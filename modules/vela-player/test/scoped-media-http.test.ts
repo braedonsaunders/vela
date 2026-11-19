@@ -17,7 +17,7 @@ beforeAll(async () => {
   await mkdir(scratch, { recursive: true });
   const ios = join(import.meta.dir, '..', 'ios');
   const compiler = Bun.spawn(['xcrun', 'swiftc', '-swift-version', '5', '-module-cache-path', join(scratch, 'modules'),
-    join(ios, 'MediaAccess.swift'), join(ios, 'ScopedMediaHTTP.swift'),
+    join(ios, 'MediaAccess.swift'), join(ios, 'ScopedMediaHTTP.swift'), join(ios, 'MediaRedirects.swift'),
     join(import.meta.dir, 'fixtures/scoped-http-probe.swift'), '-o', binary], {
     env: { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR || '/Applications/Xcode.app/Contents/Developer' }, stdout: 'pipe', stderr: 'pipe',
   });
@@ -54,9 +54,12 @@ afterAll(async () => {
 async function request(path: string, mode?: string) {
   seen.length = 0;
   const child = Bun.spawn([binary, origin, `${origin}${path}`, ...(mode ? [mode] : [])], { stdout: 'pipe', stderr: 'pipe' });
-  const [output, errors, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  expect(errors).toBe('');
-  return { output, status };
+  const limit = setTimeout(() => child.kill(), 4_000);
+  try {
+    const [output, errors, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    expect(errors).toBe('');
+    return { output, status };
+  } finally { clearTimeout(limit); }
 }
 
 appleTest('same-origin redirects within the grant retain the media headers', async () => {
@@ -118,3 +121,8 @@ appleTest('reader does not retry forbidden ranges', async () => {
   expect((await request('/grant/forbidden', 'reader')).status).not.toBe(0);
   expect(seen.length).toBe(1);
 });
+
+appleTest('stopping a startup redirect lookup cancels its in-flight HTTP request', async () => {
+  expect(await request('/grant/stall', 'redirect-cancel')).toEqual({ output: 'redirect_cancelled\n', status: 0 });
+  expect(seen.length).toBe(1);
+}, 5_000);

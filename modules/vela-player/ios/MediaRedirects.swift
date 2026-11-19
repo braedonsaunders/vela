@@ -24,6 +24,7 @@ enum MediaRedirects {
         let session = URLSession(configuration: .ephemeral, delegate: RefuseRedirects(), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         for _ in 0..<maximumHops {
+            guard !Task.isCancelled else { break }
             guard let next = await redirectTarget(of: current, headers: headers, in: session) else {
                 break
             }

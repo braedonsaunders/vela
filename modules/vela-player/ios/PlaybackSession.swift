@@ -21,6 +21,7 @@ final class PlaybackSession {
     var onSessionRefresh: ([String: Any]) -> Void = { _ in }
 
     private var player: PlaybackClient?
+    private var sourceTask: Task<Void, Never>?
     private var authorizedPlan: String?
     private var authorizedGeneration: Int?
     private var awaitingAuthorization = false
@@ -357,7 +358,7 @@ final class PlaybackSession {
         // The display switches before the first frame; player loads meanwhile, paused.
 
         report.publish(state, seekTarget: nil, force: true)
-        Task { @MainActor [weak self] in
+        sourceTask = Task { @MainActor [weak self] in
             let media: ResolvedMedia
             if let authorized { media = ResolvedMedia(url: authorized, headers: [:]) }
             else { media = await MediaRedirects.resolve(url) }
@@ -392,6 +393,8 @@ final class PlaybackSession {
     }
 
     func stop() {
+        sourceTask?.cancel()
+        sourceTask = nil
         if let plan { VelaMediaAccessStore.detach(plan: plan.mediaIdentity, generation: (mediaAuthorization?["generation"] as? NSNumber)?.intValue) }
         if let authorizedPlan { VelaMediaAccessStore.detach(plan: authorizedPlan, generation: authorizedGeneration) }
         authorizedPlan = nil

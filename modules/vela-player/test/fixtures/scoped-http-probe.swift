@@ -2,13 +2,22 @@ import Foundation
 
 
 @main struct ScopedHTTPProbe {
-    static func main() {
+    static func main() async {
         do {
             let args = CommandLine.arguments
             let access = try VelaMediaAuth(["origin": args[1], "pathPrefix": "/grant", "headers": [
                 "Authorization": "Bearer test-authorization", "X-Plex-Token": "test-plex",
                 "X-Emby-Token": "test-emby", "X-Plex-Product": "TestProduct",
             ]])
+            if args.count > 3, args[3] == "redirect-cancel" {
+                VelaMediaAccessStore.set(access, generation: 1)
+                let task = Task { await MediaRedirects.resolve(URL(string: args[2])!) }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                task.cancel()
+                _ = await task.value
+                print("redirect_cancelled")
+                return
+            }
             if args.count > 3 {
                 let reader = ScopedMediaByteReader(url: URL(string: args[2])!, access: access)
                 if args[3] == "attachment" {
