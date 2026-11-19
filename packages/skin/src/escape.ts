@@ -8,6 +8,7 @@ import { createContext, createElement, useContext, useEffect, useRef, type React
 import { Platform } from 'react-native';
 import { useHost } from './host';
 import { holdBack } from './menu-key';
+import { restoreRouteFocus } from './route-focus-policy';
 
 /** A press button that can take focus: a DOM element on the web, a native view on TV. */
 export interface Focusable {
@@ -89,6 +90,7 @@ function drawn(pressed: Pressed): Focusable | undefined {
 export function useReturnFocus(focused: boolean): void {
   const opener = useRef<Pressed | null>(null);
   useEffect(() => {
+    if (!restoreRouteFocus(Platform.OS, Platform.isTV)) return;
     if (!focused) {
       opener.current = lastPressed;
       return;
