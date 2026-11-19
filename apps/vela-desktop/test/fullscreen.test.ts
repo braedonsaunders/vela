@@ -56,3 +56,23 @@ test('HTML exit leaves native fullscreen and F11 remains a Linux window shortcut
   expect(f.changes).toEqual([true, false]);
   dispose();
 });
+
+test('preload clears document fullscreen on native exit on Linux too', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const listeners = new Map<string, Function>();
+  const dispatched: any[] = [];
+  let exits = 0;
+  const document: any = { fullscreenElement: {}, body: { classList: { toggle() {} } }, exitFullscreen: async () => { exits++; document.fullscreenElement = null; } };
+  class Event { constructor(public type: string) {} }
+  class CustomEvent extends Event { detail: unknown; constructor(type: string, init: any) { super(type); this.detail = init.detail; } }
+  runInNewContext(await Bun.file(new URL('../preload.js', import.meta.url)).text(), {
+    require: () => ({ contextBridge: { exposeInMainWorld() {} }, ipcRenderer: { on: (name: string, listener: Function) => listeners.set(name, listener), sendSync: () => false } }),
+    process: { platform: 'linux' }, document, Event, CustomEvent,
+    window: { dispatchEvent: (event: unknown) => dispatched.push(event) },
+  });
+  listeners.get('vela:fullscreen')?.({}, false);
+  await flush();
+  expect(exits).toBe(1);
+  expect(document.fullscreenElement).toBeNull();
+  expect(dispatched.map(event => [event.type, event.detail])).toEqual([['vela:fullscreen', false], ['resize', undefined]]);
+});
