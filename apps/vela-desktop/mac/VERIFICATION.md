@@ -6,7 +6,7 @@ notarized app, always with separate user data. The owner's installed application
 ## Verified
 
 - Workspace typecheck passes after installing frozen workspace/mock-server dependencies.
-- Integrated Bun run: 677 passing, one Android/JVM test skipped. Additional
+- Final Bun run: 688 passing, one Android/JVM test skipped. Additional
   desktop lifecycle tests cover teardown, stale callbacks and browser fallback.
 - Native addon loads, reports capabilities, creates/resizes/releases its NSView,
   revokes grants and tolerates repeated destroy. No subprocess is required.
@@ -18,8 +18,8 @@ notarized app, always with separate user data. The owner's installed application
 - Ten-second forward seek advances the native clock. A 1100x700 resize updates
   the actual outer window and native picture. Fullscreen entry expands to the
   display after explicit native/HTML fullscreen synchronization. Native Escape
-  returns the window to its normal bounds; the completed DOM transition still
-  needs a follow-up assertion.
+  was injected into the test process after fullscreen entry completed; within
+  the timed assertion DOM fullscreen was false and normal bounds were 1100x700.
 
 - The signed app visibly renders Fall's Asmo HEVC PQ remux at an explicit
   180-second start position, in both windowed and fullscreen modes. At the
@@ -37,17 +37,29 @@ notarized app, always with separate user data. The owner's installed application
   deep/strict signature verification passes. Apple notarization was Accepted,
   stapling and validation pass, and Gatekeeper reports Notarized Developer ID.
 
-## Server selection and pending QA
+## Server selection and live recovery
 
 The fresh Mac session advertised HDR10/HLG but Ether selected its cached
 1920x960 H.264 SDR Fall release. The authorized lab-only Asmo pin enabled the
 HDR proof. The coordinator confirmed restoration to the original empty pin
 list after each run. No production configuration changed.
 
-Mac live TV with an induced network stall and the completed native Escape/DOM
-transition assertion remain pending. A local relay is prepared for the live
-check; its initial preparing-plan handling is test setup, not a native playback
-failure. Native runtime testing pauses when host memory pressure escalates.
+CHROMA 80 visibly plays through `remoteBypass` / `aether-hls`. A test-only
+wrapper at the native-host seam redirects its already-validated source to a
+loopback relay. The relay accepts only the lab origin and `/sessions/` subtree,
+forwards no credentials to other origins, and was stopped after testing. The
+production browser plan is unchanged; changing its origin is correctly refused
+by the shared media-plan validator.
+
+An 18-second media-request hold drained about seven seconds of buffered media.
+Native position stayed at 77.843782375 while buffering for about twelve seconds,
+then resumed at 77.867600665. Source/seek generations stayed at 1, all snapshots
+reported speed 1, and AVPlayer rate was 1.0 before and after. No automatic live
+edge jump occurred. The recovered native picture was captured. The server
+confirmed the test session was already gone during final cleanup.
+
+All test Electron/HTTP relay processes were stopped. The final package rebuild
+includes the tested native/document fullscreen exit synchronization.
 
 Dolby Vision metadata preservation and E-AC-3/JOC passthrough depend on the
 AVFoundation path and output route; neither Dolby Vision panel output nor Atmos
