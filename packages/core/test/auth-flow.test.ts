@@ -15,7 +15,7 @@ test('Back returns through code, sign-in, add, chooser in order', () => {
   flow = authFlow(flow, {type: 'server', serverId: 'a'});
   flow = authFlow(flow, {type: 'code'});
   expect(flow.step).toEqual({page: 'code', serverId: 'a'});
-  for (const page of ['signin', 'add', 'choose']) { flow = authFlow(flow, {type: 'back'}); expect(flow.step.page).toBe(page); }
+  for (const page of ['signin', 'add', 'choose'] as const) { flow = authFlow(flow, {type: 'back'}); expect(flow.step.page).toBe(page); }
   expect(authFlow(flow, {type: 'back'})).toBe(flow);
 });
 test('Plex account selection has the same history and preserves the selected server', () => {
