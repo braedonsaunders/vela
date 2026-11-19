@@ -21,7 +21,7 @@ internal object PlayerCapabilities {
   fun capabilities(context: android.content.Context?): Map<String, Any> {
     val display = context?.getSystemService(android.hardware.display.DisplayManager::class.java)
       ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
-    val hdr = (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).mapNotNull {
+    val hdr = (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).toList().mapNotNull {
       when (it) {
         android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "hdr10"
         android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "hlg"
