@@ -8,7 +8,7 @@ function fixture(create?: Function) {
   const host = { setAccess: async (value: unknown) => { calls.push(value); }, update: async (value: unknown) => { calls.push(value); }, setBounds: async () => {}, destroy: async () => { calls.push('destroy'); } };
   let emit: Function = () => {};
   const bridge = attachNativePlayer(window, { create: async (args: any) => { emit = args.emit; return create ? create(host) : host; } });
-  return { bridge, calls, events, emit: (...args: unknown[]) => emit(...args) };
+  return { bridge, calls, events, captureEmit: () => emit, emit: (...args: unknown[]) => emit(...args) };
 }
 
 test('grant precedes props, stale mounts cannot update or emit after dispose', async () => {
@@ -43,4 +43,18 @@ test('host failure releases native surface and requests browser fallback', async
   expect(JSON.stringify(f.events)).not.toContain('private address');
   expect(f.events).toContainEqual(['vela:native-event', { kind: 'event', id: 'a', event: 'fallback', value: null }]);
   expect(f.calls).toContain('destroy');
+});
+
+test('replacing a mounted player retires its event callbacks', async () => {
+  const f = fixture();
+  await f.bridge.receive({ kind: 'mount', id: 'a', props: {} });
+  const oldEmit = f.captureEmit();
+  await f.bridge.receive({ kind: 'dispose', id: 'a' });
+  oldEmit('observation', { sessionId: 'a' });
+  expect(f.events).toEqual([]);
+  await f.bridge.receive({ kind: 'media-access', origin: null });
+  await f.bridge.receive({ kind: 'mount', id: 'b', props: { active: true } });
+  oldEmit('observation', { sessionId: 'a' });
+  f.emit('snapshot', { state: 'playing' });
+  expect(f.events).toEqual([['vela:native-event', { kind: 'event', id: 'b', event: 'snapshot', value: { state: 'playing' } }]]);
 });
