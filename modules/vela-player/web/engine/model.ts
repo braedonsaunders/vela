@@ -128,7 +128,7 @@ export interface Snapshot {
   state: 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'ended' | 'failed';
   sourceId: string | null;
   strategy: Source['strategy'] | null;
-  backend: 'file' | 'native-hls' | 'mse' | 'webgpu' | null;
+  backend: 'file' | 'native-hls' | 'mse' | 'webgpu' | 'aether-original' | 'aether-hls' | null;
   renditionId: string | null;
   qualityIds: string[];
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean };
@@ -152,7 +152,7 @@ export interface Snapshot {
   subtitleClientOnly?: boolean;
   audioClientOnly?: boolean;
   diagnostics?: {
-    implementation?: 'vela-core' | 'upstream-controller';
+    implementation?: 'vela-core' | 'upstream-controller' | 'vela-aether';
     metadataDiscrepancies: string[];
     subtitleFailures?: string[];
     recoveryHistory?: RecoveryDiagnostic[];

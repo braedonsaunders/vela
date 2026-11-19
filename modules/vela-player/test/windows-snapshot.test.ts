@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { VelaPlayerProps } from '@vela/player-api';
-import { windowsSnapshot } from '../src/windows/snapshot';
+import { snapshotMatchesPlan, windowsSnapshot } from '../src/windows/snapshot';
 
 type Plan = NonNullable<VelaPlayerProps['plan']>;
 const plan: Plan = {
@@ -92,4 +92,12 @@ test('Apple native telemetry retains route diagnostics, client tracks and speed 
   expect(snapshot.audioClientOnly).toBe(true);
   expect(snapshot.throughputBps).toBe(1000);
   expect(snapshot.sessionId).toBe('s1');
+});
+
+test('late native snapshots cannot relabel a retired source as the current plan', () => {
+  expect(snapshotMatchesPlan({ sessionId: 'old', sourceGeneration: 2 }, { plan })).toBe(false);
+  expect(snapshotMatchesPlan({ sessionId: 's1', sourceGeneration: 1, seekGeneration: 3 }, { plan })).toBe(false);
+  expect(snapshotMatchesPlan({ sessionId: 's1', sourceGeneration: 2, seekGeneration: 2 }, { plan })).toBe(false);
+  expect(snapshotMatchesPlan({ sessionId: 's1', sourceGeneration: 2, seekGeneration: 3 }, { plan })).toBe(true);
+  expect(snapshotMatchesPlan({ state: 'playing' }, { plan })).toBe(true);
 });

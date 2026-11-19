@@ -34,3 +34,13 @@ export function windowsSnapshot(value: unknown, props: VelaPlayerProps): Snapsho
     failure: props.serverError ?? raw.failure ?? null,
   };
 }
+
+/** Polling can deliver a final snapshot from the source retired by a newer prop. */
+export function snapshotMatchesPlan(value: unknown, props: VelaPlayerProps): boolean {
+  if (!value || typeof value !== 'object') return true;
+  const raw = value as Partial<Snapshot>;
+  if (raw.sessionId !== undefined && raw.sessionId !== props.plan?.sessionId) return false;
+  if (raw.sourceGeneration !== undefined && raw.sourceGeneration !== props.plan?.sourceGeneration) return false;
+  if (raw.seekGeneration !== undefined && raw.seekGeneration !== props.plan?.seekGeneration) return false;
+  return true;
+}

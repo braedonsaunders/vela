@@ -1,6 +1,6 @@
 import type { VelaPlayerProps, WebPlayerHost } from '@vela/player-api';
 import { desktopMediaAuthorization, isDesktopNativeHost, listen, send } from './bridge';
-import { windowsSnapshot } from './snapshot';
+import { snapshotMatchesPlan, windowsSnapshot } from './snapshot';
 
 let sequence = 0;
 
@@ -74,7 +74,7 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
           browser = fallback(props);
         }
         break;
-      case 'snapshot': props.onSnapshot?.(windowsSnapshot(message.value, props)); break;
+      case 'snapshot': if (snapshotMatchesPlan(message.value, props)) props.onSnapshot?.(windowsSnapshot(message.value, props)); break;
       case 'error': props.onError?.(message.value as Parameters<NonNullable<VelaPlayerProps['onError']>>[0]); break;
       case 'command': props.onCommand?.(message.value as Parameters<NonNullable<VelaPlayerProps['onCommand']>>[0]); break;
       case 'observation': props.onObservation?.(message.value as Parameters<NonNullable<VelaPlayerProps['onObservation']>>[0]); break;
