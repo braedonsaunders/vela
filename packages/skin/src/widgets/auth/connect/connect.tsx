@@ -59,7 +59,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   const select = (id: string) => void run(async () => {
     const result = await actions.select(id);
     if (!result.error) {
-      if (servers.list.find(server => server.id === id)?.status === 'ready') onClose?.();
+      if (!auth && servers.list.find(server => server.id === id)?.status === 'ready') onClose?.();
       send({ type: 'server', serverId: id });
     }
     return result;
