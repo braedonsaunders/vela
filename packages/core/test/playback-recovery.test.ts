@@ -21,7 +21,7 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
   try {
     const requests: any[] = [], stops: string[] = [], tracks: any[] = [];
     let offline = false;
-    const plan = (id: string) => ({ sessionId: id, state: 'playing', positionSeconds: 0, sourceGeneration: 0, seekGeneration: 0 } as PlaybackPlan);
+    const plan = (id: string) => ({ sessionId: id, state: 'playing', positionSeconds: 0, audioTracks: [{id:'fr'}], subtitleTracks: [{id:'en'}], sourceGeneration: 0, seekGeneration: 0 } as PlaybackPlan);
     const adapter = {
       startPlayback: async (r: any) => { requests.push(r); if (offline) throw new Error('connection refused'); return plan(`s${requests.length}`); },
       sessionSnapshot: async (id: string) => ({ plan: plan(id) }),
@@ -33,6 +33,7 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
     const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
     await playback.start({ kind: 'title', id: 'movie' });
     playback.snapshot({ sessionId: 's1', live: null, position: 123, state: 'playing', audioTrackId: 'fr', subtitleTrackId: 'en' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 123, state: 'loading', subtitleTrackId: null });
     offline = true;
     playback.recover('s1'); playback.recover('s1');
     expect(box.get().playback.plan).toBeNull();
@@ -49,6 +50,13 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
     expect(tracks.at(-1).audioTrackId).toBe('fr');
     expect(tracks.at(-1).subtitleTrackId).toBe('en');
     expect(stops).toContain('s1');
+    // Engines also restore local choices when the server does not implement track commands.
+    adapter.changeTracks = async () => { throw new Error('Track commands unavailable'); };
+    playback.snapshot({ sessionId: box.get().playback.sessionId, live: null, position: 125, state: 'playing' });
+    playback.recover(box.get().playback.sessionId);
+    await tick(1000);
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('fr');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('en');
     playback.recover(box.get().playback.sessionId);
     await playback.stop();
     expect(timers.size).toBe(0);

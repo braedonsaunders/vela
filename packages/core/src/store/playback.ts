@@ -77,6 +77,7 @@ export class Playback {
   private recoveryAttempt = 0;
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   private cursor = 0;
+  private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
   private externalId: string | undefined;
@@ -197,7 +198,12 @@ export class Playback {
           sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
           idempotencyKey: this.session.key(),
         }));
-      } catch { /* Unsupported tracks retain the new plan's defaults. */ }
+      } catch {
+        // Some servers leave track selection to the engines. Their plan still describes the
+        // available tracks, so carry the viewer's choices into the new engine session.
+        this.localTracks = true;
+        plan = this.withLocalTracks(plan);
+      }
       if (this.run !== run) {
         void connection.adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
           seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {});
@@ -242,6 +248,7 @@ export class Playback {
     const present = (plan: V.PlaybackPlan) => connection.plan(plan);
     const show = (plan: V.PlaybackPlan) => {
       if (this.run !== run || controller.signal.aborted || plan.sessionId !== sessionId) return;
+      plan = this.withLocalTracks(plan);
       const ended = plan.state === 'ended' && this.box.get().playback.phase !== 'ended';
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
       if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
@@ -267,6 +274,14 @@ export class Playback {
       forgetSession(sessionId);
     };
     void loop();
+  }
+
+  private withLocalTracks(plan: V.PlaybackPlan): V.PlaybackPlan {
+    if (!this.localTracks) return plan;
+    return { ...plan,
+      ...(this.audio && plan.audioTracks.some(track => track.id === this.audio) ? { selectedAudioTrackId: this.audio } : {}),
+      ...(this.subtitle === null || plan.subtitleTracks.some(track => track.id === this.subtitle) ? { selectedSubtitleTrackId: this.subtitle ?? null } : {}),
+    };
   }
 
   /** Session-level recovery follows exhausted media read retries. One intent owns all triggers. */
@@ -418,8 +433,10 @@ export class Playback {
     if (snapshot.sessionId !== this.box.get().playback.sessionId || this.recovering) return;
     const progressed = snapshot.position !== undefined && snapshot.position !== this.cursor;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
-    if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
-    if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
+    if (snapshot.state === 'playing' || snapshot.state === 'paused') {
+      if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
+      if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
+    }
     if (progressed) this.recoveryAttempt = 0;
     if (progressed || snapshot.state === 'paused' || snapshot.state === 'ended') {
       if (this.watchdog) clearTimeout(this.watchdog);
@@ -486,6 +503,7 @@ export class Playback {
     this.recovering = false;
     this.recoveryAttempt = 0;
     this.cursor = 0;
+    this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
     if (this.watchdog) clearTimeout(this.watchdog);
