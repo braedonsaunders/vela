@@ -2,7 +2,7 @@
 //   node build.mjs --ui=<web release folder> [--mac] [--linux]
 // The release folder is what tools/release/build.ts packs (index.html, _expo, player, skins, ...);
 // it is copied into ./ui so electron-builder ships it as resources/ui.
-import { cpSync, existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -28,7 +28,8 @@ for (const [input, name] of [[nativeMac, 'native-mac'], [nativeLinux, 'native-li
 }
 // Keep optional native artifacts out of browser-only packages. Explicit payloads
 // come from the platform build helper and are signed with the containing app.
-const configuration = { extraResources, ...(output ? { directories: { output: resolve(output) } } : {}) };
+const baseConfig = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).build;
+const configuration = { ...baseConfig, extraResources, ...(output ? { directories: { output: resolve(output) } } : {}) };
 const configPath = join(stage, 'desktop-build.json');
 writeFileSync(configPath, JSON.stringify(configuration));
 const targets = ['--mac', '--linux'].filter(t => process.argv.includes(t));
