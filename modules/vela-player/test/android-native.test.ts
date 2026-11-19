@@ -15,7 +15,7 @@ const scratchRoot = existsSync(join(homedir(), '.scratch/tmp')) ? join(homedir()
   try {
     const sources = ['PlaybackPlan', 'PathRecovery', 'MediaScope', 'MediaFailure', 'VideoCapabilities', 'MediaAccess', 'ScopedMediaDataSource'].map(f => join(source, f + '.kt'));
     const stubs = ['Uri', 'Common', 'DataSource', 'Probe'].map(f => join(fixtures, f + '.kt'));
-    const compile = Bun.spawn([compiler!, ...sources, ...stubs, '-d', join(scratch, 'probe.jar')], { stdout: 'pipe', stderr: 'pipe' });
+    const compile = Bun.spawn([compiler!, ...sources, ...stubs, '-include-runtime', '-d', join(scratch, 'probe.jar')], { stdout: 'pipe', stderr: 'pipe' });
     const output = await new Response(compile.stderr).text();
     expect(await compile.exited, output).toBe(0);
     const runtime = process.env.VELA_KOTLIN_STDLIB;
