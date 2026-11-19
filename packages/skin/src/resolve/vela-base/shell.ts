@@ -1,8 +1,7 @@
 import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { display, focusRing, gutter, gutterSmall, is, navFocus, sans, small, veil, wordmark } from './look';
 
-// A primary destination: the current one in full ink and weight, with the underline that
-// glides between destinations (a shared element).
+// Primary destinations stay on one scrolling row, with a filled pill for the current one.
 export const navBase: Style = {
   position: 'relative',
   display: 'flex',
@@ -20,21 +19,6 @@ export const navBase: Style = {
   'font-size': '14px',
   'white-space': 'nowrap',
 };
-export const navUnderline = (when: Condition[]): Node => ({
-  type: 'box',
-  when,
-  sharedElement: 'nav-underline',
-  layoutTransition: '460ms ease-out',
-  style: {
-    position: 'absolute',
-    left: '14px',
-    right: '14px',
-    bottom: '4px',
-    height: '2px',
-    'border-radius': '1px',
-    'background-color': '$ui.accent',
-  },
-});
 export const navItem = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
   type: 'box',
   group: true,

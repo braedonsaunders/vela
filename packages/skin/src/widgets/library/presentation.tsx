@@ -93,7 +93,7 @@ export function LibraryToolbar(props: WidgetProps) {
   const strip = (children: ReactNode, flex = true) => <ScrollView ref={phone ? stripRef : undefined} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
     style={{ flex: flex ? 1 : undefined, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
   if (tabsInShell && !browse && !tabSearchEnabled(page?.model?.tabs?.find(tab => tab.id === page.tabId))) return null;
-  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
+  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
     {phone ? strip(<>{!tabsInShell && <LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />}{filters}{sort}</>) : <>{!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}</>}
     {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
   </View>;
