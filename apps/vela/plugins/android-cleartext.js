@@ -6,9 +6,11 @@ const { withAndroidManifest, withGradleProperties } = require('expo/config-plugi
 module.exports = function withAndroidCleartext(config) {
   // Keep the native playback minimum aligned with the FFmpeg audio extension.
   config = withGradleProperties(config, (mod) => {
-    mod.modResults = mod.modResults.filter(item => !['android.minSdkVersion', 'reactNativeArchitectures'].includes(item.key));
+    mod.modResults = mod.modResults.filter(item => !['android.minSdkVersion', 'reactNativeArchitectures', 'expo.useLegacyPackaging'].includes(item.key));
     mod.modResults.push({ type: 'property', key: 'android.minSdkVersion', value: '26' });
     mod.modResults.push({ type: 'property', key: 'reactNativeArchitectures', value: process.env.VELA_ANDROID_ABI || 'armeabi-v7a,arm64-v8a,x86_64' });
+    // Extract libraries so SoLoader also finds a forced ARM ABI under native translation.
+    mod.modResults.push({ type: 'property', key: 'expo.useLegacyPackaging', value: 'true' });
     return mod;
   });
   return withAndroidManifest(config, (manifest) => {
