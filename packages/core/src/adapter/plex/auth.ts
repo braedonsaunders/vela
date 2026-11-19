@@ -10,7 +10,7 @@ export function plexHeaders(clientIdentifier: string): Record<string, string> {
 async function cloud<T>(path: string, clientIdentifier: string, method = 'GET', accountToken?: string): Promise<T> {
   const url = new URL(path, 'https://plex.tv');
   if (url.origin !== 'https://plex.tv' || !url.pathname.startsWith('/api/v2/')) throw new Error('Invalid Plex account endpoint');
-  const response = await fetch(url.href, { method, redirect: 'error', credentials: 'omit',
+  const response = await fetch(url.href, { method, cache: 'no-store', redirect: 'error', credentials: 'omit',
     headers: { ...plexHeaders(clientIdentifier), ...(accountToken ? { 'X-Plex-Token': accountToken } : {}) } });
   if (!response.ok) throw new Error(`Plex account request failed (${response.status})`);
   return response.json() as Promise<T>;
