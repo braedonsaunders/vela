@@ -74,7 +74,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       const from = kind === 'title' && positionSeconds !== undefined ? { positionSeconds } : {};
       void vela.playback.start({ ...target, ...from } as PlaybackTarget);
     },
-    [vela, kind, id, target.kind === 'title' ? target.mediaSourceId : undefined, target.kind === 'title' ? target.audioTrackId : undefined],
+    [vela, kind, id, target.kind === 'title' ? target.positionSeconds : undefined, target.kind === 'title' ? target.mediaSourceId : undefined, target.kind === 'title' ? target.audioTrackId : undefined],
   );
 
   useEffect(() => {

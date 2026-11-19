@@ -10,6 +10,7 @@ import { VelaPlayer, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
 import { useLiveContext, useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
 import { backFromNavigation, useBackHeld, usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
+import { startPosition } from '../../src/play-action';
 import { useVela } from '../../src/vela';
 
 /** "S1 · E2 · Name" for an episode, the name otherwise. */
@@ -30,9 +31,9 @@ function targetOf(kind: string | undefined, id: string): PlaybackTarget {
 }
 
 export default function Watch() {
-  const { id = '', kind, mediaSourceId, audioTrackId } = useLocalSearchParams<{ id: string; kind?: string; mediaSourceId?: string; audioTrackId?: string }>();
+  const { id = '', kind, mediaSourceId, audioTrackId, positionSeconds } = useLocalSearchParams<{ id: string; kind?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => ({ ...targetOf(kind, id), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}) }), [kind, id, mediaSourceId, audioTrackId]);
+  const target = useMemo(() => ({ ...targetOf(kind, id), ...(kind !== 'channel' && kind !== 'extra' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}) }), [kind, id, mediaSourceId, audioTrackId, positionSeconds]);
   const live = useLiveContext();
   const liveView = useLiveView();
   const owned = target.kind === 'channel' && live ? {

@@ -10,6 +10,8 @@ import type { Action } from '../../../packages/protocol/skin';
 import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra } from './browse/open';
 import type { ViewState } from './view-state';
 
+import { playParams } from './play-action';
+
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
 
 /** Where a press came from: the route and its entry (a title's ID). */
@@ -75,8 +77,7 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
         return;
       case 'play':
         if (arg) {
-          const [id, mediaSourceId, audioTrackId] = arg.split('|');
-          router.navigate({ pathname: '/watch/[id]', params: { id, ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}) } });
+          router.navigate({ pathname: '/watch/[id]', params: playParams(arg) });
         }
         return;
       case 'pickHero':

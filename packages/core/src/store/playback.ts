@@ -105,7 +105,11 @@ export class Playback {
   async start(target: PlaybackTarget): Promise<void> {
     const current = this.box.get().playback;
     if ((current.phase === 'starting' || current.phase === 'preparing') &&
-        current.target?.kind === target.kind && current.target.id === target.id) return;
+        current.target?.kind === target.kind && current.target.id === target.id &&
+        (target.kind !== 'title' || (current.target.kind === 'title' &&
+          current.target.positionSeconds === target.positionSeconds &&
+          current.target.mediaSourceId === target.mediaSourceId &&
+          current.target.audioTrackId === target.audioTrackId))) return;
     const stopping = this.stop();
     const run = {};
     this.run = run;
