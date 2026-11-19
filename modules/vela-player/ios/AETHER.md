@@ -3,7 +3,9 @@
 Vela's tvOS and iOS apps use AetherEngine 7.70.0 exclusively. AVPlayer and
 software decoding are routes inside that engine. No MPVKit, libmpv, MoltenVK,
 libplacebo, libass or mpv-only libraries are linked or bundled on Apple mobile
-platforms. Desktop hosts retain their own mpv implementations.
+platforms. The macOS Electron host reuses these playback sources through an AppKit rendering
+adapter (macOS 15+, Apple silicon). Linux and Windows retain their own mpv
+implementations. See `apps/vela-desktop/NATIVE_PLAYER.md` for the IPC contract.
 
 The pod compiles only the AetherEngine product, with no optional traits or GPL
 products. The Expo apple-player plugin pins its LGPL FFmpegBuild dependency to
@@ -278,3 +280,19 @@ arms resumePlacement after an edge rebuffer and publishes liveResumeCatchUp;
 AetherEngine+Loading consumes it with seek(origin: .liveRejoin). Vela cannot
 disable this through the public API. Non-native/software live routes therefore
 still require that upstream option; a cushion does not disable re-placement.
+
+
+## macOS shared session
+
+PlaybackSession owns plans, scoped authorization, commands, observations and
+bounded recovery for both Expo and Electron. VelaPlayerView is the thin Expo
+wrapper; PlaybackHost and PlaybackRendering isolate AppKit/UIKit integration.
+The desktop addon compiles these same Swift sources without a second player
+implementation. Aether's native view sits below Electron's transparent page.
+
+macOS uses EDR layers and probes potential display headroom for HDR eligibility.
+Aether's display-criteria matching is currently a no-op on macOS. Its AVFoundation
+route can preserve Dolby Vision metadata, but EDR headroom alone does not prove
+Dolby Vision display output. E-AC-3/JOC passthrough depends on the native audio
+route; decoding TrueHD through an audio bridge does not establish Atmos object
+delivery. Runtime desktop verification is recorded in the desktop host docs.
