@@ -34,3 +34,17 @@ UI callback intervals and missed opportunities, not GPU presentation timings.
 Optional focus, motion, layout-query and drawing-update logs contain coordinates
 and counts only. Apple player logs separately record display-criteria policy,
 criteria changes, system mode-switch events and retained/first preview frames.
+
+Row rasters carry the skin page and surface colours separately from the translucent
+cell tint. A replacement keeps the previous raster and text until an atomic swap
+when channel, origin and size match. Recycled geometry starts with the opaque
+surface placeholder. The collection, rail and ruler also have explicit opaque
+backgrounds; minute-wide focus targets remain transparent above these painted
+layers, with UIKit background configuration updates disabled.
+
+With diagnostics enabled, `[vela-guide-frame]` logs each display-link callback
+through motion and 800 ms after the last drawing update. It includes row identity,
+generation, bitmap readiness and placeholder alpha, plus cell focus, selection and
+background configuration. These are UI state samples, not GPU presentation times.
+Selecting an airing programme opens full screen immediately on all platforms;
+browsing only changes details, and returning retains the selected programme/time.

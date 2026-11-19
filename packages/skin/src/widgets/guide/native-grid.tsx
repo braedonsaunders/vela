@@ -12,7 +12,7 @@ import { startGuideFrames } from './diagnostics';
 
 export interface NativeGuideProps {
   channels: ReturnType<typeof nativeGuideLineup>;
-  data: { ticks: { minute: number; label: string; hour: boolean }[]; dayLabel: string; nowLabel: string; chrome: { rail: string; ink: string; secondary: string; accent: string; now: string }; emptyLabel: string; rows: { id: string; name: string; number: string; logo: string; logoKey: string; cells: { id: string; at: number; span: number }[] }[];
+  data: { ticks: { minute: number; label: string; hour: boolean }[]; dayLabel: string; nowLabel: string; chrome: { background: string; surface: string; rail: string; ink: string; secondary: string; accent: string; now: string }; emptyLabel: string; rows: { id: string; name: string; number: string; logo: string; logoKey: string; cells: { id: string; at: number; span: number }[] }[];
     drawings: RowDrawing[]; minutes: number; scale: number; row: number; rail: number; now: number; startsAt: number };
   command: { serial: number; channel: string; minute: number; focus: boolean };
   active: boolean;
@@ -76,7 +76,7 @@ export function NativeGuideGrid(props: GridProps & { Surface: ComponentType<Nati
   const data = useMemo(() => {
     const range = rowWindow(viewport.first, rows.length, Math.max(1, viewport.last - viewport.first), 12);
     const window = { from: Math.max(0, viewport.from - 60), to: Math.min(model.minutes, viewport.to + 60) };
-    return { ticks: model.ticks, dayLabel: model.dayLabel, nowLabel: props.liveView().guide?.nowLabel ?? model.nowLabel, chrome: { rail: look.rail, ink: look.ink, secondary: look.inkQuiet, accent: look.accent, now: look.now }, emptyLabel: msg('live.noListings'), rows: nativeGuideChannels(rows.slice(range.start, range.end), window.from, window.to),
+    return { ticks: model.ticks, dayLabel: model.dayLabel, nowLabel: props.liveView().guide?.nowLabel ?? model.nowLabel, chrome: { background: look.page, surface: look.ui.raised, rail: look.rail, ink: look.ink, secondary: look.inkQuiet, accent: look.accent, now: look.now }, emptyLabel: msg('live.noListings'), rows: nativeGuideChannels(rows.slice(range.start, range.end), window.from, window.to),
       drawings: rows.slice(range.start, range.end).map(c => rowDrawing(c, c.programmes.filter(p => p.at + p.span > window.from && p.at < window.to), scale, row, window, now, look, small)),
       minutes: model.minutes, scale, row, rail, now, startsAt: model.startsAt ?? Date.now() - model.nowMinute * 60000 };
   }, [rows, viewport, model.minutes, model.ticks, model.dayLabel, model.nowLabel, now, model.startsAt, scale, row, rail, look, small]);
@@ -100,6 +100,6 @@ export function NativeGuideGrid(props: GridProps & { Surface: ComponentType<Nati
   const onExit = useCallback(({ nativeEvent: e }: Parameters<NativeGuideProps['onExit']>[0]) => {
     flushSelection(); navigation?.blurred('guide-native-grid'); if (e.toolbar) navigation?.toolbar();
   }, [navigation, flushSelection]);
-  return <Surface channels={channels} diagnostics={process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1'} style={surfaceStyle} data={data} command={command} active={props.active}
+  return <Surface channels={channels} diagnostics={process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1'} style={[surfaceStyle, { backgroundColor: look.page }]} data={data} command={command} active={props.active}
     onWindow={onWindow} onProgramme={onProgramme} onExit={onExit} />;
 }

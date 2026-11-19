@@ -106,6 +106,11 @@ private final class GuideProgrammeCell: UICollectionViewCell {
     let ring = CALayer()
     override init(frame: CGRect) {
         super.init(frame: frame)
+        // These minute-wide targets overlay the opaque row raster. UIKit must never
+        // synthesize a selected/focused background above it.
+        backgroundConfiguration = UIBackgroundConfiguration.clear()
+        automaticallyUpdatesBackgroundConfiguration = false
+        backgroundColor = .clear; contentView.backgroundColor = .clear
         ring.borderWidth = 2; ring.isHidden = true; layer.addSublayer(ring)
         clipsToBounds = false; contentView.clipsToBounds = false
         isAccessibilityElement = true; accessibilityTraits = .button
@@ -137,7 +142,8 @@ private final class GuideRail: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         _ = Self.registerSVG
-        backgroundColor = UIColor(white: 0.055, alpha: 1)
+        backgroundColor = guideInitialBackground
+        image.backgroundColor = guideInitialBackground
         image.contentMode = .scaleAspectFit; image.clipsToBounds = true
         title.font = .systemFont(ofSize: 18, weight: .semibold); title.textColor = .white
         number.font = .monospacedDigitSystemFont(ofSize: 14, weight: .regular); number.textColor = .lightGray
@@ -146,7 +152,7 @@ private final class GuideRail: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     deinit { task?.cancel() }
     func colours(_ palette: [String: Any]) {
-        backgroundColor = guideColour(palette["rail"]); title.textColor = guideColour(palette["ink"]); number.textColor = guideColour(palette["secondary"])
+        backgroundColor = guideColour(palette["rail"]); image.backgroundColor = backgroundColor; title.textColor = guideColour(palette["ink"]); number.textColor = guideColour(palette["secondary"])
     }
     func show(_ channel: [String: Any]) {
         let id = channel["id"] as? String ?? "", uri = channel["logo"] as? String ?? ""
@@ -214,13 +220,40 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
     private var pendingFocus: Int?
     private var focusAttempts = 0
     private var pendingCommand: [String: Any]?
+    private var frameLink: CADisplayLink?
+    private var frameDeadline: CFTimeInterval = 0
+
+    private func probeFrames() {
+        guard diagnostics, window != nil else { return }
+        frameDeadline = CACurrentMediaTime() + 0.8
+        guard frameLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(probeFrame(_:)))
+        link.add(to: .main, forMode: .common); frameLink = link
+    }
+    @objc private func probeFrame(_ link: CADisplayLink) {
+        guard diagnostics, window != nil, CACurrentMediaTime() < frameDeadline else {
+            link.invalidate(); frameLink = nil; return
+        }
+        let rows = paints.filter { !$0.view.isHidden }.map { $0.view.frameState }
+        let state: [String: Any] = ["t": link.timestamp, "y": collection.contentOffset.y,
+            "rows": rows, "cells": collection.visibleCells.map { cell -> [String: Any] in
+                ["focused": cell.isFocused, "selected": cell.isSelected,
+                 "background": cell.backgroundColor?.description ?? "nil",
+                 "configuredBackground": cell.backgroundConfiguration?.backgroundColor?.description ?? "nil"]
+            }]
+        if let data = try? JSONSerialization.data(withJSONObject: state), let json = String(data: data, encoding: .utf8) {
+            print("[vela-guide-frame] \(json)")
+        }
+    }
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
         collection.dataSource = self; collection.delegate = self
         collection.allowsFocus = true
         collection.register(GuideProgrammeCell.self, forCellWithReuseIdentifier: "programme")
-        collection.backgroundColor = .clear
+        backgroundColor = guideInitialBackground
+        collection.backgroundColor = guideInitialBackground
+        railHost.backgroundColor = guideInitialBackground
         collection.remembersLastFocusedIndexPath = false
         collection.contentInsetAdjustmentBehavior = .never
         collection.showsHorizontalScrollIndicator = false; collection.showsVerticalScrollIndicator = false
@@ -228,7 +261,7 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
         dayLabel.font = .systemFont(ofSize: 14, weight: .semibold); addSubview(dayLabel)
         nowPill.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold); nowPill.textAlignment = .center
         nowPill.layer.cornerRadius = 12; nowPill.clipsToBounds = true; ruler.addSubview(nowPill)
-        ruler.backgroundColor = UIColor(white: 0.055, alpha: 1); ruler.clipsToBounds = true
+        ruler.backgroundColor = guideInitialBackground; ruler.clipsToBounds = true
         railHost.clipsToBounds = true
         nowLine.backgroundColor = .systemRed; nowLine.isUserInteractionEnabled = false; collection.addSubview(nowLine)
     }
@@ -334,10 +367,14 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
         }, uniquingKeysWith: { _, b in b })
         dayLabel.text = data["dayLabel"] as? String; nowPill.text = data["nowLabel"] as? String
         chrome = data["chrome"] as? [String: Any] ?? [:]
+        backgroundColor = guideColour(chrome["background"])
+        collection.backgroundColor = backgroundColor
+        railHost.backgroundColor = guideColour(chrome["rail"])
         ruler.backgroundColor = guideColour(chrome["rail"]); dayLabel.textColor = guideColour(chrome["secondary"])
         nowPill.backgroundColor = guideColour(chrome["now"]); nowLine.backgroundColor = guideColour(chrome["now"]); nowPill.textColor = guideColour(chrome["ink"])
         emptyLabel = data["emptyLabel"] as? String ?? ""
         accent = guideColour(chrome["accent"]).cgColor
+        probeFrames()
         paintVersion += 1
         drawings.removeAll(keepingCapacity: true); programmeDrawings.removeAll(keepingCapacity: true)
         for drawing in data["drawings"] as? [[String: Any]] ?? [] {
@@ -457,6 +494,7 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
     }
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         lastMotion = CACurrentMediaTime()
+        probeFrames()
         updateChrome(); reportWindow()
         guard diagnostics else { return }
         if motion.count < 1200 { motion.append((CACurrentMediaTime(), scrollView.contentOffset)) }
@@ -480,6 +518,8 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
     }
     private func updateChrome() {
         guard !channels.isEmpty else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         let count = Int(ceil(collection.bounds.height / layout.row)) + 2
         while rails.count < count { let v = GuideRail(); railHost.addSubview(v); rails.append(v) }
         let first = max(0, Int(collection.contentOffset.y / layout.row))
@@ -501,6 +541,10 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
                 var raw = drawings[id] ?? drawings.values.first ?? [:]
                 if drawings[id] == nil { raw["cells"] = [] }
                 raw["channelId"] = id
+                var palette = raw["colours"] as? [String: Any] ?? [:]
+                palette["background"] = chrome["background"]
+                palette["surface"] = chrome["surface"]
+                raw["colours"] = palette
                 if (raw["cells"] as? [Any])?.isEmpty == true, availability[id] == true {
                     raw["cells"] = [["id": "gap:\(id)", "x": 2, "width": max(2, (raw["width"] as? NSNumber)?.doubleValue ?? 1) - 4,
                                       "title": emptyLabel, "label": emptyLabel]]

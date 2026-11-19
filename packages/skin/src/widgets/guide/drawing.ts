@@ -3,7 +3,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import type { GuideLook } from './look';
 export interface RowDrawing {
   channelId: string; originX: number; width: number; height: number; radius: number;
-  colours: { cell: string; live: string; liveEdge: string; edge: string; fill: string; accent: string; ink: string; secondary: string };
+  colours: { background: string; surface: string; cell: string; live: string; liveEdge: string; edge: string; fill: string; accent: string; ink: string; secondary: string };
   font: string; boldFont: string; titleSize: number; detailSize: number;
   cells: { id: string; x: number; width: number; ended: boolean; airing: boolean; elapsed: number; title: string; detail: string; tone: string; label: string }[];
 }
@@ -20,7 +20,7 @@ export function rowDrawing(channel: GuideChannel, programmes: GuideProgramme[], 
   window: { from: number; to: number }, now: number, look: GuideLook, small: boolean): RowDrawing {
   const originX = Math.max(0, window.from) * scale;
   return { channelId: channel.id, originX, width: Math.max(1, window.to * scale - originX), height, radius: look.radiusCell,
-    colours: { cell: look.cell, live: look.live, liveEdge: look.liveEdge, edge: look.hairline, fill: look.liveFill, accent: look.accent, ink: look.ink, secondary: look.inkSecondary },
+    colours: { background: look.page, surface: look.ui.raised, cell: look.cell, live: look.live, liveEdge: look.liveEdge, edge: look.hairline, fill: look.liveFill, accent: look.accent, ink: look.ink, secondary: look.inkSecondary },
     font: String(look.font(600).fontFamily ?? ''), boldFont: String(look.font(680).fontFamily ?? ''), titleSize: (small ? 13 : 14) * 1.3, detailSize: 12 * 1.3,
     cells: programmes.map(p => ({ id: p.id, x: p.at * scale + 2 - originX, width: Math.max(2, p.span * scale - 4), ended: p.ended, airing: p.airing,
       elapsed: p.airing ? Math.max(0, Math.min(p.span * scale - 4, (now - p.at) * scale)) : 0,

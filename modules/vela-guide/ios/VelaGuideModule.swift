@@ -47,6 +47,10 @@ func guideColour(_ value: Any?) -> UIColor {
     return .clear
 }
 
+// Opaque until the skin palette arrives, including before the first asynchronous data decode.
+let guideInitialBackground = UIColor(red: 9 / 255, green: 11 / 255, blue: 14 / 255, alpha: 1)
+let guideInitialSurface = UIColor(red: 21 / 255, green: 25 / 255, blue: 30 / 255, alpha: 1)
+
 private let fonts = NSCache<NSString, UIFont>()
 private func face(_ family: String?, size: NSNumber, weight: String) -> UIFont {
     let key = "\(family ?? "")|\(size)|\(weight)" as NSString
@@ -96,6 +100,8 @@ final class VelaGuideRowView: ExpoView {
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
+        backgroundColor = guideInitialBackground
+        picture.backgroundColor = guideInitialSurface.cgColor
         isAccessibilityElement = false
         clipsToBounds = true
         layer.addSublayer(picture)
@@ -157,7 +163,10 @@ final class VelaGuideRowView: ExpoView {
         work?.cancel()
         let width = max(1, (raw["width"] as? NSNumber)?.doubleValue ?? 1)
         let height = max(1, (raw["height"] as? NSNumber)?.doubleValue ?? 1)
-        originX = (raw["originX"] as? NSNumber)?.doubleValue ?? 0
+        let nextOrigin = (raw["originX"] as? NSNumber)?.doubleValue ?? 0
+        let retainPicture = channel == (raw["channelId"] as? String ?? "") && originX == nextOrigin
+            && picture.bounds.size == CGSize(width: width, height: height) && picture.contents != nil
+        originX = nextOrigin
         radius = (raw["radius"] as? NSNumber)?.doubleValue ?? 0
         let r = radius
         let nextChannel = raw["channelId"] as? String ?? ""
@@ -171,11 +180,16 @@ final class VelaGuideRowView: ExpoView {
         let detailFont = face(raw["font"] as? String, size: detailSize, weight: "400")
         let displayScale = window?.screen.scale ?? 2
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        picture.contents = nil
-        picture.backgroundColor = colors["cell"]?.withAlphaComponent(0.5).cgColor
+        backgroundColor = colors["background"] ?? guideInitialBackground
+        // withAlphaComponent(0.5) used to turn the skin's 4.5% white tint into
+        // 50% white every time a bitmap was replaced. Placeholders are opaque surface.
+        if !retainPicture { picture.contents = nil }
+        picture.backgroundColor = (colors["surface"] ?? guideInitialSurface).cgColor
         picture.frame = CGRect(x: 0, y: 0, width: width, height: height)
-        for entry in labelPool { entry.clip.isHidden = true; entry.text.contents = nil }
-        labels.removeAll(keepingCapacity: true)
+        if !retainPicture {
+            for entry in labelPool { entry.clip.isHidden = true; entry.text.contents = nil }
+            labels.removeAll(keepingCapacity: true)
+        }
         channel = nextChannel; cells = nextCells
         ring.borderColor = colors["accent"]?.cgColor
         select(selected)
@@ -185,6 +199,8 @@ final class VelaGuideRowView: ExpoView {
         let job = DispatchWorkItem { [weak self] in
             let format = UIGraphicsImageRendererFormat(); format.scale = displayScale; format.opaque = false; format.preferredRange = .standard
             let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).image { ctx in
+                (colors["background"] ?? guideInitialBackground).setFill()
+                ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
                 for cell in nextCells {
                     ctx.cgContext.saveGState(); ctx.cgContext.setAlpha(cell.ended ? 0.46 : 1)
                     let path = UIBezierPath(roundedRect: cell.rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: r)
@@ -220,7 +236,9 @@ final class VelaGuideRowView: ExpoView {
                 guard let self, self.generation == token else { return }
                 if self.scroll == nil { self.observeScroll() }
                 CATransaction.begin(); CATransaction.setDisableActions(true)
-                self.picture.contents = background; self.picture.backgroundColor = nil
+                self.picture.contents = background
+                for entry in self.labelPool { entry.clip.isHidden = true; entry.text.contents = nil }
+                self.labels.removeAll(keepingCapacity: true)
                 for (index, entry) in textures.enumerated() {
                     let (cell, texture, size) = entry
                     if index == self.labelPool.count {
@@ -239,6 +257,11 @@ final class VelaGuideRowView: ExpoView {
         }
         work = job
         DispatchQueue.global(qos: .userInitiated).async(execute: job)
+    }
+
+    var frameState: [String: Any] {
+        ["channel": channel, "generation": generation, "ready": picture.contents != nil,
+         "placeholderAlpha": picture.backgroundColor?.alpha ?? 0]
     }
 
     func setVisibleOffset(_ x: CGFloat) { externalScrollX = x; positionLabels() }
