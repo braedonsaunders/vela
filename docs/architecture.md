@@ -21,8 +21,8 @@ See the [protocol reference](../packages/protocol/README.md) and canonical
 [wire types](../packages/protocol/types.ts).
 
 Skins are schema-1 JSON documents rendered by the shared React renderer. They
-contain layout, styles and bindings, not executable extensions. Native playback
-uses libmpv through the Expo module. Web uses the WebCodecs/WebGPU engine and
+contain layout, styles and bindings, not executable extensions. Android playback uses AndroidX Media3 ExoPlayer through the Expo module; Apple
+uses AetherEngine, and the desktop hosts use mpv. Web uses the WebCodecs/WebGPU engine and
 external assets identified by payload digest.
 
 Ether serves web/PWA exports under `/vela/`. Distribution uses signed inventories,
