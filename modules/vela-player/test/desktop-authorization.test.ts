@@ -21,6 +21,15 @@ test('desktop HLS authorization cannot attach after credential rotation', async 
     const refused = await desktopMediaAuthorization(props);
     expect(refused?.mediaAuthorization?.ok).toBe(false);
     expect(refused?.nativeMedia).toBeUndefined();
+    setWindowsMediaAccess({ origin: 'https://media.invalid', pathPrefix: '/media/', headers: async () => ({ Authorization: 'fixture' }), nativeURL: async source => {
+      expect(source).toBe('/media/index.m3u8');
+      return 'https://media.invalid/media/index.m3u8?token=fixture';
+    } });
+    const prepared = await desktopMediaAuthorization(props);
+    expect(prepared?.mediaAuthorization?.ok).toBe(true);
+    expect(prepared?.nativeMedia?.planId).toBe('session:1:2:3:hls');
+    expect(prepared?.nativeMedia?.source).toBe('/media/index.m3u8');
+    expect(prepared?.nativeMedia?.generation).toBe(prepared?.mediaAuthorization?.generation);
   } finally {
     setWindowsMediaAccess(null);
     if (original) Object.defineProperty(globalThis, 'window', original);
