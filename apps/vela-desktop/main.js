@@ -4,7 +4,7 @@
 // It is standalone: the page is told so, and connects to any Ether, Jellyfin, Emby or Plex server.
 'use strict';
 const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, screen, session, shell } = require('electron');
-const { loadNativeHost, attachNativePlayer } = require('./native-player');
+const { loadNativeHost, attachNativePlayer, attachFullscreen } = require('./native-player');
 const nativeAdapter = loadNativeHost();
 const fs = require('node:fs');
 const path = require('node:path');
@@ -154,24 +154,8 @@ function createWindow() {
     event.preventDefault();
     openExternal(url);
   });
-  for (const event of ['enter-full-screen', 'leave-full-screen']) {
-    window.on(event, () => window.webContents.send('vela:fullscreen', window.isFullScreen()));
-  }
-  let htmlFullscreen = false;
-  window.webContents.on('enter-html-full-screen', () => { htmlFullscreen = true; window.setFullScreen(true); });
-  window.webContents.on('leave-html-full-screen', () => { htmlFullscreen = false; window.setFullScreen(false); });
-  // Fullscreen comes from the page (the player's button or F) or the menu (F11, Ctrl+Cmd+F).
-  window.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && input.key === 'Escape' && (window.isFullScreen() || htmlFullscreen)) {
-      event.preventDefault();
-      void window.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen().then(() => true) : false')
-        .then(exited => { if (!exited && !window.isDestroyed()) window.setFullScreen(false); }).catch(() => window.setFullScreen(false));
-    }
-    if (input.type === 'keyDown' && input.key === 'F11' && process.platform !== 'darwin') {
-      event.preventDefault();
-      window.setFullScreen(!window.isFullScreen());
-    }
-  });
+  const detachFullscreen = attachFullscreen(window);
+  window.once('closed', detachFullscreen);
   void window.loadURL(START);
   return window;
 }

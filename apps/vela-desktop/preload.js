@@ -37,11 +37,13 @@ if (platform === 'mac') {
     window.addEventListener('popstate', schedule);
     schedule();
   });
-  ipcRenderer.on('vela:fullscreen', (_event, full) => {
-    document.body?.classList.toggle('vela-fullscreen', full);
-    window.dispatchEvent(new Event('resize'));
-  });
 }
+ipcRenderer.on('vela:fullscreen', (_event, full) => {
+  document.body?.classList.toggle('vela-fullscreen', full);
+  if (!full && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  window.dispatchEvent(new CustomEvent('vela:fullscreen', { detail: full }));
+  window.dispatchEvent(new Event('resize'));
+});
 ipcRenderer.on('vela:find', () => window.dispatchEvent(new Event('vela:find')));
 
 // Expose only the fixed playback transport, never ipcRenderer itself.

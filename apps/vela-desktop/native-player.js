@@ -60,3 +60,46 @@ function attachNativePlayer(window, adapter) {
   return { receive, diagnostics: () => tail.then(() => current?.host?.diagnostics?.() ?? null), dispose() { closed = true; access = null; tail = tail.then(stop).catch(() => {}); return tail; } };
 }
 module.exports = { loadNativeHost, attachNativePlayer };
+
+/** Native and document fullscreen can leave independently (Escape, menu, Space). */
+function attachFullscreen(window, platform = process.platform) {
+  const contents = window.webContents;
+  let htmlFullscreen = false;
+  const exitDocument = () => Promise.resolve().then(() => contents.executeJavaScript(
+    'document.fullscreenElement ? document.exitFullscreen().then(() => true) : false',
+  )).catch(() => false);
+  const nativeChanged = () => {
+    if (window.isDestroyed()) return;
+    const full = window.isFullScreen();
+    contents.send('vela:fullscreen', full);
+    if (!full) void exitDocument();
+  };
+  const enterHTML = () => { htmlFullscreen = true; window.setFullScreen(true); };
+  const leaveHTML = () => { htmlFullscreen = false; window.setFullScreen(false); };
+  const input = (event, key) => {
+    if (key.type !== 'keyDown') return;
+    if (key.key === 'Escape' && (window.isFullScreen() || htmlFullscreen)) {
+      event.preventDefault();
+      void exitDocument().then(exited => {
+        if (!exited && !window.isDestroyed()) window.setFullScreen(false);
+      });
+    }
+    if (key.key === 'F11' && platform !== 'darwin') {
+      event.preventDefault();
+      window.setFullScreen(!window.isFullScreen());
+    }
+  };
+  window.on('enter-full-screen', nativeChanged);
+  window.on('leave-full-screen', nativeChanged);
+  contents.on('enter-html-full-screen', enterHTML);
+  contents.on('leave-html-full-screen', leaveHTML);
+  contents.on('before-input-event', input);
+  return () => {
+    window.off('enter-full-screen', nativeChanged);
+    window.off('leave-full-screen', nativeChanged);
+    contents.off('enter-html-full-screen', enterHTML);
+    contents.off('leave-html-full-screen', leaveHTML);
+    contents.off('before-input-event', input);
+  };
+}
+module.exports.attachFullscreen = attachFullscreen;
