@@ -175,7 +175,7 @@ internal class PlayerController(
     awaitSeek(null)
     loggedOutput = false
     report.pathId = path.id
-    report.backend = if (path.isOriginalFile) "media3-original" else "media3-hls"
+    report.backend = if (path.isOriginalFile) "media3-original" else "media3-${path.transport}"
     val client = Media3Engine(context, ambient)
     engine = client
     state = client.state
