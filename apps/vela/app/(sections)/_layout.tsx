@@ -11,6 +11,7 @@ import type { LibraryParams } from '../../src/browse/library-query';
 import { FocusBoundary } from '../../src/focus-boundary';
 import { SectionFocusContext, SectionShellHostContext } from '../../src/section-focus';
 import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from '../../src/section-motion';
+import { trimSectionCache } from '../../src/section-cache';
 
 type Section = { route: 'home' | 'library' | 'live'; entry: string };
 
@@ -133,6 +134,7 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
     return () => clearTimeout(timer);
   }, [sectionKey, reducedMotion]);
   if (last.current) retained.current.set(sectionKey, last.current);
+  if (Platform.OS === 'android' && !Platform.isTV) trimSectionCache(retained.current, sectionKey, outgoing.current?.key);
   const scenes = [...retained.current.values()];
   return (
     <View style={{ flex: 1 }}>
