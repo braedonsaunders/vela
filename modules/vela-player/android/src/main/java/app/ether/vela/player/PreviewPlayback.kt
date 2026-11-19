@@ -17,7 +17,7 @@ internal class PreviewPlayback(
   private var engine: PlaybackEngine? = null
   private var state = PlayerState()
   private var active = true
-  private var onScreen = true
+  private var onScreen = false
   private var paused = false
 
   /** A preview is set (the view plays previews, not plans). */

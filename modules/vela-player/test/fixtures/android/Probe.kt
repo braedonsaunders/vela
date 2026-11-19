@@ -31,9 +31,18 @@ fun main() {
   val seen = mutableListOf<Pair<String, String?>>()
   val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
   val origin = "http://127.0.0.1:${server.address.port}"
+  val outside = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+  outside.createContext("/") { request ->
+    synchronized(seen) { seen += "other-origin" to request.requestHeaders.getFirst("Authorization") }
+    request.responseHeaders.add("Location", origin + "/media/file")
+    request.sendResponseHeaders(302, -1)
+    request.close()
+  }
+  outside.start()
   server.createContext("/") { request ->
     synchronized(seen) { seen += request.requestURI.path to request.requestHeaders.getFirst("Authorization") }
     val next = when(request.requestURI.path) {
+      "/media/cross-origin" -> "http://127.0.0.1:${outside.address.port}/redirect"
       "/media/start" -> "/media/file"
       "/media/escape" -> "/outside"
       "/outside" -> "/media/file"
@@ -77,6 +86,8 @@ fun main() {
     check(seen.takeLast(2).all { it.second == "fixture" })
     check(read("/media/escape") == "0123456789")
     check(seen.takeLast(3).map { it.second } == listOf("fixture", null, null))
+    check(read("/media/cross-origin") == "0123456789")
+    check(seen.takeLast(3).map { it.second } == listOf("fixture", null, null))
     check(read("/media/file", 3, 4) == "3456")
     check(read("/media/range", 3, 4) == "3456")
     check(runCatching { read("/media/bad-range", 3, 4) }.exceptionOrNull()?.message == "Media request failed")
@@ -86,6 +97,6 @@ fun main() {
     check(seen.size - beforeLoop == 9)
     check(read("/outside") == "0123456789")
     check(seen.takeLast(2).all { it.second == null })
-  } finally { server.stop(0) }
+  } finally { server.stop(0); outside.stop(0) }
   println("Android recovery and scoped HTTP passed")
 }

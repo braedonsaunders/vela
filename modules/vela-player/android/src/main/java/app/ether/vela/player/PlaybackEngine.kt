@@ -47,6 +47,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
       .setTargetBufferBytes(if (preview) 8 * 1024 * 1024 else 64 * 1024 * 1024).build())
     .build()
   private var plan: PlaybackPlan? = null
+  private var refused = false
   private val choices = mutableMapOf<Long, Pair<Tracks.Group, Int>>()
   private val tick = object : Runnable {
     override fun run() { update(); main.postDelayed(this, 250) }
@@ -66,7 +67,15 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
       override fun onEvents(player: Player, events: Player.Events) { update() }
       override fun onRenderedFirstFrame() { state.hasFrame = true; update() }
       override fun onCues(cueGroup: CueGroup) { onCues(cueGroup) }
-      override fun onTracksChanged(tracks: Tracks) { updateTracks(tracks); update() }
+      override fun onTracksChanged(tracks: Tracks) {
+        updateTracks(tracks)
+        // ExoPlayer can otherwise play supported audio while silently omitting unsupported video.
+        val video = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+        if (!refused && video.isNotEmpty() && video.none { it.isSupported }) {
+          refused = true
+          onFailure(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, false)
+        } else update()
+      }
       override fun onPlayerError(error: PlaybackException) {
         val refused = generateSequence(error as Throwable?) { it.cause }.filterIsInstance<MediaHttpFailure>().firstOrNull()
         onFailure(refused?.status ?: error.errorCode, refused?.status in listOf(401, 403))
@@ -77,6 +86,8 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
 
   override fun load(url: Uri, plan: PlaybackPlan?, position: Double, loop: Boolean) {
     this.plan = plan
+    state.position = position
+    refused = false
     val builder = MediaItem.Builder().setUri(url)
     if (plan?.selectedPath?.transport == "hls") builder.setMimeType(MimeTypes.APPLICATION_M3U8)
     if (plan?.selectedPath?.transport == "dash") builder.setMimeType(MimeTypes.APPLICATION_MPD)
