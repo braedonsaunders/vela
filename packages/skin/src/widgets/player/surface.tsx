@@ -19,7 +19,16 @@ export function WatchSurface({ host, state, children }: Props) {
       <PlayerChromeContext.Provider value={state}>
         <View style={styles.stage} testID="watch-stage">
           {children}
-          <PlayerChrome />
+          {/* Only interactive chrome respects cutouts and system bars. The video and its
+              aspect-ratio letterbox fill the stage, including on a folding display. */}
+          <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, {
+            top: host.viewport.insets.top,
+            bottom: host.viewport.insets.bottom,
+            left: host.viewport.sides?.left ?? host.viewport.insets.left,
+            right: host.viewport.sides?.right ?? host.viewport.insets.right,
+          }]}>
+            <PlayerChrome />
+          </View>
         </View>
       </PlayerChromeContext.Provider>
     </HostContext.Provider>
