@@ -52,6 +52,6 @@ const signArgs = signing ? [
   '--config.mac.entitlementsInherit=build/entitlements.mac.plist',
   '--config.forceCodeSigning=true',
 ] : [];
-const result = spawnSync('npx', ['electron-builder', '--config', configPath, ...(arch ? ['--' + arch] : []), ...(targets.length ? targets : ['--' + (process.platform === 'darwin' ? 'mac' : 'linux')]), '--publish', 'never', '--config.mac.notarize=false', ...signArgs],
+const result = spawnSync('npx', ['electron-builder', '--config', configPath, ...(arch ? ['--' + arch] : []), ...(process.argv.includes('--dir') ? ['--dir'] : []), ...(targets.length ? targets : ['--' + (process.platform === 'darwin' ? 'mac' : 'linux')]), '--publish', 'never', '--config.mac.notarize=false', ...signArgs],
   { stdio: 'inherit', env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' } });
 process.exit(result.status ?? 1);
