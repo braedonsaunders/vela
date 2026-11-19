@@ -5,7 +5,7 @@ import { GuideRegion, useGuideNavigation } from './focus';
 import type { Focusable } from '../../escape';
 import { FocusPressable as Pressable } from '../../focus';
 import { Image } from 'expo-image';
-import Animated, { useAnimatedStyle, useSharedValue, useReducedMotion, withSpring, ReduceMotion } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, useReducedMotion, withSpring, ReduceMotion, type SharedValue } from 'react-native-reanimated';
 import { useState, useEffect, useRef, useId, useContext, type ReactNode } from 'react';
 import { findNodeHandle, Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -13,7 +13,7 @@ import { msg } from '@vela/core';
 import { SYMBOLS } from '../../icons';
 import { useLiveContext } from './live';
 import { logoIdentity } from './logo';
-import { monogram } from './geometry';
+import { programmeFocusFrame, monogram } from './geometry';
 import type { GuideLook } from './look';
 
 export function Glyph({ name, size, color }: { name: string; size: number; color: string }) {
@@ -71,6 +71,10 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface PressProps {
   lift?: boolean;
+  programmeFrame?: {
+    left: number; width: number; viewportWidth: number; scrollX: SharedValue<number>;
+    top: number; height: number; rowTop: number; viewportHeight: number; scrollY: SharedValue<number>;
+  };
   onPress?: () => void;
   onFocus?: () => void;
   label: string;
@@ -112,7 +116,14 @@ export function Press(props: PressProps) {
   useEffect(() => {
     if (props.lift) lift.value = withSpring(still ? 1 : pressed ? 0.98 : focused ? 1.045 : 1, { damping: 22, stiffness: 280, mass: 0.8, reduceMotion: ReduceMotion.System });
   }, [focused, pressed, props.lift, lift, still]);
-  const elevation = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
+  const frame = props.programmeFrame;
+  const elevation = useAnimatedStyle(() => {
+    if (!frame) return { transform: [{ scale: lift.value }] };
+    const box = programmeFocusFrame(frame.left, frame.width, frame.scrollX.value, frame.viewportWidth, lift.value);
+    const vertical = programmeFocusFrame(frame.top, frame.height, frame.scrollY.value - frame.rowTop, frame.viewportHeight, lift.value, 3);
+    return { left: box.left, width: box.width, top: vertical.left, height: vertical.width,
+      transform: [{ translateX: box.translateX }, { translateY: vertical.translateX }, { scaleX: box.scaleX }, { scaleY: vertical.scaleX }] };
+  });
   // react-native-web hands Pressable its DOM key events; native TV moves focus itself.
   const keys =
     Platform.OS === 'web' && (onKey || navigation)

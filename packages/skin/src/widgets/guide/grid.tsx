@@ -423,9 +423,9 @@ function SharedGuideGrid(props: GridProps) {
   const nativeRows = Platform.isTV ? rowSlots.ordered(painted, channel => channel.id) : [];
   const railRows = Platform.isTV ? nativeRows.map(({ key, index, item }) => ({ key, index: paint.start + index, channel: item }))
     : rows.slice(firstRow, lastRow).map((channel, index) => ({ key: channel.id, index: firstRow + index, channel }));
-  const renderRow = (item: GuideChannel) => <TimelineRow
+  const renderRow = (item: GuideChannel, index: number) => <TimelineRow
     look={look} channel={item} scale={scale} row={row} small={small} width={width}
-    window={window} visibleWidth={body.width - rail} nowMinute={model.nowMinute}
+    window={window} visibleWidth={body.width - rail} visibleHeight={listHeight} rowTop={index * row} scrollY={scrollY} nowMinute={model.nowMinute}
     selectedChannel={item.id === selected.channel}
     selectedMinute={item.id === selected.channel ? focusMinute.current : -1}
     selectedProgramme={item.id === selected.channel ? selected.programme : ''}
@@ -485,7 +485,7 @@ function SharedGuideGrid(props: GridProps) {
                 showsVerticalScrollIndicator={false} style={{ width, height: listHeight }}
               >
                 <View style={{ width, height: rows.length * row }}>
-                  {nativeRows.map(({ key, index, item: channel }) => <View key={key} style={{ position: 'absolute', top: (paint.start + index) * row, left: 0 }}>{renderRow(channel)}</View>)}
+                  {nativeRows.map(({ key, index, item: channel }) => <View key={key} style={{ position: 'absolute', top: (paint.start + index) * row, left: 0 }}>{renderRow(channel, paint.start + index)}</View>)}
                 </View>
               </Animated.ScrollView> : (
               <Animated.FlatList
@@ -504,7 +504,7 @@ function SharedGuideGrid(props: GridProps) {
                 maxToRenderPerBatch={8}
                 updateCellsBatchingPeriod={16}
                 extraData={`${column}|${selected.channel}|${selected.programme}|${model.nowMinute}|${scale}`}
-                renderItem={({ item }) => renderRow(item)}
+                renderItem={({ item, index }) => renderRow(item, index)}
               />
               )}
               <NowLine look={look} model={model} scale={scale} />

@@ -5,7 +5,7 @@ import { memo, useEffect, type ComponentProps } from 'react';
 import { Platform, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, useReducedMotion, withSpring, ReduceMotion, type SharedValue } from 'react-native-reanimated';
 import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
-import { cellId, labelFollows } from './geometry';
+import { cellId, labelFollows, programmeFocusFrame } from './geometry';
 import type { GuideLook } from './look';
 import { Line, Press } from './parts';
 
@@ -18,6 +18,10 @@ export interface CellProps {
   small: boolean;
   nowMinute: number;
   visibleFrom: number;
+  visibleWidth: number;
+  visibleHeight: number;
+  rowTop: number;
+  scrollY: SharedValue<number>;
   selected: boolean;
   /** The timeline's horizontal scroll, for the label that keeps clear of the panel's edge. */
   scrollX: SharedValue<number>;
@@ -29,22 +33,34 @@ export interface CellProps {
 const passive = { hovered: false, focused: false, pressed: false };
 /** TV focus is owned by the grid anchor. Passive cells avoid a focus registry and state per slot. */
 function PassiveProgramme(props: ComponentProps<typeof Press>) {
-  if (props.selected) return <LiftedProgramme {...props} />;
+  if (props.programmeFrame) return <LiftedProgramme {...props} />;
   return <View nativeID={props.nativeID} testID={props.testID} pointerEvents="none" accessible={false} focusable={false} style={props.style(passive)}>
     {typeof props.children === 'function' ? props.children(passive) : props.children}
   </View>;
 }
-/** Only the TV's selected slot owns an animated value; passive slots remain cheap. */
+/** Only selected and viewport-edge slots need animated geometry on TV. */
 function LiftedProgramme(props: ComponentProps<typeof Press>) {
   const still = useReducedMotion();
   const scale = useSharedValue(1);
-  useEffect(() => { scale.value = withSpring(still ? 1 : 1.045, { damping: 22, stiffness: 280, mass: 0.8, reduceMotion: ReduceMotion.System }); }, [scale, still]);
-  const lift = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  useEffect(() => { scale.value = withSpring(still || !props.selected ? 1 : 1.045, { damping: 22, stiffness: 280, mass: 0.8, reduceMotion: ReduceMotion.System }); }, [scale, still, props.selected]);
+  const frame = props.programmeFrame!;
+  const lift = useAnimatedStyle(() => {
+    const box = programmeFocusFrame(frame.left, frame.width, frame.scrollX.value, frame.viewportWidth, scale.value);
+    const vertical = programmeFocusFrame(frame.top, frame.height, frame.scrollY.value - frame.rowTop, frame.viewportHeight, scale.value, 3);
+    return { left: box.left, width: box.width, top: vertical.left, height: vertical.width,
+      transform: [{ translateX: box.translateX }, { translateY: vertical.translateX }, { scaleX: box.scaleX }, { scaleY: vertical.scaleX }] };
+  });
   return <Animated.View nativeID={props.nativeID} testID={props.testID} pointerEvents="none" accessible={false} focusable={false} style={[props.style(passive), lift]}>
     {typeof props.children === 'function' ? props.children(passive) : props.children}
   </Animated.View>;
 }
 const CellSurface = Platform.isTV ? PassiveProgramme : Press;
+
+function nearViewportEdge(props: CellProps): boolean {
+  const p = props.programme;
+  return labelFollows(p.at, p.span, props.visibleFrom)
+    || p.at + p.span > props.visibleFrom + props.visibleWidth / props.scale - 30;
+}
 
 function metaLine(p: GuideProgramme): string {
   const when = p.airing ? p.remainingLabel : msg('ui.startEnd', { start: p.startLabel, end: p.endLabel });
@@ -67,6 +83,7 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
   return (
     <CellSurface
       lift
+      programmeFrame={!Platform.isTV || selected || nearViewportEdge(props) ? { left: left + 2, width: Math.max(2, width - 4), viewportWidth: props.visibleWidth, scrollX, top: 5, height: row - 11, rowTop: props.rowTop, viewportHeight: props.visibleHeight, scrollY: props.scrollY } : undefined}
       focusable={!Platform.isTV}
       nativeID={cellId(p.id, channel.id)}
       testID={cellId(p.id, channel.id)}
@@ -90,17 +107,15 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
         backgroundColor: focused || Platform.isTV && selected ? look.cellHover : p.airing ? look.live : hovered ? look.cellHover : look.cell,
         opacity: p.ended && !(focused || Platform.isTV && selected) ? 0.46 : 1,
         zIndex: focused || Platform.isTV && selected ? 3 : 0,
-        boxShadow: Platform.isTV ? selected ? `0px 8px 24px ${look.shadow}` : undefined : focused
-          ? `inset 0px 0px 0px 1px ${look.accent}, 0px 10px 34px ${look.shadow}`
+        boxShadow: Platform.isTV ? selected ? `0px 0px 2px ${look.shadow}` : undefined : focused
+          ? `inset 0px 0px 0px 1px ${look.accent}, 0px 0px 2px ${look.shadow}`
           : selected
             ? `inset 0px 0px 0px 2px ${look.accent}`
             : undefined,
       })}
     >
       {elapsed > 0 ? (
-        <View
-          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: elapsed, backgroundColor: look.liveFill }}
-        />
+        <ProgrammeFill elapsed={elapsed} left={left + 2} scrollX={scrollX} color={look.liveFill} />
       ) : null}
       {p.tone >= 0 && width > 24 ? (
         <View
@@ -117,49 +132,25 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
         />
       ) : null}
       {elapsed > 0 ? (
-        <View
-          style={{ position: 'absolute', left: 0, bottom: 0, height: 2, width: elapsed, backgroundColor: look.accent }}
-        />
+        <ProgrammeFill elapsed={elapsed} left={left + 2} scrollX={scrollX} color={look.accent} line />
       ) : null}
-      {labelled ? <CellLabel {...props} left={left} width={width} /> : null}
+      {labelled ? <View style={{ flex: 1, justifyContent: 'center', gap: small ? 3 : 4, paddingLeft: 12, paddingRight: 10, minWidth: 0 }}>
+        <Line look={look} size={small ? 13 : 14} weight={p.airing ? 680 : 600}>{p.name}</Line>
+        {width > 110 ? <Line look={look} size={12} color={p.airing ? look.accent : look.inkSecondary} tabular>{metaLine(p)}</Line> : null}
+      </View> : null}
     </CellSurface>
   );
 }, (a, b) => a.look === b.look && a.channel.id === b.channel.id && a.channel.name === b.channel.name
-  && a.scale === b.scale && a.row === b.row && a.small === b.small && a.selected === b.selected && a.scrollX === b.scrollX
+  && a.visibleHeight === b.visibleHeight && a.rowTop === b.rowTop && a.scrollY === b.scrollY && a.visibleWidth === b.visibleWidth && a.scale === b.scale && a.row === b.row && a.small === b.small && a.selected === b.selected && a.scrollX === b.scrollX
   && a.onFocus === b.onFocus && a.onPress === b.onPress && a.onKey === b.onKey
   && a.programme.id === b.programme.id && a.programme.name === b.programme.name
   && a.programme.at === b.programme.at && a.programme.span === b.programme.span
-  && (!Platform.isTV || labelFollows(a.programme.at, a.programme.span, a.visibleFrom) === labelFollows(b.programme.at, b.programme.span, b.visibleFrom))
+  && (!Platform.isTV || nearViewportEdge(a) === nearViewportEdge(b))
   && a.programme.episode === b.programme.episode && a.programme.tone === b.programme.tone);
 
-/** Future cells have static labels; only edge cells need an animation worklet on TV. */
-function CellLabel(props: CellProps & { left: number; width: number }) {
-  if (!Platform.isTV || labelFollows(props.programme.at, props.programme.span, props.visibleFrom)) return <SlidingCellLabel {...props} />;
-  return <View style={{ justifyContent: 'center', gap: props.small ? 3 : 4, paddingLeft: 12, paddingRight: 10, minWidth: 0, maxWidth: props.width - 4 }}>
-    <Line look={props.look} size={props.small ? 13 : 14} weight={props.programme.airing ? 680 : 600}>{props.programme.name}</Line>
-    {props.width > 110 ? <Line look={props.look} size={12} color={props.programme.airing ? props.look.accent : props.look.inkSecondary} tabular>{metaLine(props.programme)}</Line> : null}
-  </View>;
-}
-
-/** The cell's title and times, slid right while the cell's start is scrolled past. */
-function SlidingCellLabel({ look, programme: p, small, scrollX, left, width }: CellProps & { left: number; width: number }) {
-  const slide = useAnimatedStyle(() => {
-    const past = Math.max(0, scrollX.value - left);
-    const shift = Math.min(past, Math.max(0, width - 120));
-    return { transform: [{ translateX: shift }], maxWidth: Math.max(0, width - 4 - shift) };
-  });
-  return (
-    <Animated.View
-      style={[{ justifyContent: 'center', gap: small ? 3 : 4, paddingLeft: 12, paddingRight: 10, minWidth: 0 }, slide]}
-    >
-      <Line look={look} size={small ? 13 : 14} weight={p.airing ? 680 : 600}>
-        {p.name}
-      </Line>
-      {width > 110 ? (
-        <Line look={look} size={12} color={p.airing ? look.accent : look.inkSecondary} tabular>
-          {metaLine(p)}
-        </Line>
-      ) : null}
-    </Animated.View>
-  );
+function ProgrammeFill({ elapsed, left, scrollX, color, line = false }: {
+  elapsed: number; left: number; scrollX: SharedValue<number>; color: string; line?: boolean;
+}) {
+  const fill = useAnimatedStyle(() => ({ width: Math.max(0, elapsed - Math.max(0, scrollX.value + 6 - left)) }));
+  return <Animated.View style={[{ position: 'absolute', left: 0, bottom: 0, ...(line ? { height: 2 } : { top: 0 }), backgroundColor: color }, fill]} />;
 }

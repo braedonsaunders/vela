@@ -24,6 +24,9 @@ interface RowProps {
   /** Minutes to draw programmes over. */
   window: { from: number; to: number; left: number };
   visibleWidth: number;
+  visibleHeight: number;
+  rowTop: number;
+  scrollY: SharedValue<number>;
   nowMinute: number;
   selectedProgramme: string;
   selectedChannel: boolean;
@@ -66,6 +69,10 @@ export const TimelineRow = memo(function TimelineRow(props: RowProps) {
           small={props.small}
           nowMinute={props.nowMinute}
           visibleFrom={window.left}
+          visibleWidth={props.visibleWidth}
+          visibleHeight={props.visibleHeight}
+          rowTop={props.rowTop}
+          scrollY={props.scrollY}
           selected={p.id === props.selectedProgramme}
           scrollX={props.scrollX}
           onFocus={props.onFocus}
@@ -76,7 +83,7 @@ export const TimelineRow = memo(function TimelineRow(props: RowProps) {
     </View>
   );
 }, (a, b) => a.look === b.look && a.scale === b.scale && a.row === b.row && a.small === b.small && a.width === b.width
-  && a.visibleWidth === b.visibleWidth && a.window.from === b.window.from && a.window.to === b.window.to
+  && a.visibleHeight === b.visibleHeight && a.rowTop === b.rowTop && a.scrollY === b.scrollY && a.visibleWidth === b.visibleWidth && a.window.from === b.window.from && a.window.to === b.window.to
   && a.selectedMinute === b.selectedMinute && a.selectedChannel === b.selectedChannel && a.selectedProgramme === b.selectedProgramme && a.scrollX === b.scrollX
   && a.onFocus === b.onFocus && a.onPress === b.onPress && a.onKey === b.onKey && a.onWatch === b.onWatch
   && rowContentKey(a.channel) === rowContentKey(b.channel));

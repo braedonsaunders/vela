@@ -99,3 +99,18 @@ export function nowPillOffset(position: number, viewport: number, width: number)
   'worklet';
   return Math.max(4, Math.min(Math.max(4, viewport - width - 4), position - width / 2));
 }
+
+/** Crop at time-window edges before lifting. A small gutter contains the shadow;
+ * clamping the spring itself also keeps overshoot out of the channel layer. */
+export function programmeFocusFrame(left: number, width: number, viewportLeft: number, viewportWidth: number, lift: number, shadowGutter = 6) {
+  'worklet';
+  const gutter = Math.min(shadowGutter, Math.max(0, viewportWidth / 4));
+  const start = Math.max(left, viewportLeft + gutter);
+  const end = Math.min(left + width, viewportLeft + viewportWidth - gutter);
+  const visibleWidth = Math.max(0, end - start);
+  const scale = Math.max(0.98, Math.min(1.045, lift));
+  const scaleX = visibleWidth > 0 ? Math.min(scale, Math.max(1, (viewportWidth - 2 * gutter) / visibleWidth)) : 0;
+  const half = visibleWidth * scaleX / 2;
+  const centre = Math.max(viewportLeft + gutter + half, Math.min(viewportLeft + viewportWidth - gutter - half, (start + end) / 2));
+  return { left: start, width: visibleWidth, scaleX, scaleY: scale, translateX: centre - (start + visibleWidth / 2) };
+}
