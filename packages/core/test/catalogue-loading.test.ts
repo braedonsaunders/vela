@@ -122,3 +122,13 @@ test('collection first and continuation reads carry the selected tab and preserv
   await f.catalogue.library('movies');
   expect(f.box.get().library[key]?.load).toBe('failed');
 });
+
+test('failed collections cannot masquerade as an empty successful view', async () => {
+  const adapter = { libraryRows: async () => [], libraryCollections: async () => { throw new Error('offline'); }, libraryGenres: async () => [] };
+  const session = { onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
+  const catalogue = new Catalogue(new StateBox({} as VelaState), session as unknown as Session, () => 640);
+  const result = await catalogue.libraryExtras('movies', 'movies');
+  expect(result?.rowsLoad).toBe('ready');
+  expect(result?.collectionsLoad).toBe('failed');
+  expect(result?.genresLoad).toBe('ready');
+});

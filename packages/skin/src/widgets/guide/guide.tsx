@@ -58,7 +58,7 @@ function GuideContent({ focus, layout, active }: { focus?: GuideFocus; layout?: 
   const look = useGuideLook();
   const live = useLiveContext();
   const view = useLiveView();
-  if (!live) return <GuideStatus look={look} text={msg('live.noChannels')} />;
+  if (!live) return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
   if (!view.guide) {
     if (view.load === 'failed') {
       return (

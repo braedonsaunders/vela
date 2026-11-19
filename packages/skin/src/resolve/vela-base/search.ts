@@ -3,7 +3,7 @@ import { chipGroup, libChip, glassSelect } from './library';
 // while a query is open. The title matches (or the honest empty or failed state), live hits on now
 // and coming up, and the descriptive lane with its failed answers. Titles lie in the library's
 // multi-row grid, not a sideways shelf.
-import type { Condition, Node, Style } from '../../../../protocol/skin';
+import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { gridCard, titleGrid } from './cards';
 import { display, emptyState, enter, gutter, gutterSmall, is, pill, placeholder, pulse, rowSkeleton } from './look';
 
@@ -23,7 +23,7 @@ const column = (gap: string): Style => ({ display: 'flex', 'flex-direction': 'co
 const secondary = (size: string): Style => ({ 'font-size': size, color: '$ui.inkSecondary' });
 
 /** Ask the descriptive lane again, once the server allows it. */
-const retry = (height: number, padding: string, size: string): Node => ({
+const retry = (height: number, padding: string, size: string): BoxNode => ({
   type: 'box',
   when: [{ test: 'search.canRetry' }],
   press: { action: 'retryDescriptive' },
@@ -314,6 +314,7 @@ const titles: Node[] = [
     ...emptyState('alert', '{t:ui.searchUnavailable}', '{t:ui.searchIsUnavailableTryAnotherQuery}'),
     when: [is('env.search', 'failed'), ...quiet],
   },
+  { ...retry(44, '22px', '14px'), when: [is('env.search', 'failed')], press: { action: 'retry' } },
   // No titles, and nothing further down answers: say so, about the mood when the query describes one.
   {
     type: 'box',

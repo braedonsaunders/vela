@@ -93,7 +93,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       loading: !held && current?.load !== 'failed',
       moreLoading: (usableView === 'collections' || usableView === 'people') ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
-      viewLoad: usableView === 'library' ? current?.load ?? 'idle'
+      viewLoad: usableView === 'library' || usableView === 'genres' && !canRecommend ? current?.load ?? 'idle'
         : extraState.id !== id || extraState.revision !== revision || extraState.tab !== collectionTab || extraState.query !== tabQuery ? 'idle'
         : extraState.failed ? 'failed'
         : (usableView === 'recommended' ? nativeExtras?.rowsLoad : usableView === 'genres' ? nativeExtras?.genresLoad : nativeExtras?.collectionsLoad)

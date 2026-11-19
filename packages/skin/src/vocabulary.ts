@@ -250,7 +250,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.homeHasMore': (_, e) => (e.home ? yes(e.home.nextCursor !== '') : ''),
   'env.route': (_, e) => e.route,
   'env.load': (_, e) => e.load,
-  'env.canRetry': (_, e) => yes(e.load === 'failed'),
+  'env.canRetry': (_, e) => yes(e.load === 'failed' || e.library?.viewLoad === 'failed'),
   'env.entry': (_, e) => e.entry,
 
   ...Object.fromEntries(DETAIL_FIELDS.map(f => [`detail.${f}`, title(x => String(x[f]))])),

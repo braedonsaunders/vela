@@ -61,6 +61,7 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
 
   const retry = useCallback((place: Place) => {
     if (place.route === 'title') void store.catalogue.title(place.entry, true);
+    else if (store.getState().search.query.trim()) store.search.setQuery(store.getState().search.query);
     else void store.home.load();
   }, [store]);
 

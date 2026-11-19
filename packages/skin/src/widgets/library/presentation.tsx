@@ -92,7 +92,7 @@ export function LibraryToolbar(props: WidgetProps) {
     style={{ flex: flex ? 1 : undefined, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
   return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
     {phone ? strip(<><LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />{filters}{sort}</>) : <><LibraryTabs />{strip(filters)}{sort}</>}
-    {page?.extrasFailed && <Button label="Retry" onPress={() => host.dispatch('retry', '')} />}
+    {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
   </View>;
 }
 
@@ -208,7 +208,7 @@ function FacetPicker({ facet, selected, onChoose, onClose, onLabels }: {
         </View>
         <TextField accessibilityLabel={`Search ${facet.label}`} placeholder={`Search ${facet.label}`} placeholderTextColor={look.ui.inkSecondary} value={query} onChangeText={setQuery}
           style={[look.text({}), look.box({ height: '40px', padding: '0px 12px', border: '1px solid $ui.glassEdge', 'border-radius': '$ui.radiusControl' })]} />
-        {loading ? <ContentLoader inline={values.length > 0} /> : failed ? <Button label="Retry" onPress={() => retry(v => v + 1)} /> : <>
+        {loading ? <ContentLoader inline={values.length > 0} /> : failed ? <Button label="Try again" onPress={() => retry(v => v + 1)} /> : <>
           {!values.length && <Text style={look.text({})}>No values</Text>}
           <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 6 }}>
             {values.map(value => <Button key={value.id} role="checkbox" label={`${value.label} (${value.count})`} selected={selected.includes(value.id)} onPress={() => onChoose(value.id)} />)}
