@@ -97,7 +97,10 @@ VELA_JNI(jint, setOption)(JNIEnv *env, jclass, jlong handle, jstring name, jstri
 /// Draws into `surface` (mpv's Android video output takes a global reference as `wid`), or stops
 /// drawing when it is null. The previous Surface's reference is released after mpv lets go of it.
 VELA_JNI(jint, setSurface)(JNIEnv *env, jclass, jlong handle, jobject surface) {
+    // Surface lifetime is the exception to asynchronous runtime operations: stop the VO
+    // before releasing its global reference or returning to surfaceDestroyed.
     Player *target = player(handle);
+    mpv_set_property_string(target->mpv, "vo", "null");
     jobject previous = target->surface;
     target->surface = surface != nullptr ? env->NewGlobalRef(surface) : nullptr;
     int64_t wid = reinterpret_cast<intptr_t>(target->surface);
@@ -108,27 +111,30 @@ VELA_JNI(jint, setSurface)(JNIEnv *env, jclass, jlong handle, jobject surface) {
     return status;
 }
 
+// Runtime operations must never wait for the playback core on the UI thread.
+// libmpv copies async arguments before returning and preserves this client's request order.
 VELA_JNI(jint, command)(JNIEnv *env, jclass, jlong handle, jobjectArray arguments) {
     Utf8Array values(env, arguments);
-    return mpv_command(player(handle)->mpv, values.pointers());
+    return mpv_command_async(player(handle)->mpv, 0, values.pointers());
 }
 
 VELA_JNI(jint, setPropertyString)(JNIEnv *env, jclass, jlong handle, jstring name, jstring value) {
     Utf8 key(env, name);
     Utf8 text(env, value);
-    return mpv_set_property_string(player(handle)->mpv, key.get(), text.get());
+    const char *value_text = text.get();
+    return mpv_set_property_async(player(handle)->mpv, 0, key.get(), MPV_FORMAT_STRING, &value_text);
 }
 
 VELA_JNI(jint, setPropertyFlag)(JNIEnv *env, jclass, jlong handle, jstring name, jboolean value) {
     Utf8 key(env, name);
     int flag = value ? 1 : 0;
-    return mpv_set_property(player(handle)->mpv, key.get(), MPV_FORMAT_FLAG, &flag);
+    return mpv_set_property_async(player(handle)->mpv, 0, key.get(), MPV_FORMAT_FLAG, &flag);
 }
 
 VELA_JNI(jint, setPropertyDouble)(JNIEnv *env, jclass, jlong handle, jstring name, jdouble value) {
     Utf8 key(env, name);
     double number = value;
-    return mpv_set_property(player(handle)->mpv, key.get(), MPV_FORMAT_DOUBLE, &number);
+    return mpv_set_property_async(player(handle)->mpv, 0, key.get(), MPV_FORMAT_DOUBLE, &number);
 }
 
 /// A string-list property (http-header-fields) set as a node, so values may hold commas.
@@ -144,7 +150,7 @@ VELA_JNI(jint, setPropertyStringList)(JNIEnv *env, jclass, jlong handle, jstring
     mpv_node node{};
     node.format = MPV_FORMAT_NODE_ARRAY;
     node.u.list = &list;
-    return mpv_set_property(player(handle)->mpv, key.get(), MPV_FORMAT_NODE, &node);
+    return mpv_set_property_async(player(handle)->mpv, 0, key.get(), MPV_FORMAT_NODE, &node);
 }
 
 VELA_JNI(jstring, errorString)(JNIEnv *env, jclass, jint status) {

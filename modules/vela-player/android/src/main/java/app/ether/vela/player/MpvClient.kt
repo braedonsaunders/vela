@@ -56,9 +56,12 @@ internal class MpvClient(options: Map<String, String>) {
     onEvent = null
     closing = true
     MpvNative.wakeup(handle)
-    events.join()
-    MpvNative.destroy(handle)
+    val owned = handle
     handle = 0
+    Thread({
+      events.join()
+      MpvNative.destroy(owned)
+    }, "vela-mpv-release").start()
   }
 
   // Video output
@@ -181,9 +184,9 @@ internal class MpvClient(options: Map<String, String>) {
       return status.takeIf { it in listOf(401, 403, 404, 410) }
     }
 
-    /** libplacebo on OpenGL ES through mpv's Android context (gpu if gpu-next cannot start);
-     * MediaCodec decodes into it through AImageReader. */
-    private const val VIDEO_OUTPUT = "gpu-next,gpu"
+    /** OpenGL ES through mpv's Android context. gpu-next shader compilation can stall
+     * surface startup/teardown on older mobile GPUs; gpu supports the same MediaCodec path. */
+    private const val VIDEO_OUTPUT = "gpu"
 
     private val BASE_OPTIONS = linkedMapOf(
       "vo" to "null",
