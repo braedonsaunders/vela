@@ -56,7 +56,7 @@ test('a plan arriving after Back releases its server session instead of leaking 
 
 test('explicit zero overrides server resume without publishing watch state before playback', async () => {
   const requests: { positionSeconds?: number }[] = [];
-  const plan = { sessionId: 's', sourceGeneration: 0, seekGeneration: 0, state: 'ended', titleId: 't', positionSeconds: 0 } as PlaybackPlan;
+  const plan = { sessionId: 's', sourceGeneration: 0, seekGeneration: 0, state: 'playing', titleId: 't', positionSeconds: 0 } as PlaybackPlan;
   const adapter = { startPlayback: async (request: { positionSeconds?: number }) => { requests.push(request); return plan; }, sessionSnapshot: async () => ({ plan }), command: async () => plan };
   const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, client: {} };
   const box = new StateBox({ playback: initialPlayback } as VelaState);
