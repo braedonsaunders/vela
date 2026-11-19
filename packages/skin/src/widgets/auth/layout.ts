@@ -9,7 +9,8 @@ export function authLayout(viewport: Viewport, availableHeight = viewport.height
   const padding = compact ? (height < 420 ? 8 : 16) : Math.max(28, viewport.height * 0.07);
   const logoHeight = compact ? (height < 580 ? 0 : tight ? 44 : 64) : 104;
   const gap = compact ? (tight ? 8 : 16) : 32;
-  return { compact, landscape, tight, padding, logoHeight, gap,
-    cardHeight: Math.max(0, height - padding * 2 - (logoHeight ? logoHeight + gap : 0)),
+  const cardHeight = Math.max(0, height - padding * 2 - (logoHeight ? logoHeight + gap : 0));
+  const minimal = compact && cardHeight < 330;
+  return { compact, landscape, tight, minimal, padding, logoHeight, gap, cardHeight,
     headingSize: tight ? 24 : compact ? 30 : 42 };
 }

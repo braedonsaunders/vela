@@ -16,6 +16,11 @@ describe('auth stage budget', () => {
     expect(layout.logoHeight).toBe(0);
     expect(layout.cardHeight).toBe(323);
   });
+  test('collapses visual headings and labels in the smallest keyboard area', () => {
+    expect(authLayout(viewport(393, 852), 320).minimal).toBe(true);
+    expect(authLayout(viewport(393, 852)).minimal).toBe(false);
+    expect(authLayout(viewport(1920, 1080), 320, true).minimal).toBe(false);
+  });
   test('leaves spacious tablets and TV alone', () => {
     expect(authLayout(viewport(768, 1024)).compact).toBe(false);
     expect(authLayout(viewport(1920, 1080), 1080, true).compact).toBe(false);

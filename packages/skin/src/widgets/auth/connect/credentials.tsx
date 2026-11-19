@@ -21,7 +21,7 @@ export function Credentials({ busy, onSignIn, onQuick, canPassword = true, canQu
   const submit = () => { if (ready) onSignIn(username.trim(), password); };
   return (
     <View style={{ gap: layout?.tight ? 8 : 14, flexDirection: compact ? 'row' : 'column', alignItems: compact ? 'center' : undefined }}>
-      {canPassword ? <View style={{ gap: 8, flex: compact ? 1 : undefined }}>
+      {canPassword ? <View style={{ gap: layout?.minimal ? 4 : 8, flex: compact ? 1 : undefined }}>
         <Field label={msg('ui.username')} value={username} onChangeText={setUsername}
           onSubmit={() => passwordInput.current?.focus()} kind="username" testID="connect-username" />
         <Field label={msg('ui.password')} value={password} onChangeText={setPassword} onSubmit={submit}

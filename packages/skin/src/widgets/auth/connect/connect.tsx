@@ -80,9 +80,9 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   }, [auth?.quick, step.page, target]);
   const title = step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
   return <View style={{ gap: layout?.gap ?? 20, minHeight: 0, flexShrink: 1 }}>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      {flow.history.length || onClose ? <Pill label={flow.history.length ? 'Back' : 'Cancel'} height={44} onPress={back} testID="auth-back" /> : null}
-      <View style={{ flex: 1, minWidth: 0 }}><Heading title={title} /></View>
+    <View style={{ gap: layout?.tight ? 4 : 12 }}>
+      {flow.history.length || onClose ? <Pill label={flow.history.length ? 'Back' : 'Cancel'} height={44} align="flex-start" onPress={back} testID="auth-back" /> : null}
+      {!layout?.minimal ? <Heading title={title} /> : null}
     </View>
     {step.page === 'choose' ? <>
       <Pill label="Add a server" height={44} onPress={() => send({type: 'add'})} testID="auth-add" />
@@ -97,7 +97,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
       {quick?.expiresLabel ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }}>{quick.expiresLabel}</Words> : null}
     </View> : auth?.phase === 'starting' || auth?.phase === 'redeeming' ? <Waiting>{auth.phase === 'redeeming' ? 'Signing in…' : 'Connecting…'}</Waiting>
     : auth?.phase === 'offline' ? <Alert>Cannot reach this server. Check the connection or choose another server.</Alert>
-    : <Credentials busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape}
+    : <Credentials busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
       onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })} />}
     {auth?.secureOrigin && step.page === 'signin' ? <Pill label="Use secure connection" height={44} onPress={() => void run(async () => { const result = await authActions?.secureSwitch(); if (result?.error) return result; if (result?.url) { if (Platform.OS === 'web') window.location.assign(result.url); else await Linking.openURL(result.url); } })} /> : null}

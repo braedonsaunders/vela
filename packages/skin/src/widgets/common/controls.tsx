@@ -109,7 +109,7 @@ export function Heading({ eyebrow: over, title, lines = 2 }: { eyebrow?: string;
   return (
     <View style={{ gap: layout?.tight ? 4 : 10 }}>
       {over && !layout?.tight ? <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.accent' }}>{over}</Words> : null}
-      <Words rows={{ ...display, ...(layout ? { 'font-family': '$ui.font', 'font-weight': '600', 'letter-spacing': '0px' } : {}), 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines} accessibilityRole="header">
+      <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines} accessibilityRole="header">
         {title}
       </Words>
     </View>
@@ -301,7 +301,7 @@ export function Field({ label, value, onChangeText, onSubmit, kind = 'username',
   const traits = KINDS[kind];
   return (
     <View style={{ gap: layout?.tight ? 4 : 8 }}>
-      <Label>{label}</Label>
+      {!layout?.minimal ? <Label>{label}</Label> : null}
       <Animated.View style={[box, Platform.isTV && state.focus && { transform: [{ scale: 1.025 }] }]} onPointerEnter={handlers.onHoverIn} onPointerLeave={handlers.onHoverOut}>
         <TextField
           ref={inputRef}
