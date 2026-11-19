@@ -248,6 +248,7 @@ final class PlaybackClient {
                                        initialSubtitleTrackID: self.subtitle, autoplay: !self.paused)
                 // Keep live HLS on AVPlayer: the software feeder in Aether 7.70
                 // automatically re-places the playhead after a rebuffer.
+                if self.isLive { opts.clampsLiveResumeToWindow = false }
                 if self.isLive && opts.nativeRemoteHLS {
                     opts.nativeRemoteHLSIngestFallback = false
                 }

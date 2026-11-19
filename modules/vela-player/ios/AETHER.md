@@ -269,7 +269,8 @@ Live HLS uses native remote HLS when its URL needs no headers (including the
 adapter-authorized URL attachment above). Vela disables AVPlayer's automatic
 time-offset preservation, leaves configuredTimeOffsetFromLive invalid, and caps
 live AVPlayer rate at 1.0. No live cushion is configured. Explicit Live remains
-a viewer command.
+a viewer command. Live loads also disable clampsLiveResumeToWindow, which otherwise
+snaps a live-only resume to the edge when sufficiently far behind.
 
 Upstream request for AetherEngine: expose a LoadOptions opt-out for automatic
 live resume re-placement and live edge recovery. In 7.70.0 SoftwarePlaybackHost
