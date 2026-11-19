@@ -25,6 +25,11 @@ fun main() {
   check(!mediaFailureMessage(4005).contains("4005"))
   fun delivered(codec: String, format: String? = null) = PlanTrack.from(mapOf("id" to "captions", "name" to "Captions", "codec" to codec,
     "delivery" to mapOf("kind" to "external", "url" to "/captions", "format" to format)))!!
+  check(localSubtitleSelection(false, delivered("srt", "webvtt"), false))
+  check(localSubtitleSelection(false, null, true))
+  check(localSubtitleSelection(true, null, false))
+  check(!localSubtitleSelection(false, delivered("vobsub"), false))
+  check(!localSubtitleSelection(false, null, false))
   check(!delivered("vobsub").canRenderExternal)
   check(!delivered("hdmv_pgs_subtitle").canRenderExternal)
   check(delivered("vobsub", "webvtt").canRenderExternal)

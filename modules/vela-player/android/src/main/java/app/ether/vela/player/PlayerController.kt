@@ -280,15 +280,13 @@ internal class PlayerController(
   private fun applyTracks() {
     val plan = plan ?: return
     val path = plan.selectedPath ?: return
-    if (!path.isOriginalFile || state.tracks.isEmpty()) {
-      return
-    }
+    val subtitle = plan.subtitleTrack(report.subtitleTrackId)
+    if (state.tracks.isEmpty() || !localSubtitleSelection(path.isOriginalFile, subtitle, report.subtitleClientOnly)) return
     val audioIndex = plan.audioTrack(report.audioTrackId)?.streamIndex
     val audioId = audioIndex?.let { state.trackId("audio", it) }
-    if (audioId != null && state.audioId != audioId) {
+    if (path.isOriginalFile && audioId != null && state.audioId != audioId) {
       engine?.select("audio", audioId)
     }
-    val subtitle = plan.subtitleTrack(report.subtitleTrackId)
     val subtitleIndex = if (subtitle?.isExternal == false) subtitle.streamIndex else null
     val subtitleId = subtitleIndex?.let { state.trackId("sub", it) }
     if (subtitleId != null) {
@@ -425,7 +423,7 @@ internal class PlayerController(
       return null
     }
     if (id == null) {
-      if (!playsOriginal) {
+      if (!localSubtitleSelection(playsOriginal, plan?.subtitleTrack(report.subtitleTrackId), report.subtitleClientOnly)) {
         report.sessionCommand(mapOf("kind" to "tracks", "subtitleTrackId" to null))
         return null
       }

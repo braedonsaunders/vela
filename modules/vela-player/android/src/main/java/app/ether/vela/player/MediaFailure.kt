@@ -13,3 +13,8 @@ internal fun mediaFailureMessage(code: Int) = if (transientMediaFailure(code)) {
 /** Extractors can omit an unsupported video stream while retaining perfectly playable audio. */
 internal fun missingSupportedVideo(hasTracks: Boolean, hasVideo: Boolean, supportedVideo: Boolean, expectsVideo: Boolean) =
   hasTracks && ((hasVideo && !supportedVideo) || (!hasVideo && expectsVideo))
+
+
+/** External sidecars belong to the client even over a server-generated HLS/DASH path. */
+internal fun localSubtitleSelection(original: Boolean, selected: PlanTrack?, clientOnly: Boolean) =
+  original || clientOnly || selected?.canRenderExternal == true
