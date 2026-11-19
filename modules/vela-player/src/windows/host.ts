@@ -31,7 +31,7 @@ function toggleFullscreen() {
 
 function serializable(props: VelaPlayerProps) {
   const command = props.command?.type === 'fullscreen' ? undefined : props.command;
-  return { plan: props.plan, command, active: props.active, metadata: props.metadata, serverError: props.serverError };
+  return { plan: props.plan ?? null, command, active: props.active, metadata: props.metadata, serverError: props.serverError };
 }
 export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerProps, fallback?: (props: VelaPlayerProps) => WebPlayerHost): WebPlayerHost {
   const id = `windows-player-${++sequence}`;
