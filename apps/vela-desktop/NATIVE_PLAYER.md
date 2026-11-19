@@ -47,3 +47,15 @@ macOS/Electron agent. Linux agent owns linux/** and its packaging helper; send
 required build hook changes to shared owner. Native addon is preferred on macOS
 because an in-process NSView can be ordered below Electron's web contents
 without cross-process window compositing.
+
+## Apple authorized HLS attachment
+
+`setAccess` includes monotonically increasing `generation`. Renderer waits for
+headers and calls the current adapter's `nativeURL` for header-dependent HLS.
+Private update props include `mediaAuthorization: {planId,generation,ok}` and,
+when prepared, `nativeMedia: {planId,source,authorized,generation}`. `planId` is
+`sessionId:sourceGeneration:seekGeneration:revision:selectedPathId`, identical to
+Apple mediaIdentity. Host validates all fields against current plan and grant,
+then calls the shared media store's attach before applying authorization and
+plan. A stale/mismatched attachment is refused; failed preparation uses the
+Apple bounded recovery path. Attachment URLs never enter diagnostics/events.

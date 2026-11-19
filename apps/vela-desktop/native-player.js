@@ -24,7 +24,7 @@ function attachNativePlayer(window, adapter) {
     tail = tail.then(async () => {
       if (closed || !message || typeof message.kind !== 'string') return;
       if (message.kind === 'media-access') {
-        access = message.origin ? { origin: message.origin, pathPrefix: message.pathPrefix, headers: message.headers } : null;
+        access = message.origin ? { origin: message.origin, pathPrefix: message.pathPrefix, headers: message.headers, generation: message.generation } : null;
         await current?.host?.setAccess(access); return;
       }
       if (message.kind === 'mount') {

@@ -1,5 +1,5 @@
 import type { VelaPlayerProps, WebPlayerHost } from '@vela/player-api';
-import { isDesktopNativeHost, listen, send } from './bridge';
+import { desktopMediaAuthorization, isDesktopNativeHost, listen, send } from './bridge';
 import { windowsSnapshot } from './snapshot';
 
 let sequence = 0;
@@ -38,6 +38,19 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
   let props = initial;
   const restore = seeThrough(node);
   let browser: WebPlayerHost | undefined;
+  let revision = 0;
+  const publish = (kind: 'mount' | 'update') => {
+    const version = ++revision;
+    const next = props;
+    if (!isDesktopNativeHost()) { send({ kind, id, props: serializable(next) }); return; }
+    void desktopMediaAuthorization(next).then(attachment => {
+      if (disposed || browser || version !== revision || !attachment) return;
+      send({ kind: mounted ? 'update' : 'mount', id, props: { ...serializable(next), ...attachment } });
+      mounted = true;
+      bounds();
+    });
+  };
+  let mounted = false;
   let disposed = false;
   const bounds = () => {
     if (!isDesktopNativeHost() || disposed || browser) return;
@@ -70,7 +83,7 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
       case 'close': if (window.history.length > 1) window.history.back(); else window.location.assign('/vela'); break;
     }
   });
-  send({ kind: 'mount', id, props: serializable(props) });
+  publish('mount');
   bounds();
   return {
     update(next) {
@@ -80,7 +93,7 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
         fullscreenId = next.command.id;
         toggleFullscreen();
       }
-      send({ kind: 'update', id, props: serializable(props) });
+      publish('update');
     },
     dispose() {
       disposed = true;

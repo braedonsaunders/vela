@@ -16,7 +16,7 @@ test('grant precedes props, stale mounts cannot update or emit after dispose', a
   const grant = { origin: 'https://media.invalid', pathPrefix: '/media/', headers: { Authorization: 'fixture' } };
   await f.bridge.receive({ kind: 'media-access', ...grant });
   await f.bridge.receive({ kind: 'mount', id: 'a', props: { active: true } });
-  expect(f.calls.slice(1, 4)).toEqual([grant, '#00000000', { active: true }]);
+  expect(f.calls.slice(1, 4)).toEqual([{ ...grant, generation: undefined }, '#00000000', { active: true }]);
   await f.bridge.receive({ kind: 'update', id: 'stale', props: { active: false } });
   expect(f.calls).not.toContainEqual({ active: false });
   await f.bridge.receive({ kind: 'dispose', id: 'a' });
