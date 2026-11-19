@@ -1,7 +1,10 @@
 # Linux native verification — 2026-11-19
 
-Built and exercised on `bb-worker-server`, Ubuntu 26.04 x86-64, Electron 45.3.3,
-FFmpeg 8.0.1 and libmpv 0.41.0. Both media libraries were built with GPL and
+Native runtime rebuilt inside a named Ubuntu 22.04.5 container on
+`bb-worker-server`; Electron 45.3.3, FFmpeg 8.0.1, libmpv 0.41.0 and pinned
+OpenGL libplacebo 6.338.2. The initial playback evidence below was collected on
+the worker's Ubuntu 26.04 host; the final portable payload was then separately
+launched and exercised inside Ubuntu 22.04 / glibc 2.35. Both media libraries were built with GPL and
 nonfree disabled. All six FFmpeg runtime license functions are checked by the
 helper; the packaged runtime passes `vela-mpv --audit`. Notices, exact source
 archives for FFmpeg/mpv, build options and provenance accompany the libraries.
@@ -35,14 +38,14 @@ The Linux-only commits require the Mac owner's shared Electron bridge/UI changes
   at rate 1.0. Revoke/regrant recovered with a fresh native source. Full app
   testing caught an old grant's late `end-file` error; the host now matches the
   current mpv playlist entry before falling back. Browser fallback was observed
-  during failed native starts. Five Linux tests cover scope boundaries,
+  during failed native starts. Six Linux tests cover the GLIBC ceiling, scope boundaries,
   redirects/HLS rewriting, generations, scaling and live rate policy.
 - **Debian package:** inspected native runtime/notices in the package, extracted
   without installing system-wide, launched successfully, and confirmed native
   bridge availability. Full playback testing used the AppImage's same payload.
 - **Mac checks:** `bun run typecheck` passed (upstream dependency diagnostics
   ignored by the repository runner); `bun run test`: 673 passed, one skipped.
-  Linux-specific tests: five passed, 23 assertions.
+  Linux-specific tests: six passed, 28 assertions.
 
 ## Hardware and limits
 
@@ -60,8 +63,13 @@ an SDR output path. Native Wayland/HDR signaling is not implemented; Wayland
 sessions use XWayland, with mpv tone mapping to SDR. HDR output is not advertised.
 PGS support and TrueHD/DTS decoding are delegated to the compiled mpv/FFmpeg
 codecs; PGS display and audible TrueHD/DTS-HD passthrough were not verified. The
-worker has no usable physical audio sink/AVR. Ubuntu 26.04 builds do not establish
-compatibility with older glibc distributions.
+worker has no usable physical audio sink/AVR. The final payload and whole unpacked application were audited with
+`objdump -T`: 32 ELF files, maximum GLIBC_2.35. The helper and libmpv require at
+most 2.34; FFmpeg libraries at most 2.35, libplacebo at most 2.34 and libass at
+most 2.29. The AppImage launched inside Ubuntu 22.04.5, exposed its native bridge,
+and played a 640×360 fixture to 7.875 seconds at rate 1.0. Ubuntu 24.04 and Debian
+12 were not separately boot-tested; their newer glibc satisfies this symbol
+ceiling. The packager rejects newer GLIBC requirements by default.
 
 ## Artifacts
 
@@ -70,8 +78,8 @@ shared bridge and renderer (base player payload digest unchanged):
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Vela-0.2.21-linux-x86_64.AppImage | `d0ce0f59513aca5f87b36ace9eb59091e178f82faee14698c545e84b35e1b454` |
-| Vela-0.2.21-linux-amd64.deb | `ce52be011fe89924ca6beff781eca632fc8d382e18818089cd426ff742be0591` |
+| Vela-0.2.21-linux-x86_64.AppImage | `b301bdcfb4de845acc512f896287374def1b36be628ef9891662a2c3fce4e2e4` |
+| Vela-0.2.21-linux-amd64.deb | `dd134008dc132df8e8afb1acf1166c9e1be1d99951b210740a6667272d77a61e` |
 
 Delivery also includes `native-linux-lgpl.tar.gz` for the shared packager.
 No artifacts were pushed or published.
