@@ -308,6 +308,7 @@ export function Field({ label, value, onChangeText, onSubmit, kind = 'username',
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}
+          selectionColor={look.ui.accent}
           secureTextEntry={kind === 'password'}
           autoComplete={traits.autoComplete}
           textContentType={traits.content}

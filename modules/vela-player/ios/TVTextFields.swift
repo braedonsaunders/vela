@@ -6,6 +6,28 @@ import UIKit
 
 enum TVTextFields {
     private static var installed = false
+    private static var focusStyleKey: UInt8 = 0
+
+    private final class FocusStyle: NSObject {
+        weak var shell: UIView?
+        let borderColor: CGColor?
+        let borderWidth: CGFloat
+        let transform: CGAffineTransform
+        let radius: CGFloat
+        init(_ shell: UIView) {
+            self.shell = shell
+            borderColor = shell.layer.borderColor
+            borderWidth = shell.layer.borderWidth
+            transform = shell.transform
+            radius = shell.layer.cornerRadius
+        }
+        func restore() {
+            shell?.layer.borderColor = borderColor
+            shell?.layer.borderWidth = borderWidth
+            shell?.transform = transform
+            shell?.layer.cornerRadius = radius
+        }
+    }
 
     static func install() {
         #if os(tvOS)
@@ -34,8 +56,48 @@ enum TVTextFields {
             if field.background != nil { field.background = nil }
             if field.disabledBackground != nil { field.disabledBackground = nil }
             if field.backgroundColor != .clear { field.backgroundColor = .clear }
+            if let ink = field.defaultTextAttributes[.foregroundColor] as? UIColor {
+                if field.textColor != ink { field.textColor = ink }
+                let placeholder = field.value(forKey: "placeholderColor") as? UIColor ?? ink.withAlphaComponent(0.6)
+                let hint = NSAttributedString(string: field.placeholder ?? "", attributes: [.foregroundColor: placeholder])
+                if field.attributedPlaceholder?.isEqual(to: hint) != true { field.attributedPlaceholder = hint }
+                restoreLabelInk(in: field, ink: field.text?.isEmpty == false ? ink : placeholder)
+            }
+            styleFocusShell(field)
         }
-        clearPlatter(in: view)
+        // Fabric may place the floating platter beside the backed UITextField. Its immediate
+        // component view contains only the input; the skin's styled shell is outside it.
+        clearPlatter(in: view.superview ?? view)
+    }
+
+    private static func styleFocusShell(_ field: UITextField) {
+        let focusedView = UIFocusSystem.focusSystem(for: field)?.focusedItem as? UIView
+        let focused = field.isFocused || focusedView?.isDescendant(of: field) == true
+        guard field.window != nil && focused else {
+            if let saved = objc_getAssociatedObject(field, &focusStyleKey) as? FocusStyle {
+                saved.restore()
+                objc_setAssociatedObject(field, &focusStyleKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            }
+            return
+        }
+        guard objc_getAssociatedObject(field, &focusStyleKey) == nil else { return }
+        // The native input is transparent. Lift and outline the existing rounded skin shell,
+        // never draw a second shape inside it. React's editing focus arrives only on selection.
+        var ancestor = field.superview
+        for _ in 0..<8 {
+            guard let shell = ancestor else { break }
+            let radius = max(shell.layer.cornerRadius, shell.layer.sublayers?.map(\.cornerRadius).max() ?? 0)
+            if radius > 0 && shell.bounds.height < max(1, field.bounds.height) * 2 {
+                let saved = FocusStyle(shell)
+                objc_setAssociatedObject(field, &focusStyleKey, saved, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                shell.layer.cornerRadius = radius
+                shell.layer.borderColor = field.tintColor.cgColor
+                shell.layer.borderWidth = 2
+                shell.transform = saved.transform.scaledBy(x: 1.025, y: 1.025)
+                break
+            }
+            ancestor = shell.superview
+        }
     }
 
     #if os(tvOS)
@@ -58,7 +120,21 @@ enum TVTextFields {
     }
     #endif
 
+    private static func restoreLabelInk(in view: UIView, ink: UIColor) {
+        for child in view.subviews {
+            if let label = child as? UILabel, label.textColor != ink { label.textColor = ink }
+            restoreLabelInk(in: child, ink: ink)
+        }
+    }
+
     private static func clearPlatter(in view: UIView) {
+        // The focused tvOS platter can put an opaque fill inside its content view as well as
+        // in the visual effect's backdrop. Text/caret ink is separate from these backgrounds.
+        view.isOpaque = false
+        view.layer.isOpaque = false
+        view.layer.shadowOpacity = 0
+        if view.backgroundColor != .clear { view.backgroundColor = .clear }
+        if view.layer.backgroundColor != UIColor.clear.cgColor { view.layer.backgroundColor = UIColor.clear.cgColor }
         for child in view.subviews {
             if let effect = child as? UIVisualEffectView {
                 if effect.effect != nil {
@@ -66,6 +142,7 @@ enum TVTextFields {
                 }
                 if effect.backgroundColor != .clear { effect.backgroundColor = .clear }
                 if effect.contentView.backgroundColor != .clear { effect.contentView.backgroundColor = .clear }
+                clearPlatter(in: effect.contentView)
                 for layer in effect.subviews where layer !== effect.contentView {
                     layer.isHidden = true
                 }
