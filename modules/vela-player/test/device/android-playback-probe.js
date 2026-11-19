@@ -2,6 +2,7 @@ import 'expo/src/Expo.fx';
 // Device-only entry. Private config and compiled bundles belong in scratch and never distribution.
 import React, { useEffect, useRef, useState } from 'react';
 import { AppRegistry, Text, View } from 'react-native';
+import { requireNativeModule } from 'expo-modules-core';
 import { VelaPlayer, VelaPlayerView } from '@vela/player';
 import config from './android-probe-config.json';
 
@@ -38,7 +39,10 @@ function Probe({ config, onStopped }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const client = { device: config.device, protocolVersions: [0], ...await VelaPlayer.capabilities() };
+      const capabilities = await VelaPlayer.capabilities();
+      console.log('[android-capabilities]', JSON.stringify(capabilities));
+      console.log('[android-decoders]', JSON.stringify(requireNativeModule('VelaPlayer').decoderCapabilities()));
+      const client = { device: config.device, protocolVersions: [0], ...capabilities };
       if (!config.fixture) await call('/negotiate', { client, idempotencyKey: key() });
       const result = config.fixture || await call('/playback', { ...config.target, positionSeconds: 0, client, idempotencyKey: key() });
       if (!alive) return;

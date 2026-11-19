@@ -6,7 +6,7 @@ import type { ClientCapabilities } from '../wire';
 /** The media a client declares: what the player on this platform can demux, decode and present. */
 export type MediaCapabilities = Pick<
   ClientCapabilities,
-  'containers' | 'videoCodecs' | 'audioCodecs' | 'subtitleFormats' | 'hls' | 'mse' | 'hdr' | 'originalPlayback'
+  'containers' | 'videoCodecs' | 'audioCodecs' | 'subtitleFormats' | 'hls' | 'mse' | 'hdr' | 'maxWidth' | 'maxHeight' | 'originalPlayback'
 >;
 
 export interface VelaPlatform {

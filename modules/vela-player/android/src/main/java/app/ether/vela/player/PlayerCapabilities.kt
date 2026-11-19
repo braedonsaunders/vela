@@ -8,9 +8,11 @@ import android.os.Build
 internal object PlayerCapabilities {
   /** MediaCodec MIME types and the names Vela's protocol gives their codecs. */
   private val videoTypes = listOf(
+    "video/avc" to "h264",
     "video/hevc" to "hevc",
     "video/av01" to "av1",
     "video/x-vnd.on2.vp9" to "vp9",
+    "video/dolby-vision" to "dv",
   )
 
   private val audio = listOf(
@@ -21,7 +23,7 @@ internal object PlayerCapabilities {
   fun capabilities(context: android.content.Context?): Map<String, Any> {
     val display = context?.getSystemService(android.hardware.display.DisplayManager::class.java)
       ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
-    val hdr = (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).toList().mapNotNull {
+    val displayHdr = (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).toList().mapNotNull {
       when (it) {
         android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "hdr10"
         android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "hlg"
@@ -29,17 +31,17 @@ internal object PlayerCapabilities {
         else -> null
       }
     }
-    return probed + mapOf("hdr" to hdr)
+    return probed + mapOf("hdr" to playableHdr(displayHdr, decoders))
   }
 
-  private val probed: Map<String, Any> by lazy { probe() }
+  /** Full platform profiles/levels for device diagnostics; the v0 wire has codec names and global limits. */
+  fun decoderDetails(): List<Map<String, Any>> = decoders.map { it.snapshot }
 
-  private fun probe(): Map<String, Any> {
-    val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder && hardware(it) }
-    val decodable = decoders.flatMap { decoder -> decoder.supportedTypes.map { it.lowercase() } }.toSet()
-    val hardwareVideo = listOf("h264") + videoTypes.filter { (type, _) -> type in decodable }.map { it.second }
-    val video = hardwareVideo
-    return mapOf(
+  private val decoders: List<VideoDecoderFacts> by lazy { probeDecoders() }
+  private val probed: Map<String, Any> by lazy {
+    val video = videoTypes.map { it.second }.filter { codec -> codec != "dv" && decoders.any { it.codec == codec } }
+    val size = maximumVideoSize(decoders)
+    mapOf(
       // What the server's HLS may carry when an original cannot be played.
       "containers" to listOf("mp4"),
       "videoCodecs" to video,
@@ -55,8 +57,32 @@ internal object PlayerCapabilities {
         "videoDecoders" to video,
         "audioDecoders" to audio,
       ),
-    )
+    ) + (size?.let { mapOf("maxWidth" to it.first, "maxHeight" to it.second) } ?: emptyMap())
   }
+
+  private fun probeDecoders(): List<VideoDecoderFacts> =
+    MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder && hardware(it) }.flatMap { decoder ->
+      videoTypes.mapNotNull { (mime, codec) ->
+        if (decoder.supportedTypes.none { it.equals(mime, true) }) return@mapNotNull null
+        runCatching {
+          val caps = decoder.getCapabilitiesForType(mime)
+          val video = caps.videoCapabilities ?: return@runCatching null
+          // Check pairs: independent width/height range maxima can describe an impossible frame size.
+          val sizes = listOf(7680 to 4320, 4096 to 2160, 3840 to 2160, 2560 to 1440, 1920 to 1080, 1280 to 720, 720 to 480, 640 to 360, 320 to 240, 160 to 120)
+          val size = sizes.firstOrNull { (width, height) -> video.isSizeSupported(width, height) } ?: return@runCatching null
+          val profiles = caps.profileLevels.map { it.profile to it.level }
+          val main10 = profiles.any { (profile, _) -> when (codec) {
+            "hevc" -> profile in listOf(2, 4096, 8192) // HEVC Main10, Main10 HDR10 and HDR10+.
+            "vp9" -> profile in listOf(4, 8, 4096, 8192, 16384, 32768) // Profile2/3 and HDR variants.
+            "av1" -> profile in listOf(2, 4096, 8192) // AV1 Main10 and HDR variants.
+            else -> false
+          } }
+          val modes = if (codec == "dv" && profiles.isNotEmpty()) setOf("dv") else if (main10) setOf("hdr10", "hlg") else emptySet()
+          val rate = runCatching { video.getSupportedFrameRatesFor(size.first, size.second).upper.takeIf { it.isFinite() && it > 0 } }.getOrNull()
+          VideoDecoderFacts(decoder.name, codec, mime, size.first, size.second, rate, profiles, modes)
+        }.getOrNull()
+      }
+    }
 
   /** A hardware decoder; before Android 10 the platform's software codecs are known by name. */
   private fun hardware(codec: MediaCodecInfo): Boolean {

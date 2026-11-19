@@ -19,6 +19,10 @@ class VelaPlayerModule : Module() {
       PlayerCapabilities.capabilities(appContext.reactContext)
     }
 
+    Function("decoderCapabilities") {
+      PlayerCapabilities.decoderDetails()
+    }
+
     // Internal diagnostics for device profiling; no player/chrome API or media data changes.
     Function("setCPUProfiling") { enabled: Boolean ->
       val profiler = Class.forName("com.facebook.hermes.instrumentation.HermesSamplingProfiler")
