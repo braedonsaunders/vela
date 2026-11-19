@@ -6,7 +6,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const { connect } = require('./mpv-ipc');
 const { createProxy } = require('./media-proxy');
-const { acceptPlan, physicalBounds } = require('./logic');
+const { acceptPlan, physicalBounds, playbackRate } = require('./logic');
 const root = () => process.env.VELA_LINUX_NATIVE_DIR || path.join(process.resourcesPath || path.dirname(__dirname), 'native-linux');
 function available() {
   return process.platform === 'linux' && !!process.env.DISPLAY && fs.existsSync(path.join(root(), 'vela-mpv'))
@@ -27,7 +27,7 @@ async function create({ window, emit }) {
   const xid = handle.length >= 8 ? handle.readBigUInt64LE() : BigInt(handle.readUInt32LE());
   const child = spawn(path.join(root(), 'vela-mpv'), [String(xid), socket], {
     env: { ...process.env, LD_LIBRARY_PATH: path.join(root(), 'lib') }, stdio: ['pipe','pipe','ignore'] });
-  let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {};
+  let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {}, activeEntry = null;
   let rect = { x:0, y:0, width:0, height:0, scaleFactor:1 }, chain = Promise.resolve();
   const send = (event, value) => { if (!disposed) emit(event, value); };
   function bounds() {
@@ -46,14 +46,20 @@ async function create({ window, emit }) {
     }
     fs.rmSync(temp, { recursive:true, force:true });
   }
-  async function fallback(error) { send('fallback', { message:'Native playback unavailable', reason:['Unsupported path','Server failed','Native video output unavailable','Native command timeout','Native command failed'].includes(error?.message) ? error.message : 'Native host unavailable' }); await destroy(); }
+  async function fallback(error) { send('fallback', { message:'Native playback unavailable', reason:['Unsupported path','Server failed','Native video output unavailable','Native command timeout','Native command failed','Media outside access grant','Invalid URL','Browser fallback required'].includes(error?.message) ? error.message : 'Native host unavailable' }); await destroy(); }
   child.on('error', () => { void fallback(); });
-  child.on('exit', () => { if (!disposed) void fallback(); });
+  child.on('exit', code => { if (!disposed) { send('fallback',{message:'Native player exited',reason:`Native process exit ${code}`}); void destroy(); } });
   child.stdin.on('error', () => { if (!disposed) void fallback(); });
   try {
     await Promise.race([once(child.stdout, 'data'), once(child, 'exit').then(() => { throw new Error('Native startup failed'); }),
       new Promise((_, reject) => { const t = setTimeout(() => reject(new Error('Native startup timeout')), 5000); t.unref(); })]);
-    ipc = await connect(socket, event => { if (event.event === 'end-file' && event.reason === 'error') void fallback(); });
+    ipc = await connect(socket, event => {
+      if (event.event === 'start-file') activeEntry=event.playlist_entry_id;
+      if (event.event === 'end-file' && event.reason === 'error' && proxy && source
+          && activeEntry != null && event.playlist_entry_id === activeEntry) {
+        send('fallback',{message:'Native decoder failed',reason:'Native decoder error'}); void destroy();
+      }
+    });
   } catch { await destroy(); throw new Error('Native Linux player failed to start'); }
   const cmd = (...args) => ipc.command(...args);
   const get = name => cmd('get_property', name).catch(() => null);
@@ -64,7 +70,8 @@ async function create({ window, emit }) {
     if (!plan || !source || disposed || ticking) return;
     ticking = true;
     void enqueue(async () => {
-      const names = ['time-pos','duration','pause','paused-for-cache','eof-reached','demuxer-cache-duration','volume','mute','frame-drop-count','track-list','video-out-params','hwdec-current','estimated-vf-fps'];
+      if (!plan || !source || !proxy) return;
+      const names = ['time-pos','duration','pause','paused-for-cache','eof-reached','demuxer-cache-duration','volume','mute','frame-drop-count','track-list','video-out-params','hwdec-current','estimated-vf-fps','speed'];
       const values = await Promise.all(names.map(get));
       const p = Object.fromEntries(names.map((n,i) => [n,values[i]]));
       if (Date.now()-loadedAt > 10000 && p['track-list']?.some(t => t.type === 'video') && !p['video-out-params']) throw new Error('Native video output unavailable');
@@ -80,7 +87,7 @@ async function create({ window, emit }) {
         else if (kind === 'subtitle' && track?.delivery?.kind === 'external' && externalSubtitle !== id) { await cmd('sub-add',proxy.register(track.delivery.url || track.url),'select'); externalSubtitle=id; }
         else if (kind === 'subtitle' && !id) await cmd('set_property','sid','no');
       }
-      send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:(p.duration || 0)+offset,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:1,droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps']});
+      send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:(p.duration || 0)+offset,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:playbackRate(plan,p.speed),speeds:plan.channelId || plan.live ? [1] : [.5,.75,1,1.25,1.5,2],droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps']});
       send('observation', {sessionId:plan.sessionId,observation:{idempotencyKey:`${source}:${++sequence}`,sequence,
         sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,observedAt:new Date().toISOString(),positionSeconds:position,state:state === 'loading' ? 'buffering' : state,
         selectedPathId:plan.selectedPathId,audioTrackId:plan.selectedAudioTrackId,subtitleTrackId:plan.selectedSubtitleTrackId,
@@ -125,14 +132,14 @@ async function create({ window, emit }) {
         if (c.type === 'pause') await cmd('set_property','pause',true);
         if (c.type === 'mute') await cmd('set_property','mute',!!c.muted);
         if (c.type === 'volume') await cmd('set_property','volume',Math.max(0,Math.min(1,c.value))*100);
-        if (c.type === 'speed') await cmd('set_property','speed',1);
+        if (c.type === 'speed') await cmd('set_property','speed',playbackRate(plan,c.value));
         send('command',{id:c.id,ok:true});
       }
   };
   return {
     setBounds(value) { rect = value; bounds(); },
     setAccess(grant) {
-      const generation = ++accessGeneration; proxy?.close(); proxy=null;
+      const generation = ++accessGeneration; activeEntry=null; source=''; proxy?.close(); proxy=null;
       const immutable = grant ? {origin:grant.origin,pathPrefix:grant.pathPrefix,headers:{...grant.headers}} : null;
       return enqueue(async () => { await cmd('stop'); source=''; seek=''; plan=null; pendingSeek=null;
         if (generation === accessGeneration && immutable) { proxy=await createProxy(immutable); if(latestProps) await apply(latestProps); }

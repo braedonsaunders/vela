@@ -37,3 +37,11 @@ test('proxy rewrites HLS and refuses redirects outside grant before attaching cr
     expect(leaked).toBe(false);
   } finally { proxy.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
+test('live never changes rate to recover latency; VOD permits bounded user speed', () => {
+  const { playbackRate } = require('../logic');
+  expect(playbackRate({channelId:'live'},2)).toBe(1);
+  expect(playbackRate({live:{mode:'adaptive'}},.5)).toBe(1);
+  expect(playbackRate({},1.5)).toBe(1.5);
+  expect(playbackRate({},Infinity)).toBe(1);
+  expect(playbackRate({},20)).toBe(4);
+});
