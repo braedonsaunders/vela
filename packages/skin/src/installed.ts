@@ -47,6 +47,6 @@ export function chosenSkin(ids: string[], choice: string, appearance?: Appearanc
 export function packDocument(base: SkinDocument, pack: PackEntryModel): SkinDocument {
   const data = JSON.parse(pack.packJson);
   const doc = { ...base, id: pack.id, name: pack.name, tagline: pack.tagline, preview: pack.preview, swatches: pack.swatches,
-    ui: { ...base.ui, ...Object.fromEntries(Object.entries(data.palette).filter(([key]) => Object.hasOwn(uiDefaults, key))), ...(data.radius?.card !== undefined ? { radiusCard: data.radius.card } : {}), ...(data.radius?.panel !== undefined ? { radiusPanel: data.radius.panel } : {}) }, tokens: { ...base.tokens, ...data.tokens }, fonts: { ...base.fonts, ...data.fonts } } as SkinDocument;
+    ui: { ...base.ui, ...(data.fonts?.display ? { fontDisplay: data.fonts.display.family } : {}), ...(data.fonts?.text ? { font: data.fonts.text.family } : {}), ...Object.fromEntries(Object.entries(data.palette).filter(([key]) => Object.hasOwn(uiDefaults, key))), ...(data.radius?.card !== undefined ? { radiusCard: data.radius.card } : {}), ...(data.radius?.panel !== undefined ? { radiusPanel: data.radius.panel } : {}) }, tokens: { ...base.tokens, ...data.tokens }, fonts: { ...base.fonts, ...data.fonts } } as SkinDocument;
   return doc;
 }

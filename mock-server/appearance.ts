@@ -25,7 +25,7 @@ const packaged: { doc: SkinDocument; assets?: URL }[] = [{ doc: cinematicDoc }];
 for (const entry of readdirSync(skinsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)))
   if (entry.isDirectory() && existsSync(new URL(`${entry.name}/document.ts`, skinsDir)))
     packaged.push({ doc: (await import(new URL(`${entry.name}/document.ts`, skinsDir).href)).default as SkinDocument, assets: new URL(`${entry.name}/assets/`, skinsDir) });
-packaged.push({ doc: { ...cinematicDoc, id: 'harbor-document', name: 'Harbor Document', tagline: 'An owner-installed full skin.', ui: { accent: '#7fd6cb', page: '#06121a' }, preview: undefined } });
+packaged.push({ doc: { ...cinematicDoc, id: 'harbor-document', name: 'Harbor Document', tagline: 'An owner-installed full skin.', ui: { accent: '#7fd6cb', page: '#06121a' }, preview: '/vela/v0/appearance/packs/harbor/1.0.0/preview.svg' } });
 const docUrl = (d: SkinDocument) => `/vela/v0/appearance/skins/${d.id}/${d.version}.json`;
 const documents: V.SkinDocumentRef[] = packaged.map(({ doc }) => ({ id: doc.id, name: doc.name, version: doc.version, tagline: doc.tagline, url: docUrl(doc), preview: doc.preview, swatches: doc.swatches }));
 // `VELA_MOCK_SKIN=<id>` starts the mock with that engine, pack or document as the server default.

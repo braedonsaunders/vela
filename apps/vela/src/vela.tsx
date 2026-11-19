@@ -369,8 +369,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(
-    () => authArt(state.appearance.value, state.home.value?.defaultSkinId ?? '', picked ? raw.id : '', resolveUi(raw.ui).page),
-    [state.appearance.value, state.home.value?.defaultSkinId, picked, raw.id],
+    () => authArt(state.appearance.value, state.home.value?.defaultSkinId ?? '', choice ? raw.id : '', resolveUi(raw.ui).page),
+    [state.appearance.value, state.home.value?.defaultSkinId, choice, raw.id],
   );
   const value = useMemo<Vela>(
     () => ({ store, host, doc: resolved.doc, docError: resolved.error, openTitle, authArt: art }),

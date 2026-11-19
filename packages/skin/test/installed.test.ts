@@ -24,3 +24,15 @@ test('valid minimal document resolves on phone desktop and TV; nonportable style
   expect(() => installedDocument({ ...doc, renderer: 999 }, origin)).toThrow();
   expect(() => installedDocument({ ...doc, slots: { home: { type: 'box', style: { position: 'fixed' }, children: [] } } }, origin)).toThrow();
 });
+
+test('packs layer supported palette roles on the engine without unknown ui keys', async () => {
+  const { appearanceModel } = await import('../../core/src/appearance');
+  const { packDocument } = await import('../src/installed');
+  const { cinematicDoc } = await import('../../protocol/fixtures/skins/cinematic');
+  const { resolveDocument } = await import('../src/resolve');
+  const model = appearanceModel({ revision: 1, defaultSkinId: 'owner', defaultEngineId: 'cinematic', force: false, packs: [{ schema: 1, id: 'owner', version: '1', name: 'Owner', engine: 'cinematic', palette: { page: '#123456', tide: '#123456' }, images: { wordmark: '/vela/v0/appearance/packs/owner/1/logo.svg' }, swatches: [] }] }, origin);
+  const pack = model.packs[0]!;
+  const doc = packDocument(cinematicDoc, pack);
+  expect(doc.ui?.page).toBe('#123456');
+  expect(() => resolveDocument(doc, 390, 'en', { wordmark: { url: pack.wordmark, width: 240, height: 60 } })).not.toThrow();
+});

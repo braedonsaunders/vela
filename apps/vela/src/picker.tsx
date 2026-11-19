@@ -64,6 +64,7 @@ export function AppearancePicker({ documents, current, locked, image, onPick, on
               doc={doc}
               preview={doc.preview ? image(doc.preview) : undefined}
               selected={index === current}
+              disabled={locked}
               small={small}
               onPress={() => { if (!locked) onPick(index); }}
             />
@@ -78,16 +79,18 @@ interface DocumentCardProps {
   doc: SkinDocument;
   preview: ImageSource | number | undefined;
   selected: boolean;
+  disabled?: boolean;
   small: boolean;
   onPress(): void;
 }
 
 /** One document: its preview, name, tagline and up to six swatches. */
-function DocumentCard({ doc, preview, selected, small, onPress }: DocumentCardProps) {
+function DocumentCard({ doc, preview, selected, disabled, small, onPress }: DocumentCardProps) {
   return (
     <Choice
       label={doc.name}
       selected={selected}
+      disabled={disabled}
       preferred={selected}
       onPress={onPress}
       style={[styles.card, small && styles.cardSmall, selected && styles.cardSelected]}
@@ -112,6 +115,7 @@ function DocumentCard({ doc, preview, selected, small, onPress }: DocumentCardPr
 interface ChoiceProps {
   label: string;
   selected?: boolean;
+  disabled?: boolean;
   /** Takes the TV focus engine's first focus. */
   preferred?: boolean;
   onPress(): void;
@@ -121,14 +125,15 @@ interface ChoiceProps {
 }
 
 /** A focusable choice: keyboard, pointer and the TV focus engine show the same focus look. */
-function Choice({ label, selected, preferred, onPress, style, focusedStyle, children }: ChoiceProps) {
+function Choice({ label, selected, disabled, preferred, onPress, style, focusedStyle, children }: ChoiceProps) {
   const claim = useFocusClaim(preferred);
   const [focused, setFocused] = useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
       hasTVPreferredFocus={claim}
       onPress={onPress}
       onFocus={() => setFocused(true)}
