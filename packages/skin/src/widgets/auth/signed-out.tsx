@@ -20,6 +20,7 @@ export interface SessionAuth {
 }
 
 export interface AuthActions {
+  retry?(): Promise<void>;
   signIn(username: string, password: string): Promise<unknown>;
   startPlex(): Promise<void>;
   cancelPlex(): void;

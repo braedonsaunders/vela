@@ -206,8 +206,23 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   useEffect(() => { setChoice(preferences.get(preferenceKey) || preferences.get(SKIN_PREFERENCE) || ''); }, [preferenceKey]);
   useEffect(() => {
     void store.appearance.load();
-    const subscription = AppState.addEventListener('change', next => { if (next === 'active') void store.appearance.load(); });
-    return () => subscription.remove();
+    const active = () => {
+      void store.appearance.load();
+      if (store.getState().auth.phase === 'offline') void store.auth.retry();
+    };
+    const subscription = AppState.addEventListener('change', next => { if (next === 'active') active(); });
+    const visible = () => { if (document.visibilityState === 'visible') active(); };
+    if (Platform.OS === 'web') {
+      window.addEventListener('online', active);
+      document.addEventListener('visibilitychange', visible);
+    }
+    return () => {
+      subscription.remove();
+      if (Platform.OS === 'web') {
+        window.removeEventListener('online', active);
+        document.removeEventListener('visibilitychange', visible);
+      }
+    };
   }, [store, session]);
   useEffect(() => {
     let cancelled = false;

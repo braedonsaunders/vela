@@ -251,6 +251,10 @@ export class Session {
           current.token = `${connection.record.id}:${result.refreshToken || result.accessToken}`;
         }
         return result;
+      }).catch(error => {
+        // Failed network validation must be attempted again after the server returns.
+        if (this.validation === current) this.validation = undefined;
+        throw error;
       });
       this.validation = current;
     }

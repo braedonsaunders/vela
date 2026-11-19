@@ -101,7 +101,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
       {quick?.status === 'expired' || quick?.status === 'denied' ? <Alert>{quick.status === 'expired' ? 'Code expired. Go back to request another.' : 'Code rejected. Try again.'}</Alert> : <Waiting>Approve this code on a signed-in device.</Waiting>}
       {quick?.expiresLabel ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }}>{quick.expiresLabel}</Words> : null}
     </View> : auth?.phase === 'starting' || auth?.phase === 'redeeming' ? <Waiting>{auth.phase === 'redeeming' ? 'Signing in…' : 'Connecting…'}</Waiting>
-    : auth?.phase === 'offline' ? <Alert>Cannot reach this server. Check the connection or choose another server.</Alert>
+    : auth?.phase === 'offline' ? <View style={{ gap: 12 }}><Waiting>{`Reconnecting to ${name}...`}</Waiting><Pill label="Retry" height={44} disabled={busy} onPress={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} /></View>
     : target === auth?.serverId && auth.plexAvailable && !auth.passwordAvailable && !auth.quickAvailable ? serverPlex
     : <Credentials secondary={serverPlex} busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
@@ -109,6 +109,6 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
 
     {auth?.secureOrigin && step.page === 'signin' ? <Pill label="Use secure connection" height={44} onPress={() => void run(async () => { const result = await authActions?.secureSwitch(); if (result?.error) return result; if (result?.url) { if (Platform.OS === 'web') window.location.assign(result.url); else await Linking.openURL(result.url); } })} /> : null}
     {note && step.page === 'signin' ? <Words rows={{ 'font-size': '13px', color: '$ui.inkSecondary' }}>{note}</Words> : null}
-    {error || (step.page === 'signin' && auth?.error) ? <ScrollView style={{maxHeight: layout?.tight ? 56 : 120, flexShrink: 1}}><Alert>{error || auth?.error || ''}</Alert></ScrollView> : null}
+    {error || (step.page === 'signin' && auth?.phase !== 'offline' && auth?.error) ? <ScrollView style={{maxHeight: layout?.tight ? 56 : 120, flexShrink: 1}}><Alert>{error || auth?.error || ''}</Alert></ScrollView> : null}
   </View>;
 }

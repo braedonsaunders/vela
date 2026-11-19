@@ -75,11 +75,12 @@ export class Auth {
   private plexGeneration = 0;
   private plexTimer?: ReturnType<typeof setTimeout>;
   private starting: Promise<void> | undefined;
+  private retrying: Promise<void> | undefined;
   private linkError = '';
   private linkGeneration = 0;
   private quick: { secret: string; serverId: string; timer?: ReturnType<typeof setTimeout> } | undefined;
   private redemption: { code: string; idempotencyKey: string; consumed: boolean } | undefined;
-  /** Asking a server that did not answer for its sign-in options again, while signed out. */
+  /** Retry session restoration offline, or discover options for an unreachable signed-out server. */
   private reconnect: { timer: ReturnType<typeof setTimeout>; attempt: number } | undefined;
 
   constructor(
@@ -87,7 +88,9 @@ export class Auth {
     private readonly session: Session,
     private readonly platform: VelaPlatform,
   ) {
-    session.onReset(() => {
+    session.onReset(kind => {
+      if (kind === 'server') this.linkGeneration++;
+      this.cancelReconnect();
       this.cancelPlex();
       if (this.box.get().auth.phase !== 'redeeming') void this.refresh().catch(() => {});
     });
@@ -96,6 +99,34 @@ export class Auth {
   /** Settle the selected server's session: redeem a sign-in link, validate what is stored. */
   start(): Promise<void> {
     return this.starting ??= this.restoreSession();
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnect) clearTimeout(this.reconnect.timer);
+    this.reconnect = undefined;
+  }
+
+  /** Foreground and manual retries restart the delay sequence. */
+  retry(): Promise<void> {
+    if (this.box.get().auth.phase !== 'offline') return Promise.resolve();
+    this.cancelReconnect();
+    return this.retryRestore();
+  }
+
+  private retryRestore(): Promise<void> {
+    return this.retrying ??= this.restoreSession().finally(() => { this.retrying = undefined; });
+  }
+
+  private scheduleReconnect(attempt = 0): void {
+    this.cancelReconnect();
+    const generation = this.linkGeneration;
+    const serverId = this.box.get().auth.serverId;
+    const timer = setTimeout(() => {
+      if (generation !== this.linkGeneration || !this.session.hasServer() || this.session.selected().record.id !== serverId) return;
+      if (this.box.get().auth.phase === 'offline') void this.retryRestore();
+      else if (this.box.get().auth.phase === 'signed-out') void this.refresh().catch(() => {});
+    }, Math.min(60, 5 * 2 ** Math.min(attempt, 4)) * 1000);
+    this.reconnect = { timer, attempt: attempt + 1 };
   }
 
   // One deadline covers validation, credential reads and sign-in option discovery.
@@ -124,13 +155,14 @@ export class Auth {
       }
       this.patch({ phase: 'offline', error: message(error, msg('server.unreachable')),
         ...server, revision: this.session.epoch });
+      this.scheduleReconnect(this.reconnect?.attempt ?? 0);
     } finally {
       clearTimeout(timer);
     }
   }
 
   private async startSession(): Promise<void> {
-    this.patch({ phase: 'starting', error: '' });
+    if (this.box.get().auth.phase !== 'offline') this.patch({ phase: 'starting', error: '' });
     if (!this.session.hasServer()) return this.noServer();
     const code = !this.session.servers.standalone ? this.platform.page?.webCode : undefined;
     if (this.platform.page) delete this.platform.page.webCode;
@@ -208,6 +240,7 @@ export class Auth {
 
   /** A standalone app with no server yet: signed out, and the app offers Connect. */
   private noServer(): void {
+    this.cancelReconnect();
     this.patch({
       phase: 'signed-out', serverId: '', serverKind: '', serverName: '', viewer: '',
       passwordAvailable: false, quickAvailable: false, plexAvailable: false, plex: null, secureOrigin: '', error: '',
@@ -238,16 +271,9 @@ export class Auth {
     // Signed out from a server that did not answer: its sign-in options are unknown, not absent.
     // Say so, and ask again with backoff until it answers (or another server is selected).
     const attempt = this.reconnect?.attempt ?? 0;
-    if (this.reconnect) clearTimeout(this.reconnect.timer);
-    this.reconnect = undefined;
-    if (!reachable && !tokens && settled === 'signed-out') {
-      error ||= msg('server.unreachable');
-      const serverId = connection.record.id;
-      const timer = setTimeout(() => {
-        if (this.session.selected().record.id === serverId && this.box.get().auth.phase === 'signed-out') void this.refresh().catch(() => {});
-      }, Math.min(60, 5 * 2 ** attempt) * 1000);
-      this.reconnect = { timer, attempt: attempt + 1 };
-    }
+    this.cancelReconnect();
+    const reconnecting = settled === 'offline' || (!reachable && !tokens && settled === 'signed-out');
+    if (reconnecting) error ||= msg('server.unreachable');
     this.patch({
       phase: settled,
       serverId: connection.record.id,
@@ -259,6 +285,7 @@ export class Auth {
       revision: this.session.epoch,
       pollSeconds: hasEventStream(connection.adapter) ? 0 : SNAPSHOT_POLL_SECONDS,
     });
+    if (reconnecting) this.scheduleReconnect(attempt);
   }
 
   private async options(connection: Connection) {
@@ -429,6 +456,8 @@ export class Auth {
 
   /** Revoke the selected server's session, then forget it here. */
   async signOut(): Promise<void> {
+    this.linkGeneration++;
+    this.cancelReconnect();
     const connection = this.session.selected();
     const epoch = this.session.epoch;
     try {
