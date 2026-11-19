@@ -12,7 +12,7 @@ async function cloud<T>(path: string, clientIdentifier: string, method = 'GET', 
   if (url.origin !== 'https://plex.tv' || !url.pathname.startsWith('/api/v2/')) throw new Error('Invalid Plex account endpoint');
   const response = await fetch(url.href, { method, cache: 'no-store', redirect: 'error', credentials: 'omit',
     headers: { ...plexHeaders(clientIdentifier), ...(accountToken ? { 'X-Plex-Token': accountToken } : {}) } });
-  if (!response.ok) throw new Error(`Plex account request failed (${response.status})`);
+  if (!response.ok) throw new Error(response.status === 429 ? 'Too many Plex sign-in attempts. Wait before trying again.' : 'Plex is temporarily unavailable. Wait before trying again.');
   return response.json() as Promise<T>;
 }
 export function createPlexPin(clientIdentifier: string): Promise<PlexPin> {

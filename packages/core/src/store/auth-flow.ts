@@ -1,7 +1,7 @@
 /** Presentation navigation shared by every host. Authentication and tokens stay in Auth/Servers. */
-export type AuthStep = { page: 'choose' | 'add' | 'plex' } | { page: 'signin' | 'code'; serverId: string };
+export type AuthStep = { page: 'choose' | 'add' | 'plex' } | { page: 'signin' | 'code' | 'server-plex'; serverId: string };
 export interface AuthFlow { step: AuthStep; history: AuthStep[] }
-export type AuthFlowEvent = { type: 'add' | 'plex' | 'back' } | { type: 'server'; serverId: string } | { type: 'code' } | { type: 'servers'; count: number };
+export type AuthFlowEvent = { type: 'add' | 'plex' | 'back' } | { type: 'server'; serverId: string } | { type: 'code' | 'server-plex' } | { type: 'servers'; count: number };
 export function initialAuthFlow(saved: number): AuthFlow {
   return { step: { page: saved ? 'choose' : 'add' }, history: [] };
 }
@@ -12,7 +12,7 @@ export function authFlow(state: AuthFlow, event: AuthFlowEvent): AuthFlow {
     return state;
   }
   const next: AuthStep = event.type === 'server' ? { page: 'signin', serverId: event.serverId }
-    : event.type === 'code' ? state.step.page === 'signin' ? { page: 'code', serverId: state.step.serverId } : state.step
+    : (event.type === 'code' || event.type === 'server-plex') ? state.step.page === 'signin' ? { page: event.type, serverId: state.step.serverId } : state.step
     : { page: event.type };
   if (next === state.step || (next.page === state.step.page && next.page !== 'signin')) return state;
   return { step: next, history: [...state.history, state.step] };

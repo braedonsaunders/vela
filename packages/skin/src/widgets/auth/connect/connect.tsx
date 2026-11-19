@@ -24,6 +24,7 @@ export interface ConnectProps {
 
 export function Connect({ servers, actions, onClose, auth, authActions, serverId = '' }: ConnectProps) {
   const layout = useAuthLayout();
+  useEffect(() => () => authActions?.cancelPlex(), [authActions]);
   const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId ? { step: {page: 'signin', serverId}, history: count ? [{page: 'choose'}] : [{page: 'add'}] } : initialAuthFlow(count));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -34,10 +35,12 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   const record = servers.list.find(s => s.id === target) ?? (added?.id === target ? added : undefined);
   const kind = record?.kind ?? auth?.serverKind;
   const name = record?.name || 'server';
+  useEffect(() => { if (serverId) send({type: 'server', serverId}); }, [serverId]);
   useEffect(() => { send({ type: 'servers', count: servers.list.length }); }, [servers.list.length]);
   useEffect(() => { if (auth?.phase === 'signed-in' && (step.page === 'signin' || step.page === 'code')) onClose?.(); }, [auth?.phase, step.page, onClose]);
   const back = () => {
     setError(''); setNote('');
+    if (step.page === 'server-plex') authActions?.cancelPlex();
     if (step.page === 'code') { void authActions?.cancelQuick(); actions.jellyfinQuickCancel(); }
     if (step.page === 'plex' || kind === 'plex') actions.plexCancel();
     if (flow.history.length) send({ type: 'back' });
@@ -78,7 +81,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   useEffect(() => {
     if (auth?.quick && step.page === 'signin' && target === auth.serverId) send({type: 'code'});
   }, [auth?.quick, step.page, target]);
-  const title = step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
+  const title = step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' || step.page === 'server-plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
   return <View style={{ gap: layout?.gap ?? 20, minHeight: 0, flexShrink: 1 }}>
     <View style={{ gap: layout?.tight ? 4 : 12 }}>
       {flow.history.length || onClose ? <Pill label={flow.history.length ? 'Back' : 'Cancel'} height={44} align="flex-start" onPress={back} testID="auth-back" /> : null}
@@ -90,6 +93,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
         {servers.list.map(server => <ServerRow key={server.id} server={server} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />)}
       </ScrollView>
     </> : step.page === 'add' ? <AddressStep servers={[]} busy={busy} probe={url => actions.probe(url)} onAdd={add} onSelect={select} onRemove={id => void run(() => actions.remove(id))} onPlex={() => { send({type: 'plex'}); void run(() => actions.plexStart()); }} error="" />
+    : step.page === 'server-plex' ? <PlexStep link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onCancel={back} />
     : step.page === 'plex' || kind === 'plex' ? <PlexStep link={servers.plex} busy={busy} starting={busy && !servers.plex} error="" onStart={() => void run(() => actions.plexStart())} onChoose={id => void run(async () => { const result = await actions.plexChoose(id); if (!result.error && result.id) { setNote(result.note ?? ''); setAdded({id: result.id, name: 'server', kind: result.note ? 'ether' : 'plex'}); send({type: 'server', serverId: result.id}); } return result; })} onCancel={back} />
     : step.page === 'code' ? <View style={{ gap: layout?.gap ?? 18, alignItems: 'center' }}>
       {quick?.code ? <CodeTiles code={quick.code} testID="connect-code" /> : <Waiting>Requesting a code…</Waiting>}
@@ -100,6 +104,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
     : <Credentials busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
       onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })} />}
+    {step.page === 'signin' && target === auth?.serverId && auth.plexAvailable ? <Pill label="Sign in with Plex" testID="server-plex" disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }} /> : null}
     {auth?.secureOrigin && step.page === 'signin' ? <Pill label="Use secure connection" height={44} onPress={() => void run(async () => { const result = await authActions?.secureSwitch(); if (result?.error) return result; if (result?.url) { if (Platform.OS === 'web') window.location.assign(result.url); else await Linking.openURL(result.url); } })} /> : null}
     {note && step.page === 'signin' ? <Words rows={{ 'font-size': '13px', color: '$ui.inkSecondary' }}>{note}</Words> : null}
     {error || (step.page === 'signin' && auth?.error) ? <ScrollView style={{maxHeight: layout?.tight ? 56 : 120, flexShrink: 1}}><Alert>{error || auth?.error || ''}</Alert></ScrollView> : null}

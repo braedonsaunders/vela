@@ -1,6 +1,8 @@
 // Signing in to the selected server: its sign-in options, password and Quick Connect sign-in,
 // the web's sign-in link (a one-time code redeemed at start), the hand-off to the server's
 // secure origin, and sign-out. Quick Connect polling runs here, at the server's interval.
+import { createPlexPin, pollPlexPin } from '../adapter/plex/auth';
+import { exchangePlexAccount } from '../adapter/ether/plex';
 import type * as V from '../wire';
 import type { Connection } from '../adapter/connection';
 import { capabilitiesOf } from '../adapter/advertise';
@@ -37,6 +39,8 @@ export interface AuthState {
   serverName: string;
   viewer: string;
   passwordAvailable: boolean;
+  plexAvailable: boolean;
+  plex: null | { code: string; linkUrl: string; state: 'waiting' | 'expired' | 'failed'; choices: never[] };
   quickAvailable: boolean;
   /** The server's HTTPS origin this http: page may hand its session to; '' when none. */
   secureOrigin: string;
@@ -55,6 +59,7 @@ export const initialAuth: AuthState = {
   serverName: '',
   viewer: '',
   passwordAvailable: false,
+  plexAvailable: false, plex: null,
   quickAvailable: false,
   secureOrigin: '',
   error: '',
@@ -67,6 +72,8 @@ export const initialAuth: AuthState = {
 const SNAPSHOT_POLL_SECONDS = 5;
 
 export class Auth {
+  private plexGeneration = 0;
+  private plexTimer?: ReturnType<typeof setTimeout>;
   private starting: Promise<void> | undefined;
   private linkError = '';
   private linkGeneration = 0;
@@ -81,6 +88,7 @@ export class Auth {
     private readonly platform: VelaPlatform,
   ) {
     session.onReset(() => {
+      this.cancelPlex();
       if (this.box.get().auth.phase !== 'redeeming') void this.refresh().catch(() => {});
     });
   }
@@ -202,7 +210,7 @@ export class Auth {
   private noServer(): void {
     this.patch({
       phase: 'signed-out', serverId: '', serverKind: '', serverName: '', viewer: '',
-      passwordAvailable: false, quickAvailable: false, secureOrigin: '', error: '',
+      passwordAvailable: false, quickAvailable: false, plexAvailable: false, plex: null, secureOrigin: '', error: '',
       revision: this.session.epoch, quick: null,
     });
   }
@@ -215,7 +223,7 @@ export class Auth {
     const epoch = this.session.epoch;
     const generation = this.linkGeneration;
     const tokens = await this.session.tokens(connection);
-    let options = { passwordAvailable: false, quickAvailable: false, secureOrigin: '' };
+    let options = { passwordAvailable: false, quickAvailable: false, plexAvailable: false, secureOrigin: '' };
     let reachable = true;
     try {
       options = await this.options(connection);
@@ -261,10 +269,52 @@ export class Auth {
     const secure = hasWebCodeSignIn(connection.adapter) && !this.session.servers.standalone
       ? secureOriginFor(this.platform, capabilities.secureOrigins) : '';
     return {
+      plexAvailable: connection.record.kind === 'ether' && capabilities.plexAccountSignIn === true,
       passwordAvailable: capabilities.features.passwordSignIn.available,
       quickAvailable: capabilities.features.quickConnect.available,
       secureOrigin: secure,
     };
+  }
+
+  cancelPlex(): void {
+    this.plexGeneration++;
+    clearTimeout(this.plexTimer);
+    this.patch({ plex: null });
+  }
+
+  async startPlex(): Promise<void> {
+    this.cancelPlex();
+    const generation = this.plexGeneration;
+    const connection = this.session.selected();
+    const epoch = this.session.epoch;
+    const current = () => generation === this.plexGeneration && epoch === this.session.epoch && connection === this.session.selected();
+    try {
+      if (!(await this.options(connection)).plexAvailable) throw new Error('Plex sign-in is not offered by this server');
+      const pin = await createPlexPin(this.session.device.id);
+      if (!current()) return;
+      this.patch({ error: '', plex: { code: pin.code, linkUrl: 'https://plex.tv/link', state: 'waiting', choices: [] } });
+      const poll = async () => {
+        if (!current()) return;
+        try {
+          const approved = await pollPlexPin(this.session.device.id, pin);
+          if (!current()) return;
+          if (approved.authToken) {
+            const tokens = await exchangePlexAccount(connection.record.origin, approved.authToken, this.session.device, this.session.key());
+            if (!current()) return;
+            await connection.credentials.set(tokens);
+            this.cancelPlex();
+            this.session.resetSession();
+          } else if (Date.parse(pin.expiresAt) <= Date.now()) {
+            this.patch({ plex: { code: '', linkUrl: '', state: 'expired', choices: [] } });
+          } else this.plexTimer = setTimeout(() => void poll(), 2000);
+        } catch (error) {
+          if (current()) this.patch({ plex: null, error: message(error, 'Plex is temporarily unavailable. Try again.') });
+        }
+      };
+      this.plexTimer = setTimeout(() => void poll(), 2000);
+    } catch (error) {
+      if (current()) this.patch({ error: message(error, 'Plex is temporarily unavailable. Try again.') });
+    }
   }
 
   async signIn(username: string, password: string): Promise<boolean> {

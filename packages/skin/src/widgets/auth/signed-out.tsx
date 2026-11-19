@@ -11,6 +11,8 @@ export interface SessionAuth {
   serverId: string;
   serverKind: string;
   passwordAvailable: boolean;
+  plexAvailable?: boolean;
+  plex?: import('./connect/model').PlexLink | null;
   quickAvailable: boolean;
   secureOrigin: string;
   error: string;
@@ -19,6 +21,8 @@ export interface SessionAuth {
 
 export interface AuthActions {
   signIn(username: string, password: string): Promise<unknown>;
+  startPlex(): Promise<void>;
+  cancelPlex(): void;
   startQuick(): Promise<unknown>;
   cancelQuick(): unknown;
   secureSwitch(): Promise<{ url: string; error: string }>;
@@ -34,11 +38,11 @@ export interface SignedOutProps {
   servers: ServersView;
   serverActions: ServerActions;
   /** A server pack's stage art (image paths), when the server offers one. */
-  art?: { backdrop: string; wordmark: string };
+  art?: { backdrop: string; wordmark: string; name?: string };
 }
 
-export function SignedOut({ host, auth, actions, servers, serverActions }: SignedOutProps) {
-  return <HostContext.Provider value={host}><Stage>
-    <Connect servers={servers} actions={serverActions} auth={auth} authActions={actions} />
+export function SignedOut({ host, auth, actions, servers, serverActions, art }: SignedOutProps) {
+  return <HostContext.Provider value={host}><Stage branding={art}>
+    <Connect serverId={auth.serverId} servers={servers} actions={serverActions} auth={auth} authActions={actions} />
   </Stage></HostContext.Provider>;
 }
