@@ -122,7 +122,7 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
-        {branding?.name && !branding.wordmark ? <Text style={{color: look.ui.ink, fontSize: 28, fontWeight: '700'}}>{branding.name}</Text> : mark && layout.logoHeight ? <Image source={mark} style={{ width: branding?.wordmark ? 220 : layout.logoHeight * 60 / 104, height: layout.logoHeight }} accessibilityElementsHidden /> : null}
+        {branding?.name && !branding.wordmark ? <Text style={{color: look.ui.ink, fontSize: 28, fontWeight: '700'}}>{branding.name}</Text> : mark && layout.logoHeight ? <Image source={mark} contentFit="contain" style={{ width: branding?.wordmark ? 220 : layout.logoHeight * 60 / 104, height: layout.logoHeight }} accessibilityElementsHidden /> : null}
         <Animated.View testID="auth-card" style={[card.style, { maxHeight: availableHeight < host.viewport.height - 100 ? undefined : layout.cardHeight, flexShrink: 1 }, layout.compact && { padding: layout.padding, maxWidth: '100%', width: '100%' }, look.motion('velaEnter0')]}>
           {card.blur && Platform.OS !== 'web' ? (
             <BlurView
