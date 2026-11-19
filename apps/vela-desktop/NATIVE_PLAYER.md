@@ -62,3 +62,8 @@ Apple bounded recovery path. Attachment URLs never enter diagnostics/events.
 
 macOS distribution targets Apple silicon (arm64) only. Native builds and
 Electron packages must use arm64; Linux continues to target x64.
+
+Optional `diagnostics/requestId` requests return `diagnostics/requestId/value`
+from the mounted host's `diagnostics()` method. This read-only surface contains
+EDR headroom, layer flags, route, video format, first-frame state and rate only;
+never media addresses or grants. Unsupported hosts return null.

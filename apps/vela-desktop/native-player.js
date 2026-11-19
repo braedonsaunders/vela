@@ -57,6 +57,6 @@ function attachNativePlayer(window, adapter) {
     });
     return tail;
   };
-  return { receive, dispose() { closed = true; access = null; tail = tail.then(stop).catch(() => {}); return tail; } };
+  return { receive, diagnostics: () => tail.then(() => current?.host?.diagnostics?.() ?? null), dispose() { closed = true; access = null; tail = tail.then(stop).catch(() => {}); return tail; } };
 }
 module.exports = { loadNativeHost, attachNativePlayer };

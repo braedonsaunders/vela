@@ -266,6 +266,10 @@ if (!app.requestSingleInstanceLock()) {
         }).catch(() => {
           if (!window.isDestroyed()) event.sender.send('vela:native-event', { kind: 'capabilities', requestId: message.requestId, error: true });
         });
+      } else if (message.kind === 'diagnostics') {
+        window.__velaNativePlayer?.diagnostics().then(value => {
+          if (!window.isDestroyed()) event.sender.send('vela:native-event', { kind: 'diagnostics', requestId: message.requestId, value });
+        }).catch(() => {});
       } else {
         if (message.kind === 'mount') window.__velaPlayerId = message.id;
         void window.__velaNativePlayer?.receive(message);
