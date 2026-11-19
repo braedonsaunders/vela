@@ -66,6 +66,12 @@ fun main() {
 
   val scope = MediaScope("http://example.com", "/media")
   check(scope.contains("http://example.com:80/media/file"))
+  check(MediaScope("http://example.com", "/media%20folder").contains("http://example.com/media%20folder/file"))
+  check(MediaScope("http://example.com", "/media folder").contains("http://example.com/media%20folder/file"))
+  check(!scope.contains("http://example.com/media/%252e%252e/private"))
+  check(!scope.contains("http://example.com/media/%25%32%65%25%32%65/private"))
+  check(!scope.contains("http://example.com/media/%00/private"))
+  check(runCatching { MediaScope("http://example.com", "/media?scope") }.isFailure)
   listOf("http://evil.com/media/file", "http://example.com/medial/file", "https://example.com/media/file",
     "http://example.com/media/%2e%2e/private", "http://user@example.com/media/file").forEach { check(!scope.contains(it)) }
 
