@@ -12,12 +12,16 @@ function inScope(address, grant) {
   } catch { return false; }
 }
 async function createProxy(grant) {
-  const secret = randomBytes(24).toString('hex'), routes = new Map(), requests = new Set();
+  const secret = randomBytes(24).toString('hex'), routes = new Map(), reverse = new Map(), requests = new Set();
   let base, closed = false;
   const register = address => {
     const url = new URL(address, grant.origin).href;
     if (!inScope(url, grant)) throw new Error('Media outside access grant');
-    const token = randomBytes(18).toString('hex'); routes.set(token, url);
+    let token = reverse.get(url);
+    if (!token) {
+      token = randomBytes(18).toString('hex'); routes.set(token, url); reverse.set(url, token);
+      if (routes.size > 16384) { const oldest = routes.keys().next().value; reverse.delete(routes.get(oldest)); routes.delete(oldest); }
+    }
     return `${base}/${secret}/${token}`;
   };
   const server = http.createServer(async (req, res) => {
@@ -62,6 +66,6 @@ async function createProxy(grant) {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${server.address().port}`;
-  return { register, close() { closed = true; for (const c of requests) c.abort(); routes.clear(); server.closeAllConnections(); server.close(); } };
+  return { register, close() { closed = true; for (const c of requests) c.abort(); routes.clear(); reverse.clear(); server.closeAllConnections(); server.close(); } };
 }
 module.exports = { inScope, createProxy };

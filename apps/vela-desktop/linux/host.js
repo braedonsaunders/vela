@@ -27,7 +27,7 @@ async function create({ window, emit }) {
   const xid = handle.length >= 8 ? handle.readBigUInt64LE() : BigInt(handle.readUInt32LE());
   const child = spawn(path.join(root(), 'vela-mpv'), [String(xid), socket], {
     env: { ...process.env, LD_LIBRARY_PATH: path.join(root(), 'lib') }, stdio: ['pipe','pipe','ignore'] });
-  let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0;
+  let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {};
   let rect = { x:0, y:0, width:0, height:0, scaleFactor:1 }, chain = Promise.resolve();
   const send = (event, value) => { if (!disposed) emit(event, value); };
   function bounds() {
@@ -46,7 +46,7 @@ async function create({ window, emit }) {
     }
     fs.rmSync(temp, { recursive:true, force:true });
   }
-  async function fallback() { send('fallback', { message:'Native playback unavailable' }); await destroy(); }
+  async function fallback(error) { send('fallback', { message:'Native playback unavailable', reason:['Unsupported path','Server failed','Native video output unavailable','Native command timeout','Native command failed'].includes(error?.message) ? error.message : 'Native host unavailable' }); await destroy(); }
   child.on('error', () => { void fallback(); });
   child.on('exit', () => { if (!disposed) void fallback(); });
   child.stdin.on('error', () => { if (!disposed) void fallback(); });
@@ -76,38 +76,31 @@ async function create({ window, emit }) {
         const id = plan[kind === 'audio' ? 'selectedAudioTrackId' : 'selectedSubtitleTrackId'];
         const track = plan[kind === 'audio' ? 'audioTracks' : 'subtitleTracks']?.find(t => t.id === id);
         const native = p['track-list']?.find(t => t.type === (kind === 'audio' ? 'audio' : 'sub') && t['ff-index'] === track?.streamIndex);
-        if (native) await cmd('set_property', kind === 'audio' ? 'aid' : 'sid', native.id);
+        if (native && appliedTracks[kind] !== native.id) { await cmd('set_property', kind === 'audio' ? 'aid' : 'sid', native.id); appliedTracks[kind]=native.id; }
         else if (kind === 'subtitle' && track?.delivery?.kind === 'external' && externalSubtitle !== id) { await cmd('sub-add',proxy.register(track.delivery.url || track.url),'select'); externalSubtitle=id; }
         else if (kind === 'subtitle' && !id) await cmd('set_property','sid','no');
       }
-      send('snapshot', {state,position,duration:(p.duration || 0)+offset,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:1,droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps']});
+      send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:(p.duration || 0)+offset,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:1,droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps']});
       send('observation', {sessionId:plan.sessionId,observation:{idempotencyKey:`${source}:${++sequence}`,sequence,
         sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,observedAt:new Date().toISOString(),positionSeconds:position,state:state === 'loading' ? 'buffering' : state,
         selectedPathId:plan.selectedPathId,audioTrackId:plan.selectedAudioTrackId,subtitleTrackId:plan.selectedSubtitleTrackId,
         playableRanges:p['demuxer-cache-duration'] > 0 ? [{startSeconds:position,endSeconds:position+p['demuxer-cache-duration']}] : []}});
     }).finally(() => { ticking = false; });
   }, 500);
-  return {
-    setBounds(value) { rect = value; bounds(); },
-    setAccess(grant) {
-      const generation = ++accessGeneration; proxy?.close(); proxy=null;
-      const immutable = grant ? {origin:grant.origin,pathPrefix:grant.pathPrefix,headers:{...grant.headers}} : null;
-      return enqueue(async () => { await cmd('stop'); source=''; seek=''; plan=null; pendingSeek=null;
-        if (generation === accessGeneration && immutable) proxy=await createProxy(immutable);
-      });
-    },
-    update(props) { return enqueue(async () => {
+  let latestProps;
+  const apply = async props => {
       if (props.preview || props.session) throw new Error('Browser fallback required');
       if (props.active === false || !props.plan) { await cmd('stop'); source=''; plan=null; return; }
       if (props.serverError) throw new Error('Server failed');
       if (!acceptPlan(plan, props.plan)) return;
       const next = props.plan, selected = next.paths.find(p => p.id === next.selectedPathId);
-      if (!proxy || !selected || !(selected.transport === 'hls' || selected.transport === 'file' && selected.original)) throw new Error('Unsupported path');
+      if (!proxy) return;
+      if (!selected || !(selected.transport === 'hls' || selected.transport === 'file' && selected.original)) throw new Error('Unsupported path');
       if (plan?.sessionId !== next.sessionId) { sequence=0; lastCommand=-1; }
       plan=next;
       const key = `${plan.sessionId}:${selected.id}:${plan.sourceGeneration}`;
       if (source !== key) {
-        await cmd('loadfile', proxy.register(selected.url), 'replace'); source=key; externalSubtitle=null; loadedAt=Date.now();
+        await cmd('loadfile', proxy.register(selected.url), 'replace'); source=key; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now();
         await cmd('set_property','speed',1);
       }
       const seekKey = `${key}:${plan.seekGeneration}`;
@@ -135,7 +128,18 @@ async function create({ window, emit }) {
         if (c.type === 'speed') await cmd('set_property','speed',1);
         send('command',{id:c.id,ok:true});
       }
-    }); },
+  };
+  return {
+    setBounds(value) { rect = value; bounds(); },
+    setAccess(grant) {
+      const generation = ++accessGeneration; proxy?.close(); proxy=null;
+      const immutable = grant ? {origin:grant.origin,pathPrefix:grant.pathPrefix,headers:{...grant.headers}} : null;
+      return enqueue(async () => { await cmd('stop'); source=''; seek=''; plan=null; pendingSeek=null;
+        if (generation === accessGeneration && immutable) { proxy=await createProxy(immutable); if(latestProps) await apply(latestProps); }
+      });
+    },
+    update(props) { latestProps=props; return enqueue(() => apply(props)); },
+    diagnostics: async () => ({active:!!source,hasAccess:!!proxy,sessionId:plan?.sessionId,position:await get('time-pos'),video:await get('video-out-params'),hwdec:await get('hwdec-current'),speed:await get('speed')}),
     destroy,
   };
 }

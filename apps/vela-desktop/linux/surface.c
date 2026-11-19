@@ -1,5 +1,11 @@
 // LGPL libmpv render API. mpv's built-in X11 VO is GPL and must not be used.
 #include <mpv/client.h>
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavfilter/avfilter.h>
+#include <libavutil/avutil.h>
+#include <libswresample/swresample.h>
+#include <libswscale/swscale.h>
 #include <mpv/render_gl.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -14,9 +20,14 @@
 static void *get_proc(void *ctx, const char *name) { (void)ctx; return (void *)eglGetProcAddress(name); }
 static void wake(void *ctx) { int fd=*(int *)ctx; char c=1; (void)write(fd,&c,1); }
 int main(int argc, char **argv) {
-    if (argc==2 && !strcmp(argv[1],"--probe")) return 0;
-    if (argc!=3) return 2;
+    if (!strstr(avformat_license(),"LGPL") || !strstr(avfilter_license(),"LGPL") || !strstr(avutil_license(),"LGPL") || !strstr(swresample_license(),"LGPL") || !strstr(swscale_license(),"LGPL") || !strstr(avcodec_license(),"LGPL") || strstr(avcodec_configuration(),"--enable-gpl") || strstr(avcodec_configuration(),"--enable-nonfree")) return 11;
+    if (argc==2 && !strcmp(argv[1],"--audit")) return 0;
+    int probe=argc==2 && !strcmp(argv[1],"--probe");
+    if (!probe && argc!=3) return 2;
     Display *display=XOpenDisplay(NULL); if (!display) return 3;
+    char selection[64]; snprintf(selection,sizeof(selection),"_NET_WM_CM_S%d",DefaultScreen(display));
+    if (XGetSelectionOwner(display,XInternAtom(display,selection,False))==None) { XCloseDisplay(display); return 10; }
+    if (probe) { XCloseDisplay(display); return 0; }
     EGLDisplay egl=eglGetDisplay((EGLNativeDisplayType)display);
     if (!eglInitialize(egl,NULL,NULL) || !eglBindAPI(EGL_OPENGL_API)) return 4;
     EGLint config_attrs[]={EGL_SURFACE_TYPE,EGL_WINDOW_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_BIT,EGL_RED_SIZE,8,EGL_GREEN_SIZE,8,EGL_BLUE_SIZE,8,EGL_NONE};
@@ -44,7 +55,7 @@ int main(int argc, char **argv) {
         {"vo","libmpv"},{"hwdec","auto-safe"},{"gpu-sw","yes"},
         {"tone-mapping","bt.2390"},{"target-trc","srgb"},{"target-prim","bt.709"},
         {"audio-spdif","ac3,eac3,dts,dts-hd,truehd"},{"network-timeout","20"},
-        {"speed","1"},{"idle","yes"},{"ytdl","no"},{"input-ipc-server",argv[2]}
+        {"speed","1"},{"idle","yes"},{"input-ipc-server",argv[2]}
     };
     for (size_t i=0;i<sizeof(options)/sizeof(options[0]);i++)
         if (mpv_set_option_string(mpv,options[i][0],options[i][1])<0) { fprintf(stderr,"Unsupported option: %s\n",options[i][0]); return 6; }
