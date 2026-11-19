@@ -58,7 +58,13 @@
       ],
       "darkModeSupport": true,
       "hardenedRuntime": false,
-      "identity": null
+      "identity": null,
+      "extendInfo": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSLocalNetworkUsageDescription": "Vela connects to the media servers you add to play your library and live TV."
+      }
     },
     "dmg": {
       "title": "Vela ${version}"
