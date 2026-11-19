@@ -18,6 +18,10 @@ if (config.traceLive) {
 }
 if (config.profileCPU) {
   const player = requireNativeModule('VelaPlayer');
+  try {
+    console.log('[android-capabilities]', JSON.stringify(player.capabilities()));
+    console.log('[android-decoders]', JSON.stringify(player.decoderCapabilities()));
+  } catch { console.log('[android-capabilities]', 'diagnostics-unavailable'); }
   setTimeout(() => {
     try { player.setCPUProfiling(true); console.log('[android-cpu]', 'started'); }
     catch { console.log('[android-cpu]', 'unavailable'); }
@@ -27,4 +31,6 @@ if (config.profileCPU) {
     catch { console.log('[android-cpu]', 'dump-unavailable'); }
   }, (config.profileStartMs || 5000) + (config.profileDurationMs || 25000));
 }
-require('./apple-session-bootstrap');
+// An owner device keeps its existing account and registry during UI profiling.
+if (config.preserveSession) require('expo-router/entry');
+else require('./apple-session-bootstrap');
