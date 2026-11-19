@@ -4,7 +4,8 @@ import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
 import type { VelaPlatform } from '../src/store/platform';
-import { tokens } from './helpers';
+import { MemoryStore, tokens } from './helpers';
+import { ServerRegistry } from '../src/session/servers';
 
 test('a linked Ether choice saves Vela tokens before selecting its native protocol', async () => {
   const record = { id: 'ether-id', kind: 'ether', name: 'Ether', origin: 'https://example.test', basePath: '/' } as const;
@@ -37,4 +38,26 @@ test('a newly linked empty resource list retries at 3s and 10s without another P
   expect(delays).toEqual([3000, 10000]);
   expect(refreshes).toBe(2);
   expect(box.get().servers.plex?.state).toBe('linked');
+});
+
+
+test('older Ether discovered through Plex stays saved and selected for password/code sign-in', async () => {
+  const registry = new ServerRegistry(new MemoryStore());
+  const calls: string[] = [];
+  const session = { servers: registry, device: { id: 'device' }, key: () => 'key', onReset() {},
+    select: (id: string) => { registry.select(id); calls.push('select'); },
+    connection: () => { throw new Error('No credentials may be saved for an unsupported exchange'); } };
+  const box = new StateBox({ servers: { ...initialServers, plex: { code: '123', state: 'linked', choices: [], linkUrl: '' } } } as unknown as VelaState);
+  const servers = new Servers(box, session as unknown as Session, {} as VelaPlatform);
+  servers.refresh = async () => { calls.push('refresh'); };
+  (servers as unknown as { plexLink: unknown }).plexLink = { choose: async () => ({
+    kind: 'ether', name: 'Production Ether', origin: 'https://older.example', origins: ['https://older.example'],
+    tokens: null, note: 'Plex sign-in needs Ether 0.3.16 or later',
+  }), cancel() {} };
+  const result = await servers.plexChoose('chosen');
+  expect(result.error).toBe('');
+  expect(result.note).toBe('Plex sign-in needs Ether 0.3.16 or later');
+  expect(registry.read()).toEqual({ selectedId: result.id, servers: [{ id: result.id, kind: 'ether', name: 'Production Ether', origin: 'https://older.example', basePath: '/' }] });
+  expect(calls).toEqual(['select', 'refresh']);
+  expect(box.get().servers.plex).toBeNull();
 });

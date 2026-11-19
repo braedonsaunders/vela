@@ -83,7 +83,7 @@ export class PlexLink {
    * The chosen server's first connection that proves it is that server: its own `/identity`
    * must name the resource's machine identifier, read with redirects refused.
    */
-  async choose(code: string, id: string, pageSecure: boolean, signIn: { device: Device; idempotencyKey: string }): Promise<{ kind: 'ether' | 'plex'; name: string; origin: string; origins: string[]; tokens: Tokens }> {
+  async choose(code: string, id: string, pageSecure: boolean, signIn: { device: Device; idempotencyKey: string }): Promise<{ kind: 'ether' | 'plex'; name: string; origin: string; origins: string[]; tokens: Tokens | null; note?: string }> {
     const resource = this.resources.find(r => r.clientIdentifier === id);
     const account = this.account;
     if (!account || this.pin?.code !== code || !resource) throw new Error('Link Plex again to choose a server');
@@ -100,7 +100,13 @@ export class PlexLink {
       if (this.account !== account || this.pin?.code !== code) throw new Error('Link Plex again to choose a server');
       const exchangeKey = this.exchangeKeys.get(id) ?? signIn.idempotencyKey;
       this.exchangeKeys.set(id, exchangeKey);
-      if (ether && !ether.plexAccountSignIn) throw new Error('This Ether server needs an update or Plex sign-in enabled. Ask the owner to enable Sign in with Plex.');
+      if (ether && !ether.plexAccountSignIn) {
+        // Older Ether is still a usable server. Keep the verified choice, but never treat the
+        // Plex resource/account token as an Ether session; continue with its own sign-in methods.
+        this.cancel();
+        return { kind: 'ether', name: ether.name || resource.name || 'Ether', origin,
+          origins: [origin], tokens: null, note: 'Plex sign-in needs Ether 0.3.16 or later' };
+      }
       const tokens: Tokens = ether
         ? await exchangePlexAccount(origin, account.token, signIn.device, exchangeKey)
         : { accessToken: resource.accessToken, refreshToken: '', expiresAt: '9999-12-31T23:59:59Z', viewer: account.viewer };

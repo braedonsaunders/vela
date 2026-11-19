@@ -68,6 +68,7 @@ export const initialServers: ServersState = { list: [], selectedId: 'ether', ple
 
 /** The outcome of a server action: the server it concerned, or why it failed. */
 export interface ServerResult {
+  note?: string;
   id: string;
   error: string;
 }
@@ -309,10 +310,15 @@ export class Servers {
         const registry = this.session.servers;
         const record = registry.read().servers.find(s => s.kind === 'ether' && s.origin === chosen.origin)
           ?? registry.add('ether', chosen.name, chosen.origin);
-        await this.signedIn(this.session.connection(record.id), chosen.tokens);
+        if (chosen.tokens) await this.signedIn(this.session.connection(record.id), chosen.tokens);
+        else {
+          this.session.select(record.id);
+          await this.refresh();
+        }
         this.plexCancel();
-        return { id: record.id, error: '' };
+        return { id: record.id, error: '', ...(chosen.note ? { note: chosen.note } : {}) };
       }
+      if (!chosen.tokens) throw new Error('Plex returned no server session');
       // A Plex record added by a typed address (often the LAN one) becomes this server at its proven address.
       const registry = this.session.servers;
       const list = registry.read().servers;

@@ -27,6 +27,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId ? { step: {page: 'signin', serverId}, history: count ? [{page: 'choose'}] : [{page: 'add'}] } : initialAuthFlow(count));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [note, setNote] = useState('');
   const [added, setAdded] = useState<{id: string; name: string; kind: string} | null>(null);
   const step = flow.step;
   const target = 'serverId' in step ? step.serverId : '';
@@ -36,7 +37,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   useEffect(() => { send({ type: 'servers', count: servers.list.length }); }, [servers.list.length]);
   useEffect(() => { if (auth?.phase === 'signed-in' && (step.page === 'signin' || step.page === 'code')) onClose?.(); }, [auth?.phase, step.page, onClose]);
   const back = () => {
-    setError('');
+    setError(''); setNote('');
     if (step.page === 'code') { void authActions?.cancelQuick(); actions.jellyfinQuickCancel(); }
     if (step.page === 'plex' || kind === 'plex') actions.plexCancel();
     if (flow.history.length) send({ type: 'back' });
@@ -57,6 +58,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
     finally { setBusy(false); }
   };
   const select = (id: string) => void run(async () => {
+    setNote('');
     const result = await actions.select(id);
     if (!result.error) {
       if (!auth && servers.list.find(server => server.id === id)?.status === 'ready') onClose?.();
@@ -88,7 +90,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
         {servers.list.map(server => <ServerRow key={server.id} server={server} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />)}
       </ScrollView>
     </> : step.page === 'add' ? <AddressStep servers={[]} busy={busy} probe={url => actions.probe(url)} onAdd={add} onSelect={select} onRemove={id => void run(() => actions.remove(id))} onPlex={() => { send({type: 'plex'}); void run(() => actions.plexStart()); }} error="" />
-    : step.page === 'plex' || kind === 'plex' ? <PlexStep link={servers.plex} busy={busy} starting={busy && !servers.plex} error="" onStart={() => void run(() => actions.plexStart())} onChoose={id => void run(async () => { const result = await actions.plexChoose(id); if (!result.error && result.id) { setAdded({id: result.id, name: 'server', kind: 'plex'}); send({type: 'server', serverId: result.id}); } return result; })} onCancel={back} />
+    : step.page === 'plex' || kind === 'plex' ? <PlexStep link={servers.plex} busy={busy} starting={busy && !servers.plex} error="" onStart={() => void run(() => actions.plexStart())} onChoose={id => void run(async () => { const result = await actions.plexChoose(id); if (!result.error && result.id) { setNote(result.note ?? ''); setAdded({id: result.id, name: 'server', kind: result.note ? 'ether' : 'plex'}); send({type: 'server', serverId: result.id}); } return result; })} onCancel={back} />
     : step.page === 'code' ? <View style={{ gap: layout?.gap ?? 18, alignItems: 'center' }}>
       {quick?.code ? <CodeTiles code={quick.code} testID="connect-code" /> : <Waiting>Requesting a code…</Waiting>}
       {quick?.status === 'expired' || quick?.status === 'denied' ? <Alert>{quick.status === 'expired' ? 'Code expired. Go back to request another.' : 'Code rejected. Try again.'}</Alert> : <Waiting>Approve this code on a signed-in device.</Waiting>}
@@ -99,6 +101,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
       onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })} />}
     {auth?.secureOrigin && step.page === 'signin' ? <Pill label="Use secure connection" height={44} onPress={() => void run(async () => { const result = await authActions?.secureSwitch(); if (result?.error) return result; if (result?.url) { if (Platform.OS === 'web') window.location.assign(result.url); else await Linking.openURL(result.url); } })} /> : null}
+    {note && step.page === 'signin' ? <Words rows={{ 'font-size': '13px', color: '$ui.inkSecondary' }}>{note}</Words> : null}
     {error || (step.page === 'signin' && auth?.error) ? <ScrollView style={{maxHeight: layout?.tight ? 56 : 120, flexShrink: 1}}><Alert>{error || auth?.error || ''}</Alert></ScrollView> : null}
   </View>;
 }

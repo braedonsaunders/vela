@@ -39,9 +39,14 @@ test('an identity mismatch never receives a Plex account token', async () => {
   await expect(link.choose('123', 'machine', true, signIn)).rejects.toThrow('could not be reached');
   expect(seen.some(r => r.url.pathname === '/vela/v0/auth/plex')).toBe(false);
 });
-test('older Ether cannot silently become an authenticated PMS session', async () => {
-  const { link } = await linked({ advertised: false });
-  await expect(link.choose('123', 'machine', true, signIn)).rejects.toThrow('enable Sign in with Plex');
+test('older Ether falls back to its own sign-in without exchanging or storing Plex credentials', async () => {
+  const { link, seen } = await linked({ advertised: false });
+  expect(await link.choose('123', 'machine', true, signIn)).toMatchObject({
+    kind: 'ether', origin, name: 'Ether', tokens: null,
+    note: 'Plex sign-in needs Ether 0.3.16 or later',
+  });
+  expect(seen.some(r => r.url.pathname === '/vela/v0/auth/plex')).toBe(false);
+  expect(link.servers('123', true)).toEqual([]);
 });
 for (const [status, message] of [[401, 'Link Plex again'], [403, 'share this server'], [429, 'Wait'], [503, 'temporarily unavailable']] as const) {
   test(`exchange ${status} stays in server choice with an actionable error`, async () => {

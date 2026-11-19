@@ -66,6 +66,7 @@ export interface ServersView {
 
 /** A server action's outcome: the server it concerns, or why it failed. */
 export interface Outcome {
+  note?: string;
   id: string;
   error: string;
 }
