@@ -42,11 +42,14 @@ export function liveSource(adapter: LiveAdapter, client: V.ClientCapabilities): 
       } catch (error) {
         if (!(error instanceof VelaError)) throw error;
         // Ended, expired or unknown: the server holds nothing for this session any more.
-        if (error.status === 404 || error.status === 410) return;
+        if (error.status === 404 || error.status === 410 || error.detail.code === 'session_ended') return;
         // A stop can race a server-side generation change; it names the current ones.
         const current = error.detail.code === 'stale_generation' ? error.detail.currentGenerations : undefined;
         if (!current) throw error;
-        await stop(current, key('stop'));
+        try { await stop(current, key('stop')); } catch (retryError) {
+          if (retryError instanceof VelaError && (retryError.status === 404 || retryError.status === 410 || retryError.detail.code === 'session_ended')) return;
+          throw retryError;
+        }
       }
     },
   };

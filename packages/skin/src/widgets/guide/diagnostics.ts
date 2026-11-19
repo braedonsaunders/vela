@@ -1,4 +1,11 @@
 /** Diagnostics are opt-in for device verification and do not schedule renders. */
+export function previewFailure(operation: 'tune' | 'stop', error: unknown) {
+  const value = error as { status?: number; detail?: { code?: string } };
+  const code = value?.detail?.code;
+  console.warn('Vela preview', operation, typeof value?.status === 'number' ? value.status : 0,
+    typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code) ? code : 'unknown');
+}
+
 export function guideRender(part: 'grid' | 'row' | 'marker' | 'cell' | 'drawing') {
   if (process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS !== '1') return '';
   const root = globalThis as typeof globalThis & { __velaGuideRenders?: Record<string, number> };
