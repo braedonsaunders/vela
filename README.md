@@ -80,12 +80,13 @@ When the browser can do it, Vela doesn't ask the server for a transcode. It asks
 
 ### Native where it counts
 
-On TVs, phones and Windows, Vela plays through each platform's own engine behind the same player view contract, so every skin's player works unchanged. Each native app has exactly one engine; anything it cannot play falls back to the next path the server offers.
+On TVs, phones and every desktop, Vela plays through each platform's own engine behind the same player view contract, so every skin's player works unchanged. Each native app has exactly one engine; anything it cannot play falls back to the next path the server offers.
 
 * **Apple TV and iPhone/iPad:** **AetherEngine** (FFmpeg demux, VideoToolbox decode, Apple's own video layer), so colour, HDR10/Dolby Vision, Atmos and frame-rate matching come from tvOS and iOS exactly as in the TV app. Now Playing, remote commands and tvOS **Match Content** included.
 * **Android and Android TV:** **Media3 ExoPlayer** with hardware MediaCodec decode, HDR passthrough and Dolby audio passthrough on Android TV, and the LGPL FFmpeg extension for TrueHD, DTS and other audio the device lacks.
 * **Windows:** libmpv renders into the window *behind* a transparent WebView2, so the skin's player chrome lies over the native picture. F11 for fullscreen anywhere, the player's own fullscreen button, a dark title bar, and a window that remembers where you left it.
-* **macOS and Linux:** the same in-app engine as the browser, inside a desktop window.
+* **macOS (Apple silicon):** **AetherEngine**, the same engine as Apple TV, drawn natively under the Vela player with real EDR HDR on HDR-capable displays.
+* **Linux:** **libmpv** (LGPL build) through mpv's render API, with VA-API, VDPAU and NVDEC hardware decode. Runs on glibc 2.35 or newer (Ubuntu 22.04 and later).
 
 ---
 
@@ -208,7 +209,7 @@ Add servers from **Profile › Add a server** and switch between them in one tap
   │  Player contract     One view API for every platform                                                │
   │  Web engine          Range source · MKV/MP4 demux · WebCodecs + WASM video · WebGPU render + HDR    │
   │                      WASM TrueHD/DTS/E-AC-3 + 46-codec FFmpeg audio · libass · PGS · MSE HLS + ABR  │
-  │  Native engines      AetherEngine (Apple) · Media3 ExoPlayer (Android) · libmpv (Windows)            │
+  │  Native engines      AetherEngine (Apple) · Media3 ExoPlayer (Android) · libmpv (Windows, Linux)    │
   └──────────────────────────────────────────────┬──────────────────────────────────────────────────────┘
                                                  │  Vela protocol v0 · Jellyfin · Emby · Plex
                                                  ▼
@@ -236,8 +237,8 @@ Releases are signed inventories. Ether installs them atomically, can roll back, 
 | Platform | Download | Playback |
 | :--- | :--- | :--- |
 | **Windows 10/11** (x64) | `Vela-Setup-<version>-x64.exe`, a signed per-user installer | Native **libmpv** under the Vela player |
-| **macOS** (Apple silicon) | `Vela-<version>-mac-arm64.dmg`, signed and notarized | The in-app engine: original files, WebGPU, WASM audio |
-| **Linux** (x64) | `.AppImage` or `.deb` | The in-app engine |
+| **macOS** (Apple silicon) | `Vela-<version>-mac-arm64.dmg`, signed and notarized | Native **AetherEngine** with EDR HDR |
+| **Linux** (x64) | `.AppImage` or `.deb` (glibc 2.35+, Ubuntu 22.04 and later) | Native **libmpv** with VA-API, VDPAU and NVDEC |
 | **Android, Android TV** | `Vela-<version>-android.apk` / `-androidtv.apk`, to sideload | **Media3 ExoPlayer** |
 
 **In the browser, with Ether.**
@@ -254,7 +255,7 @@ Vela includes no media and no provider accounts. Your servers supply the catalog
 | :--- | :--- |
 | **Web / PWA** | Ships with Ether. Signed releases pass Ether's installer qualification (install, upgrade, rollback, reinstall). |
 | **Windows** | Standalone app with native mpv playback, an Authenticode-signed installer and self-updates. A new certificate builds SmartScreen reputation over its first downloads. |
-| **macOS, Linux** | Standalone apps around the in-app engine. macOS builds are Developer ID signed and notarized. |
+| **macOS, Linux** | Standalone apps with native playback (AetherEngine on Mac, libmpv on Linux) and self-updates. macOS builds are Developer ID signed and notarized. |
 | **Apple TV, iPhone, iPad** | Feature-complete on AetherEngine and in daily use on a real Apple TV and iPhone; TestFlight and the App Store are next. |
 | **Android, Android TV** | Feature-complete on Media3 ExoPlayer; signed APKs to sideload. Real-device testing on Android TV and Google Play are next. |
 
