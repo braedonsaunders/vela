@@ -264,3 +264,16 @@ Native `[vela-aether-cache]` JSON lines capture the status about every 15 second
 and immediately before fallback, without media URLs or grant headers.
 
 This investigation is recorded locally; no upstream issue or PR has been filed.
+
+Live HLS uses native remote HLS when its URL needs no headers (including the
+adapter-authorized URL attachment above). Vela disables AVPlayer's automatic
+time-offset preservation, leaves configuredTimeOffsetFromLive invalid, and caps
+live AVPlayer rate at 1.0. No live cushion is configured. Explicit Live remains
+a viewer command.
+
+Upstream request for AetherEngine: expose a LoadOptions opt-out for automatic
+live resume re-placement and live edge recovery. In 7.70.0 SoftwarePlaybackHost
+arms resumePlacement after an edge rebuffer and publishes liveResumeCatchUp;
+AetherEngine+Loading consumes it with seek(origin: .liveRejoin). Vela cannot
+disable this through the public API. Non-native/software live routes therefore
+still require that upstream option; a cushion does not disable re-placement.

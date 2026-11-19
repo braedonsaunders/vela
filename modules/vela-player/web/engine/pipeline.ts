@@ -492,10 +492,6 @@ export class SegmentPipeline {
           }
         }
       if (live && this.video.buffered.length) {
-        const drift = this.video.buffered.end(this.video.buffered.length - 1) - this.video.currentTime;
-        if (drift > Math.max(this.maxLiveDrift, this.liveTargetSeconds + 6))
-          this.video.currentTime =
-            this.video.buffered.end(this.video.buffered.length - 1) - this.liveTargetSeconds;
         this.video.playbackRate = this.livePlaybackRate;
       }
     }

@@ -100,6 +100,11 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
     state.position = position
     refused = false
     val builder = MediaItem.Builder().setUri(url)
+    // Disable Media3's automatic live offset correction; explicit seeks still work.
+    if (plan?.live == true) builder.setLiveConfiguration(
+      MediaItem.LiveConfiguration.Builder()
+        .setMinPlaybackSpeed(1f).setMaxPlaybackSpeed(1f).build())
+
     if (plan?.selectedPath?.transport == "hls") builder.setMimeType(MimeTypes.APPLICATION_M3U8)
     if (plan?.selectedPath?.transport == "dash") builder.setMimeType(MimeTypes.APPLICATION_MPD)
     builder.setSubtitleConfigurations(plan?.subtitleTracks.orEmpty().mapNotNull { track ->

@@ -38,8 +38,11 @@ final class PlaybackClient {
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
     private var subscriptions = Set<AnyCancellable>()
+    private var liveRateObservation: NSKeyValueObservation?
+    private var liveItemObservation: NSKeyValueObservation?
     private var displayCriteriaObservation: NSKeyValueObservation?
     private var displayObservers: [NSObjectProtocol] = []
+    private var lastLiveDiagnostic = Date.distantPast
     private var lastCacheDiagnostic = Date.distantPast
     private var loadTask: Task<Void, Never>?
     private var headers: [String] = []
@@ -136,6 +139,8 @@ final class PlaybackClient {
     private func load(_ url: URL) {
         loadTask = Task { @MainActor [weak self] in
             guard let self, !self.dead else { return }
+            self.liveRateObservation = nil
+            self.liveItemObservation = nil
             self.subscriptions.removeAll()
             self.surface?.removeFromSuperview()
             do {
@@ -201,6 +206,14 @@ final class PlaybackClient {
                         self?.emit("video-pts", time)
                     }
                     self?.drawCaptions()
+                    if let self, self.isLive, !self.preview,
+                       Date().timeIntervalSince(self.lastLiveDiagnostic) >= 2,
+                       let player = self.engine?.currentAVPlayer {
+                        self.lastLiveDiagnostic = Date()
+                        let edge = player.currentItem?.seekableTimeRanges.last?.timeRangeValue
+                        let offset = edge.map { CMTimeGetSeconds(CMTimeRangeGetEnd($0)) - player.currentTime().seconds } ?? .nan
+                        print("[vela-live] rate=\(player.rate) position=\(player.currentTime().seconds) offset=\(offset) status=\(player.timeControlStatus.rawValue)")
+                    }
                 }.store(in: &self.subscriptions)
                 engine.$audioDelivery.dropFirst().sink { [weak self] delivery in
                     if delivery == .droppedNoPipeline {
@@ -233,6 +246,11 @@ final class PlaybackClient {
                 var opts = LoadOptions(httpHeaders: [:], matchContentEnabled: !preview,
                                        isLive: self.isLive, nativeRemoteHLS: self.remoteHLS && self.headers.isEmpty,
                                        initialSubtitleTrackID: self.subtitle, autoplay: !self.paused)
+                // Keep live HLS on AVPlayer: the software feeder in Aether 7.70
+                // automatically re-places the playhead after a rebuffer.
+                if self.isLive && opts.nativeRemoteHLS {
+                    opts.nativeRemoteHLSIngestFallback = false
+                }
                 // A guide/hero picture never owns the HDMI mode. Disabling matching alone
                 // still permits criteria writes in Aether; host ownership suppresses all writes.
                 if preview { opts.displayCriteriaOwner = .host }
@@ -252,6 +270,19 @@ final class PlaybackClient {
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
                 guard !self.dead, !self.failed else { return }
+                if self.isLive, let player = engine.currentAVPlayer {
+                    self.liveItemObservation = player.observe(\.currentItem, options: [.initial, .new]) { player, _ in
+                        MainActor.assumeIsolated {
+                            player.currentItem?.automaticallyPreservesTimeOffsetFromLive = false
+                            player.currentItem?.configuredTimeOffsetFromLive = .invalid
+                        }
+                    }
+                    self.liveRateObservation = player.observe(\.rate, options: [.initial, .new]) { player, _ in
+                        MainActor.assumeIsolated {
+                            if player.rate > 1 { player.rate = 1 }
+                        }
+                    }
+                }
                 #if os(tvOS)
                 print("[vela-display] ready preview=\(preview) criteria=\(host.window?.avDisplayManager.preferredDisplayCriteria != nil) switching=\(host.window?.avDisplayManager.isDisplayModeSwitchInProgress ?? false)")
                 #endif
@@ -362,6 +393,8 @@ final class PlaybackClient {
                 if Date().timeIntervalSince(began) + wait <= 60 {
                     start = (properties["time-pos"] as? Double) ?? start
                     reconnecting = true
+                    liveRateObservation = nil
+                    liveItemObservation = nil
                     subscriptions.removeAll()
                     engine?.stop()
                     emit("paused-for-cache", true)
@@ -387,6 +420,8 @@ final class PlaybackClient {
             }
         }
         if retainPausedPicture { freezePicture() }
+        liveRateObservation = nil
+        liveItemObservation = nil
         subscriptions.removeAll()
         bitmapCaptions.values.forEach { $0.removeFromSuperview() }
         bitmapCaptions.removeAll()
@@ -444,6 +479,8 @@ final class PlaybackClient {
         outputItem = nil
         loadTask?.cancel()
         loadTask = nil
+        liveRateObservation = nil
+        liveItemObservation = nil
         subscriptions.removeAll()
         bitmapCaptions.values.forEach { $0.removeFromSuperview() }
         bitmapCaptions.removeAll()

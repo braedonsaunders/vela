@@ -101,14 +101,7 @@ export class LiveLatency {
         this.target = Math.max(goal, this.target - elapsed * 0.5);
       }
     } else this.steady = null;
-    const steady = this.steady !== null && sample.now - this.steady >= 5000;
-    const catchingUp =
-      sample.playing &&
-      !sample.waiting &&
-      steady &&
-      sample.bufferAhead >= goal &&
-      sample.behindSeconds !== null &&
-      sample.behindSeconds > this.target + Math.max(1, segment);
-    return { targetSeconds: this.target, playbackRate: catchingUp ? 1.03 : 1 };
+    // A stall increases latency. Preserve that position until the viewer chooses Live.
+    return { targetSeconds: this.target, playbackRate: 1 };
   }
 }

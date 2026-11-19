@@ -16,6 +16,7 @@ internal class PlaybackPlan(
   val selectedSubtitleTrackId: String?,
   val chapters: List<PlanChapter>,
   val fallbackState: String? = null,
+  val live: Boolean = false,
 ) {
   val selectedPath: PlanPath?
     get() = paths.firstOrNull { it.id == selectedPathId }
@@ -28,6 +29,7 @@ internal class PlaybackPlan(
     /** A plan, or null when a required field is missing. */
     fun from(value: Map<String, Any?>): PlaybackPlan? {
       return PlaybackPlan(
+        live = value.text("channelId") != null || value.map("live") != null,
         sessionId = value.text("sessionId") ?: return null,
         revision = value.int("revision") ?: return null,
         sourceGeneration = value.int("sourceGeneration") ?: return null,
