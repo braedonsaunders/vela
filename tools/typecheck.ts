@@ -8,12 +8,20 @@
  * compile cleanly under the player's settings; diagnostics inside node_modules are counted and
  * reported but do not fail the check. Every diagnostic in Vela's own files does.
  */
+import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '..');
 const projects = ['apps/vela', 'mock-server', 'modules/vela-player/web', 'tsconfig.test.json'];
 // The mock server and the tests take Bun's types from the mock server's own install.
 const tsc = join(root, 'node_modules/typescript/bin/tsc');
+// Without the compiler there is nothing to check: say so rather than read its absence as a pass.
+if (!existsSync(tsc)) {
+  console.log(`FAIL typescript is not installed (${tsc}); run bun install first`);
+  process.exit(1);
+}
+/** A compiler diagnostic: `path(line,col): error TSnnnn: …`. Anything else is not one to ignore. */
+const DIAGNOSTIC = /\(\d+,\d+\): error TS\d+/;
 
 let failed = false;
 for (const project of projects) {
@@ -25,7 +33,7 @@ for (const project of projects) {
   const own: string[] = [];
   let dependency = 0, current: 'own' | 'dependency' = 'own';
   for (const line of lines) {
-    if (!/^\s/.test(line)) current = line.startsWith('node_modules/') || line.includes('/node_modules/') ? 'dependency' : 'own';
+    if (!/^\s/.test(line)) current = DIAGNOSTIC.test(line) && (line.startsWith('node_modules/') || line.includes('/node_modules/')) ? 'dependency' : 'own';
     if (current === 'own') own.push(line);
     else if (!/^\s/.test(line)) dependency++;
   }
