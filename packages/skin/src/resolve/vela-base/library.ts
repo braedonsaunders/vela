@@ -90,21 +90,22 @@ export const libraryAlternative: Node = {
   type: 'box', id: 'vela-library-alternative', when: [ready, { test: 'library.view', is: 'ne', value: 'library' }],
   style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
   children: [
+    { type: 'widget', widget: 'contentLoader', when: [is('library.viewLoad', 'loading')] },
+    { type: 'widget', widget: 'contentLoader', when: [is('library.viewLoad', 'idle')] },
+    { ...failure('{t:library.couldNotOpen}'), when: [is('library.viewLoad', 'failed')] },
+    { ...pulse, when: [{ test: 'env.libraryMoreLoading' }] },
     { type: 'repeat', over: 'library.rows', when: [is('library.view', 'recommended')], item: { type: 'use', template: 'velaRow' } },
-    // Until the first recommendations arrive, rows' outlines rather than an empty page.
-    { type: 'box', role: 'status', label: '{t:ui.findingTitles}', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0'), { test: 'env.libraryExtrasLoading' }],
-      style: { display: 'flex', 'flex-direction': 'column' }, children: [rowSkeleton, rowSkeleton] },
-    { type: 'text', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0'), { test: 'env.libraryExtrasLoading', not: true }], text: '{t:ui.yourLibraryHasNoRowsYet}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { type: 'text', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0'), is('library.viewLoad', 'ready')], text: '{t:ui.yourLibraryHasNoRowsYet}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { ...titleGrid, when: [is('library.view', 'collections')], children: [{ type: 'repeat', over: 'library.collections', item: gridCard }] } as Node,
-    { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0'), is('library.viewLoad', 'ready')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { type: 'widget', widget: 'sentinel', params: { on: 'library' }, when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }, { test: 'env.libraryMoreLoading', not: true }, { test: 'env.libraryExtrasFailed', not: true }] },
     { type: 'box', when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },
     { ...titleGrid, style: { ...titleGrid.style, 'grid-template-columns': 'repeat(auto-fill, minmax(124px, 1fr))' }, small: { ...titleGrid.small, 'grid-template-columns': 'repeat(auto-fill, minmax(96px, 1fr))' }, when: [is('library.view', 'people')], children: [{ type: 'repeat', over: 'library.people', item: peopleTile(castPerson) }] } as Node,
-    { type: 'text', when: [is('library.view', 'people'), is('library.collectionCount', '0')], text: '{t:library.view.emptyPeople}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { type: 'text', when: [is('library.view', 'people'), is('library.collectionCount', '0'), is('library.viewLoad', 'ready')], text: '{t:library.view.emptyPeople}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { type: 'widget', widget: 'sentinel', params: { on: 'library' }, when: [is('library.view', 'people'), { test: 'library.collectionsMore' }, { test: 'env.libraryMoreLoading', not: true }, { test: 'env.libraryExtrasFailed', not: true }] },
     { type: 'box', when: [is('library.view', 'people'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },
     { type: 'box', when: [is('library.view', 'genres')], style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter }, small: { ...gutterSmall }, children: [{ type: 'repeat', over: 'library.genreViews', item: libChip([{ test: 'opt.on' }], 'genre|{opt.id}', '{opt.label}') }] },
-    { type: 'text', when: [is('library.view', 'genres'), is('library.genresCount', '0')], text: '{t:library.view.emptyGenres}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { type: 'text', when: [is('library.view', 'genres'), is('library.genresCount', '0'), is('library.viewLoad', 'ready')], text: '{t:library.view.emptyGenres}', style: { ...gutter, color: '$ui.inkSecondary' } },
   ],
 };
 export const toolbar: Node = {
@@ -245,7 +246,7 @@ const makeLibrary = (flowHeader: boolean): Node => ({
         },
         {
           ...emptyState('filter', '{t:library.empty}', '{t:library.emptyHint}'),
-          when: [{ test: 'env.libraryLoading', not: true }, noItems],
+          when: [is('library.viewLoad', 'ready'), noItems],
         } as Node,
         {
           ...titleGrid,

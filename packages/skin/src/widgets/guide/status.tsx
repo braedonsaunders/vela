@@ -1,5 +1,6 @@
 // The guide's honest states: loading, failed (with Try again), no channels, nothing matching.
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
+import { ContentLoader } from '../common/loading';
 import { msg } from '@vela/core';
 import type { GuideLook } from './look';
 import { Line, Press } from './parts';
@@ -25,10 +26,10 @@ export function GuideStatus({ look, text, busy, onRetry, action }: StatusProps) 
         backgroundColor: look.page,
       }}
     >
-      {busy ? <ActivityIndicator color={look.accent} /> : null}
-      <Line look={look} size={17} color={look.inkSecondary} lines={0} style={{ textAlign: 'center' }}>
+      {busy ? <ContentLoader /> : null}
+      {!busy && <Line look={look} size={17} color={look.inkSecondary} lines={0} style={{ textAlign: 'center' }}>
         {text}
-      </Line>
+      </Line>}
       {onRetry ? (
         <Press
           label={action ?? msg('ui.tryAgain')}

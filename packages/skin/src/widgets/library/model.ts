@@ -14,6 +14,7 @@ export interface LibraryPage {
   /** Explicit URL selection; an initially arriving server view is not a tab transition. */
   viewRequest?: string;
   extras?: LibraryExtras;
+  viewLoad?: import('@vela/core').Load;
   extrasLoading?: boolean;
   extrasFailed?: boolean;
   /** The view on show: the current sort and filters' answer, or while it is read, the last one. */

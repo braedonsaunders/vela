@@ -215,6 +215,20 @@ function convert(node: Node, depth: number, r: Context): RNode {
       motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r);
   }
   node = withRowLinks(node);
+  // Loading is app-owned across skins. Keep the document's condition and placement,
+  // but use the same passive branded indicator for status surfaces.
+  const waiting = node.when?.find(test => !test.not && (
+    (test.test === 'env.load' || test.test === 'env.search') && test.is === 'eq' && test.value === 'loading'
+    || ['env.libraryMoreLoading', 'env.collectionMoreLoading', 'env.homeMoreLoading'].includes(test.test)
+  ));
+  if (node.role === 'status' && waiting) {
+    node = { type: 'widget', widget: 'contentLoader', when: node.when,
+      params: { inline: waiting.test.endsWith('MoreLoading') ? 'true' : 'false' } };
+  }
+  // Legacy/custom skins may count items without guarding the active query's load.
+  if (node.when?.some(test => test.test === 'library.itemCount' && test.is === 'eq' && test.value === '0' && !test.not)) {
+    node = { ...node, when: [...node.when, { test: 'library.viewLoad', is: 'eq', value: 'ready' }] };
+  }
   node = withLibraryPresentation(node, r.width);
   const n = node as Node & { below?: Record<string, Style>; above?: Record<string, Style> };
   const style = variant(n, r, node.style);

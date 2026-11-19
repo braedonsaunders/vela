@@ -75,7 +75,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => libraryCardArtwork(card, 'landscape')) })) } : rawExtras, [rawExtras, landscape]);
   const view = tabs ? selectedTab?.kind ?? 'library' : requestedView === 'library' || requestedView === 'recommended' || requestedView === 'collections' || requestedView === 'genres'
     ? requestedView : canRecommend ? 'recommended' : 'library';
-  const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
+  const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !canRecommend || view === 'genres' && !extras?.genres.length ? 'library' : view;
 
   useEffect(() => {
     if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, query, current?.value?.pages ?? 1, !!current?.value);
@@ -93,6 +93,11 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       loading: !held && current?.load !== 'failed',
       moreLoading: (usableView === 'collections' || usableView === 'people') ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
+      viewLoad: usableView === 'library' ? current?.load ?? 'idle'
+        : extraState.id !== id || extraState.revision !== revision || extraState.tab !== collectionTab || extraState.query !== tabQuery ? 'idle'
+        : extraState.failed ? 'failed'
+        : (usableView === 'recommended' ? nativeExtras?.rowsLoad : usableView === 'genres' ? nativeExtras?.genresLoad : nativeExtras?.collectionsLoad)
+          ?? (extraState.loading ? 'loading' : nativeExtras?.failed ? 'failed' : nativeExtras ? 'ready' : 'idle'),
       tabId: selectedTab?.id,
       tabQuery,
       facetTitle,
@@ -104,7 +109,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     };
   }, [current, earlier, query, facetTitle, selectedTab?.id, usableView, requestedView, extras, extraState, canRecommend, nativeExtras, id, revision, tabQuery]);
 
-  const failed = current?.load === 'failed' && !current.value;
+  const failed = current?.load === 'failed';
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';
 
   const more = useCallback(() => {

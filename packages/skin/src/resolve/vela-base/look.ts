@@ -68,29 +68,7 @@ export const navFocus: Style = { 'box-shadow': 'inset 0px 0px 0px 2px $ui.accent
 export const small: Condition = { test: 'env.small' };
 // Waiting marks, as compiled cinematic draws them: three breathing dots (still under
 // reduced motion) and shimmering skeleton blocks.
-export const pulse: Node = {
-  type: 'box',
-  style: { display: 'flex', 'flex-direction': 'row', gap: '8px' },
-  children: [0, 180, 360].flatMap(d => [
-    {
-      type: 'box',
-      when: [{ test: 'env.still', not: true }],
-      motion: `velaPulse${d}`,
-      style: { width: '7px', height: '7px', 'border-radius': '4px', 'background-color': '$ui.accent' },
-    } as Node,
-    {
-      type: 'box',
-      when: [{ test: 'env.still' }],
-      style: {
-        width: '7px',
-        height: '7px',
-        'border-radius': '4px',
-        'background-color': '$ui.accent',
-        opacity: '0.8',
-      },
-    } as Node,
-  ]),
-};
+export const pulse: Node = { type: 'widget', widget: 'contentLoader', params: { inline: 'true' } };
 export const skeleton = (style: Style, small?: Style): Node => ({
   type: 'box',
   style: {

@@ -42,7 +42,7 @@ export const collection: Node = {
         gap: '16px',
       },
       children: [
-        pulse,
+        { type: 'widget', widget: 'contentLoader' },
         {
           type: 'text',
           text: '{t:ui.openingCollection}',

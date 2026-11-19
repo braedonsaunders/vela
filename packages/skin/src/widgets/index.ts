@@ -16,9 +16,11 @@ import { LibraryTabs, LibraryFacets, LibraryToolbar } from './library/presentati
 import { YearInput } from './library/year-input';
 
 import { RowLink } from './row-link';
+import { LoadingWidget } from './common/loading';
 
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   rowLink: RowLink,
+  contentLoader: LoadingWidget,
   searchInput: SearchInput,
   textInput: TextInput,
   serverSwitcher: ServerSwitcher,

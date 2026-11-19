@@ -2,12 +2,17 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { BackHandler, Platform } from 'react-native';
 import { useVela, useVelaState } from '@vela/core/react';
-import type { Card } from '@vela/core';
+import type { Card, Load } from '@vela/core';
 import type { SkinHost } from '@vela/skin';
 import { DocumentScreen } from '../src/screen';
 
 /** A person's server-provided filmography, drawn by the active skin. */
 export default function PersonPage() {
+  const params = useLocalSearchParams<{ id?: string; title?: string; name?: string; library?: string }>();
+  return <PersonContent key={JSON.stringify(params)} />;
+}
+
+function PersonContent() {
   const { id = '', title = '', name = '', library = '' } = useLocalSearchParams<{ id?: string; title: string; name: string; library?: string }>();
   const store = useVela();
   const detail = useVelaState(state => state.titles[title]);
@@ -15,18 +20,19 @@ export default function PersonPage() {
   const person = id ? { id, name, canOpen: true, portrait: '', role: '' } : castPerson;
   const [items, setItems] = useState<Card[]>([]);
   const [cursor, setCursor] = useState<string>();
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
+  const [status, setStatus] = useState<Load>('idle');
+  const loading = status === 'idle' || status === 'loading';
+  const failed = status === 'failed';
   const [profile, setProfile] = useState<{ name: string; portrait: string; knownFor: string; biography: string; birthday: string }>();
   const load = useCallback(async (next?: string) => {
-    if (!person?.canOpen) { setLoading(false); setFailed(true); return; }
-    setLoading(true); setFailed(false);
+    if (!person?.canOpen) { setStatus('failed'); return; }
+    setStatus('loading');
     try {
       const result = await store.catalogue.personTitles(person.id, library || undefined, next);
       setItems(previous => next ? [...previous, ...result.items] : result.items);
       setCursor(result.cursor);
-    } catch { setFailed(true); }
-    finally { setLoading(false); }
+      setStatus('ready');
+    } catch { setStatus('failed'); }
   }, [store, person?.id, person?.canOpen, name, library]);
   useEffect(() => { if (title && !detail) void store.catalogue.title(title); }, [store, title, detail]);
   useEffect(() => { if (detail?.value || detail?.load === 'failed' || !title) void load(); }, [load, detail?.value, detail?.load, title]);

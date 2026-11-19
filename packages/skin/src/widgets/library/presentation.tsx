@@ -1,3 +1,4 @@
+import { ContentLoader } from '../common/loading';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useVela } from '@vela/core/react';
@@ -170,7 +171,7 @@ function FacetPicker({ facet, selected, onChoose, onClose, onLabels }: {
   const [query, setQuery] = useState('');
   const [values, setValues] = useState<FacetValue[]>([]);
   const [cursor, setCursor] = useState<string>();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [attempt, retry] = useState(0);
   const generation = useRef(0);
@@ -207,7 +208,7 @@ function FacetPicker({ facet, selected, onChoose, onClose, onLabels }: {
         </View>
         <TextField accessibilityLabel={`Search ${facet.label}`} placeholder={`Search ${facet.label}`} placeholderTextColor={look.ui.inkSecondary} value={query} onChangeText={setQuery}
           style={[look.text({}), look.box({ height: '40px', padding: '0px 12px', border: '1px solid $ui.glassEdge', 'border-radius': '$ui.radiusControl' })]} />
-        {loading ? <Text style={look.text({})}>Loading…</Text> : failed ? <Button label="Retry" onPress={() => retry(v => v + 1)} /> : <>
+        {loading ? <ContentLoader inline={values.length > 0} /> : failed ? <Button label="Retry" onPress={() => retry(v => v + 1)} /> : <>
           {!values.length && <Text style={look.text({})}>No values</Text>}
           <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 6 }}>
             {values.map(value => <Button key={value.id} role="checkbox" label={`${value.label} (${value.count})`} selected={selected.includes(value.id)} onPress={() => onChoose(value.id)} />)}
