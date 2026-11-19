@@ -17,3 +17,13 @@ test('dedicated transport presses retain their meaning', () => {
   for (const key of ['rewind', 'fastForward', 'playPause', 'play', 'pause']) remotePress(key, actions);
   expect(calls).toEqual([-10, 10, 'toggle', 'play', 'pause']);
 });
+
+
+test('dedicated channel keys reach live tuning while directions remain navigation', () => {
+  const calls: string[] = [];
+  const actions = { liveKey: (key: string) => { calls.push(key); return true; }, wake: () => calls.push('wake') } as unknown as Shortcuts;
+  remotePress('channelUp', actions);
+  remotePress('channelDown', actions);
+  expect(calls).toEqual(['ChannelUp', 'wake', 'ChannelDown', 'wake']);
+  expect(() => remotePress('channelUp', { wake() {} } as unknown as Shortcuts)).not.toThrow();
+});

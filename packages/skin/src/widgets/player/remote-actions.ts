@@ -4,6 +4,8 @@ import type { Shortcuts } from './keys';
  * transport buttons still seek, but a stale hidden flag can never turn a direction into one. */
 export function remotePress(type: string, actions: Shortcuts): void {
   switch (type) {
+    case 'channelUp': actions.liveKey?.('ChannelUp'); actions.wake(); return;
+    case 'channelDown': actions.liveKey?.('ChannelDown'); actions.wake(); return;
     case 'playPause': actions.togglePlay(); return;
     case 'play': actions.play(); return;
     case 'pause': actions.pause(); return;
