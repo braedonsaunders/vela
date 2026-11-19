@@ -188,8 +188,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private nodes(c: Node): Node[] { return c.Metadata || c.Video || c.Directory || []; }
   private hub(h: Node): V.Row {
     const key = h.key || h.hubIdentifier;
+    const pageable = typeof h.key === 'string' && /^\/(hubs|library)\//.test(h.key);
     const purpose: V.Row['purpose'] = /continue/i.test(key) ? 'continue' : /onDeck|nextUp/i.test(key) ? 'nextUp' : /recentlyAdded/i.test(key) ? 'recentlyAdded' : 'recommendation';
-    return { id: key, name: h.title || '', purpose, receiptToken: '', ...page(this.nodes(h).filter(n => ['movie','show','season','episode','collection','playlist'].includes(n.type)).map(n => this.entry(n)), Number(h.offset || 0), h.totalSize ?? (h.more ? undefined : h.size)) };
+    return { id: key, name: h.title || '', purpose, receiptToken: '', ...page(this.nodes(h).filter(n => ['movie','show','season','episode','collection','playlist'].includes(n.type)).map(n => this.entry(n)), Number(h.offset || 0), pageable ? h.totalSize ?? (h.more ? Number(h.offset || 0) + this.nodes(h).length + 1 : h.size) : this.nodes(h).length) };
   }
   async home(): Promise<Home> {
     this.rotateTransientToken();
@@ -218,7 +219,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         const genre = this.genreId(n);
         return genre && n.title ? [{ id: `genre:${genre}`, kind: 'directory' as const, targetId: `vela-library-genre:${encodeURIComponent(genre)}`, name: n.title, artwork: [], receiptToken: '' }] : [];
       });
-      return genres.length ? { ...row, ...page([...row.items, ...genres], Number(h.offset || 0), h.totalSize ?? (h.more ? undefined : h.size)) } : row;
+      return genres.length ? { ...row, ...page([...row.items, ...genres], Number(h.offset || 0), h.totalSize ?? (h.more ? Number(h.offset || 0) + this.nodes(h).length + 1 : h.size)) } : row;
   }
   async libraryCollections(id: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
     const start = offset(cursor);

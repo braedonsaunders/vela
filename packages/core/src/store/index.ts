@@ -8,6 +8,7 @@ import { setLocale, type LocaleContext } from '../i18n';
 import type { ClientCapabilities } from '../wire';
 import { Appearance } from './appearance';
 import { Auth, initialAuth, type AuthState } from './auth';
+import { Rows } from './rows';
 import { Catalogue } from './catalogue';
 import { Home, initialHome, type HomeState } from './home';
 import { initialLive, Live, type LiveState } from './live';
@@ -29,6 +30,7 @@ export interface VelaState {
   titles: Record<string, Loadable<DetailModel>>;
   /** Related rows by title ID. */
   related: Record<string, Loadable<Row[]>>;
+  rows: Record<string, Loadable<Row>>;
   /** Library views by `libraryKey(id, query)`. */
   library: Record<string, Loadable<LibraryModel>>;
   /** Collections by collection ID. */
@@ -64,6 +66,7 @@ export interface Vela {
   servers: Servers;
   home: Home;
   catalogue: Catalogue;
+  rows: Rows;
   search: Search;
   playback: Playback;
   live: Live;
@@ -79,6 +82,7 @@ const initialState: VelaState = {
   libraries: idle(),
   titles: {},
   related: {},
+  rows: {},
   library: {},
   collections: {},
   search: initialSearch,
@@ -141,6 +145,7 @@ export function createVela(options: VelaOptions): Vela {
     servers,
     home,
     catalogue,
+    rows: new Rows(box, session, width),
     search: new Search(box, session, width),
     playback,
     live: new Live(box, session, playback),

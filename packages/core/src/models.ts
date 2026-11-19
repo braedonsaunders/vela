@@ -53,6 +53,7 @@ export interface Row {
   nextCursor: string;
   continuation: V.Row['continuation'];
   previewOnFocus: boolean;
+  cardStyle?: 'poster' | 'landscape' | 'square';
   presentation: string;
 }
 

@@ -33,3 +33,5 @@ export { sendCommand } from './adapter/commands';
 
 export type { TitleActions, MediaVersion, RemoteSubtitle } from './adapter/media-actions';
 export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';
+
+export { canSeeAll } from './store/rows';

@@ -39,7 +39,7 @@ export async function featuredFixture(provider: 'plex' | 'jellyfin') {
     'GET /jf/QuickConnect/Enabled': false, 'GET /jf/LiveTv/Info': {},
     'GET /jf/Users/viewer-1/Items/Resume': { Items: [items[0],items.at(-1)] },
     'GET /jf/Shows/NextUp': { Items: [items[1]] },
-    'GET /jf/Users/viewer-1/Items/Latest': items.slice(2),
+    'GET /jf/Users/viewer-1/Items': { Items: items.slice(2) },
   });
   return { home: await new JellyfinAdapter('https://media.example/jf', new FakeCredentials()).home(), ids };
 }

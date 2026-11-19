@@ -76,7 +76,7 @@ describe('PlexAdapter requests', () => {
     const rows = await plex().rows({});
     expect(rows.items.map(r => [r.id, r.purpose, r.continuation])).toEqual([
       ['/hubs/home/continueWatching', 'continue', 'exhausted'],
-      ['/hubs/home/recentlyAdded', 'recentlyAdded', 'unknown'],
+      ['/hubs/home/recentlyAdded', 'recentlyAdded', 'more'],
       ['home.other', 'recommendation', 'exhausted'],
     ]);
     expect(rows.items[2]!.items[0]).toMatchObject({ kind: 'collection', targetId: 'collection:5', name: 'Noir' });

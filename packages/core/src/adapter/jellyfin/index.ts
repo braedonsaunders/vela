@@ -301,35 +301,33 @@ export class JellyfinAdapter
         const user = await this.userPath();
         const p = this.paging(cursor, limit);
         let result: Result;
-        if (id === 'latest') {
-            const items = await this.request<Item[]>('GET', `${user}/Items/Latest${query({
-                ...p, Fields: fields, IncludeItemTypes: 'Movie,Series,Episode'
+        const library = /^library:(.+):(latest|nextup)$/.exec(id);
+        const source = library?.[2] ?? id;
+        const parent = library?.[1];
+        if (source === 'latest') {
+            result = await this.request<Result>('GET', `${user}/Items${query({
+                ...p, ParentId: parent, Recursive: true, Fields: fields, IncludeItemTypes: 'Movie,Series', SortBy: 'DateCreated', SortOrder: 'Descending'
             })}`);
-            result = {
-                Items: items
-            };
         }
-        else if (id === 'resume' || id === 'nextup')
-            result = await this.request<Result>('GET', `${id === 'resume' ? `${user}/Items/Resume` : 'Shows/NextUp'}${query({
-                ...p, UserId: (await this.credentials.get())?.viewer.id, Fields: fields, MediaTypes: 'Video'
+        else if (source === 'resume' || source === 'nextup')
+            result = await this.request<Result>('GET', `${source === 'resume' ? `${user}/Items/Resume` : 'Shows/NextUp'}${query({
+                ...p, ParentId: parent, UserId: (await this.credentials.get())?.viewer.id, Fields: fields, MediaTypes: 'Video'
             })}`);
         else
             throw this.error('not-found', 'row_not_found', 'Unknown row', 404);
         return {
-            id, name: id === 'resume' ? 'Continue Watching' : id === 'nextup' ? 'Next Up' : 'Recently Added', purpose: id === 'resume' ? 'continue' : id === 'nextup' ? 'nextUp' : 'recentlyAdded', receiptToken: '', ...this.page(result.Items.filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), result, p.StartIndex)
+            id, name: source === 'resume' ? 'Continue Watching' : source === 'nextup' ? 'Next Up' : 'Recently Added', purpose: source === 'resume' ? 'continue' : source === 'nextup' ? 'nextUp' : 'recentlyAdded', receiptToken: '', ...this.page(result.Items.filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), result, p.StartIndex)
         };
     }
     async libraryRows(id: string, kind: V.Library['kind']): Promise<V.Row[]> {
         const user = await this.userPath();
         const userId = (await this.credentials.get())?.viewer.id;
-        const latest = await this.request<Item[]>('GET', `${user}/Items/Latest${query({ ParentId: id, Limit: 20, Fields: fields, IncludeItemTypes: kind === 'movies' ? 'Movie' : kind === 'shows' ? 'Series,Episode' : 'Movie,Series,Episode' })}`);
-        const rows: V.Row[] = [{ id: `library:${id}:latest`, name: 'Recently Added', purpose: 'recentlyAdded', receiptToken: '', items: latest.filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), continuation: 'exhausted' }];
+        const rows: V.Row[] = [await this.row(`library:${id}:latest`)];
         if (kind === 'movies') {
             const suggestions = await this.request<{ BaselineItemName?: string; CategoryId?: string; RecommendationType?: string; Items: Item[] }[]>('GET', `Movies/Recommendations${query({ ParentId: id, UserId: userId, Fields: fields, CategoryLimit: 5, ItemLimit: 20 })}`);
             rows.push(...suggestions.map((group, index): V.Row => ({ id: `library:${id}:suggestion:${group.CategoryId ?? index}`, name: group.BaselineItemName || 'Suggested for you', purpose: 'recommendation', receiptToken: '', items: (group.Items ?? []).filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), continuation: 'exhausted' })));
         } else if (kind === 'shows') {
-            const next = await this.request<Result>('GET', `Shows/NextUp${query({ ParentId: id, UserId: userId, Limit: 20, Fields: fields })}`);
-            rows.unshift({ id: `library:${id}:nextup`, name: 'Next Up', purpose: 'nextUp', receiptToken: '', items: next.Items.filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), continuation: 'exhausted' });
+            rows.unshift(await this.row(`library:${id}:nextup`));
         }
         return rows.filter(row => row.items.length > 0);
     }
