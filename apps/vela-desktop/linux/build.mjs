@@ -3,12 +3,14 @@ import { existsSync, readFileSync, mkdirSync, cpSync, copyFileSync, readdirSync,
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { auditFiles } from './audit-glibc.mjs';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const prefix = process.env.VELA_LGPL_PREFIX;
 if (process.platform !== 'linux' || !prefix) throw new Error('Linux build requires VELA_LGPL_PREFIX with audited LGPL libraries');
 const manifest = JSON.parse(readFileSync(join(prefix, 'provenance.json'), 'utf8'));
 if (manifest.mpv?.gpl !== false || manifest.ffmpeg?.gpl !== false || manifest.ffmpeg?.nonfree !== false || !manifest.sources?.length)
   throw new Error('Missing LGPL build provenance');
+auditFiles([join(prefix,'lib')]);
 const out = resolve(here, '../native-linux');
 rmSync(out, { recursive:true, force:true }); mkdirSync(join(out,'lib'), { recursive:true });
 for (const entry of manifest.libraries || []) {
@@ -28,3 +30,6 @@ if (deps.status !== 0 || deps.stdout.includes('not found')) throw new Error('Nat
 
 const audit = spawnSync(join(out,'vela-mpv'),['--audit'],{env:{...process.env,LD_LIBRARY_PATH:join(out,'lib')},timeout:5000});
 if (audit.status !== 0) throw new Error('FFmpeg runtime LGPL audit failed');
+
+const abiReport=auditFiles([out]);
+console.log(`Native payload: ${abiReport.files.length} ELF files, maximum GLIBC_${abiReport.maximum}`);

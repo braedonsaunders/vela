@@ -45,3 +45,11 @@ test('live never changes rate to recover latency; VOD permits bounded user speed
   expect(playbackRate({},Infinity)).toBe(1);
   expect(playbackRate({},20)).toBe(4);
 });
+test('ABI gate compares GLIBC versions numerically and refuses newer loaders', () => {
+  const {glibcRequirement}=require('../abi');
+  expect(glibcRequirement('GLIBC_2.9 GLIBC_2.3.4 GLIBC_2.35')).toBe('2.35');
+  expect(glibcRequirement('GLIBC_2.34 GLIBC_2.2.5')).toBe('2.34');
+  expect(() => glibcRequirement('GLIBC_2.38')).toThrow('baseline');
+  expect(() => glibcRequirement('GLIBC_ABI_DT_RELR')).toThrow('Unsupported');
+  expect(() => glibcRequirement('GLIBC_PRIVATE')).toThrow('Unsupported');
+});

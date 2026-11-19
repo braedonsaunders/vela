@@ -24,8 +24,25 @@ mpv options or events. Live playback stays at rate 1; no catch-up is issued.
 Build audited LGPL FFmpeg with shared libraries, GPL/nonfree disabled, and
 libmpv with `-Dgpl=false -Dlibmpv=true -Dcplayer=false`. Enable the OpenGL render
 API, EGL, audio outputs and desired FFmpeg hardware accelerators. Do not enable
-mpv's built-in X11 VO. Build on the oldest supported distribution; binaries
-built on Ubuntu 26.04 do not establish compatibility with older glibc versions.
+mpv's built-in X11 VO. The required compiler baseline is Ubuntu 22.04 (glibc 2.35), provided by
+`linux/Dockerfile.jammy`. Compile **both** the libraries and helper inside that
+baseline; running the helper compiler on a newer host can reintroduce new symbols.
+`build-libraries.sh` builds pinned libplacebo with its OpenGL backend, avoiding a
+newer system libplacebo/Vulkan dependency. It also installs pinned NVDEC headers.
+The image provides compiler/runtime dependencies; supply a Node 18+ build-tool
+binary that itself runs on Ubuntu 22.04 (official Node 24 was used for verification).
+Use a dedicated named container and remove only that container afterward.
+
+The packager runs `objdump -T` over every native ELF and rejects GLIBC requirements
+above 2.35, private GLIBC symbols and additional loader ABIs. Recheck the whole
+unpacked application and launch the AppImage inside the baseline before delivery:
+
+```sh
+node linux/audit-glibc.mjs dist/linux-unpacked
+node linux/audit-glibc.mjs --json native-linux > native-abi.json
+# In the named Ubuntu 22.04 container, under Xvfb + a compositing WM:
+./Vela-<version>-linux-x86_64.AppImage --appimage-extract-and-run --no-sandbox
+```
 
 `VELA_LGPL_PREFIX=/audited/prefix node linux/build.mjs` builds `native-linux/`.
 The prefix must contain `include/`, `lib/`, `notices/` and `provenance.json`:
