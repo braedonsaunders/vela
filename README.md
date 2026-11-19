@@ -80,11 +80,12 @@ When the browser can do it, Vela doesn't ask the server for a transcode. It asks
 
 ### Native where it counts
 
-On TVs, phones and desktops, Vela uses **libmpv** behind the same player view contract, so every skin's player works unchanged:
+On TVs, phones and Windows, Vela plays through each platform's own engine behind the same player view contract, so every skin's player works unchanged. Each native app has exactly one engine; anything it cannot play falls back to the next path the server offers.
 
-* **Apple TV and iPhone/iPad:** MPVKit drawing into Metal, VideoToolbox hardware decode, on-device TrueHD and DTS, Now Playing and remote commands, and tvOS **Match Content** for dynamic range and frame rate.
-* **Android and Android TV:** libmpv over JNI with MediaCodec hardware decode.
+* **Apple TV and iPhone/iPad:** **AetherEngine** (FFmpeg demux, VideoToolbox decode, Apple's own video layer), so colour, HDR10/Dolby Vision, Atmos and frame-rate matching come from tvOS and iOS exactly as in the TV app. Now Playing, remote commands and tvOS **Match Content** included.
+* **Android and Android TV:** **Media3 ExoPlayer** with hardware MediaCodec decode, HDR passthrough and Dolby audio passthrough on Android TV, and the LGPL FFmpeg extension for TrueHD, DTS and other audio the device lacks.
 * **Windows:** libmpv renders into the window *behind* a transparent WebView2, so the skin's player chrome lies over the native picture. F11 for fullscreen anywhere, the player's own fullscreen button, a dark title bar, and a window that remembers where you left it.
+* **macOS and Linux:** the same in-app engine as the browser, inside a desktop window.
 
 ---
 
@@ -207,7 +208,7 @@ Add servers from **Profile › Add a server** and switch between them in one tap
   │  Player contract     One view API for every platform                                                │
   │  Web engine          Range source · MKV/MP4 demux · WebCodecs + WASM video · WebGPU render + HDR    │
   │                      WASM TrueHD/DTS/E-AC-3 + 46-codec FFmpeg audio · libass · PGS · MSE HLS + ABR  │
-  │  Native engine       libmpv (Metal · MediaCodec · Windows HWND under WebView2)                       │
+  │  Native engines      AetherEngine (Apple) · Media3 ExoPlayer (Android) · libmpv (Windows)            │
   └──────────────────────────────────────────────┬──────────────────────────────────────────────────────┘
                                                  │  Vela protocol v0 · Jellyfin · Emby · Plex
                                                  ▼
@@ -221,7 +222,7 @@ Add servers from **Profile › Add a server** and switch between them in one tap
 | `packages/core` | Server adapters, sessions, discovery, search and the live guide |
 | `packages/skin` | Skin resolution, the renderer and widgets |
 | `packages/protocol` | Wire types, the skin schema and the built-in skins |
-| `modules/vela-player` | The web engine and the native libmpv players |
+| `modules/vela-player` | The web engine and the native players (AetherEngine, Media3, libmpv) |
 | `tools/release` | Web export, signed inventories and distribution tooling |
 
 Releases are signed inventories. Ether installs them atomically, can roll back, and keeps every content-addressed file an open tab might still ask for. See [architecture](docs/architecture.md) and [distribution](docs/distribution.md).
@@ -234,11 +235,10 @@ Releases are signed inventories. Ether installs them atomically, can roll back, 
 
 | Platform | Download | Playback |
 | :--- | :--- | :--- |
-| **Windows 10/11** (x64) | `Vela-Setup-<version>-x64.exe`, a per-user installer | Native **libmpv** under the Vela player |
-| **macOS** (Apple silicon and Intel) | `Vela-<version>-mac-<arch>.dmg` | The in-app engine: original files, WebGPU, WASM audio |
+| **Windows 10/11** (x64) | `Vela-Setup-<version>-x64.exe`, a signed per-user installer | Native **libmpv** under the Vela player |
+| **macOS** (Apple silicon and Intel) | `Vela-<version>-mac-<arch>.dmg`, signed and notarized | The in-app engine: original files, WebGPU, WASM audio |
 | **Linux** (x64) | `.AppImage` or `.deb` | The in-app engine |
-
-The macOS app is not yet notarized: the first time, Control-click Vela in Applications and choose **Open**.
+| **Android, Android TV** | `Vela-<version>-android.apk` / `-androidtv.apk`, to sideload | **Media3 ExoPlayer** |
 
 **In the browser, with Ether.**
 
@@ -253,10 +253,10 @@ Vela includes no media and no provider accounts. Your servers supply the catalog
 | Platform | Status |
 | :--- | :--- |
 | **Web / PWA** | Ships with Ether. Signed releases pass Ether's installer qualification (install, upgrade, rollback, reinstall). |
-| **Windows** | Standalone app with native mpv playback and an installer. Not yet code-signed, so SmartScreen may warn on first run. |
-| **macOS, Linux** | Standalone apps around the in-app engine. macOS builds are ad-hoc signed until notarization. |
-| **Apple TV, iPhone, iPad** | In development on libmpv, tested on a real Apple TV. |
-| **Android, Android TV** | In development on libmpv. |
+| **Windows** | Standalone app with native mpv playback, an Authenticode-signed installer and self-updates. A new certificate builds SmartScreen reputation over its first downloads. |
+| **macOS, Linux** | Standalone apps around the in-app engine. macOS builds are Developer ID signed and notarized. |
+| **Apple TV, iPhone, iPad** | Feature-complete on AetherEngine and in daily use on a real Apple TV and iPhone; TestFlight and the App Store are next. |
+| **Android, Android TV** | Feature-complete on Media3 ExoPlayer; signed APKs to sideload. Real-device testing on Android TV and Google Play are next. |
 
 ## Questions you're about to ask
 
@@ -272,4 +272,4 @@ Vela includes no media and no provider accounts. Your servers supply the catalog
 
 ## License
 
-Vela is licensed under [GPL-3.0](LICENSE). Third-party components, including FFmpeg, libmpv, libass and the pinned decoder packages, keep their own licenses; see [third-party notices](THIRD_PARTY_NOTICES).
+Vela is licensed under [GPL-3.0](LICENSE). Third-party components, including FFmpeg, libmpv, AetherEngine, Media3, libass and the pinned decoder packages, keep their own licenses; see [third-party notices](THIRD_PARTY_NOTICES).
