@@ -230,7 +230,7 @@ export const heroMore = (primary: boolean): Node => ({
 export const heroCopy: Node = {
   type: 'repeat',
   over: 'home.hero',
-  when: [{ test: 'env.searching', not: true }],
+  when: [{ test: 'env.searching', not: true }, { test: 'env.searchFocused', not: true }],
   item: {
     type: 'box',
     style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '16px', 'max-width': '46rem' },
@@ -413,6 +413,7 @@ export const dots: Node = {
   motion: enter(560),
   when: [
     { test: 'env.searching', not: true },
+    { test: 'env.searchFocused', not: true },
     { test: 'env.heroCount', is: 'gt', value: '1' },
   ],
   style: {
@@ -481,6 +482,8 @@ export const copyColumn: Node = {
   layoutTransition: '640ms ease-out',
   style: copyBase,
   states: [
+    { when: [{ test: 'env.searchFocused' }, small], style: folded('80px') },
+    { when: [{ test: 'env.searchFocused' }], style: folded('82px') },
     { when: [{ test: 'env.searching' }, small], style: folded('80px') },
     { when: [{ test: 'env.searching' }], style: folded('82px') },
     { when: [noHero, small], style: folded('80px') },

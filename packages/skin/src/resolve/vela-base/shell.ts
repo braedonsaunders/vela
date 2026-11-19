@@ -217,7 +217,7 @@ export const shell: Node = {
             compactNavigation,
             {
               type: 'box',
-              press: { action: 'search', focus: 'vela-search' },
+              press: { action: 'search' },
               label: '{t:ui.search}',
               style: {
                 position: 'relative',

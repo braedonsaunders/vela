@@ -394,7 +394,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   return (
     <VelaContext.Provider value={value}>
       <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error)}>
-        <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
+        <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still} searchFocused={view.flags.includes('search-focused')}>
           {children}
         </Previews>
         {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} onPick={pickDocument} onClose={closePicker} /> : null}

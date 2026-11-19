@@ -14,6 +14,7 @@ interface Props {
   onHome: boolean;
   heroIndex: number;
   still: boolean;
+  searchFocused: boolean;
   children: ReactNode;
 }
 
@@ -26,7 +27,7 @@ function useForeground(): boolean {
   return active;
 }
 
-export function Previews({ store, state, onHome, heroIndex, still, children }: Props) {
+export function Previews({ store, state, onHome, heroIndex, still, searchFocused, children }: Props) {
   const foreground = useForeground();
   const home = state.home.value;
   const hero = home?.hero[heroIndex % Math.max(1, home.hero.length)];
@@ -44,7 +45,7 @@ export function Previews({ store, state, onHome, heroIndex, still, children }: P
   const previewable = hero && home?.heroPreviewIds.includes(hero.id);
   const heroId = hero && previewable && visibleHeroes.has(hero.id) ? hero.id : '';
   const offered = !!PreviewSurface && !!home?.trailerPreviewAvailable;
-  const allowed = offered && onHome && foreground && !still && state.search.query === '';
+  const allowed = offered && onHome && foreground && !still && !searchFocused && state.search.query === '';
 
   useEffect(() => {
     store.previews.setContext({ allowed, heroId });
