@@ -1,7 +1,10 @@
 'use strict';
 const path = require('node:path');
+const { existsSync } = require('node:fs');
 let addon;
 function load() {
+  if (!existsSync(path.join(process.resourcesPath, 'AetherEngine_AetherEngine.bundle')))
+    throw new Error('Native engine resource bundle unavailable');
   if (addon) return addon;
   const root = process.env.VELA_NATIVE_MAC_DIR || path.join(process.resourcesPath, 'native-mac');
   return (addon = require(path.join(root, 'vela-native.node')));

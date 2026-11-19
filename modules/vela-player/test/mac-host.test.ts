@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { join } from 'node:path';
 
-function fixture() {
+function fixture(bundleAvailable = true) {
   const calls: any[] = [];
   let tick: () => void = () => {};
   let cleared = false;
@@ -20,7 +20,7 @@ function fixture() {
   };
   const exports: any = {};
   runInNewContext(readFileSync(join(import.meta.dir, '../../../apps/vela-desktop/mac/host.js'), 'utf8'), {
-    exports, require: (name: string) => name === 'node:path' ? require('node:path') : binary,
+    exports, require: (name: string) => name === 'node:path' ? require('node:path') : name === 'node:fs' ? { existsSync: () => bundleAvailable } : binary,
     process: { platform: 'darwin', arch: 'arm64', getSystemVersion: () => '15.0', env: {}, resourcesPath: '/fixture/resources' },
     setInterval: (callback: () => void) => { tick = callback; return 7; },
     clearInterval: (id: number) => { expect(id).toBe(7); cleared = true; },
@@ -55,4 +55,8 @@ test('Mac poll failures dispose once and emit a sanitized browser fallback', asy
   expect(events).toEqual([['fallback', { reason: 'native-bridge-failed' }]]);
   expect(f.calls.filter(c => c[0] === 'destroy')).toHaveLength(1);
   expect(f.cleared()).toBe(true);
+});
+
+test('Mac host is unavailable when the engine resource bundle is missing', () => {
+  expect(fixture(false).exports.available()).toBe(false);
 });

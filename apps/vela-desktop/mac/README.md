@@ -18,7 +18,9 @@ AetherEngine 7.70.0; Package.resolved pins its transitive dependencies. Build
 staging is adjacent to the output. No generated binaries belong in Git.
 
 The shared desktop build accepts `--native-mac=<payload>` and copies it to
-`Contents/Resources/native-mac`. The payload and Electron app are arm64-only. `VELA_NATIVE_MAC_DIR` selects a scratch payload for development.
+`Contents/Resources/native-mac`. The payload and Electron app are arm64-only. `VELA_NATIVE_MAC_DIR` selects a scratch payload for development. The runner
+app must also contain `AetherEngine_AetherEngine.bundle` at its Resources root;
+the host remains unavailable without that bundle.
 Sign every nested framework, dylib and addon with the app's Developer ID and
 hardened runtime before signing the app. Same-team signing avoids disabling
 library validation. Ship the copied `Licenses` directory with the binaries;

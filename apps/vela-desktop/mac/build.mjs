@@ -34,6 +34,16 @@ const symbols = spawnSync('nm', ['-gU', join(bin, 'libVelaNative.dylib')], { enc
 for (const symbol of ['vela_create', 'vela_call', 'vela_destroy', 'vela_capabilities'])
   if (!symbols.stdout.includes('_' + symbol)) throw new Error(`Missing exported Swift C ABI: ${symbol}`);
 cpSync(join(bin, 'libVelaNative.dylib'), join(output, 'libVelaNative.dylib'));
+// Release must resolve Swift from the OS, never from this Mac's Xcode install.
+const nativeLibrary = join(output, 'libVelaNative.dylib');
+const loadCommands = spawnSync('otool', ['-l', nativeLibrary], { encoding: 'utf8' });
+if (loadCommands.status !== 0) throw new Error('Cannot inspect native runtime paths');
+for (const match of loadCommands.stdout.matchAll(/cmd LC_RPATH\n\s*cmdsize \d+\n\s*path (.*?) \(offset/g)) {
+  const runtimePath = match[1];
+  if (runtimePath.startsWith('/') && runtimePath.includes('.xctoolchain/'))
+    run('xcrun', ['install_name_tool', '-delete_rpath', runtimePath, nativeLibrary]);
+}
+run('codesign', ['--force', '--sign', '-', nativeLibrary]);
 // Dynamic dependency bundles must stay adjacent and replaceable (LGPL).
 for (const name of readdirSync(bin)) if (name.endsWith('.framework') || name.endsWith('.bundle')) {
   rmSync(join(output, name), { recursive: true, force: true });
