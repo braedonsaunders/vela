@@ -195,7 +195,12 @@ internal class PlayerController(
       // The abandoned engine must not spend another path or race that in-flight command.
       if (engine === client && !recovering) {
         if (unauthorized) askForFreshPlan("media grant refused")
-        else recover(code)
+        else if (transientMediaFailure(code)) {
+          state.failure = mediaFailureMessage(code)
+          state.failureKind = "network"
+          host.keepScreenOn(false)
+          report.publish(state, null, force = true)
+        } else recover(code)
       }
     }
     host.surface?.let { client.attach(it) }
@@ -217,7 +222,7 @@ internal class PlayerController(
       host.keepScreenOn(false)
       report.sessionCommand(command)
     } else {
-      state.failure = "The media could not be played (Media3 $code)"
+      state.failure = mediaFailureMessage(code)
       state.failureKind = "decoder"
     }
     report.publish(state, pendingSeek, force = true)

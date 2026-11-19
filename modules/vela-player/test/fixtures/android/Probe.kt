@@ -13,6 +13,10 @@ private fun plan(selected: String = "original", session: String = "one", fallbac
 ))!!
 
 fun main() {
+  listOf(503, 429, 2001, 2002).forEach { check(transientMediaFailure(it)) }
+  listOf(3001, 4005, 403).forEach { check(!transientMediaFailure(it)) }
+  check(mediaFailureMessage(503).contains("temporarily unavailable"))
+  check(!mediaFailureMessage(4005).contains("4005"))
   val external = PlanTrack.from(mapOf("id" to "captions:en", "name" to "English", "delivery" to mapOf("kind" to "external")))!!
   check(external.matchesExternalFormat("captions:en"))
   check(external.matchesExternalFormat("1:captions:en"))

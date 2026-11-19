@@ -10,7 +10,7 @@ const compiler = process.env.VELA_KOTLINC || Bun.which('kotlinc');
   const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');
   const fixtures = join(import.meta.dir, 'fixtures/android');
   try {
-    const sources = ['PlaybackPlan', 'PathRecovery', 'MediaScope', 'MediaAccess', 'ScopedMediaDataSource'].map(f => join(source, f + '.kt'));
+    const sources = ['PlaybackPlan', 'PathRecovery', 'MediaScope', 'MediaFailure', 'MediaAccess', 'ScopedMediaDataSource'].map(f => join(source, f + '.kt'));
     const stubs = ['Uri', 'Common', 'DataSource', 'Probe'].map(f => join(fixtures, f + '.kt'));
     const compile = Bun.spawn([compiler!, ...sources, ...stubs, '-d', join(scratch, 'probe.jar')], { stdout: 'pipe', stderr: 'pipe' });
     const output = await new Response(compile.stderr).text();
