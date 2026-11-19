@@ -54,3 +54,11 @@ test('invalid Vela tokens are never accepted as a session', async () => {
   const { link } = await linked({ exchange: Response.json({ accessToken: 'incomplete' }) });
   await expect(link.choose('123', 'machine', true, signIn)).rejects.toThrow('invalid sign-in response');
 });
+
+test('retrying an exchange reuses its idempotency key without linking Plex again', async () => {
+  const { link, seen } = await linked({ exchange: new Response('', { status: 503 }) });
+  await expect(link.choose('123', 'machine', true, signIn)).rejects.toThrow('temporarily unavailable');
+  await expect(link.choose('123', 'machine', true, { ...signIn, idempotencyKey: 'new-key' })).rejects.toThrow('temporarily unavailable');
+  const exchanges = seen.filter(r => r.url.pathname === '/vela/v0/auth/plex');
+  expect(exchanges.map(r => r.body)).toEqual([{ plexToken: 'account-secret', ...signIn }, { plexToken: 'account-secret', ...signIn }]);
+});

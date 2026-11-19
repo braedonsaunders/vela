@@ -22,6 +22,7 @@ export class PlexLink {
   private pin?: { id: number; code: string; expiresAt: string };
   private account?: { token: string; viewer: Tokens['viewer'] };
   private resources: PlexResource[] = [];
+  private exchangeKeys = new Map<string, string>();
   constructor(private readonly clientIdentifier: string) {}
 
   async start(): Promise<{ code: string; expiresAt: string }> {
@@ -81,9 +82,12 @@ export class PlexLink {
         if (body.MediaContainer?.machineIdentifier !== resource.clientIdentifier) continue;
       } catch { continue; }
       const ether = await probeEther(origin);
+      if (this.account !== account || this.pin?.code !== code) throw new Error('Link Plex again to choose a server');
+      const exchangeKey = this.exchangeKeys.get(id) ?? signIn.idempotencyKey;
+      this.exchangeKeys.set(id, exchangeKey);
       if (ether && !ether.plexAccountSignIn) throw new Error('This Ether server needs an update or Plex sign-in enabled. Ask the owner to enable Sign in with Plex.');
       const tokens: Tokens = ether
-        ? await exchangePlexAccount(origin, account.token, signIn.device, signIn.idempotencyKey)
+        ? await exchangePlexAccount(origin, account.token, signIn.device, exchangeKey)
         : { accessToken: resource.accessToken, refreshToken: '', expiresAt: '9999-12-31T23:59:59Z', viewer: account.viewer };
       if (this.account !== account || this.pin?.code !== code) throw new Error('Link Plex again to choose a server');
       this.cancel();
@@ -93,5 +97,5 @@ export class PlexLink {
     }
     throw new Error('This Plex server could not be reached from here');
   }
-  cancel(): void { this.pin = undefined; this.account = undefined; this.resources = []; }
+  cancel(): void { this.pin = undefined; this.account = undefined; this.resources = []; this.exchangeKeys.clear(); }
 }
