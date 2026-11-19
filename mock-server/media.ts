@@ -3,10 +3,18 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 export const fixtureDurationSeconds = 180;
 export const mediaRoot = join(homedir(), '.scratch/tmp/vela/media');
-export interface Faults { bandwidthBps: number; failEvery: number; truncateEvery: number; stallMs: number; fallbackUnavailable: boolean; capacityExhausted: boolean }
-export const faults: Faults = { bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false };
+export interface Faults { rangeFailSeconds: number; bandwidthBps: number; failEvery: number; truncateEvery: number; stallMs: number; fallbackUnavailable: boolean; capacityExhausted: boolean }
+export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false };
 let segmentCount = 0;
+let rangeFailureUntil = 0;
+let rangeFailureSetting = 0;
 export async function serveMedia(req: Request, resource: string): Promise<Response> {
+  if (faults.rangeFailSeconds !== rangeFailureSetting) {
+    rangeFailureSetting = faults.rangeFailSeconds;
+    rangeFailureUntil = Date.now() + rangeFailureSetting * 1000;
+  }
+  if (req.headers.has('range') && rangeFailureSetting > 0 && Date.now() < rangeFailureUntil)
+    return new Response('Injected temporary range failure', { status: 503 });
   if (resource.startsWith('audio/')) return serveAudioFixture(req, resource.slice(6));
   if (!/^(master\.m3u8|mse-master\.m3u8|ts-master\.m3u8|direct\.mp4|universal-avc\.mp4|subtitles\.vtt|(?:v(?:360|540|720)|video(?:360|540|720)|a_(?:en|es))\/(?:index\.m3u8|init\.mp4|seg-\d+\.m4s)|ts(?:360|540|720)\/(?:index\.m3u8|seg-\d+\.ts))$/.test(resource)) return new Response('Not found', { status: 404 });
   const file = Bun.file(join(mediaRoot, resource));

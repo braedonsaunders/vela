@@ -64,7 +64,7 @@ qualities=[]; TS is not offered to the fMP4 MSE pipeline or added to normal plan
 GET/POST `/__admin/faults` reads/patches:
 
 ```json
-{"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false}
+{"rangeFailSeconds":0,"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false}
 ```
 
 Zero disables each numeric fault. Bandwidth applies per response (bits/s).
@@ -171,3 +171,7 @@ For a TV on the LAN, set `VELA_MOCK_HOST` to this machine's LAN address; the
 default remains loopback. Sign in with the mock's `demo` / `vela` account.
 `VELA_MOCK_GUIDE_GAPS=scale-1` adds a long empty interval around the current
 hour on that channel to verify that vertical focus retains time across gaps.
+
+`rangeFailSeconds` fails byte-range requests with HTTP 503 for N seconds from
+the first media request after the setting changes. Set it to zero and make a
+media request before rearming the same duration. Non-range requests continue.
