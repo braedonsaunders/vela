@@ -239,6 +239,11 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     () => ({ width, height, insets, sides: { left: safeArea.left, right: safeArea.right } }),
     [width, height, insets, safeArea.left, safeArea.right],
   );
+  // Android's content navigator already consumes the system bars. Only watch is
+  // full-display; passing the bars to other documents reserves that space twice.
+  const contentViewport: Viewport = useMemo(() => Platform.OS === 'android' && !Platform.isTV
+    ? { ...viewport, height: height - insets.top - insets.bottom, insets: NO_INSETS }
+    : viewport, [viewport, height, insets]);
   const image = useCallback<SkinHost['image']>(path => {
     const source = assetSource(path, origin);
     if (source === undefined) return undefined;
@@ -274,13 +279,14 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       skinName: resolved.doc.name,
     });
     const key = `${route}:${entry}:${library ?? ''}`;
-    const inputs = [resolved.doc, env, viewport, dispatch, image, setQuery, view.setFlag, view.setPager, loadMore];
+    const routeViewport = route === 'watch' ? viewport : contentViewport;
+    const inputs = [resolved.doc, env, routeViewport, dispatch, image, setQuery, view.setFlag, view.setPager, loadMore];
     const previous = hosts.current.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.host;
     const result: SkinHost = {
       doc: resolved.doc,
       env,
-      viewport,
+      viewport: routeViewport,
       dispatch: (action, arg) => dispatch({ route, entry, library }, action, arg),
       image,
       openRow: row => {
@@ -296,7 +302,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     };
     hosts.current.set(key, { inputs, host: result });
     return result;
-  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, dispatch, image, setQuery, loadMore]);
+  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore]);
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(

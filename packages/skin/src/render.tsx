@@ -126,7 +126,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
   const loadingLibraryNav = host.env.route === 'library' && (host.env.load !== 'ready' || !!cover || !!leaving);
   // Once TV content is ready, keep its switch in the focus tree even while the cover fades.
   const floatingLibraryNav = loadingLibraryNav && !(Platform.isTV && host.env.load === 'ready');
-  const navTop = hasFlowHeader(host.doc.document.slots?.shell) ? 0 : (host.env.small ? 104 : 84) + host.viewport.insets.top;
+  const navTop = hasFlowHeader(host.doc.document.slots?.shell) ? 0 : (host.env.small ? 104 : 56) + host.viewport.insets.top;
   return (
     <View style={{ flex: 1 }}>
       <Host.Provider value={host}>

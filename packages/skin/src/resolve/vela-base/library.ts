@@ -116,7 +116,7 @@ export const toolbar: Node = {
     'z-index': '5',
     display: 'flex',
     'flex-direction': 'column',
-    'padding-top': 'calc(84px + env(safe-area-inset-top))',
+    'padding-top': 'calc(56px + env(safe-area-inset-top))',
     'background-color': veil(82),
     'backdrop-filter': 'blur(20px) saturate(1.3)',
     'border-width': '0px',

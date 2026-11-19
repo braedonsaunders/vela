@@ -179,7 +179,7 @@ test('inherited library reserves header space only for overlay navigation', asyn
     return [route.children[3].style?.['padding-top'], route.children[3].small?.['padding-top']];
   };
   expect(topPadding(broadcast)).toEqual(['0px', '0px']);
-  expect(topPadding(lateNight)).toEqual(['calc(84px + env(safe-area-inset-top))', 'calc(104px + env(safe-area-inset-top))']);
+  expect(topPadding(lateNight)).toEqual(['calc(56px + env(safe-area-inset-top))', 'calc(104px + env(safe-area-inset-top))']);
 });
 
 test('a custom library route inherits the shared view switch and alternative views', async () => {

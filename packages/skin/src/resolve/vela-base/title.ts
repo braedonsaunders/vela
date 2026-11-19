@@ -1018,7 +1018,7 @@ export const titleLoading: Node = {
   ],
 };
 // The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
-// The frame starts below the shell's 84px bar, so its close button never sits on the bar's
+// The frame starts below the shell's 56px bar, so its close button never sits on the bar's
 // profile (a 540px-tall TV screen leaves only 22px of 4vh). Its spacing is the frame's margin:
 // the root is the route's scroll view, whose own padding native ignores.
 export const title: Node = {

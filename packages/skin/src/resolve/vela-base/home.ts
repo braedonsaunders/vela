@@ -467,7 +467,7 @@ export const copyBase: Style = {
   'justify-content': 'flex-end',
   'box-sizing': 'border-box',
   'min-height': 'calc(clamp(500px, 62vh, 700px) - 108px)',
-  'padding-top': 'calc(84px + 32px + env(safe-area-inset-top))',
+  'padding-top': 'calc(56px + 32px + env(safe-area-inset-top))',
 };
 export const folded = (height: string): Style => ({
   ...copyBase,

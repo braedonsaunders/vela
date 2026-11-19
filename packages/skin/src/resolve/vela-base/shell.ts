@@ -183,14 +183,14 @@ export const shell: Node = {
             position: 'relative',
             display: 'flex',
             'flex-direction': 'row',
-            height: '84px',
+            height: '56px',
             'box-sizing': 'border-box',
             ...gutter,
             'align-items': 'center',
             gap: '10px',
           },
           small: { height: '56px', ...gutterSmall, gap: '8px' },
-          states: [{ when: [is('env.section', 'live'), { ...small, not: true }], style: { height: '60px' } }],
+          states: [{ when: [is('env.section', 'live'), { ...small, not: true }], style: { height: '56px' } }],
           children: [
             {
               type: 'box',
@@ -199,7 +199,7 @@ export const shell: Node = {
               controlStates: false,
               style: { position: 'relative', 'margin-right': '22px' } as Style,
               small: { 'margin-right': '0px' } as Style,
-              children: [wordmark(28, 24)],
+              children: [wordmark(24, 24)],
             },
             {
               type: 'box',
@@ -333,7 +333,7 @@ export const shell: Node = {
       motion: 'velaPop',
       style: {
         position: 'absolute',
-        top: 'calc(78px + env(safe-area-inset-top))',
+        top: 'calc(56px + env(safe-area-inset-top))',
         right: 'max(28px, 4vw)',
         'z-index': '30',
         width: '260px',
