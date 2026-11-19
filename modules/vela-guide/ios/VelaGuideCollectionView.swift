@@ -121,10 +121,11 @@ private final class GuideProgrammeCell: UICollectionViewCell {
     var drawsRing = true
     var programmeRect = CGRect.zero
     override func layoutSubviews() { super.layoutSubviews(); ring.frame = programmeRect }
-    override func prepareForReuse() { super.prepareForReuse(); ring.isHidden = true; accessibilityLabel = nil }
+    override func prepareForReuse() { super.prepareForReuse(); ring.isHidden = true; layer.zPosition = 0; accessibilityLabel = nil }
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         ring.isHidden = !isFocused || !drawsRing
+        layer.zPosition = isFocused ? 2 : 0
     }
 }
 
@@ -545,7 +546,7 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
             v.frame = CGRect(x: 0, y: CGFloat(index) * layout.row - collection.contentOffset.y, width: rail, height: layout.row)
             v.colours(chrome, focused: focusedPath?.section == index); v.show(channel)
             paint.view.isHidden = false
-            paint.view.setVisibleOffset(collection.contentOffset.x)
+            paint.view.layer.zPosition = focusedPath?.section == index ? 1 : 0
             paint.view.select(focusedPath.flatMap { $0.section == index ? layout.metadata(at: $0).id : nil } ?? "")
             if paint.channel != id || paint.version != paintVersion {
                 paint.channel = id; paint.version = paintVersion
@@ -565,6 +566,10 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
                 let width = (raw["width"] as? NSNumber)?.doubleValue ?? 1
                 paint.view.frame = CGRect(x: x, y: CGFloat(index) * layout.row, width: width, height: layout.row)
             }
+            let origin = paint.view.frame.origin
+            paint.view.setVisibleOffset(collection.contentOffset.x, viewport: CGRect(
+                x: collection.contentOffset.x - origin.x, y: collection.contentOffset.y - origin.y,
+                width: collection.bounds.width, height: collection.bounds.height))
         }
         for i in rails.indices where !used.contains(i) { rails[i].isHidden = true }
         for i in paints.indices where !used.contains(i) { paints[i].view.isHidden = true }

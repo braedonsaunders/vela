@@ -92,6 +92,7 @@ final class VelaGuideRowView: ExpoView {
     private var cells: [Cell] = []
     private var generation = 0
     private var selected = "", channel = ""
+    private var visibleViewport: CGRect?
     private var externalScrollX: CGFloat?
     private var originX: CGFloat = 0
     private var radius: CGFloat = 0
@@ -104,7 +105,7 @@ final class VelaGuideRowView: ExpoView {
         backgroundColor = guideInitialBackground
         picture.backgroundColor = guideInitialSurface.cgColor
         isAccessibilityElement = false
-        clipsToBounds = true
+        clipsToBounds = false
         layer.addSublayer(picture)
         ring.backgroundColor = UIColor.clear.cgColor
         ring.borderWidth = 2
@@ -144,25 +145,49 @@ final class VelaGuideRowView: ExpoView {
         selected = id
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if let cell = cells.first(where: { $0.id == id }) {
-            ring.bounds = CGRect(origin: .zero, size: cell.rect.size); ring.position = CGPoint(x: cell.rect.midX, y: cell.rect.midY); ring.cornerRadius = radius; ring.isHidden = false
+            // Lift the visible time slice, not the original offscreen programme. The
+            // collection owns clipping at the rail/ruler; individual rows must not clip lift.
+            let viewport = visibleViewport ?? CGRect(x: (scroll?.contentOffset.x ?? originX) - originX, y: 0,
+                width: scroll?.bounds.width ?? bounds.width, height: bounds.height)
+            let safe = viewport.insetBy(dx: min(6, viewport.width / 4), dy: 3)
+            let rect = cell.rect.intersection(safe)
+            guard !rect.isNull, rect.width > 0, rect.height > 0 else {
+                ring.isHidden = true; lifted.isHidden = true; CATransaction.commit(); return
+            }
+            let scale: CGFloat = UIAccessibility.isReduceMotionEnabled ? 1 : 1.045
+            let sx = min(scale, safe.width / rect.width), sy = min(scale, safe.height / rect.height)
+            let centre = CGPoint(x: max(safe.minX + rect.width * sx / 2, min(safe.maxX - rect.width * sx / 2, rect.midX)),
+                                 y: max(safe.minY + rect.height * sy / 2, min(safe.maxY - rect.height * sy / 2, rect.midY)))
+            // Encode the bounded centre as an anchor so edge tiles grow inward
+            // throughout the spring, without jumping sideways at focus entry.
+            let anchor = CGPoint(
+                x: sx > 1 ? max(0, min(1, 0.5 - (centre.x - rect.midX) / (rect.width * (sx - 1)))) : 0.5,
+                y: sy > 1 ? max(0, min(1, 0.5 - (centre.y - rect.midY) / (rect.height * (sy - 1)))) : 0.5)
+            let position = CGPoint(x: rect.minX + anchor.x * rect.width, y: rect.minY + anchor.y * rect.height)
+            ring.anchorPoint = anchor; lifted.anchorPoint = anchor
+            ring.bounds = CGRect(origin: .zero, size: rect.size); ring.position = position; ring.cornerRadius = radius; ring.isHidden = false
             ring.backgroundColor = UIColor.white.withAlphaComponent(0.055).cgColor
             ring.shadowColor = UIColor.black.cgColor; ring.shadowOpacity = 0.3
-            ring.shadowRadius = 12; ring.shadowOffset = CGSize(width: 0, height: 5)
+            ring.shadowRadius = 2; ring.shadowOffset = .zero
             ring.shadowPath = UIBezierPath(roundedRect: ring.bounds, cornerRadius: radius).cgPath
-            lifted.bounds = CGRect(origin: .zero, size: cell.rect.size); lifted.position = CGPoint(x: cell.rect.midX, y: cell.rect.midY); lifted.cornerRadius = radius
+            lifted.bounds = CGRect(origin: .zero, size: rect.size); lifted.position = position; lifted.cornerRadius = radius
             lifted.contents = picture.contents
-            lifted.contentsRect = CGRect(x: cell.rect.minX / max(1, picture.bounds.width), y: cell.rect.minY / max(1, picture.bounds.height), width: cell.rect.width / max(1, picture.bounds.width), height: cell.rect.height / max(1, picture.bounds.height))
+            lifted.contentsRect = CGRect(x: rect.minX / max(1, picture.bounds.width), y: rect.minY / max(1, picture.bounds.height), width: rect.width / max(1, picture.bounds.width), height: rect.height / max(1, picture.bounds.height))
             lifted.isHidden = picture.contents == nil
             if let entry = labels.first(where: { $0.cell.id == id }) {
-                liftedText.contents = entry.text.contents; liftedText.frame = entry.text.frame
+                liftedText.contents = entry.text.contents
+                liftedText.frame = CGRect(x: 12, y: cell.rect.minY - rect.minY, width: entry.text.bounds.width, height: entry.text.bounds.height)
                 liftedText.contentsScale = entry.text.contentsScale
             } else { liftedText.contents = nil }
-            let scale: CGFloat = UIAccessibility.isReduceMotionEnabled ? 1 : 1.045
             for surface in [ring, lifted] {
-                surface.transform = CATransform3DMakeScale(scale, scale, 1)
+                let transform = CATransform3DMakeScale(sx, sy, 1)
+                if !changed && !CATransform3DEqualToTransform(surface.transform, transform) {
+                    surface.removeAnimation(forKey: "focusLift")
+                }
+                surface.transform = transform
                 if changed && !UIAccessibility.isReduceMotionEnabled {
-                    let spring = CASpringAnimation(keyPath: "transform.scale")
-                    spring.fromValue = 1; spring.toValue = scale; spring.damping = 22; spring.stiffness = 280; spring.mass = 0.8
+                    let spring = CASpringAnimation(keyPath: "transform")
+                    spring.fromValue = NSValue(caTransform3D: CATransform3DIdentity); spring.toValue = NSValue(caTransform3D: surface.transform); spring.damping = 22; spring.stiffness = 280; spring.mass = 0.8
                     spring.duration = spring.settlingDuration; surface.add(spring, forKey: "focusLift")
                 }
             }
@@ -293,16 +318,19 @@ final class VelaGuideRowView: ExpoView {
          "placeholderRGBA": picture.backgroundColor?.components ?? []]
     }
 
-    func setVisibleOffset(_ x: CGFloat) { externalScrollX = x; positionLabels() }
+    func setVisibleOffset(_ x: CGFloat, viewport: CGRect) {
+        guard externalScrollX != x || visibleViewport != viewport else { return }
+        externalScrollX = x; visibleViewport = viewport; positionLabels()
+        if !selected.isEmpty { select(selected, refresh: true) }
+    }
 
     private func positionLabels() {
         let left = (externalScrollX ?? scroll?.contentOffset.x ?? originX) - originX
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for entry in labels {
-            let shift = min(max(0, left - entry.cell.rect.minX), max(0, entry.cell.rect.width - 120))
+            let shift = min(max(0, left - entry.cell.rect.minX), max(0, entry.cell.rect.width - 1))
             if entry.text.frame.origin.x != 12 + shift { entry.text.frame.origin = CGPoint(x: 12 + shift, y: 0) }
         }
-        if let entry = labels.first(where: { $0.cell.id == selected }) { liftedText.frame = entry.text.frame }
         CATransaction.commit()
     }
 }
