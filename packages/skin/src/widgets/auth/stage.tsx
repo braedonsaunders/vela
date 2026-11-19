@@ -1,9 +1,12 @@
 // The stage the foundation's own pages stand on (Connect a server): the Vela base sign-in's
 // drifting light on the page colour, the brand mark, and a glass card that holds the page,
-// centred and scrolling when it is taller than the screen. Styled from the document's `ui`.
+// sized to the safe viewport; long lists scroll inside the card and keyboard scrolling stays bounded.
+// Styled from the active document's `ui`.
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { authLayout } from './layout';
+import { AuthLayoutContext } from './layout-context';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useHost } from '../../host';
@@ -49,7 +52,7 @@ const AURORAS: { motion: string; rows: Css }[] = [
 const CARD: Css = {
   width: '100%',
   'flex-shrink': '0',
-  'max-width': '448px',
+  'max-width': '520px',
   padding: 'clamp(28px, 5vw, 44px) clamp(22px, 4.5vw, 40px)',
   'border-radius': '$ui.radiusPanel',
   'background-color': '$ui.glass',
@@ -62,6 +65,17 @@ const CARD: Css = {
 export function Stage({ children }: { children: ReactNode }) {
   const look = useLook();
   const host = useHost();
+  const [availableHeight, setAvailableHeight] = useState(host.viewport.height);
+  const [webHeight, setWebHeight] = useState<number | undefined>();
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    const resize = () => setWebHeight(viewport.height);
+    resize();
+    viewport.addEventListener('resize', resize);
+    return () => viewport.removeEventListener('resize', resize);
+  }, []);
+  const layout = authLayout(host.viewport, availableHeight, Platform.isTV);
   const mark = host.image('assets/brand/vela-stacked.svg');
   const card = look.layer(CARD);
   return (
@@ -94,20 +108,22 @@ export function Stage({ children }: { children: ReactNode }) {
           ]}
         />
       </View>
+      <View style={{ flex: 1, maxHeight: webHeight }} onLayout={event => setAvailableHeight(event.nativeEvent.layout.height)}>
       <ScrollView
+        testID="auth-stage-scroll"
         style={{ flex: 1 }}
-        contentContainerStyle={look.box({
+        contentContainerStyle={[look.box({
           'flex-grow': '1',
           'align-items': 'center',
           'justify-content': 'center',
           gap: '32px',
           padding: 'max(28px, 7vh) 16px',
-        })}
+        }), { paddingLeft: (host.viewport.sides?.left ?? 0) + 16, paddingRight: (host.viewport.sides?.right ?? 0) + 16, paddingTop: Math.max(layout.padding, host.viewport.insets.top), paddingBottom: Math.max(layout.padding, host.viewport.insets.bottom) }, layout.compact && { paddingLeft: (host.viewport.sides?.left ?? 0) + layout.padding, paddingRight: (host.viewport.sides?.right ?? 0) + layout.padding, paddingTop: host.viewport.insets.top + layout.padding, paddingBottom: host.viewport.insets.bottom + layout.padding, gap: layout.gap }]}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
-        {mark ? <Image source={mark} style={{ width: 60, height: 104 }} accessibilityElementsHidden /> : null}
-        <Animated.View style={[card.style, look.motion('velaEnter0')]}>
+        {mark && layout.logoHeight ? <Image source={mark} style={{ width: layout.logoHeight * 60 / 104, height: layout.logoHeight }} accessibilityElementsHidden /> : null}
+        <Animated.View testID="auth-card" style={[card.style, { maxHeight: availableHeight < host.viewport.height - 100 ? undefined : layout.cardHeight, flexShrink: 1 }, layout.compact && { padding: layout.padding, maxWidth: '100%', width: '100%' }, look.motion('velaEnter0')]}>
           {card.blur && Platform.OS !== 'web' ? (
             <BlurView
               intensity={Math.min(100, Math.round(card.blur * 2.5))}
@@ -115,9 +131,10 @@ export function Stage({ children }: { children: ReactNode }) {
               style={StyleSheet.absoluteFill}
             />
           ) : null}
-          {children}
+          <AuthLayoutContext.Provider value={layout}>{children}</AuthLayoutContext.Provider>
         </Animated.View>
       </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }

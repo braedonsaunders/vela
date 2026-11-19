@@ -1,7 +1,8 @@
+import { useAuthLayout } from '../layout-context';
 // Linking a Plex server: a PIN entered at plex.tv/link (one tile per character), then the
 // account's servers to choose from, the recommended one marked. Only the chosen server's own
 // token is kept (the session store's concern); this view only starts, chooses and cancels.
-import { Linking, Platform, View } from 'react-native';
+import { Linking, Platform, ScrollView, View } from 'react-native';
 import { msg } from '@vela/core';
 import {
   APressable,
@@ -36,23 +37,25 @@ export function PlexStep({
   onChoose(id: string): void;
   onCancel(): void;
 }) {
+  const layout = useAuthLayout();
   const waiting = starting || link?.state === 'waiting';
   return (
-    <View style={{ gap: 18 }}>
+    <View style={{ gap: layout?.tight ? 8 : 18, minHeight: 0, flexShrink: 1 }}>
       {waiting ? (
-        <View style={{ gap: 18, alignItems: 'center' }}>
+        <View style={{ gap: layout?.tight ? 8 : 18, alignItems: 'center' }}>
           {link?.code ? <CodeTiles code={link.code} testID="plex-code" /> : null}
           {link?.linkUrl ? <LinkLine url={link.linkUrl} /> : null}
           <Waiting>{msg('connect.plex.waiting')}</Waiting>
-          <Pill label={msg('ui.cancel')} height={46} align="center" onPress={onCancel} />
         </View>
       ) : link?.state === 'linked' ? (
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: 8, minHeight: 0, flexShrink: 1 }}>
           <Label>{msg('connect.plex.choose')}</Label>
           {link.choices.length === 0 ? <Waiting>{msg('connect.plex.finding')}</Waiting> : null}
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled">
           {link.choices.map(choice => (
             <Choice key={choice.id} choice={choice} busy={busy} onChoose={onChoose} />
           ))}
+          </ScrollView>
         </View>
       ) : (
         <View style={{ gap: 12 }}>

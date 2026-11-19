@@ -4,8 +4,9 @@
 // the tvOS focus engine and a D-pad.
 import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactNode, type Ref, type ComponentRef } from 'react';
 import { Platform, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { useAuthLayout } from '../auth/layout-context';
 import { TextField } from './text-field';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -104,10 +105,11 @@ export function Glyph({ symbol, size, color }: { symbol: string; size: number; c
 
 /** An eyebrow over a display title, as the base's sign-in heads its card. */
 export function Heading({ eyebrow: over, title, lines = 2 }: { eyebrow?: string; title: string; lines?: number }) {
+  const layout = useAuthLayout();
   return (
-    <View style={{ gap: 10 }}>
-      {over ? <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.accent' }}>{over}</Words> : null}
-      <Words rows={{ ...display, 'font-size': '42px' }} lines={lines} accessibilityRole="header">
+    <View style={{ gap: layout?.tight ? 4 : 10 }}>
+      {over && !layout?.tight ? <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.accent' }}>{over}</Words> : null}
+      <Words rows={{ ...display, ...(layout ? { 'font-family': '$ui.font', 'font-weight': '600', 'letter-spacing': '0px' } : {}), 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines} accessibilityRole="header">
         {title}
       </Words>
     </View>
@@ -252,7 +254,7 @@ export function Pill({
       {...handlers}
       style={[
         style,
-        { flexDirection: 'row', gap: 10, overflow: 'hidden' },
+        { flexDirection: 'row', gap: 10, overflow: 'hidden', flexShrink: 0 },
         state.pressed && !disabled ? { opacity: 0.65 } : null,
         NO_RING,
       ]}
@@ -272,6 +274,7 @@ interface FieldProps {
   value: string;
   onChangeText(value: string): void;
   onSubmit?(): void;
+  inputRef?: Ref<ComponentRef<typeof TextField>>;
   secure?: boolean;
   kind?: 'url' | 'username' | 'password';
   placeholder?: string;
@@ -285,10 +288,11 @@ const KINDS = {
 } as const;
 
 /** The base's sign-in field: a label over a glass input that rings in the accent on focus. */
-export function Field({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID }: FieldProps) {
+export function Field({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef }: FieldProps) {
   const look = useLook();
   const { state, handlers } = useInteraction();
-  const rows = overlaid(fieldRows as Css, state, {
+  const layout = useAuthLayout();
+  const rows = overlaid({ ...fieldRows, ...(layout?.tight ? { height: '44px' } : {}) } as Css, state, {
     hover: { 'border-color': '$ui.glassEdgeStrong' },
     focus: { 'border-color': '$ui.accent', 'box-shadow': '0px 0px 0px 4px $ui.focusHalo' },
   });
@@ -296,10 +300,11 @@ export function Field({ label, value, onChangeText, onSubmit, kind = 'username',
   const ink = look.text({ 'font-size': rows['font-size'] ?? '16px', color: rows.color ?? '$ui.ink' });
   const traits = KINDS[kind];
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: layout?.tight ? 4 : 8 }}>
       <Label>{label}</Label>
-      <Animated.View style={box} onPointerEnter={handlers.onHoverIn} onPointerLeave={handlers.onHoverOut}>
+      <Animated.View style={[box, Platform.isTV && state.focus && { transform: [{ scale: 1.025 }] }]} onPointerEnter={handlers.onHoverIn} onPointerLeave={handlers.onHoverOut}>
         <TextField
+          ref={inputRef}
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}

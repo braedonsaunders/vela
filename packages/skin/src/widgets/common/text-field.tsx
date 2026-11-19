@@ -16,7 +16,8 @@ const NativeField = REMAKE ? forwardRef(RemadeField) : TextInput;
 // The field's own box shows its focus (the skin's field look); on the web the shared ring backs it up.
 export const TextField = forwardRef<Input, TextInputProps>(function FocusField(props, ref) {
   useFocusStyles();
-  return <NativeField {...props} ref={ref} />;
+  return <NativeField {...props} underlineColorAndroid={props.underlineColorAndroid ?? 'transparent'}
+    style={[props.style, Platform.isTV && { backgroundColor: 'transparent', borderWidth: 0, borderRadius: 0 }]} ref={ref} />;
 }) as unknown as typeof TextInput;
 
 function RemadeField(props: TextInputProps, forwarded: Ref<Input>) {

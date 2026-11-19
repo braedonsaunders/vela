@@ -5,7 +5,6 @@ import { useVela as useSession, useVelaState } from '@vela/core/react';
 import { Connect, Stage } from '@vela/skin/src/widgets/auth';
 import { HostContext } from '@vela/skin/src/host';
 import { router } from 'expo-router';
-import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { useVela } from '../../src/vela';
 
@@ -17,17 +16,14 @@ function leave() {
 export default function ConnectServer() {
   const session = useSession();
   const servers = useVelaState(s => s.servers);
+  const auth = useVelaState(s => s.auth);
   const app = useVela();
-  const opened = useRef(servers.selectedId);
-  useEffect(() => {
-    if (servers.selectedId !== opened.current) router.dismissTo('/');
-  }, [servers.selectedId]);
   const host = app.host('auth', 'connect');
   if (!host) return <View style={{ flex: 1 }} />;
   return (
     <HostContext.Provider value={host}>
       <Stage>
-        <Connect servers={servers} actions={session.servers} onClose={leave} />
+        <Connect servers={servers} actions={session.servers} auth={auth} authActions={session.auth} onClose={leave} />
       </Stage>
     </HostContext.Provider>
   );

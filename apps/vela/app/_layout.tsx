@@ -21,6 +21,8 @@ function Screens() {
     ? { paddingTop: insets.top, paddingBottom: insets.bottom } : {};
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { ...sides, ...bars }, animation: 'fade' }}>
+      <Stack.Screen name="(auth)/sign-in" options={{ contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0 } }} />
+      <Stack.Screen name="(auth)/connect" options={{ contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0 } }} />
       <Stack.Screen
         name="title/[id]"
         // On a TV the title page is presented within the app's root view: react-native-tvos finds

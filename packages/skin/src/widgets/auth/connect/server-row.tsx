@@ -62,7 +62,7 @@ export function ServerRow({
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
       <APressable
         onPress={() => {
-          if (!server.selected) onSelect(server.id);
+          onSelect(server.id);
         }}
         disabled={disabled}
         accessibilityRole="button"
@@ -80,6 +80,10 @@ export function ServerRow({
             lines={1}
           >
             {serverDetail(server)}
+          </Words>
+          {server.origin ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }} lines={1}>{server.origin}{server.basePath === '/' ? '' : server.basePath ?? ''}</Words> : null}
+          <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }} lines={1}>
+            {server.status === 'ready' ? 'Signed in' : 'Sign-in required'}
           </Words>
         </View>
         {server.selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}

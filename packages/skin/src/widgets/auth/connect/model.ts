@@ -6,6 +6,8 @@
 export interface ServerOption {
   id: string;
   name: string;
+  origin?: string;
+  basePath?: string;
   etherOrigin?: string;
   kind: string;
   kindLabel: string;

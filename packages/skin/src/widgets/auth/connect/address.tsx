@@ -1,11 +1,12 @@
+import { useAuthLayout } from '../layout-context';
 // Connect's first step: an address, checked as it is typed (before any credential is sent);
 // the server it found, with its kind, name and version; and your servers, to switch or remove.
 import { useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
 import { display, eyebrow } from '../../../resolve/vela-base/look';
-import { Alert, Field, Heading, Label, Pill, Waiting, Words } from '../../common/controls';
+import { Alert, Field, Label, Pill, Waiting, Words } from '../../common/controls';
 import { useLook } from '../../common/look';
 import type { ServerOption, ServerProbe } from './model';
 import { useLatest } from './pending';
@@ -37,6 +38,7 @@ export function AddressStep({
   onPlex?(): void;
   error: string;
 }) {
+  const layout = useAuthLayout();
   const look = useLook();
   const [address, setAddress] = useState('');
   const checked = useLatest(probe, PROBE_DELAY_MS);
@@ -61,8 +63,8 @@ export function AddressStep({
     if (found && !busy) onAdd(found);
   };
   return (
-    <View style={{ gap: 26 }}>
-      <Heading eyebrow={msg('connect.eyebrow')} title={msg('connect.title')} />
+    <View style={{ gap: layout?.gap ?? 26, minHeight: 0, flexShrink: 1 }}>
+
       <Field
         label={msg('connect.address')}
         value={address}
@@ -113,11 +115,13 @@ export function AddressStep({
         <Pill label={msg('connect.plex.signIn')} height={46} onPress={onPlex} disabled={busy} testID="connect-plex" />
       ) : null}
       {servers.length > 0 ? (
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: 8, minHeight: 0, flexShrink: 1 }}>
           <Label>{msg('connect.yours')}</Label>
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled">
           {servers.map(server => (
             <ServerRow key={server.id} server={server} busy={busy} onSelect={onSelect} onRemove={onRemove} />
           ))}
+          </ScrollView>
         </View>
       ) : null}
     </View>
