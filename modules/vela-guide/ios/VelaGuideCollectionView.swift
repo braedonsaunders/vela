@@ -118,12 +118,13 @@ private final class GuideProgrammeCell: UICollectionViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     var focusAllowed: (() -> Bool)?
     override var canBecomeFocused: Bool { focusAllowed?() ?? true }
+    var drawsRing = true
     var programmeRect = CGRect.zero
     override func layoutSubviews() { super.layoutSubviews(); ring.frame = programmeRect }
     override func prepareForReuse() { super.prepareForReuse(); ring.isHidden = true; accessibilityLabel = nil }
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
-        ring.isHidden = !isFocused
+        ring.isHidden = !isFocused || !drawsRing
     }
 }
 
@@ -136,6 +137,7 @@ private final class GuidePaintSlot {
 /// The rail is recycled separately from programme focus, and follows native scrolling per frame.
 private final class GuideRail: UIView {
     let image = UIImageView(), title = UILabel(), number = UILabel()
+    private let separator = CALayer(), logoTile = UIView()
     private var identity = ""
     private var task: SDWebImageCombinedOperation?
     private static let registerSVG: Void = { SDImageCodersManager.shared.addCoder(SDImageSVGCoder.shared) }()
@@ -147,12 +149,15 @@ private final class GuideRail: UIView {
         image.contentMode = .scaleAspectFit; image.clipsToBounds = true
         title.font = .systemFont(ofSize: 18, weight: .semibold); title.textColor = .white
         number.font = .monospacedDigitSystemFont(ofSize: 14, weight: .regular); number.textColor = .lightGray
-        [image, title, number].forEach(addSubview)
+        logoTile.layer.cornerRadius = 10; logoTile.clipsToBounds = true
+        addSubview(logoTile); [image, title, number].forEach(addSubview)
+        layer.addSublayer(separator)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     deinit { task?.cancel() }
-    func colours(_ palette: [String: Any]) {
-        backgroundColor = guideColour(palette["rail"]); image.backgroundColor = backgroundColor; title.textColor = guideColour(palette["ink"]); number.textColor = guideColour(palette["secondary"])
+    func colours(_ palette: [String: Any], focused: Bool) {
+        backgroundColor = guideColour(palette[focused ? "railOn" : "rail"]); image.backgroundColor = .clear
+        logoTile.backgroundColor = guideColour(palette["logo"]); separator.backgroundColor = guideColour(palette["separator"]).cgColor; title.textColor = guideColour(palette["ink"]); number.textColor = guideColour(palette["secondary"])
     }
     func show(_ channel: [String: Any]) {
         let id = channel["id"] as? String ?? "", uri = channel["logo"] as? String ?? ""
@@ -176,7 +181,9 @@ private final class GuideRail: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         number.frame = CGRect(x: 10, y: 0, width: 46, height: bounds.height)
-        image.frame = CGRect(x: 62, y: 12, width: 58, height: bounds.height - 24)
+        logoTile.frame = CGRect(x: 62, y: (bounds.height - 48) / 2, width: 64, height: 48)
+        image.frame = logoTile.frame.insetBy(dx: 6, dy: 6)
+        separator.frame = CGRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
         title.frame = CGRect(x: 132, y: 0, width: max(0, bounds.width - 140), height: bounds.height)
     }
 }
@@ -465,7 +472,8 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
         cell.focusAllowed = { [weak self] in self?.canFocus(p) ?? false }
         cell.ring.borderColor = accent
         cell.ring.cornerRadius = (drawings[id]?["radius"] as? NSNumber)?.doubleValue ?? 8
-        cell.ring.isHidden = !cell.isFocused
+        cell.drawsRing = item.id.isEmpty
+        cell.ring.isHidden = !cell.isFocused || !cell.drawsRing
         cell.programmeRect = CGRect(x: (item.minute - CGFloat(p.item)) * layout.scale + 2, y: 5, width: max(2, item.span * layout.scale - 4), height: layout.row - 11)
         cell.ring.frame = cell.programmeRect
         let label = programmeDrawings[id]?[item.id]?["label"] as? String ?? channels[p.section]["name"] as? String
@@ -481,9 +489,10 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
             lastMotion = CACurrentMediaTime(); target = p
             layout.focusRow = p.section; layout.focusColumn = p.item
             layout.invalidateLayout(); collection.layoutIfNeeded()
+            updateChrome()
             emit(p, press: false)
         }
-        else if context.previouslyFocusedIndexPath != nil { onExit(["toolbar": false]) }
+        else if context.previouslyFocusedIndexPath != nil { updateChrome(); onExit(["toolbar": false]) }
     }
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) { emit(indexPath, press: true) }
     private func emit(_ p: IndexPath, press: Bool) {
@@ -526,16 +535,18 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
         while paints.count < count {
             let slot = GuidePaintSlot(); collection.layer.insertSublayer(slot.view.layer, at: 0); paints.append(slot)
         }
+        let focusedPath = collection.indexPathsForVisibleItems.first { collection.cellForItem(at: $0)?.isFocused == true }
         var used = Set<Int>()
         for index in first..<min(channels.count, first + count) {
             let slot = index % count; used.insert(slot)
             let v = rails[slot], paint = paints[slot], channel = channels[index]
             let id = channel["id"] as? String ?? ""
             v.isHidden = false
-            v.frame = CGRect(x: 0, y: CGFloat(index) * layout.row - collection.contentOffset.y, width: rail, height: layout.row - 1)
-            v.colours(chrome); v.show(channel)
+            v.frame = CGRect(x: 0, y: CGFloat(index) * layout.row - collection.contentOffset.y, width: rail, height: layout.row)
+            v.colours(chrome, focused: focusedPath?.section == index); v.show(channel)
             paint.view.isHidden = false
             paint.view.setVisibleOffset(collection.contentOffset.x)
+            paint.view.select(focusedPath.flatMap { $0.section == index ? layout.metadata(at: $0).id : nil } ?? "")
             if paint.channel != id || paint.version != paintVersion {
                 paint.channel = id; paint.version = paintVersion
                 var raw = drawings[id] ?? drawings.values.first ?? [:]
@@ -569,7 +580,7 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
         }
         nowPill.frame = CGRect(x: now * layout.scale - collection.contentOffset.x - 44, y: 8, width: 88, height: 26)
         nowPill.isHidden = now < 0; ruler.bringSubviewToFront(nowPill)
-        nowLine.frame = CGRect(x: now * layout.scale, y: 0, width: 2, height: CGFloat(channels.count) * layout.row)
+        nowLine.frame = CGRect(x: now * layout.scale, y: 0, width: 1, height: CGFloat(channels.count) * layout.row)
         nowLine.isHidden = now < 0; collection.bringSubviewToFront(nowLine)
     }
 }

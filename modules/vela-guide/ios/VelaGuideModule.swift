@@ -86,6 +86,7 @@ final class VelaGuideRowView: ExpoView {
     let onFocusProgramme = EventDispatcher()
     let onPressProgramme = EventDispatcher()
     private let picture = CALayer(), ring = CALayer()
+    private let lifted = CALayer(), liftedText = CALayer()
     private var labels: [(cell: Cell, clip: CALayer, text: CALayer)] = []
     private var labelPool: [(clip: CALayer, text: CALayer)] = []
     private var cells: [Cell] = []
@@ -107,6 +108,9 @@ final class VelaGuideRowView: ExpoView {
         layer.addSublayer(picture)
         ring.backgroundColor = UIColor.clear.cgColor
         ring.borderWidth = 2
+        layer.addSublayer(lifted)
+        lifted.addSublayer(liftedText)
+        lifted.masksToBounds = true
         layer.addSublayer(ring)
     }
 
@@ -134,12 +138,35 @@ final class VelaGuideRowView: ExpoView {
         positionLabels()
     }
 
-    func select(_ id: String) {
+    func select(_ id: String, refresh: Bool = false) {
+        guard refresh || selected != id else { return }
+        let changed = selected != id
         selected = id
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if let cell = cells.first(where: { $0.id == id }) {
-            ring.frame = cell.rect; ring.cornerRadius = radius; ring.isHidden = false
-        } else { ring.isHidden = true }
+            ring.bounds = CGRect(origin: .zero, size: cell.rect.size); ring.position = CGPoint(x: cell.rect.midX, y: cell.rect.midY); ring.cornerRadius = radius; ring.isHidden = false
+            ring.backgroundColor = UIColor.white.withAlphaComponent(0.055).cgColor
+            ring.shadowColor = UIColor.black.cgColor; ring.shadowOpacity = 0.3
+            ring.shadowRadius = 12; ring.shadowOffset = CGSize(width: 0, height: 5)
+            ring.shadowPath = UIBezierPath(roundedRect: ring.bounds, cornerRadius: radius).cgPath
+            lifted.bounds = CGRect(origin: .zero, size: cell.rect.size); lifted.position = CGPoint(x: cell.rect.midX, y: cell.rect.midY); lifted.cornerRadius = radius
+            lifted.contents = picture.contents
+            lifted.contentsRect = CGRect(x: cell.rect.minX / max(1, picture.bounds.width), y: cell.rect.minY / max(1, picture.bounds.height), width: cell.rect.width / max(1, picture.bounds.width), height: cell.rect.height / max(1, picture.bounds.height))
+            lifted.isHidden = picture.contents == nil
+            if let entry = labels.first(where: { $0.cell.id == id }) {
+                liftedText.contents = entry.text.contents; liftedText.frame = entry.text.frame
+                liftedText.contentsScale = entry.text.contentsScale
+            } else { liftedText.contents = nil }
+            let scale: CGFloat = UIAccessibility.isReduceMotionEnabled ? 1 : 1.045
+            for surface in [ring, lifted] {
+                surface.transform = CATransform3DMakeScale(scale, scale, 1)
+                if changed && !UIAccessibility.isReduceMotionEnabled {
+                    let spring = CASpringAnimation(keyPath: "transform.scale")
+                    spring.fromValue = 1; spring.toValue = scale; spring.damping = 22; spring.stiffness = 280; spring.mass = 0.8
+                    spring.duration = spring.settlingDuration; surface.add(spring, forKey: "focusLift")
+                }
+            }
+        } else { ring.isHidden = true; lifted.isHidden = true; liftedText.contents = nil }
         CATransaction.commit()
         for case let element as ProgrammeElement in accessibilityElements ?? [] {
             element.accessibilityTraits = element.accessibilityIdentifier == id ? [.button, .selected] : .button
@@ -192,7 +219,7 @@ final class VelaGuideRowView: ExpoView {
         }
         channel = nextChannel; cells = nextCells
         ring.borderColor = colors["accent"]?.cgColor
-        select(selected)
+        select(selected, refresh: true)
         refreshAccessibility()
         CATransaction.commit()
 
@@ -201,11 +228,12 @@ final class VelaGuideRowView: ExpoView {
             let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).image { ctx in
                 (colors["background"] ?? guideInitialBackground).setFill()
                 ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+                (colors["edge"] ?? .clear).setFill()
+                ctx.fill(CGRect(x: 0, y: height - 1, width: width, height: 1))
                 for cell in nextCells {
                     ctx.cgContext.saveGState(); ctx.cgContext.setAlpha(cell.ended ? 0.46 : 1)
                     let path = UIBezierPath(roundedRect: cell.rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: r)
                     (colors[cell.airing ? "live" : "cell"] ?? .clear).setFill(); path.fill()
-                    (colors[cell.airing ? "liveEdge" : "edge"] ?? .clear).setStroke(); path.lineWidth = 1; path.stroke()
                     ctx.cgContext.saveGState(); path.addClip()
                     if cell.elapsed > 0 {
                         (colors["fill"] ?? .clear).setFill(); ctx.cgContext.fill(CGRect(x: cell.rect.minX, y: 5, width: cell.elapsed, height: height - 11))
@@ -243,7 +271,7 @@ final class VelaGuideRowView: ExpoView {
                     let (cell, texture, size) = entry
                     if index == self.labelPool.count {
                         let clip = CALayer(), text = CALayer()
-                        clip.addSublayer(text); self.layer.insertSublayer(clip, below: self.ring)
+                        clip.addSublayer(text); self.layer.insertSublayer(clip, below: self.lifted)
                         self.labelPool.append((clip, text))
                     }
                     let (clip, text) = self.labelPool[index]
@@ -252,7 +280,7 @@ final class VelaGuideRowView: ExpoView {
                     text.contents = texture; text.contentsScale = displayScale; text.frame = CGRect(origin: .zero, size: size)
                     self.labels.append((cell, clip, text))
                 }
-                self.positionLabels(); CATransaction.commit()
+                self.positionLabels(); self.select(self.selected, refresh: true); CATransaction.commit()
             }
         }
         work = job
@@ -274,6 +302,7 @@ final class VelaGuideRowView: ExpoView {
             let shift = min(max(0, left - entry.cell.rect.minX), max(0, entry.cell.rect.width - 120))
             if entry.text.frame.origin.x != 12 + shift { entry.text.frame.origin = CGPoint(x: 12 + shift, y: 0) }
         }
+        if let entry = labels.first(where: { $0.cell.id == selected }) { liftedText.frame = entry.text.frame }
         CATransaction.commit()
     }
 }
