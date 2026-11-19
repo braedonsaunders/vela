@@ -124,7 +124,7 @@ export const toolbar: Node = {
     'border-bottom-width': '1px',
     'border-bottom-color': '$ui.glassEdge',
   } as Style,
-  small: { 'padding-top': 'calc(104px + env(safe-area-inset-top))' } as Style,
+  small: { 'padding-top': 'calc(56px + env(safe-area-inset-top))' } as Style,
   children: [
     {
       type: 'text',

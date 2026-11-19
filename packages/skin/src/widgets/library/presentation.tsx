@@ -2,6 +2,7 @@ import { ContentLoader } from '../common/loading';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useVela } from '@vela/core/react';
+import { shellHasLibraryTabs } from './navigation';
 import { toolbarTabs, tabSearchEnabled } from './toolbar-model';
 import type { FacetValue, LibraryFacet } from '../../../../protocol/types';
 import { FocusPressable } from '../../focus';
@@ -72,6 +73,7 @@ export function LibraryToolbar(props: WidgetProps) {
   const model = page?.model;
   const phone = host.viewport.width < 600 && !Platform.isTV;
   const stripRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const tabsInShell = shellHasLibraryTabs(host.doc.document.slots?.shell);
   const browse = (page?.view ?? 'library') === 'library';
   const select = (params: Record<string, string>, width?: number) => <ToolbarField width={width ?? (Platform.OS === 'web' ? undefined : 180)}><Select ctx={props.ctx} params={params} /></ToolbarField>;
   const filters = <>
@@ -90,8 +92,9 @@ export function LibraryToolbar(props: WidgetProps) {
   </View>;
   const strip = (children: ReactNode, flex = true) => <ScrollView ref={phone ? stripRef : undefined} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
     style={{ flex: flex ? 1 : undefined, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
+  if (tabsInShell && !browse && !tabSearchEnabled(page?.model?.tabs?.find(tab => tab.id === page.tabId))) return null;
   return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
-    {phone ? strip(<><LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />{filters}{sort}</>) : <><LibraryTabs />{strip(filters)}{sort}</>}
+    {phone ? strip(<>{!tabsInShell && <LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />}{filters}{sort}</>) : <>{!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}</>}
     {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
   </View>;
 }

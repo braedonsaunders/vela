@@ -490,7 +490,7 @@ export const copyColumn: Node = {
       style: {
         ...copyBase,
         'min-height': '424px',
-        'padding-top': 'calc(104px + 22px + env(safe-area-inset-top))',
+        'padding-top': 'calc(56px + 22px + env(safe-area-inset-top))',
       },
     },
   ],

@@ -1075,7 +1075,7 @@ export const title: Node = {
             'pointer-events': 'box-none',
           },
           // On a phone the page is full-bleed under the shell's bar and tabs: the button sits below them.
-          small: { 'padding-top': 'calc(104px + env(safe-area-inset-top))', 'padding-right': '16px' },
+          small: { 'padding-top': 'calc(56px + env(safe-area-inset-top))', 'padding-right': '16px' },
           children: [
         {
           type: 'box',

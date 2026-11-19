@@ -8,6 +8,7 @@ export const navBase: Style = {
   display: 'flex',
   'flex-direction': 'row',
   'align-items': 'center',
+  'flex-shrink': '0',
   height: '40px',
   padding: '0px 14px',
   'border-radius': '$ui.radiusControl',
@@ -53,95 +54,6 @@ export const navItem = (on: Condition[], press: BoxNode['press'], label: string)
     navUnderline(on),
   ],
 });
-
-// On phones the destinations are chips in a row under the bar; the current chip's fill
-// glides between them (a shared element).
-export const chipBase: Style = {
-  position: 'relative',
-  display: 'flex',
-  'flex-direction': 'row',
-  'align-items': 'center',
-  'flex-shrink': '0',
-  height: '36px',
-  'box-sizing': 'border-box',
-  padding: '0px 14px',
-  border: '1px solid $ui.glassEdge',
-  'border-radius': '$ui.radiusControl',
-  'background-color': '$ui.control',
-  color: '$ui.ink',
-  'backdrop-filter': 'blur(16px)',
-  transition: 'color 240ms linear',
-  'white-space': 'nowrap',
-};
-export const navChip = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
-  type: 'box',
-  press,
-  label,
-  style: chipBase,
-  states: [{ when: on, style: { ...chipBase, color: '$ui.inkInverse' } }],
-  a11y: { current: on },
-  focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
-  children: [
-    {
-      type: 'box',
-      when: on,
-      sharedElement: 'nav-chip',
-      layoutTransition: '460ms ease-out',
-      style: {
-        position: 'absolute',
-        top: '-1px',
-        right: '-1px',
-        bottom: '-1px',
-        left: '-1px',
-        'border-radius': '$ui.radiusControl',
-        'background-color': '$ui.ink',
-      },
-    },
-    {
-      type: 'text',
-      text: label,
-      style: { position: 'relative', 'font-size': '13px', 'font-weight': '600', 'white-space': 'nowrap' },
-    },
-  ],
-});
-export const chipRow: Node = {
-  type: 'box',
-  style: { display: 'none' },
-  small: {
-    position: 'relative',
-    display: 'flex',
-    'overflow-x': 'auto',
-    'overflow-y': 'hidden',
-    'scrollbar-width': 'none',
-    'mask-image': 'linear-gradient(90deg, transparent 0%, black 5%, black 88%, transparent 100%)',
-  },
-  children: [
-    {
-      type: 'box',
-      style: {
-        display: 'flex',
-        'flex-direction': 'row',
-        gap: '6px',
-        'align-items': 'center',
-        'padding-left': '18px',
-        'padding-right': '18px',
-        'padding-bottom': '8px',
-      },
-      children: [
-        navChip([{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, '{t:ui.home}'),
-        {
-          type: 'repeat',
-          over: 'nav.destinations',
-          item: navChip([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}'),
-        },
-        {
-          ...navChip([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
-          when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
-        },
-      ],
-    },
-  ],
-};
 
 export const shell: Node = {
   type: 'box',
@@ -215,7 +127,6 @@ export const shell: Node = {
                 'align-items': 'center',
                 'mask-image': 'linear-gradient(90deg, black 0%, black 90%, transparent 100%)',
               },
-              small: { display: 'none' },
               children: [
                 navItem(
                   [{ test: 'env.section', is: 'eq', value: 'home' }],
@@ -235,9 +146,9 @@ export const shell: Node = {
                   ...navItem([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
                   when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
                 },
+                { type: 'widget', widget: 'libraryTabs', when: [is('env.section', 'library')], style: { 'flex-shrink': '0' } },
               ],
             },
-            { type: 'box', small: { flex: '1' } },
             {
               type: 'box',
               press: { action: 'search', focus: 'vela-search' },
@@ -308,7 +219,6 @@ export const shell: Node = {
             },
           ],
         },
-        chipRow,
       ],
     },
     {
@@ -348,7 +258,7 @@ export const shell: Node = {
         'backdrop-filter': 'blur(24px)',
         'box-shadow': '0px 24px 70px $ui.shadow',
       },
-      small: { top: 'calc(104px + env(safe-area-inset-top))', right: '12px' },
+      small: { top: 'calc(56px + env(safe-area-inset-top))', right: '12px' },
       children: [
         {
           type: 'box',
