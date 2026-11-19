@@ -21,7 +21,7 @@ function fixture() {
   const exports: any = {};
   runInNewContext(readFileSync(join(import.meta.dir, '../../../apps/vela-desktop/mac/host.js'), 'utf8'), {
     exports, require: (name: string) => name === 'node:path' ? require('node:path') : binary,
-    process: { platform: 'darwin', env: {}, resourcesPath: '/fixture/resources' },
+    process: { platform: 'darwin', arch: 'arm64', getSystemVersion: () => '15.0', env: {}, resourcesPath: '/fixture/resources' },
     setInterval: (callback: () => void) => { tick = callback; return 7; },
     clearInterval: (id: number) => { expect(id).toBe(7); cleared = true; },
   });

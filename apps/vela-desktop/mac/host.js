@@ -7,7 +7,8 @@ function load() {
   return (addon = require(path.join(root, 'vela-native.node')));
 }
 exports.available = () => {
-  if (process.platform !== 'darwin') return false;
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') return false;
+  if (Number(process.getSystemVersion().split('.')[0]) < 15) return false;
   try { load(); return true; } catch { return false; }
 };
 exports.capabilities = async () => JSON.parse(load().capabilities());
@@ -28,7 +29,10 @@ exports.create = async ({ window, emit }) => {
   const timer = setInterval(() => {
     if (disposed) return;
     let events;
-    try { events = call('poll'); }
+    try {
+      events = call('poll');
+      if (!Array.isArray(events)) throw new Error('Invalid native event list');
+    }
     catch {
       try { destroy(); } catch { /* Surface disposal must not prevent fallback. */ }
       emit('fallback', { reason: 'native-bridge-failed' });
