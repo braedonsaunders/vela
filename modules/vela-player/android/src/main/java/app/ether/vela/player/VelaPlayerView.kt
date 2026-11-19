@@ -31,6 +31,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val subtitleLayer = androidx.media3.ui.SubtitleView(context)
   private val previewVideo = TextureView(context)
   private val previewPaint = Paint()
+  private var previewAlpha = -1
   private var videoSurface: Surface? = null
   private var previewMode = false
   private var videoRatio = 0f
@@ -112,7 +113,10 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private fun videoLayout() = LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
 
   private fun updatePreviewVisibility() {
-    previewPaint.alpha = if (previewHasPts && previewHasFrame) 255 else 0
+    val alpha = if (previewHasPts && previewHasFrame) 255 else 0
+    if (previewAlpha == alpha) return
+    previewAlpha = alpha
+    previewPaint.alpha = alpha
     previewVideo.setLayerPaint(previewPaint)
   }
 
@@ -238,8 +242,11 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       val x = (width - videoWidth) / 2
       val y = (height - videoHeight) / 2
       video.layout(x, y, x + videoWidth, y + videoHeight)
+      subtitleLayer.measure(MeasureSpec.makeMeasureSpec(videoWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(videoHeight, MeasureSpec.EXACTLY))
+      subtitleLayer.layout(x, y, x + videoWidth, y + videoHeight)
+    } else {
+      subtitleLayer.layout(0, 0, width, height)
     }
-    subtitleLayer.layout(0, 0, width, height)
   }
 
   override fun subtitles(cues: androidx.media3.common.text.CueGroup) {
