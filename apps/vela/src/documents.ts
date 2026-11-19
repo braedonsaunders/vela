@@ -12,6 +12,7 @@ import latenight from '../../../packages/protocol/fixtures/skins/latenight/docum
 import lounge from '../../../packages/protocol/fixtures/skins/lounge/document';
 import marquee from '../../../packages/protocol/fixtures/skins/marquee/document';
 import mochi from '../../../packages/protocol/fixtures/skins/mochi/document';
+import { resolveAssetSource } from './asset-source';
 import { ASSETS } from './assets.generated';
 import { config } from './data/config';
 
@@ -39,9 +40,5 @@ export function initialDocument(): number {
 
 /** A document path as an image or font source: a bundled asset, an absolute URL, or the server's path. */
 export function assetSource(path: string, serverOrigin: string): string | number | undefined {
-  if (!path) return undefined;
-  if (ASSETS[path] !== undefined) return ASSETS[path];
-  if (/^https?:\/\//.test(path)) return path;
-  if (path.startsWith('/')) return `${serverOrigin}${path}`;
-  return undefined;
+  return resolveAssetSource(path, serverOrigin, ASSETS);
 }
