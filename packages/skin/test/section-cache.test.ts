@@ -1,6 +1,14 @@
 import { expect, test } from 'bun:test';
 import { trimSectionCache } from '../../../apps/vela/src/section-cache';
 
+test('Home remains mounted for immediate search while old libraries are released', () => {
+  const home = {};
+  const cache = new Map([['home:home', home], ['library:movies', {}], ['live:live', {}]]);
+  trimSectionCache(cache, 'live:live');
+  expect([...cache.keys()]).toEqual(['home:home', 'live:live']);
+  expect(cache.get('home:home')).toBe(home);
+});
+
 test('releases previously visited scenes while preserving both transition participants', () => {
   const cache = new Map([['home', {}], ['movies', {}], ['shows', {}], ['live', {}]]);
   const live = cache.get('live');
