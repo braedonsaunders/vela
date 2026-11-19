@@ -73,7 +73,20 @@ export function SearchField({ ctx }: WidgetProps) {
   // The search actions (`search`, `focusSearch`) focus the field by its id: the text input itself,
   // which on a TV opens the system keyboard.
   const input = useRef<ElementRef<typeof TextInput>>(null);
-  useEffect(() => focusTarget('vela-search')({ focus: () => input.current?.focus() }), []);
+  useEffect(() => {
+    let frame = 0;
+    const unregister = focusTarget('vela-search')({ focus: () => {
+      const target = input.current;
+      if (Platform.OS === 'android' && !Platform.isTV && target?.isFocused()) {
+        // A prior request made while Home was sliding in may have focused the field
+        // without showing the IME. Refocus after blur so Android opens it this time.
+        target.blur();
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => { if (input.current === target) target.focus(); });
+      } else target?.focus();
+    } });
+    return () => { cancelAnimationFrame(frame); unregister?.(); };
+  }, []);
 
   // On a TV the field is a focus destination of its own (the focus engine skips a bare text input
   // here): the remote moves onto it, and selecting it opens the keyboard. The clear button sits

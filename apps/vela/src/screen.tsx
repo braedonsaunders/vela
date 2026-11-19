@@ -55,8 +55,12 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
       if (focusElement('vela-search')) setFlag('focus-search-on-home', false);
       else if (++attempts < 120) frame = requestAnimationFrame(focus);
     };
-    frame = requestAnimationFrame(focus);
-    return () => cancelAnimationFrame(frame);
+    // Android can focus an input during a native slide without opening its keyboard.
+    const timer = Platform.OS === 'android' && !Platform.isTV
+      ? setTimeout(() => { frame = requestAnimationFrame(focus); }, SECTION_SLIDE_MS + 50)
+      : undefined;
+    if (timer === undefined) frame = requestAnimationFrame(focus);
+    return () => { clearTimeout(timer); cancelAnimationFrame(frame); };
   }, [route, isCurrent, focusSearch, setFlag]);
   if (vela.docError) {
     return (
