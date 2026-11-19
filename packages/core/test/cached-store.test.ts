@@ -1,6 +1,17 @@
 import { expect, test } from 'bun:test';
 import { cachedSecretStore } from '../src/session/cached-store';
 
+test('repeated playback preferences do not repeat synchronous secure writes', () => {
+  const writes: string[] = [];
+  const store = cachedSecretStore({ get: () => 'saved', set: (key, value) => { writes.push(`${key}:${value}`); } });
+  store.set('channel', 'a');
+  for (let i = 0; i < 100; i++) store.set('channel', 'a');
+  store.set('channel', 'b');
+  expect(store.get('existing')).toBe('saved');
+  store.set('existing', 'saved');
+  expect(writes).toEqual(['channel:a', 'channel:b']);
+});
+
 test('native secure reads are cached per key, including absent values', () => {
   const reads: string[] = [];
   const store = cachedSecretStore({ get: key => { reads.push(key); return key === 'session' ? 'token' : null; }, set() {} });

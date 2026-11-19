@@ -12,6 +12,7 @@ export function cachedSecretStore(store: SecretStore): SecretStore {
       return value;
     },
     set(key, value) {
+      if (values.has(key) && values.get(key) === value) return;
       store.set(key, value);
       values.set(key, value);
     },
