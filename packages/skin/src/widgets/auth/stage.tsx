@@ -52,7 +52,7 @@ const AURORAS: { motion: string; rows: Css }[] = [
 const CARD: Css = {
   width: '100%',
   'flex-shrink': '0',
-  'max-width': '520px',
+  'max-width': '480px',
   padding: 'clamp(28px, 5vw, 44px) clamp(22px, 4.5vw, 40px)',
   'border-radius': '$ui.radiusPanel',
   'background-color': '$ui.glass',
@@ -75,7 +75,7 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
     viewport.addEventListener('resize', resize);
     return () => viewport.removeEventListener('resize', resize);
   }, []);
-  const layout = authLayout(host.viewport, availableHeight, Platform.isTV);
+  const layout = authLayout(host.viewport, availableHeight, Platform.isTV, Platform.OS !== 'web' || (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches));
   const mark = host.image(branding?.wordmark || 'assets/brand/vela-stacked.svg');
   const card = look.layer(CARD);
   return (
@@ -116,14 +116,14 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
           'flex-grow': '1',
           'align-items': 'center',
           'justify-content': 'center',
-          gap: '32px',
+          gap: `${layout.gap}px`,
           padding: 'max(28px, 7vh) 16px',
         }), { paddingLeft: (host.viewport.sides?.left ?? 0) + 16, paddingRight: (host.viewport.sides?.right ?? 0) + 16, paddingTop: Math.max(layout.padding, host.viewport.insets.top), paddingBottom: Math.max(layout.padding, host.viewport.insets.bottom) }, layout.compact && { paddingLeft: (host.viewport.sides?.left ?? 0) + layout.padding, paddingRight: (host.viewport.sides?.right ?? 0) + layout.padding, paddingTop: host.viewport.insets.top + layout.padding, paddingBottom: host.viewport.insets.bottom + layout.padding, gap: layout.gap }]}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
         {branding?.name && !branding.wordmark ? <Text style={{color: look.ui.ink, fontSize: 28, fontWeight: '700'}}>{branding.name}</Text> : mark && layout.logoHeight ? <Image source={mark} contentFit="contain" style={{ width: branding?.wordmark ? 220 : layout.logoHeight * 60 / 104, height: layout.logoHeight }} accessibilityElementsHidden /> : null}
-        <Animated.View testID="auth-card" style={[card.style, { maxHeight: availableHeight < host.viewport.height - 100 ? undefined : layout.cardHeight, flexShrink: 1 }, layout.compact && { padding: layout.padding, maxWidth: '100%', width: '100%' }, look.motion('velaEnter0')]}>
+        <Animated.View testID="auth-card" style={[card.style, { maxHeight: !layout.compact || availableHeight < host.viewport.height - 100 ? undefined : layout.cardHeight, flexShrink: 1 }, layout.tight && { padding: layout.padding }, layout.compact && { maxWidth: '100%', width: '100%' }, look.motion('velaEnter0')]}>
           {card.blur && Platform.OS !== 'web' ? (
             <BlurView
               intensity={Math.min(100, Math.round(card.blur * 2.5))}

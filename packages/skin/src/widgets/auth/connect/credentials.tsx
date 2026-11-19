@@ -1,11 +1,12 @@
 // The same password form for Ether, Jellyfin and Emby. Codes live in the flow's code step.
-import { useRef, useState, type ComponentRef } from 'react';
+import { useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { View, type TextInput } from 'react-native';
 import { msg } from '@vela/core';
 import { Alert, Field, Pill } from '../../common/controls';
 import { useAuthLayout } from '../layout-context';
 
-export function Credentials({ busy, onSignIn, onQuick, canPassword = true, canQuick = true, compact = false }: {
+export function Credentials({ busy, onSignIn, onQuick, canPassword = true, canQuick = true, compact = false, secondary }: {
+  secondary?: ReactNode;
   busy: boolean;
   canPassword?: boolean;
   canQuick?: boolean;
@@ -29,7 +30,10 @@ export function Credentials({ busy, onSignIn, onQuick, canPassword = true, canQu
         <Pill primary height={layout?.tight ? 44 : 52} label={msg('ui.signIn')} onPress={submit}
           disabled={!ready} busy={busy} testID="connect-sign-in" />
       </View> : null}
-      {canQuick ? <Pill label="Use a code" height={44} onPress={onQuick} disabled={busy} testID="connect-quick" /> : null}
+      <View style={{ gap: layout?.tight ? 8 : 14 }}>
+        {secondary}
+        {canQuick ? <Pill label="Use a code" height={layout?.tight ? 44 : 52} onPress={onQuick} disabled={busy} testID="connect-quick" /> : null}
+      </View>
       {!canPassword && !canQuick ? <Alert>No sign-in methods are available. Go back to choose another server.</Alert> : null}
     </View>
   );
