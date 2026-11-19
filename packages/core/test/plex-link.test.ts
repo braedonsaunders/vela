@@ -62,3 +62,20 @@ test('retrying an exchange reuses its idempotency key without linking Plex again
   const exchanges = seen.filter(r => r.url.pathname === '/vela/v0/auth/plex');
   expect(exchanges.map(r => r.body)).toEqual([{ plexToken: 'account-secret', ...signIn }, { plexToken: 'account-secret', ...signIn }]);
 });
+
+test('refreshing a linked account discovers a late server without a new PIN', async () => {
+  const { link } = await linked();
+  let ready = false;
+  const seen = routeFetch({
+    'GET /api/v2/resources': () => ready ? [{ name: 'Late Ether', clientIdentifier: 'late', accessToken: 'resource-secret', provides: 'server', owned: true, connections: [{ uri: origin, local: false, relay: false, protocol: 'https' }] }] : [],
+    'GET /vela/v0/capabilities': { protocolVersion: 0, server: { id: 'late', name: 'Late Ether' }, features: {} },
+  });
+  await link.refreshServers('123');
+  expect(link.servers('123', true)).toEqual([]);
+  ready = true;
+  await link.refreshServers('123');
+  expect(link.servers('123', true).map(s => s.name)).toEqual(['Late Ether']);
+  expect(await link.hasEtherServer('123', true)).toBe(true);
+  const reads = seen.filter(r => r.url.pathname === '/api/v2/resources');
+  expect(reads.every(r => r.headers.get('X-Plex-Token') === 'account-secret')).toBe(true);
+});

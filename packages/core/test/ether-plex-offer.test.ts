@@ -19,3 +19,22 @@ test('a linked Ether choice saves Vela tokens before selecting its native protoc
   expect(calls).toEqual(['tokens', 'select']);
   expect(box.get().servers.plex).toBeNull();
 });
+
+test('a newly linked empty resource list retries at 3s and 10s without another PIN', async () => {
+  const box = new StateBox({ servers: initialServers } as unknown as VelaState);
+  const session = { onReset() {} };
+  const servers = new Servers(box, session as unknown as Session, {} as VelaPlatform);
+  let refreshes = 0;
+  const link = { poll: async () => 'linked', servers: () => [], hasEtherServer: async () => false, refreshServers: async () => { refreshes++; } };
+  const internal = servers as unknown as { plexLink: unknown; schedulePlexPoll: (link: unknown, code: string, delay: number) => void; plexPoll: (link: unknown, code: string) => Promise<void> };
+  internal.plexLink = link;
+  const delays: number[] = [];
+  internal.schedulePlexPoll = (_, __, delay) => { delays.push(delay); };
+  await internal.plexPoll(link, 'pin');
+  expect(box.get().servers.plex?.state).toBe('waiting');
+  await internal.plexPoll(link, 'pin');
+  await internal.plexPoll(link, 'pin');
+  expect(delays).toEqual([3000, 10000]);
+  expect(refreshes).toBe(2);
+  expect(box.get().servers.plex?.state).toBe('linked');
+});

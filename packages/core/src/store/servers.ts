@@ -99,6 +99,7 @@ export class Servers {
     return result;
   }
   private plexLink: PlexLink | undefined;
+  private plexDiscoveryAttempt = 0;
   private plexTimer: ReturnType<typeof setTimeout> | undefined;
   private jellyfin: { serverId: string; secret: string; expiresAt: number; timer?: ReturnType<typeof setTimeout> } | undefined;
 
@@ -252,14 +253,17 @@ export class Servers {
     }
   }
 
-  private schedulePlexPoll(link: PlexLink, code: string): void {
-    this.plexTimer = setTimeout(() => void this.plexPoll(link, code), PLEX_POLL_MS);
+  private schedulePlexPoll(link: PlexLink, code: string, delay = PLEX_POLL_MS): void {
+    this.plexTimer = setTimeout(() => void this.plexPoll(link, code), delay);
   }
 
   private async plexPoll(link: PlexLink, code: string): Promise<void> {
     if (this.plexLink !== link) return;
     let state: PlexLinkState;
     try {
+      if (this.plexDiscoveryAttempt) {
+        try { await link.refreshServers(code); } catch { /* Keep the linked choices during a transient cloud failure. */ }
+      }
       state = await link.poll(code, Date.now());
     } catch {
       state = 'failed';
@@ -270,11 +274,17 @@ export class Servers {
       return;
     }
     const choices = state === 'linked' ? link.servers(code, pageSecure(this.platform)) : [];
+    let retryDelay = 0;
+    if (state === 'linked' && this.plexDiscoveryAttempt < 2 && !(await link.hasEtherServer(code, pageSecure(this.platform)))) {
+      if (this.plexLink !== link) return;
+      retryDelay = this.plexDiscoveryAttempt++ === 0 ? 3000 : 10000;
+    }
+    if (this.plexLink !== link) return;
     this.patch({
       plex: {
         code,
         linkUrl: PLEX_LINK_URL,
-        state,
+        state: retryDelay && !choices.length ? 'waiting' : state,
         choices: choices.map(c => ({
           id: c.id,
           name: c.name,
@@ -284,6 +294,7 @@ export class Servers {
         })),
       },
     });
+    if (retryDelay) this.schedulePlexPoll(link, code, retryDelay);
   }
 
   /** Add (or relocate) and select the chosen Plex server, proven by its own identity. */
@@ -324,6 +335,7 @@ export class Servers {
   }
 
   plexCancel(): void {
+    this.plexDiscoveryAttempt = 0;
     if (this.plexTimer) clearTimeout(this.plexTimer);
     this.plexTimer = undefined;
     this.plexLink?.cancel();

@@ -53,6 +53,21 @@ export class PlexLink {
     this.account = { token: result.authToken, viewer: { id: account.uuid || String(account.id), name: account.friendlyName || account.title || account.username, policyRevision: 'plex' } };
     return 'linked';
   }
+  /** Refresh the newly linked account's view: plex.tv can lag the PIN approval. */
+  async refreshServers(code: string): Promise<void> {
+    const account = this.account;
+    if (!account || this.pin?.code !== code) return;
+    const resources = await discoverPlexServers(this.clientIdentifier, account.token);
+    if (this.account === account && this.pin?.code === code) {
+      this.resources = resources.filter(r => r.accessToken && r.clientIdentifier && r.connections.length);
+    }
+  }
+  async hasEtherServer(code: string, pageSecure: boolean): Promise<boolean> {
+    if (!this.account || this.pin?.code !== code) return false;
+    const origins = [...new Set(this.resources.flatMap(r => this.reachable(r, pageSecure).map(c => new URL(c.uri).origin)))];
+    const found = await Promise.all(origins.map(origin => probeEther(origin)));
+    return found.some(Boolean);
+  }
   servers(code: string, pageSecure: boolean): PlexChoice[] {
     if (!this.account || this.pin?.code !== code) return [];
     const usable = this.resources.map(r => ({ r, connections: this.reachable(r, pageSecure) })).filter(x => x.connections.length);
