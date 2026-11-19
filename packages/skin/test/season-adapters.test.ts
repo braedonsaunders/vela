@@ -5,7 +5,7 @@ import { JellyfinAdapter } from '../../core/src/adapter/jellyfin';
 import { nativeConnection } from '../../core/src/adapter/connection';
 import { detailModel } from '../../core/src/discovery/models';
 import { FakeCredentials, restoreFetch, routeFetch } from '../../core/test/helpers';
-import { detailSeason, selectedDetailSeason } from '../../../apps/vela/src/detail-season';
+import { waitForResumeSeason, detailSeason, selectedDetailSeason } from '../../../apps/vela/src/detail-season';
 import { accessor, collection, type Env } from '../src/vocabulary';
 
 afterEach(restoreFetch);
@@ -112,4 +112,14 @@ test('an already available Continue Watching cue chooses the progress season on 
   const resume = { ...model.episodes[0]!, id: 's4e2', seasonId: '', seasonNumber: 4, progressSeconds: 80 };
   expect(selectedDetailSeason(model, '', resume)).toBe('season-4');
   expect(selectedDetailSeason(model, 'season-1', resume)).toBe('season-1');
+});
+
+
+test('film pages never wait for a resume season while Home is still loading', () => {
+  const film = detailModel({ title: { ...base, id: 'film', kind: 'movie' }, extras: [], chapters: [], cast: [] });
+  expect(waitForResumeSeason(film, '', true)).toBe(false);
+  expect(detailSeason(film, '', () => undefined).detail?.pending).toEqual([]);
+  const series = detailModel({ title: { ...base, id: 'show', kind: 'show' }, extras: [], chapters: [], cast: [] });
+  expect(waitForResumeSeason(series, '', true)).toBe(true);
+  expect(waitForResumeSeason(series, '', false)).toBe(false);
 });

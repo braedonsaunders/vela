@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import type { VelaState } from '@vela/core';
 import { searchView, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
-import { detailSeason, selectedDetailSeason } from './detail-season';
+import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
 import type { ViewState } from './view-state';
 
 export interface EnvInput {
@@ -28,7 +28,7 @@ export function environment({ state, view, live, route, entry, width, skinCount,
   const home = state.home;
   const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
   const source = title?.value;
-  const waitingForResume = !view.season && !home.value && home.load !== 'failed' && !source?.nextUp?.length;
+  const waitingForResume = waitForResumeSeason(source, view.season, !home.value && home.load !== 'failed');
   const detail = source && waitingForResume ? { ...source, pending: [...new Set([...source.pending, 'episodes' as const])] } : source;
   const { season, detail: selectedDetail } = detailSeason(detail, view.season, id => state.titles[id]?.value);
   return {

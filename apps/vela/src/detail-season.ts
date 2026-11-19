@@ -1,5 +1,11 @@
 import type { Card, DetailModel } from '@vela/core';
 
+/** Only series pages wait for Home to choose the season containing resume progress. */
+export function waitForResumeSeason(detail: DetailModel | undefined, selection: string, homePending: boolean): boolean {
+  const kind = detail?.title[0]?.kind;
+  return (kind === 'show' || kind === 'season') && !selection && homePending && !detail?.nextUp?.length;
+}
+
 /** Pick before exposing rows. Partial episode metadata cannot decide the viewer's season. */
 export function selectedDetailSeason(detail: DetailModel | undefined, selection: string, resume?: Card): string {
   if (!detail) return '';
@@ -19,6 +25,7 @@ export function selectedDetailSeason(detail: DetailModel | undefined, selection:
 
 /** Resolve tab/context keys once, and expose only the selected season while it loads. */
 export function detailSeason(detail: DetailModel | undefined, selection: string, read: (id: string) => DetailModel | undefined) {
+  if (detail?.title[0]?.kind === 'movie') return { season: '', detail };
   const season = selectedDetailSeason(detail, selection);
   const loaded = season ? read(season) : undefined;
   const episodes = (loaded?.episodes ?? detail?.episodes ?? []).filter(e => e.seasonId === season || (!e.seasonId && e.seasonNumber === detail?.seasons.find(s => s.id === season)?.seasonNumber));
