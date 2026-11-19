@@ -18,7 +18,7 @@ async function call(path, body) {
 function resolve(plan) {
   return { ...plan, paths: plan.paths.map(path => ({ ...path, ...(path.url ? { url: new URL(path.url, config.api).href } : {}) })) };
 }
-function Probe() {
+function Probe({ config, onStopped }) {
   const [plan, setPlan] = useState(null);
   const [command, setCommand] = useState(null);
   const [status, setStatus] = useState('starting');
@@ -41,7 +41,7 @@ function Probe() {
           .map(path => path.id === result.selectedPathId ? { ...path, original: true, transport: 'file', url: config.refusedURL } : path);
       }
       set(result);
-      console.log('[android-proof-plan]', result.paths.find(path => path.id === result.selectedPathId)?.kind,
+      console.log('[android-proof-plan]', config.label || '', result.paths.find(path => path.id === result.selectedPathId)?.kind,
         result.audioTracks.map(track => track.codec).join(','), result.subtitleTracks.length);
       timer.current = setInterval(() => {
         const active = current.current;
@@ -59,7 +59,8 @@ function Probe() {
       current.current = null; setPlan(null); clearInterval(timer.current);
       if (active && !config.fixture) void call(`/sessions/${active.sessionId}/commands`, { kind: 'stop', idempotencyKey: key(),
         sourceGeneration: active.sourceGeneration, seekGeneration: active.seekGeneration }).catch(() => {});
-      setStatus('Check stopped'); console.log('[android-proof-stopped]');
+      setStatus('Check stopped'); console.log('[android-proof-stopped]', config.label || '');
+      onStopped?.();
     }, config.durationMs || 60000);
     return () => clearTimeout(timeout);
   }, []);
@@ -97,4 +98,10 @@ function Probe() {
     </View>}
   </View>;
 }
-AppRegistry.registerComponent('main', () => Probe);
+function Checks() {
+  const scenarios = config.scenarios || [config];
+  const [index, setIndex] = useState(0);
+  if (index >= scenarios.length) return <View style={{ flex: 1, backgroundColor: 'black' }}><Text style={{ color: 'white', padding: 35 }}>All playback checks stopped</Text></View>;
+  return <Probe key={index} config={{ ...config, ...scenarios[index] }} onStopped={() => setTimeout(() => setIndex(index + 1), 1000)} />;
+}
+AppRegistry.registerComponent('main', () => Checks);
