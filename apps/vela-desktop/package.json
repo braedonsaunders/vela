@@ -28,7 +28,10 @@
       "main.js",
       "preload.js",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "native-player.js",
+      "mac/**/*.js",
+      "linux/**/*.js"
     ],
     "extraResources": [
       {

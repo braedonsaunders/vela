@@ -132,9 +132,13 @@ function createWindow() {
   });
   const nativePlayer = nativeAdapter ? attachNativePlayer(window, nativeAdapter) : null;
   window.__velaNativePlayer = nativePlayer;
-  window.webContents.on('render-process-gone', () => void nativePlayer?.dispose());
+  const resetNative = () => {
+    nativePlayer?.receive({ kind: 'dispose', id: window.__velaPlayerId });
+    nativePlayer?.receive({ kind: 'media-access', origin: null });
+  };
+  window.webContents.on('render-process-gone', resetNative);
   window.webContents.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => {
-    if (mainFrame) nativePlayer?.receive({ kind: 'dispose', id: window.__velaPlayerId });
+    if (mainFrame && !_inPlace) resetNative();
   });
   window.on('closed', () => void nativePlayer?.dispose());
   if (place.maximized) window.maximize();
