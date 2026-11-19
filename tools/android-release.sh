@@ -22,14 +22,6 @@ if [ ! -f "$VELA_ANDROID_KEYSTORE" ]; then
   echo "Upload keystore does not exist" >&2
   exit 1
 fi
-source modules/vela-player/android/libmpv/pin.sh
-IFS=',' read -ra abis <<< "$VELA_ANDROID_ABI"
-for abi in "${abis[@]}"; do
-  if [ ! -f "$HOME/.scratch/vela-build/libmpv/$LIBMPV_ANDROID_REVISION-lgpl/jniLibs/$abi/libmpv.so" ]; then
-    echo "Build libmpv for $abi before packaging a device APK" >&2
-    exit 1
-  fi
-done
 unset EXPO_PUBLIC_VELA_SERVER EXPO_PUBLIC_VELA_USER EXPO_PUBLIC_VELA_PASSWORD EXPO_PUBLIC_VELA_MOCK
 export EXPO_NO_DOTENV=1
 out=${1:-$(dirname "$GRADLE_USER_HOME")/release}

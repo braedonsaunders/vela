@@ -1,7 +1,4 @@
-// What this device's libmpv plays, declared to the server (packages/player-api PlayerCapabilities).
-// Video is what MediaCodec decodes in hardware (mpv's software decoders could take the rest, but not
-// at 4K in real time on a TV's processor); audio and subtitles are all decoded by FFmpeg on the device.
-// The same shape as the Apple probe (ios/PlayerCapabilities.swift).
+// Media3 capabilities: platform video decoding plus the LGPL FFmpeg audio extension.
 package app.ether.vela.player
 
 import android.media.MediaCodecInfo
@@ -27,8 +24,7 @@ internal object PlayerCapabilities {
     val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder && hardware(it) }
     val decodable = decoders.flatMap { decoder -> decoder.supportedTypes.map { it.lowercase() } }.toSet()
     val hardwareVideo = listOf("h264") + videoTypes.filter { (type, _) -> type in decodable }.map { it.second }
-    // The emulator decodes in software (Emulator): FFmpeg and dav1d take every family.
-    val video = if (Emulator.running) listOf("h264") + videoTypes.map { it.second } else hardwareVideo
+    val video = hardwareVideo
     return mapOf(
       // What the server's HLS may carry when an original cannot be played.
       "containers" to listOf("mp4"),

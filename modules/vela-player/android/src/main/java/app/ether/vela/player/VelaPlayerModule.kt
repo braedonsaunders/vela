@@ -24,6 +24,10 @@ class VelaPlayerModule : Module() {
       VelaPlayerView.live.forEach { it.enterBackground() }
     }
 
+    OnActivityEntersForeground {
+      VelaPlayerView.live.forEach { it.enterForeground() }
+    }
+
     View(VelaPlayerView::class) {
       Events("onSnapshot", "onError", "onObservation", "onCommand", "onSessionCommand", "onSessionRefresh")
 
@@ -45,6 +49,8 @@ class VelaPlayerModule : Module() {
       Prop("serverError") { view: VelaPlayerView, failure: Map<String, Any?>? ->
         view.setServerError(failure)
       }
+
+      OnViewDidUpdateProps { view: VelaPlayerView -> view.applyProps() }
 
       OnViewDestroys { view: VelaPlayerView ->
         view.release()

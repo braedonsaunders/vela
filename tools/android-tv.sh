@@ -6,7 +6,7 @@
 #   tools/android-tv.sh [--prebuild] [--phone] [--debug] [--no-install] [--device <serial>] [--open <vela://route>]
 #
 # --prebuild regenerates apps/vela/android (expo prebuild --clean; EXPO_TV=1 unless --phone).
-# libmpv must be built first (modules/vela-player/android/libmpv/build.sh). Gradle's home and the app's
+# Build the Media3 audio extension first (modules/vela-player/android/ffmpeg/build.sh). Gradle's home and the app's
 # build output live on the scratch drive (tools/android-env.sh); the Gradle daemon is stopped at the end.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)

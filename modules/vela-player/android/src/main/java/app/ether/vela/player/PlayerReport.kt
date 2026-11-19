@@ -65,7 +65,7 @@ internal class PlayerReport(
     plan = null
     previewing = true
     pathId = ""
-    backend = "mpv-preview"
+    backend = "media3-preview"
     audioTrackId = null
     subtitleTrackId = null
   }
@@ -154,7 +154,7 @@ internal class PlayerReport(
       "subtitleStyleAvailable" to false,
       "subtitleClientOnly" to subtitleClientOnly,
       "audioClientOnly" to audioClientOnly,
-      "diagnostics" to mapOf("implementation" to "vela-mpv", "metadataDiscrepancies" to emptyList<String>()),
+      "diagnostics" to mapOf("implementation" to "vela-media3", "metadataDiscrepancies" to emptyList<String>()),
       "waiting" to waiting,
       "volume" to volume,
       "muted" to muted,

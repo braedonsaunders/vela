@@ -15,6 +15,7 @@ internal class PlaybackPlan(
   val selectedAudioTrackId: String?,
   val selectedSubtitleTrackId: String?,
   val chapters: List<PlanChapter>,
+  val fallbackState: String? = null,
 ) {
   val selectedPath: PlanPath?
     get() = paths.firstOrNull { it.id == selectedPathId }
@@ -38,6 +39,7 @@ internal class PlaybackPlan(
         subtitleTracks = value.objects("subtitleTracks").mapNotNull(PlanTrack::from),
         selectedAudioTrackId = value.text("selectedAudioTrackId"),
         selectedSubtitleTrackId = value.text("selectedSubtitleTrackId"),
+        fallbackState = value.map("fallback")?.text("state"),
         chapters = value.objects("chapters").mapNotNull(PlanChapter::from),
       )
     }

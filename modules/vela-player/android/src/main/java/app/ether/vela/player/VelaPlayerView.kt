@@ -1,4 +1,4 @@
-// VelaPlayerView on Android and Android TV: libmpv drawing into a SurfaceView or preview TextureView, driven by the
+// VelaPlayerView on Android and Android TV: Media3 drawing into a SurfaceView or preview TextureView, driven by the
 // contract's props: a plan through PlayerController, or a trailer preview through PreviewPlayback.
 // Chrome is drawn by JavaScript above it.
 package app.ether.vela.player
@@ -26,10 +26,16 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val onSessionRefresh by EventDispatcher<Map<String, Any?>>()
 
   private val video = SurfaceView(context)
+  private val subtitleLayer = androidx.media3.ui.SubtitleView(context)
   private val previewVideo = TextureView(context)
   private val previewPaint = Paint()
   private var videoSurface: Surface? = null
   private var previewMode = false
+  private var videoRatio = 0f
+  private var pendingAmbient = false
+  private var pendingCommand: Map<String, Any?>? = null
+  private var pendingPreview: Map<String, Any?>? = null
+  private var previewDirty = false
   private var pendingPlan: Map<String, Any?>? = null
   private var previewHasPts = false
   private var previewHasFrame = false
@@ -96,6 +102,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       }
     }
     addView(video, videoLayout())
+    addView(subtitleLayer, videoLayout())
     live.add(this)
   }
 
@@ -119,38 +126,47 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       removeView(previewVideo)
       previewMode = false
       setBackgroundColor(Color.BLACK)
-      addView(video, videoLayout())
+      addView(video, 0, videoLayout())
     }
   }
 
   // Props (VelaPlayerModule)
 
   fun setAmbient(value: Boolean) {
-    controller.ambient = value
+    pendingAmbient = value
   }
 
   fun setPlan(plan: Map<String, Any?>?) {
     pendingPlan = plan
-    if (!previewMode) {
-      controller.setPlan(plan)
-    }
+
   }
 
   fun setPreview(value: Map<String, Any?>?) {
-    if (value != null) {
-      usePreview(true)
-      preview.setPreview(value)
-    } else if (previewMode) {
-      usePreview(false)
-      controller.setPlan(pendingPlan)
+    pendingPreview = value
+    previewDirty = true
+  }
+
+  fun applyProps() {
+    controller.ambient = pendingAmbient
+    if (previewDirty) {
+      previewDirty = false
+      if (pendingPreview != null) {
+        usePreview(true)
+        preview.setPreview(pendingPreview)
+      } else if (previewMode) usePreview(false)
     }
+    if (!previewMode) controller.setPlan(pendingPlan)
+    pendingCommand?.let { performCommand(it) }
+    pendingCommand = null
   }
 
   fun setActive(value: Boolean) = preview.setActive(value)
 
   fun setServerError(failure: Map<String, Any?>?) = controller.setServerError(failure)
 
-  fun setCommand(command: Map<String, Any?>?) {
+  fun setCommand(command: Map<String, Any?>?) { pendingCommand = command }
+
+  private fun performCommand(command: Map<String, Any?>?) {
     if (!preview.isSet) {
       controller.setCommand(command)?.let { onCommand(it) }
       return
@@ -162,7 +178,12 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     onCommand(result)
   }
 
-  fun enterBackground() = controller.enterBackground()
+  fun enterBackground() {
+    preview.setOnScreen(false)
+    controller.enterBackground()
+  }
+
+  fun enterForeground() = preview.setOnScreen(windowVisibility == View.VISIBLE && isAttachedToWindow)
 
   fun release() {
     live.remove(this)
@@ -178,8 +199,17 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     preview.setOnScreen(visibility == View.VISIBLE && isAttachedToWindow)
   }
 
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    applyProps()
+    preview.setOnScreen(windowVisibility == View.VISIBLE)
+  }
+
   override fun onDetachedFromWindow() {
     preview.setOnScreen(false)
+    preview.release()
+    controller.releaseForPreview()
+    previewDirty = pendingPreview != null
     super.onDetachedFromWindow()
   }
 
@@ -192,10 +222,29 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       video.holder.surface?.takeIf { it.isValid }
     }
 
+  override fun videoSize(width: Int, height: Int) {
+    val ratio = width.toFloat() / height
+    if (videoRatio != ratio) { videoRatio = ratio; requestLayout() }
+  }
+
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+    super.onLayout(changed, left, top, right, bottom)
+    if (!previewMode && videoRatio > 0 && width > 0 && height > 0) {
+      val videoWidth = minOf(width, (height * videoRatio).toInt())
+      val videoHeight = minOf(height, (width / videoRatio).toInt())
+      val x = (width - videoWidth) / 2
+      val y = (height - videoHeight) / 2
+      video.layout(x, y, x + videoWidth, y + videoHeight)
+    }
+    subtitleLayer.layout(0, 0, width, height)
+  }
+
+  override fun subtitles(cues: androidx.media3.common.text.CueGroup) {
+    subtitleLayer.setCues(cues.cues)
+  }
+
   override fun preferDisplay(facts: VideoFacts?) =
     DisplayMatching.prefer(facts, surface, appContext.currentActivity)
-
-  override fun displaySwitching() = DisplayMatching.switching(appContext.currentActivity)
 
   override fun describeDisplay() = DisplayMatching.describe(appContext.currentActivity)
 

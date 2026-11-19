@@ -1,50 +1,40 @@
-// VelaPlayer for Android and Android TV: Kotlin over libmpv (LGPL, built by libmpv/build.sh).
+// Android has one playback engine: Media3 with its LGPL FFmpeg audio renderer.
 plugins {
   id 'com.android.library'
   id 'expo-module-gradle-plugin'
 }
-
 group = 'app.ether.vela'
 version = '0.1.0'
 
-// libmpv/build.sh's output for the revision in libmpv/pin.sh, or -PvelaLibmpvDir=<dir>.
-def libmpvRevision = file('libmpv/pin.sh').readLines()
-  .find { it.startsWith('LIBMPV_ANDROID_REVISION=') }
-  .split('=')[1].replace('"', '')
-def libmpvDir = file(project.findProperty('velaLibmpvDir')
-  ?: "${System.getProperty('user.home')}/.scratch/vela-build/libmpv/${libmpvRevision}-lgpl")
-if (!new File(libmpvDir, 'include/mpv/client.h').exists()) {
-  throw new GradleException(
-    "libmpv is not built: run `source tools/android-env.sh; modules/vela-player/android/libmpv/build.sh` " +
-      "(expected ${libmpvDir})")
+def media3Version = '1.11.1'
+def ffmpegDir = file(project.findProperty('velaMedia3Dir')
+  ?: "${System.getProperty('user.home')}/.scratch/vela-build/media3/${media3Version}/libraries/decoder_ffmpeg/src/main")
+if (!new File(ffmpegDir, 'jni/ffmpeg/android-libs/arm64-v8a/libavcodec.a').exists()) {
+  throw new GradleException('Build the LGPL Media3 audio extension with modules/vela-player/android/ffmpeg/build.sh first')
 }
-
 android {
   namespace 'app.ether.vela.player'
   defaultConfig {
     versionCode 1
     versionName '0.1.0'
     consumerProguardFiles 'proguard-rules.pro'
+    ndk { abiFilters 'arm64-v8a', 'x86_64' }
     externalNativeBuild {
-      cmake {
-        arguments '-DANDROID_STL=c++_shared', "-DVELA_LIBMPV_DIR=${libmpvDir}"
-      }
-    }
-    ndk {
-      // The ABIs libmpv was built for.
-      abiFilters(*new File(libmpvDir, 'jniLibs').list())
+      cmake { arguments '-DANDROID_STL=c++_shared', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', "-DVELA_MEDIA3_DIR=${ffmpegDir}" }
     }
   }
   externalNativeBuild {
     cmake {
-      path 'src/main/cpp/CMakeLists.txt'
-      // CMake's working tree goes with the build output (on the scratch drive), not beside the sources.
+      path 'ffmpeg/CMakeLists.txt'
       buildStagingDirectory layout.buildDirectory.dir('cxx').get().asFile
     }
   }
-  sourceSets {
-    main {
-      jniLibs.srcDirs += ["${libmpvDir}/jniLibs"]
-    }
-  }
+  sourceSets.main.java.srcDirs += [new File(ffmpegDir, 'java')]
+}
+dependencies {
+  implementation "androidx.media3:media3-exoplayer:${media3Version}"
+  implementation "androidx.media3:media3-exoplayer-hls:${media3Version}"
+  implementation "androidx.media3:media3-exoplayer-dash:${media3Version}"
+  implementation "androidx.media3:media3-ui:${media3Version}"
+  implementation "androidx.media3:media3-decoder:${media3Version}"
 }

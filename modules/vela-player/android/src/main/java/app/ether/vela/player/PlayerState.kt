@@ -1,4 +1,4 @@
-// What mpv reports about the file playing, kept from its observed properties.
+// Engine-independent state published through the existing Vela player contract.
 package app.ether.vela.player
 
 internal class PlayerState {
@@ -46,28 +46,6 @@ internal class PlayerState {
       else -> Phase.PLAYING
     }
 
-  /** Applies one observed property's new value. */
-  fun update(name: String, value: Any?) {
-    when (name) {
-      "video-pts" -> hasFrame = value is Double
-      "time-pos" -> position = (value as? Double) ?: position
-      "duration" -> duration = value as? Double
-      "pause" -> paused = (value as? Boolean) ?: paused
-      "paused-for-cache" -> pausedForCache = value == true
-      "seeking" -> seeking = value == true
-      "eof-reached" -> endReached = value == true
-      "demuxer-cache-time" -> cacheAhead = (value as? Double)?.let { maxOf(0.0, it - position) }
-      "cache-speed" -> cacheSpeed = value as? Long
-      "frame-drop-count" -> droppedFrames = value as? Long
-      "track-list" -> tracks = (value as? List<*>)?.mapNotNull { asMap(it) } ?: emptyList()
-      "aid" -> audioId = value as? Long
-      "sid" -> subtitleId = value as? Long
-      "video-params" -> videoParams = asMap(value) ?: emptyMap()
-      "container-fps" -> frameRate = value as? Double
-      "video-codec-name" -> videoCodec = value as? String
-    }
-  }
-
   /** The position is at the file's end. mpv also raises `eof-reached` for a moment while it switches
    * tracks on a network stream; reporting that as `ended` makes Ether end the session. */
   private val atEnd: Boolean
@@ -76,7 +54,7 @@ internal class PlayerState {
       return position >= length - 1.5
     }
 
-  /** The mpv track id of a source stream (FFmpeg stream index), for `aid` and `sid`. */
+  /** The engine track id of a source stream (FFmpeg stream index), for `aid` and `sid`. */
   fun trackId(type: String, streamIndex: Int): Long? {
     val track = tracks.firstOrNull { it["type"] == type && (it["ff-index"] as? Long)?.toInt() == streamIndex }
     return track?.get("id") as? Long
@@ -96,28 +74,4 @@ internal class PlayerState {
       }
     }
 
-  companion object {
-    /** Properties the view observes, with the format each is read in. */
-    val observed = listOf(
-      "video-pts" to MpvFormat.DOUBLE,
-      "time-pos" to MpvFormat.DOUBLE,
-      "duration" to MpvFormat.DOUBLE,
-      "pause" to MpvFormat.FLAG,
-      "paused-for-cache" to MpvFormat.FLAG,
-      "seeking" to MpvFormat.FLAG,
-      "eof-reached" to MpvFormat.FLAG,
-      "demuxer-cache-time" to MpvFormat.DOUBLE,
-      "cache-speed" to MpvFormat.INT64,
-      "frame-drop-count" to MpvFormat.INT64,
-      "track-list" to MpvFormat.NODE,
-      "aid" to MpvFormat.INT64,
-      "sid" to MpvFormat.INT64,
-      "video-params" to MpvFormat.NODE,
-      "container-fps" to MpvFormat.DOUBLE,
-      "video-codec-name" to MpvFormat.STRING,
-    )
-
-    @Suppress("UNCHECKED_CAST")
-    private fun asMap(value: Any?): Map<String, Any?>? = value as? Map<String, Any?>
-  }
 }

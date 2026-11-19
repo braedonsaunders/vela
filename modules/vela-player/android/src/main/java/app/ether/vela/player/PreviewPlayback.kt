@@ -1,8 +1,3 @@
-// A trailer preview on libmpv (the `preview` and `active` props): muted, from the start, with small
-// caches, no display matching, no screen-on and no observations. It plays only while active, on
-// screen, before the grant expires and when the viewer has not asked to save data; when any of those
-// ends the mpv handle is destroyed at once, which releases the decoder. There is no retry after
-// expiry: the host asks the server for a new grant.
 package app.ether.vela.player
 
 import android.content.Context
@@ -19,7 +14,7 @@ internal class PreviewPlayback(
   private val main = Handler(Looper.getMainLooper())
   private val expire = Runnable { expired() }
   private var source: PreviewSource? = null
-  private var mpv: MpvClient? = null
+  private var engine: PlaybackEngine? = null
   private var state = PlayerState()
   private var active = true
   private var onScreen = true
@@ -64,20 +59,20 @@ internal class PreviewPlayback(
       "pause" -> paused = true
       else -> return "A preview takes play and pause only"
     }
-    mpv?.set("pause", paused)
+    engine?.play(!paused)
     return null
   }
 
   fun surfaceCreated() {
-    host.surface?.let { mpv?.attach(it) }
+    host.surface?.let { engine?.attach(it) }
   }
 
   fun surfaceChanged(width: Int, height: Int) {
-    mpv?.resize(width, height)
+    // Surface geometry is owned by the view.
   }
 
   fun surfaceDestroyed() {
-    mpv?.attach(null)
+    engine?.attach(null)
   }
 
   fun release() {
@@ -91,9 +86,9 @@ internal class PreviewPlayback(
   private fun refresh() {
     val preview = source ?: return
     val wanted = active && onScreen && preview.remaining() > 0 && !savingData()
-    if (wanted && mpv == null && !state.finished) {
+    if (wanted && engine == null && !state.finished) {
       start(preview)
-    } else if (!wanted && mpv != null) {
+    } else if (!wanted && engine != null) {
       stop()
       if (preview.remaining() <= 0) {
         expired()
@@ -108,75 +103,23 @@ internal class PreviewPlayback(
       return
     }
     state = PlayerState()
-    val client = try {
-      MpvClient(
-        mapOf(
-          "pause" to if (paused) "yes" else "no",
-          "mute" to "yes",
-          "audio" to "no",
-          "sid" to "no",
-          "loop-file" to if (preview.loop) "inf" else "no",
-          "demuxer-max-bytes" to "16MiB",
-          "demuxer-max-back-bytes" to "4MiB",
-          "demuxer-readahead-secs" to "5",
-          "tls-ca-file" to TrustStore.file(context).path,
-        ),
-      )
-    } catch (error: Exception) {
-      fail(error.message ?: "The preview player could not start")
-      return
-    }
-    mpv = client
-    var offsetApplied = preview.startSeconds == 0.0
-    var startPosition = preview.startSeconds
-    client.onProperty = property@{ name, value ->
-      if (mpv !== client) return@property
-      if (name == "duration" && value is Double && value > 0 && !offsetApplied) {
-        offsetApplied = true
-        startPosition = minOf(preview.startSeconds, value / 4)
-        client.command("seek", startPosition.toString(), "absolute+exact")
+    val client = Media3Engine(context, true)
+    engine = client
+    state = client.state
+    client.onChange = {
+      if (engine === client) {
+        showVideo(state.hasFrame)
+        report.publish(state, null)
+        if (state.finished) stop()
       }
-      if (name == "video-pts" && value is Double && offsetApplied && value >= startPosition) {
-        showVideo(true)
-      }
-      state.update(name, value)
-      report.publish(state, null)
     }
-    client.onEvent = { event -> event(event) }
-    for ((name, format) in PlayerState.observed) {
-      client.observe(name, format)
-    }
-    client.observe("video-pts", MpvFormat.DOUBLE)
+    client.onFailure = { code, _ -> fail("The preview could not be played (Media3 $code)") }
     host.surface?.let { client.attach(it) }
-    // A credentialed URL's redirects are resolved first, as for a plan (MediaRedirects).
-    MediaRedirects.resolve(url) { media ->
-      if (mpv === client) {
-        client.setRequestHeaders(media.headerFields)
-        client.command("loadfile", media.url.toString(), "replace")
-      }
-    }
+    client.volume(0f)
+    client.load(url, null, preview.startSeconds, preview.loop)
+    client.play(!paused)
     schedule(preview)
     report.publish(state, null, force = true)
-  }
-
-  private fun event(event: MpvClient.Event) {
-    when (event) {
-      MpvClient.Event.FileLoaded -> state.loaded = true
-      is MpvClient.Event.EndFile -> if (event.reason == MpvEvent.END_REASON_ERROR) {
-        state.failure = "The preview could not be played (${MpvNative.errorString(event.error)})"
-        state.failureKind = if (event.error == MpvEvent.ERROR_LOADING_FAILED) "network" else "source"
-      }
-      // A refused preview grant fails the preview; the host asks for a new grant, the view never retries.
-      is MpvClient.Event.Refused -> {
-        state.failure = "The preview's grant was refused"
-        state.failureKind = "network"
-      }
-      MpvClient.Event.SeekDone -> Unit
-    }
-    report.publish(state, null, force = true)
-    if (state.phase == PlayerState.Phase.ENDED || state.phase == PlayerState.Phase.FAILED) {
-      stop()
-    }
   }
 
   private fun schedule(preview: PreviewSource) {
@@ -201,9 +144,9 @@ internal class PreviewPlayback(
   private fun stop() {
     showVideo(false)
     main.removeCallbacks(expire)
-    val client = mpv ?: return
-    mpv = null
-    client.destroy()
+    val client = engine ?: return
+    engine = null
+    client.release()
   }
 
   /** The viewer turned on Data Saver and the network is metered. */

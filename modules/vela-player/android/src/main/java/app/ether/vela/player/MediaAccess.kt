@@ -17,13 +17,10 @@ internal class MediaAccess private constructor(
 
   /** Whether `uri` is inside the origin and path prefix. */
   fun contains(uri: Uri): Boolean {
-    if (originOf(uri) != origin) {
-      return false
-    }
-    val path = uri.path ?: return false
-    val directory = if (pathPrefix.endsWith("/")) pathPrefix else "$pathPrefix/"
-    return pathPrefix == "/" || path == pathPrefix || path.startsWith(directory)
+    return scope.contains(uri.toString())
   }
+
+  private val scope = MediaScope(origin, pathPrefix)
 
   companion object {
     private val allowedHeader = Regex(
@@ -38,16 +35,16 @@ internal class MediaAccess private constructor(
       val prefix = value["pathPrefix"] as? String
       val headers = value["headers"] as? Map<*, *>
       if (origin == null || prefix == null || !prefix.startsWith("/") || headers == null || headers.size > 8) {
-        throw MpvError("Invalid media access")
+        throw IllegalArgumentException("Invalid media access")
       }
       val fields = headers.entries.associate { (name, text) ->
-        if (name !is String || text !is String || !allowedHeader.matches(name)) {
-          throw MpvError("Invalid media access")
+        if (name !is String || text !is String || !allowedHeader.matches(name) || text.contains('\r') || text.contains('\n')) {
+          throw IllegalArgumentException("Invalid media access")
         }
         name to text
       }
-      if (originOf(Uri.parse(origin)) != origin) {
-        throw MpvError("Invalid media access")
+      if (Uri.parse(origin).scheme !in listOf("http", "https") || originOf(Uri.parse(origin)) != origin) {
+        throw IllegalArgumentException("Invalid media access")
       }
       return MediaAccess(origin, prefix, fields)
     }
@@ -77,10 +74,4 @@ internal object MediaAccessStore {
     return Uri.parse(origin + if (text.startsWith("/")) text else "/$text")
   }
 
-  /** mpv's http-header-fields for `uri`: the headers only inside the origin and path (none for Ether's
-   * broker URLs, which carry their own grant). */
-  fun headerFields(uri: Uri): List<String> {
-    val headers = current?.headers(uri) ?: emptyMap()
-    return headers.map { (name, value) -> "$name: $value" }
-  }
 }
