@@ -46,7 +46,9 @@ public final class VelaPlayerModule: Module {
         Name("VelaPlayer")
 
         AsyncFunction("sampleUIFrames") { (enabled: Bool) -> [String: Any] in
-            UIFrameTiming.shared.sample(enabled)
+            let result = UIFrameTiming.shared.sample(enabled)
+            if enabled, let data = try? JSONSerialization.data(withJSONObject: result), let json = String(data: data, encoding: .utf8) { print("[vela-guide-ui] \(json)") }
+            return result
         }.runOnQueue(.main)
 
         OnCreate {
@@ -77,6 +79,8 @@ public final class VelaPlayerModule: Module {
 
         View(VelaPlayerView.self) {
             Events("onMediaAuthorization", "onSnapshot", "onError", "onObservation", "onCommand", "onSessionCommand", "onSessionRefresh")
+
+            OnViewDidUpdateProps { (view: VelaPlayerView) in view.commitProps() }
 
             Prop("ambient") { (view: VelaPlayerView, ambient: Bool?) in
                 view.setAmbient(ambient ?? false)

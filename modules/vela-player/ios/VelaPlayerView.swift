@@ -40,6 +40,7 @@ final class VelaPlayerView: ExpoView {
     private var pendingSeek: Double?
     private var wantsPlay = true
     private var ambient = false
+    private var hasMuteCommand = false
     private var loggedOutput = false
     private var refreshAsked = ""
     private var heartbeat: Timer?
@@ -116,6 +117,21 @@ final class VelaPlayerView: ExpoView {
 
     // MARK: Props
 
+    private var pendingPlan: [String: Any]?
+    private var hasPendingPlan = false
+    private var pendingCommand: [String: Any]?
+
+    // Expo's individual prop setters have no guaranteed ordering. Settle ambient policy
+    // before starting a plan, then apply commands to the player that actually owns it.
+    func commitProps() {
+        if hasPendingPlan {
+            hasPendingPlan = false
+            let next = pendingPlan; pendingPlan = nil
+            applyPlan(next)
+        }
+        if let command = pendingCommand { pendingCommand = nil; applyCommand(command) }
+    }
+
     func setAmbient(_ value: Bool) {
         ambient = value
         report.waitForFrame = value
@@ -163,7 +179,9 @@ final class VelaPlayerView: ExpoView {
         return playback
     }
 
-    func setPlan(_ object: [String: Any]?) {
+    func setPlan(_ object: [String: Any]?) { pendingPlan = object; hasPendingPlan = true }
+
+    private func applyPlan(_ object: [String: Any]?) {
         guard previewSource == nil, let object, let next = VelaPlan.decode(object) else {
             return
         }
@@ -235,7 +253,9 @@ final class VelaPlayerView: ExpoView {
         report.publish(state, seekTarget: nil, force: true)
     }
 
-    func setCommand(_ command: [String: Any]?) {
+    func setCommand(_ command: [String: Any]?) { pendingCommand = command }
+
+    private func applyCommand(_ command: [String: Any]?) {
         guard let command, let id = command["id"] as? Int, id > lastCommand else {
             return
         }
@@ -304,7 +324,7 @@ final class VelaPlayerView: ExpoView {
         if !ambient {
             PlaybackAudioSession.activate()
         }
-        let client = PlaybackClient(host: self, preview: ambient, paused: !wantsPlay, muted: ambient || report.muted,
+        let client = PlaybackClient(host: self, preview: ambient, paused: !wantsPlay, muted: hasMuteCommand ? report.muted : ambient,
                                     isLive: plan.channelId != nil, remoteHLS: path.transport == "hls", retainPausedPicture: ambient)
         player = client
         client.set("volume", double: report.volume * 100)
@@ -599,6 +619,7 @@ final class VelaPlayerView: ExpoView {
             report.volume = max(0, min(1, value))
             player?.set("volume", double: report.volume * 100)
         case "mute":
+            hasMuteCommand = true
             report.muted = (command["muted"] as? Bool) ?? !report.muted
             player?.set("mute", flag: report.muted)
         case "audio":

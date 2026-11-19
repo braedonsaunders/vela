@@ -29,11 +29,13 @@ final class PlaybackClient {
     private var frameOutput: AVPlayerItemVideoOutput?
     private weak var outputItem: AVPlayerItem?
     private var frozenPicture: UIView?
+    private var reportedFirstFrame = false
     private static let frameContext = CIContext()
     private var failed = false
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
     private var subscriptions = Set<AnyCancellable>()
+    private var displayCriteriaObservation: NSKeyValueObservation?
     private var displayObservers: [NSObjectProtocol] = []
     private var lastCacheDiagnostic = Date.distantPast
     private var loadTask: Task<Void, Never>?
@@ -187,7 +189,13 @@ final class PlaybackClient {
                 engine.clock.$currentTime.sink { [weak self] time in
                     self?.prepareFrameOutput()
                     self?.emit("time-pos", time)
-                    if self?.engine?.hasFirstFrameReadyForDisplay == true { self?.emit("video-pts", time) }
+                    if self?.engine?.hasFirstFrameReadyForDisplay == true {
+                        if self?.reportedFirstFrame == false {
+                            self?.reportedFirstFrame = true
+                            print("[vela-preview] firstFrame preview=\(self?.preview ?? false)")
+                        }
+                        self?.emit("video-pts", time)
+                    }
                     self?.drawCaptions()
                 }.store(in: &self.subscriptions)
                 engine.$audioDelivery.dropFirst().sink { [weak self] delivery in
@@ -226,6 +234,9 @@ final class PlaybackClient {
                 if preview { opts.displayCriteriaOwner = .host }
                 #if os(tvOS)
                 let manager = host.window?.avDisplayManager
+                self.displayCriteriaObservation = manager?.observe(\.preferredDisplayCriteria, options: [.new]) { manager, _ in
+                    print("[vela-display] criteriaChanged preview=\(preview) present=\(manager.preferredDisplayCriteria != nil)")
+                }
                 self.displayObservers.forEach(NotificationCenter.default.removeObserver)
                 self.displayObservers = [NSNotification.Name.AVDisplayManagerModeSwitchStart, NSNotification.Name.AVDisplayManagerModeSwitchEnd].map { name in
                     NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
@@ -382,14 +393,17 @@ final class PlaybackClient {
                 frozenPicture = still
             }
         }
+        let decoded = frozenPicture != nil
         if frozenPicture == nil { frozenPicture = surface?.snapshotView(afterScreenUpdates: false) }
         guard let still = frozenPicture else { return }
+        print("[vela-preview] retained decoded=\(decoded)")
         still.frame = host.bounds
         still.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         host.addSubview(still)
     }
 
     func destroy() {
+        displayCriteriaObservation?.invalidate(); displayCriteriaObservation = nil
         displayObservers.forEach(NotificationCenter.default.removeObserver)
         displayObservers.removeAll()
         dead = true

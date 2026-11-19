@@ -33,6 +33,8 @@ cancellation, attachment lifetime and credential-free diagnostics. Cancellation
 interrupts the active I/O epoch; retained readers can rewind for track reloads.
 
 Aether owns full-screen display matching, subject to tvOS Match Content settings.
+Expo commits the ambient policy before applying a plan, then applies pending
+commands; setter ordering cannot accidentally start a preview as full screen.
 Guide ambient and hero previews both use the preview engine, disable matching,
 and set `displayCriteriaOwner = .host` so the engine never writes or resets
 display criteria for a preview load. Main and preview sessions use separate
