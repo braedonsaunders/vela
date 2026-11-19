@@ -1,3 +1,4 @@
+import { Restart, RestartMenu } from './widgets/restart';
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
@@ -321,6 +322,8 @@ function partition(style: Record<string, unknown>, keys: Set<string>): [Record<s
 function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const host = useHost();
   const { env, viewport } = host;
+  const [restartOpen, setRestartOpen] = useState(false);
+  const cardRestart = ctx.card && ['movie', 'episode'].includes(ctx.card.kind) && ctx.card.progressSeconds > 0 ? ctx.card.id : '';
   const swipe = useHeroSwipe(!!hero, env.home?.hero.length ?? 0, env.heroIndex, host.dispatch);
   const parentText = useContext(Inherited);
   const parentGroup = useContext(Group);
@@ -480,6 +483,8 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         focusable={selectable(node)}
         {...(web ? { dataSet: { velaFocus: 'frame' }, onKeyDown: (event) => { if (buttonRef.current) episodeNav?.key(buttonRef.current, { key: (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() }); } } : {})}
         {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
+        onLongPress={cardRestart ? () => setRestartOpen(true) : undefined}
+        {...(web && cardRestart ? { onContextMenu: (e: { preventDefault(): void }) => { e.preventDefault(); setRestartOpen(true); } } : {})}
         onPress={onPress}
         onFocus={event => {
           set('focus', isFocusVisible(event.currentTarget));
@@ -518,6 +523,15 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       </Frame>
     );
   }
+  if (node.press?.action === 'play') {
+    const arg = fill(node.press.arg, ctx, env);
+    const id = arg.split('|')[0];
+    const resumable = (ctx.heroAct?.targetId === id && ctx.heroAct.progress > 0)
+      || (ctx.card?.id === id && ctx.card.progressSeconds > 0)
+      || (env.detail?.title[0]?.id === id && env.detail.resumeSeconds > 0);
+    if (resumable && arg.split('|')[3] === undefined) element = <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<Restart arg={arg} hero={!!ctx.heroAct} /></View>;
+  }
+  if (restartOpen && cardRestart) element = <>{element}<RestartMenu id={cardRestart} close={() => setRestartOpen(false)} /></>;
   if (route && env.route === 'title') {
     element = <View style={{ flex: 1 }}>{element}<View style={{ position: 'absolute', top: env.small ? 84 : 100, right: env.small ? 20 : 48, zIndex: 20 }}><TitleActions /></View></View>;
   }

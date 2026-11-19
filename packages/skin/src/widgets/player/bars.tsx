@@ -271,6 +271,8 @@ function Controls({
           />
         </>
       ) : null}
+      {timeline ? <ChromeButton look={look} icon="skipBack" label={msg('ui.startOver')}
+        disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
       <Volume look={look} view={view} send={send} onActive={onActive} />
       <View style={cluster}>
         {look.small ? null : (
