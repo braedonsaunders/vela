@@ -157,11 +157,12 @@ function createWindow() {
   for (const event of ['enter-full-screen', 'leave-full-screen']) {
     window.on(event, () => window.webContents.send('vela:fullscreen', window.isFullScreen()));
   }
-  window.webContents.on('enter-html-full-screen', () => window.setFullScreen(true));
-  window.webContents.on('leave-html-full-screen', () => window.setFullScreen(false));
+  let htmlFullscreen = false;
+  window.webContents.on('enter-html-full-screen', () => { htmlFullscreen = true; window.setFullScreen(true); });
+  window.webContents.on('leave-html-full-screen', () => { htmlFullscreen = false; window.setFullScreen(false); });
   // Fullscreen comes from the page (the player's button or F) or the menu (F11, Ctrl+Cmd+F).
   window.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && input.key === 'Escape') {
+    if (input.type === 'keyDown' && input.key === 'Escape' && (window.isFullScreen() || htmlFullscreen)) {
       event.preventDefault();
       void window.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen().then(() => true) : false')
         .then(exited => { if (!exited && !window.isDestroyed()) window.setFullScreen(false); }).catch(() => window.setFullScreen(false));
