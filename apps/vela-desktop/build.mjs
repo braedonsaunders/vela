@@ -29,6 +29,11 @@ for (const [input, name] of [[nativeMac, 'native-mac'], [nativeLinux, 'native-li
   if (!input) continue;
   if (!existsSync(resolve(input))) throw new Error(`Missing native payload: ${input}`);
   extraResources.push({ from: resolve(input), to: name });
+  if (name === 'native-mac') {
+    const bundle = join(resolve(input), 'AetherEngine_AetherEngine.bundle');
+    if (!existsSync(bundle)) throw new Error('Native macOS payload is missing AetherEngine resources');
+    extraResources.push({ from: bundle, to: 'AetherEngine_AetherEngine.bundle' });
+  }
 }
 // Keep optional native artifacts out of browser-only packages. Explicit payloads
 // come from the platform build helper and are signed with the containing app.
