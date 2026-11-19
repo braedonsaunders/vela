@@ -2,7 +2,7 @@
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
 import { useIsFocused, usePathname } from 'expo-router';
-import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
@@ -10,7 +10,7 @@ import type { RNode } from '@vela/skin/src/resolve';
 import { useSideInsets, useVela } from './vela';
 import { FocusBoundary } from './focus-boundary';
 import { documentIsVisible } from './visible-route';
-import { useSectionFocus } from './section-focus';
+import { SectionShellHostContext, useSectionFocus } from './section-focus';
 import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from './section-motion';
 
 interface Props {
@@ -37,6 +37,12 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const visibleRoute = !(Platform.isTV && Platform.OS === 'android') || documentIsVisible(route, entry, pathname);
   const isCurrent = (sectionFocused ?? navigationFocused) && visibleRoute;
   useReturnFocus(isCurrent);
+  const publishShellHost = useContext(SectionShellHostContext);
+  useLayoutEffect(() => {
+    if (!sharedShell || !isCurrent || !host || !publishShellHost) return;
+    publishShellHost(host, true);
+    return () => publishShellHost(host, false);
+  }, [sharedShell, isCurrent, host, publishShellHost]);
   const focusSearch = !!host?.env.flags.includes('focus-search-on-home');
   const setFlag = host?.setFlag;
   useEffect(() => {

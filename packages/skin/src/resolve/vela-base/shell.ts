@@ -1,24 +1,36 @@
 import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { display, focusRing, gutter, gutterSmall, is, navFocus, sans, small, veil, wordmark } from './look';
 
-// Primary destinations stay on one scrolling row, with a filled pill for the current one.
+// A primary destination: the current one in full ink and weight, with the underline that
+// glides between destinations (a shared element).
 export const navBase: Style = {
   position: 'relative',
   display: 'flex',
   'flex-direction': 'row',
   'align-items': 'center',
-  'flex-shrink': '0',
   height: '40px',
   padding: '0px 14px',
   'border-radius': '$ui.radiusControl',
-  border: '1px solid $ui.glassEdge',
-  'background-color': '$ui.control',
-  'box-sizing': 'border-box',
   color: '$ui.inkSecondary',
   'font-weight': '550',
   'font-size': '14px',
   'white-space': 'nowrap',
 };
+export const navUnderline = (when: Condition[]): Node => ({
+  type: 'box',
+  when,
+  sharedElement: 'nav-underline',
+  layoutTransition: '460ms ease-out',
+  style: {
+    position: 'absolute',
+    left: '14px',
+    right: '14px',
+    bottom: '4px',
+    height: '2px',
+    'border-radius': '1px',
+    'background-color': '$ui.accent',
+  },
+});
 export const navItem = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
   type: 'box',
   group: true,
@@ -26,7 +38,7 @@ export const navItem = (on: Condition[], press: BoxNode['press'], label: string)
   label,
   testId: `nav-${label}`,
   style: navBase,
-  states: [{ when: on, style: { ...navBase, color: '$ui.inkInverse', 'background-color': '$ui.ink', 'font-weight': '650' } }],
+  states: [{ when: on, style: { ...navBase, color: '$ui.ink', 'font-weight': '650' } }],
   a11y: { current: on },
   hover: { 'background-color': '$ui.control', color: '$ui.ink' },
   focus: navFocus,
@@ -38,8 +50,75 @@ export const navItem = (on: Condition[], press: BoxNode['press'], label: string)
       style: { 'font-weight': '550' },
       states: [{ when: on, style: { 'font-weight': '650' } }],
     },
+    navUnderline(on),
   ],
 });
+
+// On phones the destinations are chips in a row under the bar; the current chip's fill
+// glides between them (a shared element).
+export const chipBase: Style = {
+  position: 'relative',
+  display: 'flex',
+  'flex-direction': 'row',
+  'align-items': 'center',
+  'flex-shrink': '0',
+  height: '36px',
+  'box-sizing': 'border-box',
+  padding: '0px 14px',
+  border: '1px solid $ui.glassEdge',
+  'border-radius': '$ui.radiusControl',
+  'background-color': '$ui.control',
+  color: '$ui.ink',
+  'backdrop-filter': 'blur(16px)',
+  transition: 'color 240ms linear',
+  'white-space': 'nowrap',
+};
+export const navChip = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
+  type: 'box',
+  press,
+  label,
+  style: chipBase,
+  states: [{ when: on, style: { ...chipBase, color: '$ui.inkInverse' } }],
+  a11y: { current: on },
+  focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
+  children: [
+    {
+      type: 'box',
+      when: on,
+      sharedElement: 'nav-chip',
+      layoutTransition: '460ms ease-out',
+      style: {
+        position: 'absolute',
+        top: '-1px',
+        right: '-1px',
+        bottom: '-1px',
+        left: '-1px',
+        'border-radius': '$ui.radiusControl',
+        'background-color': '$ui.ink',
+      },
+    },
+    {
+      type: 'text',
+      text: label,
+      style: { position: 'relative', 'font-size': '13px', 'font-weight': '600', 'white-space': 'nowrap' },
+    },
+  ],
+});
+const compactNavigation: Node = {
+  type: 'box',
+  style: { display: 'none' },
+  small: {
+    display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px',
+    'overflow-x': 'auto', 'overflow-y': 'hidden', 'flex-wrap': 'nowrap',
+    'padding-top': '4px', 'padding-bottom': '4px', gap: '6px', 'align-items': 'center',
+  },
+  children: [
+    navChip([is('env.section', 'home')], { action: 'home' }, '{t:ui.home}'),
+    { type: 'repeat', over: 'nav.destinations', item: navChip([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
+    { ...navChip([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'), when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] },
+    { type: 'widget', widget: 'libraryTabs', when: [is('env.route', 'library')], style: { 'flex-shrink': '0' } },
+  ],
+};
 
 export const shell: Node = {
   type: 'box',
@@ -109,13 +188,11 @@ export const shell: Node = {
                 'overflow-x': 'auto',
                 'overflow-y': 'hidden',
                 'scrollbar-width': 'none',
-                'padding-top': '4px',
-                'padding-bottom': '4px',
-                'flex-wrap': 'nowrap',
                 gap: '2px',
                 'align-items': 'center',
                 'mask-image': 'linear-gradient(90deg, black 0%, black 90%, transparent 100%)',
               },
+              small: { display: 'none' },
               children: [
                 navItem(
                   [{ test: 'env.section', is: 'eq', value: 'home' }],
@@ -135,9 +212,9 @@ export const shell: Node = {
                   ...navItem([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
                   when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
                 },
-                { type: 'widget', widget: 'libraryTabs', when: [is('env.section', 'library')], style: { 'flex-shrink': '0' } },
               ],
             },
+            compactNavigation,
             {
               type: 'box',
               press: { action: 'search', focus: 'vela-search' },

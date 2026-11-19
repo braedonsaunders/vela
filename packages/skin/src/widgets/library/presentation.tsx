@@ -73,7 +73,7 @@ export function LibraryToolbar(props: WidgetProps) {
   const model = page?.model;
   const phone = host.viewport.width < 600 && !Platform.isTV;
   const stripRef = useRef<ComponentRef<typeof ScrollView>>(null);
-  const tabsInShell = shellHasLibraryTabs(host.doc.document.slots?.shell);
+  const tabsInShell = host.env.small && shellHasLibraryTabs(host.doc.document.slots?.shell);
   const browse = (page?.view ?? 'library') === 'library';
   const select = (params: Record<string, string>, width?: number) => <ToolbarField width={width ?? (Platform.OS === 'web' ? undefined : 180)}><Select ctx={props.ctx} params={params} /></ToolbarField>;
   const filters = <>

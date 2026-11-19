@@ -1,15 +1,15 @@
 import { Navigator, useIsFocused, usePathname } from 'expo-router';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Platform, useWindowDimensions, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
-import { SkinRoot } from '@vela/skin';
+import { SkinRoot, type SkinHost } from '@vela/skin';
 import Reanimated from 'react-native-reanimated';
 import { useVela } from '../../src/vela';
 import Home from './index';
 import { LibrarySection } from './library/[id]';
 import type { LibraryParams } from '../../src/browse/library-query';
 import { FocusBoundary } from '../../src/focus-boundary';
-import { SectionFocusContext } from '../../src/section-focus';
+import { SectionFocusContext, SectionShellHostContext } from '../../src/section-focus';
 import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from '../../src/section-motion';
 
 type Section = { route: 'home' | 'library' | 'live'; entry: string };
@@ -31,7 +31,12 @@ export default function SectionsLayout() {
   section.current = sectionForPath(pathname) ?? section.current;
   const vela = useVela();
   const routeHost = vela.host(section.current.route, section.current.entry);
-  const host = routeHost;
+  const [pageHost, setPageHost] = useState<SkinHost | null>(null);
+  const publishShellHost = useCallback((page: SkinHost, active: boolean) => {
+    setPageHost(current => active ? page : current === page ? null : current);
+  }, []);
+  const host = routeHost?.env.small && pageHost?.env.route === section.current.route
+    && pageHost.env.section === section.current.entry ? pageHost : routeHost;
   const shell = vela.doc?.shell;
   const { width } = useWindowDimensions();
   // A TV switches sections at once, as with Reduce Motion: the remote moves focus along the nav
@@ -86,7 +91,7 @@ export default function SectionsLayout() {
     </View>
   );
   if (!host || !shell) return content;
-  const drawn = <SkinRoot host={{ ...host, children: content }} node={shell} />;
+  const drawn = <SectionShellHostContext.Provider value={publishShellHost}><SkinRoot host={{ ...host, children: content }} node={shell} /></SectionShellHostContext.Provider>;
   return Platform.isTV && Platform.OS === 'android'
     ? <FocusBoundary active={focused} style={{ flex: 1 }}>{drawn}</FocusBoundary>
     : drawn;
