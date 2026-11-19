@@ -1,1 +1,3 @@
+# Private per-device QA grants. Never distribute or commit these files.
+android-probe-config.json
 probe-config.json
