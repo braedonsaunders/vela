@@ -292,7 +292,16 @@ export class Servers {
     const code = this.box.get().servers.plex?.code;
     try {
       if (!link || !code) throw new Error(msg('server.plex.again'));
-      const chosen = await link.choose(code, serverId, pageSecure(this.platform));
+      const chosen = await link.choose(code, serverId, pageSecure(this.platform), { device: this.session.device, idempotencyKey: this.session.key() });
+      if (this.plexLink !== link) throw new Error(msg('server.plex.again'));
+      if (chosen.kind === 'ether') {
+        const registry = this.session.servers;
+        const record = registry.read().servers.find(s => s.kind === 'ether' && s.origin === chosen.origin)
+          ?? registry.add('ether', chosen.name, chosen.origin);
+        await this.signedIn(this.session.connection(record.id), chosen.tokens);
+        this.plexCancel();
+        return { id: record.id, error: '' };
+      }
       // A Plex record added by a typed address (often the LAN one) becomes this server at its proven address.
       const registry = this.session.servers;
       const list = registry.read().servers;
@@ -306,10 +315,8 @@ export class Servers {
       if (!record && typed) record = registry.relocate(typed.id, chosen.name, chosen.origin);
       if (!record) record = registry.add('plex', chosen.name, chosen.origin);
       await this.session.connection(record.id).credentials.set(chosen.tokens);
-      const ether = await this.etherOrigin(record);
       this.plexCancel();
-      if (ether) await this.refresh();
-      else this.session.select(record.id);
+      this.session.select(record.id);
       return { id: record.id, error: '' };
     } catch (error) {
       return { id: '', error: signInFailure(error, msg('server.plex.again')) };

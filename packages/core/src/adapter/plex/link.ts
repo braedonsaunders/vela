@@ -1,4 +1,6 @@
-import type { Tokens } from '../../wire';
+import { probeEther } from '../probe';
+import { exchangePlexAccount } from '../ether/plex';
+import type { Device, Tokens } from '../../wire';
 import { createPlexPin, pollPlexPin, discoverPlexServers, plexAccount, plexHeaders, type PlexResource } from './auth';
 import { timeoutSignal } from '../../protocol/timeout';
 
@@ -58,14 +60,14 @@ export class PlexLink {
   }
   /** A secure page cannot read plain-HTTP servers. plex.direct HTTPS first, relays last. */
   private reachable(resource: PlexResource, pageSecure: boolean) {
-    const rank = (c: PlexResource['connections'][number]) => c.relay ? 3 : secure(c.uri) ? (direct(c.uri) ? 0 : 1) : 2;
+    const rank = (c: PlexResource['connections'][number]) => c.relay ? 4 : secure(c.uri) && direct(c.uri) ? 0 : c.local ? 1 : secure(c.uri) ? 2 : 3;
     return resource.connections.filter(c => !pageSecure || secure(c.uri)).sort((a, b) => rank(a) - rank(b));
   }
   /**
    * The chosen server's first connection that proves it is that server: its own `/identity`
    * must name the resource's machine identifier, read with redirects refused.
    */
-  async choose(code: string, id: string, pageSecure: boolean): Promise<{ name: string; origin: string; origins: string[]; tokens: Tokens }> {
+  async choose(code: string, id: string, pageSecure: boolean, signIn: { device: Device; idempotencyKey: string }): Promise<{ kind: 'ether' | 'plex'; name: string; origin: string; origins: string[]; tokens: Tokens }> {
     const resource = this.resources.find(r => r.clientIdentifier === id);
     const account = this.account;
     if (!account || this.pin?.code !== code || !resource) throw new Error('Link Plex again to choose a server');
@@ -78,11 +80,16 @@ export class PlexLink {
         const body = await response.json() as { MediaContainer?: { machineIdentifier?: string } };
         if (body.MediaContainer?.machineIdentifier !== resource.clientIdentifier) continue;
       } catch { continue; }
-      const tokens: Tokens = { accessToken: resource.accessToken, refreshToken: '', expiresAt: '9999-12-31T23:59:59Z', viewer: account.viewer };
+      const ether = await probeEther(origin);
+      if (ether && !ether.plexAccountSignIn) throw new Error('This Ether server needs an update or Plex sign-in enabled. Ask the owner to enable Sign in with Plex.');
+      const tokens: Tokens = ether
+        ? await exchangePlexAccount(origin, account.token, signIn.device, signIn.idempotencyKey)
+        : { accessToken: resource.accessToken, refreshToken: '', expiresAt: '9999-12-31T23:59:59Z', viewer: account.viewer };
+      if (this.account !== account || this.pin?.code !== code) throw new Error('Link Plex again to choose a server');
       this.cancel();
       // Every address this server publishes, so a record added by one of them is recognised as this server.
       const origins = resource.connections.flatMap(c => { try { return [new URL(c.uri).origin]; } catch { return []; } });
-      return { name: resource.name || 'Plex', origin, origins, tokens };
+      return { kind: ether ? 'ether' : 'plex', name: ether?.name || resource.name || 'Plex', origin, origins, tokens };
     }
     throw new Error('This Plex server could not be reached from here');
   }

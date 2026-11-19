@@ -71,7 +71,7 @@ export async function probeServer(input: string, clientIdentifier: string, pageS
 }
 
 /** Detect a Vela endpoint without sending this server's credentials. */
-export async function probeEther(origin: string, timeoutMs = 3000): Promise<{ origin: string; name: string } | null> {
+export async function probeEther(origin: string, timeoutMs = 3000): Promise<{ origin: string; name: string; plexAccountSignIn: boolean } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -81,6 +81,6 @@ export async function probeEther(origin: string, timeoutMs = 3000): Promise<{ or
     if (response.status !== 200 || !/^application\/json(?:\s*;|\s*$)/i.test(response.headers.get('content-type') ?? '')) return null;
     const value = await response.json();
     if (!value || typeof value !== 'object' || typeof value.protocolVersion !== 'number' || !value.server || typeof value.server.id !== 'string' || !value.server.id || typeof value.server.name !== 'string' || !value.server.name || !value.features || typeof value.features !== 'object' || Array.isArray(value.features)) return null;
-    return { origin: url.origin, name: value.server.name };
+    return { origin: url.origin, name: value.server.name, plexAccountSignIn: value.plexAccountSignIn === true };
   } catch { return null; } finally { clearTimeout(timer); }
 }
