@@ -1,3 +1,4 @@
+import { ReadRetryBudget, transientReadFailure } from '../read-retry';
 import { playbackMark } from '../timing';
 import { decoderRetry } from '../universal/retry';
 import type { Failure } from '../model';
@@ -25,6 +26,7 @@ export function failPlayback(context: HostContext, failure: Failure) {
   context.telemetry.lastObservation = -Infinity;
   publishHostState(context);
 }
+export const readRetries = new WeakMap<HostContext, ReadRetryBudget>();
 export async function recoverPlayback(context: HostContext, error: unknown, token: Generation) {
   if (!context.session.controller.current(token) || context.recovery.active) return;
   context.recovery.active = true;
@@ -57,11 +59,31 @@ export async function recoverPlayback(context: HostContext, error: unknown, toke
   context.watchdog.startTimer = undefined;
   playbackMark('source:failed');
   context.playback.status = 'recovering';
-  context.playback.failure = failure;
+  context.playback.failure = null;
   publishHostState(context, true);
+  const readFailure = transientReadFailure(failure.message, kind);
   try {
+    if (context.media.source && readFailure) {
+      let budget = readRetries.get(context);
+      const key = `${token.sessionId}:${context.media.source.id}`;
+      if (!budget || budget.key !== key) {
+        budget = new ReadRetryBudget(key);
+        readRetries.set(context, budget);
+      }
+      const wait = budget.next(performance.now());
+      if (wait !== null) {
+        const source = context.media.source;
+        detachMedia(context);
+        resetMedia(context);
+        await delay(wait, token.signal);
+        if (!context.session.controller.current(token)) return;
+        context.recovery.active = false;
+        await activateSource(context, source, position, true, true);
+        return;
+      }
+    }
     const retry =
-      context.media.backend === 'webgpu' &&
+      !readFailure && context.media.backend === 'webgpu' &&
       (!failure.message.startsWith('Original first-frame deadline') ||
         context.media.runtime?.readout.decoderReady)
         ? decoderRetry(failure.message)
@@ -74,7 +96,7 @@ export async function recoverPlayback(context: HostContext, error: unknown, toke
       return;
     }
     if (
-      context.media.backend === 'webgpu' &&
+      !readFailure && context.media.backend === 'webgpu' &&
       context.media.source &&
       context.media.source.delivery === 'hls' &&
       !context.recovery.browserFallbacks.has(routeKey(context, context.media.source))
@@ -119,7 +141,7 @@ export async function recoverPlayback(context: HostContext, error: unknown, toke
         requestSwitch(context, pending, position, true);
         return;
       }
-      failPlayback(context, { ...failure, recoverable: false });
+      failPlayback(context, { ...failure, message: readFailure ? 'The stream is still unavailable after reconnecting. Try again.' : failure.message, recoverable: true });
       return;
     }
     // Release the guard before activation so a failed replacement can advance again.

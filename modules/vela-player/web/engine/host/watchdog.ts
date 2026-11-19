@@ -1,7 +1,7 @@
 import { PlaybackFault } from '../pipeline';
 import type { HostContext } from './state';
 import { emitHostEvent } from './events';
-import { failPlayback, recoverPlayback } from './recovery';
+import { failPlayback, recoverPlayback, readRetries } from './recovery';
 import { readPosition, readFrameMetrics } from './position';
 export function checkWaiting(context: HostContext) {
   if (context.tracks.pendingTracks && performance.now() - context.tracks.pendingTracks.startedAt > 15000) {
@@ -72,6 +72,7 @@ export function recordPlaybackProgress(context: HostContext, now = performance.n
     position > context.watchdog.lastPosition + 0.02 &&
     (context.media.runtime ? context.playback.status === 'playing' : !context.surface.video.paused);
   if (!started && !advanced) return false;
+  readRetries.get(context)?.progress(now);
   context.watchdog.everPlayed = true;
   context.watchdog.lastAdvance = now;
   context.watchdog.lastPosition = position;

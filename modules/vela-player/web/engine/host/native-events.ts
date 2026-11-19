@@ -59,11 +59,26 @@ export function bindMedia(context: HostContext, token: Generation) {
       )
         return;
       const kind = e.code === 2 ? 'network' : e.code === 3 ? 'decoder' : 'source';
-      void recoverPlayback(
-        context,
-        new PlaybackFault(e.message || `Media error ${e.code}`, kind),
-        context.session.controller.token(),
-      );
+      const generation = context.session.controller.token();
+      void (async () => {
+        let message = e.message || `Media error ${e.code}`;
+        let failureKind: 'network' | 'source' | 'decoder' = kind;
+        // Chromium reports an HTTP range refusal as code 4 ("Format error").
+        // Verify transport before treating it as an unsupported container.
+        if ((e.code === 2 || e.code === 4) && context.media.source) {
+          try {
+            const response = await (context.surface.mediaAccess?.fetch ?? fetch)(context.media.source.url, {
+              headers: { Range: 'bytes=0-0' }, signal: AbortSignal.any([generation.signal, AbortSignal.timeout(5000)]),
+            });
+            void response.body?.cancel();
+            if (!response.ok) { message = `HTTP ${response.status}: ${message}`; failureKind = 'network'; }
+          } catch (error) {
+            if (generation.signal.aborted) return;
+            message = 'Network read failed'; failureKind = 'network';
+          }
+        }
+        await recoverPlayback(context, new PlaybackFault(message, failureKind), generation);
+      })();
     },
   })) {
     const listener = () => {

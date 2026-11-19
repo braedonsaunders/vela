@@ -39,7 +39,7 @@ export async function activatePacketRuntime(
           publishHostState(context);
           return;
         }
-        void recoverPlayback(context, new PlaybackFault(reason, 'decoder'), generation);
+        void recoverPlayback(context, new PlaybackFault(transport?.httpStatus ? `HTTP ${transport.httpStatus}: ${reason}` : reason, transport?.httpStatus ? 'network' : 'decoder'), generation);
       }
     },
     onEvent: (event) => {

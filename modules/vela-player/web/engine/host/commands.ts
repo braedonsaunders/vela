@@ -1,3 +1,4 @@
+import { readRetries } from './recovery';
 import { seekFromCommand } from './command-seek';
 import { selectAudioFromCommand, selectSubtitleFromCommand } from './command-tracks';
 import { selectQualityFromCommand, switchPathFromCommand } from './command-selection';
@@ -29,6 +30,7 @@ export async function executeCommand(context: HostContext, command: Command) {
         pauseMedia(context);
         break;
       case 'retry':
+        readRetries.delete(context);
         if (context.session.current)
           await loadSession(context, {
             ...context.session.current,

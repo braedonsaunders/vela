@@ -183,7 +183,7 @@ export async function activateSource(
     if (context.playback.wantsPlay) await playMedia(context);
     publishHostState(context);
   } catch (e) {
-    if (context.session.controller.current(token)) await recoverPlayback(context, e, token);
+    if (context.session.controller.current(token) && !(e instanceof DOMException && e.name === 'AbortError')) await recoverPlayback(context, e, token);
   }
 }
 export function metadata(context: HostContext, token: Generation): Promise<void> {
@@ -198,7 +198,8 @@ export function metadata(context: HostContext, token: Generation): Promise<void>
     };
     const error = () => {
       clean();
-      reject(new PlaybackFault('Media metadata unavailable', 'source'));
+      // bindMedia owns classification (including HTTP range status probing).
+      reject(new DOMException('Media error handled by native listener', 'AbortError'));
     };
     const timer = setTimeout(() => {
       clean();
