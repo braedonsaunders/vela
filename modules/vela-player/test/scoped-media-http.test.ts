@@ -10,6 +10,7 @@ const binary = join(scratch, 'probe');
 let server: ReturnType<typeof Bun.serve> | undefined;
 const seen: { host: string; path: string; headers: Headers }[] = [];
 let origin = '';
+let transientReads = 0;
 
 beforeAll(async () => {
   if (process.platform !== 'darwin') return;
@@ -37,6 +38,8 @@ beforeAll(async () => {
     };
     if (redirects[url.pathname]) return Response.redirect(redirects[url.pathname]!, 302);
     if (url.pathname === '/grant/stall') return new Promise<Response>(() => {});
+    if (url.pathname === '/grant/transient' && transientReads++ === 0) return new Response(null, { status: 503 });
+    if (url.pathname === '/grant/forbidden') return new Response(null, { status: 403 });
     const body = url.pathname === '/grant/oversized' ? 'x'.repeat(2048) : 'media payload';
     return new Response(body, { status: 206, headers: { 'Content-Range': `bytes 0-${body.length - 1}/${body.length}` } });
   } });
@@ -104,4 +107,14 @@ appleTest('native URL attachments stay within their plan and grant generation an
   expect(result.output).not.toContain('never-log-this');
   expect(result.output).not.toContain('transient-secret');
   expect(result.output).not.toContain('api_key');
+});
+
+appleTest('reader retries a temporary HTTP range failure at the same offset', async () => {
+  transientReads = 0;
+  expect((await request('/grant/transient', 'reader')).status).toBe(0);
+  expect(transientReads).toBeGreaterThan(1);
+});
+appleTest('reader does not retry forbidden ranges', async () => {
+  expect((await request('/grant/forbidden', 'reader')).status).not.toBe(0);
+  expect(seen.length).toBe(1);
 });

@@ -107,7 +107,7 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
             return
         }
         guard http.statusCode == 206 || (http.statusCode == 200 && offset == 0) else {
-            reject(URLError(.badServerResponse), completionHandler)
+            reject(NSError(domain: "VelaMediaHTTP", code: http.statusCode), completionHandler)
             return
         }
         if http.statusCode == 206 {
@@ -170,6 +170,33 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     }
 
     private func fetch(at offset: Int64, count: Int, epoch: UInt64) throws -> ScopedMediaResponse {
+        let began = Date()
+        let delays: [Double] = [1, 2, 4, 8, 15, 15, 15]
+        var attempt = 0
+        while true {
+            do { return try fetchOnce(at: offset, count: count, epoch: epoch) }
+            catch {
+                let failure = error as NSError
+                let transient = failure.domain == "VelaMediaHTTP"
+                    ? ([408, 429].contains(failure.code) || (500...599).contains(failure.code))
+                    : failure.domain == NSURLErrorDomain && [-1001, -1004, -1005, -1009].contains(failure.code)
+                guard transient, attempt < delays.count else { throw error }
+                let wait = delays[attempt]
+                attempt += 1
+                guard Date().timeIntervalSince(began) + wait <= 60 else { throw error }
+                let until = Date().addingTimeInterval(wait)
+                repeat {
+                    lock.lock()
+                    let stopped = closed || interrupted || epoch != cancellationEpoch
+                    lock.unlock()
+                    if stopped { throw URLError(.cancelled) }
+                    Thread.sleep(forTimeInterval: min(0.05, max(0, until.timeIntervalSinceNow)))
+                } while until.timeIntervalSinceNow > 0
+            }
+        }
+    }
+
+    private func fetchOnce(at offset: Int64, count: Int, epoch: UInt64) throws -> ScopedMediaResponse {
         let request = ScopedMediaRequest(url: url, access: access, offset: offset, count: count)
         lock.lock()
         guard !closed && !interrupted && epoch == cancellationEpoch else { lock.unlock(); throw URLError(.cancelled) }

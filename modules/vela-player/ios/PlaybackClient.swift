@@ -32,6 +32,9 @@ final class PlaybackClient {
     private var reportedFirstFrame = false
     private static let frameContext = CIContext()
     private var failed = false
+    private var reconnecting = false
+    private var readRetryStarted: Date?
+    private var readRetryAttempt = 0
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
     private var subscriptions = Set<AnyCancellable>()
@@ -187,6 +190,7 @@ final class PlaybackClient {
                     }
                 }.store(in: &self.subscriptions)
                 engine.clock.$currentTime.sink { [weak self] time in
+                    if let self, self.readRetryStarted != nil, time > self.start + 10 { self.readRetryStarted = nil; self.readRetryAttempt = 0 }
                     self?.prepareFrameOutput()
                     self?.emit("time-pos", time)
                     if self?.engine?.hasFirstFrameReadyForDisplay == true {
@@ -344,7 +348,33 @@ final class PlaybackClient {
         captions.frame = CGRect(x: 40, y: surface.bounds.height * 0.7, width: max(0, surface.bounds.width - 80), height: surface.bounds.height * 0.25)
     }
     private func failPath() {
-        guard !dead, !failed else { return }
+        guard !dead, !failed, !reconnecting else { return }
+        let ioCodes = [-110, -104, -1001, -1005, -1009, -1004]
+        if let failure = engine?.errorInfo,
+           (ioCodes.contains(Int(failure.underlyingCode ?? 0)) || ioCodes.contains(Int(failure.ffmpegErrorCode ?? 0))),
+           let url {
+            let began = readRetryStarted ?? Date()
+            readRetryStarted = began
+            let delays: [Double] = [1, 2, 4, 8, 15, 15, 15]
+            if readRetryAttempt < delays.count {
+                let wait = delays[readRetryAttempt]
+                readRetryAttempt += 1
+                if Date().timeIntervalSince(began) + wait <= 60 {
+                    start = (properties["time-pos"] as? Double) ?? start
+                    reconnecting = true
+                    subscriptions.removeAll()
+                    engine?.stop()
+                    emit("paused-for-cache", true)
+                    loadTask = Task { @MainActor [weak self] in
+                        do { try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) } catch { return }
+                        guard let self, !self.dead else { return }
+                        self.reconnecting = false
+                        self.load(url)
+                    }
+                    return
+                }
+            }
+        }
         failed = true
         loadTask?.cancel()
         if engine?.hasFirstFrameReadyForDisplay == true {

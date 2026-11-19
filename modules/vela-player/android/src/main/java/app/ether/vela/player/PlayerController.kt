@@ -30,6 +30,10 @@ internal class PlayerController(
   private var engine: PlaybackEngine? = null
   private val recovery = PathRecovery()
   private var recovering = false
+  private var readRetryStarted = 0L
+  private var readRetryAttempt = 0
+  private var readRetryPosition = 0.0
+  private var readRetry: Runnable? = null
   private var state = PlayerState()
   private var plan: PlaybackPlan? = null
   private var activeSource = ""
@@ -168,6 +172,7 @@ internal class PlayerController(
   // Playback
 
   private fun start(plan: PlaybackPlan, path: PlanPath, url: Uri, source: String) {
+    if (activeSource != source) { readRetryStarted = 0L; readRetryAttempt = 0 }
     stop()
     activeSource = source
     state = PlayerState()
@@ -183,6 +188,7 @@ internal class PlayerController(
     client.onSubtitleCues = { host.subtitles(it) }
     client.onChange = {
       if (engine === client && !recovering) {
+        if (readRetryStarted != 0L && state.position > readRetryPosition + 10) { readRetryStarted = 0L; readRetryAttempt = 0 }
         applyTracks()
         videoChanged()
         host.keepScreenOn(!ambient && state.phase == PlayerState.Phase.PLAYING)
@@ -193,13 +199,26 @@ internal class PlayerController(
     client.onFailure = { code, unauthorized ->
       // A rejected track and the decoder may both fail before the switch plan arrives.
       // The abandoned engine must not spend another path or race that in-flight command.
-      if (engine === client && !recovering) {
+      if (engine === client && !recovering && readRetry == null) {
         if (unauthorized) askForFreshPlan("media grant refused")
         else if (transientMediaFailure(code)) {
-          state.failure = mediaFailureMessage(code)
-          state.failureKind = "network"
-          host.keepScreenOn(false)
-          report.publish(state, null, force = true)
+          val now = android.os.SystemClock.elapsedRealtime()
+          if (readRetryStarted == 0L) readRetryStarted = now
+          val wait = listOf(1000L, 2000L, 4000L, 8000L, 15000L, 15000L, 15000L).getOrNull(readRetryAttempt++)
+          if (wait != null && now - readRetryStarted + wait <= 60000L) {
+            val position = state.position
+            readRetryPosition = position
+            state.failure = null
+            state.loaded = false
+            report.publish(state, null, force = true)
+            readRetry = Runnable {
+              readRetry = null
+              if (engine === client) {
+                client.load(url, this.plan ?: plan, position)
+                client.play(wantsPlay)
+              }
+            }.also { main.postDelayed(it, wait) }
+          } else recover(code)
         } else recover(code)
       }
     }
@@ -229,6 +248,8 @@ internal class PlayerController(
   }
 
   private fun stop() {
+    readRetry?.let { main.removeCallbacks(it) }
+    readRetry = null
     awaitSeek(null)
     val client = engine ?: return
     engine = null
