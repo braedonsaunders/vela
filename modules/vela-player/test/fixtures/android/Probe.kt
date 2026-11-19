@@ -94,6 +94,13 @@ fun main() {
         return String(bytes, 0, count)
       } finally { source.close() }
     }
+    val capturedFactory = ScopedMediaDataSource.Factory(grant)
+    MediaAccessStore.current = MediaAccess.from(mapOf("origin" to origin, "pathPrefix" to "/outside", "headers" to mapOf("Authorization" to "replacement")))
+    val captured = capturedFactory.createDataSource()
+    try {
+      captured.open(DataSpec(Uri.parse(origin + "/media/file")))
+      check(seen.last().second == "fixture")
+    } finally { captured.close() }
     check(read("/media/start") == "0123456789")
     check(seen.takeLast(2).all { it.second == "fixture" })
     check(read("/media/escape") == "0123456789")
