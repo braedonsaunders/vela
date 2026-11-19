@@ -38,11 +38,14 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const isCurrent = (sectionFocused ?? navigationFocused) && visibleRoute;
   useReturnFocus(isCurrent);
   const publishShellHost = useContext(SectionShellHostContext);
+  // LibraryState's wrapper/actions are recreated on render. Publish only when the base host or
+  // memoized page model changes, so publishing into the shell cannot trigger itself again.
+  const shellHost = useMemo(() => host, [app, host?.env.library]);
   useLayoutEffect(() => {
-    if (!sharedShell || !isCurrent || !host || !publishShellHost) return;
-    publishShellHost(host, true);
-    return () => publishShellHost(host, false);
-  }, [sharedShell, isCurrent, host, publishShellHost]);
+    if (!sharedShell || !isCurrent || !shellHost || !publishShellHost) return;
+    publishShellHost(shellHost, true);
+    return () => publishShellHost(shellHost, false);
+  }, [sharedShell, isCurrent, shellHost, publishShellHost]);
   const focusSearch = !!host?.env.flags.includes('focus-search-on-home');
   const setFlag = host?.setFlag;
   useEffect(() => {
