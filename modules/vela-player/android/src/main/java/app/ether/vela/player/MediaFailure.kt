@@ -8,3 +8,8 @@ internal fun mediaFailureMessage(code: Int) = if (transientMediaFailure(code)) {
 } else {
   "This media could not be played. Please try again."
 }
+
+
+/** Extractors can omit an unsupported video stream while retaining perfectly playable audio. */
+internal fun missingSupportedVideo(hasTracks: Boolean, hasVideo: Boolean, supportedVideo: Boolean, expectsVideo: Boolean) =
+  hasTracks && ((hasVideo && !supportedVideo) || (!hasVideo && expectsVideo))

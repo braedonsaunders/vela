@@ -57,6 +57,7 @@ internal class PlanPath(
   val original: Boolean,
   /** The original's verified frame rate (OriginalVideo), for display matching before the first frame. */
   val originalFrameRate: Double?,
+  val expectsVideo: Boolean = false,
 ) {
   /** An original file the server serves by byte range: the native engine's input. */
   val isOriginalFile: Boolean
@@ -74,6 +75,7 @@ internal class PlanPath(
         url = value.text("url"),
         original = value["original"] == true,
         originalFrameRate = value.map("originalVideo")?.number("frameRate"),
+        expectsVideo = value.map("originalVideo") != null,
       )
     }
   }

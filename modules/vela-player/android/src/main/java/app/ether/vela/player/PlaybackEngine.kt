@@ -81,7 +81,8 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
         updateTracks(tracks)
         // ExoPlayer can otherwise play supported audio while silently omitting unsupported video.
         val video = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
-        if (!refused && video.isNotEmpty() && video.none { it.isSupported }) {
+        if (!refused && missingSupportedVideo(tracks.groups.isNotEmpty(), video.isNotEmpty(), video.any { it.isSupported },
+            plan?.paths?.any { it.expectsVideo } == true)) {
           refused = true
           onFailure(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, false)
         } else update()

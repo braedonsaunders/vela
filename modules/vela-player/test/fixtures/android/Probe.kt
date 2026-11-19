@@ -13,6 +13,12 @@ private fun plan(selected: String = "original", session: String = "one", fallbac
 ))!!
 
 fun main() {
+  check(missingSupportedVideo(true, false, false, true))
+  check(missingSupportedVideo(true, true, false, false))
+  check(!missingSupportedVideo(false, false, false, true))
+  check(!missingSupportedVideo(true, true, true, true))
+  check(!missingSupportedVideo(true, false, false, false))
+  check(PlanPath.from(mapOf("id" to "file", "kind" to "direct", "transport" to "file", "readiness" to "ready", "originalVideo" to mapOf("codec" to "ffv1")))!!.expectsVideo)
   listOf(503, 429, 2000, 2001, 2002).forEach { check(transientMediaFailure(it)) }
   listOf(3001, 4005, 403).forEach { check(!transientMediaFailure(it)) }
   check(mediaFailureMessage(503).contains("temporarily unavailable"))
