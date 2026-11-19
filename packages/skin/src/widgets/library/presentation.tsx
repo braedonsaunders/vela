@@ -4,6 +4,7 @@ import { Modal, Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeE
 import { useVela } from '@vela/core/react';
 import { shellHasLibraryTabs } from './navigation';
 import { toolbarTabs, tabSearchEnabled } from './toolbar-model';
+import { singleLibraryStrip } from './toolbar-layout';
 import type { FacetValue, LibraryFacet } from '../../../../protocol/types';
 import { FocusPressable } from '../../focus';
 import { InheritedContext, useHost, type WidgetProps } from '../../host';
@@ -71,7 +72,7 @@ export function LibraryToolbar(props: WidgetProps) {
   const host = useHost();
   const page = host.env.library;
   const model = page?.model;
-  const phone = host.viewport.width < 600 && !Platform.isTV;
+  const compact = singleLibraryStrip(host.viewport.width, Platform.isTV);
   const stripRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const tabsInShell = host.env.small && shellHasLibraryTabs(host.doc.document.slots?.shell);
   const browse = (page?.view ?? 'library') === 'library';
@@ -90,11 +91,11 @@ export function LibraryToolbar(props: WidgetProps) {
     {model.sorts.length > 1 && select({ options: 'library.sorts', action: 'librarySort', label: 'Sort by' })}
     {model.sorts.find(sort => sort.id === model.sort)?.directions.length === 2 && <Button label={model.direction === 'asc' ? 'Ascending' : 'Descending'} onPress={() => host.dispatch('librarySortFlip', '')} />}
   </View>;
-  const strip = (children: ReactNode, flex = true) => <ScrollView ref={phone ? stripRef : undefined} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+  const strip = (children: ReactNode, flex = true) => <ScrollView ref={compact ? stripRef : undefined} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
     style={{ flex: flex ? 1 : undefined, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
   if (tabsInShell && !browse && !tabSearchEnabled(page?.model?.tabs?.find(tab => tab.id === page.tabId))) return null;
   return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
-    {phone ? strip(<>{!tabsInShell && <LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />}{filters}{sort}</>) : <>{!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}</>}
+    {compact ? strip(<>{!tabsInShell && <LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />}{filters}{sort}</>) : <>{!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}</>}
     {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
   </View>;
 }
