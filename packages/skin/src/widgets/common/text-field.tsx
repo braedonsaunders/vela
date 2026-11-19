@@ -31,10 +31,15 @@ function RemadeField(props: TextInputProps, forwarded: Ref<Input>) {
     },
     [forwarded],
   );
-  // Preferred focus is asked for once, as the new field mounts: held, it would pull focus back.
+  // Keep the one-shot request through the native mount and first layout. Clearing it in the
+  // mount effect can cancel focus restoration; holding it would pull focus back from other controls.
   useEffect(() => {
-    if (made.focus) setMade(current => ({ ...current, focus: false }));
-  }, [made.focus]);
+    if (!made.focus) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setMade(current => ({ ...current, focus: false })));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [made.focus, made.generation]);
   const { onEndEditing, hasTVPreferredFocus } = props;
   return (
     <TextInput

@@ -62,6 +62,7 @@ enum TVTextFields {
             if let view = object as? UIView { styleField(view) }
         }
         hookFocus(field)
+        hookTextRects(field)
         #endif
     }
 
@@ -87,7 +88,12 @@ enum TVTextFields {
 
     private static func styleFocusShell(_ field: UITextField) {
         let focusedView = UIFocusSystem.focusSystem(for: field)?.focusedItem as? UIView
-        let focused = field.isFocused || focusedView?.isDescendant(of: field) == true
+        // After the full-screen keyboard closes, Fabric can focus the component wrapper
+        // rather than its backed UITextField. Both represent this same skin control.
+        let wrapperFocused = focusedView.map {
+            field.isDescendant(of: $0) && $0.bounds.height < max(1, field.bounds.height) * 2
+        } ?? false
+        let focused = field.isFocused || focusedView?.isDescendant(of: field) == true || wrapperFocused
         guard field.window != nil && focused else {
             if let saved = objc_getAssociatedObject(field, &focusStyleKey) as? FocusStyle {
                 if let shell = saved.shell,
@@ -99,7 +105,8 @@ enum TVTextFields {
             }
             return
         }
-        if let saved = objc_getAssociatedObject(field, &focusStyleKey) as? FocusStyle {
+        if let saved = objc_getAssociatedObject(field, &focusStyleKey) as? FocusStyle,
+           let shell = saved.shell, field.isDescendant(of: shell) {
             saved.apply(tint: field.tintColor)
             return
         }
@@ -121,6 +128,29 @@ enum TVTextFields {
     }
 
     #if os(tvOS)
+    private static func hookTextRects(_ cls: AnyClass) {
+        // UITextField's tvOS platter reserves extra horizontal room even with borderStyle.none.
+        // The skin already supplies padding; retain RN's explicit inset and UIKit's vertical
+        // baseline while removing only that additional system horizontal inset.
+        for selector in [#selector(UITextField.textRect(forBounds:)),
+                         #selector(UITextField.editingRect(forBounds:)),
+                         #selector(UITextField.placeholderRect(forBounds:))] {
+            guard let method = class_getInstanceMethod(cls, selector) else { continue }
+            typealias Call = @convention(c) (AnyObject, Selector, CGRect) -> CGRect
+            let previous = unsafeBitCast(method_getImplementation(method), to: Call.self)
+            let block: @convention(block) (AnyObject, CGRect) -> CGRect = { object, bounds in
+                let result = previous(object, selector, bounds)
+                let inset = (object.value(forKey: "textContainerInset") as? NSValue)?.uiEdgeInsetsValue ?? .zero
+                return CGRect(x: bounds.minX + inset.left, y: result.minY,
+                              width: max(0, bounds.width - inset.left - inset.right), height: result.height)
+            }
+            let implementation = imp_implementationWithBlock(block)
+            if !class_addMethod(cls, selector, implementation, method_getTypeEncoding(method)) {
+                method_setImplementation(method, implementation)
+            }
+        }
+    }
+
     private static func hookFocus(_ cls: AnyClass) {
         let selector = #selector(UIView.didUpdateFocus(in:with:))
         guard let method = class_getInstanceMethod(cls, selector) else { return }

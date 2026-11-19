@@ -247,6 +247,7 @@ export function Pill({
     <APressable
       onPress={onPress}
       disabled={disabled}
+      focusable={!disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled, busy }}
