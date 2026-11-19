@@ -180,7 +180,7 @@ internal class PlayerController(
     engine = client
     state = client.state
     recovering = false
-    client.onCues = { host.subtitles(it) }
+    client.onSubtitleCues = { host.subtitles(it) }
     client.onChange = {
       if (engine === client && !recovering) {
         applyTracks()

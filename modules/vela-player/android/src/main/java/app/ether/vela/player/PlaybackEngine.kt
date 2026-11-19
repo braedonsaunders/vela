@@ -19,7 +19,7 @@ internal interface PlaybackEngine {
   val state: PlayerState
   var onChange: () -> Unit
   var onFailure: (Int, Boolean) -> Unit
-  var onCues: (CueGroup) -> Unit
+  var onSubtitleCues: (CueGroup) -> Unit
   fun load(url: Uri, plan: PlaybackPlan?, position: Double, loop: Boolean = false)
   fun attach(surface: Surface?)
   fun play(playing: Boolean)
@@ -33,7 +33,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
   override val state = PlayerState()
   override var onChange: () -> Unit = {}
   override var onFailure: (Int, Boolean) -> Unit = { _, _ -> }
-  override var onCues: (CueGroup) -> Unit = {}
+  override var onSubtitleCues: (CueGroup) -> Unit = {}
   private val main = Handler(Looper.getMainLooper())
   private val selector = DefaultTrackSelector(context)
   private val grant = MediaAccessStore.current
@@ -66,7 +66,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
     player.addListener(object : Player.Listener {
       override fun onEvents(player: Player, events: Player.Events) { update() }
       override fun onRenderedFirstFrame() { state.hasFrame = true; update() }
-      override fun onCues(cueGroup: CueGroup) { onCues(cueGroup) }
+      override fun onCues(cueGroup: CueGroup) { onSubtitleCues(cueGroup) }
       override fun onTracksChanged(tracks: Tracks) {
         updateTracks(tracks)
         // ExoPlayer can otherwise play supported audio while silently omitting unsupported video.
