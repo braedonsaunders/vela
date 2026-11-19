@@ -272,13 +272,13 @@ final class PlaybackClient {
                 guard !self.dead, !self.failed else { return }
                 if self.isLive, let player = engine.currentAVPlayer {
                     self.liveItemObservation = player.observe(\.currentItem, options: [.initial, .new]) { player, _ in
-                        MainActor.assumeIsolated {
+                        Task { @MainActor in
                             player.currentItem?.automaticallyPreservesTimeOffsetFromLive = false
                             player.currentItem?.configuredTimeOffsetFromLive = .invalid
                         }
                     }
                     self.liveRateObservation = player.observe(\.rate, options: [.initial, .new]) { player, _ in
-                        MainActor.assumeIsolated {
+                        Task { @MainActor in
                             if player.rate > 1 { player.rate = 1 }
                         }
                     }
