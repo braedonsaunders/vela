@@ -12,7 +12,11 @@ async function call(path, body) {
       authorization: `Bearer ${config.token}`, 'x-vela-device-id': config.deviceId },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!response.ok) throw Error(`lab HTTP ${response.status}`);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    const code = /^[a-z0-9_]{1,80}$/i.test(detail?.error?.code || '') ? detail.error.code : '';
+    throw Error(`lab HTTP ${response.status} ${code}`);
+  }
   return response.json();
 }
 function resolve(plan) {
