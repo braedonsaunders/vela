@@ -4,7 +4,7 @@
 // the server's media authorization to the player.
 import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { msg, type PlaybackTarget } from '@vela/core';
 import { VelaPlayer, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
@@ -90,7 +90,9 @@ export default function Watch() {
   return (
     <WatchSurface host={skin} state={{ ...session.chrome, title, close }}>
       {session.view.plan ? (
-        <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />
+        <View pointerEvents={Platform.OS === 'android' ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
+          <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />
+        </View>
       ) : null}
     </WatchSurface>
   );

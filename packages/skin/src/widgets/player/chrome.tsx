@@ -120,9 +120,10 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           mounted preferred target competing with the control row during native layout. */}
       {(!Platform.isTV || !idle.visible) && <Pressable
         accessible={false}
+        testID="player-stage-input"
         onPress={tapStage}
         style={StyleSheet.absoluteFill}
-        focusable={Platform.isTV && !idle.visible}
+        focusable={Platform.isTV ? !idle.visible : Platform.OS === 'android'}
         hasTVPreferredFocus={Platform.isTV}
       />}
       {/* Each bar holds its own edge: on a short screen they overlap at the middle rather than

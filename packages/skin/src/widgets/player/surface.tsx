@@ -22,6 +22,7 @@ export function WatchSurface({ host, state, children }: Props) {
           {/* Only interactive chrome respects cutouts and system bars. The video and its
               aspect-ratio letterbox fill the stage, including on a folding display. */}
           <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, {
+            zIndex: 1,
             top: host.viewport.insets.top,
             bottom: host.viewport.insets.bottom,
             left: host.viewport.sides?.left ?? host.viewport.insets.left,
