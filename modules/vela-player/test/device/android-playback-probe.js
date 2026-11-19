@@ -56,12 +56,17 @@ function Probe() {
     // The harness changes config between runs; each check stops its server session and native view.
     const timeout = setTimeout(async () => {
       const active = current.current;
-      if (active && !config.fixture) await call(`/sessions/${active.sessionId}/commands`, { kind: 'stop', idempotencyKey: key(),
-        sourceGeneration: active.sourceGeneration, seekGeneration: active.seekGeneration }).catch(() => {});
       current.current = null; setPlan(null); clearInterval(timer.current);
+      if (active && !config.fixture) void call(`/sessions/${active.sessionId}/commands`, { kind: 'stop', idempotencyKey: key(),
+        sourceGeneration: active.sourceGeneration, seekGeneration: active.seekGeneration }).catch(() => {});
       setStatus('Check stopped'); console.log('[android-proof-stopped]');
     }, config.durationMs || 60000);
     return () => clearTimeout(timeout);
+  }, []);
+  useEffect(() => {
+    const timers = (config.commands || []).map(entry => setTimeout(() =>
+      setCommand({ ...entry.command, id: ++commandId.current }), entry.afterMs));
+    return () => timers.forEach(clearTimeout);
   }, []);
   return <View style={{ flex: 1, backgroundColor: 'black' }}>
     {plan && <VelaPlayerView style={{ flex: 1 }} plan={plan} command={command}
@@ -83,7 +88,7 @@ function Probe() {
         } catch (error) { setStatus(error.message); }
       }} />}
     <Text style={{ position: 'absolute', top: 35, left: 15, color: 'white', backgroundColor: '#000b', fontSize: 16 }}>{status}</Text>
-    {plan && <View style={{ position: 'absolute', bottom: 25, left: 15, flexDirection: 'row', gap: 15 }}>
+    {plan && <View style={{ position: 'absolute', bottom: 25, left: 15, flexDirection: 'row', flexWrap: 'wrap', right: 15, gap: 15 }}>
       {plan.audioTracks.map(track => <Text key={track.id} style={{ color: 'white', padding: 10, backgroundColor: '#333' }}
         onPress={() => setCommand({ id: ++commandId.current, type: 'audio', trackId: track.id })}>{track.name}</Text>)}
       {plan.subtitleTracks.slice(0, 3).map(track => <Text key={track.id} style={{ color: 'white', padding: 10, backgroundColor: '#333' }}

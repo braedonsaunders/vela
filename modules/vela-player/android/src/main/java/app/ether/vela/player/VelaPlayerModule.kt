@@ -19,6 +19,21 @@ class VelaPlayerModule : Module() {
       PlayerCapabilities.capabilities(appContext.reactContext)
     }
 
+    // Internal diagnostics for device profiling; no player/chrome API or media data changes.
+    Function("setCPUProfiling") { enabled: Boolean ->
+      val profiler = Class.forName("com.facebook.hermes.instrumentation.HermesSamplingProfiler")
+      if (enabled) {
+        profiler.getMethod("enable").invoke(null)
+        null
+      } else {
+        val context = appContext.reactContext ?: throw IllegalStateException("Player context unavailable")
+        val file = java.io.File(context.externalCacheDir ?: context.cacheDir, "vela-cpu-profile.json")
+        profiler.getMethod("dumpSampledTraceToFile", String::class.java).invoke(null, file.path)
+        profiler.getMethod("disable").invoke(null)
+        file.path
+      }
+    }
+
     // The viewer left the app: playing views pause, previews stop with their windows.
     OnActivityEntersBackground {
       VelaPlayerView.live.forEach { it.enterBackground() }
