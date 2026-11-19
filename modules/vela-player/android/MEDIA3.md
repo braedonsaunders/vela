@@ -53,3 +53,21 @@ VELA_KOTLINC to a Kotlin compiler launcher and VELA_KOTLIN_STDLIB to its runtime
 jar, then run `bun test modules/vela-player/test/android-native.test.ts`.
 These tests ran successfully on bb-worker-server; device verification is tracked
 separately and must be recorded before claiming playback parity.
+
+Capability declarations use actual MediaCodec profiles and supported resolution
+pairs. The server receives its existing `maxWidth`, `maxHeight`, codec-name and
+HDR fields. HDR is the intersection of the display's HDR types and compatible
+hardware decoder profiles. Full profile/level and frame-rate details are available
+through the internal `decoderCapabilities` diagnostic function; no new v0 wire
+field is invented. An emulator without hardware AVC can declare bounded software
+AVC, labelled as software in diagnostics, without declaring software HEVC/HDR.
+
+For external subtitles, `delivery.format` takes precedence over the original
+source codec: a converted WebVTT delivery is parsed as WebVTT even when the source
+was SRT or bitmap subtitles. Static sidecars work on original files, HLS and DASH,
+including initial selection and turning them off. Raw external SUP/IDX/SUB is a
+remaining limitation: Media3 needs packet timing/IDX palette initialization that
+the single-URL external delivery does not carry. Such selections use the existing
+server `tracks` command for a supported delivery or burn-in path; they are never
+fed into an uninitialized bitmap parser. Embedded PGS/VobSub uses the initialization
+data extracted from its container and Media3's bitmap cue output.
