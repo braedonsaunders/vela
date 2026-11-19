@@ -430,10 +430,10 @@ internal class PlayerController(
     val track = plan?.subtitleTrack(id) ?: return "No such subtitle track"
     val external = track.externalUrl?.let(MediaAccessStore::resolve)
     if (external != null) {
-      report.subtitleTrackId = id
-      report.subtitleClientOnly = true
       val localId = state.tracks.firstOrNull { it["plan-id"] == id }?.get("id") as? Long
       if (localId == null) return "The external subtitle is not available yet"
+      report.subtitleTrackId = id
+      report.subtitleClientOnly = true
       engine?.select("sub", localId)
       return null
     }

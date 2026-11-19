@@ -98,6 +98,15 @@ internal class PlanTrack(
   val externalUrl: String?
     get() = if (isExternal) deliveryUrl ?: url else null
 
+  /** MergingMediaPeriod prefixes each source's Format.id with its child index. External
+   * subtitle sources start at 1; source 0 is the original file and must not match by suffix. */
+  fun matchesExternalFormat(formatId: String?): Boolean {
+    if (!isExternal || formatId == null) return false
+    if (formatId == id) return true
+    val child = formatId.substringBefore(':').toIntOrNull() ?: return false
+    return child > 0 && formatId.substringAfter(':') == id
+  }
+
   /** The model.ts Track a snapshot carries. */
   val snapshot: Map<String, Any?>
     get() {

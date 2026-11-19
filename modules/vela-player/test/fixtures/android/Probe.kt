@@ -13,6 +13,14 @@ private fun plan(selected: String = "original", session: String = "one", fallbac
 ))!!
 
 fun main() {
+  val external = PlanTrack.from(mapOf("id" to "captions:en", "name" to "English", "delivery" to mapOf("kind" to "external")))!!
+  check(external.matchesExternalFormat("captions:en"))
+  check(external.matchesExternalFormat("1:captions:en"))
+  check(external.matchesExternalFormat("12:captions:en"))
+  check(!external.matchesExternalFormat("0:captions:en"))
+  check(!external.matchesExternalFormat("1:other"))
+  check(!external.matchesExternalFormat(null))
+  check(!PlanTrack.from(mapOf("id" to "captions:en", "name" to "Embedded"))!!.matchesExternalFormat("1:captions:en"))
   val recovery = PathRecovery()
   check(recovery.next(plan(), 123.0) == mapOf("kind" to "switch", "pathId" to "converted", "atSeconds" to 123.0))
   check(recovery.next(plan(selected = "converted", fallback = "unsupported"), 123.0) == null)

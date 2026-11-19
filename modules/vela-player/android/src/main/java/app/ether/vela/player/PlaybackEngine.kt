@@ -119,7 +119,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
         val format = group.getTrackFormat(index)
         val id = (choices.size + 1).toLong()
         choices[id] = group to index
-        val external = plan?.subtitleTracks?.firstOrNull { it.isExternal && it.id == format.id }
+        val external = plan?.subtitleTracks?.firstOrNull { it.matchesExternalFormat(format.id) }
         val ordinal = offsets[type] ?: 0
         if (external == null) offsets[type] = ordinal + 1
         val planned = if (type == "audio") plan?.audioTracks.orEmpty() else plan?.subtitleTracks.orEmpty().filter { !it.isExternal }
