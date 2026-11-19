@@ -35,7 +35,7 @@ function Screens() {
       />
       {/* Playback must present above title/person modals. A card is pushed beneath their
           native controller on iOS and Android, hiding the playing film and its controls. */}
-      <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' || Platform.OS === 'android' ? 'fullScreenModal' : 'card', contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: '#000' } }} />
+      <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' || Platform.OS === 'android' ? 'fullScreenModal' : 'card', ...(Platform.OS === 'android' ? { statusBarHidden: true, navigationBarHidden: true } : {}), contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: '#000' } }} />
       <Stack.Screen name="row/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' ? 'fullScreenModal' : 'card' }} />
       <Stack.Screen name="person" options={{ presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal', contentStyle: { ...bars, backgroundColor: 'transparent' } }} />
     </Stack>
