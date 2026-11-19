@@ -41,3 +41,35 @@ describe('row See all', () => {
     expect(box.get().rows).toEqual({});
   });
 });
+
+test('row store follows cursors and stops after exhaustion', async () => {
+  const box = new StateBox({ rows: {} } as VelaState);
+  const calls: unknown[][] = [];
+  const session = { epoch: 0, onReset: () => {}, ready: async () => ({ adapter: { row: async (...args: unknown[]) => {
+    calls.push(args);
+    return { id: 'r', name: 'Renamed upstream', receiptToken: '', items: [], continuation: 'exhausted' };
+  } }, images: async () => undefined }) } as unknown as Session;
+  const store = new Rows(box, session, () => 320);
+  store.seed({ ...row(), continuation: 'more', nextCursor: 'cursor-1' });
+  await store.load('r', true);
+  expect(calls).toEqual([['r', 'cursor-1', 60]]);
+  expect(box.get().rows.r?.value).toMatchObject({ name: 'Shelf', continuation: 'exhausted' });
+  await store.load('r', true);
+  expect(calls.length).toBe(1);
+});
+
+test('failed continuation retains its page and can be retried', async () => {
+  const box = new StateBox({ rows: {} } as VelaState);
+  let fail = true;
+  const session = { epoch: 0, onReset: () => {}, ready: async () => ({ adapter: { row: async () => {
+    if (fail) throw new Error('offline');
+    return { id: 'r', name: 'Shelf', receiptToken: '', items: [], continuation: 'exhausted' };
+  } }, images: async () => undefined }) } as unknown as Session;
+  const store = new Rows(box, session, () => 320);
+  store.seed({ ...row(), continuation: 'more', nextCursor: 'cursor-1' });
+  await store.load('r', true);
+  expect(box.get().rows.r).toMatchObject({ load: 'failed', value: { nextCursor: 'cursor-1' } });
+  fail = false;
+  await store.load('r', true);
+  expect(box.get().rows.r?.load).toBe('ready');
+});

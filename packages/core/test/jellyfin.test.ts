@@ -261,3 +261,17 @@ test('Jellyfin/Emby search restricts Items to the selected library', async () =>
   expect(seen[0]!.url.searchParams.get('ParentId')).toBe('movies');
   expect(seen[0]!.url.searchParams.get('SearchTerm')).toBe('heat');
 });
+
+test('latest and resume rows use pageable queries and forward scoped cursors', async () => {
+  const seen = routeFetch({
+    'GET /jf/Users/viewer-1/Items': { Items: [movie], TotalRecordCount: 100 },
+    'GET /jf/Users/viewer-1/Items/Resume': { Items: [episode], TotalRecordCount: 100 },
+  });
+  const adapter = new JellyfinAdapter(BASE, new FakeCredentials());
+  expect(await adapter.row('library:l1:latest', '20', 30)).toMatchObject({ continuation: 'more', nextCursor: '21' });
+  expect(await adapter.row('resume', '40', 30)).toMatchObject({ continuation: 'more', nextCursor: '41' });
+  expect(seen[0]!.url.searchParams.get('ParentId')).toBe('l1');
+  expect(seen[0]!.url.searchParams.get('SortBy')).toBe('DateCreated');
+  expect(seen.map(call => call.url.searchParams.get('StartIndex'))).toEqual(['20', '40']);
+  expect(seen.every(call => call.url.searchParams.get('Limit') === '30')).toBe(true);
+});

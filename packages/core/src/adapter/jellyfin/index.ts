@@ -306,12 +306,12 @@ export class JellyfinAdapter
         const parent = library?.[1];
         if (source === 'latest') {
             result = await this.request<Result>('GET', `${user}/Items${query({
-                ...p, ParentId: parent, Recursive: true, Fields: fields, IncludeItemTypes: 'Movie,Series', SortBy: 'DateCreated', SortOrder: 'Descending'
+                ...p, ParentId: parent, Recursive: true, EnableTotalRecordCount: true, Fields: fields, IncludeItemTypes: 'Movie,Series,Episode', SortBy: 'DateCreated', SortOrder: 'Descending'
             })}`);
         }
         else if (source === 'resume' || source === 'nextup')
             result = await this.request<Result>('GET', `${source === 'resume' ? `${user}/Items/Resume` : 'Shows/NextUp'}${query({
-                ...p, ParentId: parent, UserId: (await this.credentials.get())?.viewer.id, Fields: fields, MediaTypes: 'Video'
+                ...p, ParentId: parent, EnableTotalRecordCount: true, UserId: (await this.credentials.get())?.viewer.id, Fields: fields, MediaTypes: 'Video'
             })}`);
         else
             throw this.error('not-found', 'row_not_found', 'Unknown row', 404);

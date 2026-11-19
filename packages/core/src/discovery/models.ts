@@ -147,7 +147,7 @@ export function feedRow(row: WireRow, images?: Images, artWidth = 2560): Row {
     continuation: row.continuation,
     previewOnFocus: row.previewOnFocus ?? false,
     presentation: row.presentation ?? '',
-    cardStyle: row.style === 'landscape' || row.style === 'square' ? row.style : undefined,
+    cardStyle: row.style === 'poster' || row.style === 'landscape' || row.style === 'square' ? row.style : undefined,
   };
 }
 

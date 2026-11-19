@@ -38,6 +38,7 @@ export class Rows {
     try {
       const connection = await this.session.ready();
       const page = await connection.adapter.row(id, more ? value!.nextCursor : undefined, 60);
+      if (page.id !== id) throw new Error('Wrong row returned');
       const mapped = feedRow(page, await connection.images(), this.width());
       if (epoch !== this.session.epoch) return;
       const seen = this.cursors.get(id) ?? new Set<string>();
