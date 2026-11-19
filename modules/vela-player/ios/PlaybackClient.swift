@@ -3,6 +3,7 @@
 import AetherEngine
 import AVFoundation
 import Combine
+import CoreImage
 import UIKit
 
 @MainActor
@@ -23,6 +24,11 @@ final class PlaybackClient {
     private let remoteHLS: Bool
     private let loops: Bool
     private let aspectFill: Bool
+    private let retainPausedPicture: Bool
+    private var frameOutput: AVPlayerItemVideoOutput?
+    private weak var outputItem: AVPlayerItem?
+    private var frozenPicture: UIView?
+    private static let frameContext = CIContext()
     private var failed = false
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
@@ -47,7 +53,8 @@ final class PlaybackClient {
     private static var previewEngine: AetherEngine?
 
     init(host: UIView, preview: Bool = false, paused: Bool = false, muted: Bool = false,
-         loops: Bool = false, aspectFill: Bool = false, isLive: Bool = false, remoteHLS: Bool = false) {
+         loops: Bool = false, aspectFill: Bool = false, isLive: Bool = false, remoteHLS: Bool = false, retainPausedPicture: Bool = false) {
+        self.retainPausedPicture = retainPausedPicture
         self.host = host
         self.preview = preview
         self.paused = paused
@@ -60,6 +67,7 @@ final class PlaybackClient {
 
     func layout() {
         guard let host else { return }
+        frozenPicture?.frame = host.bounds
         surface?.frame = host.bounds
         surface?.setNeedsLayout()
     }
@@ -87,7 +95,11 @@ final class PlaybackClient {
     func set(_ name: String, flag: Bool) {
         if name == "pause" { paused = flag }
         if name == "mute" { muted = flag }
-        if name == "pause" { flag ? engine?.pause() : engine?.play() }
+        if name == "pause" {
+            if flag && retainPausedPicture { freezePicture() }
+            if !flag { frozenPicture?.removeFromSuperview(); frozenPicture = nil }
+            flag ? engine?.pause() : engine?.play()
+        }
         if name == "mute" { engine?.volume = flag ? 0 : volume }
     }
     func set(_ name: String, double: Double) {
@@ -170,6 +182,7 @@ final class PlaybackClient {
                     }
                 }.store(in: &self.subscriptions)
                 engine.clock.$currentTime.sink { [weak self] time in
+                    self?.prepareFrameOutput()
                     self?.emit("time-pos", time)
                     if self?.engine?.hasFirstFrameReadyForDisplay == true { self?.emit("video-pts", time) }
                     self?.drawCaptions()
@@ -325,8 +338,44 @@ final class PlaybackClient {
         onEvent?(.endFile(reason: 4, error: -1))
     }
 
+    /// Native video layers clear on upstream failure, so the outgoing preview needs its own still.
+    private func prepareFrameOutput() {
+        guard retainPausedPicture, let item = engine?.currentAVPlayer?.currentItem, item !== outputItem else { return }
+        if let output = frameOutput { outputItem?.remove(output) }
+        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        item.add(output)
+        outputItem = item
+        frameOutput = output
+    }
+
+    private func freezePicture() {
+        guard frozenPicture == nil, let host else { return }
+        if let item = outputItem, let buffer = frameOutput?.copyPixelBuffer(forItemTime: item.currentTime(), itemTimeForDisplay: nil) {
+            let image = CIImage(cvPixelBuffer: buffer)
+            let scale = min(1, 1280 / image.extent.width)
+            let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            if let frame = Self.frameContext.createCGImage(scaled, from: scaled.extent) {
+                let still = UIImageView(image: UIImage(cgImage: frame))
+                still.contentMode = aspectFill ? .scaleAspectFill : .scaleAspectFit
+                still.backgroundColor = .black
+                still.clipsToBounds = true
+                frozenPicture = still
+            }
+        }
+        if frozenPicture == nil { frozenPicture = surface?.snapshotView(afterScreenUpdates: false) }
+        guard let still = frozenPicture else { return }
+        still.frame = host.bounds
+        still.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        host.addSubview(still)
+    }
+
     func destroy() {
         dead = true
+        frozenPicture?.removeFromSuperview()
+        frozenPicture = nil
+        if let output = frameOutput { outputItem?.remove(output) }
+        frameOutput = nil
+        outputItem = nil
         loadTask?.cancel()
         loadTask = nil
         subscriptions.removeAll()
