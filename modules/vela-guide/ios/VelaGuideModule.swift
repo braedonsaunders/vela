@@ -261,7 +261,8 @@ final class VelaGuideRowView: ExpoView {
 
     var frameState: [String: Any] {
         ["channel": channel, "generation": generation, "ready": picture.contents != nil,
-         "placeholderAlpha": picture.backgroundColor?.alpha ?? 0]
+         "placeholderAlpha": picture.backgroundColor?.alpha ?? 0,
+         "placeholderRGBA": picture.backgroundColor?.components ?? []]
     }
 
     func setVisibleOffset(_ x: CGFloat) { externalScrollX = x; positionLabels() }
