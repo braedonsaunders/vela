@@ -263,7 +263,9 @@ if (!app.requestSingleInstanceLock()) {
       if (message.kind === 'capabilities') {
         Promise.resolve().then(() => nativeAdapter.capabilities()).then(value => {
           if (!window.isDestroyed()) event.sender.send('vela:native-event', { kind: 'capabilities', requestId: message.requestId, value });
-        }).catch(() => {});
+        }).catch(() => {
+          if (!window.isDestroyed()) event.sender.send('vela:native-event', { kind: 'capabilities', requestId: message.requestId, error: true });
+        });
       } else {
         if (message.kind === 'mount') window.__velaPlayerId = message.id;
         void window.__velaNativePlayer?.receive(message);

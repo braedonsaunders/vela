@@ -26,7 +26,9 @@ export function windowsCapabilities(): Promise<PlayerCapabilities> {
     const timer = setTimeout(() => { unsubscribe(); reject(new Error('Windows player capabilities timed out')); }, 10000);
     const unsubscribe = listen(message => {
       if (message.kind !== 'capabilities' || message.requestId !== requestId) return;
-      clearTimeout(timer); unsubscribe(); resolve(message.value as PlayerCapabilities);
+      clearTimeout(timer); unsubscribe();
+      if (message.error) reject(new Error('Native player capabilities unavailable'));
+      else resolve(message.value as PlayerCapabilities);
     });
     send({ kind: 'capabilities', requestId });
   });
