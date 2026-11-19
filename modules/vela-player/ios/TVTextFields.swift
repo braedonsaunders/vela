@@ -7,6 +7,11 @@ import UIKit
 enum TVTextFields {
     private static var installed = false
     private static var focusStyleKey: UInt8 = 0
+    private static var focusOwnerKey: UInt8 = 0
+    private final class FocusOwner: NSObject {
+        weak var field: UITextField?
+        init(_ field: UITextField) { self.field = field }
+    }
 
     private final class FocusStyle: NSObject {
         weak var shell: UIView?
@@ -14,12 +19,22 @@ enum TVTextFields {
         let borderWidth: CGFloat
         let transform: CGAffineTransform
         let radius: CGFloat
-        init(_ shell: UIView) {
+        let focusedRadius: CGFloat
+        init(_ shell: UIView, radius: CGFloat) {
             self.shell = shell
+            focusedRadius = radius
             borderColor = shell.layer.borderColor
             borderWidth = shell.layer.borderWidth
             transform = shell.transform
-            radius = shell.layer.cornerRadius
+            self.radius = shell.layer.cornerRadius
+        }
+        func apply(tint: UIColor) {
+            guard let shell else { return }
+            if shell.layer.borderColor != tint.cgColor { shell.layer.borderColor = tint.cgColor }
+            if shell.layer.borderWidth != 2 { shell.layer.borderWidth = 2 }
+            if shell.layer.cornerRadius != focusedRadius { shell.layer.cornerRadius = focusedRadius }
+            let lifted = transform.scaledBy(x: 1.025, y: 1.025)
+            if shell.transform != lifted { shell.transform = lifted }
         }
         func restore() {
             shell?.layer.borderColor = borderColor
@@ -75,12 +90,19 @@ enum TVTextFields {
         let focused = field.isFocused || focusedView?.isDescendant(of: field) == true
         guard field.window != nil && focused else {
             if let saved = objc_getAssociatedObject(field, &focusStyleKey) as? FocusStyle {
-                saved.restore()
+                if let shell = saved.shell,
+                   (objc_getAssociatedObject(shell, &focusOwnerKey) as? FocusOwner)?.field === field {
+                    saved.restore()
+                    objc_setAssociatedObject(shell, &focusOwnerKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                }
                 objc_setAssociatedObject(field, &focusStyleKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
             return
         }
-        guard objc_getAssociatedObject(field, &focusStyleKey) == nil else { return }
+        if let saved = objc_getAssociatedObject(field, &focusStyleKey) as? FocusStyle {
+            saved.apply(tint: field.tintColor)
+            return
+        }
         // The native input is transparent. Lift and outline the existing rounded skin shell,
         // never draw a second shape inside it. React's editing focus arrives only on selection.
         var ancestor = field.superview
@@ -88,12 +110,10 @@ enum TVTextFields {
             guard let shell = ancestor else { break }
             let radius = max(shell.layer.cornerRadius, shell.layer.sublayers?.map(\.cornerRadius).max() ?? 0)
             if radius > 0 && shell.bounds.height < max(1, field.bounds.height) * 2 {
-                let saved = FocusStyle(shell)
+                let saved = FocusStyle(shell, radius: radius)
                 objc_setAssociatedObject(field, &focusStyleKey, saved, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-                shell.layer.cornerRadius = radius
-                shell.layer.borderColor = field.tintColor.cgColor
-                shell.layer.borderWidth = 2
-                shell.transform = saved.transform.scaledBy(x: 1.025, y: 1.025)
+                objc_setAssociatedObject(shell, &focusOwnerKey, FocusOwner(field), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                saved.apply(tint: field.tintColor)
                 break
             }
             ancestor = shell.superview
@@ -111,7 +131,11 @@ enum TVTextFields {
             guard let view = object as? UIView else { return }
             styleField(view)
             // UIKit rebuilds its focused platter during the focus animation, after layout.
-            coordinator.addCoordinatedAnimations({ styleField(view) }, completion: { styleField(view) })
+            coordinator.addCoordinatedAnimations({ styleField(view) }, completion: {
+                styleField(view)
+                // UIKit can finish the floating material after other completion callbacks.
+                DispatchQueue.main.async { styleField(view) }
+            })
         }
         let implementation = imp_implementationWithBlock(block)
         if !class_addMethod(cls, selector, implementation, method_getTypeEncoding(method)) {
