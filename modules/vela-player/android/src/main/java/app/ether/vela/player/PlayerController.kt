@@ -191,7 +191,9 @@ internal class PlayerController(
       }
     }
     client.onFailure = { code, unauthorized ->
-      if (engine === client) {
+      // A rejected track and the decoder may both fail before the switch plan arrives.
+      // The abandoned engine must not spend another path or race that in-flight command.
+      if (engine === client && !recovering) {
         if (unauthorized) askForFreshPlan("media grant refused")
         else recover(code)
       }
