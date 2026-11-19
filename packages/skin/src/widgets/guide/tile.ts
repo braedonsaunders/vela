@@ -204,7 +204,11 @@ export class Tile {
   }
 
   updatePlan(plan: PlaybackPlan): void {
-    if (this.held?.sessionId === plan.sessionId) this.held = plan;
+    if (this.held?.sessionId === plan.sessionId || (this.fullscreen && plan.channelId === this.target)) {
+      this.held = plan;
+      this.givenUp = false;
+      this.changed();
+    }
   }
 
   /** The tile says its stop did not take; the viewer asks again. */
