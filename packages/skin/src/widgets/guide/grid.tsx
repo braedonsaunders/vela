@@ -437,7 +437,7 @@ function SharedGuideGrid(props: GridProps) {
       onLayout={onBody}
       accessibilityLabel={msg('ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch')}
     >
-      <Ruler look={look} model={model} scale={scale} rail={rail} small={small} scrollX={scrollX} window={window} />
+      <Ruler viewportWidth={Math.max(0, body.width - rail)} look={look} model={model} scale={scale} rail={rail} small={small} scrollX={scrollX} window={window} />
       {body.width > 0 ? (
         <View style={{ flex: 1, flexDirection: 'row', minHeight: 0 }}>
           <View style={{ width: rail, height: listHeight, overflow: 'hidden', backgroundColor: look.rail, zIndex: 3 }}>

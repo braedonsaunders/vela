@@ -578,8 +578,10 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
             v.text = timeLabels[Int(minute)]?.0
             if timeLabels[Int(minute)]?.1 == true { v.textColor = guideColour(chrome["ink"]) }
         }
-        nowPill.frame = CGRect(x: now * layout.scale - collection.contentOffset.x - 44, y: 8, width: 88, height: 26)
-        nowPill.isHidden = now < 0; ruler.bringSubviewToFront(nowPill)
+        let nowX = now * layout.scale - collection.contentOffset.x
+        let pillX = max(4, min(max(4, ruler.bounds.width - 92), nowX - 44))
+        nowPill.frame = CGRect(x: pillX, y: 8, width: 88, height: 26)
+        nowPill.isHidden = now < 0 || nowX < 0 || nowX > ruler.bounds.width; ruler.bringSubviewToFront(nowPill)
         nowLine.frame = CGRect(x: now * layout.scale, y: 0, width: 1, height: CGFloat(channels.count) * layout.row)
         nowLine.isHidden = now < 0; collection.bringSubviewToFront(nowLine)
     }

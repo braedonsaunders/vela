@@ -93,3 +93,9 @@ export function programmeGap(channel: GuideChannel, minute: number, minutes: num
   return to > from ? { at: from, span: to - from } : undefined;
 }
 export const gapId = (channelId: string, at: number) => `guide-gap-${encodeURIComponent(channelId)}|${at}`;
+
+/** Keep the complete clock pill inside the visible ruler while its line stays at the real time. */
+export function nowPillOffset(position: number, viewport: number, width: number): number {
+  'worklet';
+  return Math.max(4, Math.min(Math.max(4, viewport - width - 4), position - width / 2));
+}

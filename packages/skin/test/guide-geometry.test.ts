@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { railWidth, rowHeight } from '../src/widgets/guide/geometry';
+import { railWidth, rowHeight, nowPillOffset } from '../src/widgets/guide/geometry';
 
 test('TV guide gives channels more room without changing desktop or phone geometry', () => {
   expect(rowHeight(false, true)).toBeGreaterThan(rowHeight(false));
@@ -26,4 +26,15 @@ test('empty intervals retain their time between channels instead of choosing a d
 test('gap targets cannot collide with programme targets on another channel', async () => {
   const { cellId, gapId } = await import('../src/widgets/guide/geometry');
   expect(cellId('120', 'gap-one')).not.toBe(gapId('one', 120));
+});
+
+test('the now clock stays complete at either ruler edge without moving the time coordinate', () => {
+  expect(nowPillOffset(1, 400, 80)).toBe(4);
+  expect(nowPillOffset(399, 400, 80)).toBe(316);
+  expect(nowPillOffset(200, 400, 80)).toBe(160);
+  expect(nowPillOffset(150, 400, 80)).toBe(110);
+});
+test('a ruler still measuring its viewport never produces a negative pill position', () => {
+  expect(nowPillOffset(0, 0, 80)).toBe(4);
+  expect(nowPillOffset(20, 60, 80)).toBe(4);
 });

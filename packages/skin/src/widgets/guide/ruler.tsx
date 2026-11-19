@@ -1,9 +1,10 @@
 // The time ruler over the grid: half-hour ticks with labels, hours stronger, and the now pill.
 // It follows the timeline's horizontal scroll; the corner above the rail names the day.
+import { useState } from 'react';
 import { View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import type { GuideModel } from '@vela/core';
-import { RULER } from './geometry';
+import { RULER, nowPillOffset } from './geometry';
 import type { GuideLook } from './look';
 import { Line } from './parts';
 import { useGuideMinute } from './clock';
@@ -14,12 +15,13 @@ interface RulerProps {
   model: GuideModel;
   scale: number;
   rail: number;
+  viewportWidth: number;
   small: boolean;
   scrollX: SharedValue<number>;
   window: { from: number; to: number };
 }
 
-export function Ruler({ look, model, scale, rail, small, scrollX, window }: RulerProps) {
+export function Ruler({ look, model, scale, rail, small, scrollX, window, viewportWidth }: RulerProps) {
   const width = model.minutes * scale;
   const follow = useAnimatedStyle(() => ({ transform: [{ translateX: -scrollX.value }] }));
   const dayName = small ? (model.days.find(d => d.offset === model.day)?.label ?? '') : model.dayLabel;
@@ -103,36 +105,34 @@ export function Ruler({ look, model, scale, rail, small, scrollX, window }: Rule
               </View>
             );
           })}
-          <NowPill look={look} model={model} scale={scale} />
+          <NowPill look={look} model={model} scale={scale} scrollX={scrollX} viewportWidth={viewportWidth} />
         </Animated.View>
       </View>
     </View>
   );
 }
 
-function NowPill({ look, model, scale }: { look: GuideLook; model: GuideModel; scale: number }) {
+function NowPill({ look, model, scale, scrollX, viewportWidth }: { look: GuideLook; model: GuideModel; scale: number; scrollX: SharedValue<number>; viewportWidth: number }) {
   const minute = useGuideMinute(model.nowMinute);
   const live = useLiveContext();
+  const [width, setWidth] = useState(72);
+  const pin = useAnimatedStyle(() => {
+    const position = minute * scale - scrollX.value;
+    return { transform: [{ translateX: scrollX.value + nowPillOffset(position, viewportWidth, width) - minute * scale }], opacity: position >= 0 && position <= viewportWidth ? 1 : 0 };
+  });
   if (minute < 0) return null;
   return (
-<View
-              style={{
-                position: 'absolute',
-                left: minute * scale,
-                bottom: 7,
-                transform: [{ translateX: '-50%' }],
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: 3,
-                paddingHorizontal: 8,
-                borderRadius: 999,
-                backgroundColor: look.now,
-                boxShadow: `0px 4px 18px ${look.nowGlow}`,
-              }}
-            >
-              <Line look={look} size={11} weight={700} tabular>
-                {live?.controller.view().guide?.nowLabel ?? model.nowLabel}
-              </Line>
-            </View>
+    <Animated.View
+      onLayout={event => setWidth(event.nativeEvent.layout.width)}
+      style={[{
+        position: 'absolute', left: minute * scale, bottom: 7, flexDirection: 'row', alignItems: 'center',
+        paddingVertical: 3, paddingHorizontal: 8, borderRadius: 999,
+        backgroundColor: look.now, boxShadow: `0px 4px 18px ${look.nowGlow}`,
+      }, pin]}
+    >
+      <Line look={look} size={11} weight={700} tabular>
+        {live?.controller.view().guide?.nowLabel ?? model.nowLabel}
+      </Line>
+    </Animated.View>
   );
 }
