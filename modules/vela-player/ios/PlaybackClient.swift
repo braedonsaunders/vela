@@ -2,6 +2,7 @@
 // session/chrome/reporting code remains independent of the rendering engine.
 import AetherEngine
 import AVFoundation
+import AVKit
 import Combine
 import CoreImage
 import UIKit
@@ -33,6 +34,7 @@ final class PlaybackClient {
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
     private var subscriptions = Set<AnyCancellable>()
+    private var displayObservers: [NSObjectProtocol] = []
     private var lastCacheDiagnostic = Date.distantPast
     private var loadTask: Task<Void, Never>?
     private var headers: [String] = []
@@ -172,6 +174,7 @@ final class PlaybackClient {
                     case .playing: self.emit("pause", false)
                     case .paused: self.emit("pause", true)
                     case .ended:
+                        if self.retainPausedPicture { self.freezePicture() }
                         self.emit("eof-reached", true)
                         self.onEvent?(.endFile(reason: 0, error: 0))
                         if self.loops { self.load(url) }
@@ -215,12 +218,28 @@ final class PlaybackClient {
                 self.onBackend?("aether")
                 // All grant headers stay in the scoped byte reader. Aether's own requests,
                 // including HLS resources and external subtitles, receive no credentials.
-                let opts = LoadOptions(httpHeaders: [:], matchContentEnabled: !preview,
+                var opts = LoadOptions(httpHeaders: [:], matchContentEnabled: !preview,
                                        isLive: self.isLive, nativeRemoteHLS: self.remoteHLS && self.headers.isEmpty,
                                        initialSubtitleTrackID: self.subtitle, autoplay: !self.paused)
+                // A guide/hero picture never owns the HDMI mode. Disabling matching alone
+                // still permits criteria writes in Aether; host ownership suppresses all writes.
+                if preview { opts.displayCriteriaOwner = .host }
+                #if os(tvOS)
+                let manager = host.window?.avDisplayManager
+                self.displayObservers.forEach(NotificationCenter.default.removeObserver)
+                self.displayObservers = [AVDisplayManagerModeSwitchStartNotification, AVDisplayManagerModeSwitchEndNotification].map { name in
+                    NotificationCenter.default.addObserver(forName: name, object: manager, queue: .main) { _ in
+                        print("[vela-display] event=\(name.rawValue) preview=\(preview)")
+                    }
+                }
+                print("[vela-display] load preview=\(preview) match=\(opts.matchContentEnabled) owner=\(preview ? "host" : "engine") criteria=\(manager?.preferredDisplayCriteria != nil) switching=\(manager?.isDisplayModeSwitchInProgress ?? false)")
+                #endif
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
                 guard !self.dead, !self.failed else { return }
+                #if os(tvOS)
+                print("[vela-display] ready preview=\(preview) criteria=\(host.window?.avDisplayManager.preferredDisplayCriteria != nil) switching=\(host.window?.avDisplayManager.isDisplayModeSwitchInProgress ?? false)")
+                #endif
                 print("[vela-player] Aether ready: route=\(engine.videoRoute) format=\(engine.videoFormat) audio=\(engine.audioDelivery) AVPlayerLayer=\(engine.nativePlayerLayer != nil) surface=\(view.bounds.size) videoRect=\(engine.nativePlayerLayer?.videoRect ?? .zero) external=\(engine.currentAVPlayer?.isExternalPlaybackActive ?? false)")
                 self.emit("track-list", engine.audioTracks.map { self.track($0, type: "audio") } + engine.subtitleTracks.map { self.track($0, type: "sub") })
                 self.publishVideoParams(engine, format: engine.videoFormat)
@@ -326,6 +345,7 @@ final class PlaybackClient {
                 print("[vela-player] Aether failure kind=\(failure.kind) underlying=\(failure.underlyingCode ?? 0) ffmpeg=\(failure.ffmpegErrorCode ?? 0)")
             }
         }
+        if retainPausedPicture { freezePicture() }
         subscriptions.removeAll()
         bitmapCaptions.values.forEach { $0.removeFromSuperview() }
         bitmapCaptions.removeAll()
@@ -370,6 +390,8 @@ final class PlaybackClient {
     }
 
     func destroy() {
+        displayObservers.forEach(NotificationCenter.default.removeObserver)
+        displayObservers.removeAll()
         dead = true
         frozenPicture?.removeFromSuperview()
         frozenPicture = nil

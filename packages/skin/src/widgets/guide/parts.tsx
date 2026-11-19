@@ -10,6 +10,7 @@ import { findNodeHandle, Platform, Text, View, type StyleProp, type TextStyle, t
 import Svg, { Path } from 'react-native-svg';
 import { msg } from '@vela/core';
 import { SYMBOLS } from '../../icons';
+import { logoIdentity } from './logo';
 import { monogram } from './geometry';
 import type { GuideLook } from './look';
 
@@ -202,6 +203,7 @@ export function LogoTile({
   name,
   width,
   height,
+  channelId,
   radius = 8,
   size = 13,
 }: {
@@ -210,6 +212,7 @@ export function LogoTile({
   name: string;
   width: number;
   height: number;
+  channelId?: string;
   radius?: number;
   size?: number;
 }) {
@@ -231,7 +234,10 @@ export function LogoTile({
     >
       {logo ? (
         <Image
+          key={logoIdentity(channelId ?? name, logo)}
+          recyclingKey={logoIdentity(channelId ?? name, logo)}
           source={{ uri: logo }}
+          transition={0}
           contentFit="contain"
           style={{ width: '100%', height: '100%' }}
           accessible={false}

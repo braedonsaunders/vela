@@ -56,6 +56,7 @@ export const RailCell = memo(function RailCell({ look, channel, small, width, ro
       <View>
         <LogoTile
           look={look}
+          channelId={channel.id}
           logo={channel.logo}
           name={channel.name}
           width={small ? 64 : 58}
