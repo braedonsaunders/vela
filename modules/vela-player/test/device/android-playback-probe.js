@@ -26,7 +26,11 @@ function Probe({ config, onStopped }) {
   const last = useRef(-5);
   const timer = useRef(null);
   const commandId = useRef(0);
-  const set = plan => { current.current = plan; setPlan(resolve(plan)); };
+  const set = plan => {
+    const selected = plan.paths.find(path => path.id === plan.selectedPathId);
+    console.log('[android-proof-selected]', config.label || '', plan.revision, selected?.id, selected?.readiness, plan.fallback?.state);
+    current.current = plan; setPlan(resolve(plan));
+  };
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -86,7 +90,7 @@ function Probe({ config, onStopped }) {
         try {
           console.log('[android-proof-recovery]', event.command.kind, event.command.pathId || '');
           set(await call(`/sessions/${event.sessionId}/commands`, event.command));
-        } catch (error) { setStatus(error.message); }
+        } catch (error) { setStatus(error.message); console.log('[android-proof-session-error]', error.message); }
       }} />}
     <Text style={{ position: 'absolute', top: 35, left: 15, color: 'white', backgroundColor: '#000b', fontSize: 16 }}>{status}</Text>
     {plan && <View style={{ position: 'absolute', bottom: 25, left: 15, flexDirection: 'row', flexWrap: 'wrap', right: 15, gap: 15 }}>
