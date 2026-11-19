@@ -79,3 +79,17 @@ describe('windowsSnapshot', () => {
     expect(a.subtitleStyle).not.toBe(b.subtitleStyle);
   });
 });
+
+test('Apple native telemetry retains route diagnostics, client tracks and speed policy', () => {
+  const snapshot = windowsSnapshot({ backend: 'aether-original', speeds: [1], audioClientOnly: true,
+    subtitleTracks: [{ id: 'mpv-sub-7', label: 'Embedded English', language: 'en', codec: 'srt' }],
+    diagnostics: { implementation: 'vela-aether', metadataDiscrepancies: [] }, throughputBps: 1000,
+  }, { plan });
+  expect(snapshot.backend).toBe('aether-original');
+  expect(snapshot.speeds).toEqual([1]);
+  expect(snapshot.subtitleTracks[0]?.id).toBe('mpv-sub-7');
+  expect(snapshot.diagnostics?.implementation).toBe('vela-aether');
+  expect(snapshot.audioClientOnly).toBe(true);
+  expect(snapshot.throughputBps).toBe(1000);
+  expect(snapshot.sessionId).toBe('s1');
+});
