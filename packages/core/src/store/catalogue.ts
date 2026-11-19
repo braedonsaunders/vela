@@ -220,6 +220,7 @@ export class Catalogue {
     const reading = adapter.libraryRows(id, kind);
     if (onRows) void Promise.all([reading, images]).then(([value, sized]) => onRows({
       recommendationsAvailable: true, collectionsAvailable: true, rows: value.map(row => feedRow(row, sized, this.artWidth())),
+      rowsLoad: 'ready', collectionsLoad: 'loading', genresLoad: 'loading',
       collections: [], collectionCursor: '', genres: [], failed: false,
     }), () => {});
     const [rows, collections, genres] = await Promise.allSettled([reading, adapter.libraryCollections(id, undefined, tab, search), adapter.libraryGenres(id)]);
@@ -228,6 +229,9 @@ export class Catalogue {
 
   private extras(rows: PromiseSettledResult<V.Row[]>, collections: PromiseSettledResult<V.Page<V.RowEntry>>, genres: PromiseSettledResult<{ id: string; label: string }[]>, images: Images): LibraryExtras {
     return {
+      rowsLoad: rows.status === 'fulfilled' ? 'ready' : 'failed',
+      collectionsLoad: collections.status === 'fulfilled' ? 'ready' : 'failed',
+      genresLoad: genres.status === 'fulfilled' ? 'ready' : 'failed',
       recommendationsAvailable: true,
       collectionsAvailable: true,
       rows: rows.status === 'fulfilled' ? rows.value.map(row => feedRow(row, images, this.artWidth())) : [],

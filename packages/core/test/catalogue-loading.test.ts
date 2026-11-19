@@ -78,11 +78,14 @@ test('a library\'s recommendations are handed over before its collections and ge
   const session = { epoch: 0, onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
   const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
   const early = deferred<string[]>();
-  const all = catalogue.libraryExtras('movies', 'movies', extras => early.resolve(extras.rows.map(row => row.name)));
+  const all = catalogue.libraryExtras('movies', 'movies', extras => { expect(extras.rowsLoad).toBe('ready'); expect(extras.collectionsLoad).toBe('loading'); early.resolve(extras.rows.map(row => row.name)); });
   expect(await early.promise).toEqual(['Recently added']);
   collections.resolve({ items: [] });
   const done = await all;
   expect(done?.rows.map(row => row.name)).toEqual(['Recently added']);
+  expect(done?.collectionsLoad).toBe('ready');
+  expect(done?.rowsLoad).toBe('ready');
+  expect(done?.genresLoad).toBe('ready');
   expect(done?.genres).toEqual([{ id: 'g', label: 'Drama' }]);
 });
 
@@ -103,4 +106,19 @@ test('collection first and continuation reads carry the selected tab and preserv
   const next = await catalogue.moreLibraryCollections('library', first!.collectionCursor, 'creator-collections');
   expect(next.cursor).toBe('');
   expect(calls).toEqual([['library', undefined, 'creator-collections'], ['library', 'opaque-next', 'creator-collections']]);
+});
+
+ test('empty library is loading until the response finishes; failure never becomes ready', async () => {
+  const f = setup(), pending = deferred<LibraryContents>();
+  f.read(() => pending.promise);
+  const reading = f.catalogue.library('movies');
+  const key = libraryKey('movies', {});
+  expect(f.box.get().library[key]?.load).toBe('loading');
+  expect(f.box.get().library[key]?.value).toBeUndefined();
+  pending.resolve({ ...answer(), items: [] }); await reading;
+  expect(f.box.get().library[key]?.load).toBe('ready');
+  expect(f.box.get().library[key]?.value?.items).toEqual([]);
+  f.read(async () => { throw new Error('offline'); });
+  await f.catalogue.library('movies');
+  expect(f.box.get().library[key]?.load).toBe('failed');
 });

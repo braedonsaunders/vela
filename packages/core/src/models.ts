@@ -196,6 +196,10 @@ export interface LibraryModel {
 
 /** Server-specific library sections, absent when the server has no scoped operations. */
 export interface LibraryExtras {
+  /** Independent answers: rows may arrive before collections. */
+  rowsLoad?: import('./store/state').Load;
+  collectionsLoad?: import('./store/state').Load;
+  genresLoad?: import('./store/state').Load;
   recommendationsAvailable: boolean;
   collectionsAvailable: boolean;
   rows: Row[];
