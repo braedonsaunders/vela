@@ -1,4 +1,6 @@
-import { Restart, RestartMenu } from './widgets/restart';
+import { msg } from '@vela/core';
+import { restartAction, secondaryPlayAction } from './restart-action';
+import { RestartMenu } from './widgets/restart';
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
@@ -529,7 +531,11 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const resumable = (ctx.heroAct?.targetId === id && ctx.heroAct.progress > 0)
       || (ctx.card?.id === id && ctx.card.progressSeconds > 0)
       || (env.detail?.title[0]?.id === id && env.detail.resumeSeconds > 0);
-    if (resumable && arg.split('|')[3] === undefined) element = <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<Restart arg={arg} hero={!!ctx.heroAct} /></View>;
+    if (resumable && arg.split('|')[3] === undefined) {
+      const [titleId, source = '', audio = ''] = arg.split('|');
+      const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg(ctx.heroAct ? 'ui.fromBeginning' : 'ui.playFromBeginning'));
+      element = <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
+    }
   }
   if (restartOpen && cardRestart) element = <>{element}<RestartMenu id={cardRestart} close={() => setRestartOpen(false)} /></>;
   if (route && env.route === 'title') {

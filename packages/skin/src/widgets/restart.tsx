@@ -14,7 +14,7 @@ export function Restart({ arg, hero = false, onPlay }: { arg: string; hero?: boo
   return <FocusPressable accessibilityRole="button" accessibilityLabel={msg('ui.playFromBeginning')}
     onFocus={() => focus(true)} onBlur={() => focus(false)}
     onPress={() => { onPlay?.(); host.dispatch('play', `${id}|${source}|${audio}|0`); }}
-    style={{ padding: 12, minHeight: 44, justifyContent: 'center', borderRadius: 10, backgroundColor: focused ? look.ui.ink : look.ui.control }}>
+    style={{ padding: 12, minHeight: 44, justifyContent: 'center', borderRadius: 9999, backgroundColor: focused ? look.ui.ink : look.ui.control }}>
     <Text style={look.text({ 'font-size': '14px', color: focused ? '$ui.inkInverse' : '$ui.ink' })}>{msg(hero ? 'ui.fromBeginning' : 'ui.playFromBeginning')}</Text>
   </FocusPressable>;
 }
