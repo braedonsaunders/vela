@@ -6,6 +6,7 @@ export type PlayerIconName =
   | 'back'
   | 'play'
   | 'pause'
+  | 'restart'
   | 'skipBack'
   | 'skipForward'
   | 'speaker'
@@ -71,6 +72,8 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
       return <Path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z" fill={color} />;
     case 'pause':
       return <Path d="M6.5 4.5h3.5v15H6.5zM14 4.5h3.5v15H14z" fill={color} />;
+    case 'restart':
+      return <Path d="M4 10a8 8 0 1 1 1 8M4 4v6h6" stroke={color} {...STROKE} />;
     case 'skipBack':
       return <Skip forward={false} color={color} />;
     case 'skipForward':
