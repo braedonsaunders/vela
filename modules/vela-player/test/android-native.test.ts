@@ -1,12 +1,15 @@
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Build hosts provide their existing Kotlin compiler; no test framework or Android runtime needed.
 const compiler = process.env.VELA_KOTLINC || Bun.which('kotlinc');
+// Dev machines keep scratch output on ~/.scratch; CI runners have no such folder.
+const scratchRoot = existsSync(join(homedir(), '.scratch/tmp')) ? join(homedir(), '.scratch/tmp') : tmpdir();
 (compiler ? test : test.skip)('Android production recovery and scoped HTTP run on the JVM', async () => {
-  const scratch = await mkdtemp(join(homedir(), '.scratch/tmp/vela-android-native-'));
+  const scratch = await mkdtemp(join(scratchRoot, 'vela-android-native-'));
   const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');
   const fixtures = join(import.meta.dir, 'fixtures/android');
   try {
