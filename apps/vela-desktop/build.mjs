@@ -6,9 +6,12 @@ import { cpSync, existsSync, rmSync, mkdirSync, writeFileSync, readFileSync } fr
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+const arch = process.argv.find(a => a.startsWith('--arch='))?.slice(7);
+if (arch && !['arm64', 'x64'].includes(arch)) throw new Error('Supported desktop architectures: arm64, x64');
 const output = process.argv.find(a => a.startsWith('--output='))?.slice(9);
 const nativeMac = process.argv.find(a => a.startsWith('--native-mac='))?.slice(13);
 const nativeLinux = process.argv.find(a => a.startsWith('--native-linux='))?.slice(15);
+if (nativeMac && !arch) throw new Error('Native macOS builds require --arch=arm64 or --arch=x64 and a matching payload');
 const ui = process.argv.find(a => a.startsWith('--ui='))?.slice(5);
 if (!ui) throw new Error('Usage: node build.mjs --ui=<web release folder> [--mac] [--linux]');
 for (const part of ['index.html', '_expo', 'player', 'skins', 'routes.json'])
@@ -43,6 +46,6 @@ const signArgs = signing ? [
   '--config.mac.entitlementsInherit=build/entitlements.mac.plist',
   '--config.forceCodeSigning=true',
 ] : [];
-const result = spawnSync('npx', ['electron-builder', '--config', configPath, ...(targets.length ? targets : ['--' + (process.platform === 'darwin' ? 'mac' : 'linux')]), '--publish', 'never', '--config.mac.notarize=false', ...signArgs],
+const result = spawnSync('npx', ['electron-builder', '--config', configPath, ...(arch ? ['--' + arch] : []), ...(targets.length ? targets : ['--' + (process.platform === 'darwin' ? 'mac' : 'linux')]), '--publish', 'never', '--config.mac.notarize=false', ...signArgs],
   { stdio: 'inherit', env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' } });
 process.exit(result.status ?? 1);
