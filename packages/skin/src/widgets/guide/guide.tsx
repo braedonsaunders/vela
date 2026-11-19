@@ -143,7 +143,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const press = useCallback((channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
     const tile = controller.view().tile;
-    const action = programmeSelection(currentlyAiring(controller.view().guide, channel.id, programme.id), channel.id, tile.channelId);
+    const action = programmeSelection(currentlyAiring(controller.view().guide, channel.id, programme.id), channel.id, tile.plan ? tile.channelId : '');
     if (action === 'watch') controller.watch(channel.id);
     if (action === 'preview') controller.preview(channel.id);
   }, [controller, select]);

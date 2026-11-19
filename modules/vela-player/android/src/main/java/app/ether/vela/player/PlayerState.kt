@@ -12,6 +12,7 @@ internal class PlayerState {
   }
 
   var loaded = false
+  var hasFrame = false
   var position = 0.0
   var duration: Double? = null
   var paused = true
@@ -48,6 +49,7 @@ internal class PlayerState {
   /** Applies one observed property's new value. */
   fun update(name: String, value: Any?) {
     when (name) {
+      "video-pts" -> hasFrame = value is Double
       "time-pos" -> position = (value as? Double) ?: position
       "duration" -> duration = value as? Double
       "pause" -> paused = (value as? Boolean) ?: paused
@@ -97,6 +99,7 @@ internal class PlayerState {
   companion object {
     /** Properties the view observes, with the format each is read in. */
     val observed = listOf(
+      "video-pts" to MpvFormat.DOUBLE,
       "time-pos" to MpvFormat.DOUBLE,
       "duration" to MpvFormat.DOUBLE,
       "pause" to MpvFormat.FLAG,

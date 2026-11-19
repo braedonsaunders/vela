@@ -11,6 +11,7 @@ final class PlayerReport {
     var backend: String?
     var volume: Double = 1
     var muted = false
+    var waitForFrame = false
 
     private let emitSnapshot: ([String: Any]) -> Void
     private let emitObservation: ([String: Any]) -> Void
@@ -74,7 +75,8 @@ final class PlayerReport {
         guard let plan else {
             return
         }
-        let phase = seekTarget != nil && state.phase == .loading ? "buffering" : state.phase.rawValue
+        let phase = waitForFrame && state.phase == .playing && !state.hasFrame ? "loading"
+            : seekTarget != nil && state.phase == .loading ? "buffering" : state.phase.rawValue
         let changed = phase != lastPhase
         if force || changed || Date().timeIntervalSince(lastSnapshot) >= 0.25 {
             lastSnapshot = Date()

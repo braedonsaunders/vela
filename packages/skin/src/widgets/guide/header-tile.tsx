@@ -1,5 +1,5 @@
 // The guide header's preview tile: the ambient picture with its channel and an honest state.
-// Pressing it opens full watch (after the preview's confirmed stop); the speaker unmutes in place.
+// Pressing it opens full watch with the owned session; the speaker unmutes in place.
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';

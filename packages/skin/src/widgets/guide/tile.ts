@@ -1,8 +1,7 @@
 // The preview tile: one muted ambient channel session shared by the guide's header and a live
 // home's monitor. It tunes to the viewer's remembered channel or the first that plays in server
 // order, keeps that channel selected if it cannot play, and
-// holds at most one session. Every session it was granted is stopped at the server, and full
-// watch opens only after the server confirmed that stop, so the viewer never holds two streams.
+// owns the current session. Full watch shares that session without a server retune.
 import type { Command, Snapshot } from '@vela/player-api';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { LiveSource } from './source';

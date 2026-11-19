@@ -4,6 +4,7 @@ import { programmeSelection } from '../src/widgets/guide/selection';
 test('airing selections tune a different channel and open the current one', () => {
   expect(programmeSelection(true, 'b', 'a')).toBe('preview');
   expect(programmeSelection(true, 'b', 'b')).toBe('watch');
+  expect(programmeSelection(true, 'b', '')).toBe('preview');
 });
 
 test('future and ended programmes never tune, even on the playing channel', () => {

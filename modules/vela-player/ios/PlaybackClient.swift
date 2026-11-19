@@ -41,7 +41,8 @@ final class PlaybackClient {
     private var subtitle: Int?
     private let captions = UILabel()
     private var bitmapCaptions: [Int: UIImageView] = [:]
-    // Reuse the engine across titles; previews have an independent muted session.
+    // Idle engines are reused across titles. A mounted client leases its engine exclusively,
+    // including while a paused outgoing picture overlaps the next view.
     private static var primaryEngine: AetherEngine?
     private static var previewEngine: AetherEngine?
 
@@ -123,9 +124,9 @@ final class PlaybackClient {
                 // Upstream messages may contain media URLs. Keep grant URLs out of logs.
                 EngineLog.handler = { _ in }
                 let preview = self.preview
-                let cached = preview ? Self.previewEngine : Self.primaryEngine
+                let cached = self.engine ?? (preview ? Self.previewEngine : Self.primaryEngine)
                 let engine = try cached ?? AetherEngine()
-                if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
+                if preview { Self.previewEngine = nil } else { Self.primaryEngine = nil }
                 self.engine = engine
                 engine.maximumSubtitleOffsetSeconds = 0
                 let view = AetherPlayerView(frame: host.bounds)
@@ -316,6 +317,7 @@ final class PlaybackClient {
         bitmapCaptions.values.forEach { $0.removeFromSuperview() }
         bitmapCaptions.removeAll()
         engine?.stop()
+        if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
         engine = nil
         surface?.removeFromSuperview()
         surface = nil
@@ -331,6 +333,7 @@ final class PlaybackClient {
         bitmapCaptions.values.forEach { $0.removeFromSuperview() }
         bitmapCaptions.removeAll()
         engine?.stop()
+        if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
         engine = nil
         surface?.removeFromSuperview()
         surface = nil

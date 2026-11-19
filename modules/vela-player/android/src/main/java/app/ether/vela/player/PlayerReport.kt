@@ -116,6 +116,7 @@ internal class PlayerReport(
   /** The snapshot's state; a preview reports only loading, playing, paused, ended or failed. */
   private fun phase(state: PlayerState, seekTarget: Double?): String {
     val phase = state.phase
+    if (ambient && phase == PlayerState.Phase.PLAYING && !state.hasFrame) return "loading"
     if (phase == PlayerState.Phase.LOADING && seekTarget != null && !previewing) {
       return "buffering"
     }

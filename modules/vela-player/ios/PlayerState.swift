@@ -7,6 +7,7 @@ struct PlayerState {
     }
 
     var loaded = false
+    var hasFrame = false
     var position: Double = 0
     var duration: Double?
     var paused = true
@@ -56,6 +57,7 @@ struct PlayerState {
     /// Applies one observed property's new value.
     mutating func update(_ name: String, _ value: Any?) {
         switch name {
+        case "video-pts": hasFrame = value is Double
         case "time-pos": position = value as? Double ?? position
         case "duration": duration = value as? Double
         case "pause": paused = value as? Bool ?? paused

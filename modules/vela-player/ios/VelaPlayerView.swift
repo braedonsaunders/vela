@@ -92,7 +92,8 @@ final class VelaPlayerView: ExpoView {
         guard previewSource == nil else {
             return
         }
-        if window == nil, player != nil {
+        if window == nil, player != nil, !ambient {
+            // Ambient views may hold a paused outgoing frame behind full watch until unmounted.
             // Off screen (its screen popped or replaced): playback stops here, whatever else still
             // holds the view. A film never plays on, unseen, behind the page the viewer went to.
             print("[vela-player] left the window: stopping")
@@ -117,6 +118,7 @@ final class VelaPlayerView: ExpoView {
 
     func setAmbient(_ value: Bool) {
         ambient = value
+        report.waitForFrame = value
     }
 
     func setMetadata(_ map: [String: Any]?) {
