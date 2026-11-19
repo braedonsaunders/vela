@@ -27,7 +27,7 @@ export function Chip({
   on,
   onPress,
   children,
-  height = 36,
+  height = 38,
   nativeID,
 }: {
   look: GuideLook;
@@ -40,6 +40,7 @@ export function Chip({
 }) {
   return (
     <Press
+      lift
       nativeID={nativeID}
       label={label}
       selected={on}
@@ -81,6 +82,7 @@ export function IconButton({
 }) {
   return (
     <Press
+      lift
       label={label}
       selected={on}
       role={on === undefined ? 'button' : 'togglebutton'}
@@ -203,6 +205,7 @@ export function Segments<T extends string | number>({
         const on = o.value === value;
         return (
           <Press
+      lift
             key={String(o.value)}
             label={o.name}
             selected={on}
@@ -311,6 +314,7 @@ export function FilterMenu({
           <ScrollView>
             {options.map(option => (
               <Press
+      lift
                 key={option}
                 label={filterLabel(option)}
                 selected={option === filter}
@@ -377,6 +381,7 @@ export function GuideTabs({
         const on = t.id === tab;
         return (
           <Press
+      lift
             key={t.id || 'all'}
             label={t.name}
             role="tab"

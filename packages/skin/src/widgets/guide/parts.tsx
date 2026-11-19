@@ -5,6 +5,7 @@ import { GuideRegion, useGuideNavigation } from './focus';
 import type { Focusable } from '../../escape';
 import { FocusPressable as Pressable } from '../../focus';
 import { Image } from 'expo-image';
+import Animated, { useAnimatedStyle, useSharedValue, useReducedMotion, withSpring, ReduceMotion } from 'react-native-reanimated';
 import { useState, useEffect, useRef, useId, useContext, type ReactNode } from 'react';
 import { findNodeHandle, Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -66,7 +67,10 @@ export interface Interaction {
   pressed: boolean;
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 interface PressProps {
+  lift?: boolean;
   onPress?: () => void;
   onFocus?: () => void;
   label: string;
@@ -103,6 +107,12 @@ export function Press(props: PressProps) {
   const [focused, setFocused] = useState(false);
   const [pressed, setPressed] = useState(false);
   const state = { hovered, focused, pressed };
+  const still = useReducedMotion();
+  const lift = useSharedValue(1);
+  useEffect(() => {
+    if (props.lift) lift.value = withSpring(focused && !still ? 1.045 : 1, { damping: 22, stiffness: 280, mass: 0.8, reduceMotion: ReduceMotion.System });
+  }, [focused, props.lift, lift, still]);
+  const elevation = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
   // react-native-web hands Pressable its DOM key events; native TV moves focus itself.
   const keys =
     Platform.OS === 'web' && (onKey || navigation)
@@ -116,8 +126,8 @@ export function Press(props: PressProps) {
         }
       : {};
   return (
-    <Pressable
-      ref={value => {
+    <AnimatedPressable
+      ref={(value: Focusable | null) => {
         target.current = value;
         if (value && Platform.isTV && navigation && props.focusable !== false) setNode(findNodeHandle(value) ?? undefined);
       }}
@@ -144,11 +154,12 @@ export function Press(props: PressProps) {
       testID={testID}
       focusable={props.focusable}
       hasTVPreferredFocus={props.hasTVPreferredFocus}
-      style={[style(state), Platform.OS === 'web' ? WEB_PRESS : null]}
+      style={[style(state), props.lift ? elevation : null, Platform.OS === 'web' ? WEB_PRESS : null]}
+      {...(Platform.OS === 'web' && props.lift ? { dataSet: { velaFocus: 'frame' } } : {})}
       {...keys}
     >
       {typeof children === 'function' ? children(state) : children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

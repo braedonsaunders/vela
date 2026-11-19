@@ -1,9 +1,9 @@
 // One programme block on the timeline. Its label stays readable beside the rail when the
 // programme began before the panel's left edge; an airing block fills as it runs.
 import { guideRender } from './diagnostics';
-import { memo, type ComponentProps } from 'react';
+import { memo, useEffect, type ComponentProps } from 'react';
 import { Platform, View } from 'react-native';
-import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, useReducedMotion, withSpring, ReduceMotion, type SharedValue } from 'react-native-reanimated';
 import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import { cellId, labelFollows } from './geometry';
 import type { GuideLook } from './look';
@@ -29,9 +29,20 @@ export interface CellProps {
 const passive = { hovered: false, focused: false, pressed: false };
 /** TV focus is owned by the grid anchor. Passive cells avoid a focus registry and state per slot. */
 function PassiveProgramme(props: ComponentProps<typeof Press>) {
+  if (props.selected) return <LiftedProgramme {...props} />;
   return <View nativeID={props.nativeID} testID={props.testID} pointerEvents="none" accessible={false} focusable={false} style={props.style(passive)}>
     {typeof props.children === 'function' ? props.children(passive) : props.children}
   </View>;
+}
+/** Only the TV's selected slot owns an animated value; passive slots remain cheap. */
+function LiftedProgramme(props: ComponentProps<typeof Press>) {
+  const still = useReducedMotion();
+  const scale = useSharedValue(1);
+  useEffect(() => { scale.value = withSpring(still ? 1 : 1.045, { damping: 22, stiffness: 280, mass: 0.8, reduceMotion: ReduceMotion.System }); }, [scale, still]);
+  const lift = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return <Animated.View nativeID={props.nativeID} testID={props.testID} pointerEvents="none" accessible={false} focusable={false} style={[props.style(passive), lift]}>
+    {typeof props.children === 'function' ? props.children(passive) : props.children}
+  </Animated.View>;
 }
 const CellSurface = Platform.isTV ? PassiveProgramme : Press;
 
@@ -55,6 +66,7 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
   });
   return (
     <CellSurface
+      lift
       focusable={!Platform.isTV}
       nativeID={cellId(p.id, channel.id)}
       testID={cellId(p.id, channel.id)}
@@ -73,10 +85,11 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
         alignItems: 'stretch',
         overflow: 'hidden',
         borderRadius: look.radiusCell,
-        borderWidth: Platform.isTV && selected ? 2 : 1,
+        borderWidth: focused || Platform.isTV && selected ? 2 : 0,
         borderColor: focused || Platform.isTV && selected ? look.accent : hovered ? look.edgeStrong : p.airing ? look.liveEdge : look.hairline,
-        backgroundColor: p.airing ? look.live : hovered ? look.cellHover : look.cell,
-        opacity: p.ended ? 0.46 : 1,
+        backgroundColor: focused ? look.cellHover : p.airing ? look.live : hovered ? look.cellHover : look.cell,
+        opacity: p.ended && !focused ? 0.46 : 1,
+        zIndex: focused || Platform.isTV && selected ? 3 : 0,
         boxShadow: Platform.isTV ? undefined : focused
           ? `inset 0px 0px 0px 1px ${look.accent}, 0px 10px 34px ${look.shadow}`
           : selected

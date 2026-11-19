@@ -28,15 +28,15 @@ export const RailCell = memo(function RailCell({ look, channel, small, width, ro
       focusable={!Platform.isTV}
       style={({ hovered, focused }) => ({
         width,
-        height: row - 1,
+        height: row,
         flexDirection: 'row',
         alignItems: 'center',
         gap: small ? 0 : 12,
         justifyContent: small ? 'center' : 'flex-start',
         paddingLeft: small ? 8 : 16,
         paddingRight: small ? 8 : 14,
-        borderRightWidth: 1,
-        borderRightColor: look.edge,
+        borderBottomWidth: 1,
+        borderBottomColor: look.hairline,
         backgroundColor: selected || hovered ? look.railOn : look.rail,
         boxShadow: focused ? `inset 0px 0px 0px 2px ${look.accent}` : undefined,
       })}

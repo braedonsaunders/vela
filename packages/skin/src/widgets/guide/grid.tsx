@@ -9,7 +9,7 @@ import { useGuideNavigation } from './focus';
 import { bandOffset, ProgrammeSlots, programmeMinute, gapStep, resolveTimeTarget, rowWindow, type TimeTarget } from './navigation';
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { FlatList, Platform, Text, TVFocusGuideView, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { runOnJS, scrollTo as scrollNative, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { runOnJS, scrollTo as scrollNative, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { cellId, leftFor, minuteWidth, programmeOverlapping, programmeGap, gapId, railWidth, rowHeight, RULER, type Zoom } from './geometry';
 import type { GuideLook } from './look';
@@ -152,9 +152,8 @@ function SharedGuideGrid(props: GridProps) {
   const scrollTo = useCallback(
     (minute: number, animated: boolean) => {
       const x = Math.max(0, Math.min(width - (body.width - rail), minute * scale));
-      const distance = Math.abs(x - position.current.x);
       position.current.x = x;
-      if (Platform.isTV) targetX.value = animated && !still ? withTiming(x, { duration: Math.min(240, Math.max(90, distance / 5)) }) : x;
+      if (Platform.isTV) targetX.value = animated && !still ? withSpring(x, { damping: 30, stiffness: 240, overshootClamping: true }) : x;
       else timeline.current?.scrollTo({ x, animated: animated && !still });
       if (!animated || still) {
         scrollX.value = x;
@@ -340,12 +339,11 @@ function SharedGuideGrid(props: GridProps) {
     const visibleHeight = body.height - RULER;
     const offset = bandOffset(index * row, row, currentY(), visibleHeight, rows.length * row);
     if (offset !== currentY()) {
-      const distance = Math.abs(offset - position.current.y);
       position.current.y = offset;
       if (!Platform.isTV) scrollY.value = offset;
       setRowBase(Math.floor(offset / row / 4) * 4);
       if (!Platform.isTV) setPaintRow(Math.floor(offset / row));
-      if (Platform.isTV) targetY.value = still ? offset : withTiming(offset, { duration: Math.min(240, Math.max(90, distance / 5)) });
+      if (Platform.isTV) targetY.value = still ? offset : withSpring(offset, { damping: 30, stiffness: 240, overshootClamping: true });
       else list.current?.scrollToOffset({ offset, animated: !still });
     }
     if (!opening && alignTime) {
@@ -568,7 +566,7 @@ const NowLine = memo(function NowLine({ look, model, scale }: { look: GuideLook;
   const counts = guideRender('marker');
   if (minute < 0) return null;
   return <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: minute * scale, backgroundColor: look.past }}>
-    <View style={{ position: 'absolute', right: -1, top: 0, bottom: 0, width: 2, backgroundColor: look.now, boxShadow: `0px 0px 14px ${look.nowGlow}` }} />
+    <View style={{ position: 'absolute', right: -0.5, top: 0, bottom: 0, width: 1, backgroundColor: look.now, boxShadow: `0px 0px 14px ${look.nowGlow}` }} />
     {counts ? <Text style={{ position: 'absolute', right: 8, top: 4, color: '#ffff00', backgroundColor: '#000000', fontSize: 14 }}>{counts}</Text> : null}
   </View>;
 }, (a, b) => a.look === b.look && a.scale === b.scale && Math.floor(a.model.nowMinute) === Math.floor(b.model.nowMinute));
