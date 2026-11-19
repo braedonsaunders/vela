@@ -1,3 +1,5 @@
+import { brandDocument } from './branding';
+import type { Branding } from '../../protocol/types';
 import { withRowLinks } from './resolve/row-links';
 import { withLibraryPresentation } from './resolve/library-presentation';
 import { withHeroArtwork } from './resolve/hero-artwork';
@@ -305,10 +307,11 @@ function collectionContinuation(tree: RNode, r: Context): RNode {
 
 /** Resolve a document for a viewport width and locale. A document that needs a newer renderer
  * is refused on its version, never half-drawn. */
-export function resolveDocument(own: SkinDocument, width: number, locale = 'en'): ResolvedDocument {
+export function resolveDocument(own: SkinDocument, width: number, locale = 'en', branding?: Branding): ResolvedDocument {
   if (own.schema !== 1) throw new Error(`Skin document schema ${String(own.schema)} is not supported`);
   if (own.renderer > RENDERER_VERSION) throw new Error(`${own.name} needs renderer ${own.renderer}; this client draws ${RENDERER_VERSION}`);
-  const doc = own.id === velaBase.id ? own : withBase(own, velaBase);
+  const inherited = own.id === velaBase.id ? own : withBase(own, velaBase);
+  const doc = brandDocument(inherited, branding, resolveUi(inherited.ui).page);
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
   const r: Context = { doc, ui: resolveUi(doc.ui), strings, width, count: 0, unsupported: new Set() };
   const home = doc.slots?.home ?? doc.routes?.home;

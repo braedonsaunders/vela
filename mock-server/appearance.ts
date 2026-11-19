@@ -30,7 +30,7 @@ const documents: V.SkinDocumentRef[] = packaged.map(({ doc }) => ({ id: doc.id, 
 // `VELA_MOCK_SKIN=<id>` starts the mock with that engine, pack or document as the server default.
 const startSkin = process.env.VELA_MOCK_SKIN ?? 'cinematic';
 const startDoc = documents.find(d => d.id === startSkin), startPack = packs.find(p => p.id === startSkin);
-let state: V.Appearance = { revision: 1, defaultSkinId: startDoc || startPack || engines.includes(startSkin) ? startSkin : 'cinematic',
+let state: V.Appearance = { branding: process.env.VELA_MOCK_BRANDING === 'name' ? { name: 'Harbor Family' } : process.env.VELA_MOCK_BRANDING === 'image' ? {name: 'Harbor Family', wordmark: {url: harbor.images!.wordmark!, width: 360, height: 80}} : undefined, revision: 1, defaultSkinId: startDoc || startPack || engines.includes(startSkin) ? startSkin : 'cinematic',
   defaultEngineId: startDoc ? 'doc' : startPack ? startPack.engine : engines.includes(startSkin) ? startSkin : 'cinematic', force: false, packs, documents };
 const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encode = (a: V.Appearance) => new TextEncoder().encode(`id: ${a.revision}\ndata: ${JSON.stringify({ type: 'appearance', cursor: String(a.revision), appearance: a } satisfies V.ServerEvent)}\n\n`);

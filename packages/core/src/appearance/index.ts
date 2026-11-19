@@ -13,7 +13,7 @@ const MAX_PACK_BYTES = 65536;
 
 export interface PackEntryModel { id: string; name: string; tagline: string; engine: string; preview: string; backdrop: string; wordmark: string; swatches: string[]; packJson: string }
 export interface DocEntryModel { id: string; name: string; tagline: string; url: string; preview: string; swatches: string[] }
-export interface AppearanceModel { revision: number; defaultSkinId: string; defaultEngineId: string; force: boolean; packs: PackEntryModel[]; docs: DocEntryModel[] }
+export interface AppearanceModel { branding?: Appearance['branding']; revision: number; defaultSkinId: string; defaultEngineId: string; force: boolean; packs: PackEntryModel[]; docs: DocEntryModel[] }
 
 const text = (v: unknown, max: number): string => typeof v === 'string' && v.length <= max ? v : '';
 const colour = (v: unknown): string | undefined => typeof v === 'string' && COLOUR.test(v) ? v : undefined;
@@ -94,7 +94,7 @@ export function appearanceModel(a: Appearance, origin: string, builtInDocs: Skin
     return d && typeof d.id === 'string' && NAME.test(d.id) && !ENGINES.includes(d.id) && url ? [{ id: d.id, name: text(d.name, 40), tagline: text(d.tagline, 120), url,
       preview: asset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/) || builtInAsset(d.preview, builtInOrigin, /\.(svg|png|jpe?g|webp|avif)$/), swatches: (Array.isArray(d.swatches) ? d.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []) }] : [];
   });
-  return { revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs, docs };
+  return { branding: brandingModel(a.branding, origin), revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs, docs };
 }
 
 /** One connection to the viewer's events: each `appearance` event's model goes to `onAppearance`;
@@ -114,4 +114,22 @@ export function followAppearance(
     newest = next.revision;
     onAppearance(next);
   });
+}
+
+/** Public owner images are resolved against the selected server, never the app origin. */
+export function brandingModel(value: Appearance['branding'], origin: string): Appearance['branding'] {
+  if (!value) return undefined;
+  const name = text(value.name, 40).trim();
+  const image = value.wordmark;
+  const url = (path: unknown) => {
+    try {
+      if (typeof path !== 'string' || !path) return '';
+      const u = new URL(path, origin);
+      return u.origin === origin && !u.username && !u.password && ['http:', 'https:'].includes(u.protocol) ? u.href : '';
+    } catch { return ''; }
+  };
+  const src = url(image?.url);
+  const wordmark = image && src && Number.isFinite(image.width) && image.width > 0 && Number.isFinite(image.height) && image.height > 0
+    ? { url: src, width: image.width, height: image.height, dark: url(image.dark) || undefined } : undefined;
+  return name || wordmark ? { name: name || undefined, wordmark } : undefined;
 }

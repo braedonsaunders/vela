@@ -193,14 +193,17 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const session = `${state.auth.phase === 'signed-in'}|${origin}`;
   useEffect(() => resetFlags(), [session, resetFlags]);
 
+  useEffect(() => {
+    if (Platform.OS === 'web') document.title = state.appearance.value?.branding?.name || 'Vela';
+  }, [state.appearance.value?.branding?.name]);
   const raw = DOCUMENTS[docIndex % DOCUMENTS.length]!;
   const resolved = useMemo(() => {
     try {
-      return { doc: resolveDocument(raw, width), error: null };
+      return { doc: resolveDocument(raw, width, 'en', state.appearance.value?.branding), error: null };
     } catch (error) {
       return { doc: null, error: String(error) };
     }
-  }, [raw, width]);
+  }, [raw, width, state.appearance.value?.branding]);
 
   useEffect(() => {
     setFontsReady(false);
@@ -306,7 +309,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(
-    () => authArt(state.appearance.value, state.home.value?.defaultSkinId ?? '', picked ? raw.id : ''),
+    () => authArt(state.appearance.value, state.home.value?.defaultSkinId ?? '', picked ? raw.id : '', resolveUi(raw.ui).page),
     [state.appearance.value, state.home.value?.defaultSkinId, picked, raw.id],
   );
   const value = useMemo<Vela>(

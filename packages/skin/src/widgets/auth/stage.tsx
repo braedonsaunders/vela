@@ -7,7 +7,7 @@ import { Image } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
 import { authLayout } from './layout';
 import { AuthLayoutContext } from './layout-context';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, Text } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useHost } from '../../host';
 import type { Css } from '../../translate';
@@ -62,7 +62,7 @@ const CARD: Css = {
   overflow: 'hidden',
 };
 
-export function Stage({ children }: { children: ReactNode }) {
+export function Stage({ children, branding }: { children: ReactNode; branding?: {wordmark: string; name?: string} }) {
   const look = useLook();
   const host = useHost();
   const [availableHeight, setAvailableHeight] = useState(host.viewport.height);
@@ -76,7 +76,7 @@ export function Stage({ children }: { children: ReactNode }) {
     return () => viewport.removeEventListener('resize', resize);
   }, []);
   const layout = authLayout(host.viewport, availableHeight, Platform.isTV);
-  const mark = host.image('assets/brand/vela-stacked.svg');
+  const mark = host.image(branding?.wordmark || 'assets/brand/vela-stacked.svg');
   const card = look.layer(CARD);
   return (
     <KeyboardAvoidingView
@@ -122,7 +122,7 @@ export function Stage({ children }: { children: ReactNode }) {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
-        {mark && layout.logoHeight ? <Image source={mark} style={{ width: layout.logoHeight * 60 / 104, height: layout.logoHeight }} accessibilityElementsHidden /> : null}
+        {branding?.name && !branding.wordmark ? <Text style={{color: look.ui.ink, fontSize: 28, fontWeight: '700'}}>{branding.name}</Text> : mark && layout.logoHeight ? <Image source={mark} style={{ width: branding?.wordmark ? 220 : layout.logoHeight * 60 / 104, height: layout.logoHeight }} accessibilityElementsHidden /> : null}
         <Animated.View testID="auth-card" style={[card.style, { maxHeight: availableHeight < host.viewport.height - 100 ? undefined : layout.cardHeight, flexShrink: 1 }, layout.compact && { padding: layout.padding, maxWidth: '100%', width: '100%' }, look.motion('velaEnter0')]}>
           {card.blur && Platform.OS !== 'web' ? (
             <BlurView
