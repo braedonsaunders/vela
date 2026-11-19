@@ -10,11 +10,16 @@ public final class VelaGuideModule: Module {
             Prop("drawing") { (view: VelaGuideRowView, drawing: [String: Any]) in view.drawRow(drawing) }
             Prop("selected") { (view: VelaGuideRowView, id: String) in view.select(id) }
         }
-
+        View(VelaGuideCollectionView.self) {
+            Events("onWindow", "onProgramme", "onExit")
+            Prop("data") { (view: VelaGuideCollectionView, data: [String: Any]) in view.setData(data) }
+            Prop("command") { (view: VelaGuideCollectionView, command: [String: Any]) in view.navigate(command) }
+            Prop("active") { (view: VelaGuideCollectionView, active: Bool) in view.setActive(active) }
+        }
     }
 }
 
-private func colour(_ value: Any?) -> UIColor {
+func guideColour(_ value: Any?) -> UIColor {
     if let number = value as? NSNumber {
         let n = UInt32(truncatingIfNeeded: number.int64Value)
         return UIColor(red: CGFloat((n >> 16) & 255) / 255, green: CGFloat((n >> 8) & 255) / 255,
@@ -51,7 +56,7 @@ private struct Cell {
     let rect: CGRect, tone: UIColor, ended: Bool, airing: Bool, elapsed: CGFloat
     init(_ raw: [String: Any], height: CGFloat) {
         id = raw["id"] as? String ?? ""; title = raw["title"] as? String ?? ""; detail = raw["detail"] as? String ?? ""
-        label = raw["label"] as? String ?? ""; tone = colour(raw["tone"])
+        label = raw["label"] as? String ?? ""; tone = guideColour(raw["tone"])
         ended = raw["ended"] as? Bool ?? false; airing = raw["airing"] as? Bool ?? false
         elapsed = (raw["elapsed"] as? NSNumber)?.doubleValue ?? 0
         rect = CGRect(x: (raw["x"] as? NSNumber)?.doubleValue ?? 0, y: 5,
@@ -150,7 +155,7 @@ final class VelaGuideRowView: ExpoView {
         let r = radius
         let nextChannel = raw["channelId"] as? String ?? ""
         let palette = raw["colours"] as? [String: Any] ?? [:]
-        let colors = palette.mapValues(colour)
+        let colors = palette.mapValues(guideColour)
         let nextCells = (raw["cells"] as? [[String: Any]] ?? []).map { Cell($0, height: height) }
         let titleSize = (raw["titleSize"] as? NSNumber) ?? 18.2
         let detailSize = (raw["detailSize"] as? NSNumber) ?? 15.6

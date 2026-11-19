@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import type { LiveController, LiveView, Surface } from './controller';
+import type { NativeGuideProps } from './native-grid';
 import type { GuideRowDrawingProps } from './drawing';
 
 interface LiveContextValue {
@@ -19,6 +20,7 @@ interface LiveContextValue {
   /** Draws a session's picture; absent until the app has a player view, and then the tile stays off. */
   Player?: ComponentType<VelaPlayerViewProps>;
   GuideRow?: ComponentType<GuideRowDrawingProps>;
+  GuideSurface?: ComponentType<NativeGuideProps>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -35,12 +37,13 @@ interface ProviderProps {
   controller: LiveController | null;
   Player?: ComponentType<VelaPlayerViewProps>;
   GuideRow?: ComponentType<GuideRowDrawingProps>;
+  GuideSurface?: ComponentType<NativeGuideProps>;
   children: ReactNode;
 }
 
 /** Wraps the app (always, so the tree never remounts when a controller arrives). It follows the
  * foreground, reduced motion and Save-Data for the controller it is given. */
-export function LiveProvider({ controller, Player, GuideRow, children }: ProviderProps) {
+export function LiveProvider({ controller, Player, GuideRow, GuideSurface, children }: ProviderProps) {
   useEffect(() => {
     controller?.setCanPreview(Player !== undefined);
   }, [controller, Player]);
@@ -68,7 +71,7 @@ export function LiveProvider({ controller, Player, GuideRow, children }: Provide
     return () => sub.remove();
   }, [controller]);
 
-  const value = useMemo(() => (controller ? { controller, Player, GuideRow } : null), [controller, Player, GuideRow]);
+  const value = useMemo(() => (controller ? { controller, Player, GuideRow, GuideSurface } : null), [controller, Player, GuideRow, GuideSurface]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
 

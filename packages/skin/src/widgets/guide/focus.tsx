@@ -5,7 +5,7 @@ import type { Focusable } from '../../escape';
 import { useRemote, pressed } from '../player/remote';
 
 type Key = (key: string, prevent: () => void) => void;
-interface Entry { target: Focusable; key?: Key; toolbar?: boolean }
+interface Entry { target: Focusable; key?: Key; toolbar?: boolean; nativeGrid?: boolean }
 interface Navigation {
   register(id: string, entry: Entry | null): void;
   focused(id: string): void;
@@ -49,7 +49,7 @@ export function GuideFocusScope({ children, enter, onHold, leave, active = true 
         if (process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1') (globalThis as typeof globalThis & { __velaGuideFocus?: string }).__velaGuideFocus = id;
         const previous = gridOwned, previousId = current || blurredFrom;
         blurredFrom = '';
-        current = id; gridOwned = Boolean(entries.get(id)?.key);
+        current = id; gridOwned = Boolean(entries.get(id)?.key || entries.get(id)?.nativeGrid);
         if (!gridOwned) { if (entries.get(id)?.toolbar) toolbar = id; if (previous || previousId && previousId !== id) { pending = ''; leaving.current(); } } },
       blurred(id) { if (current === id) { blurredFrom = id; current = ''; stopRepeat(); if (Platform.OS !== 'web') { gridOwned = false; pending = ''; leaving.current(); } } },
       request(id) {

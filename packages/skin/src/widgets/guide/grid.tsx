@@ -3,6 +3,8 @@
 // virtualized and each row draws only the programmes near the visible time, so a lineup of
 // hundreds over a whole day scrolls as smoothly as a dozen. On the web, arrow keys walk the grid
 // (Enter watches what is airing). TV uses one focus anchor so recycling cannot displace focus.
+import { NativeGuideGrid } from './native-grid';
+import { useLiveContext } from './live';
 import { useGuideNavigation } from './focus';
 import { bandOffset, ProgrammeSlots, programmeMinute, gapStep, resolveTimeTarget, rowWindow, type TimeTarget } from './navigation';
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
@@ -69,6 +71,11 @@ export const GuideGrid = memo(GuideGridContent, (a, b) =>
   && sameGridContent(a.model, a.rows, b.model, b.rows));
 
 function GuideGridContent(props: GridProps) {
+  const Surface = useLiveContext()?.GuideSurface;
+  return Surface ? <NativeGuideGrid {...props} Surface={Surface} /> : <SharedGuideGrid {...props} />;
+}
+
+function SharedGuideGrid(props: GridProps) {
   guideRender('grid');
   const navigation = useGuideNavigation();
   useEffect(() => props.active ? startGuideFrames() : undefined, [props.active]);

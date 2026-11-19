@@ -12,4 +12,7 @@ Pod::Spec.new do |s|
   s.source_files = '*.swift'
   s.dependency 'ExpoModulesCore'
   s.dependency 'React-Core'
+  # Reuse Expo Image's installed loaders/coders for raster and SVG channel logos.
+  s.dependency 'SDWebImage'
+  s.dependency 'SDWebImageSVGCoder'
 end
