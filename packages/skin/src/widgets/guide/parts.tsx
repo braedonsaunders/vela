@@ -110,8 +110,8 @@ export function Press(props: PressProps) {
   const still = useReducedMotion();
   const lift = useSharedValue(1);
   useEffect(() => {
-    if (props.lift) lift.value = withSpring(focused && !still ? 1.045 : 1, { damping: 22, stiffness: 280, mass: 0.8, reduceMotion: ReduceMotion.System });
-  }, [focused, props.lift, lift, still]);
+    if (props.lift) lift.value = withSpring(still ? 1 : pressed ? 0.98 : focused ? 1.045 : 1, { damping: 22, stiffness: 280, mass: 0.8, reduceMotion: ReduceMotion.System });
+  }, [focused, pressed, props.lift, lift, still]);
   const elevation = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
   // react-native-web hands Pressable its DOM key events; native TV moves focus itself.
   const keys =
