@@ -1,5 +1,7 @@
 # macOS release signing
 
+Vela for Mac targets Apple silicon (arm64) only.
+
 The default build is ad-hoc signed. For a Developer ID release, install the
 Developer ID Application certificate (including its private key) in the build
 machine's keychain, then run:

@@ -11,7 +11,8 @@ if (arch && !['arm64', 'x64'].includes(arch)) throw new Error('Supported desktop
 const output = process.argv.find(a => a.startsWith('--output='))?.slice(9);
 const nativeMac = process.argv.find(a => a.startsWith('--native-mac='))?.slice(13);
 const nativeLinux = process.argv.find(a => a.startsWith('--native-linux='))?.slice(15);
-if (nativeMac && !arch) throw new Error('Native macOS builds require --arch=arm64 or --arch=x64 and a matching payload');
+if (nativeMac && !arch) throw new Error('Native macOS builds require --arch=arm64 and a matching payload');
+if ((nativeMac || process.argv.includes('--mac') || (!process.argv.includes('--linux') && process.platform === 'darwin')) && arch && arch !== 'arm64') throw new Error('Vela for macOS supports Apple silicon (arm64) only');
 const ui = process.argv.find(a => a.startsWith('--ui='))?.slice(5);
 if (!ui) throw new Error('Usage: node build.mjs --ui=<web release folder> [--mac] [--linux]');
 for (const part of ['index.html', '_expo', 'player', 'skins', 'routes.json'])

@@ -59,3 +59,6 @@ Apple mediaIdentity. Host validates all fields against current plan and grant,
 then calls the shared media store's attach before applying authorization and
 plan. A stale/mismatched attachment is refused; failed preparation uses the
 Apple bounded recovery path. Attachment URLs never enter diagnostics/events.
+
+macOS distribution targets Apple silicon (arm64) only. Native builds and
+Electron packages must use arm64; Linux continues to target x64.
