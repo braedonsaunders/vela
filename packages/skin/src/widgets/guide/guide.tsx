@@ -109,10 +109,9 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
     wasVisible.current = visible;
     if (!visible) { grid.current?.leaveGrid(); return; }
     if (!returning) return;
-    if (!focus) { controller.chooseDay(0); grid.current?.jumpNow(); }
-    const frame = requestAnimationFrame(() => grid.current?.focusGrid(focus?.channelId || controller.view().tunedId));
+    const frame = requestAnimationFrame(() => grid.current?.focusGrid(selected.channel));
     return () => cancelAnimationFrame(frame);
-  }, [visible, controller, focus?.channelId, focus?.minute]);
+  }, [visible, selected.channel]);
 
   const tabOn = model.guides.some(g => g.id === tab) ? tab : '';
   // A hand-off shows its channel whatever the filter, on its own day.
@@ -139,13 +138,11 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
     const channel = model.channels.find(channel => channel.id === view.tunedId);
     if (channel) select(channel, programmeAt(channel, Math.max(0, model.nowMinute)) ?? null);
   }, [view.zapping, view.tunedId, selected.channel, model.channels, model.nowMinute, select]);
-  // Pressing what is airing puts it on the tile; pressing it again once it is there watches it.
+  // Select opens airing programmes in full screen; focus changes only update details.
   const press = useCallback((channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
-    const tile = controller.view().tile;
-    const action = programmeSelection(currentlyAiring(controller.view().guide, channel.id, programme.id), channel.id, tile.plan ? tile.channelId : '');
+    const action = programmeSelection(currentlyAiring(controller.view().guide, channel.id, programme.id));
     if (action === 'watch') controller.watch(channel.id);
-    if (action === 'preview') controller.preview(channel.id);
   }, [controller, select]);
   const watch = useCallback((channelId: string) => controller.watch(channelId), [controller]);
   useEffect(() => {

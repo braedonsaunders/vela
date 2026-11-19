@@ -91,3 +91,31 @@ test('the picture is connecting until a decoded frame is reported; stale snapsho
   expect(tile.view().state).toBe('playing');
   tile.dispose();
 });
+
+test('Select opens another channel immediately while its tune is pending', async () => {
+  const starts: string[] = [], stops: string[] = [], opened: string[] = [];
+  let resolveTune!: (plan: PlaybackPlan) => void;
+  const source = {
+    tune: (id: string) => {
+      starts.push(id);
+      return id === 'a' ? Promise.resolve({ sessionId: id } as PlaybackPlan)
+        : new Promise<PlaybackPlan>(resolve => { resolveTune = resolve; });
+    },
+    stop: async (plan: PlaybackPlan) => { stops.push(plan.sessionId); },
+  } as unknown as LiveSource;
+  const tile = new Tile(source, () => {}, id => opened.push(id));
+  tile.update({ open: true, canPreview: true, quiet: false, order: ['a', 'b'], remembered: '' });
+  await Promise.resolve();
+  tile.watch('b');
+  expect(opened).toEqual(['b']);
+  expect(tile.view()).toMatchObject({ channelId: 'b', fullscreen: true });
+  await Promise.resolve();
+  expect(starts).toEqual(['a', 'b']);
+  resolveTune({ sessionId: 'b' } as PlaybackPlan);
+  await Promise.resolve();
+  expect(tile.view().plan?.sessionId).toBe('b');
+  expect(stops).toEqual(['a']);
+  tile.leaveWatch();
+  expect(tile.view()).toMatchObject({ channelId: 'b', fullscreen: false });
+  tile.dispose();
+});

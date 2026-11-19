@@ -1,5 +1,4 @@
-/** Browsing is details-only. An explicit airing selection tunes once, then opens watch. */
-export function programmeSelection(airing: boolean, channelId: string, playingChannelId: string): 'details' | 'preview' | 'watch' {
-  if (!airing) return 'details';
-  return channelId === playingChannelId ? 'watch' : 'preview';
+/** Browsing is details-only; selecting an airing programme always opens full screen. */
+export function programmeSelection(airing: boolean): 'details' | 'watch' {
+  return airing ? 'watch' : 'details';
 }
