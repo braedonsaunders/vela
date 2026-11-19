@@ -1,5 +1,5 @@
 // Build one architecture at a time; all generated files live in the requested scratch output.
-import { cpSync, mkdirSync, readdirSync, existsSync, writeFileSync, realpathSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, existsSync, writeFileSync, realpathSync, rmSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -30,10 +30,15 @@ run('swift', ['build', '-c', 'release', '--arch', swiftArch, '-j', '1']);
 const location = spawnSync('swift', ['build', '-c', 'release', '--arch', swiftArch, '--show-bin-path'], { cwd: stage, encoding: 'utf8', env: { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR || '/Applications/Xcode.app/Contents/Developer' } });
 if (location.status !== 0) throw new Error('Cannot locate SwiftPM products');
 const bin = location.stdout.trim();
+const symbols = spawnSync('nm', ['-gU', join(bin, 'libVelaNative.dylib')], { encoding: 'utf8' });
+for (const symbol of ['vela_create', 'vela_call', 'vela_destroy', 'vela_capabilities'])
+  if (!symbols.stdout.includes('_' + symbol)) throw new Error(`Missing exported Swift C ABI: ${symbol}`);
 cpSync(join(bin, 'libVelaNative.dylib'), join(output, 'libVelaNative.dylib'));
 // Dynamic dependency bundles must stay adjacent and replaceable (LGPL).
-for (const name of readdirSync(bin)) if (name.endsWith('.framework') || name.endsWith('.bundle') || name.endsWith('.dylib'))
+for (const name of readdirSync(bin)) if (name.endsWith('.framework') || name.endsWith('.bundle')) {
+  rmSync(join(output, name), { recursive: true, force: true });
   cpSync(realpathSync(join(bin, name)), join(output, name), { recursive: true, dereference: false, verbatimSymlinks: true });
+}
 const headers = arg('node-headers') || join(process.env.HOME, '.electron-gyp/40.8.0/include/node');
 if (!existsSync(join(headers, 'node_api.h'))) throw new Error('Pass --node-headers=<Electron include/node directory>');
 run('xcrun', ['clang++', '-arch', swiftArch, '-mmacosx-version-min=15.0', '-std=c++17', '-shared', '-undefined', 'dynamic_lookup', '-I', headers, join(here, 'addon.mm'), '-L', output, '-lVelaNative', '-Wl,-rpath,@loader_path', '-o', join(output, 'vela-native.node')]);

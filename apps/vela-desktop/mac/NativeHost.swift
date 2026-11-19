@@ -65,7 +65,7 @@ final class NativeSession {
 
 // C ABI keeps Node/Electron ABI details out of Swift. Calls are on Electron's main thread.
 @_cdecl("vela_create")
-func velaCreate(_ pointer: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer? {
+public func velaCreate(_ pointer: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer? {
     MainActor.assumeIsolated {
         do {
             let view = Unmanaged<NSView>.fromOpaque(pointer).takeUnretainedValue()
@@ -74,7 +74,7 @@ func velaCreate(_ pointer: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer? 
     }
 }
 @_cdecl("vela_call")
-func velaCall(_ pointer: UnsafeMutableRawPointer, _ operation: UnsafePointer<CChar>, _ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
+public func velaCall(_ pointer: UnsafeMutableRawPointer, _ operation: UnsafePointer<CChar>, _ json: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
     MainActor.assumeIsolated {
         let native = Unmanaged<NativeSession>.fromOpaque(pointer).takeUnretainedValue()
         let value = (try? JSONSerialization.jsonObject(with: Data(String(cString: json).utf8))) as? [String: Any] ?? [:]
@@ -84,7 +84,8 @@ func velaCall(_ pointer: UnsafeMutableRawPointer, _ operation: UnsafePointer<CCh
             if let media = value["nativeMedia"] as? [String: Any],
                let object = value["plan"] as? [String: Any], let plan = VelaPlan.decode(object),
                let planID = media["planId"] as? String, planID == plan.mediaIdentity,
-               let sourceText = media["source"] as? String, let source = URL(string: sourceText),
+               let sourceText = media["source"] as? String,
+               let source = URL(string: sourceText, relativeTo: VelaMediaAccessStore.origin.flatMap(URL.init(string:)))?.absoluteURL,
                let pathURL = plan.selectedPath?.url,
                let expected = URL(string: pathURL, relativeTo: VelaMediaAccessStore.origin.flatMap(URL.init(string:)))?.absoluteURL,
                source == expected,
@@ -130,7 +131,7 @@ func velaCall(_ pointer: UnsafeMutableRawPointer, _ operation: UnsafePointer<CCh
     }
 }
 @_cdecl("vela_destroy")
-func velaDestroy(_ pointer: UnsafeMutableRawPointer) {
+public func velaDestroy(_ pointer: UnsafeMutableRawPointer) {
     MainActor.assumeIsolated {
         let native = Unmanaged<NativeSession>.fromOpaque(pointer).takeRetainedValue()
         native.destroy()
@@ -139,7 +140,7 @@ func velaDestroy(_ pointer: UnsafeMutableRawPointer) {
 }
 
 @_cdecl("vela_capabilities")
-func velaCapabilities() -> UnsafeMutablePointer<CChar>? {
+public func velaCapabilities() -> UnsafeMutablePointer<CChar>? {
     MainActor.assumeIsolated {
         guard let data = try? JSONSerialization.data(withJSONObject: PlayerCapabilities.probe()), let text = String(data: data, encoding: .utf8) else { return nil }
         return strdup(text)

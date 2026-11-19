@@ -19,9 +19,22 @@ exports.create = async ({ window, emit }) => {
     if (disposed) return;
     return JSON.parse(binary.call(handle, op, JSON.stringify(value ?? {})));
   };
+  const destroy = () => {
+    if (disposed) return;
+    disposed = true;
+    clearInterval(timer);
+    binary.destroy(handle);
+  };
   const timer = setInterval(() => {
     if (disposed) return;
-    for (const { event, value } of call('poll')) {
+    let events;
+    try { events = call('poll'); }
+    catch {
+      try { destroy(); } catch { /* Surface disposal must not prevent fallback. */ }
+      emit('fallback', { reason: 'native-bridge-failed' });
+      return;
+    }
+    for (const { event, value } of events) {
       if (disposed) break;
       emit(event, value);
     }
@@ -31,11 +44,6 @@ exports.create = async ({ window, emit }) => {
     setAccess: access => call('access', access),
     setBounds: bounds => call('bounds', bounds),
     diagnostics: () => call('diagnostics'),
-    destroy() {
-      if (disposed) return;
-      disposed = true;
-      clearInterval(timer);
-      binary.destroy(handle);
-    },
+    destroy,
   };
 };

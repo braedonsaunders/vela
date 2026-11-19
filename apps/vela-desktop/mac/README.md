@@ -30,3 +30,12 @@ codec declaration is not proof of HDR output: verify headroom and visible
 playback on the target display. Windowed playback suppresses display matching;
 fullscreen alone may request it. Aether's display-criteria implementation is a
 no-op on macOS; EDR composition still applies to HDR layers.
+
+Dolby Vision capability is deliberately unclaimed on macOS. Aether's pinned
+`docs/formats.md` explains that macOS has no per-mode HDR capability API: EDR
+eligibility proves HDR10/HLG, not Dolby Vision presentation. Aether can preserve
+DV sample entries and RPU metadata through AVFoundation (including Profile 5,
+8.1 and 8.4 paths); the effective format can be promoted after AVFoundation
+accepts DV media. This host does not assert `panelPresentsDolbyVision`, and
+neither an EDR screen nor a DV file alone proves DV presentation. Verify the
+actual route and output on the target display before adding a DV capability.
