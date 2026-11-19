@@ -1,16 +1,26 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Platform } from 'react-native';
+import { Platform, processColor } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSideInsets, VelaProvider } from '../src/vela';
+import { useSideInsets, useVela, VelaProvider } from '../src/vela';
+import { resolveUi } from '@vela/skin/src/resolve/ui';
+import { systemBarStyle } from '../src/system-bar-style';
 
 export default function Layout() {
   return (
     <VelaProvider>
-      <StatusBar style="light" />
+      <SystemBar />
       <Screens />
     </VelaProvider>
   );
+}
+
+function SystemBar() {
+  const { doc } = useVela();
+  const colour = doc ? processColor(resolveUi(doc.document.ui).page) : undefined;
+  const style = Platform.OS === 'android'
+    ? systemBarStyle(typeof colour === 'number' ? colour : undefined) : 'light';
+  return <StatusBar style={style} />;
 }
 
 function Screens() {
