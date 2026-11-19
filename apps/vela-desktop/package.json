@@ -64,7 +64,8 @@
           "NSAllowsArbitraryLoads": true
         },
         "NSLocalNetworkUsageDescription": "Vela connects to the media servers you add to play your library and live TV."
-      }
+      },
+      "minimumSystemVersion": "15.0"
     },
     "dmg": {
       "title": "Vela ${version}"
