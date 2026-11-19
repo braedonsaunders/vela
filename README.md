@@ -236,7 +236,7 @@ Releases are signed inventories. Ether installs them atomically, can roll back, 
 | Platform | Download | Playback |
 | :--- | :--- | :--- |
 | **Windows 10/11** (x64) | `Vela-Setup-<version>-x64.exe`, a signed per-user installer | Native **libmpv** under the Vela player |
-| **macOS** (Apple silicon and Intel) | `Vela-<version>-mac-<arch>.dmg`, signed and notarized | The in-app engine: original files, WebGPU, WASM audio |
+| **macOS** (Apple silicon) | `Vela-<version>-mac-arm64.dmg`, signed and notarized | The in-app engine: original files, WebGPU, WASM audio |
 | **Linux** (x64) | `.AppImage` or `.deb` | The in-app engine |
 | **Android, Android TV** | `Vela-<version>-android.apk` / `-androidtv.apk`, to sideload | **Media3 ExoPlayer** |
 
