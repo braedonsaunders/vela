@@ -13,6 +13,7 @@ import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -25,6 +26,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val onSessionCommand by EventDispatcher<Map<String, Any?>>()
   private val onSessionRefresh by EventDispatcher<Map<String, Any?>>()
 
+  private val content = FrameLayout(context)
   private val video = SurfaceView(context)
   private val subtitleLayer = androidx.media3.ui.SubtitleView(context)
   private val previewVideo = TextureView(context)
@@ -101,8 +103,9 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
         }
       }
     }
-    addView(video, videoLayout())
-    addView(subtitleLayer, videoLayout())
+    content.addView(video, videoLayout())
+    content.addView(subtitleLayer, videoLayout())
+    addView(content, videoLayout())
     live.add(this)
   }
 
@@ -117,16 +120,16 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     if (previewMode == enabled) return
     if (enabled) {
       controller.releaseForPreview()
-      removeView(video)
+      content.removeView(video)
       previewMode = true
       setBackgroundColor(Color.TRANSPARENT)
-      addView(previewVideo, videoLayout())
+      content.addView(previewVideo, 0, videoLayout())
     } else {
       preview.release()
-      removeView(previewVideo)
+      content.removeView(previewVideo)
       previewMode = false
       setBackgroundColor(Color.BLACK)
-      addView(video, 0, videoLayout())
+      content.addView(video, 0, videoLayout())
     }
   }
 
@@ -189,7 +192,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     live.remove(this)
     preview.release()
     controller.release()
-    removeView(if (previewMode) previewVideo else video)
+    content.removeView(if (previewMode) previewVideo else video)
   }
 
   // A preview plays only while its view is on screen.
