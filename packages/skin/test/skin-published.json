@@ -69,7 +69,8 @@
   "d2596b55a1d892cf70ba64c65e55fba5ac68974be5b61f1853012c6e34865240",
   "379c637b15f95dabf8a492be8841a34e696ca951685932d2489ca7208cbd53c5",
   "50e64affbd854b11ed8d3561539d9ff01cab1185ae7f84bfd9101a3dffda2c75",
-  "5cfea7d0a75e6b8c16beb21a5289e9ac73225b8db5d3dd286a7c9eb9feebac43"
+  "5cfea7d0a75e6b8c16beb21a5289e9ac73225b8db5d3dd286a7c9eb9feebac43",
+  "0bd8e9d4986d409c8da4078aaaa281aaaf21cf323108ae59a5df885ac52b7b95"
  ],
  "skins/cinematic-doc/1.0.0/document.json": [
   "1dbd8c2bc3c7eecf4783b6115072c336bd7fedcab980c7b39868c59b29c2605b",
@@ -165,6 +166,21 @@
   "9c513a738acb6d5474adbb51e70d4ee1bda3e0b5f67edb6b6ba2f6990c4d7812"
  ],
  "skins/index/1.0.8/preview.jpg": [
+  "44d959634152d005fae7368f5a88cb0e1bbb16a813335e4ea78721a42dfad815"
+ ],
+ "skins/index/1.0.9/document.json": [
+  "6f1775a12f14d32384a5e685d582ad1d464fabcc2ff394b521d4f8b5b0b71850"
+ ],
+ "skins/index/1.0.9/instrument-serif.ttf": [
+  "498efd461f6ddfcb7a111bf9a565709d2085d48201d501ead960d93e84ffbb88"
+ ],
+ "skins/index/1.0.9/licences/InstrumentSerif-OFL.txt": [
+  "129ed7618959716959f2941fdd5b49e0ad6e6c1d78726761786a00253d865521"
+ ],
+ "skins/index/1.0.9/licences/README.md": [
+  "9c513a738acb6d5474adbb51e70d4ee1bda3e0b5f67edb6b6ba2f6990c4d7812"
+ ],
+ "skins/index/1.0.9/preview.jpg": [
   "44d959634152d005fae7368f5a88cb0e1bbb16a813335e4ea78721a42dfad815"
  ],
  "skins/jellytwin-data/1.0.0/document.json": [
