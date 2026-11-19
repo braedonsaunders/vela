@@ -52,7 +52,11 @@ export interface VelaPlayerProps {
   metadata?: PlayerMetadata;
   /** A failure the server reported for this session; the view stops and reports it as its own state. */
   serverError?: Failure | null;
+  /** Emit position/state throughout playback, including buffering and pause. The shared host
+   * watches progress for session recovery; paused/ended states disable its stall deadline. */
   onSnapshot?: (snapshot: Snapshot) => void;
+  /** Network/source failures reach the host after engine-local read retries are exhausted.
+   * The host replaces the server session; engines must accept a different sessionId in plan. */
   onError?: (failure: Failure) => void;
   onObservation?: (event: { sessionId: string; observation: PlayerObservation }) => void;
   /** A command finished: done, or refused with the reason (unsupported, no user activation, stale). */

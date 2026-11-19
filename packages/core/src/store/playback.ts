@@ -67,12 +67,18 @@ interface Intent {
 }
 
 const MAX_PREPARATIONS = 30;
-const MAX_FOLLOW_FAILURES = 5;
 const POLL_SECONDS = 5;
 
 export class Playback {
   /** The current playback's own token: work for an older one stops when this changes. */
   private run: object | undefined;
+  private abandoned: V.PlaybackPlan | null = null;
+  private recovering = false;
+  private recoveryAttempt = 0;
+  private watchdog: ReturnType<typeof setTimeout> | undefined;
+  private cursor = 0;
+  private audio: string | undefined;
+  private subtitle: string | null | undefined;
   private externalId: string | undefined;
   private follow: AbortController | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -129,6 +135,7 @@ export class Playback {
     if (this.run !== run) return;
     const plan = connection.plan(existing);
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
+    this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
   }
 
@@ -149,6 +156,7 @@ export class Playback {
       connection = await this.session.ready();
       const api = connection.adapter;
       await this.session.negotiate(api);
+      if (this.run !== run) return;
       const position = target.kind === 'title' ? target.positionSeconds : undefined;
       reply = await api.startPlayback({
         ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id } : { titleId: target.id }),
@@ -181,13 +189,32 @@ export class Playback {
       this.timer = setTimeout(() => void this.request(intent, attempt, preparation + 1), seconds * 1000);
       return;
     }
-    const plan = connection.plan(reply as V.PlaybackPlan);
+    let plan = connection.plan(reply as V.PlaybackPlan);
+    if (this.recovering && (this.audio !== undefined || this.subtitle !== undefined)) {
+      try {
+        plan = connection.plan(await this.send(connection, plan.sessionId, {
+          kind: 'tracks', audioTrackId: this.audio, subtitleTrackId: this.subtitle,
+          sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+          idempotencyKey: this.session.key(),
+        }));
+      } catch { /* Unsupported tracks retain the new plan's defaults. */ }
+      if (this.run !== run) {
+        void connection.adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
+          seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {});
+        return;
+      }
+    }
+    this.abandoned = null;
+    this.recovering = false;
+    this.cursor = plan.positionSeconds ?? 0;
     this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0 });
+    this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
   }
 
   /** A failure the server allows retrying is retried on its terms (at most twice, within a minute). */
   private failed(intent: Intent, error: unknown, attempt: number, preparation: number): void {
+    if (this.recovering) { this.scheduleRecovery(intent); return; }
     if (!(error instanceof VelaError)) {
       this.patch({ phase: 'failed', error: message(error, 'Playback failed'), errorCode: '', errorClass: '' });
       return;
@@ -214,35 +241,74 @@ export class Playback {
     this.follow = controller;
     const present = (plan: V.PlaybackPlan) => connection.plan(plan);
     const show = (plan: V.PlaybackPlan) => {
-      if (this.run !== run || plan.sessionId !== sessionId) return;
+      if (this.run !== run || controller.signal.aborted || plan.sessionId !== sessionId) return;
       const ended = plan.state === 'ended' && this.box.get().playback.phase !== 'ended';
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
       if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
     };
     const adapter = connection.adapter;
     const loop = async () => {
-      let failures = 0;
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
         try {
           if (hasEventStream(adapter)) {
             await followSession(adapter, present, sessionId, show, controller.signal);
-          } else {
-            const snapshot = await adapter.sessionSnapshot(sessionId);
-            if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
-            show(present(snapshot.plan));
-            await delay(POLL_SECONDS * 1000, controller.signal);
+            if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
+            break;
           }
-          failures = 0;
+          const snapshot = await adapter.sessionSnapshot(sessionId);
+          if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
+          show(present(snapshot.plan));
+          await delay(POLL_SECONDS * 1000, controller.signal);
         } catch {
-          if (controller.signal.aborted) return;
-          failures++;
-          if (failures >= MAX_FOLLOW_FAILURES) return;
-          await delay(Math.min(30, 2 ** failures) * 1000, controller.signal).catch(() => {});
+          if (!controller.signal.aborted) this.recover(sessionId);
+          break;
         }
       }
       forgetSession(sessionId);
     };
     void loop();
+  }
+
+  /** Session-level recovery follows exhausted media read retries. One intent owns all triggers. */
+  recover(sessionId: string): void {
+    const current = this.box.get().playback;
+    if (!this.run || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
+    this.recovering = true;
+    this.follow?.abort();
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = undefined;
+    this.audio ??= current.plan?.selectedAudioTrackId;
+    if (this.subtitle === undefined) this.subtitle = current.plan?.selectedSubtitleTrackId;
+    const target = current.target.kind === 'title'
+      ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
+      : current.target;
+    this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1 });
+    const old = current.plan;
+    this.abandoned = old;
+    const intent = { run: this.run, target, key: `recover-${randomId()}` };
+    this.scheduleRecovery(intent, old);
+  }
+
+  private scheduleRecovery(intent: Intent, old: V.PlaybackPlan | null = this.abandoned): void {
+    const seconds = [1, 2, 4, 8, 15][Math.min(this.recoveryAttempt++, 4)]!;
+    this.patch({ retryAfterSeconds: seconds });
+    this.timer = setTimeout(async () => {
+      if (this.run !== intent.run) return;
+      if (this.box.get().auth?.phase === 'offline') {
+        this.scheduleRecovery(intent, old);
+        return;
+      }
+      if (old) {
+        try {
+          const connection = await this.session.ready();
+          if (this.run !== intent.run) return;
+          await this.send(connection, old.sessionId, { kind: 'stop', sourceGeneration: old.sourceGeneration,
+            seekGeneration: old.seekGeneration, idempotencyKey: `recover-stop-${old.sessionId}` });
+        } catch { /* Missing sessions are already released; retry cleanup after connectivity returns. */ }
+      }
+      if (this.run !== intent.run) return;
+      await this.request(intent, 0, 0);
+    }, seconds * 1000);
   }
 
   /**
@@ -297,7 +363,7 @@ export class Playback {
     try {
       const connection = await this.session.ready();
       const plan = await this.send(connection, sessionId, command);
-      if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
     } catch (error) {
       if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback command failed') });
     }
@@ -329,7 +395,7 @@ export class Playback {
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
       if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
       if (snapshot.plan.state === 'ended') return false;
-      if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
       return true;
     } catch (error) {
       if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback refresh failed') });
@@ -339,16 +405,30 @@ export class Playback {
 
   /** The player's progress report. */
   async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
-    const connection = await this.session.ready();
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
+    const connection = await this.session.ready();
     const sent = connection.adapter.reportObservation(sessionId, observation);
     this.reporting = sent.catch(() => undefined);
     return sent;
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
-  snapshot(snapshot: LiveObservation): void {
+  snapshot(snapshot: LiveObservation & { position?: number; state?: string; audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
+    if (snapshot.sessionId !== this.box.get().playback.sessionId || this.recovering) return;
+    const progressed = snapshot.position !== undefined && snapshot.position !== this.cursor;
+    if (snapshot.position !== undefined) this.cursor = snapshot.position;
+    if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
+    if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
+    if (progressed) this.recoveryAttempt = 0;
+    if (progressed || snapshot.state === 'paused' || snapshot.state === 'ended') {
+      if (this.watchdog) clearTimeout(this.watchdog);
+      this.watchdog = undefined;
+    }
+    if (!this.watchdog && snapshot.state !== 'paused' && snapshot.state !== 'ended') {
+      const id = snapshot.sessionId;
+      this.watchdog = setTimeout(() => { if (id) this.recover(id); }, 5500);
+    }
     const live = liveStatus(snapshot);
     const current = this.box.get().playback.live;
     if (JSON.stringify(live) !== JSON.stringify(current)) this.patch({ live });
@@ -356,7 +436,8 @@ export class Playback {
 
   /** Stop playing: the server releases the session at the plan's generations. */
   async stop(): Promise<void> {
-    const { plan, target, phase } = this.box.get().playback;
+    const { target, phase } = this.box.get().playback;
+    const plan = this.box.get().playback.plan ?? this.abandoned;
     this.end();
     this.box.update('playback', () => initialPlayback);
     if (!plan || plan.state === 'ended') return;
@@ -401,6 +482,14 @@ export class Playback {
   }
 
   private end(): void {
+    this.abandoned = null;
+    this.recovering = false;
+    this.recoveryAttempt = 0;
+    this.cursor = 0;
+    this.audio = undefined;
+    this.subtitle = undefined;
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = undefined;
     this.externalId = undefined;
     this.run = undefined;
     this.follow?.abort();
