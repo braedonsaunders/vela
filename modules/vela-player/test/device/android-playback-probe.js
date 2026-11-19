@@ -31,10 +31,10 @@ function Probe() {
     let alive = true;
     (async () => {
       const client = { device: config.device, protocolVersions: [0], ...await VelaPlayer.capabilities() };
-      await call('/negotiate', { client, idempotencyKey: key() });
-      const result = await call('/playback', { ...config.target, positionSeconds: 0, client, idempotencyKey: key() });
+      if (!config.fixture) await call('/negotiate', { client, idempotencyKey: key() });
+      const result = config.fixture || await call('/playback', { ...config.target, positionSeconds: 0, client, idempotencyKey: key() });
       if (!alive) return;
-      await VelaPlayer.setMediaAccess({ origin: config.origin, pathPrefix: '/', headers: async () => ({}) });
+      await VelaPlayer.setMediaAccess({ origin: config.mediaOrigin || config.origin, pathPrefix: config.pathPrefix || '/', headers: async () => config.mediaHeaders || {} });
       if (config.refusedURL) {
         const converted = result.paths.find(path => path.kind === 'transcode' && ['ready', 'on-demand'].includes(path.readiness));
         result.paths = result.paths.filter(path => path.id === result.selectedPathId || path.id === converted?.id)
@@ -45,7 +45,7 @@ function Probe() {
         result.audioTracks.map(track => track.codec).join(','), result.subtitleTracks.length);
       timer.current = setInterval(() => {
         const active = current.current;
-        if (active) void call(`/sessions/${active.sessionId}`).then(snapshot => {
+        if (active && !config.fixture) void call(`/sessions/${active.sessionId}`).then(snapshot => {
           if (alive && snapshot.plan.revision > current.current.revision) set(snapshot.plan);
         }).catch(error => setStatus(error.message));
       }, 2000);
@@ -56,7 +56,7 @@ function Probe() {
     // The harness changes config between runs; each check stops its server session and native view.
     const timeout = setTimeout(async () => {
       const active = current.current;
-      if (active) await call(`/sessions/${active.sessionId}/commands`, { kind: 'stop', idempotencyKey: key(),
+      if (active && !config.fixture) await call(`/sessions/${active.sessionId}/commands`, { kind: 'stop', idempotencyKey: key(),
         sourceGeneration: active.sourceGeneration, seekGeneration: active.seekGeneration }).catch(() => {});
       current.current = null; setPlan(null); clearInterval(timer.current);
       setStatus('Check stopped'); console.log('[android-proof-stopped]');
@@ -73,7 +73,7 @@ function Probe() {
             snapshot.video?.codec, snapshot.video?.dynamicRange, snapshot.audioTrackId, snapshot.subtitleTrackId);
         }
       }}
-      onObservation={event => { void call(`/sessions/${event.sessionId}/observations`, event.observation).catch(() => {}); }}
+      onObservation={event => { if (!config.fixture) void call(`/sessions/${event.sessionId}/observations`, event.observation).catch(() => {}); }}
       onError={error => { setStatus(error.message); console.log('[android-proof-error]', error.kind); }}
       onCommand={event => console.log('[android-proof-command]', event.id, event.ok)}
       onSessionCommand={async event => {
