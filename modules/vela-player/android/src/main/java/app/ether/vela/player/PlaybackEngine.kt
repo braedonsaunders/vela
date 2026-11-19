@@ -102,12 +102,11 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
     if (plan?.selectedPath?.transport == "hls") builder.setMimeType(MimeTypes.APPLICATION_M3U8)
     if (plan?.selectedPath?.transport == "dash") builder.setMimeType(MimeTypes.APPLICATION_MPD)
     builder.setSubtitleConfigurations(plan?.subtitleTracks.orEmpty().mapNotNull { track ->
+      if (!track.canRenderExternal) return@mapNotNull null
       val uri = track.externalUrl?.let(MediaAccessStore::resolve) ?: return@mapNotNull null
-      val mime = when (track.codec?.lowercase()) {
+      val mime = when (track.externalFormat?.lowercase()) {
         "srt", "subrip" -> MimeTypes.APPLICATION_SUBRIP
         "ass", "ssa" -> MimeTypes.TEXT_SSA
-        "pgs" -> MimeTypes.APPLICATION_PGS
-        "vobsub", "dvd_subtitle" -> MimeTypes.APPLICATION_VOBSUB
         else -> MimeTypes.TEXT_VTT
       }
       MediaItem.SubtitleConfiguration.Builder(uri).setId(track.id).setMimeType(mime)

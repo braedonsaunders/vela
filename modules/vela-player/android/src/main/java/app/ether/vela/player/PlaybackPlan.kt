@@ -91,12 +91,20 @@ internal class PlanTrack(
   val url: String?,
   val deliveryKind: String?,
   val deliveryUrl: String?,
+  val deliveryFormat: String? = null,
 ) {
   val isExternal: Boolean
     get() = deliveryKind == "external"
 
   val externalUrl: String?
     get() = if (isExternal) deliveryUrl ?: url else null
+
+  // The source codec may be bitmap/SRT while the server delivers converted WebVTT.
+  val externalFormat: String?
+    get() = deliveryFormat ?: codec
+
+  val canRenderExternal: Boolean
+    get() = isExternal && externalFormat?.lowercase() !in listOf("vobsub", "dvd_subtitle", "pgs", "hdmv_pgs_subtitle")
 
   /** MergingMediaPeriod prefixes each source's Format.id with its child index. External
    * subtitle sources start at 1; source 0 is the original file and must not match by suffix. */
@@ -118,7 +126,7 @@ internal class PlanTrack(
       forced?.let { out["forced"] = it }
       hearingImpaired?.let { out["hearingImpaired"] = it }
       deliveryKind?.let { kind ->
-        out["delivery"] = buildMap { put("kind", kind); deliveryUrl?.let { put("url", it) } }
+        out["delivery"] = buildMap { put("kind", kind); deliveryUrl?.let { put("url", it) }; deliveryFormat?.let { put("format", it) } }
       }
       return out
     }
@@ -138,6 +146,7 @@ internal class PlanTrack(
         url = value.text("url"),
         deliveryKind = delivery?.text("kind"),
         deliveryUrl = delivery?.text("url"),
+        deliveryFormat = delivery?.text("format"),
       )
     }
   }

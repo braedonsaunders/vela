@@ -17,6 +17,14 @@ fun main() {
   listOf(3001, 4005, 403).forEach { check(!transientMediaFailure(it)) }
   check(mediaFailureMessage(503).contains("temporarily unavailable"))
   check(!mediaFailureMessage(4005).contains("4005"))
+  fun delivered(codec: String, format: String? = null) = PlanTrack.from(mapOf("id" to "captions", "name" to "Captions", "codec" to codec,
+    "delivery" to mapOf("kind" to "external", "url" to "/captions", "format" to format)))!!
+  check(!delivered("vobsub").canRenderExternal)
+  check(!delivered("hdmv_pgs_subtitle").canRenderExternal)
+  check(delivered("vobsub", "webvtt").canRenderExternal)
+  check(delivered("srt", "webvtt").externalFormat == "webvtt")
+  check(delivered("srt").externalFormat == "srt")
+  check((delivered("srt", "webvtt").snapshot["delivery"] as Map<*, *>)["format"] == "webvtt")
   val external = PlanTrack.from(mapOf("id" to "captions:en", "name" to "English", "delivery" to mapOf("kind" to "external")))!!
   check(external.matchesExternalFormat("captions:en"))
   check(external.matchesExternalFormat("1:captions:en"))

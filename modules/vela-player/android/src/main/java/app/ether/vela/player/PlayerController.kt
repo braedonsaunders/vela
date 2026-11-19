@@ -436,6 +436,12 @@ internal class PlayerController(
     }
     val track = plan?.subtitleTrack(id) ?: return "No such subtitle track"
     val external = track.externalUrl?.let(MediaAccessStore::resolve)
+    if (external != null && !track.canRenderExternal) {
+      // Raw bitmap sidecars need timing/palette metadata absent from a single URL.
+      // Ask the server to deliver a supported subtitle or prepare its burn-in path.
+      report.sessionCommand(mapOf("kind" to "tracks", "subtitleTrackId" to id))
+      return null
+    }
     if (external != null) {
       val localId = state.tracks.firstOrNull { it["plan-id"] == id }?.get("id") as? Long
       if (localId == null) return "The external subtitle is not available yet"
