@@ -39,6 +39,14 @@ const discovered = (s: SearchView) => (s.ai.state === 'off' ? [] : s.ai.items);
 const describing = (s: SearchView) =>
   s.query.trim().split(' ').filter(w => w !== '').length > 1 && s.descriptive.state !== 'off';
 
+export function searchResultAnnouncement(s: SearchView): string {
+  if (s.titles.state === 'loading') return `Searching for ${s.query}`;
+  if (s.titles.state === 'failed') return `Search failed for ${s.query}`;
+  const count = titles(s).length + descriptive(s).length + discovered(s).length
+    + channels(s).length + airing(s).length + upcoming(s).length;
+  return `${count} ${count === 1 ? 'result' : 'results'} for ${s.query}`;
+}
+
 /** A programme's channel line: its episode, then the channel. */
 const programmeLine = (x: LiveProgrammeHit) => (x.episode !== '' ? `${x.episode} · ${x.channelName}` : x.channelName);
 
@@ -67,6 +75,7 @@ export const SEARCH_VOCABULARY: Record<string, Accessor> = {
   'search.aiCount': over(s => String(discovered(s).length)),
   'search.onNowCount': over(s => String(channels(s).length + airing(s).length)),
   'search.comingUpCount': over(s => String(upcoming(s).length)),
+  'search.announcement': over(searchResultAnnouncement),
 
   'hit.id': hit(x => x.id, x => x.id),
   'hit.kind': c => c.hit?.kind ?? '',

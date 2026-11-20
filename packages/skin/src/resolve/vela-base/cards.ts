@@ -280,7 +280,7 @@ export const card: Node = {
           type: 'text',
           text: '{card.name}',
           style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$ui.ink' },
-          small: { 'font-size': '13px' },
+          small: { 'font-size': '13px', 'line-clamp': '2' },
         },
         { type: 'use', template: 'velaCardContext' },
         {
@@ -292,6 +292,7 @@ export const card: Node = {
             'line-clamp': '1',
             'font-variant-numeric': 'tabular-nums',
           },
+          small: { 'line-clamp': '2' },
         },
       ],
     },

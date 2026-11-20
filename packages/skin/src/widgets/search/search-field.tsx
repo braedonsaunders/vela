@@ -74,6 +74,14 @@ export function SearchField({ ctx }: WidgetProps) {
   // The search actions (`search`, `focusSearch`) focus the field by its id: the text input itself,
   // which on a TV opens the system keyboard.
   const input = useSearchFocus();
+  const placeholder = host.env.home?.descriptiveAvailable
+    ? msg('ui.searchPlaceholderDescriptive')
+    : msg('ui.searchPlaceholder');
+  const clearOnEscape = Platform.OS === 'web' ? { onKeyPress: (event: { nativeEvent: { key: string }; preventDefault?(): void }) => {
+    if (event.nativeEvent.key !== 'Escape' || query.text === '') return;
+    event.preventDefault?.();
+    query.change('');
+  } } : {};
 
   // On a TV the field is a focus destination of its own (the focus engine skips a bare text input
   // here): the remote moves onto it, and selecting it opens the keyboard. The clear button sits
@@ -118,7 +126,7 @@ export function SearchField({ ctx }: WidgetProps) {
           ref={input}
           value={query.text}
           onChangeText={query.change}
-          placeholder={msg('ui.searchPlaceholder')}
+          placeholder={placeholder}
           placeholderTextColor={ui.inkQuiet}
           accessibilityLabel={msg('ui.searchYourLibrary')}
           autoCorrect={false}
@@ -126,6 +134,7 @@ export function SearchField({ ctx }: WidgetProps) {
           returnKeyType="search"
           testID={`search-${ctx.index}`}
           nativeID="vela-search"
+          {...clearOnEscape}
           onFocus={() => focus(true)}
           onBlur={() => focus(false)}
           style={[text, styles.input] as TextStyle[]}

@@ -384,6 +384,10 @@ export const search: Node = {
   small: { gap: '18px' },
   children: [
     {
+      type: 'text', text: '{search.announcement}', role: 'status',
+      style: { position: 'absolute', width: '1px', height: '1px', opacity: '0', overflow: 'hidden' },
+    },
+    {
       type: 'box',
       style: { ...column('6px'), ...gutter },
       small: { ...gutterSmall },

@@ -16,10 +16,16 @@ export function SearchInput({ params, ctx }: WidgetProps) {
   const interaction = useWidgetInteraction();
   const placeholder = params.placeholder ? withClientStrings(params.placeholder) : undefined;
   const label = params.label ? withClientStrings(params.label) : placeholder;
+  const clearOnEscape = Platform.OS === 'web' ? { onKeyPress: (event: { nativeEvent: { key: string }; preventDefault?(): void }) => {
+    if (event.nativeEvent.key !== 'Escape' || query.text === '') return;
+    event.preventDefault?.();
+    query.change('');
+  } } : {};
   return (
     <TextField ref={input} value={query.text} onChangeText={query.change} placeholder={placeholder} accessibilityLabel={label}
       placeholderTextColor={params.placeholderColor ?? (drawn.style.color as string | undefined)} autoCorrect={false} autoCapitalize="none"
       returnKeyType="search" testID={`search-${ctx.index}`} nativeID="vela-search"
+      {...clearOnEscape}
       onFocus={() => { host.setFlag('search-focused', true); interaction.report('focus', true); }}
       onBlur={() => { host.setFlag('search-focused', false); interaction.report('focus', false); }}
       style={[drawn.style, { flexGrow: 1, flexShrink: 1, minWidth: 0, padding: 0, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) } as TextStyle]} />
