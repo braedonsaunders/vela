@@ -15,7 +15,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
+import { Children, memo, cloneElement, createContext, forwardRef, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -38,6 +38,8 @@ import { resolveUi } from './resolve/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
 import { collection, itemKey, type Ctx, type Env } from './vocabulary';
+import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
+import { pointerPolicy, type PointerMode } from './pointer-policy';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
 const Host = HostContext;
@@ -45,6 +47,7 @@ const Inherited = InheritedContext;
 const Group = GroupContext;
 /** The direction of the parent's flex layout (native shrinking follows it; see shrinkFor). */
 const Direction = createContext<'row' | 'column'>('column');
+const PointerInheritance = createContext<PointerMode>('auto');
 /** A direct child of a route: on TV one focus band (see tvGuide). */
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
@@ -61,7 +64,7 @@ const HiddenLibraryNav = createContext(false);
 interface Scroller { scrollTo(options: { x?: number; y?: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
 /** The masked-view package's class types predate React 19's JSX types. */
-const Masked = MaskedView as unknown as ComponentType<{ style?: ViewStyle; maskElement: ReactNode; children: ReactNode }>;
+const Masked = MaskedView as unknown as ComponentType<{ style?: ViewStyle; maskElement: ReactNode; children: ReactNode; pointerEvents?: 'box-none' }>;
 
 const AView = Animated.View;
 const AText = Animated.Text;
@@ -329,6 +332,63 @@ function partition(style: Record<string, unknown>, keys: Set<string>): [Record<s
   return [inside, outside];
 }
 
+interface StickyHeaderProps {
+  children?: ReactNode;
+  scrollAnimatedValue: RNAnimated.Value;
+  nextHeaderLayoutY?: number;
+  onLayout(event: LayoutChangeEvent): void;
+}
+
+/** Native ScrollView's default sticky wrapper forces zIndex 10. A backdrop must retain its
+ * authored order below foreground content, just as position: sticky does on the web. */
+const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, StickyHeaderProps>(function NativeStickyHeader(props, ref) {
+  const { scrollAnimatedValue } = props;
+  type ChildProps = { node?: RNode; ctx?: Ctx; children?: ReactNode; onLayout?: (event: LayoutChangeEvent) => void };
+  const children = Children.only(props.children) as ReactElement<ChildProps>;
+  const host = useHost();
+  const group = useContext(Group);
+  const [layout, setLayout] = useState<StickyLayout | null>(null);
+  const [nextY, setNextY] = useState(props.nextHeaderLayoutY);
+  const [explicitOffset, setExplicitOffset] = useState(0);
+  useImperativeHandle(ref, () => ({ setNextHeaderY: setNextY }), []);
+  // TV reading stops wrap the same child without changing its stacking or focus identity.
+  const child = children.type === ReadingStop.Provider ? Children.only(children.props.children) as ReactElement<ChildProps> : children;
+  const { node, ctx } = child.props;
+  const rows = node ? rowsFor(node, ctx ?? ROOT_CONTEXT, host.env, { hover: false, focus: false, active: false }, group, false) : {};
+  const zIndex = Number(rows['z-index'] ?? 0) || 0;
+  const translateY = useMemo(() => {
+    if (!layout) return scrollAnimatedValue.interpolate({ inputRange: [0, 1], outputRange: [0, 0] });
+    const limit = stickyLimit(layout, nextY);
+    return scrollAnimatedValue.interpolate({
+      inputRange: [layout.y, layout.y + (Number.isFinite(limit) && limit > 0 ? limit : 1)],
+      outputRange: [0, limit === 0 ? 0 : Number.isFinite(limit) ? limit : 1],
+      extrapolateLeft: 'clamp', extrapolateRight: Number.isFinite(limit) ? 'clamp' : 'extend',
+    });
+  }, [layout, nextY, scrollAnimatedValue]);
+  // Fabric's hit testing needs the settled transform in its shadow tree too. Drawing stays
+  // native-driven during the gesture; only publish the explicit value once scrolling pauses.
+  useEffect(() => {
+    if (!layout) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const listener = scrollAnimatedValue.addListener(({ value }) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setExplicitOffset(stickyOffset(value, layout, nextY)), 32);
+    });
+    return () => { scrollAnimatedValue.removeListener(listener); clearTimeout(timer); };
+  }, [scrollAnimatedValue, layout, nextY]);
+  const onLayout = (event: LayoutChangeEvent) => {
+    const { y, height } = event.nativeEvent.layout;
+    setLayout(previous => previous?.y === y && previous.height === height ? previous : { y, height });
+    props.onLayout(event);
+    children.props.onLayout?.(event);
+  };
+  return <RNAnimated.View collapsable={false} onLayout={onLayout} pointerEvents="box-none"
+    style={{ zIndex, transform: [{ translateY }] }}
+    passthroughAnimatedPropExplicitValues={{ style: { transform: [{ translateY: explicitOffset }] } }}>
+    {children}
+  </RNAnimated.View>;
+});
+
 function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const host = useHost();
   const { env, viewport } = host;
@@ -359,6 +419,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const translated = translatedBox(own, viewport, text.fontSize);
   const fx = translated.fx;
   const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
+  const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
   const instant = useContext(InstantContent);
   const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
   const rowId = ctx.row?.id ?? '';
@@ -413,8 +474,8 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     </>
   );
   const drawn: Record<string, unknown> = { ...style, ...(web && swipe ? { touchAction: 'pan-y pinch-zoom' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion, ...focusRing };
-  // Web sticky headers add a z-index: 10 wrapper, which puts decorative backdrops
-  // above their foreground. Native CSS keeps the document's own stacking order.
+  if (!web) drawn.pointerEvents = pointer.box;
+  // Sticky keeps the document's stacking order: CSS on web, our ScrollView wrapper natively.
   if (web && fx.sticky) drawn.position = 'sticky';
   // A masked box that only paints a colour draws the masked colour as a gradient fill.
   const filled = !!fx.maskedFill && node.children.length === 0;
@@ -452,6 +513,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
         refreshControl={route && host.refresh && Platform.OS !== 'web' && !Platform.isTV ? <RefreshControl refreshing={!!host.refreshing} onRefresh={host.refresh} /> : undefined}
+        StickyHeaderComponent={NativeStickyHeader}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         {...a11y}>
         {content}
@@ -491,6 +553,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     });
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
+        pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
         focusable={selectable(node)}
         {...(web ? { dataSet: { velaFocus: 'frame' }, onKeyDown: (event) => { if (buttonRef.current) episodeNav?.key(buttonRef.current, { key: (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() }); } } : {})}
         {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
@@ -562,6 +625,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const direction = fx.grid || (fx.scrollX && !fx.scrollY) || String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
   return (
     <Inherited.Provider value={text}>
+      <PointerInheritance.Provider value={web ? 'auto' : pointer.content}>
       <Group.Provider value={groupValue}>
         <Direction.Provider value={direction}>
           <Band.Provider value={Platform.isTV && (vertical || node.id === 'vela-library-alternative')}>
@@ -571,6 +635,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
           </Band.Provider>
         </Direction.Provider>
       </Group.Provider>
+      </PointerInheritance.Provider>
     </Inherited.Provider>
   );
 }
@@ -754,7 +819,7 @@ interface MaskProps {
 /** A native gradient mask with the box's geometry, around the box. */
 function Mask({ linear, radial, style, children }: MaskProps) {
   return (
-    <Masked style={style as ViewStyle} maskElement={linear ? <LinearMask mask={linear} /> : <RadialMask mask={radial!} />}>
+    <Masked pointerEvents="box-none" style={style as ViewStyle} maskElement={linear ? <LinearMask mask={linear} /> : <RadialMask mask={radial!} />}>
       {children}
     </Masked>
   );
@@ -817,7 +882,9 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const instant = useContext(InstantContent);
   const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
-  return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion } as Record<string, unknown>, fx };
+  const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
+  return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion,
+    ...(!web && pointer.content === 'none' ? { pointerEvents: 'none' } : {}) } as Record<string, unknown>, fx };
 }
 
 function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: Ctx }) {
