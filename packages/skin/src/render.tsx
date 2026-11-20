@@ -46,6 +46,7 @@ import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './transl
 import { collection, itemKey, type Card, type Ctx, type Env } from './vocabulary';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
+import { moveWebRowFocus } from './web-row-navigation';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
 function contextCard(id: string, kind: string, name: string, image = ''): Card {
@@ -86,7 +87,7 @@ const LoadingLibraryNav = createContext(false);
 const HiddenLibraryNav = createContext(false);
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x?: number; y?: number; animated: boolean }): void }
-const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
+const pagers = new Map<string, { view: Scroller; x: number; width: number; contentWidth: number }>();
 /** The masked-view package's class types predate React 19's JSX types. */
 const Masked = MaskedView as unknown as ComponentType<{ style?: ViewStyle; maskElement: ReactNode; children: ReactNode; pointerEvents?: 'box-none' }>;
 
@@ -437,6 +438,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
   const [groupUi, setGroupUi] = useState({ hover: false, focus: false });
   const scrollRef = useRef<Scroller>(null);
+  const pagerMetrics = useRef({ x: 0, width: viewport.width, contentWidth: 0 });
   const buttonRef = useRef<Focusable | null>(null);
   const suppressPress = useRef(false);
   const guideRef = useRef<Focusable | null>(null);
@@ -502,8 +504,16 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   useEffect(() => {
     if (!node.pager || !fx.scrollX || !rowId) return;
     const view = scrollRef.current;
-    if (view) pagers.set(rowId, { view, x: 0, width: viewport.width });
-    return () => { pagers.delete(rowId); };
+    if (view) pagers.set(rowId, { view, ...pagerMetrics.current });
+    const frame = web && view ? requestAnimationFrame(() => {
+      const element = view as unknown as HTMLElement;
+      pagerMetrics.current.width = element.clientWidth;
+      pagerMetrics.current.contentWidth = element.scrollWidth;
+      const pager = pagers.get(rowId);
+      if (pager) { pager.width = element.clientWidth; pager.contentWidth = element.scrollWidth; }
+      host.setPager(rowId, { atStart: element.scrollLeft <= 1, atEnd: element.scrollLeft + element.clientWidth >= element.scrollWidth - 1 });
+    }) : 0;
+    return () => { if (frame) cancelAnimationFrame(frame); pagers.delete(rowId); };
   }, [node.pager, fx.scrollX, rowId, viewport.width]);
 
   if (fx.hidden) return null;
@@ -572,9 +582,24 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const sticky = web || horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
     const onPagerScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      pagerMetrics.current = { x: contentOffset.x, width: layoutMeasurement.width, contentWidth: contentSize.width };
       const pager = pagers.get(rowId);
-      if (pager) { pager.x = contentOffset.x; pager.width = layoutMeasurement.width; }
+      if (pager) { pager.x = contentOffset.x; pager.width = layoutMeasurement.width; pager.contentWidth = contentSize.width; }
       host.setPager(rowId, { atStart: contentOffset.x <= 1, atEnd: contentOffset.x + layoutMeasurement.width >= contentSize.width - 1 });
+    } : undefined;
+    const onPagerLayout = node.pager && rowId ? (e: LayoutChangeEvent) => {
+      pagerMetrics.current.width = e.nativeEvent.layout.width;
+      const pager = pagers.get(rowId);
+      if (pager) pager.width = pagerMetrics.current.width;
+      const metrics = pager ?? pagerMetrics.current;
+      if (metrics.contentWidth) host.setPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= metrics.contentWidth - 1 });
+    } : undefined;
+    const onPagerContent = node.pager && rowId ? (width: number) => {
+      pagerMetrics.current.contentWidth = width;
+      const pager = pagers.get(rowId);
+      if (pager) pager.contentWidth = width;
+      const metrics = pager ?? pagerMetrics.current;
+      host.setPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= width - 1 });
     } : undefined;
     // Android TV: the route's offset, for keeping focused controls below the shell's bar.
     const onScroll = routeReveal ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -586,6 +611,8 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         refreshControl={route && host.refresh && Platform.OS !== 'web' && !Platform.isTV ? <RefreshControl refreshing={!!host.refreshing} onRefresh={host.refresh} /> : undefined}
         StickyHeaderComponent={NativeStickyHeader}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
+        onLayout={onPagerLayout} onContentSizeChange={onPagerContent}
+        {...(web && horizontal && rowId ? { dataSet: { velaRow: rowId } } : {})}
         {...a11y}>
         {content}
       </AScroll>
@@ -634,10 +661,13 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
         focusable={selectable(node)}
-        {...(web ? { dataSet: { velaFocus: 'frame' }, onKeyDown: (event) => {
+        {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}) }, onKeyDown: (event) => {
           const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
           if (cardPrimary && (key === 'ContextMenu' || (key === 'F10' && (event as unknown as { shiftKey?: boolean }).shiftKey))) {
             event.preventDefault(); event.stopPropagation(); openAnchoredMenu('keyboard'); return;
+          }
+          if (cardPrimary && moveWebRowFocus(event.currentTarget as unknown as HTMLElement, key)) {
+            event.preventDefault(); event.stopPropagation(); return;
           }
           if (buttonRef.current) episodeNav?.key(buttonRef.current, { key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() });
         } } : {})}

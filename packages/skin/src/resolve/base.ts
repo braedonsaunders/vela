@@ -21,7 +21,7 @@ export const velaBase: SkinDocument = {
   renderer: 16,
   id: 'vela-base',
   name: 'Vela',
-  version: '1.0.0',
+  version: '1.0.1',
   tagline: 'The look every skin inherits.',
   // Never offered in the picker, so it has no preview; swatches name its default look.
   swatches: ['#090b0e', '#f5f1e9', '#dcb998'],

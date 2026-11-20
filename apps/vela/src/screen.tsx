@@ -5,7 +5,7 @@ import { retainedHost } from './retained-host';
 import { useIsFocused, usePathname } from 'expo-router';
 import { useCallback, useContext, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
-import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
+import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, SkipToContent, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import type { RNode } from '@vela/skin/src/resolve';
 import { useSideInsets, useVela } from './vela';
 import { FocusBoundary } from './focus-boundary';
@@ -79,6 +79,8 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const search = route === 'home' && contentHost.env.query !== '' ? vela.doc?.routes.search : undefined;
   const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
   const shell = route === 'title' || route === 'person' || sharedShell ? undefined : vela.doc?.shell;
+  const mainId = `vela-main-${route}-${library ?? 'all'}`.replace(/[^a-z0-9_-]/gi, '-');
+  const main = <View nativeID={mainId} accessibilityRole="main" {...(Platform.OS === 'web' ? { tabIndex: -1 } : {})} style={{ flex: 1 }}>{content}</View>;
   // The transparent navigator modal fills the viewport, including the section shell's header.
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.
   if (route === 'title' || route === 'person') return (
@@ -95,7 +97,8 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
     <ScreenActive.Provider value={isCurrent}>
       {/* On TV a covered screen (home under a title page, a section behind another) takes no focus. */}
       <FocusBoundary active={isCurrent} entered={false} style={{ flex: 1 }}>
-        {shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content}
+        <SkipToContent target={mainId} />
+        {shell ? <SkinRoot host={{ ...host, children: main }} node={shell} /> : main}
       </FocusBoundary>
     </ScreenActive.Provider>
   );

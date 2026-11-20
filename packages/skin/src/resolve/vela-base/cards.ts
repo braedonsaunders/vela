@@ -1,5 +1,5 @@
 import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
-import { cardRadius, display, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
+import { cardRadius, display, focusRing, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
 
 // A muted trailer preview: a landscape card that opens over the poster while the card's preview
 // plays (home rows that preview on focus). It stays mounted while idle, since the widget inside
@@ -370,6 +370,7 @@ export const rowEnd: Node = {
 // A shelf scrolls sideways; ranked shelves space their cards wider, room for the numerals.
 export const shelf = (ranked: boolean, paged: boolean): Node => ({
   type: 'box',
+  ...(paged ? { pager: { inset: 28, peek: 72 } } : {}),
   when: [{ test: 'row.presentation', is: ranked ? 'eq' : 'ne', value: 'ranked' }],
   style: {
     display: 'flex',
@@ -386,6 +387,36 @@ export const shelf = (ranked: boolean, paged: boolean): Node => ({
   },
   small: { gap: ranked ? '22px' : '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall },
   children: [{ type: 'repeat', over: 'row.items', item: rowItem }, ...(paged ? [rowEnd] : [])],
+});
+
+const pageButton = (direction: 'pagePrev' | 'pageNext'): Node => ({
+  type: 'box',
+  press: { action: direction, arg: '{row.id}' },
+  label: direction === 'pagePrev' ? '{t:ui.scrollBack}' : '{t:ui.scrollOn}',
+  disabled: [{ test: direction === 'pagePrev' ? 'pager.atStart' : 'pager.atEnd' }],
+  style: {
+    position: 'absolute',
+    top: '46%',
+    [direction === 'pagePrev' ? 'left' : 'right']: 'max(8px, 1.2vw)',
+    'z-index': '12',
+    display: 'flex',
+    width: '42px',
+    height: '58px',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'border-radius': '999px',
+    'background-color': 'color-mix(in srgb, $ui.page 82%, transparent)',
+    'box-shadow': '0px 8px 24px $ui.shadow',
+    color: '$ui.ink',
+  },
+  hover: { scale: '1.08', 'background-color': '$ui.raised' },
+  focus: { 'box-shadow': focusRing },
+  disabledStyle: { opacity: '0' },
+  children: [{
+    type: 'icon',
+    symbol: 'forward-chevron',
+    style: { width: '22px', height: '22px', ...(direction === 'pagePrev' ? { rotate: '180deg' } : {}) },
+  }],
 });
 
 export const shelfRow = (paged: boolean): Node => ({
@@ -409,6 +440,10 @@ export const shelfRow = (paged: boolean): Node => ({
     },
     shelf(false, paged),
     shelf(true, paged),
+    ...(paged ? [
+      { ...pageButton('pagePrev'), when: [{ test: 'env.small', not: true }, { test: 'pager.overflows' }] },
+      { ...pageButton('pageNext'), when: [{ test: 'env.small', not: true }, { test: 'pager.overflows' }] },
+    ] as Node[] : []),
   ],
 });
 export const row = shelfRow(true);

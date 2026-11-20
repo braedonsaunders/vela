@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.12';
+const version = '1.2.13';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -237,16 +237,27 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
     { type: 'text', text: '{card.name}', style: { 'font-size': '17px', 'font-weight': '800', 'line-clamp': '1', 'text-align': 'center', padding: '0px 4px' }, small: { 'font-size': '15px' } },
   ] };
 
+const rowPage = (direction: 'pagePrev' | 'pageNext'): Node => ({ type: 'box', press: { action: direction, arg: '{row.id}' },
+  label: direction === 'pagePrev' ? '{t:ui.scrollBack}' : '{t:ui.scrollOn}',
+  disabled: [{ test: direction === 'pagePrev' ? 'pager.atStart' : 'pager.atEnd' }],
+  style: { position: 'absolute', top: '48%', [direction === 'pagePrev' ? 'left' : 'right']: 'max(8px, 1.2vw)', 'z-index': '12',
+    display: 'flex', width: '50px', height: '64px', 'align-items': 'center', 'justify-content': 'center', 'border-radius': '999px',
+    'background-color': '$card', 'box-shadow': ledge('rgba(27, 37, 80, 0.18)'), color: '$ink' },
+  hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.18)')), disabledStyle: { opacity: '0' }, children: [
+    { type: 'icon', symbol: 'forward-chevron', style: { width: '24px', height: '24px', ...(direction === 'pagePrev' ? { rotate: '180deg' } : {}) } },
+  ] });
 const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-bottom': '14px' }, children: [
   { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px', ...gutter }, small: { ...gutterSmall, gap: '10px' }, children: [
     { type: 'image', src: art('sparkle.svg'), alt: '', style: { width: '26px', height: '26px', 'flex-shrink': '0' }, small: { width: '20px', height: '20px' } },
     { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': '28px', 'font-weight': '800', 'letter-spacing': '-0.01em', 'line-clamp': '1' }, small: { 'font-size': '21px' } },
   ] },
-  { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
+  { type: 'box', pager: { inset: 24, peek: 72 }, style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '28px', 'align-items': 'flex-start', 'padding-top': '22px', 'padding-bottom': '30px', ...gutter }, small: { gap: '16px', 'padding-top': '16px', 'padding-bottom': '24px', ...gutterSmall }, children: [
       { type: 'repeat', over: 'row.items', item: { type: 'use', template: 'card', motion: 'tileIn', stagger: { step: 55, cap: 8 } } },
     ] },
   ] },
+  { ...rowPage('pagePrev'), when: [{ test: 'env.small', not: true }, { test: 'pager.overflows' }] },
+  { ...rowPage('pageNext'), when: [{ test: 'env.small', not: true }, { test: 'pager.overflows' }] },
 ] };
 
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '100%', 'padding-bottom': '56px', 'background-color': '$page', color: '$ink' },
