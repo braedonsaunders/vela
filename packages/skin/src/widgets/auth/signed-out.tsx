@@ -12,6 +12,7 @@ export interface SessionAuth {
   serverKind: string;
   passwordAvailable: boolean;
   plexAvailable?: boolean;
+  plexHomeAvailable?: boolean;
   plex?: import('./connect/model').PlexLink | null;
   quickAvailable: boolean;
   secureOrigin: string;
@@ -24,6 +25,7 @@ export interface AuthActions {
   signIn(username: string, password: string): Promise<unknown>;
   startPlex(): Promise<void>;
   cancelPlex(): void;
+  choosePlexProfile(profileId: string, pin?: string): Promise<void>;
   startQuick(): Promise<unknown>;
   cancelQuick(): unknown;
   secureSwitch(): Promise<{ url: string; error: string }>;

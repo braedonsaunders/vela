@@ -8,7 +8,7 @@ let mock: RunningMock;
 let keys = 0;
 const key = () => `test-${++keys}`;
 
-beforeAll(async () => { mock = await launchMock({ VELA_MOCK_CHANNELS: String(CHANNELS) }); });
+beforeAll(async () => { mock = await launchMock({ VELA_MOCK_CHANNELS: String(CHANNELS), VELA_MOCK_PLEX_HOME: '1' }); });
 afterAll(async () => { await mock?.stop(); });
 
 const call = (path: string, init: RequestInit = {}) => fetch(`${mock.url}/vela/v0${path}`, init);
@@ -48,6 +48,20 @@ describe('mock server: public and auth', () => {
     const response = await post('/auth/sign-in', { username: 'demo', password: 'wrong', device, idempotencyKey: key() });
     expect(response.status).toBe(401);
     expect(await errorCode(response)).toBe('invalid_credentials');
+  });
+
+  test('Plex Home selection is public, PIN-gated and returns a Vela session', async () => {
+    const begin = await post('/auth/plex', { plexToken: 'mock-plex-approved', selectProfile: true, device, idempotencyKey: key() });
+    expect(begin.status).toBe(200);
+    const selection = await begin.json() as V.PlexHomeSelection;
+    expect(selection.profiles).toEqual([
+      { id: 'owner', name: 'Demo Owner', protected: true }, { id: 'kids', name: 'Kids', protected: false },
+    ]);
+    const refused = await post('/auth/plex/profile', { selectionToken: selection.selectionToken, profileId: 'owner', pin: '0000', device, idempotencyKey: key() });
+    expect(refused.status).toBe(401);
+    const accepted = await post('/auth/plex/profile', { selectionToken: selection.selectionToken, profileId: 'owner', pin: '1234', device, idempotencyKey: key() });
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toMatchObject({ viewer: { id: 'viewer-demo' } });
   });
 
   test('a session needs both the bearer and its device id', async () => {

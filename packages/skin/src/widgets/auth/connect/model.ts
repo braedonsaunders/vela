@@ -45,8 +45,9 @@ export interface PlexChoice {
 export interface PlexLink {
   code: string;
   linkUrl: string;
-  state: 'waiting' | 'linked' | 'expired' | 'failed';
+  state: 'waiting' | 'linked' | 'expired' | 'failed' | 'profiles';
   choices: PlexChoice[];
+  profiles?: { id: string; name: string; protected: boolean }[];
 }
 
 /** A Jellyfin or Emby Quick Connect code waiting for approval on the server. */

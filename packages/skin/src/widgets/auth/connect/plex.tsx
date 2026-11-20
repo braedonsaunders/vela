@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Field } from '../../common/controls';
 import { useAuthLayout } from '../layout-context';
 // Linking a Plex server: a PIN entered at plex.tv/link (one tile per character), then the
 // account's servers to choose from, the recommended one marked. Only the chosen server's own
@@ -26,6 +28,7 @@ export function PlexStep({
   error,
   onStart,
   onChoose,
+  onChooseProfile,
   onCancel,
 }: {
   link: PlexLink | null;
@@ -35,6 +38,7 @@ export function PlexStep({
   error: string;
   onStart(): void;
   onChoose(id: string): void;
+  onChooseProfile?(id: string, pin?: string): void;
   onCancel(): void;
 }) {
   const layout = useAuthLayout();
@@ -47,7 +51,8 @@ export function PlexStep({
           {link?.linkUrl ? <LinkLine url={link.linkUrl} /> : null}
           <Waiting>{msg('connect.plex.waiting')}</Waiting>
         </View>
-      ) : link?.state === 'linked' ? (
+      ) : link?.state === 'profiles' ? <ProfilePicker profiles={link.profiles ?? []} busy={busy} onChoose={onChooseProfile ?? (() => {})} />
+      : link?.state === 'linked' ? (
         <View style={{ gap: 8, minHeight: 0, flexShrink: 1 }}>
           <Label>{msg('connect.plex.choose')}</Label>
           {link.choices.length === 0 ? <Waiting>{msg('connect.plex.finding')}</Waiting> : null}
@@ -74,6 +79,23 @@ export function PlexStep({
       {error ? <Alert>{error}</Alert> : null}
     </View>
   );
+}
+
+function ProfilePicker({ profiles, busy, onChoose }: { profiles: {id: string; name: string; protected: boolean}[]; busy: boolean; onChoose(id: string, pin?: string): void }) {
+  const [protectedId, setProtectedId] = useState('');
+  const [pin, setPin] = useState('');
+  const chosen = profiles.find(profile => profile.id === protectedId);
+  if (chosen) return <View style={{ gap: 12 }}>
+    <Label>{`ENTER ${chosen.name.toUpperCase()}'S PLEX HOME PIN`}</Label>
+    <Field label="Plex Home PIN" value={pin} onChangeText={setPin} kind="password" onSubmit={() => { if (pin) onChoose(chosen.id, pin); }} testID="plex-profile-pin" />
+    <Pill primary label="Continue" disabled={busy || !pin} busy={busy} onPress={() => onChoose(chosen.id, pin)} testID="plex-profile-continue" />
+    <Pill label="Choose another profile" disabled={busy} onPress={() => { setProtectedId(''); setPin(''); }} testID="plex-profile-back" />
+  </View>;
+  return <View style={{ gap: 12 }}>
+    <Label>WHO’S WATCHING?</Label>
+    {profiles.map(profile => <Pill key={profile.id} label={`${profile.name}${profile.protected ? ' · PIN required' : ''}`} disabled={busy}
+      onPress={() => profile.protected ? setProtectedId(profile.id) : onChoose(profile.id)} testID={`plex-profile-${profile.id}`} />)}
+  </View>;
 }
 
 /** "Enter this code at plex.tv/link": a link where a browser can open it, the address on a TV. */

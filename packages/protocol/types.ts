@@ -30,6 +30,8 @@ export interface ServerCapabilities {
   secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   plexAccountSignIn?: boolean;
+  /** Ether can turn an approved Plex account into a bounded Plex Home profile selection. */
+  plexHomeProfiles?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
     descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
     playlists?: Feature & { maxEntries: number } };
@@ -39,6 +41,10 @@ export interface NegotiateRequest extends Mutation { client: ClientCapabilities 
 export interface NegotiateResponse { capabilities: ServerCapabilities; client: ClientCapabilities }
 export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef }
 export interface Tokens { accessToken: string; refreshToken: string; expiresAt: Timestamp; viewer: Viewer }
+export interface PlexHomeProfile { id: ID; name: string; protected: boolean }
+export interface PlexHomeSelection { selectionToken: string; expiresAt: Timestamp; profiles: PlexHomeProfile[] }
+export type PlexAccountSignIn = Tokens | PlexHomeSelection;
+export interface PlexHomeSignInRequest extends Mutation { selectionToken: string; profileId: ID; pin?: string; device: Device }
 export interface SignInRequest extends Mutation { username: string; password: string; device: Device }
 export interface RefreshRequest extends Mutation { refreshToken: string; device: Device }
 export interface RevokeRequest extends Mutation { refreshToken: string }

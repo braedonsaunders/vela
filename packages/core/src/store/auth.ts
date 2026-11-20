@@ -2,7 +2,7 @@
 // the web's sign-in link (a one-time code redeemed at start), the hand-off to the server's
 // secure origin, and sign-out. Quick Connect polling runs here, at the server's interval.
 import { createPlexPin, plexAuthUrl, pollPlexPin } from '../adapter/plex/auth';
-import { exchangePlexAccount } from '../adapter/ether/plex';
+import { beginPlexHomeSignIn, exchangePlexAccount, selectPlexHomeProfile } from '../adapter/ether/plex';
 import type * as V from '../wire';
 import type { Connection } from '../adapter/connection';
 import { capabilitiesOf } from '../adapter/advertise';
@@ -40,7 +40,8 @@ export interface AuthState {
   viewer: string;
   passwordAvailable: boolean;
   plexAvailable: boolean;
-  plex: null | { code: string; linkUrl: string; state: 'waiting' | 'expired' | 'failed'; choices: never[] };
+  plexHomeAvailable: boolean;
+  plex: null | { code: string; linkUrl: string; state: 'waiting' | 'expired' | 'failed' | 'profiles'; choices: never[]; profiles: V.PlexHomeProfile[] };
   quickAvailable: boolean;
   /** The server's HTTPS origin this http: page may hand its session to; '' when none. */
   secureOrigin: string;
@@ -59,7 +60,7 @@ export const initialAuth: AuthState = {
   serverName: '',
   viewer: '',
   passwordAvailable: false,
-  plexAvailable: false, plex: null,
+  plexAvailable: false, plexHomeAvailable: false, plex: null,
   quickAvailable: false,
   secureOrigin: '',
   error: '',
@@ -75,6 +76,7 @@ export class Auth {
   private plexGeneration = 0;
   private plexTimer?: ReturnType<typeof setTimeout>;
   private plexAuthorization?: { navigate(url: string): void; close(): void };
+  private plexSelection?: { token: string; expiresAt: string; serverId: string };
   private starting: Promise<void> | undefined;
   private retrying: Promise<void> | undefined;
   private linkError = '';
@@ -244,7 +246,7 @@ export class Auth {
     this.cancelReconnect();
     this.patch({
       phase: 'signed-out', serverId: '', serverKind: '', serverName: '', viewer: '',
-      passwordAvailable: false, quickAvailable: false, plexAvailable: false, plex: null, secureOrigin: '', error: '',
+      passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, plex: null, secureOrigin: '', error: '',
       revision: this.session.epoch, quick: null,
     });
   }
@@ -257,7 +259,7 @@ export class Auth {
     const epoch = this.session.epoch;
     const generation = this.linkGeneration;
     const tokens = await this.session.tokens(connection);
-    let options = { passwordAvailable: false, quickAvailable: false, plexAvailable: false, secureOrigin: '' };
+    let options = { passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, secureOrigin: '' };
     let reachable = true;
     try {
       options = await this.options(connection);
@@ -298,6 +300,7 @@ export class Auth {
       ? secureOriginFor(this.platform, capabilities.secureOrigins) : '';
     return {
       plexAvailable: connection.record.kind === 'ether' && capabilities.plexAccountSignIn === true,
+      plexHomeAvailable: connection.record.kind === 'ether' && capabilities.plexHomeProfiles === true,
       passwordAvailable: capabilities.features.passwordSignIn.available,
       quickAvailable: capabilities.features.quickConnect.available,
       secureOrigin: secure,
@@ -309,6 +312,7 @@ export class Auth {
     clearTimeout(this.plexTimer);
     this.plexAuthorization?.close();
     this.plexAuthorization = undefined;
+    this.plexSelection = undefined;
     this.patch({ plex: null });
   }
 
@@ -321,24 +325,45 @@ export class Auth {
     const epoch = this.session.epoch;
     const current = () => generation === this.plexGeneration && epoch === this.session.epoch && connection === this.session.selected();
     try {
-      if (!(await this.options(connection)).plexAvailable) throw new Error('Plex sign-in is not offered by this server');
+      const options = await this.options(connection);
+      if (!options.plexAvailable) throw new Error('Plex sign-in is not offered by this server');
+      // The isolated mock has no plex.tv account. Its explicit profile capability exercises the
+      // complete Vela picker without weakening any release path.
+      if (this.platform.mock && options.plexHomeAvailable) {
+        const answer = await beginPlexHomeSignIn(connection.record.origin, 'mock-plex-approved', this.session.device, this.session.key());
+        if (!current() || !('profiles' in answer)) return;
+        authorization?.close();
+        this.plexAuthorization = undefined;
+        this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id };
+        this.patch({ error: '', plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
+        return;
+      }
       const pin = await createPlexPin(this.session.device.id, !!authorization);
       if (!current()) return;
       if (authorization) authorization.navigate(plexAuthUrl(this.session.device.id, pin.code));
-      this.patch({ error: '', plex: { code: authorization ? '' : pin.code, linkUrl: authorization ? '' : 'https://plex.tv/link', state: 'waiting', choices: [] } });
+      this.patch({ error: '', plex: { code: authorization ? '' : pin.code, linkUrl: authorization ? '' : 'https://plex.tv/link', state: 'waiting', choices: [], profiles: [] } });
       const poll = async () => {
         if (!current()) return;
         try {
           const approved = await pollPlexPin(this.session.device.id, pin);
           if (!current()) return;
           if (approved.authToken) {
-            const tokens = await exchangePlexAccount(connection.record.origin, approved.authToken, this.session.device, this.session.key());
+            const answer = this.box.get().auth.plexHomeAvailable
+              ? await beginPlexHomeSignIn(connection.record.origin, approved.authToken, this.session.device, this.session.key())
+              : await exchangePlexAccount(connection.record.origin, approved.authToken, this.session.device, this.session.key());
             if (!current()) return;
-            await connection.credentials.set(tokens);
+            if ('profiles' in answer) {
+              this.plexAuthorization?.close();
+              this.plexAuthorization = undefined;
+              this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id };
+              this.patch({ plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
+              return;
+            }
+            await connection.credentials.set(answer);
             this.cancelPlex();
             this.session.resetSession();
           } else if (Date.parse(pin.expiresAt) <= Date.now()) {
-            this.patch({ plex: { code: '', linkUrl: '', state: 'expired', choices: [] } });
+            this.patch({ plex: { code: '', linkUrl: '', state: 'expired', choices: [], profiles: [] } });
           } else this.plexTimer = setTimeout(() => void poll(), 2000);
         } catch (error) {
           if (current()) this.patch({ plex: null, error: message(error, 'Plex is temporarily unavailable. Try again.') });
@@ -351,6 +376,27 @@ export class Auth {
         if (this.plexAuthorization === authorization) this.plexAuthorization = undefined;
         this.patch({ error: message(error, 'Plex is temporarily unavailable. Try again.') });
       }
+    }
+  }
+
+  async choosePlexProfile(profileId: string, pin?: string): Promise<void> {
+    const selection = this.plexSelection;
+    const connection = this.session.selected();
+    if (!selection || selection.serverId !== connection.record.id || Date.parse(selection.expiresAt) <= Date.now()) {
+      this.cancelPlex();
+      this.patch({ error: 'Plex profile selection expired. Sign in with Plex again.' });
+      return;
+    }
+    try {
+      const tokens = await selectPlexHomeProfile(connection.record.origin, {
+        selectionToken: selection.token, profileId, pin: pin || undefined,
+        device: this.session.device, idempotencyKey: this.session.key(),
+      });
+      await connection.credentials.set(tokens);
+      this.cancelPlex();
+      this.session.resetSession();
+    } catch (error) {
+      this.patch({ error: message(error, 'Could not select this Plex profile. Try again.') });
     }
   }
 

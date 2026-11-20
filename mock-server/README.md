@@ -13,6 +13,8 @@ preflight and artwork, to inspect loading states.
 Optional `VELA_MOCK_BOOTSTRAP_DELAY_MS=10000` delays only Home bootstrap (up to two minutes),
 so libraries remain independently usable while inspecting the slow-Home state.
 Optional `VELA_MOCK_TOKEN=dev-token` seeds that fixed bearer/device for development.
+Optional `VELA_MOCK_PLEX_HOME=1` advertises Plex Home selection; after signing out, Vela's Plex
+button opens mock profiles directly (the protected owner profile uses PIN `1234`).
 Optional `VELA_MOCK_COLD=1` makes each title's first detail read partial (`pending: ["extras"]`,
 `refreshAfterMs: 2000`, `Cache-Control: private, no-store`), as Ether answers a title it is still filling.
 For device/quick-connect pairing, approve the displayed code using an already
