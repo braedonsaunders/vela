@@ -82,3 +82,20 @@ test('an early snapshot without an audio choice retains the server-selected trac
   const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, audioTrackId: null, throughputHistory: [], capabilities: {} } as unknown as Snapshot;
   expect(present(source, snapshot).audioId).toBe('en');
 });
+
+test('a session-wide limitation (height 0) is one explained row, never "0p" or a raw code', () => {
+  const source = plan(); source.qualityLimitations = [{ height: 0, reason: 'output_profile_unavailable' }, { height: 0, reason: 'transcoding_disabled' }];
+  const view = present(source, null);
+  expect(view.qualities.some(q => q.resolution === '0p')).toBe(false);
+  const session = view.qualities.filter(q => q.id === 'unavailable:session');
+  expect(session).toHaveLength(1);
+  expect(session[0]!.disabledReason).toBe('Not available for this title');
+  expect(JSON.stringify(view.qualities)).not.toContain('output_profile_unavailable');
+});
+
+test('limitation codes become viewer text; unknown codes are hidden, readable text is kept', async () => {
+  const { qualityLimitReason } = await import('../src/widgets/player/present');
+  expect(qualityLimitReason('transcoding_disabled')).toBe('The server owner has turned off conversion');
+  expect(qualityLimitReason('some_new_code')).toBe('Not available');
+  expect(qualityLimitReason('This server cannot encode 4K')).toBe('This server cannot encode 4K');
+});

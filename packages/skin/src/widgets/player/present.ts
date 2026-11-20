@@ -306,14 +306,27 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
     if (!chosen.aliases.includes(option.id)) chosen.aliases.push(option.id);
   }
   for (const limitation of plan.qualityLimitations ?? []) {
-    const resolution = limitation.height >= 2160 ? '4K' : `${limitation.height}p`;
+    // A height of 0 is a session-wide denial (conversion off, service down, owner policy): one
+    // explanatory row, never a fabricated "0p" resolution.
+    const sessionWide = !(limitation.height > 0);
+    const resolution = sessionWide ? msg('player.qualitySessionLimited') : limitation.height >= 2160 ? '4K' : `${limitation.height}p`;
     if (!byResolution.has(resolution)) byResolution.set(resolution, {
-      id: `unavailable:${limitation.height}`, aliases: [], resolution, traits: '', rate: '', needs: '',
-      disabledReason: limitation.reason || msg('player.qualityUnavailable'), original: false,
+      id: sessionWide ? 'unavailable:session' : `unavailable:${limitation.height}`, aliases: [], resolution, traits: '', rate: '', needs: '',
+      disabledReason: qualityLimitReason(limitation.reason), original: false,
     });
   }
   const order = (option: QualityOption) => option.resolution === '4K' ? 2160 : Number.parseInt(option.resolution) || 0;
   return [...originals, ...[...byResolution.values()].sort((a, b) => order(b) - order(a))];
+}
+
+const QUALITY_REASONS = ['output_profile_unavailable', 'transcoding_disabled', 'quality_service_unavailable', 'owner_policy', 'decoder_profile_limit'];
+
+/** Ether's quality limitation codes as viewer text; an unknown code is never shown raw. */
+export function qualityLimitReason(code: string | undefined): string {
+  if (!code) return msg('player.qualityUnavailable');
+  if (QUALITY_REASONS.includes(code)) return msg(`player.qualityReason.${code}`);
+  // A server may already send viewer text; a bare machine code it does not explain stays hidden.
+  return /^[a-z0-9_.-]+$/.test(code) ? msg('player.qualityReason.other') : code;
 }
 
 function playingQuality(snapshot: Snapshot | null, s: PlayerStats, path: Path | undefined): string {
