@@ -31,7 +31,12 @@
       "backgroundColor": "#090b0e"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "sitemap": false
+        }
+      ],
       "expo-font",
       [
         "@react-native-tvos/config-tv",

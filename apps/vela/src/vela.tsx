@@ -154,7 +154,10 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
 function useSignedOutGate(phase: VelaState['auth']['phase']): void {
   const pathname = usePathname();
   useEffect(() => {
-    if ((phase === 'signed-out' || phase === 'offline') && !SIGNED_OUT_ROUTES.includes(pathname)) router.replace('/sign-in');
+    if ((phase === 'signed-out' || phase === 'offline') && !SIGNED_OUT_ROUTES.includes(pathname)) {
+      const search = Platform.OS === 'web' ? window.location.search : '';
+      router.replace({ pathname: '/sign-in', params: { returnTo: `${pathname}${search}` } });
+    }
   }, [phase, pathname]);
 }
 

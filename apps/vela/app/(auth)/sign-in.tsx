@@ -2,16 +2,18 @@
 // sign-in state, or Connect for a signed-out Plex server. Once signed in, home.
 import { useVela as useSession, useVelaState } from '@vela/core/react';
 import { SignedOut } from '@vela/skin/src/widgets/auth';
-import { Redirect } from 'expo-router';
+import { Redirect, useLocalSearchParams, type Href } from 'expo-router';
 import { View } from 'react-native';
 import { useVela } from '../../src/vela';
+import { safeReturnTo } from '../../src/return-to';
 
 export default function SignIn() {
   const session = useSession();
   const auth = useVelaState(s => s.auth);
   const servers = useVelaState(s => s.servers);
   const app = useVela();
-  if (auth.phase === 'signed-in') return <Redirect href="/" />;
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
+  if (auth.phase === 'signed-in') return <Redirect href={safeReturnTo(params.returnTo) as Href} />;
   const host = app.host('auth', 'auth');
   const route = app.doc?.routes.auth;
   if (!host || !route) return <View style={{ flex: 1 }} />;
