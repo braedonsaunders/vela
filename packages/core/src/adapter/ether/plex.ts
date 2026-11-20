@@ -32,7 +32,13 @@ async function plexRequest(origin: string, path: string, body: object, allowSele
     throw new Error('Ether could not complete Plex sign-in. Please try again.');
   }
   const value = await response.json() as PlexAccountSignIn;
-  if (allowSelection && validSelection(value)) return value;
+  if (allowSelection && validSelection(value)) {
+    return { ...value, profiles: value.profiles.map(profile => {
+      const { avatarUrl, ...rest } = profile;
+      const avatar = profileAvatar(origin, avatarUrl);
+      return avatar ? { ...rest, avatarUrl: avatar } : rest;
+    }) };
+  }
   const tokens = value as Tokens;
   if (!tokens || typeof tokens.accessToken !== 'string' || !tokens.accessToken || typeof tokens.refreshToken !== 'string' || !tokens.refreshToken ||
       typeof tokens.expiresAt !== 'string' || !Number.isFinite(Date.parse(tokens.expiresAt)) || !tokens.viewer || typeof tokens.viewer.id !== 'string' || !tokens.viewer.id ||
@@ -49,14 +55,19 @@ function validSelection(value: PlexAccountSignIn): value is import('../../wire')
     || candidate.profiles.length < 2 || candidate.profiles.length > 32) return false;
   return candidate.profiles.every((profile: PlexHomeProfile) => profile && typeof profile.id === 'string' && !!profile.id
     && typeof profile.name === 'string' && !!profile.name.trim() && profile.name.length <= 80 && typeof profile.protected === 'boolean'
-    && (profile.restricted === undefined || typeof profile.restricted === 'boolean') && validAvatar(profile.avatarUrl));
+    && (profile.restricted === undefined || typeof profile.restricted === 'boolean'));
 }
 
-function validAvatar(value: unknown): boolean {
-  if (value === undefined) return true;
-  if (typeof value !== 'string' || !value || value.length > 2048) return false;
+/**
+ * A Plex Home avatar as Ether serves it: a sealed, short-lived image path on the same server
+ * (/vela/v0/images/plexavatar-…), usually relative. It resolves against the server's origin; any
+ * other URL is dropped (the profile shows initials) rather than invalidating the whole selection.
+ */
+export function profileAvatar(origin: string, value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value || value.length > 2048) return undefined;
   try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '::1'].includes(url.hostname));
-  } catch { return false; }
+    const server = new URL(origin);
+    const url = new URL(value, `${server.origin}/`);
+    return url.origin === server.origin && url.pathname.startsWith('/vela/v0/images/') && !url.username && !url.password ? url.href : undefined;
+  } catch { return undefined; }
 }

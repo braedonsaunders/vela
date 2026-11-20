@@ -223,8 +223,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path === '/auth/plex') {
     if (body.plexToken !== 'mock-plex-approved') return Response.json({ error: 'not_shared' }, {status: 403});
     if (capabilities.plexHomeProfiles && body.selectProfile === true) return json({ selectionToken: 'mock-plex-home', expiresAt: new Date(Date.now() + 600000).toISOString(), profiles: [
-      { id: 'owner', name: 'Demo Owner', protected: true, avatarUrl: `${url.origin}/vela/v0/artwork/profile-owner?kind=avatar&width=240` },
-      { id: 'kids', name: 'Kids', protected: false, restricted: true, avatarUrl: `${url.origin}/vela/v0/artwork/profile-kids?kind=avatar&width=240` },
+      { id: 'owner', name: 'Demo Owner', protected: true, avatarUrl: '/vela/v0/images/plexavatar-owner' },
+      { id: 'kids', name: 'Kids', protected: false, restricted: true, avatarUrl: '/vela/v0/images/plexavatar-kids' },
     ] } satisfies V.PlexHomeSelection);
     return json(issue(body.device));
   }
@@ -715,6 +715,9 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
   }
+  // Plex Home avatars, as Ether serves them: a sealed same-server path, plain GET, no headers.
+  const avatar = /^\/vela\/v0\/images\/plexavatar-([a-z0-9-]+)$/.exec(url.pathname);
+  if (avatar && req.method === 'GET') return new Response(renderArtwork(`profile-${avatar[1]}`, 'avatar', 240), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'private, no-store' } });
   const art = /^\/vela\/v0\/artwork\/([a-z0-9-]+)$/.exec(url.pathname);
   if (art && req.method === 'GET') {
     if (url.searchParams.get('kind') === 'person' || url.searchParams.has('grant')) {
