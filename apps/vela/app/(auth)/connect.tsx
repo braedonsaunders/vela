@@ -22,8 +22,8 @@ export default function ConnectServer() {
   if (!host) return <View style={{ flex: 1 }} />;
   return (
     <HostContext.Provider value={host}>
-      <Stage>
-        <Connect servers={servers} actions={session.servers} auth={auth} authActions={session.auth} onClose={leave} />
+      <Stage branding={app.authArt}>
+        <Connect servers={servers} actions={session.servers} auth={auth} authActions={session.auth} brandingName={app.authArt.name} onClose={leave} />
       </Stage>
     </HostContext.Provider>
   );

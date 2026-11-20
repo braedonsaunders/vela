@@ -53,7 +53,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
       </Words>
       {switcher.servers.list.map(server => (
         <View key={server.id}><Row
-          label={server.name}
+          label={server.selected && switcher.brandingName ? switcher.brandingName : server.name}
           detail={pending === server.id ? msg('ui.connectingToYourLibrary') : serverDetail(server)}
           busy={pending === server.id}
           ready={server.status === 'ready'}

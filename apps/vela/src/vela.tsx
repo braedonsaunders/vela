@@ -54,7 +54,7 @@ export interface Vela {
    * while partial. Call the returned function when it leaves. */
   openTitle(id: string): () => void;
   /** The server pack's stage art for the signed-out page, as document image paths ('' for none). */
-  authArt: { backdrop: string; wordmark: string };
+  authArt: { backdrop: string; wordmark: string; name?: string };
 }
 
 const VelaContext = createContext<Vela | null>(null);
@@ -133,8 +133,8 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   }, [store, signedIn, state.home.load, state.libraries.load]);
 
   const serverSwitch = useMemo(
-    () => ({ servers, actions: store.servers, consoleUrl, openConnect: () => router.push('/connect') }),
-    [servers, store, consoleUrl],
+    () => ({ servers, actions: store.servers, brandingName: state.appearance.value?.branding?.name, consoleUrl, openConnect: () => router.push('/connect') }),
+    [servers, store, state.appearance.value?.branding?.name, consoleUrl],
   );
 
   // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount

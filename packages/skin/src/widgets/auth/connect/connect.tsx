@@ -21,9 +21,11 @@ export interface ConnectProps {
   onClose?(): void;
   auth?: SessionAuth;
   authActions?: AuthActions;
+  /** Owner-facing identity for the selected server. Its technical record name remains internal. */
+  brandingName?: string;
 }
 
-export function Connect({ servers, actions, onClose, auth, authActions, serverId = '' }: ConnectProps) {
+export function Connect({ servers, actions, onClose, auth, authActions, serverId = '', brandingName }: ConnectProps) {
   const layout = useAuthLayout();
   useEffect(() => () => authActions?.cancelPlex(), [authActions]);
   const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId ? { step: {page: 'signin', serverId}, history: count ? [{page: 'choose'}] : [{page: 'add'}] } : initialAuthFlow(count));
@@ -35,7 +37,8 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   const target = 'serverId' in step ? step.serverId : '';
   const record = servers.list.find(s => s.id === target) ?? (added?.id === target ? added : undefined);
   const kind = record?.kind ?? auth?.serverKind;
-  const name = record?.name || 'server';
+  const branded = !!brandingName && (target === servers.selectedId || target === auth?.serverId);
+  const name = branded ? brandingName! : record?.name || 'server';
   useEffect(() => { if (serverId) send({type: 'server', serverId}); }, [serverId]);
   useEffect(() => { send({ type: 'servers', count: servers.list.length }); }, [servers.list.length]);
   useEffect(() => { if (auth?.phase === 'signed-in' && (step.page === 'signin' || step.page === 'code')) onClose?.(); }, [auth?.phase, step.page, onClose]);
@@ -92,7 +95,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
     {step.page === 'choose' ? <>
       <Pill label="Add a server" height={44} onPress={() => send({type: 'add'})} testID="auth-add" />
       <ScrollView style={{ flexShrink: 1, minHeight: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled">
-        {servers.list.map(server => <ServerRow key={server.id} server={server} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />)}
+        {servers.list.map(server => <ServerRow key={server.id} server={server.selected && brandingName ? { ...server, name: brandingName } : server} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />)}
       </ScrollView>
     </> : step.page === 'add' ? <AddressStep servers={[]} busy={busy} probe={url => actions.probe(url)} onAdd={add} onSelect={select} onRemove={id => void run(() => actions.remove(id))} onPlex={() => { send({type: 'plex'}); void run(() => actions.plexStart()); }} error="" />
     : step.page === 'server-plex' ? <PlexStep link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onChooseProfile={(id, pin) => void run(() => authActions!.choosePlexProfile(id, pin))} onCancel={back} />
@@ -101,7 +104,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
       {quick?.code ? <CodeTiles code={quick.code} testID="connect-code" /> : <Waiting>Requesting a code…</Waiting>}
       {quick?.status === 'expired' || quick?.status === 'denied' ? <Alert>{quick.status === 'expired' ? 'Code expired. Go back to request another.' : 'Code rejected. Try again.'}</Alert> : <Waiting>On a signed-in device, open your Ether server console, then Quick Connect.</Waiting>}
       {quick?.expiresLabel ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }}>{`Code expires at ${quick.expiresLabel}.`}</Words> : null}
-    </View> : auth?.phase === 'starting' || auth?.phase === 'redeeming' ? <Waiting>{auth.phase === 'redeeming' ? 'Signing in…' : 'Connecting…'}</Waiting>
+    </View> : auth?.phase === 'starting' || auth?.phase === 'redeeming' ? <Waiting>{auth.phase === 'redeeming' ? `Signing in to ${name}…` : `Connecting to ${name}…`}</Waiting>
     : auth?.phase === 'offline' ? <View style={{ gap: 12 }}><Waiting>{`Reconnecting to ${name}...`}</Waiting><Pill label="Retry" height={44} disabled={busy} onPress={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} /></View>
     : target === auth?.serverId && auth.plexAvailable && !auth.passwordAvailable && !auth.quickAvailable ? serverPlex
     : <Credentials secondary={serverPlex} busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}

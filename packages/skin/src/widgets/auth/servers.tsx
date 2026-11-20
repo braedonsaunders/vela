@@ -6,6 +6,8 @@ import type { ServerActions, ServersView } from './connect/model';
 export interface ServerSwitch {
   servers: ServersView;
   actions: ServerActions;
+  /** Owner-facing identity for the selected server. */
+  brandingName?: string;
   /** Open Connect a server, to add one. */
   openConnect(): void;
   /** Validated same-host HTTP(S) return address supplied by the web host. */
