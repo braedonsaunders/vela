@@ -39,3 +39,30 @@ test('approved Plex PIN exchanges only with the selected Ether and saves Vela to
     expect(reset).toBe(true);
   } finally {auth.cancelPlex(); globalThis.fetch = original;}
 });
+
+test('browser Plex sign-in opens strong PIN authorization and hides the device code', async () => {
+  const original = globalThis.fetch;
+  const requests: string[] = [];
+  let opened = '', closed = false;
+  const connection = {record: {id: 'target', kind: 'ether', origin: 'https://selected.test'}, adapter: {describe: async () => ({server: {}, plexAccountSignIn: true, features: {}})}, credentials: {set: async () => {}}};
+  const session = {onReset() {}, selected: () => connection, epoch: 0, device: {id: 'browser-id'}, names: new Map(), key: () => 'once', servers: {standalone: true}, resetSession() {}};
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(String(input));
+    return Response.json({id: 1, code: 'STRONG-CODE', expiresAt: new Date(Date.now()+60000).toISOString()});
+  }) as typeof fetch;
+  const box = new StateBox({auth: initialAuth} as VelaState);
+  const platform = { beginExternalAuth: () => ({ navigate: (url: string) => { opened = url; }, close: () => { closed = true; } }) } as VelaPlatform;
+  const auth = new Auth(box, session as unknown as Session, platform);
+  try {
+    await auth.startPlex();
+    expect(requests[0]).toContain('/api/v2/pins?strong=true');
+    expect(opened).toStartWith('https://app.plex.tv/auth/#!?');
+    expect(opened).toContain('clientID=browser-id');
+    expect(opened).toContain('code=STRONG-CODE');
+    expect(box.get().auth.plex).toMatchObject({code: '', linkUrl: '', state: 'waiting'});
+  } finally {
+    auth.cancelPlex();
+    globalThis.fetch = original;
+  }
+  expect(closed).toBe(true);
+});

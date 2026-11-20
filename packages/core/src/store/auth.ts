@@ -1,7 +1,7 @@
 // Signing in to the selected server: its sign-in options, password and Quick Connect sign-in,
 // the web's sign-in link (a one-time code redeemed at start), the hand-off to the server's
 // secure origin, and sign-out. Quick Connect polling runs here, at the server's interval.
-import { createPlexPin, pollPlexPin } from '../adapter/plex/auth';
+import { createPlexPin, plexAuthUrl, pollPlexPin } from '../adapter/plex/auth';
 import { exchangePlexAccount } from '../adapter/ether/plex';
 import type * as V from '../wire';
 import type { Connection } from '../adapter/connection';
@@ -74,6 +74,7 @@ const SNAPSHOT_POLL_SECONDS = 5;
 export class Auth {
   private plexGeneration = 0;
   private plexTimer?: ReturnType<typeof setTimeout>;
+  private plexAuthorization?: { navigate(url: string): void; close(): void };
   private starting: Promise<void> | undefined;
   private retrying: Promise<void> | undefined;
   private linkError = '';
@@ -306,20 +307,25 @@ export class Auth {
   cancelPlex(): void {
     this.plexGeneration++;
     clearTimeout(this.plexTimer);
+    this.plexAuthorization?.close();
+    this.plexAuthorization = undefined;
     this.patch({ plex: null });
   }
 
   async startPlex(): Promise<void> {
     this.cancelPlex();
+    const authorization = this.platform.beginExternalAuth?.();
+    this.plexAuthorization = authorization;
     const generation = this.plexGeneration;
     const connection = this.session.selected();
     const epoch = this.session.epoch;
     const current = () => generation === this.plexGeneration && epoch === this.session.epoch && connection === this.session.selected();
     try {
       if (!(await this.options(connection)).plexAvailable) throw new Error('Plex sign-in is not offered by this server');
-      const pin = await createPlexPin(this.session.device.id);
+      const pin = await createPlexPin(this.session.device.id, !!authorization);
       if (!current()) return;
-      this.patch({ error: '', plex: { code: pin.code, linkUrl: 'https://plex.tv/link', state: 'waiting', choices: [] } });
+      if (authorization) authorization.navigate(plexAuthUrl(this.session.device.id, pin.code));
+      this.patch({ error: '', plex: { code: authorization ? '' : pin.code, linkUrl: authorization ? '' : 'https://plex.tv/link', state: 'waiting', choices: [] } });
       const poll = async () => {
         if (!current()) return;
         try {
@@ -340,7 +346,11 @@ export class Auth {
       };
       this.plexTimer = setTimeout(() => void poll(), 2000);
     } catch (error) {
-      if (current()) this.patch({ error: message(error, 'Plex is temporarily unavailable. Try again.') });
+      if (current()) {
+        authorization?.close();
+        if (this.plexAuthorization === authorization) this.plexAuthorization = undefined;
+        this.patch({ error: message(error, 'Plex is temporarily unavailable. Try again.') });
+      }
     }
   }
 

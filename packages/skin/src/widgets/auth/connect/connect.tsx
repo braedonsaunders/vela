@@ -2,6 +2,7 @@
 // password, code, Plex exchange, restoration and handoff, without exposing credentials to skins.
 import { useEffect, useReducer, useState } from 'react';
 import { Linking, Platform, ScrollView, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { authFlow, initialAuthFlow, type AuthFlow } from '@vela/core';
 import { holdBack } from '../../../menu-key';
 import { Alert, CodeTiles, Heading, Pill, Waiting, Words } from '../../common/controls';
@@ -82,7 +83,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
     if (auth?.quick && step.page === 'signin' && target === auth.serverId) send({type: 'code'});
   }, [auth?.quick, step.page, target]);
   const title = step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' || step.page === 'server-plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
-  const serverPlex = step.page === 'signin' && target === auth?.serverId && auth.plexAvailable ? <Pill label="Sign in with Plex" testID="server-plex" height={layout?.tight ? 44 : 52} disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }} /> : null;
+  const serverPlex = step.page === 'signin' && target === auth?.serverId && auth.plexAvailable ? <Pill primary label="Sign in with Plex" testID="server-plex" height={layout?.tight ? 44 : 52} disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }}><PlexMark /></Pill> : null;
   return <View style={{ gap: layout?.gap ?? 20, minHeight: 0, flexShrink: 1 }}>
     <View style={{ gap: layout?.tight ? 4 : 12 }}>
       {flow.history.length || onClose ? <Pill label={flow.history.length ? 'Back' : 'Cancel'} height={44} align="flex-start" onPress={back} testID="auth-back" /> : null}
@@ -111,4 +112,11 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
     {note && step.page === 'signin' ? <Words rows={{ 'font-size': '13px', color: '$ui.inkSecondary' }}>{note}</Words> : null}
     {error || (step.page === 'signin' && auth?.phase !== 'offline' && auth?.error) ? <ScrollView style={{maxHeight: layout?.tight ? 56 : 120, flexShrink: 1}}><Alert>{error || auth?.error || ''}</Alert></ScrollView> : null}
   </View>;
+}
+
+/** Plex's familiar gold chevron, decorative because the button already has a complete label. */
+function PlexMark() {
+  return <Svg width={17} height={22} viewBox="0 0 17 22">
+    <Path fill="#E5A00D" d="M0 0h6.2L17 11 6.2 22H0l10.8-11z" />
+  </Svg>;
 }

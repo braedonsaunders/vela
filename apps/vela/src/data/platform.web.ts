@@ -74,6 +74,19 @@ export function platform(): VelaPlatform {
     appVersion: config.appVersion,
     media: VelaPlayer.capabilities(),
     page: { origin: location.origin, webCode: link.code, consoleUrl: link.consoleUrl },
+    beginExternalAuth: () => {
+      // WebView desktop shells hand a requested window to the system browser. Ordinary browsers
+      // must create the popup during the press, before the PIN request awaits the network.
+      if (desktop) return { navigate: url => { window.open(url, '_blank', 'noopener'); }, close: () => {} };
+      const popup = window.open('', 'vela-plex-auth', 'popup,width=720,height=760');
+      return {
+        navigate: url => {
+          if (popup && !popup.closed) popup.location.href = url;
+          else window.open(url, '_blank', 'noopener');
+        },
+        close: () => { if (popup && !popup.closed) popup.close(); },
+      };
+    },
     mock: config.mock,
     artWidth: screenArtWidth(),
   };

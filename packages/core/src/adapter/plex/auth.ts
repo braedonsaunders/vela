@@ -15,9 +15,14 @@ async function cloud<T>(path: string, clientIdentifier: string, method = 'GET', 
   if (!response.ok) throw new Error(response.status === 429 ? 'Too many Plex sign-in attempts. Wait before trying again.' : 'Plex is temporarily unavailable. Wait before trying again.');
   return response.json() as Promise<T>;
 }
-export function createPlexPin(clientIdentifier: string): Promise<PlexPin> {
-  // Short PINs can be entered on plex.tv/link on another device.
-  return cloud('/api/v2/pins?strong=false', clientIdentifier, 'POST');
+export function createPlexPin(clientIdentifier: string, strong = false): Promise<PlexPin> {
+  // Short PINs can be entered on plex.tv/link on another device; browser authorization uses a
+  // strong PIN that is never typed by the viewer.
+  return cloud(`/api/v2/pins?strong=${strong}`, clientIdentifier, 'POST');
+}
+export function plexAuthUrl(clientIdentifier: string, code: string): string {
+  const query = new URLSearchParams({ clientID: clientIdentifier, code, 'context[device][product]': 'Vela' });
+  return `https://app.plex.tv/auth/#!?${query}`;
 }
 export function pollPlexPin(clientIdentifier: string, pin: Pick<PlexPin, 'id' | 'code'>): Promise<PlexPin> {
   return cloud(`/api/v2/pins/${encodeURIComponent(pin.id)}?code=${encodeURIComponent(pin.code)}`, clientIdentifier);
