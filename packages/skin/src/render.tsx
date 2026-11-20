@@ -1,6 +1,7 @@
 import { ScreenActive } from './screen-active';
 export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
+import { WebLibraryGrid } from './web-library-grid';
 import { msg } from '@vela/core';
 import { restartAction, secondaryPlayAction } from './restart-action';
 import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './widgets/card-context-menu';
@@ -516,10 +517,22 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   if (fx.grid) {
     // A grid's cells are its drawn items: a repeat contributes one cell per item, as CSS grid
     // places each element a repeat draws.
-    const items = node.children.flatMap((child, i) => child.kind === 'repeat'
-      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c, child.over)}`} node={child.item} ctx={c} />)
-      : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
-    content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
+    const repeat = node.children.length === 1 ? node.children[0] : undefined;
+    if (web && typeof ResizeObserver !== 'undefined' && repeat?.kind === 'repeat' && repeat.over === 'library.items'
+      && !repeat.when.length && (style.rowGap === undefined || typeof style.rowGap === 'number')) {
+      const cards = env.library?.model?.items ?? [];
+      const item = (i: number) => {
+        const context = { ...ctx, card: cards[i]!, index: i };
+        return <SkinNode key={itemKey(context, repeat.over)} node={repeat.item} ctx={context} />;
+      };
+      content = <WindowedGrid grid={fx.grid} rowGap={style.rowGap ?? 0}
+        length={Math.min(cards.length, repeat.implicitLimit ? Infinity : repeat.limit)} getItem={item} />;
+    } else {
+      const items = node.children.flatMap((child, i) => child.kind === 'repeat'
+        ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c, child.over)}`} node={child.item} ctx={c} />)
+        : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
+      content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
+    }
   }
   const layers = (
     <>
@@ -835,6 +848,12 @@ const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
 
 const GRID_FIRST = 24;
 const GRID_BATCH = 24;
+
+function WindowedGrid(props: Omit<React.ComponentProps<typeof WebLibraryGrid>, 'drawn'>) {
+  const layout = useContext(RouteLayout);
+  useLayoutEffect(() => { if (props.length) layout?.grid(); }, [layout, props.length]);
+  return <WebLibraryGrid {...props} drawn={layout?.drawn} />;
+}
 
 /** A grid's cells, in a track that fills the box's content width. The track measures that width
  * itself (a box's padding may be a percentage of its parent's width), and the columns divide it:

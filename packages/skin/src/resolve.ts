@@ -63,7 +63,7 @@ export type RNode = Common & (
   | { kind: 'text'; text: Template; summary?: boolean }
   | { kind: 'image'; src: Template; alt?: Template; fade: boolean }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
-  | { kind: 'repeat'; over: string; limit: number; item: RNode }
+  | { kind: 'repeat'; over: string; limit: number; implicitLimit?: boolean; item: RNode }
   | { kind: 'slot'; slot: 'children' | 'searchField'; inner?: CssT }
   | { kind: 'widget'; widget: string; params: Record<string, string> }
 );
@@ -287,7 +287,8 @@ function convert(node: Node, depth: number, r: Context): RNode {
     case 'text': return { ...common, kind: 'text', text: compile(node.text, r)!, summary: ['{detail.summary}', '{personPage.biography}'].includes(node.text.trim()) };
     case 'image': return { ...common, kind: 'image', src: compile(node.src, r, true)!, alt: compile(node.alt, r), fade: node.fade === true };
     case 'icon': return { ...common, kind: 'icon', symbol: node.symbol, paths: node.paths, viewBox: node.viewBox, fillRule: node.fillRule };
-    case 'repeat': return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000, item: convert(node.item, depth + 1, r) };
+    case 'repeat': return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000,
+      ...(node.limit === undefined ? { implicitLimit: true } : {}), item: convert(node.item, depth + 1, r) };
     case 'slot': return { ...common, kind: 'slot', slot: node.slot, inner: node.inner && css(node.inner, r) };
     case 'widget': {
       // Parameters are text: client and document strings are filled now; holes (`{value}`, bindings) stay for the widget.
