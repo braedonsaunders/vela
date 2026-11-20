@@ -90,6 +90,24 @@ test('the first list uses next-up season before lazy episode data, never the sho
   expect(loaded.detail!.pending).not.toContain('episodes');
 });
 
+test('a series primary action plays or resumes the next episode', () => {
+  const model = detailModel({ title: { ...base, id: show, kind: 'show' },
+    episodes: [{ ...base, id: e1, kind: 'episode', seasonNumber: 1, episodeNumber: 1, durationSeconds: 1800 }],
+    nextUp: { ...base, id: 's2e4', kind: 'episode', seasonNumber: 2, episodeNumber: 4, durationSeconds: 1800,
+      watch: { positionSeconds: 300, played: false, favorite: false, watchlisted: false } },
+    extras: [], cast: [], chapters: [] });
+  const env = { detail: model, season: '' } as Env;
+  expect(accessor('detail.canPlay')!({ index: 0 }, env)).toBe('true');
+  expect(accessor('detail.id')!({ index: 0 }, env)).toBe('s2e4');
+  expect(accessor('detail.playLabel')!({ index: 0 }, env)).toBe('Resume S2 · E4');
+  expect(accessor('detail.hasResume')!({ index: 0 }, env)).toBe('true');
+
+  const unstarted = { ...model, nextUp: [] };
+  const fresh = { detail: unstarted, season: '' } as Env;
+  expect(accessor('detail.id')!({ index: 0 }, fresh)).toBe(e1);
+  expect(accessor('detail.playLabel')!({ index: 0 }, fresh)).toBe('Play S1 · E1');
+});
+
 test('partial metadata does not expose season one while the progress season is undecided', () => {
   const model = detailModel({ title: { ...base, id: show, kind: 'show' }, seasons: [1,4].map(n => ({ ...base, id: `season-${n}`, kind: 'season', seasonNumber: n })),
     episodes: [{ ...base, id: e1, kind: 'episode', seasonNumber: 1, episodeNumber: 1 }], pending: ['episodes'], extras: [], cast: [], chapters: [] });

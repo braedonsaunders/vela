@@ -193,22 +193,31 @@ export function feedRow(row: WireRow, images?: Images, artWidth = 2560): Row {
 
 type WireHero = NonNullable<Bootstrap['heroes']>[number];
 
-function heroAction(hero: WireHero): HeroAction {
-  const { title, action, reason } = hero;
-  const sameTarget = action.titleId === title.id;
-  // The decoration reads the title's own watch state: the action names no position (the server
-  // resolves where to resume when playback starts, so a cached Home never replays a stale one).
-  const position = action.kind === 'resume' && sameTarget ? title.watch?.positionSeconds : undefined;
-  const duration = title.durationSeconds;
+function heroAction(hero: WireHero, rows: WireRow[]): HeroAction {
+  const { title, reason } = hero;
+  const rowEpisodes = rows.flatMap(row => row.items.flatMap(item => item.kind === 'title'
+    && item.title.kind === 'episode' && item.title.showId === title.id && !item.title.watch?.played
+    ? [{ title: item.title, row }] : []));
+  const episode = title.kind === 'show'
+    ? rowEpisodes.find(item => (item.title.watch?.positionSeconds ?? 0) > 0)?.title
+      ?? rowEpisodes.find(item => item.row.purpose === 'nextUp')?.title
+      ?? rowEpisodes[0]?.title
+    : undefined;
+  const action = episode ? { kind: (episode.watch?.positionSeconds ?? 0) > 0 ? 'resume' as const : 'play' as const, titleId: episode.id } : hero.action;
+  const target = episode ?? title;
+  // The decoration reads the playback target's own watch state. The action names no position;
+  // the server resolves where to resume, so a cached Home never replays a stale position.
+  const position = action.kind === 'resume' ? target.watch?.positionSeconds : undefined;
+  const duration = target.durationSeconds;
   const remaining = position !== undefined && duration !== undefined && duration > position && position >= 0
     ? duration - position
     : undefined;
-  const episode = sameTarget && title.kind === 'episode'
-    && title.seasonNumber !== undefined && title.episodeNumber !== undefined;
-  const actionLabel = episode && action.kind !== 'details'
+  const episodeNumbered = target.kind === 'episode'
+    && target.seasonNumber !== undefined && target.episodeNumber !== undefined;
+  const actionLabel = episodeNumbered && action.kind !== 'details'
     ? msg(`hero.action.${action.kind === 'resume' ? 'resumeEpisode' : 'playEpisode'}`, {
-      season: year(title.seasonNumber!),
-      episode: year(title.episodeNumber!),
+      season: year(target.seasonNumber!),
+      episode: year(target.episodeNumber!),
     })
     : msg(`hero.action.${action.kind}`);
   return {
@@ -217,7 +226,7 @@ function heroAction(hero: WireHero): HeroAction {
     reasonLabel: hero.label || msg(`hero.reason.${reason}`),
     action: action.kind,
     targetId: action.titleId,
-    targetKind: sameTarget ? title.kind : reason === 'nextEpisode' ? 'episode' : '',
+    targetKind: target.kind,
     actionLabel,
     actionDetail: remaining !== undefined ? msg('hero.detail.remaining', { time: minute(Math.ceil(remaining / 60)) }) : '',
     progress: position !== undefined && duration && duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0,
@@ -233,7 +242,7 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     defaultSkinId: data.defaultSkinId,
     skins: data.capabilities.skins.map(s => s.id),
     hero: heroes.map(hero => card(hero.title, hero.receiptToken, images, artWidth)),
-    heroActions: heroes.map(heroAction),
+    heroActions: heroes.map(hero => heroAction(hero, data.rows)),
     heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id),
     previews,
     // A row with nothing in it (no shows to continue, say) is a heading over an empty shelf: left out.

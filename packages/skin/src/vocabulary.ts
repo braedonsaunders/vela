@@ -111,6 +111,12 @@ function seasonEpisodes(d: DetailModel | undefined, season: string): Card[] {
 }
 const hasProgress = (x: Card) => x.progressSeconds > 0 && x.durationSeconds > 0 && !x.played;
 
+/** A series' primary action targets the server's Next Up episode, or the first unwatched episode. */
+function detailPlaybackCard(d: DetailModel): Card | undefined {
+  if (d.canPlay) return d.title[0];
+  return d.nextUp?.[0] ?? d.episodes.find(card => !card.played);
+}
+
 /** A card or hero field, read from whichever the context holds. */
 function from(field: 'card' | 'hero', read: (x: Card) => string): Accessor {
   return c => {
@@ -258,6 +264,9 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.entry': (_, e) => e.entry,
 
   ...Object.fromEntries(DETAIL_FIELDS.map(f => [`detail.${f}`, title(x => String(x[f]))])),
+  // `detail.id` is the primary playback target. On a series page that is an episode, while
+  // kindId and the action widgets continue to use the series title itself.
+  'detail.id': detail(d => detailPlaybackCard(d)?.id ?? d.title[0]?.id ?? ''),
   'detail.showName': title(x => x.showName),
   'detail.episodeContext': title(x => x.episodeContext),
   'detail.yearLabel': title(x => x.yearLabel),
@@ -276,7 +285,10 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.kindLabel': title(x => t(x.kind === 'movie' ? 'ui.film' : x.kind === 'show' ? 'ui.series' : x.kind === 'season' ? 'ui.season' : 'ui.episode')),
   'detail.kindId': title(kindId),
   'detail.factsLine': title(factsLine),
-  'detail.resumePct': title((x, d) => pct(d.resumeSeconds, x.durationSeconds), '0'),
+  'detail.resumePct': detail(d => {
+    const card = detailPlaybackCard(d);
+    return card ? pct(card.progressSeconds, card.durationSeconds) : '0';
+  }, '0'),
   'detail.resumePosition': detail(d => d.resumePosition),
   'detail.seasonCount': detail(d => String(d.seasons.length), '0'),
   'detail.seasonName': detail((d, e) => d.seasons.filter(x => x.id === selectedSeason(d, e.season)).map(x => x.name).join('')),
@@ -291,9 +303,19 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.trailerId': detail(d => d.trailerId),
   'detail.trailerReady': detail(d => yes(d.trailerId !== '' && d.trailerReady), 'false'),
   'detail.castLine': detail(d => d.cast.join(' · ')),
-  'detail.canPlay': detail(d => yes(d.canPlay), 'false'),
-  'detail.playLabel': detail(d => (d.resumeSeconds > 0 ? t('ui.resumePositionIn', { position: d.resumePosition }) : t('ui.play'))),
-  'detail.hasResume': detail(d => yes(d.canPlay && d.resumeSeconds > 0), 'false'),
+  'detail.canPlay': detail(d => yes(!!detailPlaybackCard(d)), 'false'),
+  'detail.playLabel': detail(d => {
+    const card = detailPlaybackCard(d);
+    if (!card) return t('ui.play');
+    if (card.kind === 'episode' && card.seasonNumber > 0 && card.episodeNumber > 0) {
+      return t(`hero.action.${hasProgress(card) ? 'resumeEpisode' : 'playEpisode'}`, {
+        season: card.seasonNumberLabel,
+        episode: card.episodeNumberLabel,
+      });
+    }
+    return d.canPlay && d.resumeSeconds > 0 ? t('ui.resumePositionIn', { position: d.resumePosition }) : t('ui.play');
+  }),
+  'detail.hasResume': detail(d => yes(!!detailPlaybackCard(d) && hasProgress(detailPlaybackCard(d)!)), 'false'),
   'detail.hasSeasons': detail(d => yes(d.seasons.length > 1), 'false'),
   'detail.hasEpisodes': detail(d => yes(d.episodes.length > 0 || d.seasons.length > 0), 'false'),
   'detail.hasCast': detail(d => yes(d.castPeople.length > 0), 'false'),
