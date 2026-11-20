@@ -133,7 +133,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
       <View style={styles.top} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
       </View>
-      <View style={styles.bottom} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
+      <View style={[styles.bottom, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
+        pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <BottomBar
           look={look}
           state={state}
@@ -174,4 +175,5 @@ function Chrome({ state }: { state: PlayerChromeState }) {
 const styles = StyleSheet.create({
   top: { position: 'absolute', top: 0, left: 0, right: 0 },
   bottom: { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  menuAboveStatus: { zIndex: 1 },
 });

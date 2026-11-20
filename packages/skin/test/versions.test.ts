@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { VersionItem } from '@vela/core';
-import { preparingRetry, versionAvailability, versionBadge, versionChips, versionMenuGroups } from '../src/widgets/versions';
+import { preparingRetry, versionAvailability, versionBadge, versionChips, versionMenuChips, versionMenuGroups } from '../src/widgets/versions';
 
 const version: VersionItem = {
   id: 'v1', label: '4K Dolby Vision Remux', recommended: true, remembered: true, pinned: true,
@@ -14,6 +14,7 @@ test('version presentation applies badge priority and tidy, de-duplicated chips'
   expect(versionBadge({ ...version, remembered: undefined })).toBe('Pinned by owner');
   expect(versionBadge({ ...version, remembered: undefined, pinned: undefined })).toBe('Recommended');
   expect(versionChips(version)).toEqual(['4K', 'Dolby Vision', 'HEVC', 'Dolby Atmos', 'TrueHD', '7.1', 'Remux', 'Director’s Cut', 'English', '68 GB']);
+  expect(versionMenuChips(version)).toEqual(['Your choice', '4K', 'Dolby Vision', 'Dolby Atmos', '68 GB']);
   expect(versionAvailability(version)).toBe('May take a moment to prepare');
 });
 

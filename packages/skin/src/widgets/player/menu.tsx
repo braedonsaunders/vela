@@ -2,8 +2,8 @@
 // radio list. On TV focus starts on the active choice and stays inside until the menu closes.
 import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
-import { useEffect, useState, type ReactNode, type RefObject, type ComponentRef } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View } from 'react-native';
+import { Children, Fragment, isValidElement, useEffect, useState, type ReactNode, type RefObject, type ComponentRef } from 'react';
+import { Modal, Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, type TextStyle } from 'react-native';
 import { PlayerIcon } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';
@@ -12,9 +12,9 @@ import { useFocusClaim } from '../common/focus-claim';
 
 /** Keeps focus inside on TV; a plain view elsewhere (react-native-web has no focus guide). */
 function FocusTrap({ children }: { children: ReactNode }) {
-  if (!Platform.isTV) return <View>{children}</View>;
+  if (!Platform.isTV) return <>{children}</>;
   return (
-    <TVFocusGuideView autoFocus trapFocusUp trapFocusDown trapFocusLeft trapFocusRight>
+    <TVFocusGuideView style={{ flexShrink: 1, minHeight: 0 }} autoFocus trapFocusUp trapFocusDown trapFocusLeft trapFocusRight>
       {children}
     </TVFocusGuideView>
   );
@@ -25,6 +25,7 @@ export function MenuPanel({
   look,
   name,
   maxHeight,
+  wide,
   children,
   anchorRef,
   onClose,
@@ -32,6 +33,7 @@ export function MenuPanel({
   look: PlayerLook;
   name: string;
   maxHeight: number;
+  wide?: boolean;
   children: ReactNode;
   anchorRef: RefObject<ComponentRef<typeof View> | null>;
   onClose(): void;
@@ -47,6 +49,22 @@ export function MenuPanel({
     return () => { active = false; };
   }, [anchorRef, viewport.width, viewport.height]);
   const native = Platform.OS !== 'web';
+  const preferredWidth = look.size(wide ? 420 : 320);
+  const panelWidth = Math.min(preferredWidth, Math.max(0, viewport.width - look.size(24)));
+  const stickyHeaderIndices: number[] = [];
+  let rowIndex = 0;
+  const rows = native && wide ? Children.toArray(children).flatMap<ReactNode>(row => {
+    if (!isValidElement<MenuSectionProps>(row) || row.type !== MenuSection) {
+      rowIndex++;
+      return [row];
+    }
+    // Native ScrollView docks direct children. Web sections keep headings bounded by their group.
+    stickyHeaderIndices.push(rowIndex);
+    const sectionRows = Children.toArray(row.props.children);
+    rowIndex += 1 + sectionRows.length;
+    return [<MenuHeading key={row.key} look={look} text={row.props.title} sticky />,
+      ...sectionRows.map(child => <Fragment key={`${row.key}:${isValidElement(child) ? child.key : String(child)}`}>{child}</Fragment>)];
+  }) : children;
   const panel = (
     <View
       accessibilityRole="menu"
@@ -55,10 +73,11 @@ export function MenuPanel({
       style={{
         position: 'absolute',
         right: native && anchor ? Math.max(0, viewport.width - anchor.left - anchor.width) : 0,
-        left: !native && look.small ? 0 : undefined,
         bottom: native && anchor ? Math.max(0, viewport.height - anchor.top) : '100%',
         marginBottom: look.size(12),
-        width: look.small ? (native ? anchor?.width : undefined) : look.size(320),
+        left: !wide && !native && look.small ? 0 : undefined,
+        width: wide ? Math.min(panelWidth, native && anchor ? anchor.width : panelWidth)
+          : look.small ? (native ? anchor?.width : undefined) : look.size(320),
         maxHeight: native && anchor ? Math.min(maxHeight, Math.max(44, anchor.top - look.size(24))) : maxHeight,
         borderRadius: Math.min(look.radiusPanel, look.size(18)),
         borderWidth: 1,
@@ -83,9 +102,12 @@ export function MenuPanel({
       >
         {name}
       </Text>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: look.size(8), paddingBottom: look.size(8) }}>
-        <FocusTrap>{children}</FocusTrap>
-      </ScrollView>
+      <FocusTrap>
+        <ScrollView stickyHeaderIndices={stickyHeaderIndices.length ? stickyHeaderIndices : undefined}
+          contentContainerStyle={{ paddingHorizontal: look.size(8), paddingBottom: look.size(8) }}>
+          {rows}
+        </ScrollView>
+      </FocusTrap>
     </View>
   );
   if (!native) return panel;
@@ -172,10 +194,63 @@ export function ChoiceRow({ look, name, detail, selected, pending, enabled, onCh
   );
 }
 
+interface VersionChoice extends Omit<Choice, 'detail'> {
+  chips: string[];
+  status: string;
+  unavailable?: boolean;
+}
+
+/** A source version gets the horizontal room it deserves: name first, compact facts below. */
+export function VersionChoiceRow({ look, name, chips, status, selected, pending, enabled, unavailable, onChoose, testID }: VersionChoice) {
+  const claim = useFocusClaim(selected);
+  const [hover, setHover] = useState(false);
+  const [focus, setFocus] = useState(false);
+  const lit = look.tv && focus;
+  const ink = lit ? look.inkInverse : look.ink;
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected, disabled: !enabled, busy: !!pending }}
+      accessibilityLabel={`${name}, ${[...chips, status].filter(Boolean).join(', ')}`}
+      disabled={!enabled}
+      hasTVPreferredFocus={claim}
+      testID={testID}
+      onPress={onChoose}
+      onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
+      onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+      style={{
+        flexDirection: 'row', alignItems: 'flex-start', gap: look.size(12), minHeight: look.size(58),
+        paddingHorizontal: look.size(12), paddingVertical: look.size(10), borderRadius: look.size(12),
+        backgroundColor: lit ? look.ink : hover ? look.controlHover : selected ? look.control : 'transparent',
+        opacity: unavailable ? 0.45 : enabled || selected ? 1 : 0.55,
+        outlineColor: look.accent, outlineStyle: 'solid', outlineWidth: focus && !look.tv ? 2 : 0,
+      }}
+    >
+      <View style={{ width: look.size(16), height: look.size(20), alignItems: 'center', justifyContent: 'center' }}>
+        {pending ? <Spinner look={look} size={look.size(14)} /> : selected ? <PlayerIcon name="check" size={look.size(14)} color={lit ? look.inkInverse : look.accent} /> : null}
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: look.size(6) }}>
+        <Text style={[look.text(14, selected ? 650 : 550, ink), { flexShrink: 1 }]}>{name}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: look.size(5) }}>
+          {chips.map(chip => <Text key={chip} style={[look.text(10, 600, lit ? look.inkInverse : look.inkQuiet), {
+            paddingHorizontal: look.size(6), paddingVertical: look.size(2), borderRadius: look.size(6),
+            backgroundColor: lit ? 'transparent' : look.control,
+          }]}>{chip}</Text>)}
+          {status ? <Text style={[look.text(11, 400, lit ? look.inkInverse : look.inkQuiet), { flexShrink: 1 }]}>{status}</Text> : null}
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 /** A heading inside a menu: a resolution above its bitrates, a subtitle setting above its segments. */
-export function MenuHeading({ look, text }: { look: PlayerLook; text: string }) {
+export function MenuHeading({ look, text, sticky }: { look: PlayerLook; text: string; sticky?: boolean }) {
+  const stickyStyle = sticky && Platform.OS === 'web'
+    ? ({ position: 'sticky', top: 0, zIndex: 2 } as unknown as TextStyle)
+    : undefined;
   return (
     <Text
+      accessibilityRole={sticky ? 'header' : undefined}
       style={[
         look.text(11, 650, look.inkQuiet),
         {
@@ -183,12 +258,20 @@ export function MenuHeading({ look, text }: { look: PlayerLook; text: string }) 
           paddingHorizontal: look.size(12),
           paddingTop: look.size(10),
           paddingBottom: look.size(2),
+          backgroundColor: sticky ? look.page : undefined,
         },
+        stickyStyle,
       ]}
     >
       {text}
     </Text>
   );
+}
+
+interface MenuSectionProps { look: PlayerLook; title: string; children: ReactNode }
+
+export function MenuSection({ look, title, children }: MenuSectionProps) {
+  return <View><MenuHeading look={look} text={title} sticky />{children}</View>;
 }
 
 export function MenuRule({ look }: { look: PlayerLook }) {

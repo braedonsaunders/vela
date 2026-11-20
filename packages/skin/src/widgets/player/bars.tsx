@@ -14,7 +14,7 @@ import { LiveDial, LivePanel, type LiveWatch } from './live';
 import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
-import { AudioMenu, QualityMenu, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
+import { AudioMenu, qualityMenuRows, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
 import type { PlayerView } from './present';
 import { Scrubber } from './scrubber';
 import { Volume } from './volume';
@@ -225,7 +225,11 @@ function Controls({
       case 'audio':
         return <AudioMenu look={look} view={view} blocked={blocked} send={send} />;
       case 'quality':
-        return <QualityMenu look={look} view={view} plan={state.plan} blocked={blocked} send={send} switchVersion={state.switchVersion} pendingVersionId={state.pendingVersionId} versionMessage={state.versionMessage} pendingQualityId={state.pendingQualityId} info={info} onInfo={toggleInfo} />;
+        return qualityMenuRows({
+          look, view, plan: state.plan, blocked, send, switchVersion: state.switchVersion,
+          pendingVersionId: state.pendingVersionId, versionMessage: state.versionMessage,
+          pendingQualityId: state.pendingQualityId, info, onInfo: toggleInfo,
+        });
       case 'speed':
         return <SpeedMenu look={look} view={view} blocked={blocked} send={send} />;
     }
@@ -367,7 +371,7 @@ function Controls({
         ) : null}
       </View>
       {menu ? (
-        <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight} anchorRef={anchorRef} onClose={closeMenu}>
+        <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight} wide={menu === 'quality' && !!state.plan?.versions?.length} anchorRef={anchorRef} onClose={closeMenu}>
           {contents(menu)}
         </MenuPanel>
       ) : null}

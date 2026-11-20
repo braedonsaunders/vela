@@ -3,12 +3,13 @@
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
 import { SubtitleSearch } from './subtitle-search';
 import { msg, number } from '@vela/core';
+import type { ReactNode } from 'react';
 import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
-import { ChoiceRow, MenuHeading, MenuRule, SegmentRow } from './menu';
+import { ChoiceRow, MenuHeading, MenuRule, MenuSection, SegmentRow, VersionChoiceRow } from './menu';
 import type { PlayerView, QualityOption } from './present';
 import type { PlaybackPlan } from '@vela/player-api';
-import { versionAvailability, versionBadge, versionChips, versionMenuGroups } from '../versions';
+import { versionAvailability, versionMenuChips, versionMenuGroups } from '../versions';
 
 export type MenuName = 'subtitles' | 'audio' | 'quality' | 'speed';
 
@@ -140,62 +141,73 @@ interface QualityProps extends Props {
   onInfo(): void;
 }
 
-export function QualityMenu({ look, view, plan, blocked, send, switchVersion, pendingVersionId, versionMessage, info, onInfo, pendingQualityId }: QualityProps) {
+export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion, pendingVersionId, versionMessage, info, onInfo, pendingQualityId }: QualityProps): ReactNode[] {
   const chosen = (option: QualityOption) =>
     option.aliases.includes(view.lockedQuality) || (!view.lockedQuality && !view.qualityAuto && option.aliases.includes(view.qualityId));
   const groups = versionMenuGroups(plan?.versions, view.qualities);
   const selectedVersionId = plan?.selectedVersionId;
-  return (
-    <>
-      {groups.versions.length ? <MenuHeading look={look} text="Versions" /> : null}
+  const selectedVersion = groups.versions.find(version => version.id === selectedVersionId);
+  const hasVersions = groups.versions.length > 0;
+  const converted = groups.converted.filter(option => !option.original);
+  const qualityRow = (option: QualityOption) => (
+    <ChoiceRow
+      key={option.id}
+      look={look}
+      name={option.original ? [option.resolution, option.traits].filter(Boolean).join(' · ') : option.resolution}
+      detail={option.disabledReason || (blocked ? msg('player.qualityUnavailable') : '') ||
+        [option.original ? '' : option.traits, option.rate, hasVersions ? '' : option.needs].filter(Boolean).join(' · ')}
+      selected={chosen(option)}
+      pending={!!pendingQualityId && option.aliases.includes(pendingQualityId)}
+      enabled={!blocked && !option.disabledReason}
+      onChoose={() => { if (!chosen(option)) send({ type: 'quality', renditionId: option.id }); }}
+    />
+  );
+  const qualityRows = [
+    view.qualityAuto ? (
+      <ChoiceRow key="auto" look={look}
+        name={hasVersions ? 'Automatic quality' : msg('player.auto')}
+        detail={blocked ? msg('player.qualityUnavailable') : view.lockedQuality ? '' : view.quality}
+        selected={!view.lockedQuality}
+        pending={pendingQualityId === 'auto'}
+        enabled={!blocked}
+        onChoose={() => send({ type: 'quality', renditionId: null })}
+      />
+    ) : null,
+    ...(hasVersions ? converted : groups.converted).map(qualityRow),
+  ];
+  const convertedTitle = selectedVersion && selectedVersion.id !== groups.versions[0]?.id
+    ? `Converted from ${selectedVersion.label.split(' · ')[0]}` : 'Converted from the current version';
+  const showConverted = hasVersions && (view.qualityAuto || converted.length > 0);
+  return [
+    hasVersions ? <MenuSection key="versions" look={look} title="Versions">
       {groups.versions.map(version => {
         const unavailable = version.availability === 'unavailable';
-        const detail = [versionBadge(version), versionChips(version).join(' · '), versionAvailability(version)].filter(Boolean).join(' · ');
-        return <ChoiceRow key={`version:${version.id}`} look={look} name={version.label} detail={detail}
+        return <VersionChoiceRow key={`version:${version.id}`} look={look} name={version.label}
+          chips={versionMenuChips(version)} status={versionAvailability(version)} unavailable={unavailable}
           selected={version.id === selectedVersionId} pending={version.id === pendingVersionId}
           enabled={!blocked && !pendingVersionId && !unavailable}
           onChoose={() => { if (version.id !== selectedVersionId) switchVersion(version.id); }} />;
       })}
       {versionMessage ? <MenuHeading look={look} text={versionMessage} /> : null}
-      {groups.versions.length ? <><MenuRule look={look} /><MenuHeading look={look} text="Converted" /></> : null}
-      {view.qualityAuto ? (
-        <ChoiceRow
-          look={look}
-          name={msg('player.auto')}
-          detail={blocked ? msg('player.qualityUnavailable') : view.lockedQuality ? '' : view.quality}
-          selected={!view.lockedQuality}
-          pending={pendingQualityId === 'auto'}
-          enabled={!blocked}
-          onChoose={() => send({ type: 'quality', renditionId: null })}
-        />
-      ) : null}
-      {groups.converted.map(option => (
-        <ChoiceRow
-          key={option.id}
-          look={look}
-          name={option.original ? [option.resolution, option.traits].filter(Boolean).join(' · ') : option.resolution}
-          detail={option.disabledReason || (blocked ? msg('player.qualityUnavailable') : '') || [option.original ? '' : option.traits, option.rate, option.needs].filter(Boolean).join(' · ')}
-          selected={chosen(option)}
-          pending={!!pendingQualityId && option.aliases.includes(pendingQualityId)}
-          enabled={!blocked && !option.disabledReason}
-          onChoose={() => { if (!chosen(option)) send({ type: 'quality', renditionId: option.id }); }}
-        />
-      ))}
-      {!view.qualities.length && !view.qualityAuto ? (
-        <ChoiceRow look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
-      ) : null}
-      <MenuRule look={look} />
-      <ChoiceRow
-        look={look}
-        name={msg('player.info')}
-        detail={look.tv ? '' : 'I'}
-        selected={info}
-        enabled
-        onChoose={onInfo}
-        testID="player-info-toggle"
-      />
-    </>
-  );
+      {groups.converted.filter(option => option.original).map(qualityRow)}
+    </MenuSection> : null,
+    showConverted ? <MenuRule key="converted-divider" look={look} /> : null,
+    ...(showConverted ? [<MenuSection key="converted" look={look} title={convertedTitle}>{qualityRows}</MenuSection>] : qualityRows),
+    !view.qualities.length && !view.qualityAuto ? (
+      <ChoiceRow key="current" look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
+    ) : null,
+    <MenuRule key="info-divider" look={look} />,
+    <ChoiceRow
+      key="info"
+      look={look}
+      name={msg('player.info')}
+      detail={look.tv ? '' : 'I'}
+      selected={info}
+      enabled
+      onChoose={onInfo}
+      testID="player-info-toggle"
+    />,
+  ];
 }
 
 export function SpeedMenu({ look, view, blocked, send }: Props) {

@@ -13,14 +13,29 @@ function codec(value: string | undefined): string {
   return codecs[key] ?? value.toUpperCase();
 }
 
+function sizeChip(bytes: number | undefined): string {
+  return bytes && bytes > 0 ? `${(bytes / 1_000_000_000).toFixed(bytes >= 10_000_000_000 ? 0 : 1)} GB` : '';
+}
+
 export function versionChips(version: VersionItem): string[] {
   const audio = version.audio;
-  const size = version.sizeBytes && version.sizeBytes > 0 ? `${(version.sizeBytes / 1_000_000_000).toFixed(version.sizeBytes >= 10_000_000_000 ? 0 : 1)} GB` : '';
   return [
     version.resolution ?? '', ranges[version.dynamicRange ?? ''] ?? '', codec(version.videoCodec),
     audio?.atmos ? 'Dolby Atmos' : '', codec(audio?.codec), audio?.channels ?? '',
-    version.source ?? '', version.edition ?? '', ...(version.languages ?? []), size,
+    version.source ?? '', version.edition ?? '', ...(version.languages ?? []), sizeChip(version.sizeBytes),
   ].filter((value, index, all): value is string => !!value && all.indexOf(value) === index);
+}
+
+/** The smaller fact set that stays legible inside the player's compact quality menu. */
+export function versionMenuChips(version: VersionItem): string[] {
+  const range = ranges[version.dynamicRange ?? ''] ?? '';
+  return [
+    versionBadge(version),
+    version.resolution ?? '',
+    range,
+    version.audio?.atmos ? 'Dolby Atmos' : '',
+    sizeChip(version.sizeBytes),
+  ].filter((value, index, values): value is string => !!value && values.indexOf(value) === index);
 }
 
 export function versionAvailability(version: VersionItem): string {
