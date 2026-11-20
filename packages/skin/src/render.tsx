@@ -468,6 +468,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     ?? (ctx.person ? contextCard(ctx.person.id || ctx.person.name, 'person', ctx.person.name, ctx.person.portrait) : undefined)
     ?? (ctx.extra ? contextCard(ctx.extra.id, 'extra', ctx.extra.name) : undefined);
   const cardArg = node.press ? fill(node.press.arg, ctx, env) : '';
+  const cardHref = node.press ? host.href?.(node.press.action, cardArg) : undefined;
   const cardPrimary = menuCard && node.press && (node.press.action === 'play' || node.press.action === 'playExtra' || node.press.action === 'person' || node.press.action === 'openHit' || cardArg.split('|')[0] === menuCard.id)
     ? { action: node.press.action, arg: cardArg }
     : null;
@@ -479,6 +480,13 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     }
     const target = buttonRef.current as (Focusable & { measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void }) | null;
     target?.measureInWindow?.((x, y, width, height) => setCardMenu({ mode, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } } }));
+  }, [cardPrimary?.action, cardPrimary?.arg]);
+  const openPointerMenu = useCallback((e: { preventDefault(): void; stopPropagation(): void; clientX?: number; clientY?: number; nativeEvent?: { clientX?: number; clientY?: number; pageX?: number; pageY?: number } }) => {
+    if (!cardPrimary) return;
+    e.preventDefault(); e.stopPropagation();
+    const x = e.clientX ?? e.nativeEvent?.clientX ?? e.nativeEvent?.pageX ?? 0;
+    const y = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
+    setCardMenu({ mode: 'pointer', anchor: { kind: 'point', point: { x, y } } });
   }, [cardPrimary?.action, cardPrimary?.arg]);
   useTVMenuEvent(event => {
     if (!Platform.isTV || !ui.focus || !cardPrimary) return;
@@ -657,6 +665,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       buttonRef.current = target;
       const unregister = registerButton(target);
       const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
+      const contextTarget = web && cardPrimary ? target as unknown as HTMLElement : undefined;
+      const contextHandler = contextTarget ? (event: Event) => openPointerMenu(event as unknown as Parameters<typeof openPointerMenu>[0]) : undefined;
+      if (contextTarget && contextHandler) contextTarget.addEventListener('contextmenu', contextHandler);
       const arg = press ? fill(press.arg, ctx, env) : '';
       const kind = (node.id && fill(node.id, ctx, env).startsWith('episode-')) ? 'episode' : press?.action === 'select' && arg.includes('|season|') ? 'season' : press?.action === 'playExtra' ? 'extra' : undefined;
       const unepisode = kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
@@ -667,13 +678,14 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         buttonRef.current = null;
         unregister?.();
         untrack?.();
+        if (contextTarget && contextHandler) contextTarget.removeEventListener('contextmenu', contextHandler);
         unepisode?.();
       };
       releaseButton.current = release;
       return release;
     };
     const pressArg = press ? fill(press.arg, ctx, env) : '';
-    const href = press ? host.href?.(press.action, pressArg) : undefined;
+    const href = cardHref;
     const onPress = press && ((event: GestureResponderEvent) => {
       if (web && href) {
         const click = event.nativeEvent as unknown as { button?: number; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
@@ -709,12 +721,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         } } : {})}
         {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
         onLongPress={cardPrimary ? () => openAnchoredMenu(Platform.isTV ? 'tv' : 'touch') : undefined}
-        {...(web && cardPrimary ? { onContextMenu: (e: { preventDefault(): void; stopPropagation(): void; clientX?: number; clientY?: number; nativeEvent?: { clientX?: number; clientY?: number; pageX?: number; pageY?: number } }) => {
-          e.preventDefault(); e.stopPropagation();
-          const x = e.clientX ?? e.nativeEvent?.clientX ?? e.nativeEvent?.pageX ?? 0;
-          const y = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
-          setCardMenu({ mode: 'pointer', anchor: { kind: 'point', point: { x, y } } });
-        } } : {})}
+        {...(web && cardPrimary ? { onContextMenu: openPointerMenu } : {})}
         onPress={onPress}
         onFocus={event => {
           set('focus', isFocusVisible(event.currentTarget));
@@ -771,7 +778,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       element = <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{element}<VersionsControl /></View>;
     }
   }
-  if (cardMenu && cardPrimary && menuCard) element = <>{element}<CardContextMenu card={menuCard} primary={cardPrimary} anchor={cardMenu.anchor} mode={cardMenu.mode} opener={buttonRef.current} continueWatching={ctx.row?.purpose === 'continue'} close={() => setCardMenu(null)} /></>;
+  if (cardMenu && cardPrimary && menuCard) element = <>{element}<CardContextMenu card={menuCard} primary={cardPrimary} href={cardHref} anchor={cardMenu.anchor} mode={cardMenu.mode} opener={buttonRef.current} continueWatching={ctx.row?.purpose === 'continue'} close={() => setCardMenu(null)} /></>;
   if (masked) element = <Mask linear={fx.mask} radial={fx.radialMask} style={geometry}>{element}</Mask>;
   if (node.escape?.length) {
     const returnFocus = node.returnFocus ? fill(node.returnFocus, ctx, env) : undefined;

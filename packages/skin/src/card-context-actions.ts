@@ -8,13 +8,15 @@ export interface CardPress {
 
 export type CardContextCommand =
   | { kind: 'dispatch'; action: Action; arg: string }
+  | { kind: 'openLink'; href: string }
+  | { kind: 'copyLink'; href: string }
   | { kind: 'watch'; change: { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false } };
 
 export interface CardContextAction {
   id: string;
   label: string;
-  icon: 'play' | 'restart' | 'info' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add';
-  group: 'play' | 'details' | 'watch' | 'remove';
+  icon: 'play' | 'restart' | 'info' | 'external' | 'copy' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add';
+  group: 'play' | 'details' | 'link' | 'watch' | 'remove';
   tone?: 'warning';
   command: CardContextCommand;
 }
@@ -58,7 +60,7 @@ function addParentActions(actions: CardContextAction[], card: Card): void {
  * The useful actions for one drawn card. Server mutations are present only when the adapter
  * returned TitleActions; absence is a capability answer, never a disabled menu row.
  */
-export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: { continueWatching?: boolean; playlists?: boolean } = {}): CardContextAction[] {
+export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: { continueWatching?: boolean; playlists?: boolean; href?: string } = {}): CardContextAction[] {
   const actions: CardContextAction[] = [];
   const playable = PLAYABLE_KINDS.has(card.kind);
   const resumable = playable && card.progressSeconds > 0 && card.durationSeconds > 0 && !card.played;
@@ -80,6 +82,11 @@ export function cardContextActions(card: Card, primary: CardPress, management?: 
       ? { action: 'select' as const, arg: `${card.id}|${card.kind}|${card.receipt}` }
       : primary;
     actions.push(dispatch('details', msg('cardMenu.openDetails'), details.action, details.arg, 'info', 'details'));
+  }
+
+  if (context.href) {
+    actions.push({ id: 'open-new-tab', label: msg('cardMenu.openNewTab'), icon: 'external', group: 'link', command: { kind: 'openLink', href: context.href } });
+    actions.push({ id: 'copy-link', label: msg('cardMenu.copyLink'), icon: 'copy', group: 'link', command: { kind: 'copyLink', href: context.href } });
   }
 
   addParentActions(actions, card);

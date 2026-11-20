@@ -30,6 +30,7 @@ export type CardMenuOpenMode = 'pointer' | 'touch' | 'keyboard' | 'tv';
 interface Props {
   card: Card;
   primary: CardPress;
+  href?: string;
   anchor: CardMenuAnchor;
   mode: CardMenuOpenMode;
   opener: Focusable | null;
@@ -65,7 +66,23 @@ function restore(target: Focusable | null): void {
   });
 }
 
-export function CardContextMenu({ card, primary, anchor, mode, opener, continueWatching, close }: Props) {
+async function copyLink(href: string): Promise<void> {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(href);
+    return;
+  }
+  const field = document.createElement('textarea');
+  field.value = href;
+  field.setAttribute('readonly', '');
+  Object.assign(field.style, { position: 'fixed', opacity: '0', pointerEvents: 'none' });
+  document.body.appendChild(field);
+  field.select();
+  const copied = document.execCommand('copy');
+  field.remove();
+  if (!copied) throw new Error(msg('cardMenu.copyLinkFailed'));
+}
+
+export function CardContextMenu({ card, primary, href, anchor, mode, opener, continueWatching, close }: Props) {
   const host = useHost();
   const vela = useVela();
   const look = useLook();
@@ -97,7 +114,8 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
     }).start();
   }, [look.still, openValue]);
 
-  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists }), [card, primary, management, continueWatching, host.env.canPlaylists]);
+  const link = web && href ? new URL(href, window.location.href).href : undefined;
+  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link }), [card, primary, management, continueWatching, host.env.canPlaylists, link]);
   const focusFirst = mode === 'keyboard' || mode === 'tv';
   useEffect(() => {
     if (!focusFirst || menuSize.height <= 1) return;
@@ -124,6 +142,23 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
     if (item.command.kind === 'dispatch') {
       dismiss(false);
       host.dispatch(item.command.action, item.command.arg);
+      return;
+    }
+    if (item.command.kind === 'openLink') {
+      dismiss(false);
+      window.open(item.command.href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (item.command.kind === 'copyLink') {
+      setBusy(true);
+      setError('');
+      try {
+        await copyLink(item.command.href);
+        dismiss();
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : msg('cardMenu.copyLinkFailed'));
+        setBusy(false);
+      }
       return;
     }
     setBusy(true);
@@ -247,6 +282,7 @@ const MenuItem = forwardRef<ComponentRef<typeof FocusPressable>, {
   const colour = warning ? look.ui.live : look.ui.ink;
   const symbols: Record<CardContextAction['icon'], string> = {
     play: 'play-fill', restart: 'restart', info: 'info', checked: 'check-circle', unchecked: 'circle',
+    external: 'external', copy: 'copy',
     heart: 'heart', 'heart-filled': 'heart-fill', bookmark: 'bookmark', 'bookmark-filled': 'bookmark-fill',
     remove: 'remove', show: 'layers', season: 'list', 'playlist-add': 'playlist-add',
   };

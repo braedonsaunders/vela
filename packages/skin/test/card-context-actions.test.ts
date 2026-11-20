@@ -60,6 +60,15 @@ test('playlist action is capability-gated in the shared watch-state action group
     .toEqual({ kind: 'dispatch', action: 'addToPlaylist', arg: 'episode-1|episode' });
 });
 
+test('web card links expose native-equivalent new-tab and copy commands', () => {
+  const href = 'https://vela.example/title/episode-1';
+  const actions = cardContextActions(card(), { action: 'play', arg: 'episode-1' }, null, { href });
+  expect(actions.filter(action => action.group === 'link').map(action => action.id)).toEqual(['open-new-tab', 'copy-link']);
+  expect(actions.find(action => action.id === 'open-new-tab')?.command).toEqual({ kind: 'openLink', href });
+  expect(actions.find(action => action.id === 'copy-link')?.command).toEqual({ kind: 'copyLink', href });
+  expect(cardContextActions(card(), { action: 'play', arg: 'episode-1' }).some(action => action.group === 'link')).toBe(false);
+});
+
 test('openable non-title cards retain their actual primary action without invented title calls', () => {
   const actions = cardContextActions(card({ id: 'person-1', kind: 'person', progressSeconds: 0, contextParts: [] }), { action: 'select', arg: 'person-1|person' });
   expect(actions).toHaveLength(1);

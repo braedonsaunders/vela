@@ -15,6 +15,8 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   back: { paths: ['M15 5l-7 7 7 7'], stroke: true },
   alert: { paths: ['M12 3.5l9.5 16.5h-19zM12 10v4.5M12 17.4v.1'], stroke: true },
   info: { paths: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.4v.1'], stroke: true },
+  external: { paths: ['M14 4h6v6M20 4l-9 9M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6'], stroke: true },
+  copy: { paths: ['M8 8h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2'], stroke: true },
   smartphone: { paths: ['M8 2.5h8a1.5 1.5 0 0 1 1.5 1.5v16a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5zM11 18.5h2'], stroke: true },
   'sign-out': { paths: ['M14 4H6v16h8M10 12h10M17 8.5l3.5 3.5-3.5 3.5'], stroke: true },
   heart: { paths: ['M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z'], stroke: true },
