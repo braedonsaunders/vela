@@ -161,17 +161,21 @@ export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
   return true;
 }
 
-/** Style values with tokens, `$ui.*` and document tokens substituted; bound values compiled. */
+/** Concrete values shared by styles and colour-valued widget parameters. */
+function tokenValue(raw: string, r: Context): string {
+  return mixColours(withUi(raw, r.ui).replace(/\$([A-Za-z0-9_-]+)/g, (_, name: string) => {
+    const value = r.doc.tokens?.[name];
+    if (value === undefined) throw new Error(`Unknown token $${name}`);
+    return value;
+  }));
+}
+
+/** Style tokens substituted and bound values compiled. */
 function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
-    const text = mixColours(withUi(String(raw), r.ui)
-      .replace(/\$([A-Za-z0-9_-]+)/g, (_, name: string) => {
-        const v = r.doc.tokens?.[name];
-        if (v === undefined) throw new Error(`Unknown token $${name}`);
-        return v;
-      }));
+    const text = tokenValue(String(raw), r);
     if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
     out[row] = compile(text, r, row === 'background-image')!;
   }
@@ -287,6 +291,8 @@ function convert(node: Node, depth: number, r: Context): RNode {
     case 'widget': {
       // Parameters are text: client and document strings are filled now; holes (`{value}`, bindings) stay for the widget.
       const params = Object.fromEntries(Object.entries(node.params ?? {}).map(([k, v]) => [k, strings(v, r)]));
+      // Native TextInput takes a concrete colour, not a document's $token name.
+      if (params.placeholderColor) params.placeholderColor = tokenValue(params.placeholderColor, r);
       return { ...common, kind: 'widget', widget: node.widget, params };
     }
   }
