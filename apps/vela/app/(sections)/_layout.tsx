@@ -1,6 +1,6 @@
 import { Navigator, useIsFocused, usePathname } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Animated, Platform, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Platform, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { SkinRoot, type SkinHost } from '@vela/skin';
 import { useVela } from '../../src/vela';
@@ -9,7 +9,7 @@ import { LibrarySection } from './library/[id]';
 import type { LibraryParams } from '../../src/browse/library-query';
 import { FocusBoundary } from '../../src/focus-boundary';
 import { SectionFocusContext, SectionShellHostContext } from '../../src/section-focus';
-import { SectionScene, sectionSlide } from '../../src/section-scene';
+import { SectionScene } from '../../src/section-scene';
 import { SECTION_SLIDE_MS, sectionDirection, type SectionDirection } from '../../src/section-motion';
 import { trimSectionCache } from '../../src/section-cache';
 import { sectionRoute, type SectionRoute as Section } from '../../src/section-route';
@@ -45,14 +45,10 @@ function SectionsContent() {
   const host = routeHost?.env.small && pageHost?.env.route === section.current.route
     && pageHost.env.section === section.current.entry ? pageHost : routeHost;
   const shell = vela.doc?.shell;
-  const { width } = useWindowDimensions();
   // A TV switches sections at once, as with Reduce Motion: the remote moves focus along the nav
   // and each press would otherwise start a slide over the last one.
   const [reducedMotionSetting, setReducedMotion] = useState(false);
   const reducedMotion = reducedMotionSetting || Platform.isTV;
-  const offset = useRef(new Animated.Value(0)).current;
-  const previous = useRef<string | null>(null);
-  const outgoingOffset = useRef(new Animated.Value(0)).current;
   const libraries = host?.env.libraries ?? [];
   const key = `${section.current.route}:${section.current.entry}`;
   const order = section.current.route === 'home'
@@ -73,20 +69,13 @@ function SectionsContent() {
   }, []);
 
   useLayoutEffect(() => {
-    if (!Platform.isTV && Platform.OS !== 'web' && previous.current !== null && previous.current !== key && !reducedMotion) {
-      sectionSlide(offset, outgoingOffset, sectionDirection(order, previousOrder.current), width).start();
-    } else {
-      offset.setValue(0);
-      outgoingOffset.setValue(0);
-    }
-    previous.current = key;
     previousOrder.current = order;
-  }, [key, offset, outgoingOffset, order, reducedMotion, width]);
+  }, [key, order]);
 
   const session = useVelaState(state => state.auth.revision);
   const content = (
     <View style={{ flex: 1, overflow: 'hidden' }}>
-      <SectionScenes key={session} focused={focused} sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} transition={transition.current} />
+      <SectionScenes key={session} focused={focused} sectionKey={key} reducedMotion={reducedMotion} transition={transition.current} />
     </View>
   );
   if (!host || !shell) return content;
@@ -97,11 +86,9 @@ function SectionsContent() {
 }
 
 /** Keep visited sections mounted; only the active and briefly outgoing scenes are visible. */
-function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMotion, transition }: {
+function SectionScenes({ focused, sectionKey, reducedMotion, transition }: {
   focused: boolean;
   sectionKey: string;
-  offset: Animated.Value;
-  outgoingOffset: Animated.Value;
   reducedMotion: boolean;
   transition: { direction: SectionDirection; animated: boolean };
 }) {
@@ -147,7 +134,7 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
             visible={visible}
             animated={transition.animated && !reducedMotion}
             direction={transition.direction}
-            offset={isCurrent ? offset : outgoingOffset}
+            transitionKey={sectionKey}
           >
             <SectionFocusContext.Provider value={focused && isCurrent}>
               {scene.content}
