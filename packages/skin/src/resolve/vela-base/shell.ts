@@ -54,69 +54,63 @@ export const navItem = (on: Condition[], press: BoxNode['press'], label: string)
   ],
 });
 
-// On phones the destinations are chips in a row under the bar; the current chip's fill
-// glides between them (a shared element).
-export const chipBase: Style = {
-  position: 'relative',
-  display: 'flex',
-  'flex-direction': 'row',
-  'align-items': 'center',
-  'flex-shrink': '0',
-  height: '36px',
-  'box-sizing': 'border-box',
-  padding: '0px 14px',
-  border: '1px solid $ui.glassEdge',
-  'border-radius': '$ui.radiusControl',
-  'background-color': '$ui.control',
-  color: '$ui.ink',
-  'backdrop-filter': 'blur(16px)',
-  transition: 'color 240ms linear',
-  'white-space': 'nowrap',
-};
-export const navChip = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
-  type: 'box',
-  press,
-  label,
-  style: chipBase,
-  states: [{ when: on, style: { ...chipBase, color: '$ui.inkInverse' } }],
-  a11y: { current: on },
-  focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
-  children: [
-    {
-      type: 'box',
-      when: on,
-      sharedElement: 'nav-chip',
-      layoutTransition: '460ms ease-out',
-      style: {
-        position: 'absolute',
-        top: '-1px',
-        right: '-1px',
-        bottom: '-1px',
-        left: '-1px',
-        'border-radius': '$ui.radiusControl',
-        'background-color': '$ui.ink',
-      },
-    },
-    {
-      type: 'text',
-      text: label,
-      style: { position: 'relative', 'font-size': '13px', 'font-weight': '600', 'white-space': 'nowrap' },
-    },
-  ],
-});
+// On phones one labelled control opens every destination in a modal menu. Keeping library view
+// tabs in their page toolbar leaves the library name and selected view visible together.
 const compactNavigation: Node = {
   type: 'box',
   style: { display: 'none' },
   small: {
-    display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px',
-    'overflow-x': 'auto', 'overflow-y': 'hidden', 'flex-wrap': 'nowrap',
-    'padding-top': '4px', 'padding-bottom': '4px', gap: '6px', 'align-items': 'center',
+    position: 'relative', display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px',
+    height: '40px', 'box-sizing': 'border-box', padding: '0px 12px', gap: '8px', 'align-items': 'center',
+    'border-radius': '$ui.radiusControl', border: '1px solid $ui.glassEdge',
+    'background-color': '$ui.control', color: '$ui.ink',
   },
+  press: { action: 'toggle', arg: 'navigation' },
+  label: 'Open navigation',
+  testId: 'mobile-navigation',
+  id: 'mobile-navigation-trigger',
+  a11y: { expanded: [{ test: 'flag:navigation' }], haspopup: 'menu' },
+  hover: { 'background-color': '$ui.controlHover' },
+  focus: { 'box-shadow': focusRing },
   children: [
-    navChip([is('env.section', 'home')], { action: 'home' }, '{t:ui.home}'),
-    { type: 'repeat', over: 'nav.destinations', item: navChip([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
-    { ...navChip([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'), when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] },
-    { type: 'widget', widget: 'libraryTabs', when: [is('env.route', 'library')], style: { 'flex-shrink': '0' } },
+    { type: 'icon', symbol: 'menu', style: { width: '18px', height: '18px', 'flex-shrink': '0' } },
+    { type: 'text', when: [is('env.section', 'home')], text: '{t:ui.home}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } },
+    { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }], text: '{dest.name}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } } },
+    { type: 'text', when: [is('env.section', 'live')], text: '{t:ui.live}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } },
+  ],
+};
+
+const compactDestination = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
+  type: 'box', press, label, a11y: { current: on },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center',
+    height: '48px', padding: '0px 14px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '15px' },
+  states: [{ when: on, style: { 'background-color': '$ui.controlHover', 'font-weight': '700' } }],
+  hover: { 'background-color': '$ui.control' }, focus: navFocus,
+  children: [{ type: 'text', text: label, style: { 'line-clamp': '1' } }],
+});
+
+const compactMenu: Node = {
+  type: 'box',
+  when: [{ test: 'env.viewer' }, { test: 'flag:navigation' }],
+  escape: 'navigation',
+  returnFocus: 'mobile-navigation-trigger',
+  style: { display: 'none' },
+  small: { position: 'absolute', top: 'calc(56px + env(safe-area-inset-top))', left: '0px', right: '0px', bottom: '0px',
+    display: 'flex', 'align-items': 'stretch', 'z-index': '29' },
+  children: [
+    { type: 'box', press: { action: 'close', arg: 'navigation' }, label: 'Close navigation',
+      style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px',
+        'background-color': '$ui.scrim', 'backdrop-filter': 'blur(4px)' } },
+    { type: 'box', role: 'navigation', label: 'Main navigation', motion: 'velaPop',
+      style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '4px',
+        margin: '10px 12px auto 12px', padding: '12px', 'border-radius': '20px', border: '1px solid $ui.glassEdge',
+        'background-color': '$ui.popover', 'box-shadow': '0px 24px 70px $ui.shadow' },
+      children: [
+        compactDestination([is('env.section', 'home')], { action: 'home' }, '{t:ui.home}'),
+        { type: 'repeat', over: 'nav.destinations', item: compactDestination([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
+        { ...compactDestination([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
+          when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] },
+      ] },
   ],
 };
 
@@ -300,6 +294,7 @@ export const shell: Node = {
         width: '100%',
       } as Style,
     },
+    compactMenu,
     // A transparent modal layer owns the first press outside the profile menu. Besides closing
     // the menu, this keeps that press from selecting a card or navigation control underneath it.
     {

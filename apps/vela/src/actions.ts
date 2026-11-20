@@ -85,6 +85,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'pickHero':
         return actions.setHeroIndex(Number(arg) || 0);
       case 'home':
+        actions.resetFlags();
         store.search.clear();
         return router.dismissTo('/');
       case 'back':
@@ -131,8 +132,10 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'libraryMore':
         return loadMore('library', arg);
       case 'live':
+        actions.resetFlags();
         return router.push('/live');
       case 'library':
+        actions.resetFlags();
         return openLibrary(store, arg, place.route);
       case 'playExtra':
         return playExtra(arg);
