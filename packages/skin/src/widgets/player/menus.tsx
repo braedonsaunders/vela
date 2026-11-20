@@ -148,21 +148,26 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
   const selectedVersionId = plan?.selectedVersionId;
   const selectedVersion = groups.versions.find(version => version.id === selectedVersionId);
   const hasVersions = groups.versions.length > 0;
+  const originals = groups.converted.filter(option => option.original);
   const converted = groups.converted.filter(option => !option.original);
-  const qualityRow = (option: QualityOption) => (
-    <ChoiceRow
+  const qualityRow = (option: QualityOption) => {
+    const originalQuality = hasVersions && option.original;
+    return <ChoiceRow
       key={option.id}
       look={look}
-      name={option.original ? [option.resolution, option.traits].filter(Boolean).join(' · ') : option.resolution}
+      name={originalQuality ? 'Original quality' : option.original
+        ? [option.resolution, option.traits].filter(Boolean).join(' · ') : option.resolution}
       detail={option.disabledReason || (blocked ? msg('player.qualityUnavailable') : '') ||
-        [option.original ? '' : option.traits, option.rate, hasVersions ? '' : option.needs].filter(Boolean).join(' · ')}
+        (originalQuality ? 'No conversion' :
+          [option.original ? '' : option.traits, option.rate, hasVersions ? '' : option.needs].filter(Boolean).join(' · '))}
       selected={chosen(option)}
       pending={!!pendingQualityId && option.aliases.includes(pendingQualityId)}
       enabled={!blocked && !option.disabledReason}
       onChoose={() => { if (!chosen(option)) send({ type: 'quality', renditionId: option.id }); }}
-    />
-  );
+    />;
+  };
   const qualityRows = [
+    ...(hasVersions ? originals.map(qualityRow) : []),
     view.qualityAuto ? (
       <ChoiceRow key="auto" look={look}
         name={hasVersions ? 'Automatic quality' : msg('player.auto')}
@@ -177,7 +182,8 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
   ];
   const convertedTitle = selectedVersion && selectedVersion.id !== groups.versions[0]?.id
     ? `Converted from ${selectedVersion.label.split(' · ')[0]}` : 'Converted from the current version';
-  const showConverted = hasVersions && (view.qualityAuto || converted.length > 0);
+  const hasConversions = view.qualityAuto || converted.length > 0;
+  const showQuality = hasVersions && (hasConversions || originals.length > 0);
   return [
     hasVersions ? <MenuSection key="versions" look={look} title="Versions">
       {groups.versions.map(version => {
@@ -189,10 +195,11 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
           onChoose={() => { if (version.id !== selectedVersionId) switchVersion(version.id); }} />;
       })}
       {versionMessage ? <MenuHeading look={look} text={versionMessage} /> : null}
-      {groups.converted.filter(option => option.original).map(qualityRow)}
     </MenuSection> : null,
-    showConverted ? <MenuRule key="converted-divider" look={look} /> : null,
-    ...(showConverted ? [<MenuSection key="converted" look={look} title={convertedTitle}>{qualityRows}</MenuSection>] : qualityRows),
+    showQuality ? <MenuRule key="quality-divider" look={look} /> : null,
+    ...(showQuality ? [
+      <MenuSection key="quality" look={look} title={hasConversions ? convertedTitle : 'Playback quality'}>{qualityRows}</MenuSection>,
+    ] : qualityRows),
     !view.qualities.length && !view.qualityAuto ? (
       <ChoiceRow key="current" look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
     ) : null,
