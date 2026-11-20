@@ -195,8 +195,9 @@ export class LiveController {
   private scheduleFetch(): void {
     if (this.disposed) return;
     if (this.backoff.remaining(this.timing.now())) { this.armRetry(); return; }
-    ++this.loadGeneration;
-    this.timing.clear(this.viewportTimer);
+    // Coalesce to the first deadline, rather than waiting for scrolling to stop.
+    // In-flight coverage is still useful until a newer read actually starts.
+    if (this.viewportTimer !== undefined) return;
     this.viewportTimer = this.timing.set(() => { this.viewportTimer = undefined; this.fetch(); }, 100);
   }
 

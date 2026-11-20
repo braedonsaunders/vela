@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { bandOffset, coversRange, gapStep, PreviewDebounce, rowWindow } from '../src/widgets/guide/navigation';
+import { bandOffset, coversRange, gapStep, PreviewDebounce, rowWindow, prefetchRows } from '../src/widgets/guide/navigation';
 import { programmeAt } from '../src/widgets/guide/geometry';
 import type { GuideChannel } from '@vela/core';
 
@@ -108,4 +108,18 @@ test('retained adjacent windows cover a target but a missing interval needs data
   expect(coversRange([{ from: 180, to: 360 }, { from: 0, to: 180 }], 90, 300)).toBe(true);
   expect(coversRange([{ from: 0, to: 120 }, { from: 180, to: 360 }], 90, 300)).toBe(false);
   expect(coversRange([], 0, 180)).toBe(false);
+});
+
+
+test('network lookahead follows the scroll direction in stable bounded batches', () => {
+  const down = prefetchRows(200, 700, 4, 1);
+  const up = prefetchRows(200, 700, 4, -1);
+  expect(down.end - down.start).toBe(100);
+  expect(down.end - 204).toBeGreaterThan(60);
+  expect(200 - up.start).toBeGreaterThan(60);
+  expect(prefetchRows(212, 700, 4, 1)).toEqual(down);
+  expect(prefetchRows(0, 700, 4)).toEqual({ start: 0, end: 100 });
+  expect(prefetchRows(698, 700, 4)).toEqual({ start: 600, end: 700 });
+  expect(prefetchRows(0, 4, 4)).toEqual({ start: 0, end: 4 });
+  expect(prefetchRows(0, 0, 4)).toEqual({ start: 0, end: 0 });
 });

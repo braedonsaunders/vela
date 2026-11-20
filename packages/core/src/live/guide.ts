@@ -179,9 +179,18 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
     for (const id of entries.keys()) if (entries.size > 256 && !wanted.includes(id)) entries.delete(id);
     await Promise.all(reads);
     const answers = await Promise.all(pending);
+    // Moving the viewport must not blank rows already read in this same window.
+    // Reuse only completed, allowed channel entries; an explicit revalidation's
+    // read identity still isolates the previous session/policy's data.
+    const retained = new Map(wanted.map((id, index) => [id, answers[index]!]));
+    const allowed = new Set(channels.map(channel => channel.id));
+    for (const [id, entry] of entries) {
+      if (!retained.has(id) && allowed.has(id) && entry.ready && entry.lastReady && (!read || entry.read === read))
+        retained.set(id, { programmes: entry.lastReady, ready: true, expires: entry.expires });
+    }
     const retryAt = Math.min(...answers.filter(answer => !answer.ready).map(answer => answer.expires));
-    return { channels, programmes: answers.flatMap(answer => answer.programmes),
-      loaded: new Set(wanted.filter((_, index) => answers[index]!.ready)),
+    return { channels, programmes: [...retained.values()].flatMap(answer => answer.programmes),
+      loaded: new Set([...retained].filter(([, answer]) => answer.ready).map(([id]) => id)),
       unavailable: new Set(wanted.filter((_, index) => !answers[index]!.ready)),
       retryAt: Number.isFinite(retryAt) ? retryAt : undefined };
   })();

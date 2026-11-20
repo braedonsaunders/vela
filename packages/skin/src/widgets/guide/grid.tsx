@@ -6,7 +6,7 @@
 import { NativeGuideGrid } from './native-grid';
 import { useLiveContext } from './live';
 import { useGuideNavigation } from './focus';
-import { bandOffset, ProgrammeSlots, programmeMinute, gapStep, resolveTimeTarget, rowWindow, type TimeTarget } from './navigation';
+import { bandOffset, ProgrammeSlots, programmeMinute, gapStep, resolveTimeTarget, rowWindow, prefetchRows, type TimeTarget } from './navigation';
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { FlatList, Platform, Text, TVFocusGuideView, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { runOnJS, scrollTo as scrollNative, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -104,6 +104,12 @@ function SharedGuideGrid(props: GridProps) {
   const [column, setColumn] = useState(-1);
   const focusRow = landing.channelId ? rows.findIndex(c => c.id === landing.channelId) : -1;
   const [rowBase, setRowBase] = useState(() => Math.max(0, focusRow - 1));
+  const previousRow = useRef(rowBase);
+  const rowDirection = useRef(1);
+  if (rowBase !== previousRow.current) {
+    rowDirection.current = rowBase > previousRow.current ? 1 : -1;
+    previousRow.current = rowBase;
+  }
   const timeline = useAnimatedRef<Animated.ScrollView>();
   const list = useRef<FlatList<GuideChannel>>(null);
   const landed = useRef(false);
@@ -414,8 +420,8 @@ function SharedGuideGrid(props: GridProps) {
   const listHeight = Math.max(0, body.height - RULER);
   useEffect(() => { props.onRange(window.from - 120, window.to + 120); }, [window.from, window.to, props.onRange]);
   useEffect(() => {
-    const start = firstRow;
-    if (!pending.current) props.onVisible(rows.slice(start, lastRow).map(c => c.id));
+    const range = prefetchRows(rowBase, rows.length, Math.ceil(body.height / row), rowDirection.current);
+    if (!pending.current) props.onVisible(rows.slice(range.start, range.end).map(c => c.id));
   }, [rows, firstRow, rowBase, focusRow, body.height, row, props.onVisible]);
 
   const paint = rowWindow(paintRow, rows.length, Math.ceil(listHeight / row), 2);

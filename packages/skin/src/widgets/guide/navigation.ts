@@ -12,6 +12,18 @@ export function rowWindow(index: number, count: number, visible: number, margin 
   return { start: Math.max(0, index - margin), end: Math.min(count, index + visible + margin) };
 }
 
+/** Fetch farther than we draw, in stable bands: fast touch flings need listings before
+ * their cells enter the viewport. One band fits the guide's 100-channel request batch. */
+export function prefetchRows(index: number, count: number, visible: number, direction = 1) {
+  const budget = Math.min(100, count);
+  const showing = Math.min(budget, Math.max(1, Math.ceil(visible)));
+  const behind = Math.min(16, Math.floor((budget - showing) / 4));
+  const ahead = budget - showing - behind;
+  const anchor = direction < 0 ? Math.ceil(index / 20) * 20 : Math.floor(index / 20) * 20;
+  const start = Math.max(0, Math.min(Math.max(0, count - budget), anchor - (direction < 0 ? ahead : behind)));
+  return { start, end: Math.min(count, start + budget) };
+}
+
 /** A cancellable trailing action; selection changes never enqueue stale tunes. */
 export class PreviewDebounce {
   private timer: ReturnType<typeof setTimeout> | undefined;

@@ -89,3 +89,31 @@ test('a retryable outage retains previous programme geometry until fresh data ar
   expect(unavailable.channels[0]).toMatchObject({ listingsLoaded: false, listingsUnavailable: true });
   expect(unavailable.channels[0]?.programmes.map(p => [p.id, p.at, p.span])).toEqual(first.channels[0]?.programmes.map(p => [p.id, p.at, p.span]));
 });
+
+
+test('scrolling keeps completed rows without fetching them again or crossing a revalidation', async () => {
+  const channels: Channel[] = ['one', 'two', 'three'].map(id => ({ id, name: id, number: id, kind: 'tv', artwork: [], favorite: false }));
+  const requests: string[][] = [];
+  const api: GuideApi = {
+    channels: async () => ({ items: channels, continuation: 'exhausted' }),
+    guide: async () => { throw new Error('Bulk only'); },
+    guideWindow: async q => {
+      requests.push(q.channelIds);
+      return { ...answer(q), channels: q.channelIds.map(channelId => ({ channelId, state: 'ready', programmes: [{
+        id: channelId, channelId, name: channelId, summary: '', artwork: [], start: new Date(NOW).toISOString(), end: new Date(NOW + 60 * MINUTE).toISOString(),
+      }] })) };
+    },
+  };
+  const scope = 'bulk-retained-scroll';
+  const first = await loadGuide(api, 0, NOW, scope, undefined, undefined, ['one'], { from: 720, to: 900 });
+  const next = await loadGuide(api, 0, NOW, scope, undefined, undefined, ['two'], { from: 720, to: 900 });
+  expect(next.channels[0]?.listingsLoaded).toBe(true);
+  expect(next.channels[0]?.programmes).toEqual(first.channels[0]?.programmes);
+  expect(next.channels[1]?.listingsLoaded).toBe(true);
+  const before = requests.length;
+  await loadGuide(api, 0, NOW, scope, undefined, undefined, ['one'], { from: 720, to: 900 });
+  expect(requests).toHaveLength(before);
+  const refreshed = await loadGuide(api, 0, NOW, scope, undefined, undefined, ['three'], { from: 720, to: 900 }, { revalidate: {} });
+  expect(refreshed.channels[0]?.listingsLoaded).toBe(false);
+  expect(refreshed.channels[0]?.programmes).toEqual([]);
+});

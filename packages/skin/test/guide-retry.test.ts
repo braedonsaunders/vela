@@ -184,3 +184,23 @@ test('an initial request spanning midnight loads today before publishing program
     expect(reads).toBe(1);
   } finally { controller.dispose(); }
 });
+
+
+test('continuous viewport changes fetch at the first deadline, not after scrolling settles', async () => {
+  const time = clock(); let reads = 0;
+  const source = {
+    channels: async () => ({ items: Array.from({ length: 140 }, (_, i) => ({ id: String(i), name: String(i), number: String(i), kind: 'tv' as const, artwork: [], favorite: false })), continuation: 'exhausted' as const }),
+    guide: async (q: import('../../protocol/types').GuideQuery) => { reads++; return { from: q.from, until: q.until, items: [], continuation: 'exhausted' as const }; },
+    tune: async () => { throw new Error('No preview'); }, stop: async () => {},
+  };
+  const controller = new LiveController({ source, timing: time.timing, scope: 'viewport-coalesce', memory: { get: () => null, set: () => {} }, openWatch: () => {} });
+  const close = controller.open('guide');
+  try {
+    await time.settle(); const initial = reads;
+    controller.setGuideChannels(['110']);
+    await time.advance(50);
+    controller.setGuideChannels(['111']);
+    await time.advance(49); expect(reads).toBe(initial);
+    await time.advance(1); expect(reads).toBeGreaterThan(initial);
+  } finally { close(); controller.dispose(); }
+});
