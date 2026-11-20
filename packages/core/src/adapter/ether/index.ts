@@ -22,6 +22,7 @@ import type {
   TrackChanges,
   TrackCommand,
   TrailerPreviews,
+  Versions,
   WebCodeSignIn,
 } from '../capabilities';
 import type { TitleActions } from '../capabilities';
@@ -35,7 +36,7 @@ const PUBLIC_CACHED = { auth: false, cacheable: true };
 /** Ether speaks the v0 protocol natively, so it offers every capability Vela knows. */
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
-  AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance {
+  AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -353,6 +354,14 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   // Playback
 
+  titleVersions(id: string) {
+    return this.http.request<V.TitleVersions>('GET', `/titles/${segment(id)}/versions`);
+  }
+
+  clearVersionChoice(id: string, request: V.ClearVersionChoiceRequest) {
+    return this.http.request<V.ClearVersionChoiceResponse>('DELETE', `/titles/${segment(id)}/versions/choice`, request);
+  }
+
   startPlayback(request: V.PlaybackRequest) {
     return this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback', request);
   }
@@ -370,6 +379,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   switchPath(sessionId: string, command: SwitchCommand) {
+    return this.sessionCommand(sessionId, command);
+  }
+
+  switchVersion(sessionId: string, command: Extract<V.SessionCommand, { kind: 'version' }>) {
     return this.sessionCommand(sessionId, command);
   }
 

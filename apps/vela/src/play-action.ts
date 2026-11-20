@@ -6,8 +6,8 @@ export function startPosition(value: string | undefined): number | undefined {
 }
 
 export function playParams(arg: string) {
-  const [id = '', mediaSourceId, audioTrackId, start] = arg.split('|');
+  const [id = '', mediaSourceId, audioTrackId, start, versionId] = arg.split('|');
   const positionSeconds = startPosition(start);
   return { id, ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}),
-    ...(positionSeconds !== undefined ? { positionSeconds: String(positionSeconds) } : {}) };
+    ...(positionSeconds !== undefined ? { positionSeconds: String(positionSeconds) } : {}), ...(versionId ? { versionId } : {}) };
 }

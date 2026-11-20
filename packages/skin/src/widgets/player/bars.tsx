@@ -225,7 +225,7 @@ function Controls({
       case 'audio':
         return <AudioMenu look={look} view={view} blocked={blocked} send={send} />;
       case 'quality':
-        return <QualityMenu look={look} view={view} blocked={blocked} send={send} pendingQualityId={state.pendingQualityId} info={info} onInfo={toggleInfo} />;
+        return <QualityMenu look={look} view={view} plan={state.plan} blocked={blocked} send={send} switchVersion={state.switchVersion} pendingVersionId={state.pendingVersionId} versionMessage={state.versionMessage} pendingQualityId={state.pendingQualityId} info={info} onInfo={toggleInfo} />;
       case 'speed':
         return <SpeedMenu look={look} view={view} blocked={blocked} send={send} />;
     }

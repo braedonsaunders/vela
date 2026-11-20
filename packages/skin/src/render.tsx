@@ -30,7 +30,7 @@ import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { ExpandableSummary } from './summary';
-import { TitleActions } from './widgets/title-actions';
+import { TitleActions, VersionsControl } from './widgets/title-actions';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { useHeroSwipe } from './hero-swipe';
@@ -669,6 +669,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       const [titleId, source = '', audio = ''] = arg.split('|');
       const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg(ctx.heroAct ? 'ui.fromBeginning' : 'ui.playFromBeginning'));
       element = <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
+    }
+    if (env.route === 'title' && id === env.detail?.title[0]?.id && arg.split('|')[3] === undefined) {
+      element = <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{element}<VersionsControl /></View>;
     }
   }
   if (cardMenu && cardPrimary && menuCard) element = <>{element}<CardContextMenu card={menuCard} primary={cardPrimary} anchor={cardMenu.anchor} mode={cardMenu.mode} opener={buttonRef.current} continueWatching={ctx.row?.purpose === 'continue'} close={() => setCardMenu(null)} /></>;

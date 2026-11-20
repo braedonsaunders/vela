@@ -11,6 +11,24 @@ const ether = (credentials = new FakeCredentials(), onRejected?: () => void) => 
 const searchAnswer = { query: 'heat', generation: 1, items: [], continuation: 'exhausted' };
 
 describe('EtherAdapter', () => {
+  test('versions routes preserve opaque handles and command generations', async () => {
+    const answer = { titleId: 'movie/1', selectedVersionId: 'opaque-v2', versions: [{ id: 'opaque-v2', label: '4K Remux', recommended: true, availability: 'instant' }] };
+    const plan = { sessionId: 'session/1', sourceGeneration: 2, seekGeneration: 3, selectedVersionId: 'opaque-v2' };
+    const seen = routeFetch({
+      'GET /vela/v0/titles/movie%2F1/versions': answer,
+      'DELETE /vela/v0/titles/movie%2F1/versions/choice': { ...answer, cleared: true },
+      'POST /vela/v0/sessions/session%2F1/commands': plan,
+    });
+    const adapter = ether();
+    expect((await adapter.titleVersions('movie/1')).selectedVersionId).toBe('opaque-v2');
+    await adapter.clearVersionChoice('movie/1', { scope: 'show', idempotencyKey: 'clear-1' });
+    await adapter.switchVersion('session/1', { kind: 'version', versionId: 'opaque-v2', positionSeconds: 42, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'switch-1' });
+    expect(seen.map(call => [call.method, call.url.pathname])).toEqual([
+      ['GET', '/vela/v0/titles/movie%2F1/versions'], ['DELETE', '/vela/v0/titles/movie%2F1/versions/choice'], ['POST', '/vela/v0/sessions/session%2F1/commands'],
+    ]);
+    expect(seen[1]!.body).toEqual({ scope: 'show', idempotencyKey: 'clear-1' });
+    expect(seen[2]!.body).toMatchObject({ kind: 'version', versionId: 'opaque-v2', positionSeconds: 42, sourceGeneration: 1, seekGeneration: 1 });
+  });
   test('unsupported routes are probed only once per session', async () => {
     const seen = routeFetch({
       'GET /vela/v0/libraries/l1/collections': new Response('', { status: 405 }),

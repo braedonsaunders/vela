@@ -107,6 +107,16 @@ export interface TrailerPreviews {
   trailerPreviewState(titleId: string): Promise<V.TrailerPreviewResponse>;
 }
 
+export interface Versions {
+  titleVersions(id: string): Promise<V.TitleVersions>;
+  clearVersionChoice(id: string, request: V.ClearVersionChoiceRequest): Promise<V.ClearVersionChoiceResponse>;
+  switchVersion(sessionId: string, command: Extract<V.SessionCommand, { kind: 'version' }>): Promise<V.PlaybackPlan>;
+}
+
+export function hasVersions(adapter: ServerAdapter): adapter is ServerAdapter & Versions {
+  return 'titleVersions' in adapter && 'clearVersionChoice' in adapter && 'switchVersion' in adapter;
+}
+
 /** Ranking receipts: what the viewer saw, selected and played. */
 export interface Interactions {
   sendInteractions(request: V.InteractionsRequest): Promise<V.Ack>;

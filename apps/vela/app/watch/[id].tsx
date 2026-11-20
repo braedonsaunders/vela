@@ -32,9 +32,9 @@ function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?
 }
 
 export default function Watch() {
-  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string }>();
+  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds]);
+  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId]);
   const live = useLiveContext();
   const liveView = useLiveView();
   const owned = target.kind === 'channel' && live ? {

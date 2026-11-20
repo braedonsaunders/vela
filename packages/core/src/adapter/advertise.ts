@@ -12,6 +12,7 @@ import {
   hasQuickConnectSignIn,
   hasTrackChanges,
   hasTrailerPreviews,
+  hasVersions,
 } from './capabilities';
 
 type FeatureName = keyof V.ServerCapabilities['features'];
@@ -45,6 +46,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       extraPlayback: stated('extraPlayback'),
       themeMusic: stated('themeMusic'),
       initialTrackSelection: stated('initialTrackSelection'),
+      versions: operation('versions', hasVersions(adapter)),
     },
   };
 }

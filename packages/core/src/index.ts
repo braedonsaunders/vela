@@ -21,6 +21,7 @@ export type { HomeRetry, HomeState } from './store/home';
 export { libraryKey, type LibraryQuery } from './store/catalogue';
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
+export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse } from './wire';
 export type { LiveState, LiveTvAccess } from './store/live';
 export type { PreviewContext, PreviewState } from './store/previews';
 export type { ReceiptKind } from './store/receipts';

@@ -5,7 +5,7 @@ import type * as V from '../wire';
 import { libraryCardArtwork } from '../library-presentation';
 import { hasTitleManagement } from '../adapter/capabilities';
 import { capabilitiesOf } from '../adapter/advertise';
-import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
+import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography, hasVersions } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow, libraryLiveCard, withDateDisplay } from '../discovery/models';
@@ -48,6 +48,17 @@ const PAGE = 100;
 const RECONCILE_ATTEMPTS = 3;
 
 export class Catalogue {
+  async titleVersions(id: string): Promise<V.TitleVersions | null> {
+    const connection = await this.session.ready();
+    const capabilities = await capabilitiesOf(connection.adapter);
+    return capabilities.features.versions?.available === true && hasVersions(connection.adapter)
+      ? connection.adapter.titleVersions(id) : null;
+  }
+  async clearVersionChoice(id: string, scope: 'all' | 'title' | 'show' = 'all'): Promise<V.ClearVersionChoiceResponse> {
+    const api = (await this.session.ready()).adapter;
+    if (!hasVersions(api)) throw new Error('Versions are unavailable');
+    return api.clearVersionChoice(id, { scope, idempotencyKey: this.session.key() });
+  }
   async titleActions(id: string) {
     const api = (await this.session.ready()).adapter;
     return hasTitleManagement(api) ? api.titleActions(id) : null;

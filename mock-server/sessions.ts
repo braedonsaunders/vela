@@ -21,7 +21,7 @@ export function publish(s: Session) {
     s.pendingCodecs?.timers.clear();
   }
 }
-export async function createSession(owner: string, request: PlaybackRequest, pending?: { neverVerify: boolean; pathId: string }): Promise<Session> {
+export async function createSession(owner: string, request: PlaybackRequest, pending?: { neverVerify: boolean; pathId: string }, versionData?: Pick<PlaybackPlan, 'selectedVersionId' | 'versions' | 'rememberedChoice'>): Promise<Session> {
   const id = crypto.randomUUID(), token = crypto.randomUUID(), base = `/sessions/media/${id}/${token}`;
   const available = await Bun.file(`${mediaRoot}/master.m3u8`).exists();
   const tracks = ['en', 'es'].map((language, n) => ({ id: `audio-${language}`, kind: 'audio' as const, language, name: n ? 'Spanish · test tone' : 'English · test tone', codec: 'aac', channels: 2, default: n === 0 }));
@@ -36,6 +36,7 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
     ] : [], selectedPathId: 'direct', audioTracks: tracks, subtitleTracks: [{ id: 'sub-en', kind: 'subtitle', language: 'en', name: 'English', codec: 'webvtt', url: `${base}/subtitles.vtt` }],
     selectedAudioTrackId: request.audioTrackId ?? 'audio-en', selectedSubtitleTrackId: request.subtitleTrackId ?? null, chapters: [0,60,120].map((startSeconds, i) => ({ id: `chapter-${i + 1}`, name: ['Signal', 'Crossing', 'Homeward'][i], startSeconds, endSeconds: startSeconds + 60 })),
     fallback: { state: faults.fallbackUnavailable ? 'unavailable' : 'unsupported', reason: 'Mock serves pre-generated alternatives; no proactive encoder scheduler.' },
+    ...versionData,
   };
   if (!request.channelId && available && request.client.mse && request.allowTranscode !== false && !faults.fallbackUnavailable) {
     const mse = await mseFixture(base);
@@ -94,6 +95,7 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
     case 'stop': s.plan.state = 'ended'; break;
     case 'tracks': if (cmd.audioTrackId !== undefined) s.plan.selectedAudioTrackId = cmd.audioTrackId; if (cmd.subtitleTrackId !== undefined) s.plan.selectedSubtitleTrackId = cmd.subtitleTrackId; break;
     case 'switch': s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds; break;
+    case 'version': s.plan.selectedVersionId = cmd.versionId; s.plan.sourceGeneration++; s.plan.seekGeneration++; if (cmd.positionSeconds !== undefined) s.plan.positionSeconds = cmd.positionSeconds; break;
   }
   publish(s);
 }

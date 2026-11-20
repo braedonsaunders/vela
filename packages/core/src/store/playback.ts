@@ -6,7 +6,7 @@ import type * as V from '../wire';
 import { hasSubtitleSearch } from '../adapter/media-actions';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
-import { hasEventStream, hasLibraryLive } from '../adapter/capabilities';
+import { hasEventStream, hasLibraryLive, hasVersions } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
@@ -17,7 +17,7 @@ import { message, type StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
-  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string }
+  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string }
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string }
   | { kind: 'library-live'; id: string; libraryId: string; tab?: string };
@@ -170,6 +170,7 @@ export class Playback {
           ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id } : { titleId: target.id }),
           ...(position !== undefined ? { positionSeconds: position } : {}),
           ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
+          ...(target.kind === 'title' && target.versionId ? { versionId: target.versionId } : {}),
           ...(target.kind === 'title' && target.audioTrackId && !this.recovering ? { audioTrackId: target.audioTrackId } : {}),
           client: this.session.client,
           idempotencyKey: intent.key,
@@ -393,6 +394,21 @@ export class Playback {
     } catch (error) {
       if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback command failed') });
     }
+  }
+
+  async switchVersion(sessionId: string, versionId: string, positionSeconds?: number): Promise<V.PlaybackPlan> {
+    const current = this.box.get().playback;
+    const plan = current.sessionId === sessionId ? current.plan : null;
+    if (!plan) throw new Error('Playback session is unavailable');
+    const connection = await this.session.ready();
+    if (!hasVersions(connection.adapter)) throw new Error('Versions are unavailable');
+    const next = connection.plan(await connection.adapter.switchVersion(sessionId, {
+      kind: 'version', versionId, ...(positionSeconds !== undefined ? { positionSeconds } : {}),
+      sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+      idempotencyKey: this.session.key(),
+    }));
+    if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: next, error: '' });
+    return next;
   }
 
   private async send(connection: Connection, sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> {

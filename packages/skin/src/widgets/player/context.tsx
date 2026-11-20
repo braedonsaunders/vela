@@ -28,7 +28,10 @@ export interface PlayerChromeState {
   actionError: string;
   /** Only the quality command currently awaiting acknowledgement. */
   pendingQualityId?: string;
+  pendingVersionId?: string;
+  versionMessage: string;
   send(command: CommandInput): void;
+  switchVersion(versionId: string): void;
   close(): void;
   retry(): void;
   /** A scrub thumbnail for a position (trickplay), once a session offers them. */

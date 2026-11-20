@@ -26,7 +26,7 @@ const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
 const labPreset = process.env.VELA_MOCK_LAB === '1';
 const libraries: V.Library[] = labPreset ? [
@@ -60,8 +60,8 @@ function authenticate(req: Request): Grant {
   if (!g || g.revoked || g.expires <= Date.now() || req.headers.get('x-vela-device-id') !== g.device.id) fail('auth', 'unauthorized', 'Valid bearer and X-Vela-Device-Id required');
   return g;
 }
-function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}): never {
-  const status = { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, playback: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
+function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}, statusOverride?: number): never {
+  const status = statusOverride ?? { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, playback: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
   throw Response.json({ error: { class: cls, code, message, retry: { allowed: ['capacity', 'transient'].includes(cls), ...(cls === 'capacity' ? { afterSeconds: 3, maxAttempts: 3 } : {}) }, ...extra } } satisfies V.ErrorResponse, { status, headers: { 'Cache-Control': 'no-store', ...(cls === 'capacity' ? { 'Retry-After': '3' } : {}) } });
 }
 const mac = (value: string) => createHmac('sha256', secret).update(value).digest('base64url');
@@ -159,6 +159,31 @@ const partial = (data: unknown) => Response.json(data, { headers: { 'Cache-Contr
 interface Pairing { device: V.Device; code: string; expires: number; approved: boolean; result?: V.Tokens }
 const devices = new Map<string, Pairing>(), quick = new Map<string, Pairing>(), webCodes = new Map<string, number>();
 const idempotency = new Map<string, { body: string; response: Promise<Response>; expires: number }>();
+const clearedVersionChoices = new Set<string>();
+const preparedVersions = new Set<string>();
+const versionId = (titleId: string, slot: string) => `${titleId}-0000-4000-8000-${slot.padStart(12, '0')}`;
+function versionsFor(titleId: string, owner: string): V.TitleVersions {
+  const title = allTitles.find(candidate => candidate.id === titleId);
+  if (!title) fail('not-found', 'title_not_found', 'Title not found');
+  if (!['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Versions are available for movies and episodes');
+  const cold = titleId === 'title-1-3';
+  const remembered = !clearedVersionChoices.has(`${owner}:${titleId}`) && (titleId === 'title-1-1' || title.kind === 'episode');
+  const pinned = titleId === 'title-1-2';
+  const auto: V.VersionItem = { id: versionId(titleId, '0'), label: 'Auto', recommended: !remembered && !pinned, availability: 'instant' };
+  const full: V.VersionItem[] = cold ? [
+    auto,
+    { id: versionId(titleId, '1'), label: '4K Remux', recommended: false, availability: 'instant' },
+    { id: versionId(titleId, '2'), label: '1080p WEB-DL', recommended: false, availability: 'cached' },
+  ] : [
+    auto,
+    { id: versionId(titleId, '1'), label: '4K Dolby Vision Remux · TrueHD Atmos 7.1', recommended: true, ...(remembered ? { remembered: true as const } : {}), ...(pinned ? { pinned: true as const } : {}), resolution: '4K', dynamicRange: 'dv', videoCodec: 'hevc', audio: { codec: 'truehd', channels: '7.1', atmos: true }, source: 'Remux', edition: 'Theatrical', sizeBytes: 67_800_000_000, languages: ['English'], availability: 'instant' },
+    { id: versionId(titleId, '2'), label: '1080p WEB-DL · DD+ 5.1', recommended: false, resolution: '1080p', dynamicRange: 'sdr', videoCodec: 'h264', audio: { codec: 'eac3', channels: '5.1' }, source: 'WEB-DL', sizeBytes: 8_400_000_000, languages: ['English', 'French'], availability: 'cached' },
+    { id: versionId(titleId, '3'), label: '4K HDR10 Blu-ray · DTS-HD MA 5.1', recommended: false, resolution: '4K', dynamicRange: 'hdr10', videoCodec: 'hevc', audio: { codec: 'dts', channels: '5.1' }, source: 'Blu-ray', sizeBytes: 43_200_000_000, availability: 'fetch', note: 'Stored in the archive' },
+    { id: versionId(titleId, '4'), label: 'Director’s Cut · 1080p', recommended: false, resolution: '1080p', source: 'Local', edition: 'Director’s Cut', availability: 'unavailable', note: 'The source drive is offline' },
+  ];
+  const selected = remembered || pinned ? full[1]!.id : auto.id;
+  return { titleId, selectedVersionId: selected, ...(remembered ? { rememberedChoice: { scope: title.kind === 'episode' ? 'show' as const : 'title' as const, active: true, label: full[1]!.label } } : {}), versions: full };
+}
 function revoke(g: Grant) { g.revoked = true; for (const p of previewSessions.values()) if (p.owner === g.id) p.ended = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const close of s.listeners.values()) close(); s.listeners.clear(); } }
 function currentSession(id: string, g: Grant): Session { const s = sessions.get(id); if (!s || s.owner !== g.id || s.expires <= Date.now()) fail('not-found', 'session_not_found', 'Session not found'); return s; }
 
@@ -376,6 +401,17 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
   if (method === 'GET' && rowMatch) { const r = [...rows, ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
+  const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
+  if (versionsMatch) {
+    if (capabilities.features.versions?.available !== true) fail('policy', 'feature_unavailable', 'Versions are unavailable');
+    const result = versionsFor(versionsMatch[1], g.id);
+    if (method === 'GET' && !versionsMatch[2]) return json(result);
+    if (method === 'DELETE' && versionsMatch[2] === 'choice') {
+      clearedVersionChoices.add(`${g.id}:${versionsMatch[1]}`);
+      const next = versionsFor(versionsMatch[1], g.id);
+      return json({ ...next, cleared: true });
+    }
+  }
   const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch))?$/.exec(path);
   const previewMatch = /^\/titles\/([^/]+)\/trailer-preview$/.exec(path);
   if (method === 'POST' && previewMatch) {
@@ -462,6 +498,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const title = allTitles.find(t => t.id === body.titleId), extra = extras.find(e => e.id === body.extraId);
     if (!title && !extra && !channel) fail('not-found', 'title_not_found', 'Playback target not found');
     if (title && !['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Select an episode to play');
+    const versionData = title ? versionsFor(title.id, g.id) : undefined;
+    const requestedVersion = body.versionId ? versionData?.versions.find(version => version.id === body.versionId) : undefined;
+    if (body.versionId && !requestedVersion) fail('request', 'invalid_version', 'Unknown version');
+    if (requestedVersion?.availability === 'unavailable') fail('source', 'version_unavailable', requestedVersion.note || 'Version unavailable', {}, 409);
     if (faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted');
     if (!await Bun.file(`${mediaRoot}/master.m3u8`).exists()) fail('source', 'media_not_generated', 'Run mock-server/scripts/make-media.ts first');
     if (body.positionSeconds === undefined) body = { ...body, positionSeconds: title?.watch?.positionSeconds ?? 0 };
@@ -475,7 +515,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (pathId === 'transcode-mse' && !await Bun.file(`${mediaRoot}/mse.json`).exists()) fail('source', 'media_not_generated', 'Generate the separate audio MSE fixture first');
       pending = { neverVerify: pendingMode === 'never', pathId };
     }
-    const s = await createSession(g.id, body, pending);
+    const selectedVersionId = body.versionId ?? versionData?.selectedVersionId;
+    const s = await createSession(g.id, body, pending, versionData ? { ...versionData, selectedVersionId } : undefined);
     if (pending && !s.plan.paths.some(p => p.id === pending.pathId)) { sessions.delete(s.plan.sessionId); fail('source', 'media_not_generated', 'Requested MSE fixture is unavailable'); }
     return json(s.plan);
   }
@@ -495,7 +536,18 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (s.plan.state === 'ended') fail('conflict', 'session_ended', 'Session ended');
       if (match[2] === 'observations') { if (!Number.isInteger(body.sequence) || body.sequence < 1 || !Array.isArray(body.playableRanges) || !Number.isFinite(body.positionSeconds) || !['playing','paused','buffering','ended'].includes(body.state)) fail('request', 'invalid_observation', 'Invalid observation'); observe(s, body); if (body.state === 'ended') recordPlayback(s, true); return json({ accepted: true }); }
       if (body.kind === 'prepare-fallback') fail(faults.capacityExhausted ? 'capacity' : 'policy', faults.capacityExhausted ? 'capacity_exhausted' : 'feature_unavailable', 'Proactive fallback not implemented');
-      if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
+      if (body.kind === 'version') {
+        if (!s.plan.titleId || !s.plan.versions) fail('policy', 'feature_unavailable', 'Versions are unavailable for this session');
+        const version = s.plan.versions.find(version => version.id === body.versionId);
+        if (!version) fail('request', 'invalid_version', 'Unknown version');
+        if (version.availability === 'unavailable') fail('source', 'version_unavailable', version.note || 'Version unavailable', {}, 409);
+        const prepareKey = `${s.plan.sessionId}:${version.id}`;
+        if (version.availability === 'fetch' && !preparedVersions.has(prepareKey)) {
+          preparedVersions.add(prepareKey);
+          fail('source', 'version_preparing', 'Version is preparing', { retry: { allowed: true, afterSeconds: 1, maxAttempts: 3 } }, 503);
+        }
+      }
+      if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch', 'version'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
       if (body.kind === 'seek' && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > fixtureDurationSeconds)) fail('request', 'invalid_position', `Position must be 0–${fixtureDurationSeconds}`);
       if (body.kind === 'tracks') fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
@@ -546,7 +598,7 @@ async function dispatch(req: Request): Promise<Response> {
   const packFile = req.method === 'GET' ? await packAsset(url.pathname) : undefined;
   if (packFile) return packFile;
   if (!url.pathname.startsWith('/vela/v0/')) fail('not-found', 'endpoint_not_found', 'Endpoint not found');
-  if (req.method !== 'POST') return api(req, url, undefined);
+  if (req.method !== 'POST' && req.method !== 'DELETE') return api(req, url, undefined);
   let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }
   if (url.pathname === '/vela/v0/live/guide/window') {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('request', 'invalid_json', 'JSON object required');
@@ -567,7 +619,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 

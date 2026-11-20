@@ -31,7 +31,7 @@ export interface ServerCapabilities {
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   plexAccountSignIn?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -126,6 +126,19 @@ export interface QualityTarget { width: number; height: number;
   /** Intended output, not proof of decoded source colour characteristics. */
   dynamicRange?: 'sdr' | 'hdr10' | 'hlg' | 'dv' }
 export interface Quality extends QualityTarget { id: ID; videoCodec: string; audioCodec?: string; url: string; audioGroupId?: ID }
+export interface VersionItem {
+  id: ID; label: string; recommended: boolean; remembered?: true; pinned?: true;
+  resolution?: '4K' | '1080p' | '720p' | '576p' | '480p' | 'SD';
+  dynamicRange?: 'sdr' | 'hdr10' | 'hdr10+' | 'hlg' | 'dv'; videoCodec?: string;
+  audio?: { codec: string; channels?: string; atmos?: true };
+  source?: 'Remux' | 'Blu-ray' | 'WEB-DL' | 'WEBRip' | 'HDTV' | 'DVD' | 'Local';
+  edition?: string; sizeBytes?: number; languages?: string[];
+  availability: 'instant' | 'cached' | 'fetch' | 'unavailable'; note?: string;
+}
+export interface RememberedVersionChoice { scope: 'title' | 'show'; active: boolean; label: string }
+export interface TitleVersions { titleId: ID; selectedVersionId: ID | null; rememberedChoice?: RememberedVersionChoice; versions: VersionItem[] }
+export interface ClearVersionChoiceRequest extends Mutation { scope?: 'all' | 'title' | 'show' }
+export interface ClearVersionChoiceResponse extends TitleVersions { cleared: boolean }
 export interface Generations { sourceGeneration: number; seekGeneration: number }
 /** POST /titles/:id/trailer-preview initiates the request; GET polls it without a body or mutation key. */
 export interface TrailerPreviewRequest extends Mutation { client: ClientCapabilities }
@@ -170,16 +183,17 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   /** Also carried by SessionSnapshot.plan and full plan events. */
   trickplay?: TrickplayMetadata;
   qualityLimitations?: { height: number; reason: string }[];
+  selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };
   live?: { mode: 'adaptive' | 'low-delay'; anchor?: LiveAnchor; windowStartSeconds?: number; liveEdgeSeconds?: number; maxDriftSeconds?: number } }
 export type PlaybackTarget = { titleId: ID; channelId?: never; extraId?: never } |
   { channelId: ID; titleId?: never; extraId?: never } | { extraId: ID; titleId?: never; channelId?: never };
 export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabilities; positionSeconds?: number; mediaSourceId?: ID;
-  audioTrackId?: ID; subtitleTrackId?: ID | null; allowTranscode?: boolean; liveMode?: 'adaptive' | 'low-delay' };
+  versionId?: ID; audioTrackId?: ID; subtitleTrackId?: ID | null; allowTranscode?: boolean; liveMode?: 'adaptive' | 'low-delay' };
 export type SessionCommand = Mutation & Generations & (
   { kind: 'seek'; positionSeconds: number } | { kind: 'pause' | 'resume' | 'stop' } |
   { kind: 'tracks'; audioTrackId?: ID; subtitleTrackId?: ID | null } |
-  { kind: 'switch'; pathId: ID; atSeconds: number } | { kind: 'prepare-fallback'; maxBitrate: number });
+  { kind: 'switch'; pathId: ID; atSeconds: number } | { kind: 'version'; versionId: ID; positionSeconds?: number } | { kind: 'prepare-fallback'; maxBitrate: number });
 export interface TimeRange { startSeconds: number; endSeconds: number }
 export interface PlayerObservation extends Mutation, Generations { sequence: number; observedAt: Timestamp;
   positionSeconds: number; state: 'playing' | 'paused' | 'buffering' | 'ended'; playableRanges: TimeRange[];

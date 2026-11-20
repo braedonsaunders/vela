@@ -7,6 +7,8 @@ import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, SegmentRow } from './menu';
 import type { PlayerView, QualityOption } from './present';
+import type { PlaybackPlan } from '@vela/player-api';
+import { versionAvailability, versionBadge, versionChips, versionMenuGroups } from '../versions';
 
 export type MenuName = 'subtitles' | 'audio' | 'quality' | 'speed';
 
@@ -129,16 +131,33 @@ export function AudioMenu({ look, view, blocked, send }: Props) {
 }
 
 interface QualityProps extends Props {
+  plan: PlaybackPlan | null;
   pendingQualityId?: string;
+  pendingVersionId?: string;
+  versionMessage: string;
+  switchVersion(id: string): void;
   info: boolean;
   onInfo(): void;
 }
 
-export function QualityMenu({ look, view, blocked, send, info, onInfo, pendingQualityId }: QualityProps) {
+export function QualityMenu({ look, view, plan, blocked, send, switchVersion, pendingVersionId, versionMessage, info, onInfo, pendingQualityId }: QualityProps) {
   const chosen = (option: QualityOption) =>
     option.aliases.includes(view.lockedQuality) || (!view.lockedQuality && !view.qualityAuto && option.aliases.includes(view.qualityId));
+  const groups = versionMenuGroups(plan?.versions, view.qualities);
+  const selectedVersionId = plan?.selectedVersionId;
   return (
     <>
+      {groups.versions.length ? <MenuHeading look={look} text="Versions" /> : null}
+      {groups.versions.map(version => {
+        const unavailable = version.availability === 'unavailable';
+        const detail = [versionBadge(version), versionChips(version).join(' · '), versionAvailability(version)].filter(Boolean).join(' · ');
+        return <ChoiceRow key={`version:${version.id}`} look={look} name={version.label} detail={detail}
+          selected={version.id === selectedVersionId} pending={version.id === pendingVersionId}
+          enabled={!blocked && !pendingVersionId && !unavailable}
+          onChoose={() => { if (version.id !== selectedVersionId) switchVersion(version.id); }} />;
+      })}
+      {versionMessage ? <MenuHeading look={look} text={versionMessage} /> : null}
+      {groups.versions.length ? <><MenuRule look={look} /><MenuHeading look={look} text="Converted" /></> : null}
       {view.qualityAuto ? (
         <ChoiceRow
           look={look}
@@ -150,7 +169,7 @@ export function QualityMenu({ look, view, blocked, send, info, onInfo, pendingQu
           onChoose={() => send({ type: 'quality', renditionId: null })}
         />
       ) : null}
-      {view.qualities.map(option => (
+      {groups.converted.map(option => (
         <ChoiceRow
           key={option.id}
           look={look}

@@ -10,6 +10,7 @@ import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { CommandInput, PlayerChromeState, StartFailure } from './context';
 import { belongs, qualityReached } from './present';
+import { preparingRetry } from '../versions';
 
 export interface PlaybackSession {
   chrome: Omit<PlayerChromeState, 'title' | 'close'>;
@@ -45,6 +46,10 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const nextId = useRef(0);
   const pendingQuality = useRef(0);
   const [pendingQualityId, setPendingQualityId] = useState<string>();
+  const [pendingVersionId, setPendingVersionId] = useState<string>();
+  const [versionMessage, setVersionMessage] = useState('');
+  const versionAttempt = useRef(0);
+  const versionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const position = useRef(0);
   const paused = useRef(false);
   const { kind, id } = target;
@@ -139,6 +144,36 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const plan = playback.target?.id === id && playback.target.kind === kind ? playback.plan : null;
   const sessionId = plan?.sessionId ?? '';
   useEffect(() => {
+    versionAttempt.current++;
+    if (versionTimer.current) clearTimeout(versionTimer.current);
+    setPendingVersionId(undefined); setVersionMessage('');
+    return () => { versionAttempt.current++; if (versionTimer.current) clearTimeout(versionTimer.current); };
+  }, [sessionId]);
+  const switchVersion = useCallback((versionId: string) => {
+    if (!sessionId || pendingVersionId) return;
+    const token = ++versionAttempt.current;
+    setPendingVersionId(versionId); setVersionMessage('Preparing…');
+    const attempt = async (number: number) => {
+      try {
+        await vela.playback.switchVersion(sessionId, versionId, position.current);
+        if (versionAttempt.current !== token) return;
+        setPendingVersionId(undefined); setVersionMessage('');
+      } catch (error) {
+        if (versionAttempt.current !== token) return;
+        const detail = error instanceof VelaError ? error.detail : undefined;
+        const seconds = preparingRetry(detail?.code, detail?.retry, number);
+        if (seconds !== null) {
+          setVersionMessage(`Preparing… retrying in ${seconds}s`);
+          versionTimer.current = setTimeout(() => void attempt(number + 1), seconds * 1000);
+          return;
+        }
+        setPendingVersionId(undefined);
+        setVersionMessage(detail?.code === 'version_unavailable' ? 'This version is no longer available. Playback continues.' : error instanceof Error ? error.message : 'Could not switch version. Playback continues.');
+      }
+    };
+    void attempt(1);
+  }, [vela, sessionId, pendingVersionId]);
+  useEffect(() => {
     if (pendingQualityId && qualityReached(pendingQualityId, snapshot, plan)) setPendingQualityId(undefined);
   }, [pendingQualityId, snapshot, plan]);
   useEffect(() => { if (playback.error) setPendingQualityId(undefined); }, [playback.error]);
@@ -200,7 +235,10 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       failure: playback.phase === 'preparing' ? null : failure,
       actionError: refused || (playback.phase === 'playing' ? playback.error : ''),
       pendingQualityId,
+      pendingVersionId,
+      versionMessage,
       send,
+      switchVersion,
       retry,
     },
     view,

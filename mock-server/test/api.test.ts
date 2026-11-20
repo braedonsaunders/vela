@@ -205,6 +205,54 @@ describe('mock server: catalogue and live', () => {
       .every(item => item.kind !== 'title' || item.title.name.toLowerCase().includes('the'))).toBe(true);
   });
 
+  test('versions expose warm, cold, unavailable, remembered and clear-choice states', async () => {
+    const warm = await get<V.TitleVersions>('/titles/title-1-1/versions');
+    expect(warm.versions[0]?.label).toBe('Auto');
+    expect(warm.versions.some(version => version.availability === 'fetch')).toBe(true);
+    expect(warm.versions.some(version => version.availability === 'unavailable' && !!version.note)).toBe(true);
+    expect(warm.versions.find(version => version.remembered)?.label).toContain('Dolby Vision');
+    const cold = await get<V.TitleVersions>('/titles/title-1-3/versions');
+    expect(cold.versions.map(version => version.label)).toEqual(['Auto', '4K Remux', '1080p WEB-DL']);
+    expect(cold.versions.every(version => !version.audio && !version.videoCodec)).toBe(true);
+    const cleared = await call('/titles/title-1-1/versions/choice', { method: 'DELETE', headers: { ...authed(tokens), 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotencyKey: key(), scope: 'all' }) });
+    expect(cleared.status).toBe(200);
+    const result = await cleared.json() as V.ClearVersionChoiceResponse;
+    expect(result.cleared).toBe(true);
+    expect(result.rememberedChoice).toBeUndefined();
+    expect(result.selectedVersionId).toBe(result.versions[0]?.id);
+  });
+
+  test('a fetching version prepares once then switches the same session and generations', async () => {
+    const versions = await get<V.TitleVersions>('/titles/title-1-2/versions');
+    const initial = versions.versions[1]!;
+    const fetching = versions.versions.find(version => version.availability === 'fetch')!;
+    const started = await post('/playback', {
+      titleId: versions.titleId, versionId: initial.id, idempotencyKey: key(),
+      client: { device, protocolVersions: [0], containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: true, mse: true },
+    }, authed(tokens));
+    expect(started.status).toBe(200);
+    const plan = await started.json() as V.PlaybackPlan;
+    expect(plan.selectedVersionId).toBe(initial.id);
+    const command = { kind: 'version', versionId: fetching.id, positionSeconds: 47, sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration };
+    const preparing = await post(`/sessions/${plan.sessionId}/commands`, { ...command, idempotencyKey: key() }, authed(tokens));
+    expect(preparing.status).toBe(503);
+    const preparingError = (await preparing.json() as V.ErrorResponse).error;
+    expect(preparingError).toMatchObject({ class: 'source', code: 'version_preparing', retry: { allowed: true, afterSeconds: 1, maxAttempts: 3 } });
+    const switched = await post(`/sessions/${plan.sessionId}/commands`, { ...command, idempotencyKey: key() }, authed(tokens));
+    expect(switched.status).toBe(200);
+    const next = await switched.json() as V.PlaybackPlan;
+    expect(next.sessionId).toBe(plan.sessionId);
+    expect(next.selectedVersionId).toBe(fetching.id);
+    expect(next.positionSeconds).toBe(47);
+    expect(next.sourceGeneration).toBe(plan.sourceGeneration + 1);
+    expect(next.seekGeneration).toBe(plan.seekGeneration + 1);
+
+    const unavailable = versions.versions.find(version => version.availability === 'unavailable')!;
+    const refused = await post(`/sessions/${plan.sessionId}/commands`, { ...command, versionId: unavailable.id, sourceGeneration: next.sourceGeneration, seekGeneration: next.seekGeneration, idempotencyKey: key() }, authed(tokens));
+    expect(refused.status).toBe(409);
+    expect((await refused.json() as V.ErrorResponse).error).toMatchObject({ class: 'source', code: 'version_unavailable' });
+  });
+
   test('bootstrap-only delay leaves independent library reads responsive', async () => {
     const delayed = await launchMock({ VELA_MOCK_BOOTSTRAP_DELAY_MS: '120' });
     try {
