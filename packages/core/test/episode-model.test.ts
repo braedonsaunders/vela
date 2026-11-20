@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { card, detailModel } from '../src/discovery/models';
+import { withLocale } from '../src/i18n';
 import type { Title, TitleDetail } from '../src/wire';
 
 const title: Title = { id: 'episode', kind: 'episode', name: 'Arrival', showId: 'show', seasonId: 'season', showName: 'Meridian Station', seasonNumber: 0, episodeNumber: 3, summary: '', genres: [], artwork: [
@@ -32,6 +33,18 @@ test('episode air dates and the server-selected next item reach the display mode
   expect(model.nextUp?.[0]?.id).toBe('server-next');
   expect(model.episodes[1]?.facts).toContain('Feb 3, 2025');
   expect(detailModel({ title, nextUp: null, extras: [], chapters: [], cast: [] }).nextUp).toEqual([]);
+});
+
+test('episode air dates follow the active locale and keep the UTC calendar day', () => {
+  for (const formatLocale of ['en-US', 'fr-FR', 'en-US']) {
+    const context = JSON.stringify({ locale: 'en', resolvedLocale: 'en', formatLocale, timeZone: 'America/Toronto', utcOffset: -300 });
+    withLocale(context, () => {
+      const expected = new Intl.DateTimeFormat(formatLocale, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })
+        .format(Date.UTC(2025, 1, 3));
+      expect(card({ ...title, airDate: '2025-02-03' }).facts).toBe(expected);
+      expect(card({ ...title, airDate: '2025-99-03' }).facts).toBe('');
+    });
+  }
 });
 
 test('parent identifiers survive card and detail projection for any kind', () => {
