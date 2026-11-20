@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { Env } from '@vela/skin';
+import { shouldRotateHero } from '@vela/skin/src/hero-rotation';
 
 const HERO_SECONDS = 9;
 
@@ -37,7 +38,7 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
   }, []);
 
   // A playing hero trailer holds the hero on show, as compiled Cinematic did; rotation resumes when it stops.
-  const rotating = onHome && heroCount > 1 && !still && query === '' && !heroPreviewing;
+  const rotating = shouldRotateHero({ onHome, heroCount, still, query, heroPreviewing, flags });
   useEffect(() => {
     if (!rotating) return;
     const timer = setInterval(() => setHeroIndex(i => (i + 1) % heroCount), HERO_SECONDS * 1000);

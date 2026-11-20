@@ -114,6 +114,12 @@ export const stage: Node = {
             `radial-gradient(ellipse 120% 100% at 60% 35%, ${veil(0)} 50%, ${veil(70)} 100%)`,
           ].join(', '),
         },
+        small: {
+          'background-image': [
+            `linear-gradient(90deg, ${veil(97)} 0%, ${veil(88)} 48%, ${veil(58)} 72%, ${veil(24)} 100%)`,
+            `linear-gradient(0deg, $ui.page 0%, ${veil(90)} 26%, ${veil(22)} 68%)`,
+          ].join(', '),
+        },
       },
       {
         type: 'image',
@@ -370,41 +376,33 @@ export const dot = (current: boolean): Node => ({
   when: [{ test: 'index.current', not: !current }],
   style: {
     position: 'relative',
-    width: current ? '34px' : '8px',
-    height: '8px',
-    'border-radius': '4px',
-    'overflow-x': 'hidden',
-    'overflow-y': 'hidden',
-    'background-color': current ? '$ui.trackStrong' : '$ui.glassEdgeStrong',
+    width: '44px',
+    height: '44px',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
   },
-  hover: { 'background-color': '$ui.controlHover' },
+  hover: { opacity: '0.82' },
   focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
   // The current dot is filled; while the carousel rotates the fill grows over the interval.
-  children: current
-    ? [
-        {
-          type: 'box',
-          when: [{ test: 'env.rotating' }],
-          motion: 'velaHeroFill',
-          style: {
-            position: 'absolute',
-            inset: '0px',
-            'border-radius': '4px',
-            'background-color': '$ui.ink',
-          },
-        },
-        {
-          type: 'box',
-          when: [{ test: 'env.rotating', not: true }],
-          style: {
-            position: 'absolute',
-            inset: '0px',
-            'border-radius': '4px',
-            'background-color': '$ui.ink',
-          },
-        },
-      ]
-    : [],
+  children: [{
+    type: 'box',
+    style: { position: 'relative', width: current ? '34px' : '8px', height: '8px', 'border-radius': '4px',
+      'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': current ? '$ui.trackStrong' : '$ui.glassEdgeStrong' },
+    children: current ? [
+      { type: 'box', when: [{ test: 'env.rotating' }], motion: 'velaHeroFill', style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': '$ui.ink' } },
+      { type: 'box', when: [{ test: 'env.rotating', not: true }], style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': '$ui.ink' } },
+    ] : [],
+  }],
+});
+const rotationControl = (paused: boolean): Node => ({
+  type: 'box', press: { action: 'toggle', arg: 'hero-paused' },
+  label: paused ? 'Resume featured titles' : 'Pause featured titles',
+  when: [{ test: 'env.heroPaused', not: !paused }],
+  style: { position: 'relative', width: '44px', height: '44px', display: 'flex', 'align-items': 'center', 'justify-content': 'center',
+    'border-radius': '$ui.radiusControl', color: '$ui.ink', 'background-color': '$ui.control' },
+  hover: { 'background-color': '$ui.controlHover' }, focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
+  children: [{ type: 'icon', symbol: paused ? 'play' : 'pause', style: { width: '16px', height: '16px' } }],
 });
 export const dots: Node = {
   type: 'box',
@@ -431,6 +429,8 @@ export const dots: Node = {
       over: 'home.heroes',
       item: { type: 'box', style: { display: 'flex' }, children: [dot(true), dot(false)] },
     },
+    rotationControl(false),
+    rotationControl(true),
   ],
 };
 // The hero copy and its dots. Compiled draws them in one column with the search field below
@@ -468,6 +468,7 @@ export const copyBase: Style = {
   'justify-content': 'flex-end',
   'box-sizing': 'border-box',
   'min-height': 'calc(clamp(500px, 62vh, 700px) - 108px)',
+  height: 'calc(clamp(500px, 62vh, 700px) - 108px)',
   'padding-top': 'calc(56px + 32px + env(safe-area-inset-top))',
 };
 export const folded = (height: string): Style => ({
@@ -493,6 +494,7 @@ export const copyColumn: Node = {
       style: {
         ...copyBase,
         'min-height': '424px',
+        height: '424px',
         'padding-top': 'calc(56px + 22px + env(safe-area-inset-top))',
       },
     },

@@ -82,6 +82,7 @@ const Band = createContext(false);
 const ReadingStop = createContext(false);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
 const PressLabelContent = createContext(false);
+const HeroInteraction = createContext(false);
 /** First content layout releases the skeleton covering a newly loaded route. */
 const InstantContent = createContext(false);
 const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
@@ -459,6 +460,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const reveal = useContext(RevealContext);
   const offsetY = useRef(0);
   const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY) : null), [route]);
+  const inHero = useContext(HeroInteraction) || !!hero;
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
   const menuCard = ctx.card
@@ -558,6 +560,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     }
   }
   if (node.press) content = <PressLabelContent.Provider value>{content}</PressLabelContent.Provider>;
+  if (hero) content = <HeroInteraction.Provider value>{content}</HeroInteraction.Provider>;
   const layers = (
     <>
       {fx.backdropBlur ? <Backdrop blur={fx.backdropBlur} glass={style.backgroundColor !== undefined} /> : null}
@@ -672,6 +675,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
       notePress(buttonRef.current, `${press.action}:${arg}`);
+      // The pause and resume controls replace one another. Clear their focus-derived interaction
+      // before dispatch, because the focused control can unmount without delivering blur.
+      if (inHero && press.action === 'toggle' && arg === 'hero-paused') host.setFlag('hero-interacting', false);
       host.dispatch(press.action, arg);
       // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
       if (focus) requestAnimationFrame(() => focusElement(focus));
@@ -702,11 +708,12 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         onPress={onPress}
         onFocus={event => {
           set('focus', isFocusVisible(event.currentTarget));
+          if (inHero) host.setFlag('hero-interacting', true);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => set('focus', false)}
+        onBlur={() => { set('focus', false); if (inHero) host.setFlag('hero-interacting', false); }}
         onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
@@ -730,7 +737,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const Frame = (guide ? AGuide : frameFor(node)) as typeof AView;
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
-        {...barLayout} {...swipe} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}>
+        {...barLayout} {...swipe} {...hoverProps}
+        {...(web && hero ? { onMouseEnter: () => host.setFlag('hero-interacting', true), onMouseLeave: () => host.setFlag('hero-interacting', false) } : {})}
+        {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}>
         {layers}
         {content}
         {button}

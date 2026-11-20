@@ -261,7 +261,9 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.heroCount': (_, e) => (e.home ? String(e.home.hero.length) : ''),
   'env.heroIndex': (_, e) => String(e.heroIndex),
   'env.rowCount': (_, e) => (e.home ? String(e.home.rows.length) : ''),
-  'env.rotating': (_, e) => (e.home ? yes(e.home.hero.length > 1 && !e.still && e.query === '') : ''),
+  'env.rotating': (_, e) => (e.home ? yes(e.home.hero.length > 1 && !e.still && e.query === ''
+    && !e.flags.includes('hero-paused') && !e.flags.includes('hero-interacting')) : ''),
+  'env.heroPaused': (_, e) => yes(e.flags.includes('hero-paused')),
   'env.width': (_, e) => String(e.width),
   'env.skinCount': (_, e) => String(e.skinCount),
   'env.skinName': (_, e) => e.skinName,
