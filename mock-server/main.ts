@@ -186,10 +186,13 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${library.id}`), g.id); }
     const items = libraryEntries(library.id);
     const ids = new Set(items.filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
+    // A plugin library declares its own default shelves, many more than a built-in library has.
     const selected: V.Row[] = library.id === 'videos'
-      ? [{ id: 'creator-picks', name: 'From your creators', purpose: 'recommendation', receiptToken: '', items: items.slice(0, 24), continuation: 'exhausted' }]
+      ? Array.from({ length: 30 }, (_, n) => ({ id: n ? `creator-picks-${n + 1}` : 'creator-picks', name: n ? `Creator shelf ${n + 1}` : 'From your creators', purpose: 'recommendation' as const, receiptToken: '', items: items.slice(n % 8, (n % 8) + 16), continuation: 'exhausted' as const }))
       : rows.map(row => ({ ...row, items: row.items.filter(e => e.kind === 'title' && ids.has(e.title.id)) })).filter(row => row.items.length);
-    return cached(req, page(selected.map(row => boundRow(g, row)), url, g, `library-rows:${library.id}`), g.id);
+    const paging = new URL(url);
+    if (process.env.VELA_MOCK_LIBRARY_ROW_PAGE) paging.searchParams.set('limit', process.env.VELA_MOCK_LIBRARY_ROW_PAGE);
+    return cached(req, page(selected.map(row => boundRow(g, row)), paging, g, `library-rows:${library.id}`), g.id);
   }
   const collectionsMatch = /^\/libraries\/([^/]+)\/collections$/.exec(path);
   if (method === 'GET' && collectionsMatch && process.env.VELA_MOCK_OLD !== '1') {

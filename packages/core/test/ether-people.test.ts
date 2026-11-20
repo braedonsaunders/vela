@@ -85,7 +85,10 @@ test('plugin library facets apply OR within fields, AND across fields and librar
     expect(libraries.items.find(l => l.id === 'videos')).toMatchObject({ presentation: { card: 'landscape' } });
     await adapter.probeLibraryViews('videos');
     expect(hasLibraryRecommendations(adapter)).toBe(true);
-    expect((await adapter.libraryRows('videos', 'mixed')).length).toBeGreaterThan(0);
+    // 30 plugin-declared shelves, served two per page: every page is read, none repeated.
+    const shelves = await adapter.libraryRows('videos', 'mixed');
+    expect(shelves).toHaveLength(30);
+    expect(new Set(shelves.map(row => row.id)).size).toBe(30);
     expect((await adapter.libraryCollections('videos', undefined, 'topics')).items.length).toBeGreaterThan(0);
     const facets = await adapter.libraryFacets('videos', 'topic', 'science');
     expect(facets.items).toEqual([{ id: 'Science Fiction', label: 'Science Fiction', count: 26 }]);
