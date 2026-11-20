@@ -35,7 +35,6 @@ export async function startDecodeEpoch(
   const lifetime = AbortSignal.any([source.abort.signal, abort.signal]);
   const progress = admission ?? trackStartupProgress(context, source, lifetime);
   const signal = AbortSignal.any([lifetime, progress.signal]);
-  const live = source.kind === 'hls' && !!source.live;
   if (source.kind === 'file') source.subtitleClusters.reset(id);
   const demux: PacketDemux =
     source.kind === 'file'
@@ -115,7 +114,7 @@ export async function startDecodeEpoch(
         )
           return;
         preparedVideo = track.id;
-        videoConfiguring = run.decoder.configure(track, id, startup, live);
+        videoConfiguring = run.decoder.configure(track, id, startup);
         // Audio metadata can still be in flight; retain its sibling failure.
         void videoConfiguring.catch(() => {});
       }),
@@ -151,7 +150,7 @@ export async function startDecodeEpoch(
       Promise.all([
         preparedVideo === video.id && videoConfiguring
           ? videoConfiguring
-          : run.decoder.configure(video, id, startup, live),
+          : run.decoder.configure(video, id, startup),
         audio
           ? (async () => {
               if (!sameAudio) await source.audio.configure(audio, id, startup);

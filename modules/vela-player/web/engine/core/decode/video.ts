@@ -14,7 +14,7 @@ export interface VideoPresentation {
 }
 export interface VideoBackend {
   readonly metrics: { decoded: number };
-  configure(track: VideoTrack, epoch: number, signal: AbortSignal, live: boolean): Promise<void>;
+  configure(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void>;
   decode(packet: EncodedPacket, signal: AbortSignal): Promise<void>;
   drain(signal: AbortSignal): Promise<void>;
   dispose(): void;
@@ -41,7 +41,7 @@ export class VideoDecoderRouter implements VideoBackend {
   get metrics() {
     return this.backend?.metrics ?? { decoded: 0 };
   }
-  async configure(track: VideoTrack, epoch: number, signal: AbortSignal, live: boolean): Promise<void> {
+  async configure(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void> {
     if (this.closed) throw new Error('Video route is disposed');
     if (!this.forcePackage) {
       const phase = new AbortController(),
@@ -50,7 +50,7 @@ export class VideoDecoderRouter implements VideoBackend {
       try {
         await abortable(
           Promise.all([
-            native.configure(track, epoch, operation, live),
+            native.configure(track, epoch, operation),
             this.presentation.prepare(track, epoch, operation, { kind: 'native' }),
           ]),
           operation,
@@ -88,7 +88,7 @@ export class VideoDecoderRouter implements VideoBackend {
     ));
     await abortable(
       Promise.all([
-        software.configure(track, epoch, signal, live),
+        software.configure(track, epoch, signal),
         this.presentation.prepare(track, epoch, signal, { kind: 'native' }),
       ]),
       signal,
