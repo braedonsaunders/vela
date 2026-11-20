@@ -4,12 +4,14 @@
 // moved as soon as anything about it changes: a seek, a new label, a re-rendered row. The claim
 // is made when `preferred` turns on (or the view mounts preferred) and let go a frame later.
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
 export function useFocusClaim(preferred: boolean | undefined): boolean {
-  const [claim, setClaim] = useState(!!preferred);
+  const wanted = Platform.isTV && !!preferred;
+  const [claim, setClaim] = useState(wanted);
   useEffect(() => {
-    if (preferred) setClaim(true);
-  }, [preferred]);
+    if (wanted) setClaim(true);
+  }, [wanted]);
   useEffect(() => {
     if (!claim) return;
     const frame = requestAnimationFrame(() => setClaim(false));
