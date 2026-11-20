@@ -3,7 +3,7 @@
     "name": "Vela",
     "slug": "vela",
     "scheme": "vela",
-    "version": "0.2.23",
+    "version": "0.2.24",
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#090b0e",
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "app.ether.vela",
-      "versionCode": 2023
+      "versionCode": 2024
     },
     "web": {
       "output": "single",
