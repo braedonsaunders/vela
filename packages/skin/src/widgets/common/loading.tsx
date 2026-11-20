@@ -9,9 +9,11 @@ import { LaunchArt } from './launch-art';
 
 export function ContentLoader({ inline = false }: { inline?: boolean }) {
   const look = useLook();
-  const { viewport } = useHost();
+  const { viewport, env } = useHost();
   const [visible, show] = useState(false);
   useEffect(() => { const timer = setTimeout(() => show(true), 250); return () => clearTimeout(timer); }, []);
+  // The shared slow-Home surface replaces, rather than competes with, the passive progress state.
+  if (env.route === 'home' && env.homeSlow) return null;
   return <View testID={inline ? 'vela-inline-loader' : 'vela-content-loader'} pointerEvents="none" accessible={visible}
     accessibilityRole="progressbar" accessibilityLabel={msg('ui.findingTitles')}
     style={{ minHeight: inline ? 48 : Math.max(220, viewport.height - 240), width: '100%', alignItems: 'center', justifyContent: 'center' }}>

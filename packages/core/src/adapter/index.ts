@@ -15,7 +15,7 @@ export interface ServerAdapter {
   describe(): Promise<ServerDescription>;
 
   /** The signed-in viewer's home: rows, heroes and the server's description. */
-  home(fresh?: boolean): Promise<Home>;
+  home(fresh?: boolean, signal?: AbortSignal): Promise<Home>;
   rows(query: V.RowsQuery): Promise<V.Page<V.Row>>;
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
   libraries(query: V.LibrariesQuery): Promise<V.Page<V.Library>>;

@@ -21,6 +21,7 @@ const guide = (from: number, until: number, ids: string[]) => fixtureGuide(from,
   !gapChannels.has(programme.channelId) || Date.parse(programme.end) <= gapHour - 3 * 3600000 || Date.parse(programme.start) >= gapHour + 5 * 3600000);
 
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
+const bootstrapDelayMs = Math.min(120_000, Math.max(0, Number(process.env.VELA_MOCK_BOOTSTRAP_DELAY_MS) || 0));
 const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
@@ -305,6 +306,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'GET' && path === '/events') return serverEvents(req, () => !g.revoked && g.expires > Date.now());
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
+    if (bootstrapDelayMs) await Bun.sleep(bootstrapDelayMs);
     const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
     const home = homeRows(g, firstPage);

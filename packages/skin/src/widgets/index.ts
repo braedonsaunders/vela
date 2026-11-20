@@ -17,10 +17,12 @@ import { YearInput } from './library/year-input';
 
 import { RowLink } from './row-link';
 import { LoadingWidget } from './common/loading';
+import { HomeSlowWidget } from './common/home-slow';
 
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   rowLink: RowLink,
   contentLoader: LoadingWidget,
+  homeSlow: HomeSlowWidget,
   searchInput: SearchInput,
   textInput: TextInput,
   serverSwitcher: ServerSwitcher,
@@ -52,4 +54,5 @@ export const FOCUSABLE_WIDGETS = new Set([
   'libraryToolbar',
   'libraryTabs',
   'libraryFacets',
+  'homeSlow',
 ]);

@@ -49,6 +49,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     skinCount,
     skinName,
     homeLoading: !home.value && home.load === 'loading',
+    homeSlow: home.slow,
     detail: selectedDetail,
     season,
     route,

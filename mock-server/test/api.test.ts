@@ -177,6 +177,24 @@ describe('mock server: catalogue and live', () => {
     expect((await call('/titles/no-such-title', { headers: authed(tokens) })).status).toBe(404);
   });
 
+  test('bootstrap-only delay leaves independent library reads responsive', async () => {
+    const delayed = await launchMock({ VELA_MOCK_BOOTSTRAP_DELAY_MS: '120' });
+    try {
+      const signed = await fetch(`${delayed.url}/vela/v0/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        idempotencyKey: 'slow-home', username: 'demo', password: 'vela', device: { id: 'slow-home', name: 'Test', platform: 'web', appVersion: '0.1' },
+      }) }).then(response => response.json()) as { accessToken: string };
+      const headers = { Authorization: `Bearer ${signed.accessToken}`, 'X-Vela-Device-Id': 'slow-home' };
+      const homeRead = fetch(`${delayed.url}/vela/v0/bootstrap`, { headers });
+      const libraryRead = fetch(`${delayed.url}/vela/v0/libraries?limit=10`, { headers });
+      expect(await Promise.race([libraryRead.then(() => 'library'), homeRead.then(() => 'home')])).toBe('library');
+      const [library, home] = await Promise.all([libraryRead, homeRead]);
+      expect(library.ok).toBe(true);
+      expect(home.ok).toBe(true);
+    } finally {
+      await delayed.stop();
+    }
+  });
+
   test('fast search matches titles by name and live channels and programmes', async () => {
     const response = await post('/search', { query: 'world news', generation: 9, mode: 'fast', idempotencyKey: key() }, authed(tokens));
     const result = await response.json() as V.SearchResponse;

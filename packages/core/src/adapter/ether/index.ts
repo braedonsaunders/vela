@@ -212,15 +212,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   // Catalogue
 
   /** A home whose continuation the server has expired is read again without revalidation. */
-  async home(fresh = false): Promise<Home> {
+  async home(fresh = false, signal?: AbortSignal): Promise<Home> {
     try {
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...CACHED, fresh });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...CACHED, fresh, signal });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     } catch (error) {
       const expired = error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
       if (!expired) throw error;
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap');
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { signal });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     }

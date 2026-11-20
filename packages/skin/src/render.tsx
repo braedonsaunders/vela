@@ -72,6 +72,9 @@ const AScroll = Animated.ScrollView;
 const web = Platform.OS === 'web';
 /** A box that is also a TV focus guide (react-native-web has no focus guide, so only on TV). */
 const AGuide = Platform.isTV ? Animated.createAnimatedComponent(TVFocusGuideView) : AView;
+const HOME_SLOW_NODE: Extract<RNode, { kind: 'widget' }> = {
+  kind: 'widget', widget: 'homeSlow', params: {}, when: [], base: { style: {} }, states: [], group: false, order: 0,
+};
 
 
 export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
@@ -151,6 +154,11 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
       {cover || leaving ? (
         <SkeletonCover key={cover ? 'held' : 'leaving'} host={(cover ?? leaving)!} node={node} ground={ground}
           leaving={!cover} onGone={clearLeaving} />
+      ) : null}
+      {host.env.route === 'home' && host.env.homeSlow ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Host.Provider value={host}><Widget node={HOME_SLOW_NODE} ctx={ROOT_CONTEXT} /></Host.Provider>
+        </View>
       ) : null}
       {floatingLibraryNav && host.doc.libraryViews && !hideLibraryViews ? (
         <View style={{ position: 'absolute', top: navTop, left: 0, right: 0, zIndex: 20 }}>

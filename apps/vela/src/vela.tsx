@@ -394,7 +394,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   );
   return (
     <VelaContext.Provider value={value}>
-      <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error)}>
+      <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error, state.home.slow)}>
         <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still} searchFocused={view.flags.includes('search-focused')}>
           {children}
         </Previews>

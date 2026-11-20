@@ -6,6 +6,7 @@ test('launch waits for the first rendered answer, including failures and signed-
   expect(launchReady('offline', 'idle', true, false, false)).toBe(false);
   expect(launchReady('starting', 'idle', true, false, false)).toBe(false);
   expect(launchReady('signed-in', 'loading', true, false, false)).toBe(false);
+  expect(launchReady('signed-in', 'loading', true, false, false, true)).toBe(true);
   expect(launchReady('signed-in', 'ready', false, false, false)).toBe(false);
   expect(launchReady('signed-in', 'ready', true, false, false)).toBe(true);
   expect(launchReady('signed-in', 'failed', true, false, false)).toBe(true);

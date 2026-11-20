@@ -41,6 +41,7 @@ export interface Env {
   skinCount: number;
   skinName: string;
   homeLoading: boolean;
+  homeSlow: boolean;
   detail?: DetailModel;
   season: string;
   route: string;
@@ -247,6 +248,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.skinName': (_, e) => e.skinName,
   'env.libraryCount': (_, e) => String(e.libraries.length),
   'env.homeMoreLoading': (_, e) => yes(e.homeLoading),
+  'env.homeSlow': (_, e) => yes(e.homeSlow),
   'env.homeHasMore': (_, e) => (e.home ? yes(e.home.nextCursor !== '') : ''),
   'env.route': (_, e) => e.route,
   'env.load': (_, e) => e.load,

@@ -20,29 +20,47 @@ export interface HomeRetry {
 
 export interface HomeState extends Loadable<HomeModel> {
   retry: HomeRetry | null;
+  /** The first Home answer has taken long enough that the viewer needs choices, not only a skeleton. */
+  slow: boolean;
   /** Rows whose next items are being read. */
   rowsLoading: string[];
   /** The next page of rows: being read, failed, or none left. */
   moreRows: Load | 'end';
 }
 
-export const initialHome: HomeState = { ...idle<HomeModel>(), retry: null, rowsLoading: [], moreRows: 'idle' };
+export const initialHome: HomeState = { ...idle<HomeModel>(), retry: null, slow: false, rowsLoading: [], moreRows: 'idle' };
 
 const PAGE_ITEMS = 20;
 const LIBRARY_PAGES = 100;
+export const HOME_SLOW_MS = 7_000;
+
+export type HomePresentation = 'skeleton' | 'slow' | 'ready' | 'failed';
+
+/** Home's time/state transition is pure so behaviour tests do not need to wait seven seconds. */
+export function homePresentation(load: Load, hasValue: boolean, elapsedMs: number): HomePresentation {
+  if (hasValue || load === 'ready') return 'ready';
+  if (load === 'failed') return 'failed';
+  return elapsedMs >= HOME_SLOW_MS ? 'slow' : 'skeleton';
+}
 
 export class Home {
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private slowTimer: ReturnType<typeof setTimeout> | undefined;
   private reading: Promise<void> | undefined;
+  private controller: AbortController | undefined;
 
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly artWidth: () => number,
+    private readonly slowDelayMs = HOME_SLOW_MS,
   ) {
     session.onReset(() => {
       if (this.timer) clearTimeout(this.timer);
+      if (this.slowTimer) clearTimeout(this.slowTimer);
+      this.controller?.abort();
       this.reading = undefined;
+      this.controller = undefined;
       this.artworkRead = undefined;
       this.box.update('home', () => initialHome);
       this.box.update('libraries', () => idle());
@@ -57,35 +75,63 @@ export class Home {
 
   /** Read home again: the viewer asked, or a retry is due. */
   load(attempt = 0): Promise<void> {
-    if (this.reading && this.box.get().home.load === 'loading') return this.reading;
+    if (this.reading) return this.reading;
     if (this.timer) clearTimeout(this.timer);
-    const reading = this.read(attempt);
+    const controller = new AbortController();
+    this.controller = controller;
+    const reading = this.read(attempt, controller.signal).finally(() => {
+      if (this.reading !== reading) return;
+      this.reading = undefined;
+      this.controller = undefined;
+    });
     this.reading = reading;
     return reading;
   }
 
-  private async read(attempt: number): Promise<void> {
+  /** The viewer explicitly asked to try again. Stop this read, then start one replacement. */
+  async retry(): Promise<void> {
+    const reading = this.reading;
+    if (reading) {
+      this.controller?.abort();
+      await reading;
+    }
+    await this.load();
+  }
+
+  private async read(attempt: number, signal: AbortSignal): Promise<void> {
     const epoch = this.session.epoch;
-    this.box.update('home', home => ({ ...home, ...loading(home), retry: null }));
+    if (this.slowTimer) clearTimeout(this.slowTimer);
+    this.box.update('home', home => ({ ...home, ...loading(home), retry: null, slow: false }));
+    const slowTimer = setTimeout(() => {
+      if (epoch !== this.session.epoch) return;
+      this.box.update('home', home => homePresentation(home.load, home.value !== undefined, HOME_SLOW_MS) === 'slow'
+        ? { ...home, slow: true }
+        : home);
+    }, this.slowDelayMs);
+    this.slowTimer = slowTimer;
     try {
       const connection = await this.session.ready();
       const api = connection.adapter;
       await this.session.negotiate(api);
-      const home = await api.home();
+      const home = await api.home(false, signal);
       const bootstrap: V.Bootstrap = { ...home, capabilities: advertise(api, home.capabilities) };
       this.session.check(epoch, 'home');
       this.session.features = bootstrap.capabilities.features;
       this.session.searchCapabilities = bootstrap.capabilities;
       const images = await connection.images();
       const model = homeModel(bootstrap, images, this.artWidth());
-      this.box.update('home', home => ({ ...home, ...ready(model), rowsLoading: [], moreRows: 'idle' }));
+      this.box.update('home', home => ({ ...home, ...ready(model), slow: false, rowsLoading: [], moreRows: 'idle' }));
     } catch (error) {
+      if (signal.aborted) return;
       if (epoch !== this.session.epoch) return;
       const retry = retryPolicy(error, attempt);
-      this.box.update('home', home => ({ ...home, ...failed(error, home), retry }));
+      this.box.update('home', home => ({ ...home, ...failed(error, home), retry, slow: false }));
       if (retry.allowed && attempt < retry.limit) {
         this.timer = setTimeout(() => void this.load(attempt + 1), retry.delaySeconds * 1000);
       }
+    } finally {
+      clearTimeout(slowTimer);
+      if (this.slowTimer === slowTimer) this.slowTimer = undefined;
     }
   }
 
