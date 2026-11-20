@@ -223,7 +223,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path === '/auth/plex') {
     if (body.plexToken !== 'mock-plex-approved') return Response.json({ error: 'not_shared' }, {status: 403});
     if (capabilities.plexHomeProfiles && body.selectProfile === true) return json({ selectionToken: 'mock-plex-home', expiresAt: new Date(Date.now() + 600000).toISOString(), profiles: [
-      { id: 'owner', name: 'Demo Owner', protected: true }, { id: 'kids', name: 'Kids', protected: false },
+      { id: 'owner', name: 'Demo Owner', protected: true, avatarUrl: `${url.origin}/vela/v0/artwork/profile-owner?kind=avatar&width=240` },
+      { id: 'kids', name: 'Kids', protected: false, restricted: true, avatarUrl: `${url.origin}/vela/v0/artwork/profile-kids?kind=avatar&width=240` },
     ] } satisfies V.PlexHomeSelection);
     return json(issue(body.device));
   }

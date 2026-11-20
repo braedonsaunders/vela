@@ -55,7 +55,8 @@ describe('mock server: public and auth', () => {
     expect(begin.status).toBe(200);
     const selection = await begin.json() as V.PlexHomeSelection;
     expect(selection.profiles).toEqual([
-      { id: 'owner', name: 'Demo Owner', protected: true }, { id: 'kids', name: 'Kids', protected: false },
+      { id: 'owner', name: 'Demo Owner', protected: true, avatarUrl: `${mock.url}/vela/v0/artwork/profile-owner?kind=avatar&width=240` },
+      { id: 'kids', name: 'Kids', protected: false, restricted: true, avatarUrl: `${mock.url}/vela/v0/artwork/profile-kids?kind=avatar&width=240` },
     ]);
     const refused = await post('/auth/plex/profile', { selectionToken: selection.selectionToken, profileId: 'owner', pin: '0000', device, idempotencyKey: key() });
     expect(refused.status).toBe(401);

@@ -43,7 +43,13 @@ export interface NegotiateRequest extends Mutation { client: ClientCapabilities 
 export interface NegotiateResponse { capabilities: ServerCapabilities; client: ClientCapabilities }
 export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef }
 export interface Tokens { accessToken: string; refreshToken: string; expiresAt: Timestamp; viewer: Viewer }
-export interface PlexHomeProfile { id: ID; name: string; protected: boolean }
+export interface PlexHomeProfile {
+  id: ID; name: string; protected: boolean;
+  /** Short-lived Ether URL usable during the unsigned selection challenge; never a Plex token URL. */
+  avatarUrl?: string;
+  /** Plex managed/restricted user. Absent when the server cannot determine it. */
+  restricted?: boolean;
+}
 export interface PlexHomeSelection { selectionToken: string; expiresAt: Timestamp; profiles: PlexHomeProfile[] }
 export type PlexAccountSignIn = Tokens | PlexHomeSelection;
 export interface PlexHomeSignInRequest extends Mutation { selectionToken: string; profileId: ID; pin?: string; device: Device }

@@ -48,5 +48,15 @@ function validSelection(value: PlexAccountSignIn): value is import('../../wire')
     || typeof candidate.expiresAt !== 'string' || !Number.isFinite(Date.parse(candidate.expiresAt)) || !Array.isArray(candidate.profiles)
     || candidate.profiles.length < 2 || candidate.profiles.length > 32) return false;
   return candidate.profiles.every((profile: PlexHomeProfile) => profile && typeof profile.id === 'string' && !!profile.id
-    && typeof profile.name === 'string' && !!profile.name.trim() && profile.name.length <= 80 && typeof profile.protected === 'boolean');
+    && typeof profile.name === 'string' && !!profile.name.trim() && profile.name.length <= 80 && typeof profile.protected === 'boolean'
+    && (profile.restricted === undefined || typeof profile.restricted === 'boolean') && validAvatar(profile.avatarUrl));
+}
+
+function validAvatar(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== 'string' || !value || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '::1'].includes(url.hostname));
+  } catch { return false; }
 }
