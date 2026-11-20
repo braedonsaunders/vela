@@ -322,7 +322,7 @@ final class PlaybackSession {
             host.activateAudio()
         }
         let client = PlaybackClient(rendering: host.makeRendering(retainPausedPicture: ambient), preview: ambient, paused: !wantsPlay, muted: hasMuteCommand ? report.muted : ambient,
-                                    isLive: plan.channelId != nil, remoteHLS: path.transport == "hls", retainPausedPicture: ambient)
+                                    isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient)
         player = client
         client.set("volume", double: report.volume * 100)
         client.onBackend = { [weak self] backend in

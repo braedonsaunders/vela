@@ -3,6 +3,8 @@ import Foundation
 
 struct VelaPlan: Decodable {
     let channelId: String?
+    /// Present on every live plan: a Live TV channel, or a library's live stream (no channel).
+    let live: VelaPlanLive?
     let sessionId: String
     let revision: Int
     let sourceGeneration: Int
@@ -16,6 +18,8 @@ struct VelaPlan: Decodable {
     let selectedSubtitleTrackId: String?
     let fallback: VelaFallback?
     let chapters: [VelaPlanChapter]?
+
+    var isLive: Bool { channelId != nil || live != nil }
 
     var mediaIdentity: String { "\(sessionId):\(sourceGeneration):\(seekGeneration):\(revision):\(selectedPathId)" }
 
@@ -138,4 +142,8 @@ struct VelaPlanChapter: Decodable {
 struct VelaFallback: Decodable {
     let state: String
     let pathId: String?
+}
+
+struct VelaPlanLive: Decodable {
+    let mode: String?
 }

@@ -97,3 +97,34 @@ test('event stream EOF and errors both enter session recovery, explicit ended do
     await playback.stop();
   }
 });
+
+test('a replacement session that already has the viewer\'s tracks gets no track command', async () => {
+  const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
+  const timers = new Map<number, () => unknown>();
+  let sequence = 0;
+  globalThis.setTimeout = ((fire: () => unknown) => { const id = ++sequence; timers.set(id, fire); return id; }) as never;
+  globalThis.clearTimeout = ((id: number) => { timers.delete(id); }) as never;
+  try {
+    const commands: any[] = [];
+    const plan = (id: string) => ({ sessionId: id, state: 'playing', positionSeconds: 0, audioTracks: [{ id: 'aac' }], subtitleTracks: [], selectedAudioTrackId: 'aac', sourceGeneration: 1, seekGeneration: 1, live: { mode: 'adaptive' } } as unknown as PlaybackPlan);
+    let n = 0;
+    const adapter = {
+      startPlayback: async () => plan(`s${++n}`),
+      sessionSnapshot: async (id: string) => ({ plan: plan(id) }),
+      changeTracks: async (id: string, c: any) => { commands.push(c); return plan(id); },
+      command: async (id: string, c: any) => { if (c.kind !== 'stop') commands.push(c); return plan(id); },
+    };
+    const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
+    const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
+    const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+    await playback.start({ kind: 'channel', id: 'cam' });
+    // Subtitles off and the only audio track: exactly what the replacement session starts with.
+    playback.snapshot({ sessionId: 's1', live: null, position: 4, state: 'playing', audioTrackId: 'aac', subtitleTrackId: null });
+    playback.recover('s1');
+    for (const [id, fire] of [...timers]) { timers.delete(id); await fire(); }
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands).toEqual([]);
+    await playback.stop();
+  } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; }
+});

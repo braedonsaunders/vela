@@ -198,7 +198,11 @@ export class Playback {
       return;
     }
     let plan = connection.plan(reply as V.PlaybackPlan);
-    if (this.recovering && (this.audio !== undefined || this.subtitle !== undefined)) {
+    // A replacement session that already carries the viewer's tracks needs no command (and a live
+    // session may refuse one), so only a real difference is sent.
+    const differs = (this.audio !== undefined && this.audio !== plan.selectedAudioTrackId)
+      || (this.subtitle !== undefined && this.subtitle !== (plan.selectedSubtitleTrackId ?? null));
+    if (this.recovering && differs) {
       try {
         plan = connection.plan(await this.send(connection, plan.sessionId, {
           kind: 'tracks', audioTrackId: this.audio, subtitleTrackId: this.subtitle,
