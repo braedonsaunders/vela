@@ -17,6 +17,7 @@ const ROW = {
   'align-items': 'center',
   'justify-content': 'space-between',
   gap: '10px',
+  'min-height': '44px',
   padding: '8px 10px',
   margin: '0px -10px',
   'border-radius': '10px',
@@ -48,7 +49,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
   const title = params.label || msg('connect.servers');
   return (
     <View style={{ gap: 2 }} accessibilityRole="menu" accessibilityLabel={title}>
-      <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>
+      <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>
         {title}
       </Words>
       {switcher.servers.list.map(server => (
@@ -113,7 +114,7 @@ function Row({
           {label}
         </Words>
         {detail ? (
-          <Words rows={{ 'font-size': '11px', color: ready ? '$ui.inkQuiet' : '$ui.accent' }} lines={1}>
+          <Words rows={{ 'font-size': '12px', color: ready ? '$ui.inkQuiet' : '$ui.accent' }} lines={1}>
             {detail}
           </Words>
         ) : null}

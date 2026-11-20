@@ -197,7 +197,7 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
                 'text-transform': broadcast ? 'uppercase' : 'none',
                 color: '$ui.ink',
               })}>{card.name}</Text>
-              {meta ? <Text style={look.text({ 'font-size': '11px', 'font-weight': '550', color: '$ui.inkQuiet' })}>{meta}</Text> : null}
+              {meta ? <Text style={look.text({ 'font-size': '12px', 'font-weight': '550', color: '$ui.inkQuiet' })}>{meta}</Text> : null}
             </View>
             <View style={[look.box({ height: '1px', 'background-color': '$ui.glassEdge' }), { marginHorizontal: 6 }]} />
             <ScrollView style={{ maxHeight: Math.max(120, viewport.height - 24) }} contentContainerStyle={{ gap: 2 }} keyboardShouldPersistTaps="handled">

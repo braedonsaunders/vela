@@ -90,7 +90,7 @@ export function AddressStep({
           ]}
         >
           <View style={{ gap: 4 }}>
-            <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.accent' }}>{found.kindLabel}</Words>
+            <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.accent' }}>{found.kindLabel}</Words>
             <Words rows={{ ...display, 'font-size': '28px' }} lines={2}>
               {foundName(found)}
             </Words>

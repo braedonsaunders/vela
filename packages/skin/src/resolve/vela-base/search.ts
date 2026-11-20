@@ -186,7 +186,7 @@ const airing: Node[] = [
       {
         type: 'text',
         text: '{t:live.liveBadge}',
-        style: { 'font-size': '10px', 'font-weight': '750', 'letter-spacing': '0.12em' },
+        style: { 'font-size': '12px', 'font-weight': '750', 'letter-spacing': '0.12em' },
       },
     ],
   },
@@ -213,7 +213,7 @@ const airing: Node[] = [
       ...glassChip,
       'background-color': '$ui.glass',
       'backdrop-filter': 'blur(12px)',
-      'font-size': '11px',
+      'font-size': '12px',
       'font-weight': '600',
       'font-variant-numeric': 'tabular-nums',
     },

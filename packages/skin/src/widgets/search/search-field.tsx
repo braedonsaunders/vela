@@ -172,7 +172,7 @@ export function SearchField({ ctx }: WidgetProps) {
 /** How long opening search takes to lay out before the field is checked against the bar. */
 const SETTLE_MS = 250;
 const FIELD_HEIGHT = 60;
-const CLEAR_SIZE = 40;
+const CLEAR_SIZE = 44;
 
 const styles = StyleSheet.create({
   field: {

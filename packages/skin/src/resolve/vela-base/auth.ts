@@ -83,7 +83,7 @@ export const fieldBlock = (name: 'username' | 'password', label: string): Node =
   type: 'box',
   style: { display: 'flex', 'flex-direction': 'column', gap: '8px' },
   children: [
-    { type: 'text', text: label, style: { ...eyebrow, 'font-size': '10px', color: '$ui.inkQuiet' } as Style },
+    { type: 'text', text: label, style: { ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' } as Style },
     {
       type: 'widget',
       widget: 'textInput',

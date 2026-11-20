@@ -66,7 +66,7 @@ function NowRow({
       <LogoTile look={look} logo={c.logo} name={c.name} width={76} height={48} radius={10} size={15} />
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          <Line look={look} size={11} color={look.inkQuiet} tabular>
+          <Line look={look} size={12} color={look.inkQuiet} tabular>
             {c.number}
           </Line>
           <Line look={look} size={12} weight={600} color={look.inkSecondary} style={{ flexShrink: 1 }}>
@@ -80,7 +80,7 @@ function NowRow({
         {c.nowId ? (
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Progress look={look} percent={c.nowProgress} height={2} flex={1} />
-            <Line look={look} size={11} color={look.inkQuiet} tabular>
+            <Line look={look} size={12} color={look.inkQuiet} tabular>
               {c.nowRemaining}
             </Line>
           </View>

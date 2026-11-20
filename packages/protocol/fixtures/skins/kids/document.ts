@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.13';
+const version = '1.2.14';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -88,7 +88,7 @@ const bar: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when:
     { type: 'icon', symbol: 'search', style: { width: '26px', height: '26px', color: '$ink' }, small: { width: '22px', height: '22px' } },
   ] },
   // The grown-ups corner: small and quiet, behind a gate.
-  { type: 'box', press: { action: 'open', arg: 'gate' }, label: '{s:grownUps}', a11y: { haspopup: 'dialog' }, testId: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '40px', height: '40px', 'border-radius': '999px', 'flex-shrink': '0', opacity: '0.5', 'background-color': 'rgba(255, 255, 255, 0.5)', transition: 'opacity 160ms linear' },
+  { type: 'box', press: { action: 'open', arg: 'gate' }, label: '{s:grownUps}', a11y: { haspopup: 'dialog' }, testId: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '44px', height: '44px', 'border-radius': '999px', 'flex-shrink': '0', opacity: '0.5', 'background-color': 'rgba(255, 255, 255, 0.5)', transition: 'opacity 160ms linear' },
     hover: { opacity: '1' }, focus: { opacity: '1', 'box-shadow': ring }, children: [
     { type: 'icon', symbol: 'lock', style: { width: '18px', height: '18px', color: '$ink' } },
   ] },
@@ -193,15 +193,20 @@ const hero: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.sear
 ] } };
 
 const dotFill: Style = { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'border-radius': '8px', 'background-color': '$sun' };
-const dot: Node = { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', a11y: { current: [{ test: 'index.current' }] },
-  style: { position: 'relative', width: '16px', height: '16px', 'border-radius': '8px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$card',
-    'box-shadow': 'inset 0px 0px 0px 2px rgba(27, 37, 80, 0.16)', transition: `width 420ms ${bouncy}, background-color 200ms linear` },
-  hover: { 'background-color': '$sun-soft' }, focus: { 'background-color': '$sun-soft', 'box-shadow': ring },
-  states: [{ when: [{ test: 'index.current' }], style: { width: '44px', 'background-color': 'rgba(27, 37, 80, 0.16)', 'box-shadow': 'none' } }],
-  children: [
-    { type: 'box', when: [{ test: 'index.current' }, { test: 'env.rotating' }], motion: 'heroFill', style: dotFill },
-    { type: 'box', when: [{ test: 'index.current' }, { test: 'env.rotating', not: true }], style: dotFill },
-  ] };
+const dotShape = (current: boolean): Node => ({
+  type: 'box', when: [{ test: 'index.current', not: !current }],
+  style: { position: 'relative', width: current ? '44px' : '16px', height: '16px', 'border-radius': '8px', 'overflow-x': 'hidden', 'overflow-y': 'hidden',
+    'background-color': current ? 'rgba(27, 37, 80, 0.16)' : '$card',
+    'box-shadow': current ? 'none' : 'inset 0px 0px 0px 2px rgba(27, 37, 80, 0.16)', transition: `background-color 200ms linear` },
+  groupHover: { 'background-color': '$sun-soft' }, groupFocus: { 'background-color': '$sun-soft', 'box-shadow': ring },
+  children: current ? [
+    { type: 'box', when: [{ test: 'env.rotating' }], motion: 'heroFill', style: dotFill },
+    { type: 'box', when: [{ test: 'env.rotating', not: true }], style: dotFill },
+  ] : [],
+});
+const dot: Node = { type: 'box', group: true, press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', a11y: { current: [{ test: 'index.current' }] },
+  style: { position: 'relative', width: '44px', height: '44px', display: 'flex', 'align-items': 'center', 'justify-content': 'center' },
+  children: [dotShape(true), dotShape(false)] };
 const dots: Node = { type: 'box', role: 'group', label: '{s:featured}', when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'gt', value: '1' }],
   style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'justify-content': 'center', 'padding-top': '26px' }, children: [
     { type: 'repeat', over: 'home.heroes', item: dot }] };

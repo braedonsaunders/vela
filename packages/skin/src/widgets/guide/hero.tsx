@@ -122,7 +122,7 @@ const HeroArt = memo(function HeroArt({
 }, (a, b) => a.look === b.look && a.small === b.small && a.still === b.still
   && a.programme.art === b.programme.art && a.programme.tone === b.programme.tone);
 
-function Eyebrow({ look, children, size = 10 }: { look: GuideLook; children: string; size?: number }) {
+function Eyebrow({ look, children, size = 12 }: { look: GuideLook; children: string; size?: number }) {
   return (
     <Line
       look={look}
@@ -253,7 +253,7 @@ function ProgrammeCopy({
               flexShrink: 0,
             }}
           >
-            <Line look={look} size={10} weight={700} color={look.inkSecondary} style={{ letterSpacing: 0.6 }}>
+            <Line look={look} size={12} weight={700} color={look.inkSecondary} style={{ letterSpacing: 0.6 }}>
               {programme.rating}
             </Line>
           </View>

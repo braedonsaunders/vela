@@ -169,7 +169,7 @@ function ActionButton({ label, icon, active, testID, run, disabled }: {
       onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)}
       style={[
         look.box({
-          width: '40px', height: '40px', 'align-items': 'center', 'justify-content': 'center',
+          width: '44px', height: '44px', 'align-items': 'center', 'justify-content': 'center',
           'border-radius': '$ui.radiusControl', 'background-color': lit || active ? '$ui.controlHover' : '$ui.control',
           border: focus ? '1px solid $ui.accent' : '1px solid $ui.glassEdge',
           'backdrop-filter': 'blur(16px)',

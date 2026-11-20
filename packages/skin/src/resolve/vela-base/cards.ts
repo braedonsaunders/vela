@@ -77,7 +77,7 @@ export const cardPreview: Node = {
           type: 'text',
           text: '{card.facts}',
           style: {
-            'font-size': '11px',
+            'font-size': '12px',
             color: '$ui.inkSecondary',
             'line-clamp': '1',
             'font-variant-numeric': 'tabular-nums',

@@ -585,6 +585,15 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const [geometry, inner] = masked ? partition(drawn, GEOMETRY) : [{}, drawn];
   const boxStyleFinal = masked ? { ...inner, flexGrow: 1 } : drawn;
   const a11y = a11yProps(node, ctx, env);
+  const hitEdge = (side: 'Top' | 'Right' | 'Bottom' | 'Left') => {
+    const value = boxStyleFinal[`border${side}Width`] ?? boxStyleFinal.borderWidth;
+    return typeof value === 'number' ? -value : 0;
+  };
+  // The transparent web button is absolutely positioned inside its box's padding edge. Extend it
+  // across any visible border so a 44px authored control retains a 44px interactive target.
+  const buttonHitBox = web ? {
+    top: hitEdge('Top'), right: hitEdge('Right'), bottom: hitEdge('Bottom'), left: hitEdge('Left'),
+  } : undefined;
   const hoverProps = web && (node.base.hover || node.group || node.states.some(s => s.layer.hover))
     ? { onMouseEnter: () => set('hover', true), onMouseLeave: () => set('hover', false) } : {};
 
@@ -683,7 +692,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       if (focus) requestAnimationFrame(() => focusElement(focus));
     });
     const button = press ? (
-      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
+      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
         {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
         focusable={selectable(node)}

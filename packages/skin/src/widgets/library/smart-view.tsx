@@ -16,7 +16,7 @@ function WatchState({ card }: { card: Card }) {
     <View style={look.box({ height: '3px', 'border-radius': '2px', 'background-color': '$ui.trackStrong', 'overflow-x': 'hidden', 'overflow-y': 'hidden' })}>
       <View style={[look.box({ height: '3px', 'background-color': '$ui.accent' }), { width: `${progress * 100}%` }]} />
     </View>
-    <Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '11px' })}>{Math.round(progress * 100)}% watched</Text>
+    <Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '12px' })}>{Math.round(progress * 100)}% watched</Text>
   </View>;
 }
 

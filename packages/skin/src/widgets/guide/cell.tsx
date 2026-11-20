@@ -105,7 +105,7 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
         borderWidth: focused || Platform.isTV && selected ? 2 : 0,
         borderColor: focused || Platform.isTV && selected ? look.accent : hovered ? look.edgeStrong : p.airing ? look.liveEdge : look.hairline,
         backgroundColor: focused || Platform.isTV && selected ? look.cellHover : p.airing ? look.live : hovered ? look.cellHover : look.cell,
-        opacity: p.ended && !(focused || Platform.isTV && selected) ? 0.46 : 1,
+        opacity: p.ended && !(focused || Platform.isTV && selected) ? 0.72 : 1,
         zIndex: focused || Platform.isTV && selected ? 3 : 0,
         boxShadow: Platform.isTV ? selected ? `0px 0px 2px ${look.shadow}` : undefined : focused
           ? `inset 0px 0px 0px 1px ${look.accent}, 0px 0px 2px ${look.shadow}`

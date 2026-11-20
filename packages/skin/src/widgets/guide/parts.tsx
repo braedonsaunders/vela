@@ -177,7 +177,7 @@ export function Press(props: PressProps) {
 }
 
 /** The broadcast "LIVE" badge. */
-export function LiveBadge({ look, size = 10 }: { look: GuideLook; size?: number }) {
+export function LiveBadge({ look, size = 12 }: { look: GuideLook; size?: number }) {
   return (
     <View
       style={{
@@ -190,8 +190,8 @@ export function LiveBadge({ look, size = 10 }: { look: GuideLook; size?: number 
         backgroundColor: look.now,
       }}
     >
-      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: look.ink }} />
-      <Line look={look} size={size} weight={750} style={{ letterSpacing: size * 0.14 }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: look.liveInk }} />
+      <Line look={look} size={size} weight={750} color={look.liveInk} style={{ letterSpacing: size * 0.14 }}>
         {msg('live.liveBadge')}
       </Line>
     </View>

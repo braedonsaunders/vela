@@ -175,7 +175,7 @@ export const heroPrimary: Node = {
               type: 'text',
               when: [{ test: 'heroAct.actionDetail' }],
               text: '{heroAct.actionDetail}',
-              style: { 'font-size': '11px', 'font-weight': '600', opacity: '0.62', 'line-height': '1' },
+              style: { 'font-size': '12px', 'font-weight': '600', opacity: '0.62', 'line-height': '1' },
             },
           ],
         },
@@ -278,7 +278,7 @@ export const heroCopy: Node = {
             type: 'text',
             text: '{heroAct.reasonLabel}',
             style: {
-              'font-size': '11px',
+              'font-size': '12px',
               'font-weight': '650',
               'letter-spacing': '0.08em',
               'text-transform': 'uppercase',

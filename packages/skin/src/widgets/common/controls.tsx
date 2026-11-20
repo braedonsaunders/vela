@@ -108,7 +108,7 @@ export function Heading({ eyebrow: over, title, lines = 2 }: { eyebrow?: string;
   const layout = useAuthLayout();
   return (
     <View style={{ gap: layout?.tight ? 4 : 10 }}>
-      {over && !layout?.tight ? <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.accent' }}>{over}</Words> : null}
+      {over && !layout?.tight ? <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.accent' }}>{over}</Words> : null}
       <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines} accessibilityRole="header" aria-level={1}>
         {title}
       </Words>
@@ -117,7 +117,7 @@ export function Heading({ eyebrow: over, title, lines = 2 }: { eyebrow?: string;
 }
 
 export function Label({ children }: { children: string }) {
-  return <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.inkQuiet' }}>{children}</Words>;
+  return <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }}>{children}</Words>;
 }
 
 /** A failure the viewer should read: announced, in the accent ink. */

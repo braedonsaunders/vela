@@ -53,7 +53,7 @@ export function Ruler({ look, model, scale, rail, small, scrollX, window, viewpo
       >
         <Line
           look={look}
-          size={10}
+          size={12}
           weight={650}
           color={look.inkSecondary}
           style={{ letterSpacing: 1.6, textTransform: 'uppercase' }}
@@ -141,7 +141,7 @@ function NowPill({ look, model, minute, scale, scrollX, viewportWidth }: { look:
         backgroundColor: look.now, boxShadow: `0px 4px 18px ${look.nowGlow}`,
       }, pin]}
     >
-      <Line look={look} size={11} weight={700} tabular>
+      <Line look={look} size={12} weight={700} color={look.liveInk} tabular>
         {live?.controller.view().guide?.nowLabel ?? model.nowLabel}
       </Line>
     </Animated.View>

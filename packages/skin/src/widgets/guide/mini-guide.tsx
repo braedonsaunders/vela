@@ -119,7 +119,7 @@ function DialledCard({
           {playing ? (
             <Line
               look={look}
-              size={9}
+              size={12}
               weight={650}
               color={look.inkQuiet}
               style={{ letterSpacing: 1.6, textTransform: 'uppercase' }}
@@ -134,7 +134,7 @@ function DialledCard({
         {c.nowId ? (
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Progress look={look} percent={c.nowProgress} flex={1} />
-            <Line look={look} size={11} color={look.inkQuiet} tabular>
+            <Line look={look} size={12} color={look.inkQuiet} tabular>
               {c.nowRemaining}
             </Line>
           </View>

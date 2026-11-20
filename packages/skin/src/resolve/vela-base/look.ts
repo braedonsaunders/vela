@@ -150,7 +150,7 @@ export const display: Style = {
   'line-height': '0.98',
 } as Style;
 export const eyebrow: Style = {
-  'font-size': '11px',
+  'font-size': '12px',
   'font-weight': '600',
   'letter-spacing': '0.24em',
   'text-transform': 'uppercase',

@@ -65,7 +65,7 @@ export const RailCell = memo(function RailCell({ look, channel, small, width, ro
         {small ? (
           <Line
             look={look}
-            size={9}
+            size={12}
             weight={700}
             tabular
             style={{ position: 'absolute', right: 3, bottom: 2, textShadowColor: look.shadow, textShadowRadius: 3 }}
@@ -108,12 +108,12 @@ function RailText({ look, channel: original }: { look: GuideLook; channel: Guide
           <View style={{ marginTop: 3 }}>
             <Progress look={look} percent={channel.nowProgress} height={2} />
           </View>
-          <Line look={look} size={11} color={look.inkQuiet} tabular>
+          <Line look={look} size={12} color={look.inkQuiet} tabular>
             {channel.nowRemaining}
           </Line>
         </>
       ) : (
-        <Line look={look} size={11} color={look.inkQuiet}>
+        <Line look={look} size={12} color={look.inkQuiet}>
           {!channel.listingsLoaded || channel.listed ? channel.group : msg('live.noListings')}
         </Line>
       )}

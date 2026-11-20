@@ -52,11 +52,11 @@ export function GuideTile({ look, tile, channelName, height, small, still, contr
         style={[styles.top, { paddingVertical: small ? 5 : 8, paddingHorizontal: small ? 6 : 10 }]}
         pointerEvents="none"
       >
-        <LiveBadge look={look} size={9} />
+        <LiveBadge look={look} size={12} />
         {!small ? (
           <Line
             look={look}
-            size={11}
+            size={12}
             weight={650}
             style={{ flexShrink: 1, textShadowColor: look.shadow, textShadowRadius: 4 }}
           >

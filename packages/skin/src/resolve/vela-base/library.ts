@@ -27,7 +27,7 @@ export const libChip = (on: Condition[], arg: string, label: string): BoxNode =>
     display: 'flex',
     'flex-direction': 'row',
     'align-items': 'center',
-    height: '34px',
+    height: '44px',
     padding: '0px 14px',
     'border-radius': '$ui.radiusControl',
     'background-color': veil(0),
@@ -68,7 +68,7 @@ export const chipGroup = (label: string, children: Node[], when?: Condition[]): 
 });
 export const glassSelect: Style = {
   'box-sizing': 'border-box',
-  height: '42px',
+  height: '44px',
   padding: '0px 14px',
   border: '1px solid $ui.glassEdge',
   'border-radius': '$ui.radiusControl',

@@ -248,7 +248,7 @@ function Choice({ choice, busy, onChoose }: { choice: PlexChoice; busy: boolean;
       {choice.recommended ? (
         <View style={look.box({ padding: '4px 8px', 'border-radius': '6px', 'background-color': '$ui.accent' })}>
           <Words
-            rows={{ 'font-size': '11px', 'font-weight': '650', 'letter-spacing': '0.06em', color: '$ui.onAccent' }}
+            rows={{ 'font-size': '12px', 'font-weight': '650', 'letter-spacing': '0.06em', color: '$ui.onAccent' }}
           >
             {msg('connect.plex.recommended')}
           </Words>

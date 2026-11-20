@@ -233,7 +233,7 @@ export const band: Node = {
             {
               type: 'text',
               text: '{detail.kindLabel}',
-              style: { ...eyebrow, 'font-size': '10px', color: '$ui.accent' },
+              style: { ...eyebrow, 'font-size': '12px', color: '$ui.accent' },
             },
           ],
         },
@@ -284,7 +284,7 @@ export const band: Node = {
                 type: 'text',
                 text: '{fact.text}',
                 style: {
-                  'font-size': '11px',
+                  'font-size': '12px',
                   'font-weight': '650',
                   'letter-spacing': '0.06em',
                   color: '$ui.ink',
@@ -619,7 +619,7 @@ export const seasonTab = (on: boolean): Node => ({
     display: 'flex',
     'flex-direction': 'row',
     'align-items': 'center',
-    height: '42px',
+    height: '44px',
     padding: '0px 18px',
     'box-sizing': 'border-box',
     border: '1px solid $ui.glassEdge',

@@ -8,7 +8,7 @@ export const navBase: Style = {
   display: 'flex',
   'flex-direction': 'row',
   'align-items': 'center',
-  height: '40px',
+  height: '44px',
   padding: '0px 14px',
   'border-radius': '$ui.radiusControl',
   color: '$ui.inkSecondary',
@@ -168,7 +168,7 @@ export const shell: Node = {
               press: { action: 'home' },
               label: '{t:ui.velaHome}',
               controlStates: false,
-              style: { position: 'relative', 'margin-right': '22px' } as Style,
+              style: { position: 'relative', 'margin-right': '22px', 'min-height': '44px', 'min-width': '44px', display: 'flex', 'align-items': 'center', 'justify-content': 'center' } as Style,
               small: { 'margin-right': '0px' } as Style,
               children: [wordmark(24, 24)],
             },
@@ -215,8 +215,8 @@ export const shell: Node = {
               label: '{t:ui.search}',
               style: {
                 position: 'relative',
-                width: '40px',
-                height: '40px',
+                width: '44px',
+                height: '44px',
                 'box-sizing': 'border-box',
                 padding: '10px',
                 'border-radius': '$ui.radiusControl',
@@ -251,7 +251,7 @@ export const shell: Node = {
               },
               hover: { 'background-color': '$ui.control', color: '$ui.ink' },
               focus: navFocus,
-              small: { padding: '4px' },
+              small: { padding: '4px', 'min-width': '44px' },
               children: [
                 {
                   type: 'text',
@@ -402,7 +402,7 @@ export const shell: Node = {
                   type: 'text',
                   text: '{t:ui.appearance}',
                   style: {
-                    'font-size': '10px',
+                    'font-size': '12px',
                     'font-weight': '600',
                     'letter-spacing': '0.18em',
                     'text-transform': 'uppercase',

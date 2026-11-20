@@ -7,6 +7,7 @@ import { resolveUi } from '../../resolve/ui';
 import type { UiTokens } from '../../resolve/ui-defaults';
 import { fontFace } from '../../fonts';
 import { HostContext } from '../../host';
+import { readableInk } from './contrast';
 
 /** Genre cues: the data module's tone slots (news, sport, film, kids, factual, drama, comedy,
  * music, lifestyle, other). Fixed hues, so a genre reads the same in every document. */
@@ -84,6 +85,7 @@ export interface GuideLook {
   onAccent: string;
   /** The broadcast-red now line, live badges and the tile's bug. */
   now: string;
+  liveInk: string;
   nowGlow: string;
   aura: string;
   panel: string;
@@ -135,6 +137,7 @@ export function guideLook(ui: UiTokens): GuideLook {
     accent: ui.accent,
     onAccent: ui.onAccent,
     now: ui.live,
+    liveInk: readableInk(ui.live, ui.ink, ui.inkInverse),
     nowGlow: alpha(ui.live, 0.5),
     aura: alpha(ui.accent, 0.12),
     panel: alpha(mix(page, ui.raised, 0.15), 0.8),

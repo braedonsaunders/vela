@@ -27,7 +27,7 @@ export function Chip({
   on,
   onPress,
   children,
-  height = 38,
+  height = 44,
   nativeID,
 }: {
   look: GuideLook;
@@ -88,8 +88,8 @@ export function IconButton({
       role="button"
       onPress={onPress}
       style={({ hovered, focused, pressed }) => ({
-        width: 38,
-        height: 38,
+        width: 44,
+        height: 44,
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
@@ -157,7 +157,7 @@ export function NowChip({ look, still, onPress }: { look: GuideLook; still: bool
     transform: [{ scale: 1 + Math.min(1, pulse.value / 0.7) * 1.6 }],
   }));
   return (
-    <Chip nativeID="guide-toolbar-now" look={look} label={msg('live.jumpToNow')} onPress={onPress} height={38}>
+    <Chip nativeID="guide-toolbar-now" look={look} label={msg('live.jumpToNow')} onPress={onPress} height={44}>
       <View style={{ width: 8, height: 8 }}>
         {!still ? (
           <Animated.View
@@ -212,7 +212,7 @@ export function Segments<T extends string | number>({
             role="tab"
             onPress={() => onPick(o.value)}
             style={({ focused }) => ({
-              height: 30,
+              height: 44,
               paddingHorizontal: 12,
               justifyContent: 'center',
               borderRadius: look.radiusControl,
@@ -286,7 +286,7 @@ export function FilterMenu({
         look={look}
         label={`${msg('live.filter')}: ${filterLabel(filter)}`}
         onPress={() => setOpen(o => !o)}
-        height={38}
+        height={44}
       >
         <Line look={look} size={13} weight={600}>
           {filterLabel(filter)}
@@ -371,7 +371,7 @@ export function GuideTabs({
       style={{ flexGrow: 0, flexShrink: 0, marginBottom: small ? 8 : 10 }}
       contentContainerStyle={{
         gap: small ? 18 : 24,
-        height: 38,
+        height: 44,
         paddingLeft: small ? side : side + 6,
         paddingRight: side,
       }}
@@ -388,6 +388,7 @@ export function GuideTabs({
             selected={on}
             onPress={() => onPick(t.id)}
             style={({ focused }) => ({
+              minWidth: 44,
               justifyContent: 'center',
               paddingHorizontal: 2,
               borderBottomWidth: 2,
