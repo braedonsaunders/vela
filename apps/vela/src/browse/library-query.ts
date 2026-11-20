@@ -104,6 +104,20 @@ export function collectionRoute(
   };
 }
 
+export function collectionHref(
+  id: string,
+  query: LibraryQuery,
+  target: string,
+  view: string,
+  card?: { name: string; facts: string },
+): string {
+  const route = collectionRoute(id, query, target, view, card);
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(route.params)) if (name !== 'id' && value) params.set(name, value);
+  const suffix = params.toString();
+  return `/library/${encodeURIComponent(id)}${suffix ? `?${suffix}` : ''}`;
+}
+
 /** `librarySort {opt.id}`: that sort, keeping the direction when the sort offers it. */
 export function sortedBy(query: LibraryQuery, model: LibraryModel | undefined, id: string): LibraryQuery {
   if (!isSort(id)) return query;

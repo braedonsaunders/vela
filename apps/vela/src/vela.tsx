@@ -42,6 +42,7 @@ import { launchReady } from './launch-state';
 import { Previews } from './previews';
 import { createHostStateSelector } from './host-state';
 import { useViewState } from './view-state';
+import { actionHref, webHref } from './action-href';
 
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
@@ -305,7 +306,16 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   // Only at start: a stored choice never overrides one made in this session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker, openAddToPlaylist });
+  const setQuery = useCallback((query: string) => {
+    store.search.setQuery(query);
+    if (Platform.OS !== 'web') return;
+    if (query) {
+      const target = { pathname: '/search' as const, params: { q: query } };
+      if (pathname === '/search') router.setParams(target.params);
+      else router.push(target);
+    } else if (pathname === '/search') router.replace('/');
+  }, [store, pathname]);
+  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker, openAddToPlaylist, setQuery });
   useEffect(() => {
     if (Platform.OS !== 'web' || state.auth.phase !== 'signed-in') return;
     const find = () => {
@@ -329,7 +339,6 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     // A URL; or a bundled asset, which is a module id natively and an asset object on the web.
     return typeof source === 'string' ? { uri: source } : source;
   }, [origin, assetData]);
-  const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
   // On TV, Back (Menu) with a search open clears the search, as it closes a menu, rather than
   // leaving the app. Only while home (where the results are) is the screen showing: held over a
   // title page or the player, it kept Menu from closing them (the player blocked its own removal
@@ -369,12 +378,18 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       viewport: routeViewport,
       dispatch: previous && inputs.slice(3).every((v, i) => v === previous.inputs[i + 3])
         ? previous.host.dispatch : (action, arg) => dispatch({ route, entry, library }, action, arg),
+      href: Platform.OS === 'web' ? (action, arg) => {
+        const liveLibrary = action === 'library' && state.libraries.value?.find(item => item.id === arg)?.kind === 'live';
+        const href = liveLibrary ? '/live' : actionHref({ route, entry, library }, action, arg);
+        return href && webHref(href);
+      } : undefined,
       image,
       openRow: previous?.host.openRow ?? (row => {
         if (row.items.some(item => item.kind === 'channel')) { router.push('/live'); return; }
         store.rows.seed(row);
         router.push({ pathname: '/row/[id]', params: { id: row.id } });
       }),
+      rowHref: Platform.OS === 'web' ? row => webHref(row.items.some(item => item.kind === 'channel') ? '/live' : `/row/${encodeURIComponent(row.id)}`) : undefined,
       refreshHeroArtwork: previous?.host.refreshHeroArtwork ?? (id => store.home.refreshArtwork(id)),
       setQuery,
       setFlag: view.setFlag,

@@ -20,7 +20,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, memo, cloneElement, createContext, forwardRef, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -647,9 +647,16 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       releaseButton.current = release;
       return release;
     };
-    const onPress = press && (() => {
+    const pressArg = press ? fill(press.arg, ctx, env) : '';
+    const href = press ? host.href?.(press.action, pressArg) : undefined;
+    const onPress = press && ((event: GestureResponderEvent) => {
+      if (web && href) {
+        const click = event.nativeEvent as unknown as { button?: number; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+        if (click.button === 1 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+        event.preventDefault?.();
+      }
       if (suppressPress.current) { suppressPress.current = false; return; }
-      const arg = fill(press.arg, ctx, env);
+      const arg = pressArg;
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
       notePress(buttonRef.current, `${press.action}:${arg}`);
@@ -659,6 +666,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     });
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
+        {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
         focusable={selectable(node)}
         {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}) }, onKeyDown: (event) => {
@@ -690,7 +698,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
-        accessibilityRole={a11y.accessibilityRole ?? 'button'} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
+        accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
         testID={a11y.testID} />
     ) : null;
     const guide = node.press ? undefined : tvGuide(node, env.flags, band);

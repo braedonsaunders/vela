@@ -19,9 +19,19 @@ export function RowLink({ ctx, params }: WidgetProps) {
   useEffect(() => available ? trackButton(ref.current, does) : undefined, [available, does]);
   if (!row) return null;
   if (!available) return end ? null : <Text style={ink.style} accessibilityRole="header">{row.name}</Text>;
-  return <Pressable ref={ref} accessibilityRole="button" accessibilityLabel={`See all ${row.name}`}
+  const href = host.rowHref?.(row);
+  return <Pressable ref={ref} accessibilityRole={href ? 'link' : 'button'} accessibilityLabel={`See all ${row.name}`}
+    {...(href ? { href } : {})}
     onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-    onPress={() => { notePress(ref.current, does); host.openRow?.({ ...row, cardStyle: row.cardStyle ?? host.env.library?.model?.presentation?.card }); }}
+    onPress={event => {
+      if (href) {
+        const click = event.nativeEvent as unknown as { button?: number; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+        if (click.button === 1 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+        event.preventDefault();
+      }
+      notePress(ref.current, does);
+      host.openRow?.({ ...row, cardStyle: row.cardStyle ?? host.env.library?.model?.presentation?.card });
+    }}
     style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: end ? 24 : 0,
       ...(end ? { minWidth: 144, height: 120, marginTop: 16, borderRadius: 12, backgroundColor: look.ui.control } : {}),
       ...(focused ? { borderWidth: 2, borderColor: look.ui.accent, borderRadius: 8 } : {}) }}>

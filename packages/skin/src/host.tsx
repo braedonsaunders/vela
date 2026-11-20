@@ -16,9 +16,12 @@ export interface SkinHost {
   env: Env;
   viewport: Viewport;
   dispatch(action: Action, arg: string): void;
+  /** A canonical web destination for a navigation action; absent for non-navigation actions. */
+  href?(action: Action, arg: string): string | undefined;
   /** An image source for a document path: an app asset, the document's own asset, or a URL. */
   image(src: string): ImageSource | number | undefined;
   openRow?(row: import('@vela/core').Row): void;
+  rowHref?(row: import('@vela/core').Row): string;
   refreshHeroArtwork?(id: string): Promise<{ backdrop: string; poster: string } | undefined>;
   setQuery(query: string): void;
   setFlag(flag: string, on: boolean): void;

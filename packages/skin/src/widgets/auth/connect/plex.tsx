@@ -189,8 +189,9 @@ function LinkLine({ url }: { url: string }) {
       <Words rows={{ 'font-size': '15px', color: '$ui.inkSecondary' }}>{msg('connect.plex.enterAt')}</Words>
       {canOpen ? (
         <APressable
-          onPress={() => Linking.openURL(url)}
+          onPress={Platform.OS === 'web' ? undefined : () => Linking.openURL(url)}
           accessibilityRole="link"
+          {...(Platform.OS === 'web' ? { href: url, hrefAttrs: { target: '_blank', rel: 'noreferrer' } } : {})}
           testID="plex-link"
           {...handlers}
           style={[

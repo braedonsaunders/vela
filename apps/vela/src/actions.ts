@@ -34,13 +34,14 @@ interface Context {
   /** Open the appearance picker. */
   openPicker(): void;
   openAddToPlaylist(titleId: string, titleKind?: string): void;
+  setQuery(query: string): void;
 }
 
 function notYet(action: string, arg: string): void {
   console.info(`Vela: ${action} ${arg} is not carried out yet`);
 }
 
-export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist }: Context): Dispatcher {
+export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist, setQuery }: Context): Dispatcher {
   const { setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags } = view;
   const actions = useMemo(() => ({ setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags }), [setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags]);
   const loadMore = useCallback<SkinHost['loadMore']>((on, id) => {
@@ -114,7 +115,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'reset':
         return actions.resetFlags();
       case 'clearSearch':
-        return store.search.clear();
+        return setQuery('');
       case 'search':
       case 'focusSearch':
         // The search field belongs to home; a library or guide has no field to focus.
@@ -170,7 +171,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       default:
         notYet(action, arg);
     }
-  }, [store, actions, live, select, retry, loadMore, openPicker, openAddToPlaylist]);
+  }, [store, actions, live, select, retry, loadMore, openPicker, openAddToPlaylist, setQuery]);
 
   return { dispatch, loadMore };
 }
