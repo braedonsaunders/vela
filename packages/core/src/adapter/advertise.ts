@@ -38,6 +38,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       aiSearch: operation('aiSearch', hasAiSearch(adapter)),
       proactiveFallback: operation('proactiveFallback', hasProactiveFallback(adapter)),
       liveTV: operation('liveTV', hasLiveTv(adapter)),
+      ...(description.features.livePreview ? { livePreview: description.features.livePreview } : {}),
       libraryLive: operation('libraryLive', hasLibraryLive(adapter)),
       trailerPreview: operation('trailerPreview', hasTrailerPreviews(adapter)),
       audioFallback: operation('audioFallback', hasAudioFallback(adapter)),

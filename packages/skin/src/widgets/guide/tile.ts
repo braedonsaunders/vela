@@ -3,7 +3,7 @@
 // order, keeps that channel selected if it cannot play, and
 // owns the current session. Full watch shares that session without a server retune.
 import type { Command, Snapshot } from '@vela/player-api';
-import type { PlaybackPlan } from '../../../../protocol/types';
+import type { LivePreviewMode, PlaybackPlan } from '../../../../protocol/types';
 import type { LiveSource } from './source';
 import { previewFailure } from './diagnostics';
 
@@ -56,6 +56,7 @@ export class Tile {
   private commandId = 0;
   private command: Command | null = null;
   private fullscreen = false;
+  private mode: LivePreviewMode = 'auto';
   private readonly stopping = new Map<string, Stopping>();
 
   constructor(
@@ -74,7 +75,9 @@ export class Tile {
   }
 
   private get allowed(): boolean {
-    return this.manual || !this.inputs.quiet;
+    if (this.fullscreen) return true;
+    if (this.mode === 'off') return false;
+    return this.mode === 'auto' ? !this.inputs.quiet || this.manual : this.manual;
   }
 
   private get wanted(): boolean {
@@ -95,10 +98,18 @@ export class Tile {
 
   private state(): TileState {
     if (!this.held && [...this.stopping.values()].some(s => s.failed && s.tries >= STOP_RETRIES.length)) return 'stuck';
-    if (this.target === '' || !this.inputs.canPreview) return 'off';
+    if (this.target === '' || !this.inputs.canPreview || (!this.inputs.open && !this.fullscreen) || (this.mode === 'off' && !this.fullscreen)) return 'off';
     if (!this.allowed) return 'tune-in';
     if (this.givenUp) return 'unavailable';
     return this.held && this.playing ? 'playing' : 'connecting';
+  }
+
+  setMode(mode: LivePreviewMode): void {
+    if (this.mode === mode) return;
+    this.mode = mode;
+    if (mode !== 'auto') this.manual = false;
+    this.settle();
+    this.changed();
   }
 
   /** Re-decide after the controller's inputs changed: tune when wanted, release when not. */

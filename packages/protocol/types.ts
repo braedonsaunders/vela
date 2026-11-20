@@ -14,6 +14,8 @@ export interface ClientCapabilities {
   maxWidth?: number; maxHeight?: number; maxBitrate?: number; hdr?: string[];
 }
 export interface Feature { available: boolean; reason?: string }
+export type LivePreviewMode = 'auto' | 'on-click' | 'off';
+export interface LivePreviewFeature extends Feature { mode: LivePreviewMode }
 export type SearchSort = string;
 export type SearchDirection = 'asc' | 'desc';
 export type SearchKind = string;
@@ -33,7 +35,7 @@ export interface ServerCapabilities {
   /** Ether can turn an approved Plex account into a bounded Plex Home profile selection. */
   plexHomeProfiles?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
     playlists?: Feature & { maxEntries: number } };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }

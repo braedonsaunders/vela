@@ -28,6 +28,8 @@ export interface LiveTvAccess {
   /** The server and viewer: what listings are cached under and the remembered channel is kept by. */
   scope: string;
   images: Images;
+  /** Server-owner policy. Older servers omit it and retain the original automatic preview. */
+  previewMode: V.LivePreviewMode;
 }
 
 export class Live {
@@ -66,6 +68,7 @@ export class Live {
       client: await this.session.declared(),
       scope: `${connection.record.id}|${tokens?.viewer.id ?? ''}`,
       images: await connection.images(),
+      previewMode: features.livePreview?.available === false ? 'off' : features.livePreview?.mode ?? 'auto',
     };
   }
 

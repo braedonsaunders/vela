@@ -43,6 +43,8 @@ export interface LiveOptions {
   /** Cache scope for listings: the server and viewer. */
   scope: string;
   images?: Images;
+  /** Whether a guide may tune by itself, only after an explicit action, or not at all. */
+  previewMode?: import('../../../../protocol/types').LivePreviewMode;
   /** Where the viewer's current channel is remembered across launches. */
   memory: { get(key: string): string | null; set(key: string, value: string): void };
   /** Open full-screen live watch; `replace` swaps the watched channel in place. */
@@ -96,6 +98,7 @@ export class LiveController {
       () => this.emit(),
       id => this.watchNow(id, false),
     );
+    this.tile.setMode(options.previewMode ?? 'auto');
     this.homeZap = new Zap(
       HOME_ZAP_WAIT,
       () => this.channels(),

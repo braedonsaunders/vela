@@ -35,6 +35,7 @@ export function useLiveController(store: Store, session: number | null): LiveCon
           source: liveSource(access.api, access.client),
           scope: access.scope,
           images: access.images,
+          previewMode: access.previewMode,
           memory: preferences,
           openWatch,
         });
