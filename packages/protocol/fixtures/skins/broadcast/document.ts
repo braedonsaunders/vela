@@ -197,7 +197,7 @@ const stackRow: Node = { type: 'box', group: true, press: { action: 'preview', a
   hover: { 'background-color': '$panel-hi' }, focus: { 'background-color': '$panel-hi', 'box-shadow': 'inset 0px 0px 0px 2px $cue' },
   small: { width: '232px', 'border-radius': '3px', 'background-color': '$panel', 'box-shadow': 'none', padding: '10px 12px' }, children: [
     { type: 'box', when: [{ test: 'ch.tuned' }], style: { position: 'absolute', top: '0px', bottom: '0px', left: '0px', width: '3px', 'background-color': '$signal' } },
-    { type: 'text', text: '{ch.number}', style: { width: '42px', 'flex-shrink': '0', 'font-family': display, 'font-size': '22px', 'font-weight': '700', 'font-variant-numeric': 'tabular-nums', color: '$ink2' }, small: { width: '34px', 'font-size': '19px' } },
+    { type: 'text', text: '{ch.number}', style: { width: '52px', 'white-space': 'nowrap', 'flex-shrink': '0', 'font-family': display, 'font-size': '22px', 'font-weight': '700', 'font-variant-numeric': 'tabular-nums', color: '$ink2' }, small: { width: '44px', 'font-size': '19px' } },
     { type: 'box', style: { width: '52px', height: '34px', 'flex-shrink': '0', 'border-radius': '2px', 'background-color': '$plate', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...clip }, children: [
       { type: 'image', when: [{ test: 'ch.logo' }], src: '{ch.logo}', alt: '', style: { width: '44px', height: '26px', 'object-fit': 'contain' } },
       { type: 'text', when: [{ test: 'ch.logo', not: true }], text: '{ch.name}', style: { ...caps('10px'), color: '$ink3', 'line-clamp': '2', 'text-align': 'center', padding: '0px 4px' } },
@@ -364,7 +364,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 15, id: 'broadcast', name: 'Broadcast', version: '1.0.1', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 15, id: 'broadcast', name: 'Broadcast', version: '1.0.2', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },
