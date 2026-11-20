@@ -40,6 +40,7 @@ import { useLiveController } from './live';
 import { LaunchGate } from './launch';
 import { launchReady } from './launch-state';
 import { Previews } from './previews';
+import { createHostStateSelector } from './host-state';
 import { useViewState } from './view-state';
 
 export interface Vela {
@@ -116,16 +117,9 @@ async function start(store: Store): Promise<void> {
 }
 
 function AppProvider({ store, children, consoleUrl }: { store: Store; children: ReactNode; consoleUrl?: string }) {
-  // Library/collection pages subscribe to their own keyed values. Their loading and
-  // paging must not invalidate every host, the shell and all retained sections.
-  const selectHostState = useMemo(() => {
-    let previous: VelaState | undefined;
-    return (next: VelaState): VelaState => {
-      if (previous && (Object.keys(next) as (keyof VelaState)[]).every(key =>
-        key === 'library' || key === 'collections' || next[key] === previous![key])) return previous;
-      return previous = next;
-    };
-  }, []);
+  // Pages and the player subscribe to their own values; player ticks must not
+  // redraw the shell and every retained catalogue section behind the video.
+  const selectHostState = useMemo(createHostStateSelector, []);
   const state = useVelaState(selectHostState);
   const { auth, servers } = state;
   const signedIn = auth.phase === 'signed-in';
@@ -370,14 +364,15 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       doc: resolved.doc,
       env,
       viewport: routeViewport,
-      dispatch: (action, arg) => dispatch({ route, entry, library }, action, arg),
+      dispatch: previous && inputs.slice(3).every((v, i) => v === previous.inputs[i + 3])
+        ? previous.host.dispatch : (action, arg) => dispatch({ route, entry, library }, action, arg),
       image,
-      openRow: row => {
+      openRow: previous?.host.openRow ?? (row => {
         if (row.items.some(item => item.kind === 'channel')) { router.push('/live'); return; }
         store.rows.seed(row);
         router.push({ pathname: '/row/[id]', params: { id: row.id } });
-      },
-      refreshHeroArtwork: id => store.home.refreshArtwork(id),
+      }),
+      refreshHeroArtwork: previous?.host.refreshHeroArtwork ?? (id => store.home.refreshArtwork(id)),
       setQuery,
       setFlag: view.setFlag,
       setPager: view.setPager,

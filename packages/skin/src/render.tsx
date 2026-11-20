@@ -1,3 +1,4 @@
+import { sameRouteHost } from './route-host';
 import { msg } from '@vela/core';
 import { restartAction, secondaryPlayAction } from './restart-action';
 import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './widgets/card-context-menu';
@@ -192,7 +193,9 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
   );
 }
 
-export const SkinRoute = memo(SkinRouteView);
+export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after
+  && a.hideLibraryViews === b.hideLibraryViews
+  && sameRouteHost(a.host, b.host, [b.node, b.after, b.host.doc.libraryViews]));
 
 /** The shared switch outside an animated library scene. */
 export function SkinLibraryViews({ host }: { host: SkinHost }) {

@@ -68,7 +68,7 @@ export function environment({ state, view, live, route, entry, library, width, s
 /** Keep a route's environment stable while unrelated store slices change. */
 export function createEnvironmentReader() {
   const defaults = new Map<string, string>();
-  const routes = new Map<string, { inputs: unknown[]; env: Env; title: unknown; seasonTitle: unknown }>();
+  const routes = new Map<string, { inputs: unknown[]; env: Env; title: unknown; seasonTitle: unknown; search: unknown }>();
   return (input: EnvInput): Env => {
     const { state, view, route, entry, library } = input;
     const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
@@ -89,7 +89,9 @@ export function createEnvironmentReader() {
     // Season scoping need not replace the detail model for menu/pager changes.
     if (previous && title?.value && previous.title === title && previous.seasonTitle === state.titles[season]
       && previous.env.season === env.season) env.detail = previous.env.detail;
-    routes.set(key, { inputs, env, title, seasonTitle: state.titles[season] });
+    if (previous?.search === state.search) env.search = previous.env.search;
+    if (previous && previous.env.preview?.cardId === env.preview?.cardId && previous.env.preview?.heroId === env.preview?.heroId) env.preview = previous.env.preview;
+    routes.set(key, { inputs, env, title, seasonTitle: state.titles[season], search: state.search });
     return env;
   };
 }

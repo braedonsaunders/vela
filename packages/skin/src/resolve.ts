@@ -1,3 +1,4 @@
+import { flagBinding } from './route-host';
 import { brandDocument } from './branding';
 import type { Branding } from '../../protocol/types';
 import { withRowLinks } from './resolve/row-links';
@@ -126,11 +127,11 @@ function compile(text: string | undefined, r: Context, urls = false): Template |
 function read(key: string): Accessor {
   if (key.startsWith('flag:')) {
     const flag = key.slice(5);
-    return (_, e) => (e.flags.includes(flag) ? 'true' : 'false');
+    return flagBinding<Accessor>((_, e) => (e.flags.includes(flag) ? 'true' : 'false'), flag);
   }
   const found = accessor(key);
   if (!found) throw new Error(`Unknown binding ${key}`);
-  return found;
+  return flagBinding(found, key === 'env.searchFocused' ? 'search-focused' : null);
 }
 
 export function fill(template: Template | undefined, c: Ctx, e: Env): string {
