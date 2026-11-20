@@ -109,7 +109,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
   const incomingOffset = useRef(new Animated.Value(0)).current;
   const outgoingOffset = useRef(new Animated.Value(0)).current;
   const frame = useRef<HTMLElement | null>(null);
-  const fixedNav = useRef<{ top: number; left: number; width: number } | null>(null);
+  const fixedNav = useRef<{ top: number; left: number; width: number; surface: Record<string, string | number> } | null>(null);
   const restoreTab = useRef('');
   const [, refresh] = useState(0);
   if (current.current.request !== request) {
@@ -125,9 +125,23 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
       if (active && pinned) fixedNav.current = pinned;
       else if (active && nav && parent?.getBoundingClientRect) {
         const bounds = nav.getBoundingClientRect(), root = parent.getBoundingClientRect();
+        let surface = nav.parentElement;
+        while (surface && surface !== parent && getComputedStyle(surface).position !== 'sticky') surface = surface.parentElement;
+        if (!surface || surface === parent) {
+          surface = nav.parentElement;
+          while (surface && surface !== parent && getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)') surface = surface.parentElement;
+        }
+        const drawn = surface && surface !== parent ? getComputedStyle(surface) : null;
         // libraryViews owns the document's horizontal gutter. Pin its full-width frame at the
         // toolbar's vertical position; using the measured inner left/width applies that gutter twice.
-        fixedNav.current = { top: bounds.top - root.top, left: 0, width: root.width };
+        fixedNav.current = { top: bounds.top - root.top, left: 0, width: root.width, surface: drawn ? {
+          backgroundColor: drawn.backgroundColor,
+          backdropFilter: drawn.backdropFilter,
+          borderBottomColor: drawn.borderBottomColor,
+          borderBottomWidth: drawn.borderBottomWidth,
+          borderBottomStyle: drawn.borderBottomStyle,
+          boxShadow: drawn.boxShadow,
+        } : {} };
       }
     }
     outgoing.current = active ? previous : null;
@@ -170,6 +184,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
   return <View ref={frame as never} style={{ flex: 1, overflow: 'hidden' }}>
     {outgoing.current && !still ? scene(outgoing.current.host, false) : null}
     {scene(host, true)}
-    {fixedNav.current && transition.current.active && !still ? <View style={{ position: 'absolute', ...fixedNav.current, zIndex: 20 }}><SkinLibraryViews host={host} /></View> : null}
+    {fixedNav.current && transition.current.active && !still ? <View style={[{ position: 'absolute', top: fixedNav.current.top, left: fixedNav.current.left,
+      width: fixedNav.current.width, zIndex: 20 }, fixedNav.current.surface as never]}><SkinLibraryViews host={host} /></View> : null}
   </View>;
 }

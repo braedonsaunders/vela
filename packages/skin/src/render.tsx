@@ -189,6 +189,12 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
   const loadingLibraryNav = useContext(LoadingLibraryNav);
   const hiddenLibraryNav = useContext(HiddenLibraryNav);
   if (!loadingLibraryNav && env.route === 'library' && env.load !== 'ready' && node.id === 'vela-library-views') return null;
+  if (hiddenLibraryNav && node.kind === 'box' && node.base.style.position === 'sticky'
+    && node.children.some(child => child.id === 'vela-library-views')) {
+    return <View style={{ opacity: 0, width: '100%' }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Box node={node} ctx={ctx} route={route} after={after} hero={hero} />
+    </View>;
+  }
   if (hiddenLibraryNav && node.id === 'vela-library-views' && (node.kind === 'box' || node.kind === 'widget')) {
     return <View style={{ opacity: 0, width: '100%' }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {node.kind === 'box' ? <Box node={node} ctx={ctx} /> : <Widget node={node} ctx={ctx} />}
