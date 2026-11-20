@@ -11,6 +11,21 @@ export interface Playlist {
   ended: boolean;
   targetDuration: number;
 }
+export function playlistChanged(previous: Playlist, current: Playlist): boolean {
+  if (previous.ended !== current.ended || previous.targetDuration !== current.targetDuration) return true;
+  if (previous.segments.length !== current.segments.length) return true;
+  return previous.segments.some((segment, index) => {
+    const next = current.segments[index];
+    return (
+      !next ||
+      segment.sequence !== next.sequence ||
+      segment.url !== next.url ||
+      segment.init !== next.init ||
+      segment.duration !== next.duration ||
+      segment.gap !== next.gap
+    );
+  });
+}
 export function parsePlaylist(text: string, base: string): Playlist {
   if (!text.trimStart().startsWith('#EXTM3U')) throw new Error('Invalid HLS playlist');
   if (/#EXT-X-(KEY|BYTERANGE|DISCONTINUITY|STREAM-INF)/m.test(text))

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { LiveWindow } from '../web/engine/core/source/live-window';
 import { livePlaylistReloadDelayMs } from '../web/engine/core/source/reload';
+import { playlistChanged, parsePlaylist } from '../web/engine/hls';
 
 test('changed live playlists follow the newest segment duration', () => {
   expect(livePlaylistReloadDelayMs(6, 2, true)).toBe(2000);
@@ -26,10 +27,60 @@ test('live window detects publication advances independently of sliding overlap'
       ...Array.from({ length: segments }, (_, index) => [`#EXTINF:2,`, `segment-${index}.m4s`]).flat(),
     ].join('\n');
   const window = new LiveWindow();
-  window.update(playlist(2), { mediaSequence: 0, windowStartSeconds: 0 });
+  const first = window.update(playlist(2), { mediaSequence: 0, windowStartSeconds: 0 });
   expect(window.reloadDelayMs).toBe(2000);
-  window.update(playlist(2));
+  expect(first).toContain('#EXT-X-TARGETDURATION:2');
+  const unchanged = window.update(playlist(2));
   expect(window.reloadDelayMs).toBe(3000);
-  window.update(playlist(3));
+  expect(unchanged).toContain('#EXT-X-TARGETDURATION:3');
+  const advanced = window.update(playlist(3));
   expect(window.reloadDelayMs).toBe(2000);
+  expect(advanced).toContain('#EXT-X-TARGETDURATION:2');
+});
+
+test('playlist changes include publication and segment metadata', () => {
+  const playlist = (duration: number, extra = '') =>
+    parsePlaylist(
+      [
+        '#EXTM3U',
+        '#EXT-X-TARGETDURATION:4',
+        '#EXT-X-MAP:URI="init.mp4"',
+        `#EXTINF:${duration},`,
+        '0.m4s',
+        extra,
+      ].join('\n'),
+      'https://media.test/live/index.m3u8',
+    );
+  const initial = playlist(2);
+  expect(playlistChanged(initial, playlist(2))).toBe(false);
+  expect(playlistChanged(initial, playlist(2, '#EXTINF:2,\n1.m4s'))).toBe(true);
+  expect(playlistChanged(initial, playlist(1.5))).toBe(true);
+});
+
+test('live-window updates leave playlist polling to the segment consumer', () => {
+  const text = [
+    '#EXTM3U',
+    '#EXT-X-TARGETDURATION:1',
+    '#EXT-X-MEDIA-SEQUENCE:0',
+    '#EXT-X-MAP:URI="init.mp4"',
+    '#EXTINF:0.1,',
+    '0.m4s',
+    '#EXTINF:0.2,',
+    '1.m4s',
+  ].join('\n');
+  const scheduled: number[] = [];
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+    scheduled.push(delay ?? 0);
+    return 0;
+  }) as typeof setTimeout;
+  try {
+    const window = new LiveWindow();
+    window.update(text, { mediaSequence: 0, windowStartSeconds: 0 });
+    window.update(text);
+    expect(window.reloadDelayMs).toBe(500);
+    expect(scheduled).toEqual([]);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
 });

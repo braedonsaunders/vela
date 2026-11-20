@@ -3,7 +3,8 @@ import type { AudioFallbackResponse } from '../../../../../../packages/protocol/
 import type { OwnedNativeMediaAudioBackendPort } from 'webgpu-player/src/audio/native/CustomDecodeNativeAudioBridge';
 import { MAXIMUM_NATIVE_AUDIO_SEGMENT_BYTE_LENGTH, MAXIMUM_NATIVE_AUDIO_SEGMENT_DURATION_MICROSECONDS } from 'webgpu-player/src/audio/native/NativeMediaAudioLimits';
 import { secondsToMicroseconds } from 'webgpu-player/src/MediaTime';
-import { parsePlaylist } from '../../hls';
+import { parsePlaylist, playlistChanged, type Playlist } from '../../hls';
+import { livePlaylistReloadDelayMs } from '../../core/source/reload';
 import { delay } from '../../session';
 
 /** Feed the existing native audio backend after its owner starts it at the
@@ -18,6 +19,7 @@ export async function feedEtherAudio(descriptor: AudioFallbackResponse, position
   let nextSequence: number | null = null, nextStart = positionSeconds, initialization = '';
   let pendingInit: Uint8Array | null = null;
   let lastProgress = performance.now();
+  let previousList: Playlist | null = null;
   while (!signal.aborted) {
     const bytes = await read(descriptor.url, 4 * 1024 * 1024, signal, fetchResource);
     const list = parsePlaylist(new TextDecoder().decode(bytes), descriptor.url);
@@ -54,7 +56,12 @@ export async function feedEtherAudio(descriptor: AudioFallbackResponse, position
     }
     if (list.ended) { signal.throwIfAborted(); await backend.endOfStream(generation); return; }
     if (performance.now() - lastProgress > 30_000) throw new Error('Ether audio publication stopped progressing');
-    await delay(Math.max(200, Math.min(1000, list.targetDuration * 500)), signal);
+    const changed = previousList === null || playlistChanged(previousList, list);
+    previousList = list;
+    await delay(
+      livePlaylistReloadDelayMs(list.targetDuration, list.segments.at(-1)?.duration ?? null, changed),
+      signal,
+    );
   }
   signal.throwIfAborted();
 }

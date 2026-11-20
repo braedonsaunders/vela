@@ -3,7 +3,7 @@ import type { AudioRendition } from '../../../../packages/protocol/types';
 import { PlaybackFault, mutation, appendBuffer } from './buffer';
 export { PlaybackFault } from './buffer';
 import { AdaptiveBitrate, BandwidthEstimator } from './abr';
-import { parsePlaylist, type Playlist } from './hls';
+import { parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
@@ -20,21 +20,6 @@ export function bufferAhead(video: HTMLVideoElement) {
     if (video.currentTime >= video.buffered.start(i) - 0.05 && video.currentTime < video.buffered.end(i))
       return video.buffered.end(i) - video.currentTime;
   return 0;
-}
-export function playlistChanged(previous: Playlist, current: Playlist): boolean {
-  if (previous.ended !== current.ended || previous.targetDuration !== current.targetDuration) return true;
-  if (previous.segments.length !== current.segments.length) return true;
-  return previous.segments.some((segment, index) => {
-    const next = current.segments[index];
-    return (
-      !next ||
-      segment.sequence !== next.sequence ||
-      segment.url !== next.url ||
-      segment.init !== next.init ||
-      segment.duration !== next.duration ||
-      segment.gap !== next.gap
-    );
-  });
 }
 /** Single producer serializes append/remove. No append can outlive its source. */
 export class SegmentPipeline {

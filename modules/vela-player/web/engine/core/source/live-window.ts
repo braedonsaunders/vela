@@ -106,11 +106,16 @@ export class LiveWindow {
     // The demux library accepts a date anchor. Use a synthetic epoch ONLY on
     // this private in-memory playlist to carry our exact media timeline; it is
     // not broadcast wall time and is never sent to the broker or diagnostics.
+    // It is also the sole live playlist poller. Give that consumer the RFC 8216
+    // reload delay through its private target-duration field; a second timer
+    // here would refresh a cache without waking the segment readers.
     const first = segments[0]!.line;
     return lines
       .flatMap((line, i) =>
         line.startsWith('#EXT-X-PROGRAM-DATE-TIME:')
           ? []
+          : line.startsWith('#EXT-X-TARGETDURATION:')
+            ? [`#EXT-X-TARGETDURATION:${this.reloadDelayMs / 1000}`]
           : i === first
             ? [`#EXT-X-PROGRAM-DATE-TIME:${new Date(start * 1000).toISOString()}`, line]
             : [line],
