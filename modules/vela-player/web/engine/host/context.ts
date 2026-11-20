@@ -103,6 +103,7 @@ export function createHostContext(
       latency: liveLatency,
       targetSeconds: 12,
       networkRetries: 0,
+      behind: false,
     },
     telemetry: {
       lastObservation: 0,

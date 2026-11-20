@@ -119,6 +119,8 @@ export interface HostLiveState {
   readonly latency: LiveLatency;
   targetSeconds: number;
   networkRetries: number;
+  /** Whether the viewer is shown as behind live (held with hysteresis, see behindLive). */
+  behind: boolean;
 }
 export interface HostTelemetryState {
   lastObservation: number;
