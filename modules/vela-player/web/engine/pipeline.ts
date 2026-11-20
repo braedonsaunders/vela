@@ -6,6 +6,7 @@ import { AdaptiveBitrate, BandwidthEstimator } from './abr';
 import { parsePlaylist, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
+import { livePlaylistReloadDelayMs } from './core/source/reload';
 
 type MediaSourceClass = typeof MediaSource;
 export function mediaSourceClass(): MediaSourceClass | undefined {
@@ -19,6 +20,21 @@ export function bufferAhead(video: HTMLVideoElement) {
     if (video.currentTime >= video.buffered.start(i) - 0.05 && video.currentTime < video.buffered.end(i))
       return video.buffered.end(i) - video.currentTime;
   return 0;
+}
+export function playlistChanged(previous: Playlist, current: Playlist): boolean {
+  if (previous.ended !== current.ended || previous.targetDuration !== current.targetDuration) return true;
+  if (previous.segments.length !== current.segments.length) return true;
+  return previous.segments.some((segment, index) => {
+    const next = current.segments[index];
+    return (
+      !next ||
+      segment.sequence !== next.sequence ||
+      segment.url !== next.url ||
+      segment.init !== next.init ||
+      segment.duration !== next.duration ||
+      segment.gap !== next.gap
+    );
+  });
 }
 /** Single producer serializes append/remove. No append can outlive its source. */
 export class SegmentPipeline {
@@ -317,7 +333,8 @@ export class SegmentPipeline {
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
     let sequence = next.sequence,
       init = '',
-      first = true;
+      first = true,
+      playlistAdvanced = true;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
     while (!signal.aborted) {
       await this.audio?.applySelection(list, signal);
@@ -377,8 +394,16 @@ export class SegmentPipeline {
           continue;
         }
         this.publicationPending = true;
-        await delay(Math.max(500, list.targetDuration * 500), signal);
+        await delay(
+          livePlaylistReloadDelayMs(
+            list.targetDuration,
+            list.segments.at(-1)?.duration ?? null,
+            playlistAdvanced,
+          ),
+          signal,
+        );
         const fresh = await this.playlist(rendition, signal);
+        playlistAdvanced = playlistChanged(list, fresh);
         const overlap = fresh.segments.find((s) => list.segments.some((old) => old.sequence === s.sequence));
         if (!overlap) throw new PlaybackFault('Live playlist lost timeline overlap', 'source');
         const offset = list.segments.find((s) => s.sequence === overlap.sequence)!.start - overlap.start;

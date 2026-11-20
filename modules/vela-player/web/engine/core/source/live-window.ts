@@ -1,3 +1,5 @@
+import { livePlaylistReloadDelayMs } from './reload';
+
 /** An HLS sequence is identity, never a duration estimate. Keep one bounded
  * census and anchor new windows by an overlapping segment or exact successor. */
 export class LiveWindow {
@@ -9,6 +11,7 @@ export class LiveWindow {
   ended = false;
   gap = false;
   updatedAt = 0;
+  reloadDelayMs = 1000;
   update(text: string, anchor?: { mediaSequence: number; windowStartSeconds: number }): string {
     const lines = text.split(/\r?\n/).map((line) => line.trim());
     const sequence = Number(
@@ -75,6 +78,8 @@ export class LiveWindow {
       next.set(sequence + i, { start: end, duration: segment.duration });
       end += segment.duration;
     }
+    const previousLast = this.last,
+      previousEnded = this.ended;
     this.spans = next;
     this.last = { sequence: sequence + segments.length - 1, end };
     this.start = start;
@@ -88,6 +93,16 @@ export class LiveWindow {
     this.ended = lines.includes('#EXT-X-ENDLIST');
     this.gap = lines.includes('#EXT-X-GAP');
     this.updatedAt = performance.now();
+    const changed =
+      !previousLast ||
+      previousLast.sequence !== this.last.sequence ||
+      Math.abs(previousLast.end - this.last.end) > 0.001 ||
+      previousEnded !== this.ended;
+    this.reloadDelayMs = livePlaylistReloadDelayMs(
+      this.targetDuration,
+      segments.at(-1)?.duration ?? null,
+      changed,
+    );
     // The demux library accepts a date anchor. Use a synthetic epoch ONLY on
     // this private in-memory playlist to carry our exact media timeline; it is
     // not broadcast wall time and is never sent to the broker or diagnostics.

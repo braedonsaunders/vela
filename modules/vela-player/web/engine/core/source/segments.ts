@@ -33,7 +33,7 @@ export class SegmentReader {
   readonly liveWindow?: LiveWindow;
   networkRetries = 0;
   retrying = false;
-  private polling?: ReturnType<typeof setInterval>;
+  private polling?: ReturnType<typeof setTimeout>;
   readonly bandwidth = new BandwidthEstimator();
   readonly delivery = new DeliveryMeter();
   readonly metrics = { requests: 0, bytes: 0, receivedBytes: 0, cacheHits: 0, milliseconds: 0 };
@@ -93,13 +93,19 @@ export class SegmentReader {
         depth--;
         continue;
       }
-      if (this.liveWindow && !this.polling)
-        this.polling = setInterval(() => {
-          void this.object(this.root, this.lifetime.signal, true).catch(() => {});
-        }, 1000);
+      if (this.liveWindow && !this.polling) this.schedulePoll();
       return;
     }
     throw new SegmentFailure('HLS variant nesting exceeded its bound');
+  }
+  private schedulePoll() {
+    if (!this.liveWindow || this.liveWindow.ended || this.lifetime.signal.aborted) return;
+    this.polling = setTimeout(() => {
+      this.polling = undefined;
+      void this.object(this.root, this.lifetime.signal, true)
+        .catch(() => {})
+        .finally(() => this.schedulePoll());
+    }, this.liveWindow.reloadDelayMs);
   }
   createSource(signal: () => AbortSignal, count: (bytes: number) => void): CustomPathedSource {
     return new CustomPathedSource(this.root, (request) => {
@@ -331,7 +337,7 @@ export class SegmentReader {
     }
   }
   dispose() {
-    if (this.polling) clearInterval(this.polling);
+    if (this.polling) clearTimeout(this.polling);
     this.polling = undefined;
     this.lifetime.abort();
     this.cache.clear();
