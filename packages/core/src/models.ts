@@ -201,6 +201,8 @@ export interface LibraryModel {
   canFavorite: boolean;
   items: Card[];
   more: boolean;
+  /** Titles matching the whole view when the server counts them. */
+  total?: number;
   /** How many pages the items fill (the next read asks for one more). */
   pages: number;
 }

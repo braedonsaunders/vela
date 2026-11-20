@@ -1,4 +1,4 @@
-import { matchesLibrarySearch } from './library-search';
+import { librarySortTitle, matchesLibrarySearch } from './library-search';
 import { renderArtwork } from './artwork';
 import { previewSessions, stopPreview, trailerPreview } from './previews';
 import { libraries as fixtureLibraries, libraryEntries as fixtureLibraryEntries } from '../packages/protocol/fixtures/libraries';
@@ -472,7 +472,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     });
     if (sort !== 'server' && sort !== 'index') items.sort((a, b) => {
       if (a.kind !== 'title' || b.kind !== 'title') return 0;
-      const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : sort === 'released' ? (a.title.airDate ?? '').localeCompare(b.title.airDate ?? '')
+      const cmp = sort === 'title' ? librarySortTitle(a.title.name).localeCompare(librarySortTitle(b.title.name), 'en', { numeric: true }) : sort === 'released' ? (a.title.airDate ?? '').localeCompare(b.title.airDate ?? '')
         : sort === 'lastViewed' ? (a.title.watch?.lastViewedAt ?? '').localeCompare(b.title.watch?.lastViewedAt ?? '') : (a.title.year ?? 0) - (b.title.year ?? 0);
       return (cmp || a.id.localeCompare(b.id)) * (direction === 'desc' ? -1 : 1);
     });
@@ -481,7 +481,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     items = items.map(i => ({ ...i, receiptToken: receipt(g, `library:${scope}:${i.id}`) }));
     const paging = new URL(url);
     if (tab) paging.searchParams.set('limit', '6');
-    return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, paging, g, scope) } satisfies V.LibraryContents, g.id);
+    return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, paging, g, scope), total: items.length } satisfies V.LibraryContents, g.id);
   }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'GET' && path === '/events') return serverEvents(req, () => !g.revoked && g.expires > Date.now());

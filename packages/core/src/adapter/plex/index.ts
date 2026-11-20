@@ -262,7 +262,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const direction = q.direction || 'asc';
     const c = await this.request(`/library/sections/${enc(id)}/all`, { sort: `${sorts[sort]}:${direction}`, genre: q.genre, year: q.year, unwatched: q.played === undefined ? undefined : q.played ? 0 : 1,
       'X-Plex-Container-Start': offset(q.cursor), 'X-Plex-Container-Size': q.limit || 100 });
-    return { library, sort, direction, ...page(this.nodes(c).map(n => this.entry(n)), offset(q.cursor), c.totalSize ?? c.size) };
+    return { library, sort, direction, ...page(this.nodes(c).map(n => this.entry(n)), offset(q.cursor), c.totalSize ?? c.size), ...(c.totalSize !== undefined ? { total: Number(c.totalSize) } : {}) };
   }
   async personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
     const libraries = libraryId ? [libraryId] : (await this.libraries({})).items.map(l => l.id);

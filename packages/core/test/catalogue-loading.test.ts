@@ -192,3 +192,16 @@ test('failed collections cannot masquerade as an empty successful view', async (
   expect(result?.collectionsLoad).toBe('failed');
   expect(result?.genresLoad).toBe('ready');
 });
+
+test('a server-counted total reaches the library model; a missing or invalid one is left out', async () => {
+  const f = setup();
+  f.read(async () => ({ ...answer(), total: 1234 }));
+  await f.catalogue.library('movies');
+  expect(f.box.get().library[libraryKey('movies', {})]?.value?.total).toBe(1234);
+  for (const total of [undefined, -1, 1.5]) {
+    const g = setup();
+    g.read(async () => ({ ...answer(), total }));
+    await g.catalogue.library('movies');
+    expect(g.box.get().library[libraryKey('movies', {})]?.value).not.toHaveProperty('total');
+  }
+});

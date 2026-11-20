@@ -370,7 +370,8 @@ export class JellyfinAdapter
             ...p, ParentId: id, Recursive: true, Fields: fields, SortBy: sortKeys[sort], SortOrder: q.direction === 'desc' ? 'Descending' : 'Ascending', IncludeItemTypes: q.kind ? Object.keys(kinds).find(k => kinds[k] === q.kind) : 'Movie,Series', Genres: q.genre, Years: q.year, IsPlayed: q.played, IsFavorite: q.favorite
         })}`);
         return {
-            library: this.libraryModel(item), sort, direction: q.direction ?? 'asc', ...this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex)
+            library: this.libraryModel(item), sort, direction: q.direction ?? 'asc', ...this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex),
+            ...(result.TotalRecordCount !== undefined ? { total: result.TotalRecordCount } : {})
         };
     }
     async collection(id: string, cursor?: string, limit = 100): Promise<V.CollectionContents> {

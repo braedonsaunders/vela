@@ -279,7 +279,11 @@ export interface LibraryBrowseQuery extends LibrariesQuery {
   tab?: string; query?: string; facets?: Record<string, string[]>;
   sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean; collectionId?: ID;
 }
-export interface LibraryContents extends Page<RowEntry> { library: Library; sort: LibrarySort; direction: SortDirection }
+export interface LibraryContents extends Page<RowEntry> {
+  library: Library; sort: LibrarySort; direction: SortDirection;
+  /** Titles matching the whole query (all pages), when the server counts them; optional. */
+  total?: number;
+}
 export interface LibraryLiveItem { id: ID; title: string; subtitle?: string; badge?: string; viewers?: number; tags?: string[]; live?: boolean; artwork: ArtworkRef[] }
 export interface LibraryLiveFilter { key: string; label: string }
 export interface LibraryLiveQuery extends LibrariesQuery { tab?: string; query?: string; filter?: string }

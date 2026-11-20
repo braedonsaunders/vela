@@ -1,6 +1,7 @@
 import { ContentLoader } from '../common/loading';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { msg, number, plural } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import { shellHasLibraryTabs } from './navigation';
 import { toolbarTabs, tabSearchEnabled } from './toolbar-model';
@@ -44,57 +45,94 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
   </FocusPressable>;
 }
 
-/** The tab strip is its own scroll owner so large server-declared sets cannot squeeze the page. */
-export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
-  const host = useHost();
+/** A horizontal strip that scrolls on its own and shows real buttons at a clipped edge, so
+ * hidden tabs or filters are both hinted at and reachable with a pointer. Keyboard and remote
+ * focus scroll the strip by themselves, so the edge buttons stay out of the focus order. */
+function useOverflowStrip(names: { before: string; after: string }, resized?: () => void) {
   const look = useLook();
-  const page = host.env.library;
-  const tabs = toolbarTabs(page);
-  const activeId = page?.tabId ?? page?.view;
   const strip = useRef<ComponentRef<typeof ScrollView>>(null);
-  const positions = useRef<Record<string, { x: number; width: number }>>({});
   const metrics = useRef({ x: 0, width: 0, content: 0 });
   const [overflow, setOverflow] = useState({ before: false, after: false });
-  const updateOverflow = () => {
+  const update = () => {
     const { x, width, content } = metrics.current;
     setOverflow(value => {
       const next = tabOverflow(x, width, content);
       return value.before === next.before && value.after === next.after ? value : next;
     });
   };
+  const scrollTo = (x: number, animated: boolean) => {
+    metrics.current.x = Math.max(0, Math.min(Math.max(0, metrics.current.content - metrics.current.width), x));
+    strip.current?.scrollTo({ x: metrics.current.x, animated });
+    update();
+  };
+  const page = (direction: -1 | 1) => scrollTo(metrics.current.x + direction * Math.max(80, metrics.current.width * 0.75), true);
+  const wheel = Platform.OS === 'web' ? { onWheel: (event: { nativeEvent?: { deltaX?: number; deltaY?: number } }) => {
+    const native = event.nativeEvent ?? event as never as { deltaX?: number; deltaY?: number };
+    const delta = Math.abs(native.deltaY ?? 0) > Math.abs(native.deltaX ?? 0) ? native.deltaY ?? 0 : native.deltaX ?? 0;
+    if (delta && metrics.current.content > metrics.current.width) scrollTo(metrics.current.x + delta, false);
+  } } : {};
+  const scrollProps = {
+    ref: strip,
+    onLayout: (event: LayoutChangeEvent) => { metrics.current.width = event.nativeEvent.layout.width; update(); resized?.(); },
+    onContentSizeChange: (width: number) => { metrics.current.content = width; update(); resized?.(); },
+    onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => { metrics.current.x = event.nativeEvent.contentOffset.x; update(); },
+    scrollEventThrottle: 16,
+    ...wheel,
+  };
+  const edge = (side: 'before' | 'after') => <Pressable key={side} onPress={() => page(side === 'before' ? -1 : 1)} focusable={false}
+    accessibilityRole="button" accessibilityLabel={names[side]} {...(Platform.OS === 'web' ? { tabIndex: -1 } as object : {})}
+    style={{ position: 'absolute', top: 0, bottom: 0, [side === 'before' ? 'left' : 'right']: 0, width: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: look.ui.page,
+      ...(Platform.OS === 'web' ? { boxShadow: `${side === 'before' ? 12 : -12}px 0px 12px ${look.ui.page}`, cursor: 'pointer' } as object : {}) }}>
+    <View style={look.box({ width: '30px', height: '30px', 'border-radius': '15px', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', 'align-items': 'center', 'justify-content': 'center' })}>
+      <Text accessible={false} style={[look.text({ color: '$ui.ink', 'font-size': '20px', 'font-weight': '700' }), { lineHeight: 22, marginTop: -2 }]}>{side === 'before' ? '‹' : '›'}</Text>
+    </View>
+  </Pressable>;
+  const edges = <>{overflow.before && edge('before')}{overflow.after && edge('after')}</>;
+  return { strip, metrics, scrollProps, edges };
+}
+
+/** The tab strip is its own scroll owner so large server-declared sets cannot squeeze the page. */
+export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
+  const host = useHost();
+  const page = host.env.library;
+  const tabs = toolbarTabs(page);
+  const activeId = page?.tabId ?? page?.view;
+  const positions = useRef<Record<string, { x: number; width: number }>>({});
   const reveal = (id: string, animated: boolean) => {
     const position = positions.current[id];
     if (!position || !metrics.current.width) return;
     const x = Math.max(0, position.x - Math.max(12, (metrics.current.width - position.width) / 2));
     strip.current?.scrollTo({ x, animated });
   };
+  const { strip, metrics, scrollProps, edges } = useOverflowStrip({ before: msg('library.previousTabs'), after: msg('library.nextTabs') }, () => { if (activeId) reveal(activeId, false); });
   useEffect(() => { if (activeId) reveal(activeId, false); }, [activeId, tabs.length]);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     document.getElementById(`vela-library-view-${page?.tabId ?? page?.view}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [page?.tabId, page?.view]);
-  const scrolled = (event: NativeSyntheticEvent<NativeScrollEvent>) => { metrics.current.x = event.nativeEvent.contentOffset.x; updateOverflow(); };
-  const wheel = Platform.OS === 'web' ? { onWheel: (event: { nativeEvent?: { deltaX?: number; deltaY?: number } }) => {
-    const native = event.nativeEvent ?? event as never as { deltaX?: number; deltaY?: number };
-    const delta = Math.abs(native.deltaY ?? 0) > Math.abs(native.deltaX ?? 0) ? native.deltaY ?? 0 : native.deltaX ?? 0;
-    if (!delta) return;
-    metrics.current.x = Math.max(0, Math.min(metrics.current.content - metrics.current.width, metrics.current.x + delta));
-    strip.current?.scrollTo({ x: metrics.current.x, animated: false });
-    updateOverflow();
-  } } : {};
-  return <View style={[{ position: 'relative', minWidth: 0, flexShrink: 1 }, Platform.OS === 'web' && { width: 'max-content', maxWidth: '100%' } as never]}>
-    <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityRole="tablist" accessibilityLabel="Library views"
-      onLayout={event => { metrics.current.width = event.nativeEvent.layout.width; updateOverflow(); if (activeId) reveal(activeId, false); }}
-      onContentSizeChange={width => { metrics.current.content = width; updateOverflow(); if (activeId) reveal(activeId, false); }}
-      onScroll={scrolled} scrollEventThrottle={16} {...wheel}
-      style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3 }}>
-      {page?.facetTitle && <Button label="Back to collections" onPress={() => host.dispatch('libraryView', page.tabId ?? 'collections')} />}
-      {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
-        onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout; if (activeId === tab.id) reveal(tab.id, false); }}
-        onFocus={() => reveal(tab.id, true)} selected={activeId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
-    </ScrollView>
-    {overflow.before && <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 30, alignItems: 'flex-start', justifyContent: 'center', backgroundColor: look.ui.page }}><Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '22px', 'font-weight': '800' })}>‹</Text></View>}
-    {overflow.after && <View pointerEvents="none" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 30, alignItems: 'flex-end', justifyContent: 'center', backgroundColor: look.ui.page }}><Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '22px', 'font-weight': '800' })}>›</Text></View>}
+  // An opened collection keeps its way back outside the scrolling tabs, where it is always seen.
+  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: '100%' }}>
+    {page?.facetTitle && <Button label={msg('library.backToCollections')} onPress={() => host.dispatch('libraryView', page.tabId ?? 'collections')} />}
+    <View style={[{ position: 'relative', minWidth: 0, flexShrink: 1 }, Platform.OS === 'web' && { width: 'max-content', maxWidth: '100%' } as never]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityRole="tablist" accessibilityLabel={msg('library.views')}
+        {...scrollProps} style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3 }}>
+        {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
+          onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout; if (activeId === tab.id) reveal(tab.id, false); }}
+          onFocus={() => reveal(tab.id, true)} selected={activeId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
+      </ScrollView>
+      {edges}
+    </View>
+  </View>;
+}
+
+/** Filters and sorting scroll sideways together when they outgrow the width; the edge buttons
+ * say there is more. */
+function FilterStrip({ children }: { children: ReactNode }) {
+  const { scrollProps, edges } = useOverflowStrip({ before: msg('library.previousFilters'), after: msg('library.moreFilters') });
+  return <View style={{ position: 'relative', width: '100%', minWidth: 0 }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" {...scrollProps}
+      style={{ width: '100%', minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>
+    {edges}
   </View>;
 }
 
@@ -128,16 +166,20 @@ export function LibraryToolbar(props: WidgetProps) {
     {model.sorts.length > 1 && select({ options: 'library.sorts', action: 'librarySort', label: 'Sort by' })}
     {model.sorts.find(sort => sort.id === model.sort)?.directions.length === 2 && <Button label={model.direction === 'asc' ? 'Ascending' : 'Descending'} onPress={() => host.dispatch('librarySortFlip', '')} />}
   </View>;
-  const strip = (children: ReactNode, flex = true) => <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-    style={flex
-      ? [Platform.OS === 'web' ? { width: 'max-content', maxWidth: '100%', flexGrow: 0, flexShrink: 0 } as never : { flex: 1 }, { minWidth: 0 }]
-      : { width: '100%', minWidth: 0 }}
-    contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
-  if (tabsInShell && !browse && !tabSearchEnabled(page?.model?.tabs?.find(tab => tab.id === page.tabId))) return null;
-  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ minHeight: look.ui.controlHeight + 22, paddingVertical: 8, flexDirection: 'row', flexWrap: singleStrip ? 'wrap' : 'nowrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
+  const tab = page?.model?.tabs?.find(tab => tab.id === page?.tabId);
+  const hasFilters = browse || tabSearchEnabled(tab) || page?.view === 'live';
+  const total = browse && !page?.facetTitle && model?.total !== undefined && !page?.loading ? msg(`library.count.${plural(model.total)}`, { count: number(model.total) }) : '';
+  if (tabsInShell && !hasFilters) return null;
+  // Tabs keep a row of their own: filters arriving later (a genre list) never squeeze them, and
+  // the filters and sort share one scrollable row below.
+  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={{ paddingVertical: 8, flexDirection: 'column', alignItems: 'stretch', gap: 6, minWidth: 0 }}>
     {!tabsInShell && <LibraryTabs />}
-    {singleStrip ? <View style={{ width: '100%', minWidth: 0 }}>{strip(<>{filters}{sort}</>, false)}</View> : <>{strip(filters)}{sort}</>}
-    {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
+    {hasFilters && <View style={{ minHeight: look.ui.controlHeight + 6, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      <View style={{ flex: 1, minWidth: 0 }}><FilterStrip>{filters}{sort}</FilterStrip></View>
+      {!!total && !singleStrip && <Text accessibilityLiveRegion="polite" style={[look.text({ color: '$ui.inkSecondary', 'font-size': '$ui.controlFontSize', 'font-weight': '500' }), { flexShrink: 0 }]}>{total}</Text>}
+    </View>}
+    {!!total && singleStrip && <Text accessibilityLiveRegion="polite" style={look.text({ color: '$ui.inkSecondary', 'font-size': '13px', 'font-weight': '500' })}>{total}</Text>}
+    {page?.extrasFailed && <View style={{ flexDirection: 'row' }}><Button label="Try again" onPress={() => host.dispatch('retry', '')} /></View>}
   </View>;
 }
 

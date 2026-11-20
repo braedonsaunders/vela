@@ -489,6 +489,7 @@ function libraryModel(
     canFavorite: !!filters.favorite,
     items: cards,
     more: result.continuation === 'more',
+    ...(Number.isSafeInteger(result.total) && result.total! >= 0 ? { total: result.total } : {}),
     pages,
   };
 }
