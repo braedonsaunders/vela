@@ -44,6 +44,7 @@ import { Previews } from './previews';
 import { createHostStateSelector } from './host-state';
 import { useViewState } from './view-state';
 import { actionHref, webHref } from './action-href';
+import { useSearchAddress } from './use-search-address';
 
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
@@ -307,15 +308,10 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   // Only at start: a stored choice never overrides one made in this session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const setQuery = useCallback((query: string) => {
-    store.search.setQuery(query);
-    if (Platform.OS !== 'web') return;
-    if (query) {
-      const target = { pathname: '/search' as const, params: { q: query } };
-      if (pathname === '/search') router.setParams(target.params);
-      else router.push(target);
-    } else if (pathname === '/search') router.replace('/');
-  }, [store, pathname]);
+  // Typing stays on the screen it began on: the address follows the query in place (#21), as a
+  // route change per keystroke remounted home and dropped the field's focus.
+  const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
+  useSearchAddress(store, state.search.query, pathname, state.auth.phase === 'signed-in');
   const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker, openAddToPlaylist, setQuery });
   useEffect(() => {
     if (Platform.OS !== 'web' || state.auth.phase !== 'signed-in') return;
