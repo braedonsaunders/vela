@@ -35,7 +35,8 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
       'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
       'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : '$ui.glassEdge' })}>
     {/* A tab's bold selected label must not resize the strip while its scenes are moving. */}
-    {tab && <Text accessible={false} numberOfLines={1} style={[look.text({ ...controlText, 'font-weight': '700' }), { opacity: 0 }]}>{label}</Text>}
+    {tab && <Text accessible={false} numberOfLines={1} style={[look.text({ ...controlText, 'font-weight': '700' }),
+      Platform.OS === 'web' ? { visibility: 'hidden' } as never : { opacity: 0 }]}>{label}</Text>}
     <Text accessible={false} numberOfLines={1} style={[text, tab && { position: 'absolute', left: 12, right: 12, top: 0, height: look.ui.controlHeight, lineHeight: look.ui.controlHeight }]}>
       {role === 'checkbox' && selected ? '✓ ' : ''}{label}
     </Text>
