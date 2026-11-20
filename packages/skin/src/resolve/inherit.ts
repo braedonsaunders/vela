@@ -4,7 +4,7 @@ import { searchControls, searchPaging } from './vela-base/search';
 // route the document defines replaces the base's; templates, motion, keyframes, fonts, tokens and
 // strings merge by name, the document's winning.
 import type { BoxNode, Node, SkinDocument } from '../../../protocol/skin';
-import { libraryBelowHeader } from './vela-base/library';
+import { libraryBelowHeader, libraryBelowOverlayHeader } from './vela-base/library';
 import { personContent } from './vela-base/person';
 
 /** A document with the base under it: every table filled, slots always present. */
@@ -83,6 +83,27 @@ export function hasFlowHeader(shell: Node | undefined): boolean {
   return !!shell && walk(shell, true) && navigation;
 }
 
+/** The top overlay navigation's declared height, for inherited routes that start beneath it. */
+export function overlayHeaderOffset(shell: Node | undefined): { wide: string; small: string } {
+  let found: { wide: string; small: string } | undefined;
+  const walk = (node: Node) => {
+    if (found || node.type !== 'box') return;
+    const style = node.style ?? {};
+    if (node.role === 'navigation' && style.position === 'absolute' && style.top === '0px') {
+      const wide = style.height;
+      const compact = { ...style, ...node.small };
+      const small = compact.display === 'none' ? undefined : compact.height;
+      if (typeof wide === 'string' && typeof (small ?? wide) === 'string') found = { wide, small: (small ?? wide) as string };
+    }
+    for (const child of node.children ?? []) walk(child);
+  };
+  if (shell) walk(shell);
+  return found ?? {
+    wide: 'calc(56px + env(safe-area-inset-top))',
+    small: 'calc(56px + env(safe-area-inset-top))',
+  };
+}
+
 /** All documents share the same accessible cast control and capability rule. */
 function sharedCast(node: Node): Node {
   if (node.type === 'repeat') return node.over === 'detail.cast'
@@ -143,7 +164,9 @@ export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocume
   delete routes.home;
   if (routes.search) routes.search = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '18px' }, children: [searchControls, routes.search, searchPaging] };
   if (routes.title) routes.title = sharedCast(routes.title);
-  if (!doc.routes?.library && hasFlowHeader(doc.slots?.shell)) routes.library = libraryBelowHeader;
+  if (!doc.routes?.library) routes.library = hasFlowHeader(doc.slots?.shell)
+    ? libraryBelowHeader
+    : libraryBelowOverlayHeader(overlayHeaderOffset(doc.slots?.shell));
   if (routes.library) routes.library = withLibraryViews(libraryHeaderOrder(routes.library));
   const layout = libraryLayout(doc.routes?.library ?? base.routes?.library);
   const personCard = layout?.item ?? doc.templates?.gridCard ?? doc.templates?.gridPoster ?? doc.templates?.poster ?? doc.templates?.card ?? base.templates!.velaCard!;

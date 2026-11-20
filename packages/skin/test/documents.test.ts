@@ -169,10 +169,11 @@ describe('portability checker', () => {
 });
 
 test('inherited library reserves header space only for overlay navigation', async () => {
-  const { withBase } = await import('../src/resolve/inherit');
+  const { overlayHeaderOffset, withBase } = await import('../src/resolve/inherit');
   const { velaBase } = await import('../src/resolve/base');
   const broadcast = documents.find(([name]) => name === 'broadcast')![1];
   const lateNight = documents.find(([name]) => name === 'latenight')![1];
+  const kids = documents.find(([name]) => name === 'kids')![1];
   const topPadding = (doc: SkinDocument) => {
     const route = withBase(doc, velaBase).routes!.library!;
     if (route.type !== 'box' || route.children?.[3]?.type !== 'box') throw new Error('missing toolbar');
@@ -180,6 +181,8 @@ test('inherited library reserves header space only for overlay navigation', asyn
   };
   expect(topPadding(broadcast)).toEqual(['0px', '0px']);
   expect(topPadding(lateNight)).toEqual(['calc(56px + env(safe-area-inset-top))', 'calc(56px + env(safe-area-inset-top))']);
+  expect(overlayHeaderOffset(kids.slots?.shell)).toEqual({ wide: '100px', small: '68px' });
+  expect(topPadding(kids)).toEqual(['100px', '68px']);
 });
 
 test('a custom library route inherits the shared view switch and alternative views', async () => {

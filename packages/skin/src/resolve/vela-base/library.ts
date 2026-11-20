@@ -176,7 +176,14 @@ export const libraryLoading: Node = {
 export const noItems: Condition = { test: 'library.itemCount', is: 'eq', value: '0' };
 // The route paints its own page: a document whose shell leaves the ground to its home (Kids)
 // still reads its ink on its paper here.
-const makeLibrary = (flowHeader: boolean): Node => ({
+interface LibraryHeaderOffset { wide: string; small: string }
+
+const floatingHeader: LibraryHeaderOffset = {
+  wide: 'calc(56px + env(safe-area-inset-top))',
+  small: 'calc(56px + env(safe-area-inset-top))',
+};
+
+const makeLibrary = (header: LibraryHeaderOffset | undefined): Node => ({
   type: 'box',
   style: {
     position: 'relative',
@@ -186,7 +193,7 @@ const makeLibrary = (flowHeader: boolean): Node => ({
     'background-color': '$ui.page',
   },
   children: [
-    flowHeader ? { ...libraryLoading, style: { ...libraryLoading.style, 'padding-top': '24px' }, small: { 'padding-top': '18px' } } : libraryLoading,
+    !header ? { ...libraryLoading, style: { ...libraryLoading.style, 'padding-top': '24px' }, small: { 'padding-top': '18px' } } : libraryLoading,
     failure('{t:library.couldNotOpen}'),
     {
       type: 'box',
@@ -221,7 +228,7 @@ const makeLibrary = (flowHeader: boolean): Node => ({
       ],
     },
     // The toolbar is a direct child of the route root, where native draws sticky.
-    { ...toolbar, when: [ready], ...(flowHeader ? { style: { ...toolbar.style, 'padding-top': '0px' }, small: { ...toolbar.small, 'padding-top': '0px' } } : {}) },
+    { ...toolbar, when: [ready], style: { ...toolbar.style, 'padding-top': header?.wide ?? '0px' }, small: { ...toolbar.small, 'padding-top': header?.small ?? '0px' } },
     { type: 'use', template: 'velaLibraryAlternative' },
     {
       type: 'box',
@@ -292,5 +299,6 @@ const makeLibrary = (flowHeader: boolean): Node => ({
   ],
 });
 
-export const library = makeLibrary(false);
-export const libraryBelowHeader = makeLibrary(true);
+export const library = makeLibrary(floatingHeader);
+export const libraryBelowHeader = makeLibrary(undefined);
+export const libraryBelowOverlayHeader = (header: LibraryHeaderOffset): Node => makeLibrary(header);
