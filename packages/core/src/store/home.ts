@@ -6,7 +6,7 @@ import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
 import { card, entry, feedRow, homeModel } from '../discovery/models';
-import { homeWatched, type Watched } from '../discovery/progress';
+import { homeCard, homeWatched, reconcileHomeProgress, recorded, type Watched } from '../discovery/progress';
 import type { Destination, HomeModel, Row } from '../models';
 import type { Session } from './session';
 import { failed, idle, loading, ready, type Load, type Loadable, type StateBox } from './state';
@@ -26,12 +26,16 @@ export interface HomeState extends Loadable<HomeModel> {
   rowsLoading: string[];
   /** The next page of rows: being read, failed, or none left. */
   moreRows: Load | 'end';
+  /** Advances after a stop is reconciled so mounted library progress rows can refresh. */
+  progressRevision: number;
 }
 
-export const initialHome: HomeState = { ...idle<HomeModel>(), retry: null, slow: false, rowsLoading: [], moreRows: 'idle' };
+export const initialHome: HomeState = { ...idle<HomeModel>(), retry: null, slow: false, rowsLoading: [], moreRows: 'idle', progressRevision: 0 };
 
 const PAGE_ITEMS = 20;
 const LIBRARY_PAGES = 100;
+const RECONCILE_RETRIES = 2;
+const RECONCILE_DELAY_MS = 500;
 export const HOME_SLOW_MS = 7_000;
 
 export type HomePresentation = 'skeleton' | 'slow' | 'ready' | 'failed';
@@ -48,12 +52,17 @@ export class Home {
   private slowTimer: ReturnType<typeof setTimeout> | undefined;
   private reading: Promise<void> | undefined;
   private controller: AbortController | undefined;
+  private reconcilePending: Watched | undefined;
+  private reconcileReading: Promise<void> | undefined;
+  private reconcileController: AbortController | undefined;
+  private reconcileGeneration = 0;
 
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly artWidth: () => number,
     private readonly slowDelayMs = HOME_SLOW_MS,
+    private readonly reconcileDelayMs = RECONCILE_DELAY_MS,
   ) {
     session.onReset(() => {
       if (this.timer) clearTimeout(this.timer);
@@ -62,6 +71,10 @@ export class Home {
       this.reading = undefined;
       this.controller = undefined;
       this.artworkRead = undefined;
+      this.reconcilePending = undefined;
+      this.reconcileGeneration++;
+      this.reconcileController?.abort();
+      this.reconcileController = undefined;
       this.box.update('home', () => initialHome);
       this.box.update('libraries', () => idle());
     });
@@ -172,6 +185,63 @@ export class Home {
   /** Where the viewer left a title, applied at once to Continue Watching and the hero. */
   watched(watched: Watched): void {
     this.box.update('home', home => (home.value ? { ...home, value: homeWatched(home.value, watched) } : home));
+  }
+
+  /** Re-read only the server-owned progress presentation after a confirmed playback stop. */
+  reconcile(watched: Watched): Promise<void> {
+    this.reconcilePending = watched;
+    this.reconcileGeneration++;
+    this.reconcileController?.abort();
+    if (!this.reconcileReading) {
+      const reading = this.drainReconciles().finally(() => {
+        if (this.reconcileReading === reading) this.reconcileReading = undefined;
+      });
+      this.reconcileReading = reading;
+    }
+    return this.reconcileReading;
+  }
+
+  private async drainReconciles(): Promise<void> {
+    while (this.reconcilePending) {
+      const watched = this.reconcilePending;
+      this.reconcilePending = undefined;
+      const generation = this.reconcileGeneration;
+      const controller = new AbortController();
+      this.reconcileController = controller;
+      await this.reconcileOne(watched, generation, controller.signal);
+      if (this.reconcileController === controller) this.reconcileController = undefined;
+    }
+  }
+
+  private async reconcileOne(watched: Watched, generation: number, signal: AbortSignal): Promise<void> {
+    const epoch = this.session.epoch;
+    for (let attempt = 0; attempt <= RECONCILE_RETRIES; attempt++) {
+      try {
+        const connection = await this.session.ready();
+        const bootstrap = await connection.adapter.home(true, signal);
+        const images = await connection.images();
+        this.session.check(epoch, 'home progress');
+        if (signal.aborted || generation !== this.reconcileGeneration) return;
+        const fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
+        const value = homeCard(fresh, watched.titleId);
+        const serverRecorded = (watched.finished || value !== undefined) && recorded(value, watched);
+        if (!serverRecorded && attempt < RECONCILE_RETRIES) {
+          await wait(this.reconcileDelayMs * (attempt + 1), signal);
+          continue;
+        }
+        if (!serverRecorded) return;
+        this.box.update('home', home => ({
+          ...home,
+          value: home.value ? reconcileHomeProgress(home.value, fresh) : home.value,
+          progressRevision: home.progressRevision + 1,
+        }));
+        return;
+      } catch {
+        if (signal.aborted || epoch !== this.session.epoch) return;
+        // A background correction never replaces the Home page with an error.
+        return;
+      }
+    }
   }
 
   /** The next page of rows, without the heroes' titles and without rows already shown. */
@@ -310,5 +380,15 @@ function retryPolicy(error: unknown, attempt: number): HomeRetry & { limit: numb
   const maxAttempts = Number.isFinite(retry?.maxAttempts) ? Math.floor(retry!.maxAttempts!) : 3;
   const limit = Math.max(0, Math.min(2, maxAttempts - 1));
   return { allowed: retry?.allowed === true && delaySeconds <= 60, delaySeconds, attempt, limit };
+}
+
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(done, ms);
+    function done() { signal.removeEventListener('abort', aborted); resolve(); }
+    function aborted() { clearTimeout(timer); signal.removeEventListener('abort', aborted); reject(signal.reason); }
+    signal.addEventListener('abort', aborted, { once: true });
+    if (signal.aborted) aborted();
+  });
 }
 

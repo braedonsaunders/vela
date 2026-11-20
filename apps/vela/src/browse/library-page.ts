@@ -27,6 +27,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   useVelaState(state => state.libraries.load);
   const canRecommend = store.catalogue.libraryRecommendationsAvailable;
   const liveAvailable = useVelaState(state => state.home.value?.libraryLiveAvailable ?? false);
+  const progressRevision = useVelaState(state => state.home.progressRevision);
   const revision = useVelaState(state => state.auth.revision);
   const focused = useSectionFocus() ?? true;
   const key = libraryKey(id, query);
@@ -53,7 +54,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const liveGeneration = useRef(0);
   const [liveAttempt, setLiveAttempt] = useState(0);
   const [liveState, setLiveState] = useState<{ key: string; loading: boolean; failed: boolean; moreLoading?: boolean; items: Card[]; filters: LibraryLiveModel['filters']; cursor: string }>({ key: '', loading: false, failed: false, items: [], filters: [], cursor: '' });
-  const [extraState, setExtraState] = useState<{ id: string; tab?: string; query?: string; attempt?: number; revision: number; loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras }>({ id: '', revision: -1, loading: false, failed: false });
+  const [extraState, setExtraState] = useState<{ id: string; tab?: string; query?: string; attempt?: number; revision: number; progressRevision: number; loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras }>({ id: '', revision: -1, progressRevision: -1, loading: false, failed: false });
 
   useEffect(() => {
     if (!id || !liveTab || !focused || !kind) return;
@@ -70,25 +71,25 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   useEffect(() => {
     if (!id || !kind || !focused || liveTab) return;
     // A modal person page keeps this library mounted. Keep its accumulated pages on return.
-    if (extraState.id === id && extraState.revision === revision && extraState.tab === collectionTab && extraState.query === tabQuery && extraState.attempt === extraAttempt && extraState.value && !extraState.loading && !extraState.failed && !extraState.value.failed) {
+    if (extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.tab === collectionTab && extraState.query === tabQuery && extraState.attempt === extraAttempt && extraState.value && !extraState.loading && !extraState.failed && !extraState.value.failed) {
       setExtraState(previous => ({ ...previous, moreLoading: false }));
       return;
     }
     let active = true;
     extraGeneration.current++;
-    setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, loading: true, failed: false });
+    setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: true, failed: false });
     // The recommendations show as soon as they arrive; collections and genres follow.
     const rows = (value: LibraryExtras) => {
-      if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.loading ? { ...previous, value } : previous);
+      if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.progressRevision === progressRevision && previous.loading ? { ...previous, value } : previous);
     };
-    void store.catalogue.libraryExtras(id, kind, rows, collectionTab, tabQuery).then(value => {
-      if (active) setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, loading: false, failed: false, value });
+    void store.catalogue.libraryExtras(id, kind, rows, collectionTab, tabQuery, progressRevision > 0).then(value => {
+      if (active) setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value });
     }).catch(() => {
-      if (active) setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, loading: false, failed: true });
+      if (active) setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: true });
     });
     return () => { active = false; extraGeneration.current++; };
-  }, [store, id, kind, revision, focused, extraAttempt, canRecommend, collectionTab, tabQuery, liveTab]);
-  const nativeExtras = extraState.id === id && extraState.revision === revision && extraState.tab === collectionTab && extraState.query === tabQuery ? extraState.value : undefined;
+  }, [store, id, kind, revision, progressRevision, focused, extraAttempt, canRecommend, collectionTab, tabQuery, liveTab]);
+  const nativeExtras = extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.tab === collectionTab && extraState.query === tabQuery ? extraState.value : undefined;
   const rawExtras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
@@ -117,7 +118,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       view: usableView,
       viewLoad: usableView === 'live' ? liveState.failed ? 'failed' : liveState.loading ? 'loading' : 'ready'
         : usableView === 'library' || usableView === 'genres' && !canRecommend ? current?.load ?? 'idle'
-        : extraState.id !== id || extraState.revision !== revision || extraState.tab !== collectionTab || extraState.query !== tabQuery ? 'idle'
+        : extraState.id !== id || extraState.revision !== revision || extraState.progressRevision !== progressRevision || extraState.tab !== collectionTab || extraState.query !== tabQuery ? 'idle'
         : extraState.failed ? 'failed'
         : (usableView === 'recommended' ? nativeExtras?.rowsLoad : usableView === 'genres' ? nativeExtras?.genresLoad : nativeExtras?.collectionsLoad)
           ?? (extraState.loading ? 'loading' : nativeExtras?.failed ? 'failed' : nativeExtras ? 'ready' : 'idle'),
@@ -130,10 +131,10 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       liveAvailable,
       viewRequest: requestedView ?? '',
       extras,
-      extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.failed) || extraState.id === id && extraState.loading),
-      extrasFailed: usableView !== 'live' && extraState.id === id && (extraState.failed || !!extras?.failed),
+      extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.failed) || extraState.id === id && extraState.loading),
+      extrasFailed: usableView !== 'live' && extraState.id === id && extraState.progressRevision === progressRevision && (extraState.failed || !!extras?.failed),
     };
-  }, [current, earlier, query, facetTitle, selectedTab?.id, selectedTab?.card, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, tabQuery, liveFilter, liveState]);
+  }, [current, earlier, query, facetTitle, selectedTab?.id, selectedTab?.card, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, progressRevision, tabQuery, liveFilter, liveState]);
 
   const failed = current?.load === 'failed';
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';

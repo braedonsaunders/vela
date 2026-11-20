@@ -48,6 +48,8 @@ export interface Card {
 export interface Row {
   id: string;
   name: string;
+  /** Why the server placed this row; progress reconciliation uses this instead of its label. */
+  purpose: V.Row['purpose'];
   receipt: string;
   items: Card[];
   nextCursor: string;

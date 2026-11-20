@@ -230,12 +230,12 @@ export class Catalogue {
   /** Library-specific native server views. Ether v0 does not identify a library in RowsQuery. */
   /** A library's recommendations, collections and genres, read together. `onRows` has the
    * recommendations as soon as they arrive, so they show while the others are still read. */
-  async libraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void, tab?: string, search?: string): Promise<LibraryExtras | undefined> {
+  async libraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void, tab?: string, search?: string, freshRows = false): Promise<LibraryExtras | undefined> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     if (!hasLibraryRecommendations(adapter)) return undefined;
     const images = connection.images();
-    const reading = adapter.libraryRows(id, kind);
+    const reading = adapter.libraryRows(id, kind, freshRows);
     const display = this.dateDisplay(id);
     const row = (value: V.Row, sized: Images) => { const model = feedRow(value, sized, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; };
     if (onRows) void Promise.all([reading, images]).then(([value, sized]) => onRows({

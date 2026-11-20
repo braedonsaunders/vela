@@ -75,8 +75,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
   /** Every shelf of a library, page by page. A cursor the server has expired mid-read restarts
    * the read once from the first page, uncached, so no shelf is skipped or repeated. */
-  async libraryRows(id: string, kind: V.Library['kind']): Promise<V.Row[]> {
-    try { return await this.readLibraryRows(id, kind, false); }
+  async libraryRows(id: string, kind: V.Library['kind'], fresh = false): Promise<V.Row[]> {
+    try { return await this.readLibraryRows(id, kind, fresh); }
     catch (error) {
       if (!(error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired')) throw error;
       return this.readLibraryRows(id, kind, true);

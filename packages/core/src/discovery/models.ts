@@ -168,6 +168,7 @@ export function feedRow(row: WireRow, images?: Images, artWidth = 2560): Row {
   return {
     id: row.id,
     name: row.name,
+    purpose: row.purpose,
     receipt: row.receiptToken,
     items: row.items.map(item => entry(item, images, artWidth)),
     nextCursor: row.nextCursor ?? '',

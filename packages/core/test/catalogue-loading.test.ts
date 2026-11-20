@@ -70,15 +70,16 @@ test('person titles require a real adapter capability and never fall back to nam
 test('a library\'s recommendations are handed over before its collections and genres arrive', async () => {
   const box = new StateBox({ library: {}, titles: {}, related: {}, collections: {} } as unknown as VelaState);
   const collections = deferred<{ items: never[] }>();
+  const rowReads: (boolean | undefined)[] = [];
   const adapter = {
-    libraryRows: async () => [{ id: 'r', name: 'Recently added', purpose: 'recentlyAdded', items: [], receiptToken: '', continuation: 'exhausted' }],
+    libraryRows: async (_id: string, _kind: string, fresh?: boolean) => { rowReads.push(fresh); return [{ id: 'r', name: 'Recently added', purpose: 'recentlyAdded', items: [], receiptToken: '', continuation: 'exhausted' }]; },
     libraryCollections: () => collections.promise,
     libraryGenres: async () => [{ id: 'g', label: 'Drama' }],
   };
   const session = { epoch: 0, onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
   const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
   const early = deferred<string[]>();
-  const all = catalogue.libraryExtras('movies', 'movies', extras => { expect(extras.rowsLoad).toBe('ready'); expect(extras.collectionsLoad).toBe('loading'); early.resolve(extras.rows.map(row => row.name)); });
+  const all = catalogue.libraryExtras('movies', 'movies', extras => { expect(extras.rowsLoad).toBe('ready'); expect(extras.collectionsLoad).toBe('loading'); early.resolve(extras.rows.map(row => row.name)); }, undefined, undefined, true);
   expect(await early.promise).toEqual(['Recently added']);
   collections.resolve({ items: [] });
   const done = await all;
@@ -87,6 +88,7 @@ test('a library\'s recommendations are handed over before its collections and ge
   expect(done?.rowsLoad).toBe('ready');
   expect(done?.genresLoad).toBe('ready');
   expect(done?.genres).toEqual([{ id: 'g', label: 'Drama' }]);
+  expect(rowReads).toEqual([true]);
 });
 
 test('collection first and continuation reads carry the selected tab and preserve its cursor', async () => {

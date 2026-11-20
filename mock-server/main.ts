@@ -24,6 +24,7 @@ const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?
 const bootstrapDelayMs = Math.min(120_000, Math.max(0, Number(process.env.VELA_MOCK_BOOTSTRAP_DELAY_MS) || 0));
 const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
+let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
 const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
@@ -84,7 +85,35 @@ function page<T>(items: T[], url: URL, g: Grant, scope: string, defaultLimit = 5
   const p = Buffer.from(JSON.stringify({ owner: g.id, scope, offset: offset + n, expires })).toString('base64url');
   return { items: items.slice(offset, offset + n), continuation: more ? 'more' : 'exhausted', ...(more ? { nextCursor: `${p}.${mac(p)}` } : {}) };
 }
-function homeScope() { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), rows]))}`; }
+function progressRows(): V.Row[] {
+  const continuing = allTitles.filter(title => (title.kind === 'movie' || title.kind === 'episode') && !title.watch?.played && (title.watch?.positionSeconds ?? 0) > 0);
+  const next = episodesByShow().map(items => items.find(title => !title.watch?.played)).filter((title): title is V.Title => !!title);
+  const row = (id: string, name: string, purpose: V.Row['purpose'], items: V.Title[]): V.Row => ({
+    id, name, purpose, receiptToken: '', continuation: 'exhausted',
+    items: items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title, receiptToken: '' })),
+  });
+  return [
+    ...(continuing.length ? [row('progress-continue', 'Continue Watching', 'continue', continuing)] : []),
+    ...(next.length ? [row('progress-next-up', 'Next Up', 'nextUp', next)] : []),
+  ];
+}
+function episodesByShow(): V.Title[][] {
+  const grouped = new Map<string, V.Title[]>();
+  for (const title of allTitles) if (title.kind === 'episode') {
+    const items = grouped.get(title.showId ?? '') ?? [];
+    items.push(title); grouped.set(title.showId ?? '', items);
+  }
+  return [...grouped.values()];
+}
+function recordPlayback(session: Session, ended: boolean): void {
+  const title = allTitles.find(value => value.id === session.plan.titleId);
+  if (!title) return;
+  const position = session.plan.positionSeconds ?? 0;
+  const finished = ended || position >= (title.durationSeconds ?? fixtureDurationSeconds) - 1;
+  title.watch = { ...(title.watch ?? { favorite: false, watchlisted: false }), positionSeconds: finished ? 0 : position, played: finished };
+  viewer.policyRevision = `mock-${++viewerRevision}`;
+}
+function homeScope() { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const bound = boundRow(g, row);
   return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope()}`, 20) };
@@ -99,14 +128,14 @@ const labRows: V.Row[] = [
     return { id: `lab-${i}-${n}`, kind: 'title' as const, title, receiptToken: '' };
   }), continuation: 'exhausted' as const }));
 const labHomeRows: V.Row[] = [
-  { ...labRows[0]!, id: 'lab-home-continue', name: 'Continue Watching', items: labRows[0]!.items.slice(0, 1) },
+  { ...labRows[0]!, id: 'lab-home-continue', name: 'Continue Watching', purpose: 'continue', items: labRows[0]!.items.slice(0, 1) },
   { ...labRows[1]!, id: 'lab-home-top10', name: 'Top 10', items: labRows[1]!.items.slice(0, 8) },
   { ...labRows[2]!, id: 'lab-home-new', items: labRows[0]!.items.slice(0, 20) },
   { ...labRows[3]!, id: 'lab-home-because', name: 'Because You Watched…', items: labRows[3]!.items.slice(0, 12) },
   { ...labRows[0]!, id: 'lab-home-trending', items: labRows[0]!.items.slice(0, 20) },
 ];
 function homeRows(g: Grant, url: URL): V.Page<V.Row> {
-  const result = page(labPreset ? labHomeRows : rows, url, g, `home-rows:${homeScope()}`, labPreset ? 5 : 2);
+  const result = page(labPreset ? labHomeRows : [...progressRows(), ...rows], url, g, `home-rows:${homeScope()}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
   return { ...result, items: result.items.map(row => homeRow(g, row, firstItems)) };
 }
@@ -450,12 +479,13 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (method === 'POST' && ['commands', 'observations'].includes(match[2])) {
       if (body.sourceGeneration !== s.plan.sourceGeneration || body.seekGeneration !== s.plan.seekGeneration) fail('conflict', 'stale_generation', 'Refresh session state', { currentGenerations: { sourceGeneration: s.plan.sourceGeneration, seekGeneration: s.plan.seekGeneration } });
       if (s.plan.state === 'ended') fail('conflict', 'session_ended', 'Session ended');
-      if (match[2] === 'observations') { if (!Number.isInteger(body.sequence) || body.sequence < 1 || !Array.isArray(body.playableRanges) || !Number.isFinite(body.positionSeconds) || !['playing','paused','buffering','ended'].includes(body.state)) fail('request', 'invalid_observation', 'Invalid observation'); observe(s, body); return json({ accepted: true }); }
+      if (match[2] === 'observations') { if (!Number.isInteger(body.sequence) || body.sequence < 1 || !Array.isArray(body.playableRanges) || !Number.isFinite(body.positionSeconds) || !['playing','paused','buffering','ended'].includes(body.state)) fail('request', 'invalid_observation', 'Invalid observation'); observe(s, body); if (body.state === 'ended') recordPlayback(s, true); return json({ accepted: true }); }
       if (body.kind === 'prepare-fallback') fail(faults.capacityExhausted ? 'capacity' : 'policy', faults.capacityExhausted ? 'capacity_exhausted' : 'feature_unavailable', 'Proactive fallback not implemented');
       if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
       if (body.kind === 'seek' && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > fixtureDurationSeconds)) fail('request', 'invalid_position', `Position must be 0–${fixtureDurationSeconds}`);
       if (body.kind === 'tracks') fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
+      if (body.kind === 'stop') recordPlayback(s, false);
       applyCommand(s, body); return json(s.plan);
     }
   }

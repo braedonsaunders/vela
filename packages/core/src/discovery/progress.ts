@@ -1,7 +1,7 @@
 // A watched position applied to models already drawn, before the server's answer arrives: the
 // title's resume point, its cards' progress (Continue Watching, the hero) and the hero's resume
 // detail. The server's next read replaces these with its own.
-import type { Card, DetailModel, HeroAction, HomeModel } from '../models';
+import type { Card, DetailModel, HeroAction, HomeModel, Row } from '../models';
 import { clock, minute, msg, percent } from '../i18n';
 
 /** Where the viewer left a title: a position, or finished. */
@@ -43,6 +43,56 @@ export function homeWatched(home: HomeModel, watched: Watched): HomeModel {
     heroActions: home.heroActions.map(action => heroAction(action, hero.find(h => h.id === action.heroId), watched)),
     rows: home.rows.map(row => ({ ...row, items: row.items.map(value => card(value, watched)) })),
   };
+}
+
+const progressRow = (row: Row) => row.purpose === 'continue' || row.purpose === 'nextUp';
+
+/**
+ * Replace only Home's server-owned progress shelves. Non-progress shelves retain their exact
+ * objects and order (including pages appended by moreRows); fresh progress shelves are inserted
+ * beside the same first-page anchors the server returned.
+ */
+export function reconcileHomeProgress(current: HomeModel, fresh: HomeModel): HomeModel {
+  const retained = current.rows.filter(row => !progressRow(row));
+  const retainedIndex = new Map(retained.map((row, index) => [row.id, index]));
+  const groups: { slot: number; rows: Row[] }[] = [];
+  for (let index = 0; index < fresh.rows.length;) {
+    if (!progressRow(fresh.rows[index]!)) { index++; continue; }
+    const rows: Row[] = [];
+    while (index < fresh.rows.length && progressRow(fresh.rows[index]!)) rows.push(fresh.rows[index++]!);
+    let slot: number | undefined;
+    for (let next = index; next < fresh.rows.length; next++) {
+      const found = retainedIndex.get(fresh.rows[next]!.id);
+      if (found !== undefined) { slot = found; break; }
+    }
+    if (slot === undefined) {
+      for (let previous = index - rows.length - 1; previous >= 0; previous--) {
+        const found = retainedIndex.get(fresh.rows[previous]!.id);
+        if (found !== undefined) { slot = found + 1; break; }
+      }
+    }
+    groups.push({ slot: slot ?? 0, rows });
+  }
+  const insertions = new Map<number, Row[]>();
+  for (const group of groups) insertions.set(group.slot, [...(insertions.get(group.slot) ?? []), ...group.rows]);
+  const rows: Row[] = [];
+  for (let slot = 0; slot <= retained.length; slot++) {
+    rows.push(...(insertions.get(slot) ?? []));
+    if (slot < retained.length) rows.push(retained[slot]!);
+  }
+
+  const freshHeroes = new Map(fresh.hero.map(hero => [hero.id, hero]));
+  const hero = current.hero.map(value => {
+    const next = freshHeroes.get(value.id);
+    if (!next || value.progressSeconds === next.progressSeconds && value.progressLabel === next.progressLabel && value.played === next.played) return value;
+    return { ...value, progressSeconds: next.progressSeconds, progressLabel: next.progressLabel, played: next.played };
+  });
+  const freshActions = new Map(fresh.heroActions.map(action => [action.heroId, action]));
+  const heroActions = current.heroActions.map(action => {
+    const next = freshActions.get(action.heroId);
+    return next && (action.action === 'resume' || next.action === 'resume') ? next : action;
+  });
+  return { ...current, hero, heroActions, rows };
 }
 
 export function detailWatched(detail: DetailModel, watched: Watched): DetailModel {
