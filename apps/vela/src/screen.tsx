@@ -125,7 +125,9 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
       if (active && pinned) fixedNav.current = pinned;
       else if (active && nav && parent?.getBoundingClientRect) {
         const bounds = nav.getBoundingClientRect(), root = parent.getBoundingClientRect();
-        fixedNav.current = { top: bounds.top - root.top, left: bounds.left - root.left, width: bounds.width };
+        // libraryViews owns the document's horizontal gutter. Pin its full-width frame at the
+        // toolbar's vertical position; using the measured inner left/width applies that gutter twice.
+        fixedNav.current = { top: bounds.top - root.top, left: 0, width: root.width };
       }
     }
     outgoing.current = active ? previous : null;
