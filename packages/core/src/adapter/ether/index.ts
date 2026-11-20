@@ -337,7 +337,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
         catch (error) {
           if (error instanceof VelaError && (error.status === 405 || error.status === 404 && ['endpoint_not_found', 'http_error'].includes(error.detail.code))) { this.personSupport = 'no'; break; }
           if (error instanceof VelaError && error.status === 404) this.missingPeople.add(personId);
-          else throw error;
+          // Person discovery decorates credit links; it is never allowed to hide the title.
+          else break;
         }
       }
     }
@@ -346,9 +347,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
       try {
         const show = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(data.title.showId)}`, undefined, CACHED);
         return { ...data, title: { ...data.title, showName: show.title.name } };
-      } catch (error) {
-        // A removed parent must not hide a still-playable episode.
-        if (!(error instanceof VelaError) || error.status !== 404) throw error;
+      } catch {
+        // Parent-name decoration is secondary; a removed or temporarily unavailable show must
+        // not hide a still-playable episode.
       }
     }
     return data;

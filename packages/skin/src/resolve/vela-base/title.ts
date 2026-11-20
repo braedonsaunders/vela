@@ -1118,7 +1118,7 @@ export const title: Node = {
           small: { gap: '36px' },
           children: [
             titleLoading,
-            failure('{t:ui.thisTitleCouldnTBeOpenedItMayNoLongerBeAvailable}'),
+            failure('{env.loadMessage}'),
             ...detailSections,
           ],
         },

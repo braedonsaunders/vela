@@ -8,9 +8,9 @@ export const cinematicDoc: SkinDocument = {
   renderer: 15,
   id: 'cinematic-doc',
   name: 'Cinematic',
-  version: '1.0.2',
+  version: '1.0.3',
   tagline: 'Vela\'s own look: full-bleed art, serif titles and a ranked Top 10.',
-  preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.2/preview.jpg',
+  preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.3/preview.jpg',
   swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
   // The Vela base's own look: Cinematic's values (packages/skin/src/resolve/ui-defaults.ts).
   ui: {

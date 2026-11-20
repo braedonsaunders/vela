@@ -55,6 +55,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     season,
     route,
     load: route === 'title' || route === 'watch' ? load(title) : load(home),
+    loadFailure: route === 'title' || route === 'watch' ? title?.failure : home.failure,
     entry,
     flags: view.flags,
     rowLoading: home.rowsLoading,

@@ -726,7 +726,7 @@ export const title: Node = {
           children: [
             {
               type: 'text',
-              text: '{s:failed}',
+              text: '{env.loadMessage}',
               style: { 'font-size': 'clamp(22px, 1.8vw, 36px)', 'font-weight': '700' },
             },
             {

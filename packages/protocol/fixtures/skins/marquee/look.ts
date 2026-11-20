@@ -7,7 +7,7 @@ import type { Condition, Node, Style } from '../../../skin';
 // poster beside the facts. Every value here follows the compiled original it replaces.
 
 export const id = 'marquee',
-  version = '1.0.10';
+  version = '1.0.11';
 export const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 export const sans =

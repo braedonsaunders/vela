@@ -59,6 +59,13 @@ describe('EtherAdapter', () => {
     await adapter.detail('second');
     expect(adapter.supportsPersonFilmography).toBe(true);
   });
+  test('a temporary person probe failure keeps the title page available', async () => {
+    routeFetch({
+      'GET /vela/v0/titles/first': { title: { id: 'first' }, cast: [{ id: 'p1', name: 'Person' }] },
+      'GET /vela/v0/people/p1': Response.json({ error: { class: 'transient', code: 'service_unavailable', message: 'Busy', retry: { allowed: true } } }, { status: 503 }),
+    });
+    expect((await ether().detail('first')).title.id).toBe('first');
+  });
   test('search posts the fast and descriptive modes under /vela/v0 with bearer and device', async () => {
     const seen = routeFetch({ 'POST /vela/v0/search': searchAnswer });
     const adapter = ether();

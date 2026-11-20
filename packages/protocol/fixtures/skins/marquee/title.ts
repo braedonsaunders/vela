@@ -949,7 +949,7 @@ export const title: Node = {
       },
       children: [
         detailLoading,
-        failure('{s:titleFailed}'),
+        failure('{env.loadMessage}'),
         {
           type: 'box',
           when: [is('env.load', 'ready')],

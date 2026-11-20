@@ -872,7 +872,7 @@ export const title: Node = {
       }),
       children: [
         waiting(220, '{s:opening}'),
-        failure('{s:titleFailed}'),
+        failure('{env.loadMessage}'),
         { ...titleTop, when: [ready], motion: 'fadeIn' } as Node,
         { ...titleRest, when: [ready], motion: 'fadeIn' } as Node,
       ],

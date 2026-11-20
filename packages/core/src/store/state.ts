@@ -1,13 +1,17 @@
 // The store's state: one immutable snapshot, replaced slice by slice. React reads it through
 // useSyncExternalStore (`@vela/core/react`); each slice keeps its identity until it changes, so a
 // selector that returns a slice re-renders only when that slice does.
+import { VelaError } from '../adapter/errors';
+
 export type Load = 'idle' | 'loading' | 'ready' | 'failed';
+export type FailureKind = 'not-found' | 'temporary' | 'other';
 
 /** A value read from the server: its load state, the value once read, and why it failed. */
 export interface Loadable<T> {
   load: Load;
   value?: T;
   error: string;
+  failure?: FailureKind;
 }
 
 export const idle = <T>(): Loadable<T> => ({ load: 'idle', error: '' });
@@ -17,6 +21,11 @@ export const failed = <T>(error: unknown, previous?: Loadable<T>): Loadable<T> =
   load: 'failed',
   value: previous?.value,
   error: message(error),
+  failure: error instanceof VelaError && (error.status === 404 || error.detail.class === 'not-found')
+    ? 'not-found'
+    : error instanceof VelaError && (error.status >= 500 || error.detail.class === 'transient' || error.detail.retry.allowed)
+      ? 'temporary'
+      : 'other',
 });
 
 export function message(error: unknown, fallback = 'Something went wrong'): string {

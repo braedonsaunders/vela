@@ -11,7 +11,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.10';
+const version = '1.0.11';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -1228,7 +1228,7 @@ const title: Node = {
           label: '{s:titleDetails}',
           style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'auto', 'overflow-y': 'auto' },
           children: [
-            status('{s:failed}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
+            status('{env.loadMessage}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
             status('{s:opening}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
             { ...detail, when: [{ test: 'env.load', is: 'eq', value: 'ready' }] },
           ],

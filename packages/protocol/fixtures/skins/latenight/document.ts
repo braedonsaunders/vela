@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.12';
+const id = 'latenight', version = '1.0.13';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -367,7 +367,7 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
     ] },
     { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'alert', style: { position: 'absolute', ...inset('0px'), display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'justify-content': 'center', gap: '16px 16px', 'background-color': '$vcr-blue' }, children: [
       { type: 'text', text: '{s:noSignal}', style: { ...osdText('56px', '$ink'), 'text-shadow': '3px 3px 0px $shadow' } },
-      { type: 'text', text: '{s:failed}', style: { ...osdText('24px', '$ink'), 'text-shadow': 'none', 'text-transform': 'none', 'text-align': 'center', 'max-width': '30rem' } },
+      { type: 'text', text: '{env.loadMessage}', style: { ...osdText('24px', '$ink'), 'text-shadow': 'none', 'text-transform': 'none', 'text-align': 'center', 'max-width': '30rem' } },
       { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{s:retry}', testId: 'detail-retry', style: { ...vcrButton(true), 'margin-top': '10px' }, hover: pressed, focus: pressed, children: [
         { type: 'text', text: '▶ {s:retry}', style: { ...osdText('26px', 'inherit'), 'text-shadow': 'none' } },
       ] },

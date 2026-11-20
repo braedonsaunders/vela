@@ -47,6 +47,7 @@ export interface Env {
   season: string;
   route: string;
   load: 'loading' | 'failed' | 'ready';
+  loadFailure?: import('@vela/core').FailureKind;
   entry: string;
   flags: string[];
   rowLoading: string[];
@@ -270,6 +271,9 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.homeHasMore': (_, e) => (e.home ? yes(e.home.nextCursor !== '') : ''),
   'env.route': (_, e) => e.route,
   'env.load': (_, e) => e.load,
+  'env.loadMessage': (_, e) => t(e.loadFailure === 'not-found'
+    ? 'ui.titleNotFound'
+    : e.loadFailure === 'temporary' ? 'ui.titleTemporarilyUnavailable' : 'ui.titleLoadFailed'),
   'env.canRetry': (_, e) => yes(e.load === 'failed' || e.library?.viewLoad === 'failed'),
   'env.entry': (_, e) => e.entry,
 

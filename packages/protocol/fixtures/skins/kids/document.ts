@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.11';
+const version = '1.2.12';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -417,7 +417,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
   { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden' }, children: [
     { type: 'image', src: art('sky.svg'), alt: '', style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '560px', 'object-fit': 'cover', 'pointer-events': 'none', 'mask-image': 'linear-gradient(180deg, black 0%, black 60%, transparent 100%)' } },
     restState('loading', 'star.svg', '{s:opening}', false),
-    restState('failed', 'sleepy.svg', '{s:failed}', true, [
+    restState('failed', 'sleepy.svg', '{env.loadMessage}', true, [
       { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{s:tryAgain}', style: { position: 'relative', display: 'flex', 'align-items': 'center', height: '60px', padding: '0px 30px', 'border-radius': '999px', 'background-color': '$sun', 'box-shadow': '0px 5px 0px #E8A419', 'font-size': '19px', 'font-weight': '800' },
         hover: lift, focus: ringed('0px 5px 0px #E8A419'), children: [{ type: 'text', text: '{s:tryAgain}' }] }]),
     titleReady,

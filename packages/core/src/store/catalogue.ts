@@ -182,7 +182,10 @@ export class Catalogue {
 
   /** One read of a title's details; a partial answer is followed while the title is on screen. */
   private async detail(connection: Connection, id: string): Promise<{ model: DetailModel; answer: V.TitleDetail }> {
-    const [answer, capabilities] = await Promise.all([connection.adapter.detail(id), capabilitiesOf(connection.adapter)]);
+    const answer = await this.titleDetail(connection, id);
+    // Capability decoration is secondary metadata. A temporary describe failure must not discard
+    // a complete title answer that is already available.
+    const capabilities = await capabilitiesOf(connection.adapter).catch(() => ({ features: this.session.features ?? {} } as V.ServerCapabilities));
     const images = await connection.images();
     const features = capabilities.features;
     const model = detailModel(
@@ -195,6 +198,18 @@ export class Catalogue {
     );
     this.pending.answered(id, answer);
     return { model, answer };
+  }
+
+  private async titleDetail(connection: Connection, id: string): Promise<V.TitleDetail> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await connection.adapter.detail(id);
+      } catch (error) {
+        const delay = titleRetryDelay(error, attempt);
+        if (delay === undefined) throw error;
+        await new Promise<void>(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
   /** Where the viewer left a title, applied at once to every title page drawn that shows it. */
@@ -412,6 +427,17 @@ export class Catalogue {
       if (epoch === this.session.epoch && !quiet) set(failed(error, previous));
     }
   }
+}
+
+/** Retry only protocol-declared temporary title reads, at most twice and within a short wait. */
+export function titleRetryDelay(error: unknown, attempt: number): number | undefined {
+  if (!(error instanceof VelaError) || error.detail.retry.allowed !== true || attempt >= 2) return undefined;
+  const maximum = Number.isFinite(error.detail.retry.maxAttempts) ? Math.max(1, Math.floor(error.detail.retry.maxAttempts!)) : 3;
+  if (attempt + 1 >= maximum) return undefined;
+  const header = Number(error.retryAfter);
+  const hinted = Number.isFinite(error.detail.retry.afterSeconds) ? Math.max(0, error.detail.retry.afterSeconds!) : 0;
+  const seconds = Math.max(1, 2 ** attempt, hinted, Number.isFinite(header) ? header : 0);
+  return seconds <= 30 ? seconds * 1000 : undefined;
 }
 
 type SliceValue<K extends 'titles' | 'related' | 'library' | 'collections'> = {

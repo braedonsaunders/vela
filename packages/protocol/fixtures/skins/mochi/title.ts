@@ -1099,7 +1099,7 @@ export const title: Node = {
                     },
                   ],
                 },
-                failed('{s:titleFailed}'),
+                failed('{env.loadMessage}'),
                 titleHead,
                 episodesSection([set('detail.hasEpisodes')]),
                 episodesSection([not('detail.hasEpisodes'), set('detail.hasSeasons')]),

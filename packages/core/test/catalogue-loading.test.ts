@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { Catalogue, libraryKey } from '../src/store/catalogue';
+import { Catalogue, libraryKey, titleRetryDelay } from '../src/store/catalogue';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
@@ -114,6 +114,15 @@ test('person titles require a real adapter capability and never fall back to nam
   const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
   await expect(catalogue.personTitles('person-id', 'library-id')).rejects.toThrow('Person filmography is unavailable');
   expect(searches).toBe(0);
+});
+
+test('title retry policy follows declared transient attempts without retrying permanent failures', () => {
+  const transient = new VelaError({ class: 'transient', code: 'service_unavailable', message: 'Busy', retry: { allowed: true, maxAttempts: 3 } }, 503);
+  expect(titleRetryDelay(transient, 0)).toBe(1000);
+  expect(titleRetryDelay(transient, 1)).toBe(2000);
+  expect(titleRetryDelay(transient, 2)).toBeUndefined();
+  const missing = new VelaError({ class: 'not-found', code: 'not_found', message: 'Gone', retry: { allowed: false } }, 404);
+  expect(titleRetryDelay(missing, 0)).toBeUndefined();
 });
 
 test('a library\'s recommendations are handed over before its collections and genres arrive', async () => {
