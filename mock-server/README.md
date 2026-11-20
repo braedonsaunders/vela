@@ -136,6 +136,9 @@ The guide fixture has170 channels, six favourites,80% logos, and25% without
 listings. Programmes follow fixed channel-seeded schedules with15–120min slots,
 two channels with gaps, varied episode metadata/artwork and explicit fixture
 genres. IDs and programme facts remain stable across overlapping guide windows.
+
+Set `VELA_MOCK_SEASONS=50` to expose a long named season list on Meridian Station
+for title-page selector checks.
 The existing24h window cap and100-item maximum pages still apply.
 
 Initial API track selection and in-session track mutation are advertised unavailable

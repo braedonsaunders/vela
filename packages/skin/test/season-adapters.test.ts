@@ -6,7 +6,7 @@ import { nativeConnection } from '../../core/src/adapter/connection';
 import { detailModel } from '../../core/src/discovery/models';
 import { FakeCredentials, restoreFetch, routeFetch } from '../../core/test/helpers';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from '../../../apps/vela/src/detail-season';
-import { accessor, collection, type Env } from '../src/vocabulary';
+import { accessor, collection, seasonDisplayName, type Env } from '../src/vocabulary';
 
 afterEach(restoreFetch);
 const base = { name: 'MobLand', summary: '', genres: [], artwork: [] };
@@ -103,7 +103,7 @@ test('a series primary action plays or resumes the next episode', () => {
   expect(accessor('detail.hasResume')!({ index: 0 }, env)).toBe('true');
 
   const unstarted = { ...model, nextUp: [] };
-  const fresh = { detail: unstarted, season: '' } as Env;
+  const fresh = { detail: unstarted, season: '' } as unknown as Env;
   expect(accessor('detail.id')!({ index: 0 }, fresh)).toBe(e1);
   expect(accessor('detail.playLabel')!({ index: 0 }, fresh)).toBe('Play S1 · E1');
 });
@@ -140,4 +140,17 @@ test('film pages never wait for a resume season while Home is still loading', ()
   const series = detailModel({ title: { ...base, id: 'show', kind: 'show' }, extras: [], chapters: [], cast: [] });
   expect(waitForResumeSeason(series, '', true)).toBe(true);
   expect(waitForResumeSeason(series, '', false)).toBe(false);
+});
+
+test('season selector labels keep the number when a season has a proper name', () => {
+  const season = detailModel({ title: { ...base, id: show, kind: 'show' }, seasons: [
+    { ...base, id: s1, kind: 'season', name: 'Borneo', seasonNumber: 1 },
+    { ...base, id: s2, kind: 'season', name: 'Season 2', seasonNumber: 2 },
+  ], extras: [], chapters: [], cast: [] }).seasons;
+  expect(seasonDisplayName(season[0]!)).toBe('S1 · Borneo');
+  expect(seasonDisplayName(season[1]!)).toBe('Season 2');
+  const env = { detail: { ...detailModel({ title: { ...base, id: show, kind: 'show' }, extras: [], chapters: [], cast: [] }), seasons: season }, season: s1 } as Env;
+  const choices = collection('detail.seasons', { index: 0 }, env, 100);
+  expect(accessor('card.name')!(choices[0]!, env)).toBe('S1 · Borneo');
+  expect(accessor('season.on')!(choices[0]!, env)).toBe('true');
 });

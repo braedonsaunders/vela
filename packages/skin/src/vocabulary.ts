@@ -79,6 +79,8 @@ export interface Ctx {
   extra?: Extra;
   person?: Person;
   fact?: string;
+  /** A season's compact selector label; absent when the same card appears outside a selector. */
+  seasonLabel?: string;
   hit?: Hit;
   /** A channel of live.channels or live.favorites. */
   ch?: GuideChannel;
@@ -110,6 +112,13 @@ function seasonEpisodes(d: DetailModel | undefined, season: string): Card[] {
   return (d?.episodes ?? []).filter(card => !selected || card.seasonId === selected);
 }
 const hasProgress = (x: Card) => x.progressSeconds > 0 && x.durationSeconds > 0 && !x.played;
+
+export function seasonDisplayName(card: Card): string {
+  const name = card.name.trim();
+  if (card.seasonNumber <= 0 || !name) return name || card.seasonNumberLabel;
+  const generic = new RegExp(`^(?:season|series|s)\\s*0*${card.seasonNumber}$`, 'i').test(name);
+  return generic ? name : `S${card.seasonNumberLabel || card.seasonNumber} · ${name}`;
+}
 
 /** A series' primary action targets the server's Next Up episode, or the first unwatched episode. */
 function detailPlaybackCard(d: DetailModel): Card | undefined {
@@ -157,6 +166,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   /** The context parts as one line (series · season · episode), for a card too narrow for the links. */
   'card.contextLine': from('card', x => x.contextParts.map(part => part.label).join(' · ')),
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
+  'card.name': c => c.seasonLabel ?? c.card?.name ?? '',
   'card.played': from('card', x => yes(x.played)),
   'card.episodeNumberLabel': from('card', x => x.episodeNumberLabel),
   'card.durationLabel': from('card', x => x.durationLabel),
@@ -362,7 +372,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     }
     case 'nav.destinations': return at(e.libraries, dest => ({ dest }));
     case 'hero.genres': return at(c.hero?.genres ?? [], fact => ({ fact }));
-    case 'detail.seasons': return at(d?.seasons ?? [], card => ({ card }));
+    case 'detail.seasons': return at(d?.seasons ?? [], card => ({ card, seasonLabel: seasonDisplayName(card) }));
     case 'detail.episodes': return at(seasonEpisodes(d, e.season), card => ({ card }));
     case 'detail.upNext': return at(d?.nextUp ?? seasonEpisodes(d, e.season).filter(x => !x.played).slice(0, 1), card => ({ card }));
     case 'detail.extras': return at(d?.extras ?? [], extra => ({ extra }));

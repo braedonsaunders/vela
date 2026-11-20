@@ -28,6 +28,7 @@ const CURRENT: Record<string, string> = {
   'library.kinds': 'library.kindFilter',
   'library.genres': 'library.genreFilter',
   'library.played': 'library.playedFilter',
+  'detail.seasons': 'detail.selectedSeason',
 };
 const MAX_OPTIONS = 500;
 
@@ -45,8 +46,8 @@ function choicesOf(params: Record<string, string>, c: Ctx, e: Env): Choice[] {
           return { value, label: label.join('|') };
         })
     : collection(params.options ?? '', c, e, MAX_OPTIONS).map(item => ({
-        value: read('opt.id', item, e),
-        label: read('opt.label', item, e),
+        value: read(params.options === 'detail.seasons' ? 'card.id' : 'opt.id', item, e),
+        label: read(params.options === 'detail.seasons' ? 'card.name' : 'opt.label', item, e),
       }));
   return params.none !== undefined ? [{ value: '', label: params.none }, ...fixed] : fixed;
 }

@@ -15,6 +15,7 @@ const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
 const fixtureGuide = scaleFixture?.guide ?? defaultGuide;
+const mockSeasonCount = Math.max(0, Math.floor(Number(process.env.VELA_MOCK_SEASONS) || 0));
 const gapChannels = new Set((process.env.VELA_MOCK_GUIDE_GAPS ?? '').split(','));
 const gapHour = Math.floor(Date.now() / 3600000) * 3600000;
 const guide = (from: number, until: number, ids: string[]) => fixtureGuide(from, until, ids).filter(programme =>
@@ -521,8 +522,38 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return response;
   }
   if (titleMatch) {
-    const raw = detail(titleMatch[1]); if (!raw) fail('not-found', 'title_not_found', 'Title not found');
-    const d = { ...raw, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
+    const requestedSeason = /^season-meridian-(\d+)$/.exec(titleMatch[1]);
+    const requestedSeasonNumber = Number(requestedSeason?.[1]);
+    const fixtureSeason = requestedSeasonNumber > 0 && requestedSeasonNumber <= mockSeasonCount
+      ? detail('season-meridian-1')
+      : undefined;
+    const raw = detail(titleMatch[1]) ?? (fixtureSeason ? {
+      ...fixtureSeason,
+      title: {
+        ...fixtureSeason.title,
+        id: titleMatch[1],
+        name: ['Borneo', 'The Australian Outback', 'Africa'][requestedSeasonNumber - 1] ?? `Season ${requestedSeasonNumber}`,
+        seasonNumber: requestedSeasonNumber,
+      },
+      episodes: fixtureSeason.episodes?.map(episode => ({
+        ...episode,
+        id: `episode-${requestedSeasonNumber}-${episode.episodeNumber}`,
+        seasonNumber: requestedSeasonNumber,
+      })),
+    } : undefined);
+    if (!raw) fail('not-found', 'title_not_found', 'Title not found');
+    const scaledSeasons = raw.title.kind === 'show' && mockSeasonCount > 0
+      ? Array.from({ length: mockSeasonCount }, (_, index) => ({
+          ...raw.title,
+          id: `season-meridian-${index + 1}`,
+          kind: 'season' as const,
+          name: ['Borneo', 'The Australian Outback', 'Africa'][index] ?? `Season ${index + 1}`,
+          showId: raw.title.id,
+          showName: raw.title.name,
+          seasonNumber: index + 1,
+        }))
+      : raw.seasons;
+    const d = { ...raw, seasons: scaledSeasons, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
     if (method === 'POST' && titleMatch[2] === 'watch') {
       const t = allTitles.find(t => t.id === titleMatch[1])!;
       t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };

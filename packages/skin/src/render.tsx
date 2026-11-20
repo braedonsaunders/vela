@@ -35,6 +35,7 @@ import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { ExpandableSummary } from './summary';
 import { VersionsControl } from './widgets/title-actions';
+import { SeasonSelector } from './widgets/season-selector';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { needsAnimatedFrame } from './animated-frame';
@@ -238,6 +239,9 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     </View>;
   }
   if (node.kind === 'repeat') {
+    if (node.over === 'detail.seasons' && (env.detail?.seasons.length ?? 0) > 8) {
+      return <SeasonSelector ctx={ctx} />;
+    }
     return (
       <>
         {collection(node.over, ctx, env, node.limit).map(c => {
