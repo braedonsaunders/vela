@@ -85,6 +85,25 @@ export function paramsOf(query: LibraryQuery): Record<Exclude<keyof LibraryParam
   };
 }
 
+/** A collection URL carries the label/count shown by its entry and the tab it returns to. */
+export function collectionRoute(
+  id: string,
+  query: LibraryQuery,
+  target: string,
+  view: string,
+  card?: { name: string; facts: string },
+) {
+  return {
+    pathname: '/library/[id]' as const,
+    params: {
+      id,
+      ...paramsOf(query),
+      view,
+      facetTitle: [card?.name ?? target, card?.facts].filter(Boolean).join(' · '),
+    },
+  };
+}
+
 /** `librarySort {opt.id}`: that sort, keeping the direction when the sort offers it. */
 export function sortedBy(query: LibraryQuery, model: LibraryModel | undefined, id: string): LibraryQuery {
   if (!isSort(id)) return query;

@@ -5,6 +5,10 @@ export type AuthFlowEvent = { type: 'add' | 'plex' | 'back' } | { type: 'server'
 export function initialAuthFlow(saved: number): AuthFlow {
   return { step: { page: saved ? 'choose' : 'add' }, history: [] };
 }
+/** Open a selected server directly. A standalone sign-in has no screen behind its Back button. */
+export function selectedAuthFlow(serverId: string, saved: number, canChooseServer = true): AuthFlow {
+  return { step: { page: 'signin', serverId }, history: canChooseServer ? [initialAuthFlow(saved).step] : [] };
+}
 export function authFlow(state: AuthFlow, event: AuthFlowEvent): AuthFlow {
   if (event.type === 'back') return state.history.length ? { step: state.history[state.history.length - 1]!, history: state.history.slice(0, -1) } : state;
   if (event.type === 'servers') {
@@ -14,6 +18,6 @@ export function authFlow(state: AuthFlow, event: AuthFlowEvent): AuthFlow {
   const next: AuthStep = event.type === 'server' ? { page: 'signin', serverId: event.serverId }
     : (event.type === 'code' || event.type === 'server-plex') ? state.step.page === 'signin' ? { page: event.type, serverId: state.step.serverId } : state.step
     : { page: event.type };
-  if (next === state.step || (next.page === state.step.page && next.page !== 'signin')) return state;
+  if (next === state.step || next.page === state.step.page && (next.page !== 'signin' || next.serverId === (state.step.page === 'signin' ? state.step.serverId : ''))) return state;
   return { step: next, history: [...state.history, state.step] };
 }

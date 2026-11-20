@@ -6,7 +6,7 @@ import { facetCollectionQuery, type LibraryQuery } from '@vela/core';
 import type { SkinHost } from '@vela/skin';
 import type { CollectionState } from './collection-page';
 import type { LibraryState } from './library-page';
-import { filteredBy, flipped, paramsOf, sortedBy } from './library-query';
+import { collectionRoute, filteredBy, flipped, paramsOf, sortedBy } from './library-query';
 
 function view(query: LibraryQuery): void {
   router.setParams(paramsOf(query));
@@ -20,13 +20,14 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
         const [target, kind] = arg.split('|');
         if (kind === 'library-live' && target) return router.push({ pathname: '/watch/[id]', params: { id: target, kind, libraryId: id, tab: library.page.tabId } });
         if (kind === 'person' && target) return router.push({ pathname: '/person', params: { id: target } });
-        const tab = model?.tabs?.find(tab => tab.id === library.page.tabId);
-        const facetQuery = kind === 'collection' && target && tab ? facetCollectionQuery(target, tab) : undefined;
-        if (facetQuery) {
-          const name = library.page.extras?.collections.find(card => card.id === target)?.name ?? target;
-          return router.push({ pathname: '/library/[id]', params: { id, ...paramsOf(facetQuery), view: tab!.id, facetTitle: name } });
+        if (kind === 'collection' && target) {
+          const tab = model?.tabs?.find(candidate => candidate.id === library.page.tabId);
+          const facetQuery = tab ? facetCollectionQuery(target, tab) : undefined;
+          if (model?.canCollectionId || facetQuery) {
+            const card = library.page.extras?.collections.find(candidate => candidate.id === target);
+            return router.push(collectionRoute(id, facetQuery ?? { ...query, collectionId: target }, target, tab?.id ?? library.page.tabId ?? 'collections', card));
+          }
         }
-        if (kind === 'collection' && target && model?.canCollectionId) return router.setParams({ collectionId: target, view: 'library' });
         if (kind === 'directory' && target?.startsWith('vela-library-genre:')) {
           const genre = decodeURIComponent(target.slice('vela-library-genre:'.length));
           return router.setParams({ ...paramsOf(filteredBy(query, `genre|${genre}`)), view: 'library' });

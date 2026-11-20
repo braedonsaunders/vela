@@ -46,6 +46,6 @@ export interface SignedOutProps {
 
 export function SignedOut({ host, auth, actions, servers, serverActions, art }: SignedOutProps) {
   return <HostContext.Provider value={host}><Stage branding={art}>
-    <Connect serverId={auth.serverId} servers={servers} actions={serverActions} auth={auth} authActions={actions} brandingName={art?.name} />
+    <Connect serverId={auth.serverId} servers={servers} actions={serverActions} auth={auth} authActions={actions} brandingName={art?.name} standaloneSignIn />
   </Stage></HostContext.Provider>;
 }

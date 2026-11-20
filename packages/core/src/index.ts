@@ -39,4 +39,4 @@ export type { TitleActions, MediaVersion, RemoteSubtitle } from './adapter/media
 export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';
 
 export { canSeeAll } from './store/rows';
-export { authFlow, initialAuthFlow, type AuthFlow, type AuthFlowEvent, type AuthStep } from './store/auth-flow';
+export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFlowEvent, type AuthStep } from './store/auth-flow';

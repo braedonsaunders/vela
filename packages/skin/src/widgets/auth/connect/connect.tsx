@@ -3,7 +3,7 @@
 import { useEffect, useReducer, useState } from 'react';
 import { Linking, Platform, ScrollView, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { authFlow, initialAuthFlow, type AuthFlow } from '@vela/core';
+import { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow } from '@vela/core';
 import { holdBack } from '../../../menu-key';
 import { Alert, CodeTiles, Heading, Pill, Waiting, Words } from '../../common/controls';
 import { useAuthLayout } from '../layout-context';
@@ -23,12 +23,16 @@ export interface ConnectProps {
   authActions?: AuthActions;
   /** Owner-facing identity for the selected server. Its technical record name remains internal. */
   brandingName?: string;
+  /** This route is already the sign-in destination, with no server chooser behind it. */
+  standaloneSignIn?: boolean;
 }
 
-export function Connect({ servers, actions, onClose, auth, authActions, serverId = '', brandingName }: ConnectProps) {
+export function Connect({ servers, actions, onClose, auth, authActions, serverId = '', brandingName, standaloneSignIn = false }: ConnectProps) {
   const layout = useAuthLayout();
   useEffect(() => () => authActions?.cancelPlex(), [authActions]);
-  const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId ? { step: {page: 'signin', serverId}, history: count ? [{page: 'choose'}] : [{page: 'add'}] } : initialAuthFlow(count));
+  const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId
+    ? selectedAuthFlow(serverId, count, !standaloneSignIn)
+    : initialAuthFlow(count));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');

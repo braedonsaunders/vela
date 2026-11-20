@@ -4,15 +4,22 @@ import { BackHandler, Platform } from 'react-native';
 import { backFromNavigation, useBackHeld } from '@vela/skin/src/menu-key';
 import { DocumentScreen } from '../../src/screen';
 import { useVela } from '../../src/vela';
+import { clearTitleNavigation, isTitleNavigation } from '../../src/title-origin';
 
 export default function Title() {
   const { id, library } = useLocalSearchParams<{ id: string; library?: string }>();
   const { openTitle } = useVela();
+  const openedInApp = isTitleNavigation(id);
   // tvOS Menu also reaches the native stack. Close an open description/menu first.
   usePreventRemove(useBackHeld(), backFromNavigation);
   useEffect(() => (id ? openTitle(id) : undefined), [id, openTitle]);
+  useEffect(() => () => clearTitleNavigation(id), [id]);
   useFocusEffect(useCallback(() => {
-    const back = () => { if (router.canGoBack()) router.back(); else router.replace('/'); };
+    const back = () => {
+      if (openedInApp && router.canGoBack()) router.back();
+      else if (library) router.replace({ pathname: '/library/[id]', params: { id: library } });
+      else router.replace('/');
+    };
     if (Platform.OS !== 'web') {
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => { back(); return true; });
       return () => subscription.remove();
@@ -29,6 +36,6 @@ export default function Title() {
     window.addEventListener('keydown', onKey);
     window.addEventListener('click', onClick);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); };
-  }, []));
+  }, [library, openedInApp]));
   return <DocumentScreen route="title" entry={id ?? ''} library={library} />;
 }

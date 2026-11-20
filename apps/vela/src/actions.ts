@@ -11,6 +11,7 @@ import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra } fro
 import type { ViewState } from './view-state';
 
 import { playParams } from './play-action';
+import { isTitleNavigation, noteTitleNavigation } from './title-origin';
 
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
 
@@ -54,11 +55,17 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
     if (receipt) void store.receipts.record(receipt, 'selected');
     if (kind === 'season') {
       actions.setSeason(id);
-      if (showId) router.push({ pathname: '/title/[id]', params: { id: showId, library: place.route === 'library' ? place.entry : place.library ?? '' } });
+      if (showId) {
+        noteTitleNavigation(showId);
+        router.push({ pathname: '/title/[id]', params: { id: showId, library: place.route === 'library' ? place.entry : place.library ?? '' } });
+      }
     }
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
     else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id, kind);
-    else if (id && TITLE_KINDS.includes(kind)) router.push({ pathname: '/title/[id]', params: { id, library: place.route === 'library' ? place.entry : place.library ?? '' } });
+    else if (id && TITLE_KINDS.includes(kind)) {
+      noteTitleNavigation(id);
+      router.push({ pathname: '/title/[id]', params: { id, library: place.route === 'library' ? place.entry : place.library ?? '' } });
+    }
     else notYet('select', arg);
   }, [store, actions]);
 
@@ -91,6 +98,10 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'back':
       case 'close':
         if (action === 'close' && arg) return actions.setFlag(arg, false);
+        if (place.route === 'title' && !isTitleNavigation(place.entry)) {
+          if (place.library) return router.replace({ pathname: '/library/[id]', params: { id: place.library } });
+          return router.replace('/');
+        }
         if (router.canGoBack()) router.back();
         else router.replace('/');
         return;
