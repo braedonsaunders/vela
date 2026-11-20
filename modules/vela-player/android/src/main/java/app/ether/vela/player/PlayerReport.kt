@@ -178,7 +178,7 @@ internal class PlayerReport(
       "duration" to state.duration,
       "throughputBps" to throughput(state),
       "droppedFrames" to state.droppedFrames,
-      "totalFrames" to null,
+      "totalFrames" to state.totalFrames,
       "audioTrackId" to (audioTrackId ?: plan?.audioTracks?.firstOrNull { track -> state.audioId != null && track.streamIndex?.let { state.trackId("audio", it) } == state.audioId }?.id),
       "pendingAudioTrackId" to null,
       "subtitleTrackId" to subtitleTrackId,

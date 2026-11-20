@@ -25,6 +25,7 @@ internal class PlayerState {
   /** Bytes per second the cache fills at. */
   var cacheSpeed: Long? = null
   var droppedFrames: Long? = null
+  var totalFrames: Long? = null
   var tracks: List<Map<String, Any?>> = emptyList()
   var audioId: Long? = null
   var subtitleId: Long? = null

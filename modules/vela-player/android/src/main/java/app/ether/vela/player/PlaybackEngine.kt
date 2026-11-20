@@ -18,11 +18,12 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 
 /** One engine per full-screen or preview session. No alternate local decoder engine. */
 internal interface PlaybackEngine {
+  val liveWindowSeconds: Double
   val state: PlayerState
   var onChange: () -> Unit
   var onFailure: (Int, Boolean) -> Unit
   var onSubtitleCues: (CueGroup) -> Unit
-  fun load(url: Uri, plan: PlaybackPlan?, position: Double, loop: Boolean = false)
+  fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean = false)
   fun attach(surface: Surface?)
   fun play(playing: Boolean)
   fun volume(value: Float)
@@ -31,7 +32,7 @@ internal interface PlaybackEngine {
   fun release()
 }
 
-internal class Media3Engine(context: Context, private val preview: Boolean) : PlaybackEngine {
+internal class Media3Engine(context: Context, private val preview: Boolean, live: Boolean = false) : PlaybackEngine {
   override val state = PlayerState()
   override var onChange: () -> Unit = {}
   override var onFailure: (Int, Boolean) -> Unit = { _, _ -> }
@@ -39,18 +40,25 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
   private val main = Handler(Looper.getMainLooper())
   private val selector = DefaultTrackSelector(context)
   private val grant = MediaAccessStore.current
+  private val buffering = playbackBuffering(preview, live)
   private val player = ExoPlayer.Builder(context,
     DefaultRenderersFactory(context).setEnableDecoderFallback(true)
       .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
+    // Foreground streaming needs consistent Wi-Fi latency as well as an awake display.
+    // Media3 releases both locks on pause, background pause and engine release.
+    .setWakeMode(C.WAKE_MODE_NETWORK)
     .setTrackSelector(selector)
     .setMediaSourceFactory(DefaultMediaSourceFactory(ScopedMediaDataSource.Factory(grant)))
     .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(
-      if (preview) 2000 else 15000, if (preview) 5000 else 50000, 500, 1000)
+      buffering.minimumMs, buffering.maximumMs, buffering.startMs, buffering.resumeMs)
+      .setPrioritizeTimeOverSizeThresholds(buffering.prioritizeTime)
       .setTargetBufferBytes(if (preview) 8 * 1024 * 1024 else 64 * 1024 * 1024).build())
     .build()
+  override val liveWindowSeconds: Double get() = player.duration.takeIf { it > 0 }?.div(1000.0) ?: Double.NaN
   private var plan: PlaybackPlan? = null
   private var timeline = MediaTimeline()
   private var refused = false
+  private var loggedLiveWindow = false
   private val choices = mutableMapOf<Long, Pair<Tracks.Group, Int>>()
   private val tick = object : Runnable {
     override fun run() { update(); main.postDelayed(this, 250) }
@@ -76,6 +84,13 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
     })
     player.addListener(object : Player.Listener {
       override fun onEvents(player: Player, events: Player.Events) { update() }
+      override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+        if (plan?.live != true || loggedLiveWindow || timeline.isEmpty) return
+        val window = timeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
+        if (window.durationMs <= 0) return
+        loggedLiveWindow = true
+        Log.i("vela-media3", "live window ${window.durationMs / 1000.0}s; initial ${player.currentPosition / 1000.0}s; default ${window.defaultPositionMs / 1000.0}s; speed ${player.playbackParameters.speed}")
+      }
       override fun onRenderedFirstFrame() { state.hasFrame = true; update() }
       override fun onCues(cueGroup: CueGroup) { onSubtitleCues(cueGroup) }
       override fun onTracksChanged(tracks: Tracks) {
@@ -96,17 +111,19 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
     main.post(tick)
   }
 
-  override fun load(url: Uri, plan: PlaybackPlan?, position: Double, loop: Boolean) {
+  override fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean) {
     this.plan = plan
     // Live windows have their own clock; never rebase them or move them to the edge.
     timeline = MediaTimeline(if (plan?.live != true && plan?.selectedPath?.transport == "hls") plan?.selectedPath?.timelineOriginSeconds ?: 0.0 else 0.0)
     if (!preview) Log.i("vela-media3", "media timeline origin ${timeline.origin}s")
-    state.position = position
+    state.position = position ?: 0.0
     refused = false
+    loggedLiveWindow = false
     val builder = MediaItem.Builder().setUri(url)
     // Disable Media3's automatic live offset correction; explicit seeks still work.
     if (plan?.live == true) builder.setLiveConfiguration(
       MediaItem.LiveConfiguration.Builder()
+        .setTargetOffsetMs(18_000)
         .setMinPlaybackSpeed(1f).setMaxPlaybackSpeed(1f).build())
 
     if (plan?.selectedPath?.transport == "hls") builder.setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -123,7 +140,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
         .setLanguage(track.language).setLabel(track.name).build()
     })
     player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-    player.setMediaItem(builder.build(), (timeline.mediaTime(position) * 1000).toLong())
+    player.setMediaItem(builder.build(), position?.let { (timeline.mediaTime(it) * 1000).toLong() } ?: C.TIME_UNSET)
     player.prepare()
   }
 
@@ -160,6 +177,11 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
     state.position = timeline.titleTime(player.currentPosition.coerceAtLeast(0) / 1000.0)
     state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let(timeline::titleTime)
     state.cacheAhead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000.0
+    player.videoDecoderCounters?.let { counters ->
+      counters.ensureUpdated()
+      state.droppedFrames = counters.droppedBufferCount.toLong()
+      state.totalFrames = counters.renderedOutputBufferCount.toLong() + counters.droppedBufferCount
+    }
     player.videoFormat?.let { format ->
       state.videoCodec = format.sampleMimeType
       state.frameRate = format.frameRate.toDouble().takeIf { it > 0 }

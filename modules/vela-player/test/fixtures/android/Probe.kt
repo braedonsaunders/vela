@@ -13,6 +13,27 @@ private fun plan(selected: String = "original", session: String = "one", fallbac
 ))!!
 
 fun main() {
+  for (preview in listOf(false, true)) for (live in listOf(false, true)) {
+    val policy = playbackBuffering(preview, live)
+    check(policy.maximumMs >= policy.minimumMs)
+    check(policy.minimumMs >= policy.startMs && policy.minimumMs >= policy.resumeMs)
+    check(policy.startMs == if (live) 3000 else 500)
+    check(policy.resumeMs == if (live) 5000 else 1000)
+    check(policy.prioritizeTime == live)
+  }
+  check(playbackBuffering(true, true).maximumMs == 20000)
+  check(playbackBuffering(true, false).maximumMs == 5000)
+
+  val livePlan = PlaybackPlan.from(mapOf("sessionId" to "live-window", "revision" to 1, "sourceGeneration" to 1, "seekGeneration" to 1, "selectedPathId" to "live", "channelId" to "channel", "paths" to emptyList<Any>()))!!
+  val windowRecovery = PathRecovery()
+  check(windowRecovery.liveWindowPosition(livePlan, 60.0, 0) == 6.0)
+  check(windowRecovery.liveWindowPosition(livePlan, 60.0, 4999) == null)
+  check(windowRecovery.liveWindowPosition(livePlan, 12.0, 5000) == 3.0)
+  check(windowRecovery.liveWindowPosition(livePlan, 2.0, 10000) == 0.5)
+  check(windowRecovery.liveWindowPosition(livePlan, Double.NaN, 15000) == null)
+  check(windowRecovery.liveWindowPosition(livePlan, 0.0, 15000) == null)
+  check(windowRecovery.liveWindowPosition(plan(), 60.0, 15000) == null)
+
   val shifted = PlanPath.from(mapOf("id" to "converted", "kind" to "transcode", "transport" to "hls", "readiness" to "ready", "timelineOriginSeconds" to 74.0))!!
   val timeline = MediaTimeline(shifted.timelineOriginSeconds)
   check(timeline.mediaTime(74.0) == 0.0) // switching audio must not seek a second 74 seconds

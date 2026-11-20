@@ -37,6 +37,7 @@ internal class PlayerController(
   private var state = PlayerState()
   private var plan: PlaybackPlan? = null
   private var activeSource = ""
+  private var startedLiveSession = ""
   private var lastCommand = -1
   private var pendingSeek: Double? = null
   /** A seek the server applies (its HLS, an extra): sent as a session command, made when its plan arrives. */
@@ -105,7 +106,11 @@ internal class PlayerController(
       report.publish(state, pendingSeek, force = true)
       return
     }
-    start(next, path, url, source)
+    // An initial live join uses the manifest's safe start offset rather than zero
+    // (the oldest segment). Later recovery/reloads must keep explicit positions.
+    val initialLiveJoin = next.live && startedLiveSession != next.sessionId && next.positionSeconds <= 0.0
+    if (next.live) startedLiveSession = next.sessionId
+    start(next, path, url, source, if (initialLiveJoin) null else next.positionSeconds)
   }
 
   fun setServerError(failure: Map<String, Any?>?) {
@@ -171,7 +176,7 @@ internal class PlayerController(
 
   // Playback
 
-  private fun start(plan: PlaybackPlan, path: PlanPath, url: Uri, source: String) {
+  private fun start(plan: PlaybackPlan, path: PlanPath, url: Uri, source: String, position: Double?) {
     if (activeSource != source) { readRetryStarted = 0L; readRetryAttempt = 0 }
     stop()
     activeSource = source
@@ -181,7 +186,7 @@ internal class PlayerController(
     loggedOutput = false
     report.pathId = path.id
     report.backend = if (path.isOriginalFile) "media3-original" else "media3-${path.transport}"
-    val client = Media3Engine(context, ambient)
+    val client = Media3Engine(context, ambient, plan.live)
     engine = client
     state = client.state
     recovering = false
@@ -226,13 +231,24 @@ internal class PlayerController(
     displayFacts = if (path.isOriginalFile) DisplayMatching.facts(path.originalFrameRate) else null
     if (!ambient) host.preferDisplay(displayFacts)
     client.volume(if (ambient || report.muted) 0f else report.volume.toFloat())
-    client.load(url, plan, plan.positionSeconds)
+    client.load(url, plan, position)
     client.play(wantsPlay)
     report.publish(state, null, force = true)
   }
 
   private fun recover(code: Int) {
     val current = plan ?: return
+    if (code == androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+      val window = engine?.liveWindowSeconds ?: Double.NaN
+      val position = recovery.liveWindowPosition(current, window, android.os.SystemClock.elapsedRealtime())
+      val path = current.selectedPath
+      val url = path?.url?.let(MediaAccessStore::resolve)
+      if (position != null && path != null && url != null) {
+        Log.w("vela-media3", "expired live window: resume at oldest + ${position}s of ${window}s, speed 1.0")
+        start(current, path, url, activeSource, position)
+        return
+      }
+    }
     val command = recovery.next(current, state.position)
     if (command != null) {
       recovering = true
@@ -487,7 +503,7 @@ internal class PlayerController(
     val url = path.url?.let(MediaAccessStore::resolve) ?: return
     activeSource = ""
     state.failure = null
-    start(plan, path, url, "${plan.sessionId}:${path.id}:${plan.sourceGeneration}")
+    start(plan, path, url, "${plan.sessionId}:${path.id}:${plan.sourceGeneration}", state.position)
   }
 
   private companion object {
