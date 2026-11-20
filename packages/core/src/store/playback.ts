@@ -6,7 +6,7 @@ import type * as V from '../wire';
 import { hasSubtitleSearch } from '../adapter/media-actions';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
-import { hasEventStream } from '../adapter/capabilities';
+import { hasEventStream, hasLibraryLive } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
@@ -19,7 +19,8 @@ import type { VelaState } from './index';
 export type PlaybackTarget =
   | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string }
   | { kind: 'extra'; id: string }
-  | { kind: 'channel'; id: string };
+  | { kind: 'channel'; id: string }
+  | { kind: 'library-live'; id: string; libraryId: string; tab?: string };
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
 
@@ -116,7 +117,10 @@ export class Playback {
         (target.kind !== 'title' || (current.target.kind === 'title' &&
           current.target.positionSeconds === target.positionSeconds &&
           current.target.mediaSourceId === target.mediaSourceId &&
-          current.target.audioTrackId === target.audioTrackId))) return;
+          current.target.audioTrackId === target.audioTrackId)) &&
+        (target.kind !== 'library-live' || (current.target.kind === 'library-live' &&
+          current.target.libraryId === target.libraryId &&
+          current.target.tab === target.tab))) return;
     const stopping = this.stop();
     const run = {};
     this.run = run;
@@ -159,14 +163,17 @@ export class Playback {
       await this.session.negotiate(api);
       if (this.run !== run) return;
       const position = target.kind === 'title' ? target.positionSeconds : undefined;
-      reply = await api.startPlayback({
-        ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id } : { titleId: target.id }),
-        ...(position !== undefined ? { positionSeconds: position } : {}),
-        ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
-        ...(target.kind === 'title' && target.audioTrackId && !this.recovering ? { audioTrackId: target.audioTrackId } : {}),
-        client: this.session.client,
-        idempotencyKey: intent.key,
-      });
+      if (target.kind === 'library-live') {
+        if (!this.session.features?.libraryLive?.available || !hasLibraryLive(api)) throw new Error('Library live is unavailable');
+        reply = await api.startLibraryLive(target.libraryId, { itemId: target.id, tab: target.tab, liveMode: 'adaptive', client: this.session.client, idempotencyKey: intent.key });
+      } else reply = await api.startPlayback({
+          ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id } : { titleId: target.id }),
+          ...(position !== undefined ? { positionSeconds: position } : {}),
+          ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
+          ...(target.kind === 'title' && target.audioTrackId && !this.recovering ? { audioTrackId: target.audioTrackId } : {}),
+          client: this.session.client,
+          idempotencyKey: intent.key,
+        });
     } catch (error) {
       if (this.run !== run || epoch !== this.session.epoch) return;
       this.failed(intent, error, attempt, preparation);

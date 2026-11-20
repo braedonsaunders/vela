@@ -352,6 +352,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       live: live ? liveView : undefined,
       route,
       entry,
+      library,
       width,
       skinCount: documents.length,
       skinName: resolved.doc.name,

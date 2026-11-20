@@ -3,7 +3,7 @@ import { libraryTabs } from '@vela/core';
 
 /** An explicit server list, including an empty list, always wins over legacy views. */
 export function toolbarTabs(page: LibraryPage | undefined) {
-  return libraryTabs(page?.model?.tabs) ?? [
+  return libraryTabs(page?.model?.tabs)?.filter(tab => tab.kind !== 'live' || page?.liveAvailable) ?? [
     ...(page?.canRecommend ? [{ id: 'recommended', label: 'Recommended' }] : []),
     { id: 'library', label: 'Library' },
     ...(page?.extras?.collectionsAvailable ? [{ id: 'collections', label: 'Collections' }] : []),
@@ -12,5 +12,5 @@ export function toolbarTabs(page: LibraryPage | undefined) {
 }
 
 export function tabSearchEnabled(tab: { kind: string; search?: boolean } | undefined) {
-  return !!tab && (tab.search ?? (tab.kind === 'collections' || tab.kind === 'people'));
+  return !!tab && (tab.search ?? (tab.kind === 'collections' || tab.kind === 'people' || tab.kind === 'live'));
 }

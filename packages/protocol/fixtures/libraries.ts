@@ -13,8 +13,8 @@ export const libraries: Library[] = [
 ].map(l => {
   const kind = l.kind as Library['kind'];
   const members = l.id === 'shows' ? shows : l.id === 'documentaries' ? movies.filter(t => t.genres.includes('Documentary')) : l.id === 'all' ? titles : movies;
-  if (l.id === 'videos') return { ...l, kind, presentation: { card: 'landscape' }, tabs: [
-    { id: 'discover', label: 'For you', kind: 'recommended' }, { id: 'performers', label: 'Performers', kind: 'people', facet: 'creator', order: 'name' }, { id: 'videos', label: 'All videos', kind: 'library' }, { id: 'popular-cast', label: 'Popular cast', kind: 'people', facet: 'creator', order: 'count' }, { id: 'topics', label: 'Topics', kind: 'collections', facet: 'topic', order: 'name' }, { id: 'popular-topics', label: 'Popular topics', kind: 'collections', facet: 'topic', order: 'count' }],
+  if (l.id === 'videos') return { ...l, kind, dateDisplay: 'date', presentation: { card: 'landscape' }, tabs: [
+    { id: 'discover', label: 'For you', kind: 'recommended' }, { id: 'performers', label: 'Performers', kind: 'people', facet: 'creator', order: 'name' }, { id: 'videos', label: 'All videos', kind: 'library' }, { id: 'popular-cast', label: 'Popular cast', kind: 'people', facet: 'creator', order: 'count' }, { id: 'topics', label: 'Topics', kind: 'collections', facet: 'topic', order: 'name' }, { id: 'popular-topics', label: 'Popular topics', kind: 'collections', facet: 'topic', order: 'count' }, { id: 'live-now', label: 'Live now', kind: 'live', card: 'landscape', search: true, searchPlaceholder: 'Search live streams' }],
     browse: { sorts: [{ id: 'index', directions: ['asc'] }, { id: 'title', directions: ['asc', 'desc'] }], defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'topic', label: 'Topic', type: 'strings', multi: true }, { id: 'creator', label: 'Creator', type: 'people', multi: true }, { id: 'length', label: 'Length', type: 'duration', multi: true }] } } } as Library;
   return { ...l, kind, presentation: { card: 'poster' }, tabs: kind === 'live' ? [{ id: 'library', label: 'Channels', kind: 'library' }] : [
@@ -29,5 +29,9 @@ export const libraries: Library[] = [
 export function libraryEntries(id: string): RowEntry[] {
   if (id === 'live') return channels.map(channel => ({ id: `live:${channel.id}`, kind: 'channel', channel, receiptToken: '' }));
   const items = id === 'shows' ? shows : id === 'documentaries' ? movies.filter(t => t.genres.includes('Documentary')) : id === 'all' ? titles : movies;
-  return items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title: id === 'videos' ? { ...title, artwork: title.artwork.filter(a => a.kind === 'backdrop') } : { ...title, airDate: `${title.year ?? 2020}-06-15` }, receiptToken: '' }));
+  return items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title: {
+    ...title,
+    airDate: `${title.year ?? 2020}-06-15`,
+    ...(id === 'videos' ? { artwork: title.artwork.filter(a => a.kind === 'backdrop') } : {}),
+  }, receiptToken: '' }));
 }

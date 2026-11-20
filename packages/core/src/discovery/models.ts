@@ -1,6 +1,6 @@
 // Projections of the wire's discovery data (home, rows, titles) into the display models of
 // models.ts: labels formatted for the current locale, artwork sized for each slot.
-import type { ArtworkRef, Bootstrap, Row as WireRow, RowEntry, Title, TitleDetail } from '../wire';
+import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, Title, TitleDetail } from '../wire';
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
 import { clock, minute, msg, number, percent, plural, localeContext } from '../i18n';
@@ -41,7 +41,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const position = title.watch?.positionSeconds ?? 0;
   const durationLabel = duration ? minute(Math.round(duration / 60)) : '';
   const yearLabel = title.year ? year(title.year) : '';
-  return {
+  return withDateDisplay({
     id: title.id,
     kind: title.kind,
     name: title.name,
@@ -77,7 +77,34 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     facts: [title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, title.rating ?? '', durationLabel].filter(Boolean).join(' · '),
     ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode'),
     receipt,
-  };
+  }, title.dateDisplay);
+}
+
+/** One shared library date rule for every card surface. Invalid/missing full dates fall back to year. */
+export function withDateDisplay(value: Card, display: 'year' | 'date' | undefined): Card {
+  if (display !== 'date') return value;
+  const label = /^\d{4}-\d{2}-\d{2}$/.test(value.airDate) ? value.airDate : value.year > 0 ? year(value.year) : '';
+  return { ...value, yearLabel: label, facts: [label, value.rating, value.durationLabel].filter(Boolean).join(' · ') };
+}
+
+export function detailDateDisplay(value: DetailModel, display: 'year' | 'date' | undefined): DetailModel {
+  if (display !== 'date') return value;
+  const map = (item: Card) => withDateDisplay(item, display);
+  return { ...value, title: value.title.map(map), seasons: value.seasons.map(map), episodes: value.episodes.map(map), nextUp: value.nextUp?.map(map),
+    related: value.related.map(row => ({ ...row, items: row.items.map(map) })) };
+}
+
+/** A content-library live item uses ordinary static landscape card rendering, never a channel/guide card. */
+export function libraryLiveCard(item: LibraryLiveItem, images?: Images, artWidth = 2560): Card {
+  const art = pictures(item.artwork, images, artWidth, Math.min(artWidth, CARD_BACKDROP_WIDTH));
+  const model = plainCard(item.id, 'library-live', item.title, '', art, '');
+  model.poster = model.thumbnail || model.backdrop || model.poster;
+  model.summary = item.subtitle ?? '';
+  model.contextParts = item.subtitle ? [{ label: item.subtitle, select: '' }] : [];
+  model.episodeContext = item.subtitle ?? '';
+  model.genres = item.tags ?? [];
+  model.facts = [item.badge, item.viewers === undefined ? '' : `${number(item.viewers)} viewers`, ...(item.tags ?? []).slice(0, 1)].filter(Boolean).join(' · ');
+  return model;
 }
 
 /** A row card's backdrop is never wider than this many pixels, whatever the display: at the
@@ -200,6 +227,7 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     rows: data.rows.filter(row => row.items.length > 0).map(row => feedRow(row, images, artWidth)),
     nextCursor: data.nextCursor ?? '',
     liveAvailable: features.liveTV.available,
+    libraryLiveAvailable: features.libraryLive?.available ?? false,
     aiAvailable: features.aiSearch.available,
     descriptiveAvailable: features.descriptiveSearch.available,
     trailerPreviewAvailable: features.trailerPreview?.available ?? false,

@@ -225,7 +225,7 @@ const makeLibrary = (flowHeader: boolean): Node => ({
     { type: 'use', template: 'velaLibraryAlternative' },
     {
       type: 'box',
-      when: [ready, is('library.view', 'library')],
+      when: [ready, is('library.catalogView', 'library')],
       style: {
         position: 'relative',
         display: 'flex',

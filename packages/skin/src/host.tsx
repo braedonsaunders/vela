@@ -25,6 +25,9 @@ export interface SkinHost {
   setPager(rowId: string, state: { atStart: boolean; atEnd: boolean }): void;
   /** Ask for the next page of a row, home, a library or a collection (the `sentinel` widget). */
   loadMore(on: 'row' | 'home' | 'library' | 'collection', id: string): void;
+  /** Native touch pull-to-refresh for the current route, when it has a refreshable answer. */
+  refresh?(): void;
+  refreshing?: boolean;
   /** Where the shell draws the route (slot `children`). */
   children?: ReactNode;
 }

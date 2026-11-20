@@ -78,7 +78,7 @@ export function LibraryToolbar(props: WidgetProps) {
   const browse = (page?.view ?? 'library') === 'library';
   const select = (params: Record<string, string>, width?: number) => <ToolbarField width={width ?? (Platform.OS === 'web' ? undefined : 180)}><Select ctx={props.ctx} params={params} /></ToolbarField>;
   const filters = <>
-    {browse ? <LibraryFacets key={`${model?.id}:${page?.tabId}:${browse}`} /> : <TabSearch key={`${model?.id}:${page?.tabId}`} />}
+    {browse ? <LibraryFacets key={`${model?.id}:${page?.tabId}:${browse}`} /> : <><TabSearch key={`${model?.id}:${page?.tabId}`} />{page?.view === 'live' && <LiveFilters />}</>}
     {browse && model && <>
       {model.kinds.length > 1 && select({ options: 'library.kinds', action: 'libraryFilter', arg: 'kind|{value}', none: 'All kinds', label: 'Kind' })}
       {model.canPlayed && select({ options: 'library.played', choices: '|All;false|Unwatched;true|Watched', action: 'libraryFilter', arg: 'played|{value}', label: 'Watched filter' })}
@@ -97,6 +97,15 @@ export function LibraryToolbar(props: WidgetProps) {
   return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
     {compact ? strip(<>{!tabsInShell && <LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />}{filters}{sort}</>) : <>{!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}</>}
     {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
+  </View>;
+}
+
+function LiveFilters() {
+  const host = useHost();
+  const page = host.env.library;
+  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+    {page?.liveFilters?.map(filter => <Button key={filter.key} label={filter.label} role="checkbox" selected={page.liveFilter === filter.key}
+      onPress={() => host.dispatch('libraryFilter', `liveFilter|${page.liveFilter === filter.key ? '' : filter.key}`)} />)}
   </View>;
 }
 

@@ -225,9 +225,9 @@ export class Home {
       let cursor: string | undefined;
       for (let n = 0; n < LIBRARY_PAGES; n++) {
         const page = await connection.adapter.libraries({ cursor, limit: 100 });
-        for (const { id, name, kind, artwork } of page.items) {
+        for (const { id, name, kind, artwork, dateDisplay = 'year' } of page.items) {
           const image = artwork.find(a => a.kind === 'backdrop');
-          items.push({ id, name, kind, backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
+          items.push({ id, name, kind, dateDisplay, backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
         }
         if (page.continuation === 'exhausted') {
           const first = items.find(item => item.kind !== 'live');

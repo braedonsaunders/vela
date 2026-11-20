@@ -32,6 +32,8 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /bootstrap | — | Bootstrap |
 | GET | /libraries | LibrariesQuery (query) | Page<Library> |
 | GET | /libraries/:id/items | LibraryBrowseQuery (query) | LibraryContents |
+| GET | /libraries/:id/live | LibraryLiveQuery (query) | LibraryLiveContents |
+| POST | /libraries/:id/live/play | LibraryLivePlaybackRequest | PlaybackPlan |
 | GET | /rows | RowsQuery (query) | Page<Row> |
 | GET | /rows/:id | cursor, limit (query) | Row |
 | GET | /collections/:id | cursor, limit (query) | CollectionContents |
@@ -278,6 +280,19 @@ plus the library and effective sort/direction. Pages default50, maximum100; no
 exact count is required. Preserve host order and issued receipts. Empty
 receiptToken means no receipt was issued: clients skip interaction reporting for
 that entry rather than manufacturing attribution.
+
+`Library.dateDisplay` defaults to `year`; `date` asks every surface scoped to that
+library to show `Title.airDate` as `YYYY-MM-DD`, falling back to the numeric year.
+`Title.dateDisplay: "date"` carries the same rule through rows, detail and search
+answers that are no longer accompanied by their library declaration.
+
+A declared `LibraryTab.kind: "live"` is a content-library catalogue, not Live TV.
+It is available only with `features.libraryLive`; older servers and libraries
+without such a tab expose no UI. `GET /libraries/:id/live` accepts the declared
+tab key, text query, one advertised filter key, opaque cursor and limit, and returns
+static artwork cards plus the filter chips for that answer. `POST
+/libraries/:id/live/play` resolves one item into the ordinary live PlaybackPlan and
+session lifecycle. It does not create guide channels, programmes or EPG state.
 
 Library.browse advertises only implemented sorts/directions and filters, with
 defaults. Optional filters.genres lists actual offered choices in server order;

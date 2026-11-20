@@ -16,7 +16,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -443,6 +443,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
+        refreshControl={route && host.refresh && Platform.OS !== 'web' && !Platform.isTV ? <RefreshControl refreshing={!!host.refreshing} onRefresh={host.refresh} /> : undefined}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         {...a11y}>
         {content}

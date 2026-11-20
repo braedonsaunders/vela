@@ -157,7 +157,8 @@ export class Search {
       const images = await connection.images();
       if (signal.aborted || !this.current(generation) || result.generation !== generation) return;
       const live = liveSearch(result.live, images, Date.now());
-      const items = result.items.map(title => card(title, '', images, this.artWidth()));
+      const dateDisplay = this.dateDisplay(options.library);
+      const items = result.items.map(title => card({ ...title, dateDisplay: title.dateDisplay ?? (dateDisplay === 'date' ? 'date' : undefined) }, '', images, this.artWidth()));
       this.patch('fast', { status: 'ready', items: cursor ? [...this.box.get().search.fast.items, ...items] : items, nextCursor: result.nextCursor, loadingMore: false, error: '', ...live });
     } catch (error) {
       if (this.current(generation)) this.patch('fast', { loadingMore: false, status: 'failed', error: message(error) });
@@ -179,7 +180,8 @@ export class Search {
       const result = await api.searchByDescription({ ...options, query, generation, cursor, idempotencyKey: this.session.key() }, signal);
       const images = await connection.images();
       if (signal.aborted || !this.current(generation) || result.generation !== generation) return;
-      const items = result.items.map(title => card(title, '', images, this.artWidth()));
+      const dateDisplay = this.dateDisplay(options.library);
+      const items = result.items.map(title => card({ ...title, dateDisplay: title.dateDisplay ?? (dateDisplay === 'date' ? 'date' : undefined) }, '', images, this.artWidth()));
       this.patch('descriptive', { nextCursor: result.nextCursor, loadingMore: false });
       this.described(query, generation, result.descriptive, cursor ? [...this.box.get().search.descriptive.items, ...items] : items, cursor);
     } catch (error) {
@@ -218,6 +220,10 @@ export class Search {
       if (this.current(generation)) run();
     }, ms);
     this.timers.add(timer);
+  }
+
+  private dateDisplay(library: string | undefined): 'year' | 'date' {
+    return this.box.get().libraries.value?.find(item => item.id === library)?.dateDisplay ?? 'year';
   }
 
   private stopTimers(): void {

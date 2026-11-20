@@ -15,6 +15,7 @@ const collections = [
 const genres = [['Science Fiction', 'Adventure'], ['Romance', 'Comedy'], ['Thriller', 'Mystery'], ['Documentary', 'Nature'], ['Drama'], ['Drama', 'Mystery']];
 export const titles: Title[] = collections.flatMap(([_, ...names], row) => names.map((name, n): Title => ({
   id: `title-${row + 1}-${n + 1}`, kind: 'movie', name, year: 2012 + (row * 3 + n) % 14,
+  airDate: `${2012 + (row * 3 + n) % 14}-06-15`,
   summary: [
     'A remote research crew follows a faint transmission that challenges everything they know about the journey home.',
     'An unexpected meeting changes the plans of two travellers, one long afternoon and a city full of small surprises.',
@@ -26,7 +27,7 @@ export const titles: Title[] = collections.flatMap(([_, ...names], row) => names
   artwork: [artwork(`title-${row + 1}-${n + 1}`), artwork(`title-${row + 1}-${n + 1}`, 'backdrop')],
   ...(row === 0 && n < 3 ? { watch: { positionSeconds: 12 + n * 8, played: false, favorite: n === 0, watchlisted: false } } : {}),
 })));
-const show: Title = { id: 'show-meridian', kind: 'show', name: 'Meridian Station', summary: 'At a remote coastal weather station, a new team maps the strange rhythms of an isolated island.', year: 2025, genres: ['Drama', 'Mystery'], rating: 'TV-14', artwork: [artwork('show-meridian'), artwork('show-meridian', 'backdrop')] };
+const show: Title = { id: 'show-meridian', kind: 'show', name: 'Meridian Station', summary: 'At a remote coastal weather station, a new team maps the strange rhythms of an isolated island.', year: 2025, airDate: '2025-06-15', genres: ['Drama', 'Mystery'], rating: 'TV-14', artwork: [artwork('show-meridian'), artwork('show-meridian', 'backdrop')] };
 export const seasons: Title[] = [1, 2].map(n => ({ ...show, id: `season-meridian-${n}`, kind: 'season', name: `Season ${n}`, showId: show.id, showName: show.name, seasonNumber: n }));
 // Match Ether: episodes identify their season by number; the show includes only its first season.
 export const episodes: Title[] = seasons.flatMap(s => Array.from({ length: 24 }, (_, i) => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'][i % 6]!).map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, showName: show.name, seasonNumber: s.seasonNumber, episodeNumber: i + 1, airDate: `2025-0${s.seasonNumber}-${String(i + 1).padStart(2, '0')}`, durationSeconds: 180, watch: { positionSeconds: i === 1 ? 68 : 0, played: i === 0, favorite: false, watchlisted: false } })));

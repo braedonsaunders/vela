@@ -24,7 +24,7 @@ const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?
 const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
 const labPreset = process.env.VELA_MOCK_LAB === '1';
 const libraries: V.Library[] = labPreset ? [
@@ -33,9 +33,15 @@ const libraries: V.Library[] = labPreset ? [
   { ...fixtureLibraries[1]!, id: '4', name: 'Anime Shows', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
 ] : fixtureLibraries;
 const libraryEntries = (id: string) => fixtureLibraryEntries(labPreset ? id === '1' ? 'movies' : id === '2' || id === '4' ? 'shows' : id : id);
+const libraryLiveItems = Array.from({ length: 75 }, (_, index): V.LibraryLiveItem => ({
+  id: `stream-${index + 1}`, title: ['Conference keynote', 'City harbour camera', 'Creator Q&A'][index % 3]!,
+  subtitle: ['Main stage', 'Waterfront', 'Community stream'][index % 3]!, badge: index % 2 ? 'Public webcam' : 'LIVE',
+  viewers: 320 + index * 137, tags: [index % 2 ? 'Travel' : 'Technology'], live: true, artwork: [],
+}));
 const visibleLibraries: V.Library[] = process.env.VELA_MOCK_OLD === '1' ? libraries.map(library => {
+  const { dateDisplay: _dateDisplay, ...legacy } = library;
   const { collectionId: _collectionId, ...filters } = library.browse.filters;
-  return { ...library, tabs: undefined, presentation: undefined, browse: { ...library.browse, filters: { ...filters, facets: undefined } } };
+  return { ...legacy, tabs: undefined, presentation: undefined, browse: { ...library.browse, filters: { ...filters, facets: undefined } } };
 }) : libraries;
 interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; client?: V.ClientCapabilities }
 const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
@@ -233,6 +239,29 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const visible = libraryId ? libraryEntries(libraryId) : libraryEntries('all');
     const items: V.RowEntry[] = (performer ? visible.filter(e => e.kind === 'title').slice(0, performerIndex + 1) : visible.filter(e => e.kind === 'title' && e.title.id === titles[0]!.id)).map(e => ({ ...e, receiptToken: '', role: 'Commander' }));
     return cached(req, page(items, url, g, `person:${personMatch[1]}:${libraryId ?? ''}`), g.id);
+  }
+  const libraryLiveMatch = /^\/libraries\/([^/]+)\/live(\/play)?$/.exec(path);
+  if (libraryLiveMatch) {
+    const library = visibleLibraries.find(l => l.id === libraryLiveMatch[1]);
+    const tab = library?.tabs?.find(candidate => candidate.kind === 'live' && (!url.searchParams.get('tab') || candidate.id === url.searchParams.get('tab')));
+    if (!library || !tab) fail('not-found', 'library_live_not_found', 'Library live tab not found');
+    if (method === 'GET' && !libraryLiveMatch[2]) {
+      const search = (url.searchParams.get('query') ?? '').trim().toLowerCase();
+      const filter = url.searchParams.get('filter') ?? '';
+      if (search.length > 256 || filter.length > 128) fail('request', 'invalid_library_live_query', 'Invalid live library query');
+      let items = libraryLiveItems.filter(item => !search || `${item.title} ${item.subtitle ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase().includes(search));
+      if (filter === 'featured') items = items.filter((_, index) => index % 2 === 0);
+      else if (filter) fail('request', 'invalid_library_live_filter', 'Unknown live library filter');
+      items = items.map((item, index) => ({ ...item, artwork: [signedArtwork(g, titles[index % titles.length]!.id, 'thumb')] }));
+      return cached(req, { library, filters: [{ key: 'featured', label: 'Featured' }], ...page(items, url, g, `library-live:${library.id}:${tab.id}:${search}:${filter}`, 6) } satisfies V.LibraryLiveContents, g.id);
+    }
+    if (method === 'POST' && libraryLiveMatch[2]) {
+      if (!body.client || !libraryLiveItems.some(item => item.id === body.itemId) || body.tab && body.tab !== tab.id) fail('request', 'invalid_library_live_play', 'Invalid live library playback request');
+      const s = await createSession(g.id, { channelId: channels[0]!.id, client: body.client, liveMode: body.liveMode, idempotencyKey: body.idempotencyKey });
+      delete s.plan.channelId;
+      Object.assign(s.plan, { libraryId: library.id, liveItemId: body.itemId, title: libraryLiveItems.find(item => item.id === body.itemId)!.title });
+      return json(s.plan);
+    }
   }
   const libraryMatch = /^\/libraries\/([^/]+)\/items$/.exec(path);
   if (method === 'GET' && libraryMatch) {

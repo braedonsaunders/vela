@@ -17,8 +17,17 @@ test('cache identity includes search and facet OR sets independent of order', ()
 test('tabs preserve labels, identity and order, skipping unknown kinds', () => {
   expect(libraryTabs(undefined)).toBeUndefined();
   expect(libraryTabs([])).toEqual([]);
-  const tabs = [{ id: 'custom', label: 'Videos', kind: 'library' }, { id: 'future', label: '?', kind: 'future' }, { id: 'for-you', label: 'For you', kind: 'recommended' }];
-  expect(libraryTabs(tabs as any)?.map(t => [t.id, t.label])).toEqual([['custom', 'Videos'], ['for-you', 'For you']]);
+  const tabs = [{ id: 'custom', label: 'Videos', kind: 'library' }, { id: 'future', label: '?', kind: 'future' }, { id: 'for-you', label: 'For you', kind: 'recommended' }, { id: 'streams', label: 'Live now', kind: 'live' }];
+  expect(libraryTabs(tabs as any)?.map(t => [t.id, t.label])).toEqual([['custom', 'Videos'], ['for-you', 'For you'], ['streams', 'Live now']]);
+});
+
+test('the shared library date rule uses ISO full dates and falls back to year', async () => {
+  const { card } = await import('../src/discovery/models');
+  const title = { id: 'dated', kind: 'movie' as const, name: 'Dated', summary: '', genres: [], artwork: [], year: 2026, airDate: '2026-11-19' };
+  expect(card(title).yearLabel).toBe('2026');
+  expect(card({ ...title, dateDisplay: 'date' }).yearLabel).toBe('2026-11-19');
+  expect(card({ ...title, airDate: undefined, dateDisplay: 'date' }).yearLabel).toBe('2026');
+  expect(card({ ...title, airDate: 'not-a-date', dateDisplay: 'date' }).facts).toBe('2026');
 });
 test('unknown presentation safely uses posters', () => {
   expect(libraryCard('future')).toBe('poster');

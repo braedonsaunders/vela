@@ -5,12 +5,12 @@ import type * as V from '../wire';
 import { libraryCardArtwork } from '../library-presentation';
 import { hasTitleManagement } from '../adapter/media-actions';
 import { capabilitiesOf } from '../adapter/advertise';
-import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
+import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
 import { artworkURL, type Images } from '../discovery/artwork';
-import { detailModel, entry, feedRow } from '../discovery/models';
+import { detailModel, entry, feedRow, libraryLiveCard, withDateDisplay } from '../discovery/models';
 import { detailCard, detailWatched, recorded, type Watched } from '../discovery/progress';
-import type { Card, CollectionModel, DetailModel, LibraryExtras, LibraryModel, Row } from '../models';
+import type { Card, CollectionModel, DetailModel, LibraryExtras, LibraryLiveModel, LibraryModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
 import { msg } from '../i18n';
 import { PendingTitles } from './pending';
@@ -76,8 +76,26 @@ export class Catalogue {
     if (!id || !hasPersonFilmography(adapter)) throw new Error('Person filmography is unavailable');
     const result = await adapter.personTitles(id, libraryId, cursor);
     const images = await connection.images();
-    const items = result.items.map(item => entry(item, images, this.artWidth()));
+    const display = this.dateDisplay(libraryId);
+    const items = result.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), display));
     return { items, cursor: result.nextCursor };
+  }
+  private dateDisplay(id?: string): 'year' | 'date' {
+    if (!id) return 'year';
+    const state = this.box.get();
+    return Object.values(state.library ?? {}).find(view => view.value?.id === id)?.value?.dateDisplay
+      ?? state.libraries?.value?.find(library => library.id === id)?.dateDisplay ?? 'year';
+  }
+
+  async libraryLive(id: string, tab: string, search = '', filter = '', cursor?: string): Promise<LibraryLiveModel> {
+    const connection = await this.session.ready();
+    const adapter = connection.adapter;
+    const available = this.session.features?.libraryLive?.available === true;
+    if (!available || !hasLibraryLive(adapter)) throw new Error('Library live is unavailable');
+    const result = await adapter.libraryLive(id, { tab, query: search || undefined, filter: filter || undefined, cursor, limit: 50 });
+    const images = await connection.images();
+    return { items: result.items.map(item => libraryLiveCard(item, images, this.artWidth())), filters: result.filters,
+      cursor: result.nextCursor ?? '', continuation: result.continuation };
   }
   /** Available before a library's asynchronous rows arrive. */
   get libraryRecommendationsAvailable(): boolean {
@@ -218,24 +236,26 @@ export class Catalogue {
     if (!hasLibraryRecommendations(adapter)) return undefined;
     const images = connection.images();
     const reading = adapter.libraryRows(id, kind);
+    const display = this.dateDisplay(id);
+    const row = (value: V.Row, sized: Images) => { const model = feedRow(value, sized, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; };
     if (onRows) void Promise.all([reading, images]).then(([value, sized]) => onRows({
-      recommendationsAvailable: true, collectionsAvailable: true, rows: value.map(row => feedRow(row, sized, this.artWidth())),
+      recommendationsAvailable: true, collectionsAvailable: true, rows: value.map(value => row(value, sized)),
       rowsLoad: 'ready', collectionsLoad: 'loading', genresLoad: 'loading',
       collections: [], collectionCursor: '', genres: [], failed: false,
     }), () => {});
     const [rows, collections, genres] = await Promise.allSettled([reading, adapter.libraryCollections(id, undefined, tab, search), adapter.libraryGenres(id)]);
-    return this.extras(rows, collections, genres, await images);
+    return this.extras(rows, collections, genres, await images, display);
   }
 
-  private extras(rows: PromiseSettledResult<V.Row[]>, collections: PromiseSettledResult<V.Page<V.RowEntry>>, genres: PromiseSettledResult<{ id: string; label: string }[]>, images: Images): LibraryExtras {
+  private extras(rows: PromiseSettledResult<V.Row[]>, collections: PromiseSettledResult<V.Page<V.RowEntry>>, genres: PromiseSettledResult<{ id: string; label: string }[]>, images: Images, display: 'year' | 'date'): LibraryExtras {
     return {
       rowsLoad: rows.status === 'fulfilled' ? 'ready' : 'failed',
       collectionsLoad: collections.status === 'fulfilled' ? 'ready' : 'failed',
       genresLoad: genres.status === 'fulfilled' ? 'ready' : 'failed',
       recommendationsAvailable: true,
       collectionsAvailable: true,
-      rows: rows.status === 'fulfilled' ? rows.value.map(row => feedRow(row, images, this.artWidth())) : [],
-      collections: collections.status === 'fulfilled' ? collections.value.items.map(item => entry(item, images, this.artWidth())) : [],
+      rows: rows.status === 'fulfilled' ? rows.value.map(row => { const model = feedRow(row, images, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; }) : [],
+      collections: collections.status === 'fulfilled' ? collections.value.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), display)) : [],
       collectionCursor: collections.status === 'fulfilled' ? collections.value.nextCursor ?? '' : '',
       genres: genres.status === 'fulfilled' ? genres.value : [],
       failed: [rows, collections, genres].some(result => result.status === 'rejected'),
@@ -246,13 +266,15 @@ export class Catalogue {
     const connection = await this.session.ready();
     if (!hasLibraryRecommendations(connection.adapter)) return { items: [], cursor: '' };
     const [page, images] = await Promise.all([connection.adapter.libraryCollections(id, cursor, tab, search), connection.images()]);
-    return { items: page.items.map(item => entry(item, images, this.artWidth())), cursor: page.nextCursor ?? '' };
+    return { items: page.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), this.dateDisplay(id))), cursor: page.nextCursor ?? '' };
   }
 
-  async moreLibraryRow(id: string, cursor: string): Promise<Row> {
+  async moreLibraryRow(id: string, cursor: string, libraryId?: string): Promise<Row> {
     const connection = await this.session.ready();
     const data = await connection.adapter.row(id, cursor);
-    return feedRow(data, await connection.images(), this.artWidth());
+    const row = feedRow(data, await connection.images(), this.artWidth());
+    const display = this.dateDisplay(libraryId);
+    return { ...row, items: row.items.map(item => withDateDisplay(item, display)) };
   }
 
   /** One library view, `pages` pages deep (100 items a page). A background revisit
@@ -360,7 +382,7 @@ function libraryModel(
   const filters = library.browse.filters;
   const image = library.artwork.find(a => a.kind === 'backdrop');
   const cards: Card[] = items.map(item => {
-    const card = entry(item, images, artWidth);
+    const card = withDateDisplay(entry(item, images, artWidth), library.dateDisplay);
     return libraryCardArtwork(card, library.presentation?.card);
   });
   return {
@@ -372,6 +394,7 @@ function libraryModel(
     id: library.id,
     name: library.name,
     kind: library.kind,
+    dateDisplay: library.dateDisplay ?? 'year',
     backdrop: image ? artworkURL(image, artWidth, Math.ceil(artWidth * 9 / 16), images) ?? '' : '',
     sorts: library.browse.sorts.map(s => ({ id: s.id, label: msg(`library.sort.${s.id}`), directions: s.directions })),
     sort: result.sort,

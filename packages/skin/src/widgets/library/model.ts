@@ -2,13 +2,17 @@
 // on show and whether a read is under way. The app builds these from core's store; documents
 // read them through the library vocabulary.
 import type { Choice, CollectionModel, LibraryExtras, LibraryModel } from '@vela/core';
+import type { LibraryLiveFilter } from '../../../../protocol/types';
 
-export type LibraryView = 'recommended' | 'library' | 'collections' | 'people' | 'genres';
+export type LibraryView = 'recommended' | 'library' | 'collections' | 'people' | 'genres' | 'live';
 
 export interface LibraryPage {
   canRecommend?: boolean;
+  liveAvailable?: boolean;
   tabId?: string;
   tabQuery?: string;
+  liveFilter?: string;
+  liveFilters?: LibraryLiveFilter[];
   facetTitle?: string;
   view?: LibraryView;
   /** Explicit URL selection; an initially arriving server view is not a tab transition. */

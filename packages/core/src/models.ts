@@ -89,6 +89,7 @@ export interface HomeModel {
   rows: Row[];
   nextCursor: string;
   liveAvailable: boolean;
+  libraryLiveAvailable: boolean;
   aiAvailable: boolean;
   descriptiveAvailable: boolean;
   trailerPreviewAvailable: boolean;
@@ -149,6 +150,7 @@ export interface Destination {
   id: string;
   name: string;
   kind: string;
+  dateDisplay: 'year' | 'date';
   backdrop: string;
 }
 
@@ -173,6 +175,7 @@ export interface LibraryModel {
   id: string;
   name: string;
   kind: V.Library['kind'];
+  dateDisplay: 'year' | 'date';
   backdrop: string;
   sorts: SortChoice[];
   sort: V.LibrarySort;
@@ -192,6 +195,13 @@ export interface LibraryModel {
   more: boolean;
   /** How many pages the items fill (the next read asks for one more). */
   pages: number;
+}
+
+export interface LibraryLiveModel {
+  items: Card[];
+  filters: V.LibraryLiveFilter[];
+  cursor: string;
+  continuation: V.LibraryLiveContents['continuation'];
 }
 
 /** Server-specific library sections, absent when the server has no scoped operations. */

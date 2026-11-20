@@ -67,6 +67,20 @@ describe('EtherAdapter', () => {
     expect(seen[1]!.url.pathname).toBe('/vela/v0/titles/a%2Fb');
   });
 
+  test('library live list and play preserve the agreed route and wire fields', async () => {
+    const list = { library: { id: 'creator' }, items: [{ id: 's1', title: 'Finals', live: true, artwork: [] }], filters: [{ key: 'featured', label: 'Featured' }], continuation: 'exhausted' };
+    const plan = { sessionId: 'live-session', libraryId: 'creator', liveItemId: 's1', live: { mode: 'adaptive' } };
+    const seen = routeFetch({
+      'GET /vela/v0/libraries/creator/live': list,
+      'POST /vela/v0/libraries/creator/live/play': plan,
+    });
+    const adapter = ether();
+    expect(await adapter.libraryLive('creator', { tab: 'live-now', query: 'finals', filter: 'featured', cursor: 'next', limit: 50 })).toEqual(list as never);
+    expect(await adapter.startLibraryLive('creator', { itemId: 's1', tab: 'live-now', liveMode: 'adaptive', client: {} as never, idempotencyKey: 'play-live' })).toEqual(plan as never);
+    expect(Object.fromEntries(seen[0]!.url.searchParams)).toEqual({ tab: 'live-now', query: 'finals', filter: 'featured', cursor: 'next', limit: '50' });
+    expect(seen[1]!.body).toMatchObject({ itemId: 's1', tab: 'live-now', liveMode: 'adaptive', idempotencyKey: 'play-live' });
+  });
+
   test('artwork refresh skips the old ETag and replaces the cached bootstrap grants', async () => {
     let calls = 0;
     const seen = routeFetch({ 'GET /vela/v0/bootstrap': () => {

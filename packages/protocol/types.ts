@@ -31,7 +31,7 @@ export interface ServerCapabilities {
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   plexAccountSignIn?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -61,7 +61,7 @@ export interface TitleRating { source: string; kind: 'critic' | 'audience'; valu
 export interface ThemeMusic { url: string; expiresAt: Timestamp; durationSeconds?: number;
   /** Measured integrated loudness in LUFS; omitted when unmeasured. */ loudness?: number }
 export interface Title {
-  id: ID; kind: TitleKind; name: string; summary: string; year?: number; /** Original air date, YYYY-MM-DD. */ airDate?: string; genres: string[];
+  id: ID; kind: TitleKind; name: string; summary: string; year?: number; /** Original air/release date, YYYY-MM-DD. */ airDate?: string; dateDisplay?: 'date'; genres: string[];
   durationSeconds?: number; rating?: string; ratings?: TitleRating[]; artwork: ArtworkRef[]; watch?: WatchState; themeMusic?: ThemeMusic;
   showId?: ID; showName?: string; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
 }
@@ -163,7 +163,7 @@ export interface TrickplayMetadata {
   /** Monotonic within the plan's sourceGeneration; changes when published sheets change. */
   revision: number;
 }
-export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; purpose?: 'playback' | 'preview';
+export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; libraryId?: ID; liveItemId?: ID; title?: string; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   paths: PlaybackPath[]; selectedPathId: ID; audioTracks: Track[]; subtitleTracks: Track[];
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
@@ -223,7 +223,7 @@ export interface CollectionContents extends Page<RowEntry> { collection: Collect
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people'; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
+export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }
@@ -233,13 +233,18 @@ export interface LibraryBrowseOptions {
   /** Boolean fields declare support; kind lists supported values. */
   filters: { facets?: LibraryFacet[]; kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean; collectionId?: boolean };
 }
-export interface Library { presentation?: { card: LibraryCard }; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
+export interface Library { presentation?: { card: LibraryCard }; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }
 export interface LibraryBrowseQuery extends LibrariesQuery {
   query?: string; facets?: Record<string, string[]>;
   sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean; collectionId?: ID;
 }
 export interface LibraryContents extends Page<RowEntry> { library: Library; sort: LibrarySort; direction: SortDirection }
+export interface LibraryLiveItem { id: ID; title: string; subtitle?: string; badge?: string; viewers?: number; tags?: string[]; live?: boolean; artwork: ArtworkRef[] }
+export interface LibraryLiveFilter { key: string; label: string }
+export interface LibraryLiveQuery extends LibrariesQuery { tab?: string; query?: string; filter?: string }
+export interface LibraryLiveContents extends Page<LibraryLiveItem> { library: Library; filters: LibraryLiveFilter[] }
+export interface LibraryLivePlaybackRequest extends Mutation { itemId: ID; tab?: string; liveMode?: 'adaptive' | 'low-delay'; client: ClientCapabilities }
 
 // Appearance: the server's default skin and the runtime skin packs it has installed.
 // A pack is data only (no code, no CSS text): validated colours, lengths, font files and

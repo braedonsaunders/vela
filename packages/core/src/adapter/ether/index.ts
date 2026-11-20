@@ -12,6 +12,7 @@ import type {
   EventStream,
   FallbackCommand,
   Interactions,
+  LibraryLive,
   LiveTv,
   PasswordSignIn,
   PathSwitching,
@@ -33,7 +34,7 @@ const PUBLIC_CACHED = { auth: false, cacheable: true };
 /** Ether speaks the v0 protocol natively, so it offers every capability Vela knows. */
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
-  AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, EventStream, Appearance {
+  AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -241,6 +242,14 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     const path = `/libraries/${segment(id)}/items${libraryBrowseQuery(browse)}`;
     const contents = await this.http.request<V.LibraryContents>('GET', path, undefined, CACHED);
     return { ...contents, library: { ...this.declaredLibraries.get(id), ...contents.library } };
+  }
+
+  libraryLive(id: string, live: V.LibraryLiveQuery) {
+    return this.http.request<V.LibraryLiveContents>('GET', `/libraries/${segment(id)}/live${query(live)}`, undefined, CACHED);
+  }
+
+  startLibraryLive(id: string, request: V.LibraryLivePlaybackRequest) {
+    return this.http.request<V.PlaybackPlan>('POST', `/libraries/${segment(id)}/live/play`, request);
   }
 
   collection(id: string, cursor?: string, limit?: number) {

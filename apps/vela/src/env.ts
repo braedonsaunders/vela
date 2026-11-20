@@ -1,7 +1,7 @@
 // The view state a document reads (env) for one route, from the store's state and the app's own
 // view state. A value the store has not read yet is honest about it: loading, or absent.
 import { Platform } from 'react-native';
-import type { VelaState } from '@vela/core';
+import { detailDateDisplay, type VelaState } from '@vela/core';
 import { searchView, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
@@ -13,6 +13,7 @@ export interface EnvInput {
   live: LiveView | undefined;
   route: RouteName;
   entry: string;
+  library?: string;
   width: number;
   skinCount: number;
   skinName: string;
@@ -24,13 +25,15 @@ function load(value: { load: string; value?: unknown } | undefined): Env['load']
   return 'loading';
 }
 
-export function environment({ state, view, live, route, entry, width, skinCount, skinName }: EnvInput): Env {
+export function environment({ state, view, live, route, entry, library, width, skinCount, skinName }: EnvInput): Env {
   const home = state.home;
   const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
   const source = title?.value;
   const waitingForResume = waitForResumeSeason(source, view.season, !home.value && home.load !== 'failed');
   const detail = source && waitingForResume ? { ...source, pending: [...new Set([...source.pending, 'episodes' as const])] } : source;
-  const { season, detail: selectedDetail } = detailSeason(detail, view.season, id => state.titles[id]?.value);
+  const { season, detail: selectedDetailRaw } = detailSeason(detail, view.season, id => state.titles[id]?.value);
+  const dateDisplay = state.libraries.value?.find(item => item.id === library)?.dateDisplay;
+  const selectedDetail = selectedDetailRaw ? detailDateDisplay(selectedDetailRaw, dateDisplay) : undefined;
   return {
     viewer: state.auth.viewer,
     section: route === 'library' ? entry : route === 'live' ? 'live' : 'home',
@@ -65,7 +68,7 @@ export function createEnvironmentReader() {
   const defaults = new Map<string, string>();
   const routes = new Map<string, { inputs: unknown[]; env: Env; title: unknown; seasonTitle: unknown }>();
   return (input: EnvInput): Env => {
-    const { state, view, route, entry } = input;
+    const { state, view, route, entry, library } = input;
     const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
     const explicit = title?.value?.seasons.some(s => s.id === view.season || `@number:${s.seasonNumber}` === view.season);
     const selection = explicit ? view.season : defaults.get(entry) ?? '';
@@ -77,8 +80,8 @@ export function createEnvironmentReader() {
     const inputs = [state.auth.viewer, state.home, state.libraries.value, state.search.query,
       route === 'home' ? state.search : undefined, title, state.titles[season],
       view.season, view.flags, view.pagers, view.heroIndex, view.still,
-      input.live, input.width, input.skinCount, input.skinName, state.previews.cardId, state.previews.heroId];
-    const key = `${route}:${entry}`, previous = routes.get(key);
+      input.live, input.width, input.skinCount, input.skinName, library, state.previews.cardId, state.previews.heroId];
+    const key = `${route}:${entry}:${library ?? ''}`, previous = routes.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.env;
     const env = environment({ ...input, view: { ...view, season: selection || season } });
     // Season scoping need not replace the detail model for menu/pager changes.

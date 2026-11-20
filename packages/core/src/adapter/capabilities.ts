@@ -47,6 +47,17 @@ export interface LibraryRecommendations {
   libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
 }
 
+/** Static live streams exposed inside a content library, separate from Live TV and its guide. */
+export interface LibraryLive {
+  libraryLive(id: string, query: V.LibraryLiveQuery): Promise<V.LibraryLiveContents>;
+  startLibraryLive(id: string, request: V.LibraryLivePlaybackRequest): Promise<V.PlaybackPlan>;
+}
+
+export function hasLibraryLive(adapter: ServerAdapter): adapter is ServerAdapter & LibraryLive {
+  return 'libraryLive' in adapter && typeof adapter.libraryLive === 'function'
+    && 'startLibraryLive' in adapter && typeof adapter.startLibraryLive === 'function';
+}
+
 /** Filmography by server person identifier, optionally within one library. */
 export interface PersonFilmography {
   personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>>;

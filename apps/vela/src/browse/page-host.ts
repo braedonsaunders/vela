@@ -18,6 +18,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
     switch (action) {
       case 'select': {
         const [target, kind] = arg.split('|');
+        if (kind === 'library-live' && target) return router.push({ pathname: '/watch/[id]', params: { id: target, kind, libraryId: id, tab: library.page.tabId } });
         if (kind === 'person' && target) return router.push({ pathname: '/person', params: { id: target } });
         const tab = model?.tabs?.find(tab => tab.id === library.page.tabId);
         const facetQuery = kind === 'collection' && target && tab ? facetCollectionQuery(target, tab) : undefined;
@@ -38,10 +39,11 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
         return view(flipped(query, model));
       case 'libraryFilter':
         if (arg.startsWith('tabQuery|')) return library.setSearch(arg.slice('tabQuery|'.length));
+        if (arg.startsWith('liveFilter|')) return library.setLiveFilter(arg.slice('liveFilter|'.length));
         if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
       case 'libraryView':
-        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections', 'people'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ ...(library.page.facetTitle ? paramsOf({}) : {}), view: arg, collectionId: undefined, facetTitle: undefined });
+        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections', 'people', 'live'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ ...(library.page.facetTitle ? paramsOf({}) : {}), view: arg, collectionId: undefined, facetTitle: undefined });
         return;
       case 'libraryMore':
         return library.more();
@@ -57,6 +59,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
     ...host,
     // The shell marks this library's destination as the section on show.
     env: { ...host.env, section: id, load: library.load, library: library.page, rowLoading: library.rowLoading },
+    ...(library.page.view === 'live' ? { refresh: library.retry, refreshing: library.page.viewLoad === 'loading' } : {}),
     dispatch,
     loadMore: (on, entry) => (on === 'library' ? library.more() : on === 'row' ? library.moreRow(entry) : host.loadMore(on, entry)),
   };

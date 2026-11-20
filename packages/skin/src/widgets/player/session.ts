@@ -56,7 +56,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
 
   useEffect(() => {
     if (!external || !ownedPlan) return;
-    void vela.playback.attach({ kind, id }, ownedPlan).catch(error => console.warn('Live session attach failed', error));
+    void vela.playback.attach(target, ownedPlan).catch(error => console.warn('Live session attach failed', error));
     return () => vela.playback.detach(ownedPlan.sessionId);
   }, [vela, external, ownedId, kind, id]);
 
