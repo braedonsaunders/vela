@@ -635,9 +635,10 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         onLayout={onPagerLayout} onContentSizeChange={onPagerContent}
         {...(web && horizontal && rowId ? { dataSet: { velaRow: rowId } } : {})}
-        {...a11y} {...(web && route ? (env.route === 'title' || env.route === 'person'
-          ? { role: 'dialog', 'aria-modal': true, 'aria-label': env.detail?.title[0]?.name ?? 'Details' }
-          : { role: 'main' }) : {})}>
+        {...a11y} {...(web && route && (env.route === 'title' || env.route === 'person')
+          // The page's main landmark is the screen wrapper (the skip link's target); a route
+          // adds only its dialog role, so there is exactly one main.
+          ? { role: 'dialog', 'aria-modal': true, 'aria-label': env.detail?.title[0]?.name ?? 'Details' } : {})}>
         {content}
       </AScroll>
     );
