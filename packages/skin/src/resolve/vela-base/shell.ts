@@ -300,6 +300,24 @@ export const shell: Node = {
         width: '100%',
       } as Style,
     },
+    // A transparent modal layer owns the first press outside the profile menu. Besides closing
+    // the menu, this keeps that press from selecting a card or navigation control underneath it.
+    {
+      type: 'box',
+      when: [{ test: 'env.viewer' }, { test: 'flag:menu' }],
+      press: { action: 'close', arg: 'menu' },
+      label: 'Close profile menu',
+      testId: 'profile-menu-dismiss',
+      style: {
+        position: 'absolute',
+        top: '0px',
+        right: '0px',
+        bottom: '0px',
+        left: '0px',
+        'z-index': '29',
+        'background-color': 'transparent',
+      },
+    },
     // Escape closes the menu and returns to its trigger, as compiled's menuKey does.
     {
       type: 'box',
