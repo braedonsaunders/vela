@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { authLayout } from '../src/widgets/auth/layout';
+import { authLayout, keyboardAvoidanceEnabled } from '../src/widgets/auth/layout';
 
 const viewport = (width: number, height: number) => ({ width, height, insets: { top: 47, bottom: 34, left: 0, right: 0 } });
 describe('auth stage budget', () => {
+  test('leaves Android TV IME resizing to the native window', () => {
+    expect(keyboardAvoidanceEnabled('android', true)).toBe(false);
+    expect(keyboardAvoidanceEnabled('android', false)).toBe(true);
+    expect(keyboardAvoidanceEnabled('ios', true)).toBe(true);
+    expect(keyboardAvoidanceEnabled('web', false)).toBe(false);
+  });
   test.each([[320, 568], [375, 667], [393, 852], [440, 956], [568, 320], [852, 393], [956, 440]])('fits safe area at %ix%i', (w, h) => {
     const v = viewport(w, h);
     const layout = authLayout(v, v.height, false, true);

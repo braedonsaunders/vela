@@ -1,5 +1,11 @@
 import type { Viewport } from '../../css';
 
+/** Android TV's IME already resizes the app window. Applying KeyboardAvoidingView's height
+ * reduction as well can collapse the served TextInput and make the TV keyboard restart focus. */
+export function keyboardAvoidanceEnabled(os: string, tv: boolean): boolean {
+  return os !== 'web' && !(os === 'android' && tv);
+}
+
 /** Sizes in the usable auth area. Height reduces decoration; only a small touch
  * viewport may change the form structure. Foldables/tablets keep the column. */
 export function authLayout(viewport: Viewport, availableHeight = viewport.height, tv = false, touch = false) {

@@ -5,7 +5,7 @@
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
-import { authLayout } from './layout';
+import { authLayout, keyboardAvoidanceEnabled } from './layout';
 import { AuthLayoutContext } from './layout-context';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, Text } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -81,7 +81,7 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
   return (
     <KeyboardAvoidingView
       style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]}
-      enabled={Platform.OS !== 'web'}
+      enabled={keyboardAvoidanceEnabled(Platform.OS, Platform.isTV)}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View
