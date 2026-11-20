@@ -572,7 +572,7 @@ export const titleCopy: Node = {
             ],
           },
         },
-
+        { type: 'widget', widget: 'titleActions' },
       ],
     },
     {

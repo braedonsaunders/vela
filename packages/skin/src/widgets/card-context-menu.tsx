@@ -1,9 +1,10 @@
 import { msg, type Card, type TitleActions } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import { BlurView } from 'expo-blur';
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { forwardRef, Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   Animated,
+  Easing,
   Modal,
   Platform,
   ScrollView,
@@ -20,6 +21,7 @@ import { placeAtPoint, placeAtRect, type Point, type Rect, type Size } from '../
 import { DismissScope, type Focusable } from '../escape';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
+import { Glyph } from './common/controls';
 import { useLook } from './common/look';
 
 export type CardMenuAnchor = { kind: 'point'; point: Point } | { kind: 'card'; rect: Rect };
@@ -36,7 +38,25 @@ interface Props {
 }
 
 const web = Platform.OS === 'web';
-const PANEL_WIDTH = 300;
+const PANEL_WIDTH = 316;
+
+function blurTint(colour: string): 'light' | 'dark' {
+  const match = /^#([\da-f]{6})/i.exec(colour);
+  if (!match) return 'dark';
+  const value = Number.parseInt(match[1]!, 16);
+  const red = value >> 16;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return red * 0.299 + green * 0.587 + blue * 0.114 > 150 ? 'light' : 'dark';
+}
+
+function episodeLine(card: Card): string {
+  if (card.kind !== 'episode' || (!card.seasonNumber && !card.episodeNumber)) return '';
+  return msg('cardMenu.episodeNumber', {
+    season: card.seasonNumberLabel || String(card.seasonNumber),
+    episode: card.episodeNumberLabel || String(card.episodeNumber),
+  });
+}
 
 function restore(target: Focusable | null): void {
   requestAnimationFrame(() => {
@@ -69,7 +89,12 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
 
   useEffect(() => {
     if (look.still) { openValue.setValue(1); return; }
-    Animated.spring(openValue, { toValue: 1, damping: 22, stiffness: 320, mass: 0.7, useNativeDriver: true }).start();
+    Animated.timing(openValue, {
+      toValue: 1,
+      duration: 120,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
   }, [look.still, openValue]);
 
   const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists }), [card, primary, management, continueWatching, host.env.canPlaylists]);
@@ -120,17 +145,22 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
     width: `${PANEL_WIDTH}px`,
     'max-width': 'calc(100vw - 24px)',
     'max-height': 'calc(100vh - 24px)',
-    padding: '7px',
-    'border-radius': '$ui.radiusPanel',
+    padding: '6px',
+    'border-radius': '13px',
     'background-color': '$ui.popover',
     border: '1px solid $ui.glassEdge',
     'box-shadow': '0px 18px 60px $ui.shadow',
     'backdrop-filter': 'blur(22px) saturate(1.3)',
   } as const;
+  const skin = `${host.doc.id} ${host.doc.name}`.toLowerCase();
+  const kids = skin.includes('kids');
+  const broadcast = skin.includes('broadcast');
+  const radius = kids ? 20 : broadcast ? 5 : 13;
   const layer = look.layer(panelRows);
   const Trap = Platform.isTV ? TVFocusGuideView : View;
-  const scale = openValue.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] });
+  const scale = openValue.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
   const hidden = menuSize.height <= 1;
+  const meta = episodeLine(card);
 
   return (
     <DismissScope open dismiss={close} returnTarget={opener} guide={guide}>
@@ -151,13 +181,25 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
             accessibilityLabel={msg('cardMenu.actionsFor', { title: card.name })}
             style={[
               layer.style,
+              { borderRadius: radius },
               {
                 position: 'absolute', left: placement.x, top: placement.y, overflow: 'hidden',
                 opacity: hidden ? 0 : openValue, transform: [{ scale }],
               } as ViewStyle,
             ]}
           >
-            {layer.blur ? <BlurView intensity={Math.min(100, Math.round(layer.blur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+            {layer.blur ? <BlurView intensity={Math.min(100, Math.round(layer.blur * 2.5))} tint={blurTint(look.ui.popover)} style={StyleSheet.absoluteFill} /> : null}
+            <View style={{ paddingHorizontal: 12, paddingTop: 9, paddingBottom: 10, gap: 2 }}>
+              <Text numberOfLines={1} style={look.text({
+                'font-size': kids ? '15px' : '13px',
+                'font-weight': kids ? '750' : '650',
+                'letter-spacing': broadcast ? '0.06em' : '0',
+                'text-transform': broadcast ? 'uppercase' : 'none',
+                color: '$ui.ink',
+              })}>{card.name}</Text>
+              {meta ? <Text style={look.text({ 'font-size': '11px', 'font-weight': '550', color: '$ui.inkQuiet' })}>{meta}</Text> : null}
+            </View>
+            <View style={[look.box({ height: '1px', 'background-color': '$ui.glassEdge' }), { marginHorizontal: 6 }]} />
             <ScrollView style={{ maxHeight: Math.max(120, viewport.height - 24) }} contentContainerStyle={{ gap: 2 }} keyboardShouldPersistTaps="handled">
               <Trap
                 ref={Platform.isTV ? (guide as never) : undefined}
@@ -165,13 +207,19 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
                 style={{ gap: 2 }}
               >
                 {actions.map((action, index) => (
-                  <MenuItem
-                    key={action.id}
-                    ref={index === 0 ? first : undefined}
-                    action={action}
-                    disabled={busy}
-                    run={() => void run(action)}
-                  />
+                  <Fragment key={action.id}>
+                    {index > 0 && actions[index - 1]?.group !== action.group
+                      ? <View style={[look.box({ height: '1px', 'background-color': '$ui.glassEdge' }), { marginHorizontal: 6, marginVertical: 4 }]} />
+                      : null}
+                    <MenuItem
+                      ref={index === 0 ? first : undefined}
+                      action={action}
+                      disabled={busy}
+                      radius={kids ? 14 : broadcast ? 3 : 9}
+                      bold={kids}
+                      run={() => void run(action)}
+                    />
+                  </Fragment>
                 ))}
               </Trap>
               {error ? <Text accessibilityRole="alert" style={[look.text({ 'font-size': '13px', color: '$ui.accent' }), { padding: 10 }]}>{error}</Text> : null}
@@ -186,13 +234,22 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
 const MenuItem = forwardRef<ComponentRef<typeof FocusPressable>, {
   action: CardContextAction;
   disabled: boolean;
+  radius: number;
+  bold: boolean;
   run(): void;
-}>(function MenuItem({ action, disabled, run }, ref) {
+}>(function MenuItem({ action, disabled, radius, bold, run }, ref) {
   const look = useLook();
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const [pressed, setPressed] = useState(false);
   const highlighted = hover || focus;
+  const warning = action.tone === 'warning';
+  const colour = warning ? look.ui.live : look.ui.ink;
+  const symbols: Record<CardContextAction['icon'], string> = {
+    play: 'play-fill', restart: 'restart', info: 'info', checked: 'check-circle', unchecked: 'circle',
+    heart: 'heart', 'heart-filled': 'heart-fill', bookmark: 'bookmark', 'bookmark-filled': 'bookmark-fill',
+    remove: 'remove', show: 'layers', season: 'list', 'playlist-add': 'playlist-add',
+  };
   const move = (event: NativeSyntheticEvent<unknown> & { key?: string; currentTarget?: unknown }) => {
     if (!web) return;
     const key = event.key ?? (event as unknown as { nativeEvent?: { key?: string } }).nativeEvent?.key;
@@ -221,8 +278,8 @@ const MenuItem = forwardRef<ComponentRef<typeof FocusPressable>, {
       onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)}
       style={[
         look.box({
-          'min-height': '42px', padding: '9px 11px', 'justify-content': 'center',
-          'border-radius': '10px',
+          'min-height': '40px', padding: '7px 10px', 'justify-content': 'center',
+          'border-radius': `${radius}px`,
           ...(highlighted ? { 'background-color': '$ui.controlHover' } : {}),
           ...(focus ? { border: '1px solid $ui.glassEdgeStrong', 'box-shadow': '0px 0px 0px 2px $ui.accent' } : { border: '1px solid transparent' }),
         }),
@@ -231,7 +288,12 @@ const MenuItem = forwardRef<ComponentRef<typeof FocusPressable>, {
         disabled ? { opacity: 0.5 } : null,
       ]}
     >
-      <Text style={look.text({ 'font-size': '14px', 'font-weight': highlighted ? '600' : '450', color: '$ui.ink' })}>{action.label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+        <View style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center', opacity: warning ? 0.82 : 0.92 }}>
+          <Glyph symbol={symbols[action.icon]} size={18} color={colour} />
+        </View>
+        <Text style={[look.text({ 'font-size': '14px', 'font-weight': bold || highlighted ? '650' : '480', color: '$ui.ink' }), warning ? { color: colour, opacity: 0.88 } : null]}>{action.label}</Text>
+      </View>
     </FocusPressable>
   );
 });

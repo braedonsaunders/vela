@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.10';
+const version = '1.2.11';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -357,7 +357,9 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     ] },
     // Play first; then a little for the grown-ups: facts and two lines of story.
     { type: 'box', motion: 'zoomLate', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '26px', 'align-items': 'center' }, small: { 'flex-direction': 'column', 'align-items': 'stretch', gap: '18px' }, children: [
-      titlePlay, upNext,
+      { type: 'box', style: { 'flex-direction': 'row', 'flex-wrap': 'wrap', 'align-items': 'center', gap: '14px' }, children: [
+        titlePlay, upNext, { type: 'widget', widget: 'titleActions' },
+      ] },
       { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', flex: '1', 'min-width': '16rem', 'max-width': '44rem' }, small: { 'min-width': '0px' }, children: [
         { type: 'text', text: '{detail.factsLine}', style: { 'font-size': '15px', 'font-weight': '700', color: '$ink-soft' } },
 

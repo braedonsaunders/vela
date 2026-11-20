@@ -11,7 +11,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.9';
+const version = '1.0.10';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -1120,8 +1120,11 @@ const detail: Node = {
             { type: 'use', template: 'velaEpisodeContext' },
             { type: 'text', text: '{detail.facts}', style: { 'font-size': '13px' } },
             { type: 'use', template: 'velaSummary', style: { 'font-size': '16px', 'line-height': '1.6' } },
-            playButton('{s:resume}', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }]),
-            playButton('{s:play}', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume', not: true }]),
+            { type: 'box', style: { 'flex-direction': 'row', 'flex-wrap': 'wrap', 'align-items': 'center', gap: '10px' }, children: [
+              playButton('{s:resume}', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }]),
+              playButton('{s:play}', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume', not: true }]),
+              { type: 'widget', widget: 'titleActions' },
+            ] },
           ],
         },
       ],

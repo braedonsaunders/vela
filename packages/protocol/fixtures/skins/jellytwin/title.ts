@@ -292,6 +292,7 @@ const titleTop: Node = {
                     'detail-trailer-{extra.id}',
                   ),
                 },
+                { type: 'widget', widget: 'titleActions', style: { 'align-self': 'center' } },
               ],
             },
             {

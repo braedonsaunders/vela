@@ -298,7 +298,7 @@ const facts: Node = {
         'flex-wrap': 'wrap',
         'margin-top': '4px',
       },
-      children: [playButton, upNextButton, trailerButton],
+      children: [playButton, upNextButton, trailerButton, { type: 'widget', widget: 'titleActions' }],
     },
     {
       type: 'box',

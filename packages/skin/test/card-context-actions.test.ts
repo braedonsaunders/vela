@@ -43,8 +43,11 @@ test('adapter-backed mutations are included and unsupported mutations are absent
   const actions = cardContextActions(card(), { action: 'play', arg: 'episode-1' }, management);
   expect(actions.find(action => action.id === 'watched')?.command).toEqual({ kind: 'watch', change: { played: true } });
   expect(actions.find(action => action.id === 'favorite')?.command).toEqual({ kind: 'watch', change: { favorite: false } });
-  expect(cardContextActions(card(), { action: 'play', arg: 'episode-1' }, management, { continueWatching: true }).find(action => action.id === 'remove-continue')?.command)
+  const continuing = cardContextActions(card(), { action: 'play', arg: 'episode-1' }, management, { continueWatching: true });
+  expect(continuing.find(action => action.id === 'remove-continue')?.command)
     .toEqual({ kind: 'watch', change: { continueWatching: false } });
+  expect(continuing.at(-1)).toMatchObject({ id: 'remove-continue', icon: 'remove', group: 'remove', tone: 'warning' });
+  expect(continuing.map(action => action.group)).toEqual(['play', 'play', 'details', 'details', 'details', 'watch', 'watch', 'remove']);
   expect(cardContextActions(card(), { action: 'play', arg: 'episode-1' }, management).some(action => action.id === 'remove-continue')).toBe(false);
 });
 
@@ -52,6 +55,7 @@ test('playlist action is capability-gated in the shared watch-state action group
   const absent = cardContextActions(card(), { action: 'play', arg: 'episode-1' });
   expect(absent.some(action => action.id === 'playlist')).toBe(false);
   const present = cardContextActions(card(), { action: 'play', arg: 'episode-1' }, null, { playlists: true });
+  expect(present.find(action => action.id === 'playlist')).toMatchObject({ icon: 'playlist-add', group: 'watch' });
   expect(present.find(action => action.id === 'playlist')?.command)
     .toEqual({ kind: 'dispatch', action: 'addToPlaylist', arg: 'episode-1|episode' });
 });

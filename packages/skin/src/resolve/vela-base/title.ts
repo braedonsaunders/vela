@@ -389,6 +389,7 @@ export const band: Node = {
                 },
               ],
             },
+            { type: 'widget', widget: 'titleActions' },
             pendingStatus('detail.trailerPending', '{t:jellytwin.trailer}'),
           ],
         },

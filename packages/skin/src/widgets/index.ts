@@ -19,11 +19,13 @@ import { YearInput } from './library/year-input';
 import { RowLink } from './row-link';
 import { LoadingWidget } from './common/loading';
 import { HomeSlowWidget } from './common/home-slow';
+import { TitleActions } from './title-actions';
 
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   rowLink: RowLink,
   contentLoader: LoadingWidget,
   homeSlow: HomeSlowWidget,
+  titleActions: TitleActions,
   searchInput: SearchInput,
   textInput: TextInput,
   serverSwitcher: ServerSwitcher,
@@ -58,4 +60,5 @@ export const FOCUSABLE_WIDGETS = new Set([
   'libraryFacets',
   'librarySmartView',
   'homeSlow',
+  'titleActions',
 ]);

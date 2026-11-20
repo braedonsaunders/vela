@@ -223,6 +223,7 @@ export const titleActions: Node = {
             ],
           },
         },
+        { type: 'widget', widget: 'titleActions' },
       ],
     },
     {

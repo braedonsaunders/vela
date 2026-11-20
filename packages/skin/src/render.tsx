@@ -30,7 +30,7 @@ import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { ExpandableSummary } from './summary';
-import { TitleActions, VersionsControl } from './widgets/title-actions';
+import { VersionsControl } from './widgets/title-actions';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { useHeroSwipe } from './hero-swipe';
@@ -675,9 +675,6 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     }
   }
   if (cardMenu && cardPrimary && menuCard) element = <>{element}<CardContextMenu card={menuCard} primary={cardPrimary} anchor={cardMenu.anchor} mode={cardMenu.mode} opener={buttonRef.current} continueWatching={ctx.row?.purpose === 'continue'} close={() => setCardMenu(null)} /></>;
-  if (route && env.route === 'title') {
-    element = <View style={{ flex: 1 }}>{element}<View style={{ position: 'absolute', top: env.small ? 84 : 100, right: env.small ? 76 : 132, zIndex: 20 }}><TitleActions /></View></View>;
-  }
   if (masked) element = <Mask linear={fx.mask} radial={fx.radialMask} style={geometry}>{element}</Mask>;
   if (node.escape?.length) {
     const returnFocus = node.returnFocus ? fill(node.returnFocus, ctx, env) : undefined;

@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.11';
+const id = 'latenight', version = '1.0.12';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -392,7 +392,7 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'text', text: '{detail.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em' }, small: { 'font-size': '20px' } },
           { type: 'use', template: 'velaSummary', when: [{ test: 'detail.summary' }], motion: 'osd3', style: { 'font-size': '16px', 'line-height': '1.6', color: '$ink-dim', 'max-width': '40rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14.5px' } },
           { type: 'text', when: [{ test: 'detail.crewLine' }], text: '{detail.crewLine}', motion: 'osd3', style: { 'font-family': print, 'font-size': '10.5px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', 'line-height': '1.7', color: '$ink-quiet' } },
-          { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px 14px', 'flex-wrap': 'wrap', 'margin-top': '8px' } as Style, children: [titlePlay] },
+          { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px 14px', 'flex-wrap': 'wrap', 'margin-top': '8px' } as Style, children: [titlePlay, { type: 'widget', widget: 'titleActions' }] },
         ] },
       ] },
       // Seasons are channel buttons; the selected one is lit.
