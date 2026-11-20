@@ -460,7 +460,7 @@ export const home: Node = {
     {
       type: 'repeat',
       over: 'home.hero',
-      when: [ready, not('env.searching')],
+      when: [ready, not('env.searching'), not('env.searchFocused')],
       item: {
         type: 'box',
         exit: 'heroOut',
@@ -473,7 +473,7 @@ export const home: Node = {
       type: 'box',
       role: 'group',
       label: '{s:featuredTitles}',
-      when: [ready, not('env.searching'), { test: 'env.heroCount', is: 'gt', value: '1' }],
+      when: [ready, not('env.searching'), not('env.searchFocused'), { test: 'env.heroCount', is: 'gt', value: '1' }],
       style: {
         ...row,
         gap: '8px',
@@ -484,13 +484,15 @@ export const home: Node = {
       small: { 'padding-top': '16px' },
       children: [{ type: 'repeat', over: 'home.heroes', item: heroDot }],
     },
-    // Padding by searching and phone width, as states (variants layer over them).
+    // Focus brings the empty field above the keyboard before the viewer starts typing.
     {
       type: 'box',
       when: [ready],
       style: searchBlock,
       layoutTransition: '420ms ease-out',
       states: [
+        { when: [set('env.searchFocused'), set('env.small')], style: { ...searchBlock, 'padding-top': '40px' } },
+        { when: [set('env.searchFocused')], style: { ...searchBlock, 'padding-top': '48px' } },
         { when: [set('env.searching'), set('env.small')], style: { ...searchBlock, 'padding-top': '40px' } },
         { when: [set('env.searching')], style: { ...searchBlock, 'padding-top': '48px' } },
         { when: [set('env.small')], style: { ...searchBlock, 'padding-top': '26px' } },
