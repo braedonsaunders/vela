@@ -25,11 +25,12 @@ interface Props {
   current: number;
   locked?: boolean;
   image(path: string): ImageSource | number | undefined;
+  branding?: { name?: string; wordmark?: { url: string; dark?: string } };
   onPick(index: number): void;
   onClose(): void;
 }
 
-export function AppearancePicker({ documents, current, locked, image, onPick, onClose }: Props) {
+export function AppearancePicker({ documents, current, locked, image, branding, onPick, onClose }: Props) {
   const { width } = useWindowDimensions();
   // Over the whole window (outside the screens, which pad by the safe area): clear of it too.
   const insets = useSafeAreaInsets();
@@ -63,6 +64,7 @@ export function AppearancePicker({ documents, current, locked, image, onPick, on
               key={doc.id}
               doc={doc}
               preview={doc.preview ? image(doc.preview) : undefined}
+              branding={branding}
               selected={index === current}
               disabled={locked}
               small={small}
@@ -78,6 +80,7 @@ export function AppearancePicker({ documents, current, locked, image, onPick, on
 interface DocumentCardProps {
   doc: SkinDocument;
   preview: ImageSource | number | undefined;
+  branding?: Props['branding'];
   selected: boolean;
   disabled?: boolean;
   small: boolean;
@@ -85,7 +88,8 @@ interface DocumentCardProps {
 }
 
 /** One document: its preview, name, tagline and up to six swatches. */
-function DocumentCard({ doc, preview, selected, disabled, small, onPress }: DocumentCardProps) {
+function DocumentCard({ doc, preview, branding, selected, disabled, small, onPress }: DocumentCardProps) {
+  const ownerMark = branding?.wordmark?.dark || branding?.wordmark?.url;
   return (
     <Choice
       label={doc.name}
@@ -98,6 +102,8 @@ function DocumentCard({ doc, preview, selected, disabled, small, onPress }: Docu
     >
       <View style={styles.preview}>
         {preview ? <Image source={preview} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+        {ownerMark ? <View style={styles.previewBrand}><Image source={{ uri: ownerMark }} style={styles.previewWordmark} contentFit="contain" /></View>
+          : branding?.name ? <View style={styles.previewBrand}><Text style={styles.previewName} numberOfLines={1}>{branding.name}</Text></View> : null}
       </View>
       <View style={styles.meta}>
         <Text style={styles.name} numberOfLines={1}>{doc.name}</Text>
@@ -162,6 +168,9 @@ const styles = StyleSheet.create({
   cardSelected: { borderColor: '#dcb998' },
   cardFocused: { borderColor: '#f5f1e9', transform: [{ scale: 1.04 }] },
   preview: { aspectRatio: 16 / 9, backgroundColor: '#0b0d10' },
+  previewBrand: { position: 'absolute', left: 8, top: 8, minWidth: 76, maxWidth: 150, height: 34, paddingHorizontal: 8, borderRadius: 7, backgroundColor: '#090b0ee6', alignItems: 'center', justifyContent: 'center' },
+  previewWordmark: { width: 128, height: 24 },
+  previewName: { maxWidth: 132, color: '#f5f1e9', fontSize: 13, fontWeight: '700' },
   meta: { padding: 16, gap: 6 },
   name: { color: '#f5f1e9', fontSize: 18, fontWeight: '600' },
   tagline: { color: '#b6b8bb', fontSize: 14, lineHeight: 19 },

@@ -20,3 +20,8 @@ test('wordmark uses its intrinsic ratio and replaces Mochi paired mark and text 
   expect(JSON.stringify(branded)).not.toContain('dark.png');
   expect(JSON.stringify(branded)).not.toContain('vela-mark.svg');
 });
+
+test('owner branding replaces the home logo accessible name', () => {
+  const doc = {type: 'box', press: {action: 'home'}, label: '{s:velaHome}', children: [{type: 'image', src: 'assets/brand/vela-lockup.svg'}]};
+  expect(brandDocument(doc, {name: 'Harbor Family'})).toMatchObject({label: 'Harbor Family home'});
+});

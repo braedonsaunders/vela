@@ -82,7 +82,7 @@ try {
     display: 'standalone', theme_color: '#090B0E', background_color: '#090B0E', icons: pwaIcons,
   }) + '\n');
   await writeFile(join(dist, 'offline.html'), '<!doctype html><html lang="en"><meta charset="utf-8">'
-    + '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Vela · Offline</title>'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline</title>'
     + '<style>body{background:#090B0E;color:#f2e9d6;font:18px system-ui;padding:3rem}</style>'
     + '<h1>You’re offline</h1><p>Reconnect to browse and play.</p><a href="/vela">Try again</a></html>');
   const staticFiles = await inventory(dist);

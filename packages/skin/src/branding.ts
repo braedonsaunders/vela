@@ -6,6 +6,10 @@ export function brandDocument<T>(document: T, branding: Branding | undefined, ba
     if (Array.isArray(value)) return value.map(visit);
     if (!value || typeof value !== 'object') return value;
     const node = value as Record<string, unknown>;
+    if (node.type === 'box' && (node.press as { action?: string } | undefined)?.action === 'home'
+      && typeof node.label === 'string' && /\{[st]:(ui\.)?velaHome\}/.test(node.label) && branding.name) {
+      return visit({ ...node, label: `${branding.name} home` });
+    }
     if (node.type === 'box' && Array.isArray(node.children) && node.children.some(child => child?.type === 'image' && /\/vela-mark\.svg$/.test(child.src))) {
       return visit({...node, children: [{type: 'image', src: 'assets/brand/vela-lockup.svg'}]});
     }

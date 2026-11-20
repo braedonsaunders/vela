@@ -398,7 +398,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
         <Previews store={store} state={state} onHome={pathname === '/' && !pickerOpen} heroIndex={view.heroIndex} still={view.still} searchFocused={view.flags.includes('search-focused')}>
           {children}
         </Previews>
-        {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
+        {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} branding={appearance?.branding} onPick={pickDocument} onClose={closePicker} /> : null}
         {playlistTarget ? <AddToPlaylist {...playlistTarget} close={closeAddToPlaylist} /> : null}
       </LaunchGate>
     </VelaContext.Provider>
