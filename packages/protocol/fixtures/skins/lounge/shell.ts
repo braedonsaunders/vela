@@ -3,7 +3,7 @@ import { gutter, gutterSmall, lift, sans, side } from './look';
 
 export const tab = (
   label: string,
-  press: { action: 'home' | 'library'; arg?: string },
+  press: { action: 'home' | 'library' | 'live'; arg?: string },
   on: Node['when'],
   testId: string,
 ): Node => ({
@@ -174,6 +174,11 @@ export const shell: Node = {
                   children: [
                     tab('{s:home}', { action: 'home' }, [{ test: 'env.section', is: 'eq', value: 'home' }], 'nav-home'),
                     { type: 'repeat', over: 'nav.destinations', item: libraryTab },
+                    // Live TV, when the server has it and no library already stands for it.
+                    {
+                      ...tab('{s:liveTv}', { action: 'live' }, [{ test: 'env.section', is: 'eq', value: 'live' }], 'nav-live'),
+                      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
+                    },
                     {
                       type: 'box',
                       press: { action: 'search', focus: 'vela-search' },

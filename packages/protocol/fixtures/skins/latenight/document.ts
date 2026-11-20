@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.13';
+const id = 'latenight', version = '1.0.14';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -39,7 +39,7 @@ const snow = (motion: string, extra: Partial<Node> = {}): Node => ({ type: 'box'
 const wordmark = (h: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${Math.round(h * 2.629)}px`, height: `${h}px` } });
 
 // A channel on the dial: number, then name. The current one is lit like a VCR menu row.
-const channel = (num: string, name: string, on: Node['when'], press: { action: 'home' | 'library'; arg?: string }, testId?: string): Node => ({
+const channel = (num: string, name: string, on: Node['when'], press: { action: 'home' | 'library' | 'live'; arg?: string }, testId?: string): Node => ({
   type: 'box', group: true, press, label: name, testId, a11y: { current: on },
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '7px 7px', height: '36px', 'box-sizing': 'border-box', padding: '9px 12px 0px 10px', 'border-radius': '3px', color: '$ink-dim', 'white-space': 'nowrap', 'flex-shrink': '0', transition: 'background-color 120ms linear, color 120ms linear' },
   hover: { color: '$ink', 'background-color': '$glass' }, focus: { color: '$ink', 'background-color': '$vcr-blue' },
@@ -48,6 +48,10 @@ const channel = (num: string, name: string, on: Node['when'], press: { action: '
     { type: 'text', text: name, style: { ...osdText('21px', 'inherit'), 'text-shadow': 'none', 'letter-spacing': '0.06em' } },
     { type: 'box', when: on, style: { position: 'absolute', left: '10px', right: '12px', bottom: '3px', height: '2px', 'background-color': '$osd', 'box-shadow': '0px 0px 8px $osd-glow' } },
   ] });
+
+// Live TV on the dial, when the server has it and no library already stands for it.
+const liveChannel: Node = { ...channel('04', '{s:liveTv}', [{ test: 'env.section', is: 'eq', value: 'live' }], { action: 'live' }, 'channel-live'),
+  when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] };
 
 const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn', escape: 'menu', returnFocus: 'latenight-profile',
   style: { position: 'absolute', ...inset(bezel.normal), bottom: 'auto', 'z-index': '20', 'pointer-events': 'none' },
@@ -60,6 +64,7 @@ const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer'
         { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '2px 2px', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 92%, transparent 100%)' },
           small: { display: 'none' }, children: [
             channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, 'channel-home'),
+            liveChannel,
             { type: 'repeat', over: 'nav.destinations', item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }) },
           ] },
         { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
@@ -84,6 +89,7 @@ const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer'
     // Phones: the dial is a strip of channel buttons under the bar.
     { type: 'box', style: { display: 'none' }, small: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '2px 2px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', ...gutterSmall, 'padding-left': '8px', 'pointer-events': 'auto', 'mask-image': 'linear-gradient(90deg, black 0%, black 88%, transparent 100%)' } as Style, children: [
       channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }),
+      liveChannel,
       { type: 'repeat', over: 'nav.destinations', item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }) },
     ] },
   ] };
