@@ -43,7 +43,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
         if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
       case 'libraryView':
-        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections', 'people', 'live'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ ...(library.page.facetTitle ? paramsOf({}) : {}), view: arg, collectionId: undefined, facetTitle: undefined });
+        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections', 'people', 'live', 'view'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ ...(library.page.facetTitle ? paramsOf({}) : {}), view: arg, collectionId: undefined, facetTitle: undefined });
         return;
       case 'libraryMore':
         return library.more();

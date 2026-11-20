@@ -13,12 +13,18 @@ test('library facets repeat within a field and retain independent fields and sea
 test('cache identity includes search and facet OR sets independent of order', () => {
   expect(libraryKey('a', { facets: { x: ['2', '1'], y: ['a'] } })).toBe(libraryKey('a', { facets: { y: ['a'], x: ['1', '2', '2'] } }));
   expect(libraryKey('a', { query: 'one' })).not.toBe(libraryKey('a', { query: 'two' }));
+  expect(libraryKey('a', { tab: 'recent' })).not.toBe(libraryKey('a', { tab: 'history' }));
 });
 test('tabs preserve labels, identity and order, skipping unknown kinds', () => {
   expect(libraryTabs(undefined)).toBeUndefined();
   expect(libraryTabs([])).toEqual([]);
-  const tabs = [{ id: 'custom', label: 'Videos', kind: 'library' }, { id: 'future', label: '?', kind: 'future' }, { id: 'for-you', label: 'For you', kind: 'recommended' }, { id: 'streams', label: 'Live now', kind: 'live' }];
-  expect(libraryTabs(tabs as any)?.map(t => [t.id, t.label])).toEqual([['custom', 'Videos'], ['for-you', 'For you'], ['streams', 'Live now']]);
+  const tabs = [{ id: 'custom', label: 'Videos', kind: 'library' }, { id: 'future', label: '?', kind: 'future' }, { id: 'history', label: 'History', kind: 'view' }, { id: 'for-you', label: 'For you', kind: 'recommended' }, { id: 'streams', label: 'Live now', kind: 'live' }];
+  expect(libraryTabs(tabs as any)?.map(t => [t.id, t.label])).toEqual([['custom', 'Videos'], ['history', 'History'], ['for-you', 'For you'], ['streams', 'Live now']]);
+});
+
+test('view browse parameters carry the tab with its search and ordering', () => {
+  const q = new URLSearchParams(libraryBrowseQuery({ tab: 'history', query: 'portal', sort: 'updated', direction: 'desc', cursor: 'opaque' }));
+  expect(Object.fromEntries(q)).toEqual({ tab: 'history', query: 'portal', sort: 'updated', direction: 'desc', cursor: 'opaque' });
 });
 
 test('the shared library date rule uses ISO full dates and falls back to year', async () => {

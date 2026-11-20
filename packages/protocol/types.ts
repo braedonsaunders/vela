@@ -223,7 +223,7 @@ export interface CollectionContents extends Page<RowEntry> { collection: Collect
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
+export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }
@@ -236,7 +236,7 @@ export interface LibraryBrowseOptions {
 export interface Library { presentation?: { card: LibraryCard }; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }
 export interface LibraryBrowseQuery extends LibrariesQuery {
-  query?: string; facets?: Record<string, string[]>;
+  tab?: string; query?: string; facets?: Record<string, string[]>;
   sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean; collectionId?: ID;
 }
 export interface LibraryContents extends Page<RowEntry> { library: Library; sort: LibrarySort; direction: SortDirection }

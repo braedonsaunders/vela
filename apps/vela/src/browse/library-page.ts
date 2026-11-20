@@ -30,19 +30,29 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const progressRevision = useVelaState(state => state.home.progressRevision);
   const revision = useVelaState(state => state.auth.revision);
   const focused = useSectionFocus() ?? true;
-  const key = libraryKey(id, query);
-  const current = useVelaState(state => state.library[key]);
+  const initialKey = libraryKey(id, query);
+  const initial = useVelaState(state => state.library[initialKey]);
   const earlier = useMemo(() => Object.values(store.getState().library)
-    .find(view => view.value?.id === id)?.value, [store, id, key]);
-  const tabs = libraryTabs((current?.value ?? earlier)?.tabs)?.filter(tab => tab.kind !== 'live' || liveAvailable);
+    .find(view => view.value?.id === id)?.value, [store, id, initial]);
+  const tabs = libraryTabs((initial?.value ?? earlier)?.tabs)?.filter(tab => tab.kind !== 'live' || liveAvailable);
   const selectedTab = tabs?.find(tab => tab.id === requestedView) ?? tabs?.[0];
   const collectionTab = (selectedTab?.kind === 'collections' || selectedTab?.kind === 'people') ? selectedTab.id : undefined;
   const liveTab = selectedTab?.kind === 'live' ? selectedTab.id : undefined;
+  const viewTab = selectedTab?.kind === 'view' ? selectedTab : undefined;
   const [searchState, setSearchState] = useState({ tab: '', value: '' });
-  const searchKey = `${id}:${collectionTab ?? liveTab ?? ''}`;
+  const searchKey = `${id}:${collectionTab ?? liveTab ?? viewTab?.id ?? ''}`;
   const tabQuery = searchState.tab === searchKey ? searchState.value : '';
   const setSearch = useCallback((value: string) => setSearchState({ tab: searchKey, value: value.trim().slice(0, liveTab ? 256 : 100) }), [searchKey, liveTab]);
   useEffect(() => setSearchState({ tab: searchKey, value: '' }), [searchKey]);
+  const browseQuery = useMemo<LibraryQuery>(() => viewTab ? {
+    ...query,
+    tab: viewTab.id,
+    sort: viewTab.sort ?? query.sort,
+    direction: viewTab.direction ?? query.direction,
+    query: viewTab.search && tabQuery ? tabQuery : undefined,
+  } : query, [query, viewTab, tabQuery]);
+  const key = libraryKey(id, browseQuery);
+  const current = useVelaState(state => state.library[key]);
   const missing = current === undefined;
   const kind = current?.value?.kind;
   const extraGeneration = useRef(0);
@@ -69,7 +79,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   }, [store, id, liveTab, tabQuery, liveFilter, revision, liveAttempt, focused, kind]);
 
   useEffect(() => {
-    if (!id || !kind || !focused || liveTab) return;
+    if (!id || !kind || !focused || liveTab || viewTab) return;
     // A modal person page keeps this library mounted. Keep its accumulated pages on return.
     if (extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.tab === collectionTab && extraState.query === tabQuery && extraState.attempt === extraAttempt && extraState.value && !extraState.loading && !extraState.failed && !extraState.value.failed) {
       setExtraState(previous => ({ ...previous, moreLoading: false }));
@@ -88,7 +98,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       if (active) setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: true });
     });
     return () => { active = false; extraGeneration.current++; };
-  }, [store, id, kind, revision, progressRevision, focused, extraAttempt, canRecommend, collectionTab, tabQuery, liveTab]);
+  }, [store, id, kind, revision, progressRevision, focused, extraAttempt, canRecommend, collectionTab, tabQuery, liveTab, viewTab]);
   const nativeExtras = extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.tab === collectionTab && extraState.query === tabQuery ? extraState.value : undefined;
   const rawExtras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
@@ -100,16 +110,16 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !canRecommend || view === 'genres' && !extras?.genres.length ? 'library' : view;
 
   useEffect(() => {
-    if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, query, current?.value?.pages ?? 1, !!current?.value);
+    if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, browseQuery, current?.value?.pages ?? 1, !!current?.value);
     // The key names the query; a session change empties the store, which reads it again.
-  }, [store, id, key, missing, focused]);
+  }, [store, id, key, missing, focused, browseQuery]);
 
   const page = useMemo<LibraryPage>(() => {
     const held = current?.value;
     // While a new view is read, the library's last view stays on show under the new controls.
     return {
       model: (() => {
-        const model = held ?? (earlier ? asQueried(earlier, query) : undefined);
+        const model = held ?? (earlier ? asQueried(earlier, browseQuery) : undefined);
         return model ? { ...model, name: facetTitle || model.name, genres: extras?.genres ?? model.genres,
           ...(usableView === 'live' ? { presentation: { card: selectedTab?.card ?? 'landscape' }, items: liveState.items, more: !!liveState.cursor, pages: 1 } : {}) } : model;
       })(),
@@ -117,7 +127,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       moreLoading: usableView === 'live' ? !!liveState.moreLoading : (usableView === 'collections' || usableView === 'people') ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
       viewLoad: usableView === 'live' ? liveState.failed ? 'failed' : liveState.loading ? 'loading' : 'ready'
-        : usableView === 'library' || usableView === 'genres' && !canRecommend ? current?.load ?? 'idle'
+        : usableView === 'library' || usableView === 'view' || usableView === 'genres' && !canRecommend ? current?.load ?? 'idle'
         : extraState.id !== id || extraState.revision !== revision || extraState.progressRevision !== progressRevision || extraState.tab !== collectionTab || extraState.query !== tabQuery ? 'idle'
         : extraState.failed ? 'failed'
         : (usableView === 'recommended' ? nativeExtras?.rowsLoad : usableView === 'genres' ? nativeExtras?.genresLoad : nativeExtras?.collectionsLoad)
@@ -134,7 +144,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.failed) || extraState.id === id && extraState.loading),
       extrasFailed: usableView !== 'live' && extraState.id === id && extraState.progressRevision === progressRevision && (extraState.failed || !!extras?.failed),
     };
-  }, [current, earlier, query, facetTitle, selectedTab?.id, selectedTab?.card, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, progressRevision, tabQuery, liveFilter, liveState]);
+  }, [current, earlier, browseQuery, facetTitle, selectedTab?.id, selectedTab?.card, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, progressRevision, tabQuery, liveFilter, liveState]);
 
   const failed = current?.load === 'failed';
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';
@@ -158,11 +168,11 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       })).catch(() => setExtraState(previous => generation === extraGeneration.current && previous.id === id && previous.revision === revision ? { ...previous, moreLoading: false, failed: true } : previous));
       return;
     }
-    if (page.view !== 'library') return;
+    if (page.view !== 'library' && page.view !== 'view') return;
     const held = current?.value;
     if (!held?.more || current?.load === 'loading') return;
-    void store.catalogue.library(id, query, held.pages + 1);
-  }, [store, id, revision, query, current, extras, page.view, extraState.moreLoading, collectionTab, tabQuery, liveTab, liveFilter, liveState]);
+    void store.catalogue.library(id, browseQuery, held.pages + 1);
+  }, [store, id, revision, browseQuery, current, extras, page.view, extraState.moreLoading, collectionTab, tabQuery, liveTab, liveFilter, liveState]);
 
   const retry = useCallback(() => {
     if (page.view === 'live') {
@@ -170,8 +180,8 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       return;
     }
     setExtraAttempt(value => value + 1);
-    void store.catalogue.library(id, query, current?.value?.pages ?? 1);
-  }, [store, id, query, current, page.view]);
+    void store.catalogue.library(id, browseQuery, current?.value?.pages ?? 1);
+  }, [store, id, browseQuery, current, page.view]);
 
   const moreRow = useCallback((rowId: string) => {
     const row = extras?.rows.find(item => item.id === rowId);

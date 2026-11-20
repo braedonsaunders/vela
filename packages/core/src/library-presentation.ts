@@ -9,7 +9,7 @@ export function libraryCardRatio(value: unknown): string {
 }
 /** Absent tabs means a legacy server. An explicit empty/unknown-only list stays empty. */
 export function libraryTabs(tabs: Library['tabs']) {
-  return tabs?.filter(tab => ['recommended', 'library', 'collections', 'people', 'live'].includes(tab.kind));
+  return tabs?.filter(tab => ['recommended', 'library', 'collections', 'people', 'live', 'view'].includes(tab.kind));
 }
 
 /** Landscape art follows Ether's declared preference; poster/square retain poster art. */

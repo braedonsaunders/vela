@@ -21,6 +21,7 @@ import { optimisticWatchState } from './watch-state';
 
 /** A library view: sort, direction and filters; absent fields are the server's defaults. */
 export interface LibraryQuery {
+  tab?: string;
   query?: string;
   facets?: Record<string, string[]>;
   collectionId?: string;
@@ -35,11 +36,11 @@ export interface LibraryQuery {
 
 /** The key a library view is kept under in state (`state.library`). */
 export function libraryKey(id: string, query: LibraryQuery): string {
-  const { sort, direction, kind, genre, year, played, favorite, collectionId } = query;
+  const { tab, sort, direction, kind, genre, year, played, favorite, collectionId } = query;
   const facets = Object.entries(query.facets ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([field, values]) => [field, [...new Set(values)].sort()]);
-  return JSON.stringify([id, sort, direction, kind, genre, year, played, favorite, collectionId, query.query, facets]);
+  return JSON.stringify([id, tab, sort, direction, kind, genre, year, played, favorite, collectionId, query.query, facets]);
 }
 
 const PAGE = 100;

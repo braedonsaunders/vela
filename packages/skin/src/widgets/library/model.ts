@@ -4,7 +4,7 @@
 import type { Choice, CollectionModel, LibraryExtras, LibraryModel } from '@vela/core';
 import type { LibraryLiveFilter } from '../../../../protocol/types';
 
-export type LibraryView = 'recommended' | 'library' | 'collections' | 'people' | 'genres' | 'live';
+export type LibraryView = 'recommended' | 'library' | 'collections' | 'people' | 'genres' | 'live' | 'view';
 
 export interface LibraryPage {
   canRecommend?: boolean;
