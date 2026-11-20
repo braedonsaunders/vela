@@ -57,7 +57,7 @@ export function Guide({ focus, layout, active = true }: { focus?: GuideFocus; la
 function GuideContent({ focus, layout, active }: { focus?: GuideFocus; layout?: 'cinematic'; active: boolean }) {
   const look = useGuideLook();
   const live = useLiveContext();
-  const view = useLiveView();
+  const view = useLiveView(active);
   if (!live) return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
   if (!view.guide) {
     if (view.load === 'failed') {

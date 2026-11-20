@@ -7,3 +7,15 @@ export function sectionRoute(name: string | undefined, id: unknown): SectionRout
   if (name === 'library/[id]' && typeof id === 'string' && id) return { route: 'library', entry: id };
   return null;
 }
+
+/** Retained native navigators may still report focus under a fullscreen modal.
+ * Section activity also follows the visible URL, on touch devices as on TV. */
+export function sectionPathVisible(path: string): boolean {
+  return path === '/' || path === '/live' || path.startsWith('/library/');
+}
+
+/** Touch sections are rendered directly rather than as navigator descriptors; their
+ * visible path owns activity. TV still waits for native focus before taking focus. */
+export function sectionIsActive(path: string, navigationFocused: boolean, tv: boolean): boolean {
+  return sectionPathVisible(path) && (!tv || navigationFocused);
+}

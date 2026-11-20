@@ -1,9 +1,10 @@
 import { Navigator, useIsFocused, usePathname } from 'expo-router';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Platform, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
-import { SkinRoot, type SkinHost } from '@vela/skin';
+import { ScreenActive, SkinRoot, type SkinHost } from '@vela/skin';
 import { useVela } from '../../src/vela';
+import { retainedHost } from '../../src/retained-host';
 import Home from './index';
 import { LibrarySection } from './library/[id]';
 import type { LibraryParams } from '../../src/browse/library-query';
@@ -12,16 +13,7 @@ import { SectionFocusContext, SectionShellHostContext } from '../../src/section-
 import { SectionScene } from '../../src/section-scene';
 import { SECTION_SLIDE_MS, sectionDirection, type SectionDirection } from '../../src/section-motion';
 import { trimSectionCache } from '../../src/section-cache';
-import { sectionRoute, type SectionRoute as Section } from '../../src/section-route';
-
-function sectionForPath(path: string): Section | null {
-  if (path === '/') return { route: 'home', entry: 'home' };
-  if (path === '/live') return { route: 'live', entry: 'live' };
-  if (path.startsWith('/library/')) {
-    return { route: 'library', entry: decodeURIComponent(path.slice('/library/'.length)) };
-  }
-  return null;
-}
+import { sectionRoute, sectionIsActive, type SectionRoute as Section } from '../../src/section-route';
 
 export default function SectionsLayout() {
   // A skin change or host update must not replace the navigator that owns section history.
@@ -33,7 +25,7 @@ function SectionsContent() {
   const activeRoute = state.routes[state.index];
   const pathname = usePathname();
   const navigationFocused = useIsFocused();
-  const focused = navigationFocused && (!(Platform.isTV && Platform.OS === 'android') || sectionForPath(pathname) !== null);
+  const focused = sectionIsActive(pathname, navigationFocused, Platform.isTV);
   const section = useRef<Section>({ route: 'home', entry: 'home' });
   section.current = sectionRoute(activeRoute?.name, (activeRoute?.params as { id?: unknown } | undefined)?.id) ?? section.current;
   const vela = useVela();
@@ -44,6 +36,9 @@ function SectionsContent() {
   }, []);
   const host = routeHost?.env.small && pageHost?.env.route === section.current.route
     && pageHost.env.section === section.current.entry ? pageHost : routeHost;
+  const held = useRef(host);
+  held.current = retainedHost(held.current, host, focused);
+  const shellHost = held.current;
   const shell = vela.doc?.shell;
   // A TV switches sections at once, as with Reduce Motion: the remote moves focus along the nav
   // and each press would otherwise start a slide over the last one.
@@ -73,13 +68,14 @@ function SectionsContent() {
   }, [key, order]);
 
   const session = useVelaState(state => state.auth.revision);
-  const content = (
+  const content = useMemo(() => (
     <View style={{ flex: 1, overflow: 'hidden' }}>
       <SectionScenes key={session} focused={focused} sectionKey={key} reducedMotion={reducedMotion} transition={transition.current} />
     </View>
-  );
-  if (!host || !shell) return content;
-  const drawn = <SectionShellHostContext.Provider value={publishShellHost}><SkinRoot host={{ ...host, children: content }} node={shell} /></SectionShellHostContext.Provider>;
+  ), [session, focused, key, reducedMotion, transition.current]);
+  const framedHost = useMemo(() => shellHost ? { ...shellHost, children: content } : null, [shellHost, content]);
+  if (!framedHost || !shell) return content;
+  const drawn = <SectionShellHostContext.Provider value={publishShellHost}><ScreenActive.Provider value={focused}><SkinRoot host={framedHost} node={shell} /></ScreenActive.Provider></SectionShellHostContext.Provider>;
   return Platform.isTV && Platform.OS === 'android'
     ? <FocusBoundary active={focused} style={{ flex: 1 }}>{drawn}</FocusBoundary>
     : drawn;

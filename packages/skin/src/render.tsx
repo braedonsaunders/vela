@@ -1,3 +1,5 @@
+import { ScreenActive } from './screen-active';
+export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
 import { msg } from '@vela/core';
 import { restartAction, secondaryPlayAction } from './restart-action';
@@ -75,9 +77,6 @@ const PointerInheritance = createContext<PointerMode>('auto');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
-/** Whether this screen is the one showing (the app says: a page under the player or a title page
- * is not). Looping animations stop while it is not (motion.ts). */
-export const ScreenActive = createContext(true);
 /** First content layout releases the skeleton covering a newly loaded route. */
 const InstantContent = createContext(false);
 const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);

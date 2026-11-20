@@ -1,3 +1,5 @@
+import { openScopeFlags } from './escape-policy';
+import { ScreenActive } from './screen-active';
 // Escape on a document's menus (docs/skin-schema.md, `escape`): Escape anywhere on the page, or
 // Back on a TV remote or Android (Menu on tvOS), clears the open flags of the innermost node that
 // names them and returns focus to its `returnFocus` element, else to the press button that opened
@@ -128,10 +130,11 @@ interface ScopeProps {
 /** Wraps a node that names `escape` flags: registers its scope and counts it for its descendants. */
 export function EscapeScope({ flags, returnFocus, guide, children }: ScopeProps) {
   const host = useHost();
+  const active = useContext(ScreenActive);
   const level = useContext(Level) + 1;
-  const latest = useRef({ host, flags, returnFocus });
-  latest.current = { host, flags, returnFocus };
-  const open = scopeOpen(flags, host.env.flags);
+  const latest = useRef({ host, flags, returnFocus, active });
+  latest.current = { host, flags, returnFocus, active };
+  const open = active && scopeOpen(flags, host.env.flags);
 
   // Open: Back closes it, and on TV focus moves into it once it is drawn (the guide hands focus
   // to its first item), so a menu over the page is never skipped for what lies behind it.
@@ -143,7 +146,7 @@ export function EscapeScope({ flags, returnFocus, guide, children }: ScopeProps)
   }, [open, guide]);
 
   useEffect(() => {
-    const openFlags = () => latest.current.flags.filter(flag => latest.current.host.env.flags.includes(flag));
+    const openFlags = () => openScopeFlags(latest.current.flags, latest.current.host.env.flags, latest.current.active);
     const scope: Scope = {
       level,
       order: ++registered,
@@ -156,6 +159,7 @@ export function EscapeScope({ flags, returnFocus, guide, children }: ScopeProps)
         const opener = openers.get(open[0]!);
         // Focus moves once the closed menu has left the tree.
         requestAnimationFrame(() => {
+          if (!latest.current.active) return;
           if (id && focusElement(id)) return;
           if (opener) focusOn(opener);
         });

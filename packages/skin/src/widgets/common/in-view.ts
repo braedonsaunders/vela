@@ -1,7 +1,8 @@
+import { ScreenActive } from '../../screen-active';
 // Whether a view is on screen, within a margin past the screen's edge: an IntersectionObserver
 // on the web; on native, the view's window position checked while the app is in front. A view
 // counts as coming into range only while the app is in the foreground; leaving is always reported.
-import { useEffect, useRef, type RefObject } from 'react';
+import { useContext, useEffect, useRef, type RefObject } from 'react';
 import { AppState, Dimensions, Platform, type HostInstance } from 'react-native';
 
 /** How far past the screen's edge counts as in range: below for a page, beyond the end for a row. */
@@ -18,16 +19,19 @@ export function useVisibility(
   reach: Reach,
   onChange: (visible: boolean) => void,
 ): void {
+  const active = useContext(ScreenActive);
   const latest = useRef(onChange);
   latest.current = onChange;
   useEffect(() => {
+    if (!active) { latest.current(false); return; }
     const node = ref.current;
     if (!node) return;
     const change = (visible: boolean) => latest.current(visible);
-    return Platform.OS === 'web'
+    const stop = Platform.OS === 'web'
       ? observeWeb(node as unknown as Element, reach, change)
       : pollNative(node, reach, change);
-  }, [ref, reach.below, reach.after]);
+    return () => { stop(); change(false); };
+  }, [active, ref, reach.below, reach.after]);
 }
 
 /** Calls `onEnter` each time the view comes into range. */
@@ -55,10 +59,12 @@ function observeWeb(element: Element, reach: Reach, change: (visible: boolean) =
 }
 
 function pollNative(node: HostInstance, reach: Reach, change: (visible: boolean) => void): () => void {
+  let disposed = false;
   let inside = false;
   const check = () => {
     if (AppState.currentState !== 'active') return;
     node.measureInWindow((x, y, width, height) => {
+      if (disposed) return;
       const screen = Dimensions.get('window');
       const visible = width > 0 || height > 0;
       const now =
@@ -73,5 +79,5 @@ function pollNative(node: HostInstance, reach: Reach, change: (visible: boolean)
   };
   check();
   const timer = setInterval(check, NATIVE_CHECK_MS);
-  return () => clearInterval(timer);
+  return () => { disposed = true; clearInterval(timer); };
 }

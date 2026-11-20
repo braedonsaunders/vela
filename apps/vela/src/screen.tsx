@@ -1,3 +1,4 @@
+import { retainedHost } from './retained-host';
 // One route drawn by the active document: the shell's tree around the route's tree. A document
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
@@ -37,6 +38,9 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const visibleRoute = !(Platform.isTV && Platform.OS === 'android') || documentIsVisible(route, entry, pathname);
   const isCurrent = (sectionFocused ?? navigationFocused) && visibleRoute;
   useReturnFocus(isCurrent);
+  const held = useRef(host);
+  held.current = retainedHost(held.current, host, isCurrent);
+  const contentHost = held.current;
   const publishShellHost = useContext(SectionShellHostContext);
   // LibraryState's wrapper/actions are recreated on render. Publish only when the base host or
   // memoized page model changes, so publishing into the shell cannot trigger itself again.
@@ -70,10 +74,10 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
     );
   }
   const tree = vela.doc?.routes[route];
-  if (!host || !tree) return <View style={{ flex: 1 }} />;
+  if (!host || !contentHost || !tree) return <View style={{ flex: 1 }} />;
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md).
-  const search = route === 'home' && host.env.query !== '' ? vela.doc?.routes.search : undefined;
-  const content = route === 'library' ? <LibraryScenes host={host} node={tree} /> : <SkinRoute host={host} node={tree} after={search} />;
+  const search = route === 'home' && contentHost.env.query !== '' ? vela.doc?.routes.search : undefined;
+  const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
   const shell = route === 'title' || route === 'person' || sharedShell ? undefined : vela.doc?.shell;
   // The transparent navigator modal fills the viewport, including the section shell's header.
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.

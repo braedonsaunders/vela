@@ -4,6 +4,8 @@ import type { VelaPlayerViewProps } from '@vela/player-api';
 import {
   createContext,
   useContext,
+  useCallback,
+  useRef,
   useEffect,
   useMemo,
   useSyncExternalStore,
@@ -93,13 +95,17 @@ const IDLE: LiveView = {
 const none = () => () => {};
 
 /** The live view, re-rendering on every change; idle where there is no controller. */
-export function useLiveView(): LiveView {
+export function useLiveView(active = true): LiveView {
   const live = useContext(LiveContext);
-  return useSyncExternalStore(
-    live?.controller.subscribe ?? none,
-    live?.controller.view ?? (() => IDLE),
-    live?.controller.view ?? (() => IDLE),
-  );
+  const controller = live?.controller;
+  const retained = useRef({ controller, view: controller?.view() ?? IDLE });
+  // Never keep another connection's data, even while the screen is covered.
+  if (retained.current.controller !== controller) retained.current = { controller, view: controller?.view() ?? IDLE };
+  const read = useCallback(() => {
+    if (active) retained.current.view = controller?.view() ?? IDLE;
+    return retained.current.view;
+  }, [active, controller]);
+  return useSyncExternalStore(active ? controller?.subscribe ?? none : none, read, read);
 }
 
 /** Guide cache/clock changes cannot cause native player prop commits. */
