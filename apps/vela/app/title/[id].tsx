@@ -20,8 +20,15 @@ export default function Title() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) { event.preventDefault(); back(); }
     };
+    // A click on the dimmed page around the frame closes it, like Escape. Sheets and menus the
+    // page opens are drawn outside the route (portals), so clicks in them never count as outside.
+    const onClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.defaultPrevented || !(event.target instanceof Element)) return;
+      if (event.target.closest('[data-testid="detail-route"]') && !event.target.closest('[data-testid="detail-frame"]')) back();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('click', onClick);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); };
   }, []));
   return <DocumentScreen route="title" entry={id ?? ''} library={library} />;
 }

@@ -1023,6 +1023,8 @@ export const titleLoading: Node = {
 // the root is the route's scroll view, whose own padding native ignores.
 export const title: Node = {
   type: 'box',
+  // The web host closes the page on a click that lands here but outside the frame.
+  testId: 'detail-route',
   style: {
     position: 'absolute',
     inset: '0px',
@@ -1035,6 +1037,7 @@ export const title: Node = {
     {
       type: 'box',
       motion: 'velaOpen',
+      testId: 'detail-frame',
       style: {
         position: 'relative',
         display: 'flex',
