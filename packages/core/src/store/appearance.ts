@@ -13,6 +13,12 @@ import type { VelaState } from './index';
 const LOCAL: V.Appearance = { revision: 0, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: [] };
 const MAX_FOLLOW_FAILURES = 5;
 
+/** An unchanged appearance keeps its identity, so a refresh (returning to the app, coming back
+ * online) does not re-resolve the skin and replay the page's entrance. */
+export function settled(previous: AppearanceModel | undefined, next: AppearanceModel): AppearanceModel {
+  return previous && JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+}
+
 function missing(error: unknown): boolean {
   if (!(error instanceof VelaError)) return false;
   return error.status === 404 || error.detail.code === 'feature_unavailable' || error.detail.code === 'unsupported';
@@ -56,7 +62,7 @@ export class Appearance {
         }
       }
       const model = appearanceModel(appearance, this.origin, await builtInDocuments(this.builtInOrigin, this.rendererVersion), this.builtInOrigin);
-      if (epoch === this.session.epoch) this.box.update('appearance', () => ready(model));
+      if (epoch === this.session.epoch) this.box.update('appearance', current => ready(settled(current.value, model)));
     } catch (error) {
       if (epoch === this.session.epoch) this.box.update('appearance', appearance => failed(error, appearance));
     }
@@ -66,7 +72,7 @@ export class Appearance {
   follow(): () => void {
     const controller = new AbortController();
     const show = (model: AppearanceModel) => {
-      if (!controller.signal.aborted) this.box.update('appearance', () => ready(model));
+      if (!controller.signal.aborted) this.box.update('appearance', current => ready(settled(current.value, model)));
     };
     const loop = async () => {
       let failures = 0;
