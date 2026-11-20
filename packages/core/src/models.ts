@@ -87,6 +87,8 @@ export interface PreviewGrant {
 
 export interface HomeModel {
   viewer: string;
+  /** The signed-in viewer's picture (a Plex or Jellyfin avatar) on the server's own origin; '' for none. */
+  viewerAvatar: string;
   defaultSkinId: string;
   skins: string[];
   hero: Card[];

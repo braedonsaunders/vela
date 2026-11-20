@@ -36,6 +36,7 @@ export function environment({ state, view, live, route, entry, library, width, s
   const selectedDetail = selectedDetailRaw ? detailDateDisplay(selectedDetailRaw, dateDisplay) : undefined;
   return {
     viewer: state.auth.viewer,
+    viewerAvatar: home.value?.viewerAvatar ?? '',
     section: route === 'library' ? entry : route === 'live' ? 'live' : 'home',
     query: state.search.query,
     small: width < 640,

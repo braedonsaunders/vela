@@ -28,6 +28,8 @@ export interface Destination { id: string; name: string; kind: string; backdrop:
 /** The view state documents read. A key whose model is absent (an area not drawn yet) reads nothing. */
 export interface Env {
   viewer: string;
+  /** The viewer's picture for the profile control; '' where the server gives none. */
+  viewerAvatar?: string;
   section: string;
   query: string;
   small: boolean;
@@ -250,6 +252,7 @@ export const VOCABULARY: Record<string, Accessor> = {
 
   'env.viewer': (_, e) => e.viewer,
   'env.viewerInitial': (_, e) => e.viewer.slice(0, 1).toUpperCase(),
+  'env.viewerAvatar': (_, e) => e.viewerAvatar ?? '',
   'env.section': (_, e) => e.section,
   'env.query': (_, e) => e.query,
   'env.small': (_, e) => yes(e.small),

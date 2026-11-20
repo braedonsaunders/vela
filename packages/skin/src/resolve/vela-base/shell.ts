@@ -114,6 +114,45 @@ const compactMenu: Node = {
   ],
 };
 
+// The viewer's badge: their avatar where the server gives one, over the initial on a warm disc.
+// The picture is decorative (the control already names the viewer), and one that fails to load
+// leaves the initial showing through.
+export const viewerBadge = (size: number, fontSize: string): Node => ({
+  type: 'box',
+  style: {
+    position: 'relative',
+    width: `${size}px`,
+    height: `${size}px`,
+    'border-radius': `${size / 2}px`,
+    'overflow-x': 'hidden',
+    'overflow-y': 'hidden',
+    'flex-shrink': '0',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'background-image': 'linear-gradient(135deg, #c0703f 0%, #5b2a4a 100%)',
+  },
+  children: [
+    {
+      type: 'text',
+      text: '{env.viewerInitial}',
+      style: {
+        'font-size': fontSize,
+        'font-weight': '650',
+        color: '$ui.ink',
+      },
+    },
+    {
+      type: 'image',
+      when: [{ test: 'env.viewerAvatar' }],
+      src: '{env.viewerAvatar}',
+      alt: '',
+      fade: true,
+      style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' },
+    },
+  ],
+});
+
 export const shell: Node = {
   type: 'box',
   style: {
@@ -253,22 +292,7 @@ export const shell: Node = {
               focus: navFocus,
               small: { padding: '4px', 'min-width': '44px' },
               children: [
-                {
-                  type: 'text',
-                  text: '{env.viewerInitial}',
-                  style: {
-                    width: '32px',
-                    height: '32px',
-                    'border-radius': '16px',
-                    display: 'flex',
-                    'align-items': 'center',
-                    'justify-content': 'center',
-                    'font-size': '14px',
-                    'font-weight': '650',
-                    color: '$ui.ink',
-                    'background-image': 'linear-gradient(135deg, #c0703f 0%, #5b2a4a 100%)',
-                  },
-                },
+                viewerBadge(32, '14px'),
                 {
                   type: 'text',
                   text: '{env.viewer}',
@@ -343,21 +367,7 @@ export const shell: Node = {
           type: 'box',
           style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center' },
           children: [
-            {
-              type: 'text',
-              text: '{env.viewerInitial}',
-              style: {
-                width: '40px',
-                height: '40px',
-                'border-radius': '20px',
-                display: 'flex',
-                'align-items': 'center',
-                'justify-content': 'center',
-                'font-size': '17px',
-                'font-weight': '650',
-                'background-image': 'linear-gradient(135deg, #c0703f 0%, #5b2a4a 100%)',
-              },
-            },
+            viewerBadge(40, '17px'),
             {
               type: 'text',
               text: '{env.viewer}',

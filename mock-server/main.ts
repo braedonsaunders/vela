@@ -24,7 +24,9 @@ const guide = (from: number, until: number, ids: string[]) => fixtureGuide(from,
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
 const bootstrapDelayMs = Math.min(120_000, Math.max(0, Number(process.env.VELA_MOCK_BOOTSTRAP_DELAY_MS) || 0));
 const secret = crypto.randomUUID();
-const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
+// The demo viewer is Plex-linked: bootstrap carries its avatar as a session-length image address.
+const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1',
+  avatar: { id: 'viewer-demo', kind: 'person', tag: '1', sizes: [{ width: 240, height: 240, url: '/vela/v0/images/plexavatar-viewer-demo' }] } };
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
 const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };

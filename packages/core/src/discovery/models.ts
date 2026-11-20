@@ -262,12 +262,25 @@ function heroAction(hero: WireHero, rows: WireRow[]): HeroAction {
   };
 }
 
+/** The viewer's avatar at a top-bar size. Only the server's own origin serves it, and an image
+ * that is not there leaves the initial in its place. */
+export function viewerAvatar(avatar: ArtworkRef | undefined, images?: Images): string {
+  if (!avatar?.sizes?.length) return '';
+  const url = artworkURL(avatar, 96, 96, images);
+  if (!url) return '';
+  if (!images) return url;
+  try {
+    return new URL(url).origin === new URL(images.origin).origin ? url : '';
+  } catch { return ''; }
+}
+
 export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): HomeModel {
   const heroes = (data.heroes ?? []).slice(0, 6);
   const previews: PreviewGrant[] = [];
   const features = data.capabilities.features;
   return {
     viewer: data.viewer.name,
+    viewerAvatar: viewerAvatar(data.viewer.avatar, images),
     defaultSkinId: data.defaultSkinId,
     skins: data.capabilities.skins.map(s => s.id),
     hero: heroes.map(hero => card(hero.title, hero.receiptToken, images, artWidth)),
