@@ -58,7 +58,7 @@ export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
   const updateOverflow = () => {
     const { x, width, content } = metrics.current;
     setOverflow(value => {
-      const next = { before: x > 2, after: x + width < content - 2 };
+      const next = tabOverflow(x, width, content);
       return value.before === next.before && value.after === next.after ? value : next;
     });
   };
@@ -82,12 +82,12 @@ export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
     strip.current?.scrollTo({ x: metrics.current.x, animated: false });
     updateOverflow();
   } } : {};
-  return <View style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+  return <View style={[{ position: 'relative', minWidth: 0, flexShrink: 1 }, Platform.OS === 'web' && { width: 'max-content', maxWidth: '100%' } as never]}>
     <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityRole="tablist" accessibilityLabel="Library views"
       onLayout={event => { metrics.current.width = event.nativeEvent.layout.width; updateOverflow(); if (activeId) reveal(activeId, false); }}
       onContentSizeChange={width => { metrics.current.content = width; updateOverflow(); if (activeId) reveal(activeId, false); }}
       onScroll={scrolled} scrollEventThrottle={16} {...wheel}
-      style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3, paddingRight: 24 }}>
+      style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3 }}>
       {page?.facetTitle && <Button label="Back to collections" onPress={() => host.dispatch('libraryView', page.tabId ?? 'collections')} />}
       {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
         onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout; if (activeId === tab.id) reveal(tab.id, false); }}
