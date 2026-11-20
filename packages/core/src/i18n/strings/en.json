@@ -286,6 +286,7 @@
   "library.sort.duration": "Running time",
   "library.sort.popularity": "Popularity",
   "library.sort.updated": "Recently updated",
+  "library.sort.lastViewed": "Recently watched",
   "library.kind.movie": "Films",
   "library.kind.show": "Series",
   "library.kind.season": "Seasons",

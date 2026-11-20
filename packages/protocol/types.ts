@@ -55,7 +55,7 @@ export interface ArtworkRef {
   sizes: { width: number; height: number; url: string }[]; blurHash?: string; thumbHash?: string; color?: string;
 }
 export type TitleKind = 'movie' | 'show' | 'season' | 'episode';
-export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean }
+export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean; /** Most recent viewing activity, RFC3339. */ lastViewedAt?: Timestamp }
 /** Actual server-sourced rating; scale is the maximum possible value. */
 export interface TitleRating { source: string; kind: 'critic' | 'audience'; value: number; scale: number; state?: string; votes?: number; url?: string }
 export interface ThemeMusic { url: string; expiresAt: Timestamp; durationSeconds?: number;
@@ -220,10 +220,10 @@ export interface WatchRequest extends Mutation { played?: boolean; favorite?: bo
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[] }
 export interface CollectionContents extends Page<RowEntry> { collection: Collection }
 
-export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
+export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated' | 'lastViewed';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
+export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; layout?: 'grid' | 'list' | 'timeline'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }

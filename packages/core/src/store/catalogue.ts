@@ -314,7 +314,8 @@ export class Catalogue {
       }
       if (result.continuation === 'more' && !result.nextCursor) throw new Error('Invalid library continuation');
       const images = await connection.images();
-      return { ...libraryModel(result, items, read, query, images, this.artWidth()), canSearch: supportsLibraryBrowse(api, result.library) };
+      const unique = [...new Map(items.map(item => [item.id, item])).values()];
+      return { ...libraryModel(result, unique, read, query, images, this.artWidth()), canSearch: supportsLibraryBrowse(api, result.library) };
     }, background);
     this.libraryReads.set(key, { pages, promise: reading });
     void reading.finally(() => {

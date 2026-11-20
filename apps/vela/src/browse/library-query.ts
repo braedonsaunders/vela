@@ -35,6 +35,7 @@ const SORTS: Record<Sort, true> = {
   duration: true,
   popularity: true,
   updated: true,
+  lastViewed: true,
 };
 const KINDS: Record<Kind, true> = { movie: true, show: true, season: true, episode: true };
 

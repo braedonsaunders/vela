@@ -23,6 +23,7 @@ export interface Card {
   played: boolean;
   favorite?: boolean;
   watchlisted?: boolean;
+  lastViewedAt?: string;
   showId: string;
   showName: string;
   episodeContext: string;

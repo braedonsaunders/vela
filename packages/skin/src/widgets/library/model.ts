@@ -15,6 +15,8 @@ export interface LibraryPage {
   liveFilters?: LibraryLiveFilter[];
   facetTitle?: string;
   view?: LibraryView;
+  /** Server-selected presentation for a Smart View; other views use the grid. */
+  layout?: 'grid' | 'list' | 'timeline';
   /** Explicit URL selection; an initially arriving server view is not a tab transition. */
   viewRequest?: string;
   extras?: LibraryExtras;

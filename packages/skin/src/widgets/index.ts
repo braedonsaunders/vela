@@ -13,6 +13,7 @@ import { CardPreview, HeroPreview } from './common/preview';
 import { Select } from './common/select';
 import { Sentinel } from './common/sentinel';
 import { LibraryTabs, LibraryFacets, LibraryToolbar } from './library/presentation';
+import { LibrarySmartView } from './library/smart-view';
 import { YearInput } from './library/year-input';
 
 import { RowLink } from './row-link';
@@ -38,6 +39,7 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   libraryToolbar: LibraryToolbar,
   libraryTabs: LibraryTabs,
   libraryFacets: LibraryFacets,
+  librarySmartView: LibrarySmartView,
 };
 
 /** The widgets that take focus themselves. The rest (sentinel, previews, the live tile) only draw,
@@ -54,5 +56,6 @@ export const FOCUSABLE_WIDGETS = new Set([
   'libraryToolbar',
   'libraryTabs',
   'libraryFacets',
+  'librarySmartView',
   'homeSlow',
 ]);

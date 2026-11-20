@@ -126,6 +126,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       loading: !held && current?.load !== 'failed',
       moreLoading: usableView === 'live' ? !!liveState.moreLoading : (usableView === 'collections' || usableView === 'people') ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
+      layout: viewTab?.layout ?? 'grid',
       viewLoad: usableView === 'live' ? liveState.failed ? 'failed' : liveState.loading ? 'loading' : 'ready'
         : usableView === 'library' || usableView === 'view' || usableView === 'genres' && !canRecommend ? current?.load ?? 'idle'
         : extraState.id !== id || extraState.revision !== revision || extraState.progressRevision !== progressRevision || extraState.tab !== collectionTab || extraState.query !== tabQuery ? 'idle'
@@ -144,7 +145,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.failed) || extraState.id === id && extraState.loading),
       extrasFailed: usableView !== 'live' && extraState.id === id && extraState.progressRevision === progressRevision && (extraState.failed || !!extras?.failed),
     };
-  }, [current, earlier, browseQuery, facetTitle, selectedTab?.id, selectedTab?.card, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, progressRevision, tabQuery, liveFilter, liveState]);
+  }, [current, earlier, browseQuery, facetTitle, selectedTab?.id, selectedTab?.card, viewTab?.layout, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, progressRevision, tabQuery, liveFilter, liveState]);
 
   const failed = current?.load === 'failed';
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';

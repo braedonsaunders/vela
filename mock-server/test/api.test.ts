@@ -187,6 +187,24 @@ describe('mock server: catalogue and live', () => {
     expect((await call('/titles/no-such-title', { headers: authed(tokens) })).status).toBe(404);
   });
 
+  test('plugin library exposes paged Smart Views and watch-history timestamps', async () => {
+    const page = await get<V.Page<V.Library>>('/libraries?limit=100');
+    const plugin = page.items.find(library => library.id === 'videos')!;
+    expect(plugin.tabs).toHaveLength(45);
+    expect(plugin.tabs?.filter(tab => tab.kind === 'view').slice(0, 3).map(tab => [tab.id, tab.layout])).toEqual([
+      ['smart-grid', 'grid'], ['smart-list', 'list'], ['smart-timeline', 'timeline'],
+    ]);
+    expect(plugin.browse.sorts.find(sort => sort.id === 'lastViewed')?.directions).toEqual(['desc', 'asc']);
+    const first = await get<V.LibraryContents>('/libraries/videos/items?tab=smart-timeline&sort=lastViewed&direction=desc');
+    expect(first.items).toHaveLength(6);
+    expect(first.continuation).toBe('more');
+    expect(first.items.every(item => item.kind !== 'title' || !!item.title.watch?.lastViewedAt)).toBe(true);
+    const next = await get<V.LibraryContents>(`/libraries/videos/items?tab=smart-timeline&sort=lastViewed&direction=desc&cursor=${encodeURIComponent(first.nextCursor!)}`);
+    expect(new Set([...first.items, ...next.items].map(item => item.id)).size).toBe(first.items.length + next.items.length);
+    expect((await get<V.LibraryContents>('/libraries/videos/items?tab=smart-list&sort=lastViewed&direction=desc&query=the')).items
+      .every(item => item.kind !== 'title' || item.title.name.toLowerCase().includes('the'))).toBe(true);
+  });
+
   test('bootstrap-only delay leaves independent library reads responsive', async () => {
     const delayed = await launchMock({ VELA_MOCK_BOOTSTRAP_DELAY_MS: '120' });
     try {

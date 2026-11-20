@@ -1,10 +1,9 @@
 import { ContentLoader } from '../common/loading';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Modal, Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useVela } from '@vela/core/react';
 import { shellHasLibraryTabs } from './navigation';
 import { toolbarTabs, tabSearchEnabled } from './toolbar-model';
-import { singleLibraryStrip } from './toolbar-layout';
 import type { FacetValue, LibraryFacet } from '../../../../protocol/types';
 import { FocusPressable } from '../../focus';
 import { InheritedContext, useHost, type WidgetProps } from '../../host';
@@ -20,8 +19,8 @@ import { TextField } from '../common/text-field';
 const control = { height: '$ui.controlHeight', padding: '0px 12px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', 'justify-content': 'center', 'flex-shrink': '0' };
 const controlText = { color: '$ui.ink', 'font-size': '$ui.controlFontSize', 'font-weight': '500' };
 
-function Button({ label, onPress, selected = false, role = 'button', id, quiet = false, preferred = false, onLayout }: {
-  onLayout?(event: LayoutChangeEvent): void; id?: string; label: string; onPress(): void; selected?: boolean; quiet?: boolean; preferred?: boolean; role?: 'button' | 'tab' | 'checkbox';
+function Button({ label, onPress, selected = false, role = 'button', id, quiet = false, preferred = false, onLayout, onFocus }: {
+  onLayout?(event: LayoutChangeEvent): void; onFocus?(): void; id?: string; label: string; onPress(): void; selected?: boolean; quiet?: boolean; preferred?: boolean; role?: 'button' | 'tab' | 'checkbox';
 }) {
   const look = useLook();
   const [focused, focus] = useState(false);
@@ -30,7 +29,7 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
   const text = look.text({ ...controlText, color: tab && selected ? '$ui.onAccent' : quiet ? '$ui.inkSecondary' : '$ui.ink', 'font-weight': tab && selected ? '700' : '500' });
   return <FocusPressable onLayout={onLayout} nativeID={id} accessibilityRole={role} accessibilityLabel={label} accessibilityState={{ selected, checked: role === 'checkbox' ? selected : undefined }}
     {...(Platform.OS === 'web' ? { 'aria-selected': tab ? selected : undefined, 'aria-checked': role === 'checkbox' ? selected : undefined } : {})}
-    hasTVPreferredFocus={claim} onFocus={event => { focus(true); if (Platform.OS === 'web') (event.target as unknown as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }} onBlur={() => focus(false)} onPress={onPress}
+    hasTVPreferredFocus={claim} onFocus={event => { focus(true); onFocus?.(); if (Platform.OS === 'web') (event.target as unknown as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }} onBlur={() => focus(false)} onPress={onPress}
     style={look.box({ ...control, position: 'relative',
       'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
       'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : '$ui.glassEdge' })}>
@@ -44,24 +43,57 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
   </FocusPressable>;
 }
 
-/** No nested scrolling: the toolbar owns overflow for tabs and every control. */
-export function LibraryTabs({ onActiveLayout }: Partial<WidgetProps> & { onActiveLayout?(x: number): void } = {}) {
+/** The tab strip is its own scroll owner so large server-declared sets cannot squeeze the page. */
+export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
   const host = useHost();
+  const look = useLook();
   const page = host.env.library;
   const tabs = toolbarTabs(page);
   const activeId = page?.tabId ?? page?.view;
-  const positions = useRef<Record<string, number>>({});
-  const reveal = useRef(onActiveLayout); reveal.current = onActiveLayout;
-  useEffect(() => { if (activeId && positions.current[activeId] !== undefined) reveal.current?.(positions.current[activeId]!); }, [activeId]);
+  const strip = useRef<ComponentRef<typeof ScrollView>>(null);
+  const positions = useRef<Record<string, { x: number; width: number }>>({});
+  const metrics = useRef({ x: 0, width: 0, content: 0 });
+  const [overflow, setOverflow] = useState({ before: false, after: false });
+  const updateOverflow = () => {
+    const { x, width, content } = metrics.current;
+    setOverflow(value => {
+      const next = { before: x > 2, after: x + width < content - 2 };
+      return value.before === next.before && value.after === next.after ? value : next;
+    });
+  };
+  const reveal = (id: string, animated: boolean) => {
+    const position = positions.current[id];
+    if (!position || !metrics.current.width) return;
+    const x = Math.max(0, position.x - Math.max(12, (metrics.current.width - position.width) / 2));
+    strip.current?.scrollTo({ x, animated });
+  };
+  useEffect(() => { if (activeId) reveal(activeId, false); }, [activeId, tabs.length]);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     document.getElementById(`vela-library-view-${page?.tabId ?? page?.view}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [page?.tabId, page?.view]);
-  return <View accessibilityRole="tablist" accessibilityLabel="Library views" style={{ flexDirection: 'row', gap: 8, flexShrink: 0 }}>
-    {page?.facetTitle && <Button label="Back to collections" onPress={() => host.dispatch('libraryView', page.tabId ?? 'collections')} />}
-    {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
-      onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout.x; if (activeId === tab.id) reveal.current?.(event.nativeEvent.layout.x); }}
-      selected={activeId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
+  const scrolled = (event: NativeSyntheticEvent<NativeScrollEvent>) => { metrics.current.x = event.nativeEvent.contentOffset.x; updateOverflow(); };
+  const wheel = Platform.OS === 'web' ? { onWheel: (event: { nativeEvent?: { deltaX?: number; deltaY?: number } }) => {
+    const native = event.nativeEvent ?? event as never as { deltaX?: number; deltaY?: number };
+    const delta = Math.abs(native.deltaY ?? 0) > Math.abs(native.deltaX ?? 0) ? native.deltaY ?? 0 : native.deltaX ?? 0;
+    if (!delta) return;
+    metrics.current.x = Math.max(0, Math.min(metrics.current.content - metrics.current.width, metrics.current.x + delta));
+    strip.current?.scrollTo({ x: metrics.current.x, animated: false });
+    updateOverflow();
+  } } : {};
+  return <View style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+    <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityRole="tablist" accessibilityLabel="Library views"
+      onLayout={event => { metrics.current.width = event.nativeEvent.layout.width; updateOverflow(); if (activeId) reveal(activeId, false); }}
+      onContentSizeChange={width => { metrics.current.content = width; updateOverflow(); if (activeId) reveal(activeId, false); }}
+      onScroll={scrolled} scrollEventThrottle={16} {...wheel}
+      style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3, paddingRight: 24 }}>
+      {page?.facetTitle && <Button label="Back to collections" onPress={() => host.dispatch('libraryView', page.tabId ?? 'collections')} />}
+      {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
+        onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout; if (activeId === tab.id) reveal(tab.id, false); }}
+        onFocus={() => reveal(tab.id, true)} selected={activeId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
+    </ScrollView>
+    {overflow.before && <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 30, alignItems: 'flex-start', justifyContent: 'center', backgroundColor: look.ui.page }}><Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '22px', 'font-weight': '800' })}>‹</Text></View>}
+    {overflow.after && <View pointerEvents="none" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 30, alignItems: 'flex-end', justifyContent: 'center', backgroundColor: look.ui.page }}><Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '22px', 'font-weight': '800' })}>›</Text></View>}
   </View>;
 }
 
@@ -77,8 +109,6 @@ export function LibraryToolbar(props: WidgetProps) {
   const look = useLook();
   const page = host.env.library;
   const model = page?.model;
-  const compact = singleLibraryStrip(host.viewport.width, Platform.isTV);
-  const stripRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const tabsInShell = host.env.small && shellHasLibraryTabs(host.doc.document.slots?.shell);
   const browse = (page?.view ?? 'library') === 'library';
   const select = (params: Record<string, string>, width?: number) => <ToolbarField width={width ?? (Platform.OS === 'web' ? undefined : 180)}><Select ctx={props.ctx} params={params} /></ToolbarField>;
@@ -96,11 +126,11 @@ export function LibraryToolbar(props: WidgetProps) {
     {model.sorts.length > 1 && select({ options: 'library.sorts', action: 'librarySort', label: 'Sort by' })}
     {model.sorts.find(sort => sort.id === model.sort)?.directions.length === 2 && <Button label={model.direction === 'asc' ? 'Ascending' : 'Descending'} onPress={() => host.dispatch('librarySortFlip', '')} />}
   </View>;
-  const strip = (children: ReactNode, flex = true) => <ScrollView ref={compact ? stripRef : undefined} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+  const strip = (children: ReactNode, flex = true) => <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
     style={{ flex: flex ? 1 : undefined, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
   if (tabsInShell && !browse && !tabSearchEnabled(page?.model?.tabs?.find(tab => tab.id === page.tabId))) return null;
   return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ minHeight: look.ui.controlHeight + 22, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
-    {compact ? strip(<>{!tabsInShell && <LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />}{filters}{sort}</>) : <>{!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}</>}
+    {!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}
     {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
   </View>;
 }

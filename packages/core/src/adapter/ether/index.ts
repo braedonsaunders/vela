@@ -259,7 +259,17 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async library(id: string, browse: V.LibraryBrowseQuery) {
     const path = `/libraries/${segment(id)}/items${libraryBrowseQuery(browse)}`;
-    const contents = await this.http.request<V.LibraryContents>('GET', path, undefined, CACHED);
+    let contents: V.LibraryContents;
+    try {
+      contents = await this.http.request<V.LibraryContents>('GET', path, undefined, CACHED);
+    } catch (error) {
+      const expired = browse.cursor && error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
+      if (!expired) throw error;
+      // The ordering may have changed since the cursor was issued. Restart at page one without
+      // revalidation; Catalogue merges by item identity if this happens during a multi-page read.
+      const { cursor: _cursor, ...first } = browse;
+      contents = await this.http.request<V.LibraryContents>('GET', `/libraries/${segment(id)}/items${libraryBrowseQuery(first)}`);
+    }
     return { ...contents, library: { ...this.declaredLibraries.get(id), ...contents.library } };
   }
 

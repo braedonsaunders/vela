@@ -304,7 +304,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!library) fail('not-found', 'library_not_found', 'Library not found');
     const q = url.searchParams, options = library.browse;
     const invalid = () => fail('request', 'invalid_library_query', 'Unsupported or malformed library query');
-    for (const key of q.keys()) if (key.startsWith('facet.') ? !options.filters.facets?.some(f => `facet.${f.id}` === key) : !['cursor','limit','sort','direction','kind','genre','year','played','favorite','collectionId','query'].includes(key) || q.getAll(key).length !== 1) invalid();
+    for (const key of q.keys()) if (key.startsWith('facet.') ? !options.filters.facets?.some(f => `facet.${f.id}` === key) : !['cursor','limit','tab','sort','direction','kind','genre','year','played','favorite','collectionId','query'].includes(key) || q.getAll(key).length !== 1) invalid();
+    const tab = q.get('tab') ? library.tabs?.find(candidate => candidate.id === q.get('tab') && candidate.kind === 'view') : undefined;
+    if ((q.has('tab') && !tab) || (tab && q.has('query') && !tab.search)) invalid();
     const collectionId = q.get('collectionId');
     if (collectionId && (process.env.VELA_MOCK_OLD === '1' || !options.filters.collectionId || collectionId !== 'fixture-collection')) invalid();
     const sort = q.get('sort') ?? options.defaultSort, direction = q.get('direction') ?? options.defaultDirection;
@@ -325,13 +327,16 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     });
     if (sort !== 'server' && sort !== 'index') items.sort((a, b) => {
       if (a.kind !== 'title' || b.kind !== 'title') return 0;
-      const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : sort === 'released' ? (a.title.airDate ?? '').localeCompare(b.title.airDate ?? '') : (a.title.year ?? 0) - (b.title.year ?? 0);
+      const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : sort === 'released' ? (a.title.airDate ?? '').localeCompare(b.title.airDate ?? '')
+        : sort === 'lastViewed' ? (a.title.watch?.lastViewedAt ?? '').localeCompare(b.title.watch?.lastViewedAt ?? '') : (a.title.year ?? 0) - (b.title.year ?? 0);
       return (cmp || a.id.localeCompare(b.id)) * (direction === 'desc' ? -1 : 1);
     });
-    const query = [sort, direction, kind, genre?.trim().toLowerCase(), year, q.get('played'), q.get('favorite'), q.get('limit') ?? '50', collectionId];
+    const query = [tab?.id, sort, direction, kind, genre?.trim().toLowerCase(), year, q.get('played'), q.get('favorite'), q.get('query'), q.get('limit') ?? '50', collectionId];
     const scope = `library:${library.id}:${viewer.policyRevision}:${mac(JSON.stringify([query, q.getAll('query'), [...q].filter(([key]) => key.startsWith('facet.')), items]))}`;
     items = items.map(i => ({ ...i, receiptToken: receipt(g, `library:${scope}:${i.id}`) }));
-    return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, url, g, scope) } satisfies V.LibraryContents, g.id);
+    const paging = new URL(url);
+    if (tab) paging.searchParams.set('limit', '6');
+    return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, paging, g, scope) } satisfies V.LibraryContents, g.id);
   }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'GET' && path === '/events') return serverEvents(req, () => !g.revoked && g.expires > Date.now());

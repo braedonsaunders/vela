@@ -27,6 +27,11 @@ test('view browse parameters carry the tab with its search and ordering', () => 
   expect(Object.fromEntries(q)).toEqual({ tab: 'history', query: 'portal', sort: 'updated', direction: 'desc', cursor: 'opaque' });
 });
 
+test('lastViewed has the Recently watched sort label', async () => {
+  const { msg } = await import('../src/i18n');
+  expect(msg('library.sort.lastViewed')).toBe('Recently watched');
+});
+
 test('the shared library date rule uses ISO full dates and falls back to year', async () => {
   const { card } = await import('../src/discovery/models');
   const title = { id: 'dated', kind: 'movie' as const, name: 'Dated', summary: '', genres: [], artwork: [], year: 2026, airDate: '2026-11-19' };

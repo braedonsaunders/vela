@@ -257,7 +257,7 @@ const makeLibrary = (header: LibraryHeaderOffset | undefined): Node => ({
         } as Node,
         {
           ...titleGrid,
-          when: [{ ...noItems, not: true }],
+          when: [{ ...noItems, not: true }, is('library.layout', 'grid')],
           children: [
             {
               type: 'repeat',
@@ -266,6 +266,7 @@ const makeLibrary = (header: LibraryHeaderOffset | undefined): Node => ({
             },
           ],
         } as Node,
+        { type: 'widget', widget: 'librarySmartView', when: [{ ...noItems, not: true }, { test: 'library.layout', is: 'ne', value: 'grid' }] },
         {
           type: 'box',
           when: [{ ...noItems, not: true }, { test: 'library.more' }],

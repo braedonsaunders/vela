@@ -54,6 +54,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     played: title.watch?.played ?? false,
     favorite: title.watch?.favorite ?? false,
     watchlisted: title.watch?.watchlisted ?? false,
+    lastViewedAt: title.watch?.lastViewedAt ?? '',
     showId: title.showId ?? '',
     showName: title.showName ?? '',
     episodeContext: [
@@ -153,6 +154,7 @@ function plainCard(id: string, kind: string, name: string, rating: string, art: 
     durationSeconds: 0,
     progressSeconds: 0,
     played: false,
+    lastViewedAt: '',
     showId: '',
     showName: '',
     episodeContext: '',

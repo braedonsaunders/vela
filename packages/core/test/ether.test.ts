@@ -81,6 +81,19 @@ describe('EtherAdapter', () => {
     expect(seen[1]!.body).toMatchObject({ itemId: 's1', tab: 'live-now', liveMode: 'adaptive', idempotencyKey: 'play-live' });
   });
 
+  test('an expired library cursor restarts the Smart View from page one', async () => {
+    const first = { library: { id: 'videos' }, items: [], sort: 'lastViewed', direction: 'desc', continuation: 'more', nextCursor: 'fresh' };
+    const seen = routeFetch({ 'GET /vela/v0/libraries/videos/items': (request: { url: URL }) => request.url.searchParams.has('cursor')
+      ? Response.json({ error: { class: 'conflict', code: 'cursor_expired', message: 'Restart', retry: { allowed: false } } }, { status: 409 })
+      : first });
+    expect(await ether().library('videos', { tab: 'history', sort: 'lastViewed', direction: 'desc', cursor: 'expired', limit: 100 })).toEqual(first as never);
+    expect(seen.map(call => Object.fromEntries(call.url.searchParams))).toEqual([
+      { tab: 'history', sort: 'lastViewed', direction: 'desc', cursor: 'expired', limit: '100' },
+      { tab: 'history', sort: 'lastViewed', direction: 'desc', limit: '100' },
+    ]);
+    expect(seen[1]!.headers.has('if-none-match')).toBe(false);
+  });
+
   test('artwork refresh skips the old ETag and replaces the cached bootstrap grants', async () => {
     let calls = 0;
     const seen = routeFetch({ 'GET /vela/v0/bootstrap': () => {

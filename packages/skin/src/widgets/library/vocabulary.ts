@@ -56,6 +56,7 @@ export const LIBRARY_VOCABULARY: Record<string, LibraryAccessor> = {
   'library.card': (_, e) => libraryCard(e.collection?.card ?? e.library?.model?.presentation?.card),
   'library.cardRatio': (_, e) => libraryCardRatio(e.collection?.card ?? e.library?.model?.presentation?.card),
   'library.view': (_, e) => e.library?.view ?? 'library',
+  'library.layout': (_, e) => e.library?.layout ?? 'grid',
   'library.catalogView': (_, e) => e.library?.view === 'live' || e.library?.view === 'view' ? 'library' : e.library?.view ?? 'library',
   'library.hasViews': (_, e) => yes(!!e.library?.extras),
   'library.canRecommend': (_, e) => yes(e.library?.canRecommend ?? !!e.library?.extras?.recommendationsAvailable),
