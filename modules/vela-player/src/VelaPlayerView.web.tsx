@@ -6,7 +6,6 @@
 import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import type { Failure, MediaAccess, VelaPlayerModule, VelaPlayerProps, VelaPlayerViewProps } from '@vela/player-api';
-import { createWebPlayerHost } from '../web/engine/host';
 import { playerAssetBase } from '../web/asset-base';
 import { playerCapabilities } from '../web/capabilities';
 import { currentMediaAccess, onMediaAccessChange, setMediaAccess } from '../web/media-access';
@@ -37,16 +36,33 @@ function unsupported(message: string): Failure {
   return { kind: 'unsupported', message, recoverable: false };
 }
 
-const mountPlayback: Mount = (node, props) => {
-  if (!props.ambient && isWindowsHost()) return createWindowsPlayerHost(node, props, next => {
-    const assetBaseURL = playerAssetBase();
-    if (!assetBaseURL) throw new Error('This build has no player assets');
-    return createWebPlayerHost(node, next, { assetBaseURL, access: currentMediaAccess });
-  });
+const mountBrowserPlayback: Mount = (node, initial) => {
   const assetBaseURL = playerAssetBase();
   if (!assetBaseURL) throw new Error('This build has no player assets');
-  return createWebPlayerHost(node, props, { assetBaseURL, access: currentMediaAccess });
+  let props = initial;
+  let disposed = false;
+  let host: Mounted | undefined;
+  void import('../web/engine/host').then(({ createWebPlayerHost }) => {
+    if (!disposed) host = createWebPlayerHost(node, props, { assetBaseURL, access: currentMediaAccess });
+  }).catch(error => {
+    if (!disposed) props.onError?.(unsupported(error instanceof Error ? error.message : 'The player could not start'));
+  });
+  return {
+    update(next) {
+      props = next;
+      host?.update(next);
+    },
+    dispose() {
+      disposed = true;
+      host?.dispose();
+    },
+  };
 };
+
+const mountPlayback: Mount = (node, props) =>
+  !props.ambient && isWindowsHost()
+    ? createWindowsPlayerHost(node, props, next => mountBrowserPlayback(node, next))
+    : mountBrowserPlayback(node, props);
 
 const mountPreview: Mount = (node, props) => {
   const preview = createWebPreview(node, { ...props, preview: props.preview! }, currentMediaAccess);
