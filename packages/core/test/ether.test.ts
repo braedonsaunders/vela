@@ -112,6 +112,15 @@ describe('EtherAdapter', () => {
     expect(seen[1]!.headers.has('if-none-match')).toBe(false);
   });
 
+  test('a library snapshot reader handles cursor expiry without the adapter silently replaying page one', async () => {
+    const seen = routeFetch({ 'GET /vela/v0/libraries/videos/items': () =>
+      Response.json({ error: { class: 'conflict', code: 'cursor_expired', message: 'Restart', retry: { allowed: false } } }, { status: 409 }) });
+    await expect(ether().library('videos', { cursor: 'expired' }, { snapshot: true })).rejects.toMatchObject({
+      status: 409, detail: { code: 'cursor_expired' },
+    });
+    expect(seen).toHaveLength(1);
+  });
+
   test('artwork refresh skips the old ETag and replaces the cached bootstrap grants', async () => {
     let calls = 0;
     const seen = routeFetch({ 'GET /vela/v0/bootstrap': () => {

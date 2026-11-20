@@ -3,6 +3,7 @@
 // and dropped when the session or server changes.
 import type * as V from '../wire';
 import { libraryCardArtwork } from '../library-presentation';
+import { VelaError } from '../adapter/errors';
 import { hasTitleManagement } from '../adapter/capabilities';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography, hasVersions } from '../adapter/capabilities';
@@ -125,6 +126,7 @@ export class Catalogue {
     catch { return false; }
   }
   private readonly libraryReads = new Map<string, { pages: number; promise: Promise<void> }>();
+  private readonly librarySnapshots = new Map<string, { cursor?: string; seen: Set<string>; indices: Map<string, number> }>();
   /** What each collection has read so far, and where the server said to continue. */
   private readonly collectionReads = new Map<string, { items: V.RowEntry[]; cursor?: string; continuation: string }>();
   /** Titles on screen whose answer was partial, read again until complete. */
@@ -137,6 +139,7 @@ export class Catalogue {
   ) {
     session.onReset(() => {
       this.libraryReads.clear();
+      this.librarySnapshots.clear();
       this.collectionReads.clear();
       this.pending.clear();
       this.box.update('titles', () => ({}));
@@ -309,24 +312,49 @@ export class Catalogue {
       const epoch = this.session.epoch;
       return active.promise.then(() => epoch === this.session.epoch ? this.library(id, query, pages, background) : undefined);
     }
+    const epoch = this.session.epoch;
+    const held = this.box.get().library[key]?.value;
+    const snapshot = this.librarySnapshots.get(key);
+    const extend = !background && held && held.pages < pages && snapshot?.cursor ? { held, snapshot } : undefined;
     const reading = this.read('library', key, async connection => {
       const api = connection.adapter;
       const browse: V.LibraryBrowseQuery = { ...query, limit: PAGE };
-      let result = await api.library(id, browse);
-      const items = [...result.items];
-      const seen = new Set<string>();
-      let read = 1;
-      for (; read < Math.max(1, Math.floor(pages)) && result.continuation === 'more'; read++) {
-        const cursor = result.nextCursor;
-        if (!cursor || seen.has(cursor)) throw new Error('Invalid library continuation');
-        seen.add(cursor);
-        result = await api.library(id, { ...browse, cursor });
-        items.push(...result.items);
+      const load = async (previous: typeof extend, fresh: boolean) => {
+        const seen = new Set(previous?.snapshot.seen);
+        const entries = new Map<string, V.RowEntry>();
+        let cursor = previous?.snapshot.cursor;
+        let read = previous?.held.pages ?? 0;
+        let result: V.LibraryContents;
+        do {
+          if (cursor && seen.has(cursor)) throw new Error('Invalid library continuation');
+          if (cursor) seen.add(cursor);
+          result = await api.library(id, { ...browse, cursor }, { snapshot: true, fresh });
+          for (const item of result.items) entries.set(item.id, item);
+          read++;
+          cursor = result.continuation === 'more' ? result.nextCursor : undefined;
+          if (result.continuation === 'more' && (!cursor || seen.has(cursor))) throw new Error('Invalid library continuation');
+        } while (cursor && read < Math.max(1, Math.floor(pages)));
+
+        const images = await connection.images();
+        const model = libraryModel(result, [...entries.values()], read, query, images, this.artWidth());
+        const cards = [...(previous?.held.items ?? [])];
+        const indices = new Map(previous?.snapshot.indices);
+        let index = 0;
+        for (const id of entries.keys()) {
+          const position = indices.get(id) ?? cards.length;
+          indices.set(id, position);
+          cards[position] = model.items[index++]!;
+        }
+        if (epoch === this.session.epoch) this.librarySnapshots.set(key, { cursor, seen, indices });
+        return { ...model, items: cards, canSearch: supportsLibraryBrowse(api, result.library) };
+      };
+      try {
+        return await load(extend, false);
+      } catch (error) {
+        if (!(error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired')
+          || epoch !== this.session.epoch) throw error;
+        return load(undefined, true);
       }
-      if (result.continuation === 'more' && !result.nextCursor) throw new Error('Invalid library continuation');
-      const images = await connection.images();
-      const unique = [...new Map(items.map(item => [item.id, item])).values()];
-      return { ...libraryModel(result, unique, read, query, images, this.artWidth()), canSearch: supportsLibraryBrowse(api, result.library) };
     }, background);
     this.libraryReads.set(key, { pages, promise: reading });
     void reading.finally(() => {

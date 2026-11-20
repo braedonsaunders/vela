@@ -3,19 +3,20 @@ import { Catalogue, libraryKey } from '../src/store/catalogue';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
-import type { LibraryContents } from '../src/wire';
+import type { LibraryBrowseQuery, LibraryContents } from '../src/wire';
+import { VelaError } from '../src/adapter/errors';
 import { libraries, libraryEntries } from '../../protocol/fixtures/libraries';
 
 const answer = (): LibraryContents => ({ library: libraries[0]!, items: libraryEntries('movies'), sort: 'server', direction: 'asc', continuation: 'exhausted' });
 function setup() {
   const box = new StateBox({ library: {}, titles: {}, related: {}, collections: {} } as unknown as VelaState);
   const resets: (() => void)[] = [];
-  let read = async () => answer();
+  let read: (query: LibraryBrowseQuery) => Promise<LibraryContents> = async () => answer();
   let calls = 0;
   const session = {
     epoch: 0,
     onReset(fn: () => void) { resets.push(fn); },
-    async ready() { return { adapter: { library: () => { calls++; return read(); } }, images: async () => ({ origin: 'https://fixture.test' }) }; },
+    async ready() { return { adapter: { library: (_id: string, query: LibraryBrowseQuery) => { calls++; return read(query); } }, images: async () => ({ origin: 'https://fixture.test' }) }; },
   };
   const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
   return { box, catalogue, session, calls: () => calls, read(fn: typeof read) { read = fn; }, reset() { session.epoch++; resets.forEach(fn => fn()); } };
@@ -48,6 +49,54 @@ test('a background refresh keeps cached content ready, including on failure', as
   pending.reject(new Error('offline')); await refresh;
   expect(f.box.get().library).toBe(held);
   expect(held[libraryKey('movies', {})]?.load).toBe('ready');
+});
+
+test('opening eleven library pages reads each cursor exactly once', async () => {
+  const f = setup();
+  const items = answer().items;
+  f.read(async ({ cursor }) => {
+    const offset = Number(cursor ?? 0);
+    return { ...answer(), items: [items[offset]!], continuation: offset < 10 ? 'more' : 'exhausted',
+      nextCursor: offset < 10 ? String(offset + 1) : undefined };
+  });
+  for (let pages = 1; pages <= 11; pages++) await f.catalogue.library('movies', {}, pages);
+  expect(f.calls()).toBe(11);
+  expect(f.box.get().library[libraryKey('movies', {})]?.value?.items.map(item => item.id))
+    .toEqual(items.slice(0, 11).map(item => item.kind === 'title' ? item.title.id : item.id));
+});
+
+test('an expired cursor replaces the old snapshot and restarts only once', async () => {
+  const f = setup();
+  const items = answer().items;
+  let restarted = false;
+  const cursors: (string | undefined)[] = [];
+  const expired = () => new VelaError({ class: 'conflict', code: 'cursor_expired', message: 'Restart', retry: { allowed: false } }, 409);
+  f.read(async ({ cursor }) => {
+    cursors.push(cursor);
+    if (cursor === 'old') { restarted = true; throw expired(); }
+    if (cursor === 'new') return { ...answer(), items: [items[2]!] };
+    return { ...answer(), items: [items[restarted ? 1 : 0]!], continuation: 'more', nextCursor: restarted ? 'new' : 'old' };
+  });
+  await f.catalogue.library('movies');
+  await f.catalogue.library('movies', {}, 2);
+  expect(cursors).toEqual([undefined, 'old', undefined, 'new']);
+  expect(f.box.get().library[libraryKey('movies', {})]?.value?.items.map(item => item.id))
+    .toEqual(items.slice(1, 3).map(item => item.kind === 'title' ? item.title.id : item.id));
+});
+
+test('repeated cursor expiry keeps the last visible snapshot', async () => {
+  const f = setup();
+  f.read(async ({ cursor }) => {
+    if (cursor) throw new VelaError({ class: 'conflict', code: 'cursor_expired', message: 'Restart', retry: { allowed: false } }, 409);
+    return { ...answer(), items: [answer().items[0]!], continuation: 'more', nextCursor: 'expired' };
+  });
+  const key = libraryKey('movies', {});
+  await f.catalogue.library('movies');
+  const held = f.box.get().library[key]?.value;
+  await f.catalogue.library('movies', {}, 2);
+  expect(f.calls()).toBe(4);
+  expect(f.box.get().library[key]?.load).toBe('failed');
+  expect(f.box.get().library[key]?.value).toBe(held);
 });
 
 test('a session reset drops cached libraries and ignores an old background response', async () => {

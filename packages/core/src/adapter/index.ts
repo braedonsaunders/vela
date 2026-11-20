@@ -19,7 +19,7 @@ export interface ServerAdapter {
   rows(query: V.RowsQuery): Promise<V.Page<V.Row>>;
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
   libraries(query: V.LibrariesQuery): Promise<V.Page<V.Library>>;
-  library(id: string, query: V.LibraryBrowseQuery): Promise<V.LibraryContents>;
+  library(id: string, query: V.LibraryBrowseQuery, options?: { fresh?: boolean; snapshot?: boolean }): Promise<V.LibraryContents>;
   collection(id: string, cursor?: string, limit?: number): Promise<V.CollectionContents>;
   detail(id: string, fresh?: boolean): Promise<V.TitleDetail>;
   /** Catalogue search by name. Search by description is the DescriptiveSearch capability. */
