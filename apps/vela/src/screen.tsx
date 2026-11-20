@@ -4,14 +4,14 @@
 import { useIsFocused, usePathname } from 'expo-router';
 import { useCallback, useContext, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
-import Reanimated from 'react-native-reanimated';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import type { RNode } from '@vela/skin/src/resolve';
 import { useSideInsets, useVela } from './vela';
 import { FocusBoundary } from './focus-boundary';
 import { documentIsVisible } from './visible-route';
 import { SectionShellHostContext, useSectionFocus } from './section-focus';
-import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from './section-motion';
+import { SectionScene, sectionSlide } from './section-scene';
+import { SECTION_SLIDE_MS, sectionDirection, type SectionDirection } from './section-motion';
 
 interface Props {
   route: RouteName;
@@ -105,7 +105,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
   const still = host.env.still || Platform.isTV;
   const current = useRef({ request, view, host });
   const outgoing = useRef<{ request: string; view: string; host: SkinHost } | null>(null);
-  const transition = useRef({ request, direction: 1, active: false });
+  const transition = useRef<{ request: string; direction: SectionDirection; active: boolean }>({ request, direction: 1, active: false });
   const incomingOffset = useRef(new Animated.Value(0)).current;
   const outgoingOffset = useRef(new Animated.Value(0)).current;
   const frame = useRef<HTMLElement | null>(null);
@@ -120,7 +120,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const selected = document.activeElement;
       restoreTab.current = selected?.getAttribute('role') === 'tab' ? host.env.library?.tabId ?? view : '';
-      const nav = document.getElementById('vela-library-views');
+      const nav = document.querySelector<HTMLElement>('[data-testid="library-toolbar"]');
       const parent = frame.current;
       if (active && pinned) fixedNav.current = pinned;
       else if (active && nav && parent?.getBoundingClientRect) {
@@ -129,7 +129,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
       }
     }
     outgoing.current = active ? previous : null;
-    transition.current = { request, direction: order.indexOf(view) >= order.indexOf(previous.view) ? 1 : -1, active };
+    transition.current = { request, direction: sectionDirection(order.indexOf(view), order.indexOf(previous.view)), active };
   }
   current.current = { request, view, host };
   const complete = useCallback(() => {
@@ -143,12 +143,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
   useLayoutEffect(() => {
     if (!transition.current.active || still || Platform.OS === 'web') return;
     const direction = transition.current.direction;
-    incomingOffset.setValue(direction * host.viewport.width);
-    outgoingOffset.setValue(0);
-    const slide = Animated.parallel([
-      Animated.timing(incomingOffset, { toValue: 0, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
-      Animated.timing(outgoingOffset, { toValue: -direction * host.viewport.width, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
-    ]);
+    const slide = sectionSlide(incomingOffset, outgoingOffset, direction, host.viewport.width);
     slide.start(({ finished }) => { if (finished) complete(); });
     return () => { slide.stop(); incomingOffset.setValue(0); };
   }, [request, still, host.viewport.width, incomingOffset, outgoingOffset, complete]);
@@ -163,20 +158,12 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
   }, [request, still, complete]);
   const scene = (sceneHost: SkinHost, isCurrent: boolean) => {
     const active = transition.current.active && !still;
-    const webAnimation = Platform.OS === 'web' && active ? {
-      animationName: isCurrent ? transition.current.direction > 0 ? slideInForward : slideInBackward : transition.current.direction > 0 ? slideOutForward : slideOutBackward,
-      animationDuration: SECTION_SLIDE_MS, animationTimingFunction: 'ease-in-out' as const, animationFillMode: 'both' as const,
-    } : undefined;
-    const Scene = Platform.OS === 'web' ? Reanimated.View : Animated.View;
     // Keyed by the request alone: the view that was current stays mounted as it leaves, rather
     // than being drawn again from nothing alongside the view coming in.
-    return <Scene key={`scene:${isCurrent ? request : outgoing.current?.request}`} pointerEvents={isCurrent ? 'auto' : 'none'}
-      accessibilityElementsHidden={!isCurrent} importantForAccessibility={isCurrent ? 'auto' : 'no-hide-descendants'}
-      // Natively always bound to its offset (at rest, zero): a view switched from a native-driven
-      // value to a constant keeps the last value the slide drew.
-      style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, ...(Platform.OS === 'web' ? webAnimation : { transform: [{ translateX: isCurrent ? incomingOffset : outgoingOffset }] }) }}>
+    return <SectionScene key={`scene:${isCurrent ? request : outgoing.current?.request}`} current={isCurrent}
+      animated={active} direction={transition.current.direction} offset={isCurrent ? incomingOffset : outgoingOffset}>
       <SkinRoute host={sceneHost} node={node} hideLibraryViews={!!fixedNav.current && active} />
-    </Scene>;
+    </SectionScene>;
   };
   return <View ref={frame as never} style={{ flex: 1, overflow: 'hidden' }}>
     {outgoing.current && !still ? scene(outgoing.current.host, false) : null}

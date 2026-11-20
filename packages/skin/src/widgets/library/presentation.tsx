@@ -27,13 +27,16 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
   const [focused, focus] = useState(false);
   const claim = useFocusClaim(preferred);
   const tab = role === 'tab';
+  const text = look.text({ ...controlText, color: tab && selected ? '$ui.onAccent' : quiet ? '$ui.inkSecondary' : '$ui.ink', 'font-weight': tab && selected ? '700' : '500' });
   return <FocusPressable onLayout={onLayout} nativeID={id} accessibilityRole={role} accessibilityLabel={label} accessibilityState={{ selected, checked: role === 'checkbox' ? selected : undefined }}
     {...(Platform.OS === 'web' ? { 'aria-selected': tab ? selected : undefined, 'aria-checked': role === 'checkbox' ? selected : undefined } : {})}
     hasTVPreferredFocus={claim} onFocus={event => { focus(true); if (Platform.OS === 'web') (event.target as unknown as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }} onBlur={() => focus(false)} onPress={onPress}
     style={look.box({ ...control, position: 'relative',
       'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
       'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : '$ui.glassEdge' })}>
-    <Text numberOfLines={1} style={look.text({ ...controlText, color: tab && selected ? '$ui.onAccent' : quiet ? '$ui.inkSecondary' : '$ui.ink', 'font-weight': tab && selected ? '700' : '500' })}>
+    {/* A tab's bold selected label must not resize the strip while its scenes are moving. */}
+    {tab && <Text accessible={false} numberOfLines={1} style={[look.text({ ...controlText, 'font-weight': '700' }), { opacity: 0 }]}>{label}</Text>}
+    <Text accessible={false} numberOfLines={1} style={[text, tab && { position: 'absolute', left: 12, right: 12, top: 0, height: look.ui.controlHeight, lineHeight: look.ui.controlHeight }]}>
       {role === 'checkbox' && selected ? '✓ ' : ''}{label}
     </Text>
 
@@ -70,6 +73,7 @@ function ToolbarField({ children, width }: { children: ReactNode; width?: number
 
 export function LibraryToolbar(props: WidgetProps) {
   const host = useHost();
+  const look = useLook();
   const page = host.env.library;
   const model = page?.model;
   const compact = singleLibraryStrip(host.viewport.width, Platform.isTV);
@@ -94,7 +98,7 @@ export function LibraryToolbar(props: WidgetProps) {
   const strip = (children: ReactNode, flex = true) => <ScrollView ref={compact ? stripRef : undefined} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
     style={{ flex: flex ? 1 : undefined, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
   if (tabsInShell && !browse && !tabSearchEnabled(page?.model?.tabs?.find(tab => tab.id === page.tabId))) return null;
-  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
+  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ minHeight: look.ui.controlHeight + 22, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
     {compact ? strip(<>{!tabsInShell && <LibraryTabs onActiveLayout={Platform.OS === 'web' ? undefined : x => stripRef.current?.scrollTo({ x: Math.max(0, x - 3), animated: false })} />}{filters}{sort}</>) : <>{!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}</>}
     {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
   </View>;

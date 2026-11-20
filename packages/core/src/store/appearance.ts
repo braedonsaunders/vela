@@ -7,7 +7,7 @@ import { hasAppearance, hasEventStream } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { appearanceModel, builtInDocuments, followAppearance, type AppearanceModel } from '../appearance';
 import type { Session } from './session';
-import { failed, loading, ready, type StateBox } from './state';
+import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
 
 const LOCAL: V.Appearance = { revision: 0, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: [] };
@@ -17,6 +17,17 @@ const MAX_FOLLOW_FAILURES = 5;
  * online) does not re-resolve the skin and replay the page's entrance. */
 export function settled(previous: AppearanceModel | undefined, next: AppearanceModel): AppearanceModel {
   return previous && JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+}
+
+/** A background refresh of a settled appearance is invisible until it finds a real change. */
+export function refreshing(current: Loadable<AppearanceModel>): Loadable<AppearanceModel> {
+  return current.load === 'ready' && current.value ? current : loading(current);
+}
+
+/** Keep the whole ready slice when its value settled to the one already on show. */
+export function refreshed(current: Loadable<AppearanceModel>, next: AppearanceModel): Loadable<AppearanceModel> {
+  const value = settled(current.value, next);
+  return current.load === 'ready' && current.value === value && !current.error ? current : ready(value);
 }
 
 function missing(error: unknown): boolean {
@@ -50,7 +61,7 @@ export class Appearance {
   /** Read the selected server's appearance (or the local one). */
   async load(): Promise<void> {
     const epoch = this.session.epoch;
-    this.box.update('appearance', appearance => loading(appearance));
+    this.box.update('appearance', refreshing);
     try {
       const adapter = this.session.hasServer() ? this.session.selected().adapter : undefined;
       let appearance = LOCAL;
@@ -62,7 +73,7 @@ export class Appearance {
         }
       }
       const model = appearanceModel(appearance, this.origin, await builtInDocuments(this.builtInOrigin, this.rendererVersion), this.builtInOrigin);
-      if (epoch === this.session.epoch) this.box.update('appearance', current => ready(settled(current.value, model)));
+      if (epoch === this.session.epoch) this.box.update('appearance', current => refreshed(current, model));
     } catch (error) {
       if (epoch === this.session.epoch) this.box.update('appearance', appearance => failed(error, appearance));
     }
@@ -72,7 +83,7 @@ export class Appearance {
   follow(): () => void {
     const controller = new AbortController();
     const show = (model: AppearanceModel) => {
-      if (!controller.signal.aborted) this.box.update('appearance', current => ready(settled(current.value, model)));
+      if (!controller.signal.aborted) this.box.update('appearance', current => refreshed(current, model));
     };
     const loop = async () => {
       let failures = 0;

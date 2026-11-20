@@ -3,14 +3,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { AccessibilityInfo, Animated, Platform, useWindowDimensions, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { SkinRoot, type SkinHost } from '@vela/skin';
-import Reanimated from 'react-native-reanimated';
 import { useVela } from '../../src/vela';
 import Home from './index';
 import { LibrarySection } from './library/[id]';
 import type { LibraryParams } from '../../src/browse/library-query';
 import { FocusBoundary } from '../../src/focus-boundary';
 import { SectionFocusContext, SectionShellHostContext } from '../../src/section-focus';
-import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from '../../src/section-motion';
+import { SectionScene, sectionSlide } from '../../src/section-scene';
+import { SECTION_SLIDE_MS, sectionDirection, type SectionDirection } from '../../src/section-motion';
 import { trimSectionCache } from '../../src/section-cache';
 import { sectionRoute, type SectionRoute as Section } from '../../src/section-route';
 
@@ -61,9 +61,9 @@ function SectionsContent() {
       ? libraries.findIndex(library => library.kind === 'live') + 1 || libraries.length + 1
       : libraries.findIndex(library => library.id === section.current.entry) + 1;
   const previousOrder = useRef(order);
-  const transition = useRef({ key, direction: 1, animated: false });
+  const transition = useRef<{ key: string; direction: SectionDirection; animated: boolean }>({ key, direction: 1, animated: false });
   if (transition.current.key !== key) {
-    transition.current = { key, direction: order >= previousOrder.current ? 1 : -1, animated: !reducedMotion && !Platform.isTV };
+    transition.current = { key, direction: sectionDirection(order, previousOrder.current), animated: !reducedMotion && !Platform.isTV };
   }
 
   useEffect(() => {
@@ -74,13 +74,7 @@ function SectionsContent() {
 
   useLayoutEffect(() => {
     if (!Platform.isTV && Platform.OS !== 'web' && previous.current !== null && previous.current !== key && !reducedMotion) {
-      const direction = order >= previousOrder.current ? 1 : -1;
-      offset.setValue(direction * width);
-      outgoingOffset.setValue(0);
-      Animated.parallel([
-        Animated.timing(offset, { toValue: 0, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
-        Animated.timing(outgoingOffset, { toValue: -direction * width, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
-      ]).start();
+      sectionSlide(offset, outgoingOffset, sectionDirection(order, previousOrder.current), width).start();
     } else {
       offset.setValue(0);
       outgoingOffset.setValue(0);
@@ -109,7 +103,7 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
   offset: Animated.Value;
   outgoingOffset: Animated.Value;
   reducedMotion: boolean;
-  transition: { direction: number; animated: boolean };
+  transition: { direction: SectionDirection; animated: boolean };
 }) {
   const { state, descriptors } = Navigator.useContext();
   const route = state.routes[state.index];
@@ -145,40 +139,20 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
       {scenes.map(scene => {
         const isCurrent = scene.key === sectionKey;
         const visible = isCurrent || scene.key === outgoing.current?.key;
-        const webAnimation = visible && Platform.OS === 'web' && transition.animated && !reducedMotion
-          ? {
-            animationName: isCurrent
-              ? transition.direction > 0 ? slideInForward : slideInBackward
-              : transition.direction > 0 ? slideOutForward : slideOutBackward,
-            animationDuration: SECTION_SLIDE_MS,
-            animationTimingFunction: 'ease-in-out' as const,
-            animationFillMode: 'both' as const,
-          }
-          : undefined;
-        const SceneView = Platform.OS === 'web' ? Reanimated.View : Animated.View;
         return (
-          <SceneView
+          <SectionScene
             key={scene.key}
             testID={`section-${scene.key}`}
-            pointerEvents={isCurrent ? 'auto' : 'none'}
-            accessibilityElementsHidden={!isCurrent}
-            importantForAccessibility={isCurrent ? 'auto' : 'no-hide-descendants'}
-            style={{
-              display: visible ? 'flex' : 'none',
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              ...(Platform.OS === 'web' ? webAnimation : {
-                transform: [{ translateX: isCurrent ? offset : outgoingOffset }],
-              }),
-            }}
+            current={isCurrent}
+            visible={visible}
+            animated={transition.animated && !reducedMotion}
+            direction={transition.direction}
+            offset={isCurrent ? offset : outgoingOffset}
           >
             <SectionFocusContext.Provider value={focused && isCurrent}>
               {scene.content}
             </SectionFocusContext.Provider>
-          </SceneView>
+          </SectionScene>
         );
       })}
     </View>

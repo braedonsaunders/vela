@@ -76,7 +76,7 @@ export const glassSelect: Style = {
   color: '$ui.ink',
   'font-size': '14px',
 };
-export const libraryViews: Node = { type: 'widget', widget: 'libraryToolbar', style: { ...gutter, 'min-width': '0px' }, small: { ...gutterSmall } };
+export const libraryViews: Node = { type: 'widget', id: 'vela-library-views', widget: 'libraryToolbar', style: { ...gutter, 'min-width': '0px' }, small: { ...gutterSmall } };
 
 // Kept as an empty compatibility template for older documents placing both templates.
 export const libraryFilters: Node = { type: 'box' };
