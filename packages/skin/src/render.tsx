@@ -436,7 +436,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const buttonRef = useRef<Focusable | null>(null);
   const suppressPress = useRef(false);
   const guideRef = useRef<Focusable | null>(null);
-  const episodeUnregister = useRef<(() => void) | undefined>(undefined);
+  const releaseButton = useRef<(() => void) | undefined>(undefined);
   const band = useContext(Band);
   const stop = useContext(ReadingStop);
   const routeFocus = useRouteFocusContext();
@@ -594,20 +594,27 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const press = node.press;
     const registerButton = focusTarget(a11y.nativeID);
     const bindButton = (target: Focusable | null) => {
-      episodeUnregister.current?.();
+      // React Native Web's merged refs discard callback return values and detach with null.
+      // Native React can call the returned cleanup instead. Both paths must release registrations.
+      releaseButton.current?.();
+      if (!target) return;
       buttonRef.current = target;
       const unregister = registerButton(target);
       const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
       const arg = press ? fill(press.arg, ctx, env) : '';
       const kind = (node.id && fill(node.id, ctx, env).startsWith('episode-')) ? 'episode' : press?.action === 'select' && arg.includes('|season|') ? 'season' : press?.action === 'playExtra' ? 'extra' : undefined;
-      const unepisode = target && kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
-      episodeUnregister.current = unepisode;
-      if (target && press) routeFocus?.offer(target, press.action);
-      return () => {
+      const unepisode = kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
+      if (press) routeFocus?.offer(target, press.action);
+      const release = () => {
+        if (releaseButton.current !== release) return;
+        releaseButton.current = undefined;
+        buttonRef.current = null;
         unregister?.();
         untrack?.();
         unepisode?.();
       };
+      releaseButton.current = release;
+      return release;
     };
     const onPress = press && (() => {
       if (suppressPress.current) { suppressPress.current = false; return; }
