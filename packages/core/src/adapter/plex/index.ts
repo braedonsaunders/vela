@@ -348,12 +348,13 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const audio = (m.Part || []).flatMap((p: Node) => (p.Stream || []).filter((t: Node) => Number(t.streamType) === 2));
       return audio.length > 1 ? audio.map((t: Node) => ({ id: String(m.id ?? index), audioTrackId: String(t.id), name: `${release} · ${t.displayTitle || t.language || t.languageCode || t.codec}` })) : [{ id: String(m.id ?? index), name: release }];
     });
-    return { watched: true, list: null, watch: this.title(n).watch!, versions };
+    return { watched: true, favorite: false, watchlist: false, removeFromContinue: true, watch: this.title(n).watch!, versions };
   }
 
-  async setTitleWatch(id: string, change: { played?: boolean; listed?: boolean }) {
-    if (change.listed !== undefined) fail('Plex list management is unavailable');
+  async setTitleWatch(id: string, change: V.WatchRequest) {
+    if (change.favorite !== undefined || change.watchlisted !== undefined) fail('Plex list management is unavailable');
     if (change.played !== undefined) await this.request(change.played ? '/:/scrobble' : '/:/unscrobble', { key: id, identifier: 'com.plexapp.plugins.library' }, 'PUT');
+    if (change.continueWatching === false) await this.request('/actions/removeFromContinueWatching', { ratingKey: id }, 'PUT');
   }
   async searchSubtitles(sessionId: string, language: string) {
     const s = this.session(sessionId);

@@ -31,7 +31,7 @@ export interface ServerCapabilities {
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   plexAccountSignIn?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -215,7 +215,7 @@ export interface ChildrenPage extends Page<Title>, PartialAnswer {}
 /** One-use console Watch hand-off; redeem against the same Ether instance. */
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
 
-export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean }
+export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }
 
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[] }
 export interface CollectionContents extends Page<RowEntry> { collection: Collection }

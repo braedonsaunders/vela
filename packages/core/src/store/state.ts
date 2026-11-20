@@ -33,6 +33,13 @@ export class StateBox<S extends object> {
 
   get = (): S => this.state;
 
+  /** Replace a coherently updated snapshot and announce it once. */
+  replace(next: S): void {
+    if (next === this.state) return;
+    this.state = next;
+    for (const listener of [...this.listeners]) listener();
+  }
+
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

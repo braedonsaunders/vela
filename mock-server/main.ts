@@ -26,7 +26,7 @@ const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
 const labPreset = process.env.VELA_MOCK_LAB === '1';
 const libraries: V.Library[] = labPreset ? [
@@ -85,8 +85,9 @@ function page<T>(items: T[], url: URL, g: Grant, scope: string, defaultLimit = 5
   const p = Buffer.from(JSON.stringify({ owner: g.id, scope, offset: offset + n, expires })).toString('base64url');
   return { items: items.slice(offset, offset + n), continuation: more ? 'more' : 'exhausted', ...(more ? { nextCursor: `${p}.${mac(p)}` } : {}) };
 }
+const removedContinue = new Set<string>();
 function progressRows(): V.Row[] {
-  const continuing = allTitles.filter(title => (title.kind === 'movie' || title.kind === 'episode') && !title.watch?.played && (title.watch?.positionSeconds ?? 0) > 0);
+  const continuing = allTitles.filter(title => (title.kind === 'movie' || title.kind === 'episode') && !title.watch?.played && (title.watch?.positionSeconds ?? 0) > 0 && !removedContinue.has(title.id));
   const next = episodesByShow().map(items => items.find(title => !title.watch?.played)).filter((title): title is V.Title => !!title);
   const row = (id: string, name: string, purpose: V.Row['purpose'], items: V.Title[]): V.Row => ({
     id, name, purpose, receiptToken: '', continuation: 'exhausted',
@@ -115,7 +116,8 @@ function recordPlayback(session: Session, ended: boolean): void {
 }
 function homeScope() { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
-  const bound = boundRow(g, row);
+  const source = row.purpose === 'continue' ? { ...row, items: row.items.filter(item => item.kind !== 'title' || !removedContinue.has(item.title.id)) } : row;
+  const bound = boundRow(g, source);
   return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope()}`, 20) };
 }
 const labRows: V.Row[] = [
@@ -384,7 +386,14 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (titleMatch) {
     const raw = detail(titleMatch[1]); if (!raw) fail('not-found', 'title_not_found', 'Title not found');
     const d = { ...raw, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
-    if (method === 'POST' && titleMatch[2] === 'watch') { const t = allTitles.find(t => t.id === titleMatch[1])!; t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false }; for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key]; return json({ accepted: true }); }
+    if (method === 'POST' && titleMatch[2] === 'watch') {
+      const t = allTitles.find(t => t.id === titleMatch[1])!;
+      t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
+      for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key];
+      if (body.continueWatching === false) removedContinue.add(t.id);
+      viewer.policyRevision = `mock-${++viewerRevision}`;
+      return json({ accepted: true });
+    }
     if (method === 'GET' && !titleMatch[2] && coldTitle(d.title.id)) return partial({ ...d, extras: [], pending: ['extras'], refreshAfterMs: 2000 });
     if (method === 'GET') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
   }

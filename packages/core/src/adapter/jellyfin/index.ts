@@ -497,15 +497,16 @@ export class JellyfinAdapter
     }
     async titleActions(id: string): Promise<TitleActions> {
         const item = await this.request<Item>('GET', `${await this.userPath()}/Items/${e(id)}`);
-        return { watched: true, list: 'favorite' as const, watch: this.title(item).watch!, versions: (item.MediaSources || []).flatMap(s => {
+        return { watched: true, favorite: true, watchlist: false, removeFromContinue: false, watch: this.title(item).watch!, versions: (item.MediaSources || []).flatMap(s => {
             const audio = (s.MediaStreams || []).filter(t => t.Type === 'Audio');
             return audio.length > 1 ? audio.map(t => ({ id: s.Id, audioTrackId: String(t.Index), name: `${s.Name || s.Id} · ${t.DisplayTitle || t.Language || t.Codec}` })) : [{ id: s.Id, name: s.Name || s.Id }];
         }) };
     }
-    async setTitleWatch(id: string, change: { played?: boolean; listed?: boolean }) {
+    async setTitleWatch(id: string, change: V.WatchRequest) {
+        if (change.continueWatching !== undefined) throw new Error('Removing from Continue Watching is unavailable');
         const user = await this.userPath();
         if (change.played !== undefined) await this.request(change.played ? 'POST' : 'DELETE', `${user}/PlayedItems/${e(id)}`);
-        if (change.listed !== undefined) await this.request(change.listed ? 'POST' : 'DELETE', `${user}/FavoriteItems/${e(id)}`);
+        if (change.favorite !== undefined) await this.request(change.favorite ? 'POST' : 'DELETE', `${user}/FavoriteItems/${e(id)}`);
     }
     async searchSubtitles(sessionId: string, language: string) {
         const s = this.session(sessionId);

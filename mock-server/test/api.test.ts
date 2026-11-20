@@ -104,6 +104,16 @@ describe('mock server: catalogue and live', () => {
     return response.json() as Promise<T>;
   };
 
+  test('title watch mutations persist every supported field', async () => {
+    const bootstrap = await get<V.Bootstrap>('/bootstrap');
+    const title = bootstrap.rows.flatMap(row => row.items).find(item => item.kind === 'title')!;
+    const response = await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: true, favorite: true, watchlisted: true }, authed(tokens));
+    expect(response.status).toBe(200);
+    const detail = await get<V.TitleDetail>(`/titles/${title.title.id}`);
+    expect(detail.title.watch).toMatchObject({ played: true, favorite: true, watchlisted: true });
+    await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: false, favorite: false, watchlisted: false }, authed(tokens));
+  });
+
   test('VELA_MOCK_CHANNELS sizes the lineup', async () => {
     const page = await get<V.Page<V.Channel>>('/live/channels?limit=100');
     expect(page.items).toHaveLength(CHANNELS);

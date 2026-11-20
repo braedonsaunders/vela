@@ -24,6 +24,7 @@ import type {
   TrailerPreviews,
   WebCodeSignIn,
 } from '../capabilities';
+import type { TitleActions } from '../capabilities';
 import { VelaError } from '../errors';
 import { EtherTransport } from './transport';
 
@@ -202,6 +203,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async skinDocument(path: string) {
     return this.http.request<SkinDocument>('GET', path, undefined, { cacheable: true, auth: !!(await this.credentials.get()) });
+  }
+
+  async titleActions(id: string): Promise<TitleActions> {
+    const [detail, capabilities] = await Promise.all([this.detail(id, true), this.describe()]);
+    return { watched: true, favorite: true, watchlist: true, removeFromContinue: capabilities.features.removeFromContinue?.available === true, watch: detail.title.watch ?? { positionSeconds: 0, played: false, favorite: false, watchlisted: false }, versions: [] };
+  }
+
+  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack> {
+    return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, request);
   }
 
   /** The viewer-level server event stream; its first event is the current appearance. */

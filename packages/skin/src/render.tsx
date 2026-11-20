@@ -1,6 +1,6 @@
 import { msg } from '@vela/core';
 import { restartAction, secondaryPlayAction } from './restart-action';
-import { RestartMenu } from './widgets/restart';
+import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './widgets/card-context-menu';
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
@@ -16,7 +16,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, memo, cloneElement, createContext, forwardRef, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -37,11 +37,32 @@ import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
-import { collection, itemKey, type Ctx, type Env } from './vocabulary';
+import { collection, itemKey, type Card, type Ctx, type Env } from './vocabulary';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
+function contextCard(id: string, kind: string, name: string, image = ''): Card {
+  return {
+    id, kind, name, summary: '', airDate: '', year: 0, rating: '', durationSeconds: 0,
+    progressSeconds: 0, played: false, favorite: false, watchlisted: false, showId: '',
+    showName: '', episodeContext: '', contextParts: [], seasonId: '', seasonNumber: 0,
+    episodeNumber: 0, genres: [], durationLabel: '', yearLabel: '', progressLabel: '',
+    seasonNumberLabel: '', episodeNumberLabel: '', facts: '', poster: image, backdrop: image,
+    logo: '', accent: '', receipt: '',
+  };
+}
+function channelCard(channel: NonNullable<Ctx['ch']>): Card {
+  return {
+    ...contextCard(channel.id, 'channel', channel.now || channel.name, channel.nowArt),
+    summary: channel.next, favorite: channel.favorite, showName: channel.name,
+    episodeContext: channel.nowEpisode, genres: channel.nowGenre ? [channel.nowGenre] : [],
+    facts: [channel.number, channel.name].filter(Boolean).join(' · '), logo: channel.logo,
+  };
+}
+const useTVMenuEvent = typeof useTVEventHandler === 'function'
+  ? useTVEventHandler
+  : (_handler: (event: { eventType?: string }) => void) => undefined;
 const Host = HostContext;
 const Inherited = InheritedContext;
 const Group = GroupContext;
@@ -400,8 +421,7 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
 function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const host = useHost();
   const { env, viewport } = host;
-  const [restartOpen, setRestartOpen] = useState(false);
-  const cardRestart = ctx.card && ['movie', 'episode'].includes(ctx.card.kind) && ctx.card.progressSeconds > 0 ? ctx.card.id : '';
+  const [cardMenu, setCardMenu] = useState<{ anchor: CardMenuAnchor; mode: CardMenuOpenMode } | null>(null);
   const swipe = useHeroSwipe(!!hero, env.home?.hero.length ?? 0, env.heroIndex, host.dispatch);
   const parentText = useContext(Inherited);
   const parentGroup = useContext(Group);
@@ -409,6 +429,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const [groupUi, setGroupUi] = useState({ hover: false, focus: false });
   const scrollRef = useRef<Scroller>(null);
   const buttonRef = useRef<Focusable | null>(null);
+  const suppressPress = useRef(false);
   const guideRef = useRef<Focusable | null>(null);
   const episodeUnregister = useRef<(() => void) | undefined>(undefined);
   const band = useContext(Band);
@@ -420,6 +441,27 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY) : null), [route]);
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
+  const menuCard = ctx.card
+    ?? (ctx.ch ? channelCard(ctx.ch) : undefined)
+    ?? (ctx.person ? contextCard(ctx.person.id || ctx.person.name, 'person', ctx.person.name, ctx.person.portrait) : undefined)
+    ?? (ctx.extra ? contextCard(ctx.extra.id, 'extra', ctx.extra.name) : undefined);
+  const cardArg = node.press ? fill(node.press.arg, ctx, env) : '';
+  const cardPrimary = menuCard && node.press && (node.press.action === 'play' || node.press.action === 'playExtra' || node.press.action === 'person' || node.press.action === 'openHit' || cardArg.split('|')[0] === menuCard.id)
+    ? { action: node.press.action, arg: cardArg }
+    : null;
+  const openAnchoredMenu = useCallback((mode: CardMenuOpenMode) => {
+    if (!cardPrimary) return;
+    if (mode !== 'keyboard') {
+      suppressPress.current = true;
+      setTimeout(() => { suppressPress.current = false; }, 500);
+    }
+    const target = buttonRef.current as (Focusable & { measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void }) | null;
+    target?.measureInWindow?.((x, y, width, height) => setCardMenu({ mode, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } } }));
+  }, [cardPrimary?.action, cardPrimary?.arg]);
+  useTVMenuEvent(event => {
+    if (!Platform.isTV || !ui.focus || !cardPrimary) return;
+    if (event.eventType === 'longSelect' || event.eventType === 'menu') openAnchoredMenu('tv');
+  });
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
   const { own, inherited } = split(rows);
   const text = inheritFrom(parentText, inherited, viewport);
@@ -551,6 +593,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       };
     };
     const onPress = press && (() => {
+      if (suppressPress.current) { suppressPress.current = false; return; }
       const arg = fill(press.arg, ctx, env);
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
@@ -563,10 +606,21 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
         focusable={selectable(node)}
-        {...(web ? { dataSet: { velaFocus: 'frame' }, onKeyDown: (event) => { if (buttonRef.current) episodeNav?.key(buttonRef.current, { key: (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() }); } } : {})}
+        {...(web ? { dataSet: { velaFocus: 'frame' }, onKeyDown: (event) => {
+          const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
+          if (cardPrimary && (key === 'ContextMenu' || (key === 'F10' && (event as unknown as { shiftKey?: boolean }).shiftKey))) {
+            event.preventDefault(); event.stopPropagation(); openAnchoredMenu('keyboard'); return;
+          }
+          if (buttonRef.current) episodeNav?.key(buttonRef.current, { key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() });
+        } } : {})}
         {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
-        onLongPress={cardRestart ? () => setRestartOpen(true) : undefined}
-        {...(web && cardRestart ? { onContextMenu: (e: { preventDefault(): void }) => { e.preventDefault(); setRestartOpen(true); } } : {})}
+        onLongPress={cardPrimary ? () => openAnchoredMenu(Platform.isTV ? 'tv' : 'touch') : undefined}
+        {...(web && cardPrimary ? { onContextMenu: (e: { preventDefault(): void; stopPropagation(): void; clientX?: number; clientY?: number; nativeEvent?: { clientX?: number; clientY?: number; pageX?: number; pageY?: number } }) => {
+          e.preventDefault(); e.stopPropagation();
+          const x = e.clientX ?? e.nativeEvent?.clientX ?? e.nativeEvent?.pageX ?? 0;
+          const y = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
+          setCardMenu({ mode: 'pointer', anchor: { kind: 'point', point: { x, y } } });
+        } } : {})}
         onPress={onPress}
         onFocus={event => {
           set('focus', isFocusVisible(event.currentTarget));
@@ -617,9 +671,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       element = <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
     }
   }
-  if (restartOpen && cardRestart) element = <>{element}<RestartMenu id={cardRestart} close={() => setRestartOpen(false)} /></>;
+  if (cardMenu && cardPrimary && menuCard) element = <>{element}<CardContextMenu card={menuCard} primary={cardPrimary} anchor={cardMenu.anchor} mode={cardMenu.mode} opener={buttonRef.current} continueWatching={ctx.row?.purpose === 'continue'} close={() => setCardMenu(null)} /></>;
   if (route && env.route === 'title') {
-    element = <View style={{ flex: 1 }}>{element}<View style={{ position: 'absolute', top: env.small ? 84 : 100, right: env.small ? 20 : 48, zIndex: 20 }}><TitleActions /></View></View>;
+    element = <View style={{ flex: 1 }}>{element}<View style={{ position: 'absolute', top: env.small ? 84 : 100, right: env.small ? 76 : 132, zIndex: 20 }}><TitleActions /></View></View>;
   }
   if (masked) element = <Mask linear={fx.mask} radial={fx.radialMask} style={geometry}>{element}</Mask>;
   if (node.escape?.length) {

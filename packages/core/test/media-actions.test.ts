@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { PlexAdapter } from '../src/adapter/plex';
 import { JellyfinAdapter } from '../src/adapter/jellyfin';
+import { EtherAdapter } from '../src/adapter/ether';
 import { hasTitleManagement, hasSubtitleSearch } from '../src/adapter/media-actions';
 import { FakeCredentials, restoreFetch, routeFetch, device } from './helpers';
 afterEach(restoreFetch);
@@ -11,20 +12,28 @@ test('capabilities are absent rather than inferred from title kind', () => {
 });
 test('Plex offers watched and versions; choosing a version uses its part', async () => {
   const media = (id: string) => ({ id, videoResolution: '1080', container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', Part: [{ id, key: `/library/parts/${id}/file.mp4`, Stream: [] }] });
-  const seen = routeFetch({ 'GET /library/metadata/10': { MediaContainer: { Metadata: [{ ratingKey: '10', type: 'movie', title: 'Movie', Media: [media('a'), media('b')] }] } }, 'PUT /:/scrobble': {} });
+  const seen = routeFetch({ 'GET /library/metadata/10': { MediaContainer: { Metadata: [{ ratingKey: '10', type: 'movie', title: 'Movie', Media: [media('a'), media('b')] }] } }, 'PUT /:/scrobble': {}, 'PUT /actions/removeFromContinueWatching': {} });
   const api = new PlexAdapter({ origin: 'https://test.example', credentials: new FakeCredentials(), clientIdentifier: 'c' });
   const actions = await api.titleActions('10');
-  expect(actions.list).toBeNull(); expect(actions.versions.map(v => v.id)).toEqual(['a', 'b']);
-  await api.setTitleWatch('10', { played: true });
+  expect(actions).toMatchObject({ favorite: false, watchlist: false }); expect(actions.versions.map(v => v.id)).toEqual(['a', 'b']);
+  await api.setTitleWatch('10', { played: true, idempotencyKey: 'watched' });
   expect(seen.at(-1)?.url.searchParams.get('key')).toBe('10');
+  await api.setTitleWatch('10', { continueWatching: false, idempotencyKey: 'remove' });
+  expect(seen.at(-1)?.url.searchParams.get('ratingKey')).toBe('10');
   const plan = await api.startPlayback({ titleId: '10', mediaSourceId: 'b', client, idempotencyKey: 'play' });
   expect(plan.paths[0]?.url).toContain('/parts/b/');
 });
 test('Jellyfin mutations use viewer-scoped endpoints and subtitle results retain language', async () => {
   const seen = routeFetch({ 'POST /Users/viewer-1/PlayedItems/10': {}, 'DELETE /Users/viewer-1/FavoriteItems/10': {} });
   const api = new JellyfinAdapter('https://test.example', new FakeCredentials());
-  await api.setTitleWatch('10', { played: true, listed: false });
+  await api.setTitleWatch('10', { played: true, favorite: false, idempotencyKey: 'watched' });
   expect(seen.map(r => `${r.method} ${r.url.pathname}`)).toEqual(['POST /Users/viewer-1/PlayedItems/10', 'DELETE /Users/viewer-1/FavoriteItems/10']);
+});
+test('Ether maps every supported watch field to its idempotent title mutation', async () => {
+  const seen = routeFetch({ 'POST /vela/v0/titles/10/watch': { accepted: true } });
+  const api = new EtherAdapter('https://test.example', new FakeCredentials(), 'test');
+  await api.setTitleWatch('10', { played: true, favorite: true, watchlisted: false, idempotencyKey: 'watch-1' });
+  expect(seen[0]?.body).toEqual({ played: true, favorite: true, watchlisted: false, idempotencyKey: 'watch-1' });
 });
 test('Plex downloads a searched subtitle into the existing plan without changing the source', async () => {
   let downloaded = false;

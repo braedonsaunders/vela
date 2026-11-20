@@ -4,7 +4,7 @@
 // the flag. On TV an open scope takes focus when it opens and keeps it until it closes.
 // Press buttons register here by element id, so focus can be moved to one by id (Escape's
 // returnFocus, and a press's `focus`).
-import { createContext, createElement, useContext, useEffect, useRef, type ReactNode } from 'react';
+import { createContext, createElement, useContext, useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { Platform } from 'react-native';
 import { useHost } from './host';
 import { holdBack } from './menu-key';
@@ -159,6 +159,53 @@ export function EscapeScope({ flags, returnFocus, guide, children }: ScopeProps)
           if (id && focusElement(id)) return;
           if (opener) focusOn(opener);
         });
+        return true;
+      },
+    };
+    scopes.add(scope);
+    listen();
+    return () => {
+      scopes.delete(scope);
+      if (!scopes.size) stopListening();
+    };
+  }, [level]);
+
+  return createElement(Level.Provider, { value: level }, children);
+}
+
+/**
+ * An ephemeral popover participates in the same innermost Escape/Back stack as document flags.
+ * Unlike EscapeScope it owns no view-state flag; dismissing it calls its close function and puts
+ * focus back on the control that opened it.
+ */
+export function DismissScope({ open, dismiss, returnTarget, guide, children }: {
+  open: boolean;
+  dismiss(): void;
+  returnTarget?: Focusable | null;
+  guide?: RefObject<Focusable | null>;
+  children: ReactNode;
+}) {
+  const level = useContext(Level) + 1;
+  const latest = useRef({ open, dismiss, returnTarget });
+  latest.current = { open, dismiss, returnTarget };
+
+  useEffect(() => {
+    if (!open) return;
+    if (Platform.isTV && guide) requestAnimationFrame(() => guide.current && focusOn(guide.current));
+    if (Platform.OS === 'web') return;
+    return holdBack(escapeInnermost);
+  }, [open, guide]);
+
+  useEffect(() => {
+    const scope: Scope = {
+      level,
+      order: ++registered,
+      isOpen: () => latest.current.open,
+      escape() {
+        if (!latest.current.open) return false;
+        const { dismiss, returnTarget } = latest.current;
+        dismiss();
+        requestAnimationFrame(() => returnTarget && focusOn(returnTarget));
         return true;
       },
     };

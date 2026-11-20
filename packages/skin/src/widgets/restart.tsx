@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { msg } from '@vela/core';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
@@ -17,18 +17,4 @@ export function Restart({ arg, hero = false, onPlay }: { arg: string; hero?: boo
     style={{ padding: 12, minHeight: 44, justifyContent: 'center', borderRadius: 9999, backgroundColor: focused ? look.ui.ink : look.ui.control }}>
     <Text style={look.text({ 'font-size': '14px', color: focused ? '$ui.inkInverse' : '$ui.ink' })}>{msg(hero ? 'ui.fromBeginning' : 'ui.playFromBeginning')}</Text>
   </FocusPressable>;
-}
-
-export function RestartMenu({ id, close }: { id: string; close(): void }) {
-  const host = useHost();
-  const look = useLook();
-  return <Modal visible transparent onRequestClose={close}>
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: look.ui.scrim }}>
-      <View style={{ padding: 24, gap: 12, backgroundColor: look.ui.page, borderRadius: 16 }}>
-        <FocusPressable accessibilityRole="button" onPress={() => { close(); host.dispatch('play', id); }}><Text style={look.text({})}>{msg('ui.resumeWatching')}</Text></FocusPressable>
-        <Restart arg={id} onPlay={close} />
-        <FocusPressable accessibilityRole="button" onPress={close}><Text style={look.text({})}>{msg('ui.close')}</Text></FocusPressable>
-      </View>
-    </View>
-  </Modal>;
 }

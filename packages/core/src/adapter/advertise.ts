@@ -40,6 +40,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       trailerPreview: operation('trailerPreview', hasTrailerPreviews(adapter)),
       audioFallback: operation('audioFallback', hasAudioFallback(adapter)),
       sessionTrackChanges: operation('sessionTrackChanges', hasTrackChanges(adapter)),
+      removeFromContinue: stated('removeFromContinue'),
       extras: stated('extras'),
       extraPlayback: stated('extraPlayback'),
       themeMusic: stated('themeMusic'),

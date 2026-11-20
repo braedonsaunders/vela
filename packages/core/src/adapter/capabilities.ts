@@ -3,6 +3,25 @@ import type { SkinDocument } from '../wire';
 import type { EventHandler } from '../protocol/sse';
 import type { ServerAdapter } from './index';
 
+export interface MediaVersion { id: string; name: string; audioTrackId?: string }
+export interface TitleActions {
+  watched: boolean;
+  favorite: boolean;
+  watchlist: boolean;
+  removeFromContinue: boolean;
+  watch: V.WatchState;
+  versions: MediaVersion[];
+}
+/** Viewer-specific title mutations. Each independently advertised boolean hides unsupported UI. */
+export interface TitleManagement {
+  titleActions(id: string): Promise<TitleActions>;
+  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack | void>;
+}
+export function hasTitleManagement(api: ServerAdapter): api is ServerAdapter & TitleManagement {
+  return 'titleActions' in api && typeof api.titleActions === 'function'
+    && 'setTitleWatch' in api && typeof api.setTitleWatch === 'function';
+}
+
 /*
  * Optional capabilities. An adapter implements one only when its server really offers it, and
  * callers find it by presence with the guards below. A feature only one server has (today,

@@ -52,6 +52,8 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     durationSeconds: duration ?? 0,
     progressSeconds: position,
     played: title.watch?.played ?? false,
+    favorite: title.watch?.favorite ?? false,
+    watchlisted: title.watch?.watchlisted ?? false,
     showId: title.showId ?? '',
     showName: title.showName ?? '',
     episodeContext: [

@@ -3,7 +3,7 @@
 // and dropped when the session or server changes.
 import type * as V from '../wire';
 import { libraryCardArtwork } from '../library-presentation';
-import { hasTitleManagement } from '../adapter/media-actions';
+import { hasTitleManagement } from '../adapter/capabilities';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
@@ -17,6 +17,7 @@ import { PendingTitles } from './pending';
 import type { Session } from './session';
 import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
+import { optimisticWatchState } from './watch-state';
 
 /** A library view: sort, direction and filters; absent fields are the server's defaults. */
 export interface LibraryQuery {
@@ -50,11 +51,20 @@ export class Catalogue {
     const api = (await this.session.ready()).adapter;
     return hasTitleManagement(api) ? api.titleActions(id) : null;
   }
-  async setTitleWatch(id: string, change: { played?: boolean; listed?: boolean }) {
+  async setTitleWatch(id: string, change: { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }) {
     const api = (await this.session.ready()).adapter;
     if (!hasTitleManagement(api)) throw new Error('Title actions are unavailable');
-    await api.setTitleWatch(id, change);
-    await this.title(id, true);
+    const before = this.box.get();
+    this.box.replace(optimisticWatchState(before, id, change));
+    try {
+      await api.setTitleWatch(id, { ...change, idempotencyKey: this.session.key() });
+      void this.title(id, true);
+    } catch (error) {
+      // A removal has no card left to map back into the row, so restore the captured immutable
+      // snapshot rather than trying to synthesize an inverse mutation.
+      this.box.replace(before);
+      throw new Error(msg('cardMenu.actionFailed'), { cause: error });
+    }
   }
 
   async libraryFacets(id: string, field: string, query = '', cursor?: string): Promise<V.Page<V.FacetValue>> {
