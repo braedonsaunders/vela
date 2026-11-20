@@ -6,13 +6,14 @@ import { FocusPressable as Pressable } from '../../focus';
 import { Pressable as PlainPressable } from 'react-native';
 import { msg } from '@vela/core';
 import { BlurView } from 'expo-blur';
-import { useContext, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
-import { Platform, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, View, type TextStyle, type ViewStyle } from 'react-native';
 import { TextField } from '../common/text-field';
 import Svg, { Path } from 'react-native-svg';
 import { useQueryText } from './query-text';
 import { resolveUi } from '../../resolve/ui';
-import { focusTarget, type Focusable } from '../../escape';
+import { type Focusable } from '../../escape';
+import { useSearchFocus } from './use-search-focus';
 import { useRouteFocusContext } from '../../route-focus';
 import { RevealContext } from '../../tv-reveal';
 import { measure, useHost, type WidgetProps } from '../../host';
@@ -72,21 +73,7 @@ export function SearchField({ ctx }: WidgetProps) {
 
   // The search actions (`search`, `focusSearch`) focus the field by its id: the text input itself,
   // which on a TV opens the system keyboard.
-  const input = useRef<ElementRef<typeof TextInput>>(null);
-  useEffect(() => {
-    let frame = 0;
-    const unregister = focusTarget('vela-search')({ focus: () => {
-      const target = input.current;
-      if (Platform.OS === 'android' && !Platform.isTV && target?.isFocused()) {
-        // A prior request made while Home was sliding in may have focused the field
-        // without showing the IME. Refocus after blur so Android opens it this time.
-        target.blur();
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => { if (input.current === target) target.focus(); });
-      } else target?.focus();
-    } });
-    return () => { cancelAnimationFrame(frame); unregister?.(); };
-  }, []);
+  const input = useSearchFocus();
 
   // On a TV the field is a focus destination of its own (the focus engine skips a bare text input
   // here): the remote moves onto it, and selecting it opens the keyboard. The clear button sits
@@ -123,7 +110,8 @@ export function SearchField({ ctx }: WidgetProps) {
 
   return (
     <View style={[styles.field, field, ring]}>
-      <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
+      {/* Android has no blur target here; its dark fallback tint hides light skins' glass. */}
+      {Platform.OS !== 'android' && <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />}
       <Frame ref={frame as never} style={styles.entry} {...tvProps}>
         <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
         <TextField
