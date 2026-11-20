@@ -192,6 +192,7 @@
   "cardMenu.removeFavourite": "Remove from favourites",
   "cardMenu.addWatchlist": "Add to watchlist",
   "cardMenu.removeWatchlist": "Remove from watchlist",
+  "cardMenu.addToPlaylist": "Add to playlist…",
   "cardMenu.goToShow": "Go to show",
   "cardMenu.goToSeason": "Go to season",
   "cardMenu.removeContinue": "Remove from Continue Watching",

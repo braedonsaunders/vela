@@ -31,6 +31,7 @@ import { listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';
 import { AppearancePicker } from './picker';
+import { AddToPlaylist } from './playlists/add-to-playlist';
 
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
@@ -288,6 +289,9 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const openPicker = useCallback(() => setPickerOpen(true), []);
   const closePicker = useCallback(() => setPickerOpen(false), []);
+  const [playlistTarget, setPlaylistTarget] = useState<{ titleId: string; titleKind?: string } | null>(null);
+  const openAddToPlaylist = useCallback((titleId: string, titleKind?: string) => setPlaylistTarget({ titleId, titleKind }), []);
+  const closeAddToPlaylist = useCallback(() => setPlaylistTarget(null), []);
   const pickDocument = useCallback((index: number) => {
     if (appearance?.force) return;
     setChoice(documents[index]!.id);
@@ -304,7 +308,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   // Only at start: a stored choice never overrides one made in this session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker });
+  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker, openAddToPlaylist });
   useEffect(() => {
     if (Platform.OS !== 'web' || state.auth.phase !== 'signed-in') return;
     const find = () => {
@@ -399,6 +403,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
           {children}
         </Previews>
         {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
+        {playlistTarget ? <AddToPlaylist {...playlistTarget} close={closeAddToPlaylist} /> : null}
       </LaunchGate>
     </VelaContext.Provider>
   );

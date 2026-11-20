@@ -48,6 +48,14 @@ test('adapter-backed mutations are included and unsupported mutations are absent
   expect(cardContextActions(card(), { action: 'play', arg: 'episode-1' }, management).some(action => action.id === 'remove-continue')).toBe(false);
 });
 
+test('playlist action is capability-gated in the shared watch-state action group', () => {
+  const absent = cardContextActions(card(), { action: 'play', arg: 'episode-1' });
+  expect(absent.some(action => action.id === 'playlist')).toBe(false);
+  const present = cardContextActions(card(), { action: 'play', arg: 'episode-1' }, null, { playlists: true });
+  expect(present.find(action => action.id === 'playlist')?.command)
+    .toEqual({ kind: 'dispatch', action: 'addToPlaylist', arg: 'episode-1|episode' });
+});
+
 test('openable non-title cards retain their actual primary action without invented title calls', () => {
   const actions = cardContextActions(card({ id: 'person-1', kind: 'person', progressSeconds: 0, contextParts: [] }), { action: 'select', arg: 'person-1|person' });
   expect(actions).toHaveLength(1);

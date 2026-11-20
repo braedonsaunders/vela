@@ -32,13 +32,14 @@ interface Context {
   live: LiveController | null;
   /** Open the appearance picker. */
   openPicker(): void;
+  openAddToPlaylist(titleId: string, titleKind?: string): void;
 }
 
 function notYet(action: string, arg: string): void {
   console.info(`Vela: ${action} ${arg} is not carried out yet`);
 }
 
-export function useDispatcher({ store, view, live, openPicker }: Context): Dispatcher {
+export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist }: Context): Dispatcher {
   const { setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags } = view;
   const actions = useMemo(() => ({ setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags }), [setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags]);
   const loadMore = useCallback<SkinHost['loadMore']>((on, id) => {
@@ -56,7 +57,7 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
       if (showId) router.push({ pathname: '/title/[id]', params: { id: showId, library: place.route === 'library' ? place.entry : place.library ?? '' } });
     }
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
-    else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id);
+    else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id, kind);
     else if (id && TITLE_KINDS.includes(kind)) router.push({ pathname: '/title/[id]', params: { id, library: place.route === 'library' ? place.entry : place.library ?? '' } });
     else notYet('select', arg);
   }, [store, actions]);
@@ -139,6 +140,14 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
         return openHit(store, arg);
       case 'openPicker':
         return openPicker();
+      case 'playlists':
+        actions.resetFlags();
+        return router.push('/playlists');
+      case 'addToPlaylist': {
+        const [titleId, titleKind] = arg.split('|');
+        if (titleId) openAddToPlaylist(titleId, titleKind || undefined);
+        return;
+      }
       case 'signOut':
         void store.auth.signOut();
         return;
@@ -147,7 +156,7 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
       default:
         notYet(action, arg);
     }
-  }, [store, actions, live, select, retry, loadMore, openPicker]);
+  }, [store, actions, live, select, retry, loadMore, openPicker, openAddToPlaylist]);
 
   return { dispatch, loadMore };
 }

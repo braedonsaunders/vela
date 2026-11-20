@@ -88,6 +88,7 @@ export function TitleActions() {
   const host = useHost();
   const look = useLook();
   const id = host.env.detail?.title[0]?.id ?? '';
+  const kind = host.env.detail?.title[0]?.kind ?? '';
   const [actions, setActions] = useState<Actions | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -97,7 +98,8 @@ export function TitleActions() {
     if (id) void vela.catalogue.titleActions(id).then(value => { if (live) setActions(value); }).catch(() => {});
     return () => { live = false; };
   }, [vela, id]);
-  if (!actions || (!actions.watched && !actions.favorite && !actions.watchlist)) return null;
+  const hasWatchActions = !!actions && (actions.watched || actions.favorite || actions.watchlist);
+  if (!hasWatchActions && !host.env.canPlaylists) return null;
 
   const change = async (value: { played?: boolean; favorite?: boolean; watchlisted?: boolean }) => {
     if (busy) return;
@@ -116,9 +118,10 @@ export function TitleActions() {
   return (
     <View style={{ alignItems: 'flex-end', maxWidth: '100%' }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, padding: 4 }}>
-        {actions.watched ? <ActionButton disabled={busy} label={msg(actions.watch.played ? 'cardMenu.markUnwatched' : 'cardMenu.markWatched')} run={() => void change({ played: !actions.watch.played })} /> : null}
-        {actions.favorite ? <ActionButton disabled={busy} label={msg(actions.watch.favorite ? 'cardMenu.removeFavourite' : 'cardMenu.addFavourite')} run={() => void change({ favorite: !actions.watch.favorite })} /> : null}
-        {actions.watchlist ? <ActionButton disabled={busy} label={msg(actions.watch.watchlisted ? 'cardMenu.removeWatchlist' : 'cardMenu.addWatchlist')} run={() => void change({ watchlisted: !actions.watch.watchlisted })} /> : null}
+        {actions?.watched ? <ActionButton disabled={busy} label={msg(actions.watch.played ? 'cardMenu.markUnwatched' : 'cardMenu.markWatched')} run={() => void change({ played: !actions.watch.played })} /> : null}
+        {actions?.favorite ? <ActionButton disabled={busy} label={msg(actions.watch.favorite ? 'cardMenu.removeFavourite' : 'cardMenu.addFavourite')} run={() => void change({ favorite: !actions.watch.favorite })} /> : null}
+        {actions?.watchlist ? <ActionButton disabled={busy} label={msg(actions.watch.watchlisted ? 'cardMenu.removeWatchlist' : 'cardMenu.addWatchlist')} run={() => void change({ watchlisted: !actions.watch.watchlisted })} /> : null}
+        {host.env.canPlaylists ? <ActionButton disabled={busy} label={msg('cardMenu.addToPlaylist')} run={() => host.dispatch('addToPlaylist', `${id}|${kind}`)} /> : null}
       </ScrollView>
       {error ? <Text accessibilityRole="alert" style={look.text({ 'font-size': '13px', color: '$ui.accent' })}>{error}</Text> : null}
     </View>

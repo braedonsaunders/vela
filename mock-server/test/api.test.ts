@@ -14,6 +14,8 @@ afterAll(async () => { await mock?.stop(); });
 const call = (path: string, init: RequestInit = {}) => fetch(`${mock.url}/vela/v0${path}`, init);
 const post = (path: string, body: object, headers: Record<string, string> = {}) =>
   call(path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+const mutate = (method: 'PATCH' | 'DELETE', path: string, body: object, headers: Record<string, string> = {}) =>
+  call(path, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 const authed = (t: V.Tokens) => ({ Authorization: `Bearer ${t.accessToken}`, 'X-Vela-Device-Id': device.id });
 async function signIn(): Promise<V.Tokens> {
   const response = await post('/auth/sign-in', { username: 'demo', password: 'vela', device, idempotencyKey: key() });
@@ -92,6 +94,35 @@ describe('mock server: public and auth', () => {
     expect(response.status).toBe(404);
     expect(await errorCode(response)).toBe('endpoint_not_found');
     expect((await fetch(`${mock.url}/elsewhere`)).status).toBe(404);
+  });
+});
+
+describe('mock server: viewer playlists', () => {
+  test('supports lifecycle, stable entry ids, reorder, expansion and smart read-only errors', async () => {
+    const tokens = await signIn(), headers = authed(tokens);
+    const capability = await (await call('/capabilities')).json() as V.ServerCapabilities;
+    expect(capability.features.playlists).toEqual({ available: true, maxEntries: 5000 });
+    const createdResponse = await post('/playlists', { idempotencyKey: key(), name: 'Series night', titleIds: ['show-meridian'] }, headers);
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json() as V.PlaylistCard;
+    const detail = await (await call(`/playlists/${created.id}`, { headers })).json() as V.CollectionContents;
+    expect(detail.collection).toMatchObject({ kind: 'playlist', name: 'Series night', smart: false, entryCount: 48 });
+    expect(detail.items[0]?.entryId).toBeTruthy();
+    const showMembership = await (await call('/titles/show-meridian/playlists', { headers })).json() as V.TitlePlaylists;
+    expect(showMembership.items.find(item => item.id === created.id)?.entryIds).toHaveLength(48);
+    const first = detail.items[0]!.entryId!, second = detail.items[1]!.entryId!;
+    expect((await post(`/playlists/${created.id}/entries/${second}/move`, { idempotencyKey: key(), afterEntryId: null }, headers)).status).toBe(200);
+    const reordered = await (await call(`/playlists/${created.id}`, { headers })).json() as V.CollectionContents;
+    expect(reordered.items[0]?.entryId).toBe(second);
+    expect((await mutate('DELETE', `/playlists/${created.id}/entries/${first}`, { idempotencyKey: key() }, headers)).status).toBe(200);
+    const renamed = await (await mutate('PATCH', `/playlists/${created.id}`, { idempotencyKey: key(), name: 'Renamed' }, headers)).json() as V.PlaylistCard;
+    expect(renamed.name).toBe('Renamed');
+    const membership = await (await call('/titles/episode-1-2/playlists', { headers })).json() as V.TitlePlaylists;
+    expect(membership.items.find(item => item.id === created.id)?.entryIds.length).toBeGreaterThan(0);
+    const smart = (await (await call('/playlists', { headers })).json() as V.Page<V.PlaylistCard>).items.find(item => item.smart)!;
+    const readOnly = await post(`/playlists/${smart.id}/entries`, { idempotencyKey: key(), titleIds: ['title-1-1'] }, headers);
+    expect(readOnly.status).toBe(409); expect(await errorCode(readOnly)).toBe('playlist_read_only');
+    expect((await mutate('DELETE', `/playlists/${created.id}`, { idempotencyKey: key() }, headers)).status).toBe(200);
   });
 });
 

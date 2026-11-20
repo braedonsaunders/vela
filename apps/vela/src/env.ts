@@ -42,6 +42,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     tv: width >= 1600 || Platform.isTV,
     still: view.still,
     canLive: home.value?.liveAvailable ?? false,
+    canPlaylists: home.value?.playlistsAvailable ?? false,
     width,
     home: home.value,
     heroIndex: home.value ? view.heroIndex % Math.max(1, home.value.hero.length) : 0,

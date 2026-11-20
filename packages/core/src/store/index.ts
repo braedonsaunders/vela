@@ -15,6 +15,7 @@ import { initialLive, Live, type LiveState } from './live';
 import { initialPlayback, Playback, type PlaybackState } from './playback';
 import type { MediaCapabilities, VelaPlatform } from './platform';
 import { initialPreviews, Previews, type PreviewState } from './previews';
+import { initialPlaylists, Playlists, type PlaylistsState } from './playlists';
 import { Receipts } from './receipts';
 import { initialSearch, Search, type SearchState } from './search';
 import { initialServers, Servers, type ServersState } from './servers';
@@ -35,6 +36,7 @@ export interface VelaState {
   library: Record<string, Loadable<LibraryModel>>;
   /** Collections by collection ID. */
   collections: Record<string, Loadable<CollectionModel>>;
+  playlists: PlaylistsState;
   search: SearchState;
   playback: PlaybackState;
   live: LiveState;
@@ -73,6 +75,7 @@ export interface Vela {
   appearance: Appearance;
   receipts: Receipts;
   previews: Previews;
+  playlists: Playlists;
 }
 
 const initialState: VelaState = {
@@ -85,6 +88,7 @@ const initialState: VelaState = {
   rows: {},
   library: {},
   collections: {},
+  playlists: initialPlaylists,
   search: initialSearch,
   playback: initialPlayback,
   live: initialLive,
@@ -106,6 +110,7 @@ export function createVela(options: VelaOptions): Vela {
   const previews = new Previews(box, session);
   const home = new Home(box, session, width);
   const catalogue = new Catalogue(box, session, width);
+  const playlists = new Playlists(box, session, width);
   // What the viewer watched changes their resume positions, Continue Watching and the hero:
   // applied locally only from the server-confirmed stop position. Detail and Home's progress
   // shelves are then reconciled in place; navigation and playback never repeat the full bootstrap.
@@ -146,6 +151,7 @@ export function createVela(options: VelaOptions): Vela {
     servers,
     home,
     catalogue,
+    playlists,
     rows: new Rows(box, session, width),
     search: new Search(box, session, width),
     playback,

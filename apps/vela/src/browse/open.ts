@@ -19,8 +19,8 @@ export function openLibrary(store: Store, id: string, fromRoute: string): void {
   else router.push(target);
 }
 
-export function openCollection(id: string): void {
-  router.push({ pathname: '/collection/[id]', params: { id } });
+export function openCollection(id: string, kind?: string): void {
+  router.push({ pathname: '/collection/[id]', params: { id, ...(kind === 'playlist' ? { playlist: '1' } : {}) } });
 }
 
 /** `playExtra {extra.id}`: a trailer or featurette, played on the watch route. */

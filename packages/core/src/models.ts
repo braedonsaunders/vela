@@ -45,6 +45,8 @@ export interface Card {
   accent: string;
   /** The ranking receipt the server issued with this card ('' when none). */
   receipt: string;
+  /** Stable playlist member identity; absent outside playlist contents. */
+  entryId?: string;
 }
 
 /** A row of cards, in the server's order. */
@@ -98,6 +100,7 @@ export interface HomeModel {
   aiAvailable: boolean;
   descriptiveAvailable: boolean;
   trailerPreviewAvailable: boolean;
+  playlistsAvailable: boolean;
 }
 
 export interface Rating {
@@ -225,9 +228,23 @@ export interface LibraryExtras {
 }
 
 export interface CollectionModel {
+  id?: string;
+  kind?: string;
   name: string;
   items: Card[];
   more: boolean;
+  smart?: boolean;
+  entryCount?: number;
   /** True only when the server says the list is exhausted. */
   complete: boolean;
+}
+
+export interface PlaylistModel {
+  id: string;
+  name: string;
+  poster: string;
+  backdrop: string;
+  itemCount: number;
+  smart: boolean;
+  updatedAt: string;
 }

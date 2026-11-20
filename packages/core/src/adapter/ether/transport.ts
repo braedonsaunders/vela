@@ -3,7 +3,7 @@ import type { Credentials } from '../index';
 import { VelaError } from '../errors';
 import { readEvents, type EventHandler } from '../../protocol/sse';
 
-type Method = 'GET' | 'POST' | 'DELETE';
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Token = V.Tokens | null;
 
 export interface RequestOptions {

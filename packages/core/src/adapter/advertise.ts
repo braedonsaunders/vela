@@ -13,6 +13,7 @@ import {
   hasTrackChanges,
   hasTrailerPreviews,
   hasVersions,
+  hasViewerPlaylists,
 } from './capabilities';
 
 type FeatureName = keyof V.ServerCapabilities['features'];
@@ -47,6 +48,9 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       themeMusic: stated('themeMusic'),
       initialTrackSelection: stated('initialTrackSelection'),
       versions: operation('versions', hasVersions(adapter)),
+      ...(hasViewerPlaylists(adapter) && description.features.playlists
+        ? { playlists: description.features.playlists }
+        : {}),
     },
   };
 }

@@ -26,7 +26,7 @@ const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
 const labPreset = process.env.VELA_MOCK_LAB === '1';
 const libraries: V.Library[] = labPreset ? [
@@ -184,6 +184,34 @@ function versionsFor(titleId: string, owner: string): V.TitleVersions {
   const selected = remembered || pinned ? full[1]!.id : auto.id;
   return { titleId, selectedVersionId: selected, ...(remembered ? { rememberedChoice: { scope: title.kind === 'episode' ? 'show' as const : 'title' as const, active: true, label: full[1]!.label } } : {}), versions: full };
 }
+interface MockPlaylist { id: string; name: string; smart: boolean; updatedAt: string; entries: { entryId: string; titleId: string }[] }
+const playlists: MockPlaylist[] = [
+  { id: 'playlist-weekend', name: 'Weekend watch', smart: false, updatedAt: new Date().toISOString(), entries: [
+    { entryId: 'entry-weekend-1', titleId: titles[0]!.id }, { entryId: 'entry-weekend-2', titleId: titles[1]!.id },
+  ] },
+  { id: 'playlist-smart', name: 'Recently added', smart: true, updatedAt: new Date().toISOString(), entries: [
+    { entryId: 'entry-smart-1', titleId: titles[2]!.id },
+  ] },
+];
+const playlistCard = (g: Grant, value: MockPlaylist): V.PlaylistCard => ({ id: value.id, kind: 'playlist', name: value.name,
+  artwork: value.entries[0] ? [signedArtwork(g, value.entries[0].titleId, 'poster')] : [], itemCount: value.entries.length,
+  smart: value.smart, updatedAt: value.updatedAt });
+function playlistTitles(ids: string[]): V.Title[] {
+  const result: V.Title[] = [];
+  for (const id of ids) {
+    const title = allTitles.find(item => item.id === id);
+    if (!title) fail('not-found', 'not_found', 'Title not found');
+    if (title.kind === 'movie' || title.kind === 'episode') result.push(title);
+    else if (title.kind === 'show') result.push(...allTitles.filter(item => item.kind === 'episode' && item.showId === title.id));
+    else if (title.kind === 'season') result.push(...allTitles.filter(item => item.kind === 'episode' && item.showId === title.showId && item.seasonNumber === title.seasonNumber));
+    else unprocessable('unsupported_kind', 'Unsupported playlist title kind');
+  }
+  return result;
+}
+function unprocessable(code: string, message: string): never {
+  throw Response.json({ error: { class: 'request', code, message, retry: { allowed: false } } } satisfies V.ErrorResponse,
+    { status: 422, headers: { 'Cache-Control': 'no-store' } });
+}
 function revoke(g: Grant) { g.revoked = true; for (const p of previewSessions.values()) if (p.owner === g.id) p.ended = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const close of s.listeners.values()) close(); s.listeners.clear(); } }
 function currentSession(id: string, g: Grant): Session { const s = sessions.get(id); if (!s || s.owner !== g.id || s.expires <= Date.now()) fail('not-found', 'session_not_found', 'Session not found'); return s; }
 
@@ -225,6 +253,63 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return json({ capabilities, client: body.client });
   }
   const g = authenticate(req);
+  if (capabilities.features.playlists?.available) {
+    if (method === 'GET' && path === '/playlists') return cached(req, page(playlists.map(value => playlistCard(g, value)), url, g, `playlists:${playlists.map(value => `${value.id}:${value.updatedAt}`).join('|')}`), g.id);
+    if (method === 'POST' && path === '/playlists') {
+      if (typeof body.name !== 'string' || !body.name.trim()) fail('request', 'invalid_request', 'Playlist name required');
+      const expanded = playlistTitles(Array.isArray(body.titleIds) ? body.titleIds : []);
+      if (expanded.length > 5000) unprocessable('playlist_too_large', 'Playlist is too large');
+      const value: MockPlaylist = { id: `playlist-${crypto.randomUUID()}`, name: body.name.trim(), smart: false, updatedAt: new Date().toISOString(),
+        entries: expanded.map(title => ({ entryId: crypto.randomUUID(), titleId: title.id })) };
+      playlists.push(value); return Response.json(playlistCard(g, value), { status: 201 });
+    }
+    const titlePlaylists = /^\/titles\/([^/]+)\/playlists$/.exec(path);
+    if (method === 'GET' && titlePlaylists) {
+      const titleId = decodeURIComponent(titlePlaylists[1]!);
+      const matchingTitleIds = new Set(playlistTitles([titleId]).map(title => title.id));
+      return cached(req, { items: playlists.map(value => ({ id: value.id, name: value.name, smart: value.smart,
+        entryIds: value.entries.filter(entry => matchingTitleIds.has(entry.titleId)).map(entry => entry.entryId) })) } satisfies V.TitlePlaylists, g.id);
+    }
+    const playlistMatch = /^\/playlists\/([^/]+)$/.exec(path);
+    if (playlistMatch) {
+      const id = decodeURIComponent(playlistMatch[1]!); const value = playlists.find(item => item.id === id);
+      if (!value) fail('not-found', 'not_found', 'Playlist not found');
+      if (method === 'GET') {
+        const items: V.RowEntry[] = value.entries.flatMap(member => {
+          const title = allTitles.find(item => item.id === member.titleId); return title ? [{ id: title.id, entryId: member.entryId, kind: 'title' as const,
+            title: { ...title, artwork: title.artwork.map(ref => signedArtwork(g, title.id, ref.kind)) }, receiptToken: '' }] : [];
+        });
+        return cached(req, { collection: { id: value.id, kind: 'playlist', name: value.name, artwork: playlistCard(g, value).artwork,
+          smart: value.smart, entryCount: value.entries.length, updatedAt: value.updatedAt }, ...page(items, url, g, `playlist:${id}:${value.updatedAt}`) } satisfies V.CollectionContents, g.id);
+      }
+      if (value.smart) fail('conflict', 'playlist_read_only', 'Smart playlists are read only');
+      if (method === 'PATCH') { if (typeof body.name !== 'string' || !body.name.trim()) fail('request', 'invalid_request', 'Playlist name required'); value.name = body.name.trim(); value.updatedAt = new Date().toISOString(); return json(playlistCard(g, value)); }
+      if (method === 'DELETE') { playlists.splice(playlists.indexOf(value), 1); return json({ accepted: true }); }
+    }
+    const entriesMatch = /^\/playlists\/([^/]+)\/entries$/.exec(path);
+    if (method === 'POST' && entriesMatch) {
+      const value = playlists.find(item => item.id === decodeURIComponent(entriesMatch[1]!)); if (!value) fail('not-found', 'not_found', 'Playlist not found');
+      if (value.smart) fail('conflict', 'playlist_read_only', 'Smart playlists are read only');
+      const expanded = playlistTitles(Array.isArray(body.titleIds) ? body.titleIds : []); if (!expanded.length) fail('request', 'invalid_request', 'Title ids required');
+      if (value.entries.length + expanded.length > 5000) unprocessable('playlist_too_large', 'Playlist is too large');
+      value.entries.push(...expanded.map(title => ({ entryId: crypto.randomUUID(), titleId: title.id }))); value.updatedAt = new Date().toISOString();
+      return json({ entryCount: value.entries.length });
+    }
+    const entryMatch = /^\/playlists\/([^/]+)\/entries\/([^/]+)(\/move)?$/.exec(path);
+    if (entryMatch) {
+      const value = playlists.find(item => item.id === decodeURIComponent(entryMatch[1]!)); if (!value) fail('not-found', 'not_found', 'Playlist not found');
+      if (value.smart) fail('conflict', 'playlist_read_only', 'Smart playlists are read only');
+      const entryId = decodeURIComponent(entryMatch[2]!); const index = value.entries.findIndex(entry => entry.entryId === entryId);
+      if (index < 0) fail('not-found', 'not_found', 'Playlist entry not found');
+      if (method === 'DELETE' && !entryMatch[3]) { value.entries.splice(index, 1); value.updatedAt = new Date().toISOString(); return json({ accepted: true }); }
+      if (method === 'POST' && entryMatch[3]) {
+        if (!('afterEntryId' in body)) fail('request', 'invalid_request', 'afterEntryId is required');
+        const [moving] = value.entries.splice(index, 1); const after = body.afterEntryId === null ? -1 : value.entries.findIndex(entry => entry.entryId === body.afterEntryId);
+        if (!moving || body.afterEntryId !== null && after < 0) fail('request', 'invalid_request', 'Invalid playlist move');
+        value.entries.splice(after + 1, 0, moving); value.updatedAt = new Date().toISOString(); return json({ accepted: true });
+      }
+    }
+  }
   if (method === 'GET' && path === '/libraries') return cached(req, page(visibleLibraries, url, g, `libraries:${viewer.policyRevision}:${mac(JSON.stringify(visibleLibraries))}`), g.id);
   const facetsMatch = /^\/libraries\/([^/]+)\/facets\/([^/]+)$/.exec(path);
   if (method === 'GET' && facetsMatch) {
@@ -598,7 +683,7 @@ async function dispatch(req: Request): Promise<Response> {
   const packFile = req.method === 'GET' ? await packAsset(url.pathname) : undefined;
   if (packFile) return packFile;
   if (!url.pathname.startsWith('/vela/v0/')) fail('not-found', 'endpoint_not_found', 'Endpoint not found');
-  if (req.method !== 'POST' && req.method !== 'DELETE') return api(req, url, undefined);
+  if (req.method !== 'POST' && req.method !== 'DELETE' && req.method !== 'PATCH') return api(req, url, undefined);
   let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }
   if (url.pathname === '/vela/v0/live/guide/window') {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('request', 'invalid_json', 'JSON object required');
@@ -619,7 +704,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 

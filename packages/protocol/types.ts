@@ -31,7 +31,8 @@ export interface ServerCapabilities {
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   plexAccountSignIn?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
+    playlists?: Feature & { maxEntries: number } };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -85,7 +86,7 @@ export interface LibraryFacetCollection { id: ID; name: string; itemCount: numbe
 /** Ordinary library collection entries retain the nested metadata envelope. */
 export interface LibraryCollectionEntry { id: ID; kind: 'collection'; receiptToken: string; collection: { id: ID; name: string; summary: string; itemCount: number; artwork: ArtworkRef[] } }
 export interface LibraryPersonEntry { id: ID; kind: 'person'; person: Pick<PersonDetail, 'id' | 'name' | 'photo'>; itemCount: number }
-export type RowEntry = { id: ID; receiptToken: string } & (
+export type RowEntry = { id: ID; receiptToken: string; /** Stable playlist member identity when read from playlist contents. */ entryId?: ID } & (
   { kind: 'title'; title: Title; role?: string } | { kind: 'person'; person: LibraryPersonEntry['person']; itemCount: number } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID; itemCount?: number });
 export interface Row { id: ID; name: string; purpose: 'continue' | 'nextUp' | 'recent' | 'recentlyReleased' | 'recentlyAdded' | 'collection' | 'recommendation' | 'live' | 'watchlist';
@@ -231,8 +232,18 @@ export interface WebCodeRedeemRequest extends Mutation { code: string; device: D
 
 export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }
 
-export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[] }
+export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[];
+  /** Playlist-only fields. */ smart?: boolean; entryCount?: number; updatedAt?: Timestamp }
 export interface CollectionContents extends Page<RowEntry> { collection: Collection }
+
+export interface PlaylistCard { id: ID; kind: 'playlist'; name: string; artwork: ArtworkRef[]; itemCount: number; smart: boolean; updatedAt: Timestamp }
+export interface CreatePlaylistRequest extends Mutation { name: string; titleIds?: ID[] }
+export interface RenamePlaylistRequest extends Mutation { name: string }
+export interface AddPlaylistEntriesRequest extends Mutation { titleIds: ID[] }
+export interface MovePlaylistEntryRequest extends Mutation { afterEntryId: ID | null }
+export interface PlaylistEntryCount { entryCount: number }
+export interface TitlePlaylistMembership { id: ID; name: string; smart: boolean; entryIds: ID[] }
+export interface TitlePlaylists { items: TitlePlaylistMembership[] }
 
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated' | 'lastViewed';
 export type SortDirection = 'asc' | 'desc';

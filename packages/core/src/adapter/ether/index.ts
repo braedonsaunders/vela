@@ -287,6 +287,42 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.CollectionContents>('GET', path, undefined, CACHED);
   }
 
+  playlists(cursor?: string, limit?: number) {
+    return this.http.request<V.Page<V.PlaylistCard>>('GET', `/playlists${query({ cursor, limit })}`, undefined, CACHED);
+  }
+
+  playlist(id: string, cursor?: string, limit?: number) {
+    return this.http.request<V.CollectionContents>('GET', `/playlists/${segment(id)}${query({ cursor, limit })}`, undefined, CACHED);
+  }
+
+  createPlaylist(request: V.CreatePlaylistRequest) {
+    return this.http.request<V.PlaylistCard>('POST', '/playlists', request);
+  }
+
+  renamePlaylist(id: string, request: V.RenamePlaylistRequest) {
+    return this.http.request<V.PlaylistCard>('PATCH', `/playlists/${segment(id)}`, request);
+  }
+
+  deletePlaylist(id: string, request: V.Mutation) {
+    return this.http.request<V.Ack>('DELETE', `/playlists/${segment(id)}`, request);
+  }
+
+  addPlaylistEntries(id: string, request: V.AddPlaylistEntriesRequest) {
+    return this.http.request<V.PlaylistEntryCount>('POST', `/playlists/${segment(id)}/entries`, request);
+  }
+
+  removePlaylistEntry(id: string, entryId: string, request: V.Mutation) {
+    return this.http.request<V.Ack>('DELETE', `/playlists/${segment(id)}/entries/${segment(entryId)}`, request);
+  }
+
+  movePlaylistEntry(id: string, entryId: string, request: V.MovePlaylistEntryRequest) {
+    return this.http.request<V.Ack>('POST', `/playlists/${segment(id)}/entries/${segment(entryId)}/move`, request);
+  }
+
+  titlePlaylists(titleId: string) {
+    return this.http.request<V.TitlePlaylists>('GET', `/titles/${segment(titleId)}/playlists`, undefined, CACHED);
+  }
+
   async detail(id: string, fresh = false) {
     const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, { ...CACHED, fresh });
     if (this.personSupport === 'unknown') {

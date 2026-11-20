@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.9';
+const version = '1.2.10';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -125,6 +125,7 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
     { ...question(2, '{s:gateTwo}', [4, 7, 5, 9, 6, 8], 6), when: [{ test: 'flag:g2' }, { test: 'flag:parent', not: true }] },
     { type: 'box', when: [{ test: 'flag:parent' }], style: { display: 'flex', 'flex-direction': 'column', width: '100%' }, children: [
       { type: 'text', text: '{s:signedInAs} {env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft', 'padding-bottom': '16px' } },
+      { ...menuRow({ action: 'playlists' }, 'Playlists', 'layers', 'kids-playlists'), when: [{ test: 'env.canPlaylists' }] },
       menuRow({ action: 'openPicker' }, '{s:changeLook}', 'sparkles', 'skin-picker'),
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },

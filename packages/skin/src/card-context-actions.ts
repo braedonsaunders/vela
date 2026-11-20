@@ -48,7 +48,7 @@ function addParentActions(actions: CardContextAction[], card: Card): void {
  * The useful actions for one drawn card. Server mutations are present only when the adapter
  * returned TitleActions; absence is a capability answer, never a disabled menu row.
  */
-export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: { continueWatching?: boolean } = {}): CardContextAction[] {
+export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: { continueWatching?: boolean; playlists?: boolean } = {}): CardContextAction[] {
   const actions: CardContextAction[] = [];
   const playable = PLAYABLE_KINDS.has(card.kind);
   const resumable = playable && card.progressSeconds > 0 && card.durationSeconds > 0 && !card.played;
@@ -89,6 +89,9 @@ export function cardContextActions(card: Card, primary: CardPress, management?: 
     label: msg(management.watch.watchlisted ? 'cardMenu.removeWatchlist' : 'cardMenu.addWatchlist'),
     command: { kind: 'watch', change: { watchlisted: !management.watch.watchlisted } },
   });
+  if (context.playlists && TITLE_KINDS.has(card.kind)) {
+    actions.push(dispatch('playlist', msg('cardMenu.addToPlaylist'), 'addToPlaylist', `${card.id}|${card.kind}`));
+  }
   if (context.continueWatching && management?.removeFromContinue) actions.push({
     id: 'remove-continue', label: msg('cardMenu.removeContinue'),
     command: { kind: 'watch', change: { continueWatching: false } },

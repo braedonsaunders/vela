@@ -236,6 +236,7 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     aiAvailable: features.aiSearch.available,
     descriptiveAvailable: features.descriptiveSearch.available,
     trailerPreviewAvailable: features.trailerPreview?.available ?? false,
+    playlistsAvailable: features.playlists?.available ?? false,
   };
 }
 

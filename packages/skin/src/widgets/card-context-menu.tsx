@@ -72,7 +72,7 @@ export function CardContextMenu({ card, primary, anchor, mode, opener, continueW
     Animated.spring(openValue, { toValue: 1, damping: 22, stiffness: 320, mass: 0.7, useNativeDriver: true }).start();
   }, [look.still, openValue]);
 
-  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching }), [card, primary, management, continueWatching]);
+  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists }), [card, primary, management, continueWatching, host.env.canPlaylists]);
   const focusFirst = mode === 'keyboard' || mode === 'tv';
   useEffect(() => {
     if (!focusFirst || menuSize.height <= 1) return;

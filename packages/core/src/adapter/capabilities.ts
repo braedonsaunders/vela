@@ -82,6 +82,25 @@ export interface PersonFilmography {
   personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>>;
 }
 
+/** Viewer-owned playlists, present only when both the server feature and adapter methods exist. */
+export interface ViewerPlaylists {
+  playlists(cursor?: string, limit?: number): Promise<V.Page<V.PlaylistCard>>;
+  playlist(id: string, cursor?: string, limit?: number): Promise<V.CollectionContents>;
+  createPlaylist(request: V.CreatePlaylistRequest): Promise<V.PlaylistCard>;
+  renamePlaylist(id: string, request: V.RenamePlaylistRequest): Promise<V.PlaylistCard>;
+  deletePlaylist(id: string, request: V.Mutation): Promise<V.Ack>;
+  addPlaylistEntries(id: string, request: V.AddPlaylistEntriesRequest): Promise<V.PlaylistEntryCount>;
+  removePlaylistEntry(id: string, entryId: string, request: V.Mutation): Promise<V.Ack>;
+  movePlaylistEntry(id: string, entryId: string, request: V.MovePlaylistEntryRequest): Promise<V.Ack>;
+  titlePlaylists(titleId: string): Promise<V.TitlePlaylists>;
+}
+
+export function hasViewerPlaylists(adapter: ServerAdapter): adapter is ServerAdapter & ViewerPlaylists {
+  return ['playlists', 'playlist', 'createPlaylist', 'renamePlaylist', 'deletePlaylist', 'addPlaylistEntries',
+    'removePlaylistEntry', 'movePlaylistEntry', 'titlePlaylists'].every(name =>
+      name in adapter && typeof (adapter as unknown as Record<string, unknown>)[name] === 'function');
+}
+
 export function hasPersonFilmography(adapter: ServerAdapter): adapter is ServerAdapter & PersonFilmography {
   return 'personTitles' in adapter && typeof adapter.personTitles === 'function'
     && (!('supportsPersonFilmography' in adapter) || adapter.supportsPersonFilmography === true);

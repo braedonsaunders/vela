@@ -5,10 +5,13 @@ import type { SkinHost } from '@vela/skin';
 import { useCollectionPage } from '../../src/browse/collection-page';
 import { collectionHost } from '../../src/browse/page-host';
 import { DocumentScreen } from '../../src/screen';
+import { PlaylistManager } from '../../src/playlists/playlist-manager';
+import { View } from 'react-native';
 
 export default function Collection() {
-  const { id = '' } = useLocalSearchParams<{ id: string }>();
-  const collection = useCollectionPage(id);
+  const { id = '', playlist } = useLocalSearchParams<{ id: string; playlist?: string }>();
+  const collection = useCollectionPage(id, playlist === '1');
   const page = (host: SkinHost) => collectionHost(host, collection);
-  return <DocumentScreen route="collection" entry={id} page={page} />;
+  return <View style={{ flex: 1 }}><DocumentScreen route="collection" entry={id} page={page} />
+    {playlist === '1' ? <PlaylistManager playlistId={id} /> : null}</View>;
 }

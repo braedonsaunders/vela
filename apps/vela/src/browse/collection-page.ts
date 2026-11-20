@@ -13,22 +13,22 @@ export interface CollectionState {
   retry(): void;
 }
 
-export function useCollectionPage(id: string): CollectionState {
+export function useCollectionPage(id: string, playlist = false): CollectionState {
   const store = useVela();
   const current = useVelaState(state => state.collections[id]);
   const missing = current === undefined;
 
   useEffect(() => {
-    if (missing && id) void store.catalogue.collection(id);
-  }, [store, id, missing]);
+    if (missing && id) void (playlist ? store.playlists.open(id) : store.catalogue.collection(id));
+  }, [store, id, missing, playlist]);
 
   const page = useMemo<CollectionPage>(
     () => ({ model: current?.value, moreLoading: !!current?.value && current.load === 'loading' }),
     [current],
   );
   const load: Env['load'] = current?.load === 'failed' ? 'failed' : current?.value ? 'ready' : 'loading';
-  const more = useCallback(() => void store.catalogue.collection(id, true), [store, id]);
-  const retry = useCallback(() => void store.catalogue.collection(id), [store, id]);
+  const more = useCallback(() => void (playlist ? store.playlists.open(id, true) : store.catalogue.collection(id, true)), [store, id, playlist]);
+  const retry = useCallback(() => void (playlist ? store.playlists.open(id) : store.catalogue.collection(id)), [store, id, playlist]);
 
   return { page, load, more, retry };
 }
