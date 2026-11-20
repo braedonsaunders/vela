@@ -199,14 +199,18 @@ export class Playback {
       return;
     }
     let plan = connection.plan(reply as V.PlaybackPlan);
-    // A replacement session that already carries the viewer's tracks needs no command (and a live
-    // session may refuse one), so only a real difference is sent.
-    const differs = (this.audio !== undefined && this.audio !== plan.selectedAudioTrackId)
-      || (this.subtitle !== undefined && this.subtitle !== (plan.selectedSubtitleTrackId ?? null));
-    if (this.recovering && differs) {
+    // A replacement session that already carries the viewer's tracks needs no command, and a live
+    // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
+    // refuse track commands. Only choices that name a track in the new plan are carried.
+    const live = target.kind === 'channel' || target.kind === 'library-live';
+    const audio = this.audio !== undefined && plan.audioTracks.some(t => t.id === this.audio) ? this.audio : undefined;
+    const subtitle = this.subtitle === null || (this.subtitle !== undefined && plan.subtitleTracks.some(t => t.id === this.subtitle)) ? this.subtitle : undefined;
+    const differs = (audio !== undefined && audio !== plan.selectedAudioTrackId)
+      || (subtitle !== undefined && subtitle !== (plan.selectedSubtitleTrackId ?? null));
+    if (this.recovering && !live && differs) {
       try {
         plan = connection.plan(await this.send(connection, plan.sessionId, {
-          kind: 'tracks', audioTrackId: this.audio, subtitleTrackId: this.subtitle,
+          kind: 'tracks', audioTrackId: audio, subtitleTrackId: subtitle,
           sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
           idempotencyKey: this.session.key(),
         }));
