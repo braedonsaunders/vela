@@ -73,7 +73,16 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   async personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
     return this.http.request<V.Page<V.RowEntry>>('GET', `/people/${segment(id)}/titles${query({ libraryId, cursor })}`, undefined, CACHED);
   }
-  async libraryRows(id: string, _kind: V.Library['kind']): Promise<V.Row[]> {
+  /** Every shelf of a library, page by page. A cursor the server has expired mid-read restarts
+   * the read once from the first page, uncached, so no shelf is skipped or repeated. */
+  async libraryRows(id: string, kind: V.Library['kind']): Promise<V.Row[]> {
+    try { return await this.readLibraryRows(id, kind, false); }
+    catch (error) {
+      if (!(error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired')) throw error;
+      return this.readLibraryRows(id, kind, true);
+    }
+  }
+  private async readLibraryRows(id: string, _kind: V.Library['kind'], fresh: boolean): Promise<V.Row[]> {
     const tabs = this.declaredLibraries.get(id)?.tabs;
     if (tabs && !tabs.some(tab => tab.kind === 'recommended')) return [];
     const result: V.Row[] = [];
@@ -81,8 +90,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     let cursor: string | undefined;
     for (let n = 0; n < 100; n++) {
       const page = this.declaredLibraries.get(id)?.tabs
-        ? await this.http.request<V.Page<V.Row>>('GET', `/libraries/${segment(id)}/rows${query({ cursor, limit: 100 })}`, undefined, CACHED)
-        : await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 });
+        ? await this.http.request<V.Page<V.Row>>('GET', `/libraries/${segment(id)}/rows${query({ cursor, limit: 100 })}`, undefined, fresh ? undefined : CACHED)
+        : await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 }, fresh);
       result.push(...page.items);
       if (page.continuation !== 'more') return result;
       if (!page.nextCursor || seen.has(page.nextCursor)) throw new Error('Invalid library row continuation');
@@ -217,8 +226,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     }
   }
 
-  rows(rowsQuery: V.RowsQuery) {
-    return this.http.request<V.Page<V.Row>>('GET', `/rows${query(rowsQuery)}`, undefined, CACHED);
+  rows(rowsQuery: V.RowsQuery, fresh = false) {
+    return this.http.request<V.Page<V.Row>>('GET', `/rows${query(rowsQuery)}`, undefined, fresh ? undefined : CACHED);
   }
 
   row(id: string, cursor?: string, limit?: number) {

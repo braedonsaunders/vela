@@ -199,3 +199,25 @@ test('tab search retains server order and query-bound paging', async () => {
     expect((await adapter.libraryCollections('videos', undefined, 'performers', 'No such performer')).items).toEqual([]);
   } finally { await mock.stop(); }
 });
+
+test('a plugin library whose row cursor expires mid-read is read again from the first page', async () => {
+  const { mock, adapter } = await connect();
+  const request = globalThis.fetch;
+  let expired = 0;
+  // The server expires the cursor once, partway through the shelves.
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (!expired && url.includes('/libraries/videos/rows') && url.includes('cursor=')) {
+      expired++;
+      return Response.json({ error: { class: 'conflict', code: 'cursor_expired', message: 'Refresh from first page', retry: { allowed: false } } }, { status: 409 });
+    }
+    return request(input, init);
+  }) as typeof fetch;
+  try {
+    await adapter.libraries({});
+    await adapter.probeLibraryViews('videos');
+    const shelves = await adapter.libraryRows('videos', 'mixed');
+    expect(expired).toBe(1);
+    expect(shelves.map(row => row.id)).toEqual(Array.from({ length: 30 }, (_, n) => n ? `creator-picks-${n + 1}` : 'creator-picks'));
+  } finally { globalThis.fetch = request; await mock.stop(); }
+});
