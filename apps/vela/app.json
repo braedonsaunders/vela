@@ -2,6 +2,7 @@
   "expo": {
     "name": "Vela",
     "slug": "vela",
+    "icon": "./assets/brand/vela-app-icon-1024.png",
     "scheme": "vela",
     "version": "0.2.26",
     "orientation": "default",
