@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { railWidth, rowHeight, nowPillOffset, programmeFocusFrame } from '../src/widgets/guide/geometry';
+import { railWidth, rowHeight, nowPillOffset, programmeFocusFrame, rulerLabelVisible } from '../src/widgets/guide/geometry';
 
 test('TV guide gives channels more room without changing desktop or phone geometry', () => {
   expect(rowHeight(false, true)).toBeGreaterThan(rowHeight(false));
@@ -37,6 +37,12 @@ test('the now clock stays complete at either ruler edge without moving the time 
 test('a ruler still measuring its viewport never produces a negative pill position', () => {
   expect(nowPillOffset(0, 0, 80)).toBe(4);
   expect(nowPillOffset(20, 60, 80)).toBe(4);
+});
+
+test('the ruler hides only time labels covered by the now chip', () => {
+  expect(rulerLabelVisible(100, 70, 120, 88)).toBe(false);
+  expect(rulerLabelVisible(20, 70, 120, 88)).toBe(true);
+  expect(rulerLabelVisible(220, 70, 120, 88)).toBe(true);
 });
 
 

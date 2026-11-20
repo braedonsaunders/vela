@@ -79,7 +79,7 @@ export const collection: Node = {
             },
             {
               type: 'text',
-              text: '{s:collectionKind}',
+              text: '{collection.kindLabel}',
               motion: 'copy0',
               style: {
                 'margin-top': 'clamp(18px, 2vw, 40px)',

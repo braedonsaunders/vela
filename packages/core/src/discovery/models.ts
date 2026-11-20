@@ -49,6 +49,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const position = title.watch?.positionSeconds ?? 0;
   const durationLabel = duration ? minute(Math.round(duration / 60)) : '';
   const yearLabel = title.year ? year(title.year) : '';
+  const rating = displayRating(title.rating);
   return withDateDisplay({
     id: title.id,
     kind: title.kind,
@@ -56,7 +57,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     summary: title.summary,
     airDate: title.airDate ?? '',
     year: title.year ?? 0,
-    rating: title.rating ?? '',
+    rating,
     durationSeconds: duration ?? 0,
     progressSeconds: position,
     played: title.watch?.played ?? false,
@@ -85,10 +86,16 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     progressLabel: duration ? percent(Math.min(1, Math.max(0, position / duration))) : '',
     seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '',
     episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
-    facts: [title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, title.rating ?? '', durationLabel].filter(Boolean).join(' · '),
+    facts: [title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, rating, durationLabel].filter(Boolean).join(' · '),
     ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode'),
     receipt,
   }, title.dateDisplay);
+}
+
+/** Ether may qualify a certification with its region (`gb/12A`); cards show the mark itself. */
+export function displayRating(value: string | undefined): string {
+  const rating = value?.trim() ?? '';
+  return /^[a-z]{2,3}\//i.test(rating) ? rating.slice(rating.indexOf('/') + 1) : rating;
 }
 
 /** One shared library date rule for every card surface. Invalid/missing full dates fall back to year. */
@@ -374,7 +381,7 @@ export function detailModel(
     }
     return { ...(value.id ? { id: value.id } : {}), ...(value.id && personFilmography ? { canOpen: true } : {}), name: value.name, role: value.role ?? '', portrait };
   };
-  const credit = (c: { name: string; role?: string }) => (c.role ? `${c.name} · ${c.role}` : c.name);
+  const credit = (c: { name: string; role?: string }) => (c.role ? `${c.name} (${c.role})` : c.name);
   const theme = themeMusic(data, images, themeAvailable);
   const trailers = data.extras.filter(extra => extra.kind === 'trailer');
   const trailer = trailers.find(extra => extra.availability !== 'unavailable') ?? trailers[0];

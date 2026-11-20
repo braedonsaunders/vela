@@ -23,7 +23,7 @@ export function useCollectionPage(id: string, playlist = false): CollectionState
   }, [store, id, missing, playlist]);
 
   const page = useMemo<CollectionPage>(
-    () => ({ model: current?.value, moreLoading: !!current?.value && current.load === 'loading' }),
+    () => ({ kind: 'collection', model: current?.value, moreLoading: !!current?.value && current.load === 'loading' }),
     [current],
   );
   const load: Env['load'] = current?.load === 'failed' ? 'failed' : current?.value ? 'ready' : 'loading';

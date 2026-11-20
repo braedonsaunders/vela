@@ -32,6 +32,8 @@ export interface LibraryPage {
 }
 
 export interface CollectionPage {
+  /** A real server collection or a row expanded through See all. */
+  kind?: 'collection' | 'row';
   card?: 'poster' | 'landscape' | 'square';
   model?: CollectionModel;
   moreLoading: boolean;

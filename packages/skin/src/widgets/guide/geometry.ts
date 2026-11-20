@@ -100,6 +100,12 @@ export function nowPillOffset(position: number, viewport: number, width: number)
   return Math.max(4, Math.min(Math.max(4, viewport - width - 4), position - width / 2));
 }
 
+/** A ruler label is hidden while the now chip occupies the same horizontal space. */
+export function rulerLabelVisible(labelLeft: number, labelWidth: number, pillLeft: number, pillWidth: number): boolean {
+  'worklet';
+  return labelLeft + labelWidth <= pillLeft - 4 || labelLeft >= pillLeft + pillWidth + 4;
+}
+
 /** Crop at time-window edges before lifting. A small gutter contains the shadow;
  * clamping the spring itself also keeps overshoot out of the channel layer. */
 export function programmeFocusFrame(left: number, width: number, viewportLeft: number, viewportWidth: number, lift: number, shadowGutter = 6) {

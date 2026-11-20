@@ -587,6 +587,12 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
         let pillX = max(4, min(max(4, ruler.bounds.width - 92), nowX - 44))
         nowPill.frame = CGRect(x: pillX, y: 8, width: 88, height: 26)
         nowPill.isHidden = now < 0 || nowX < 0 || nowX > ruler.bounds.width; ruler.bringSubviewToFront(nowPill)
+        let pillCover = nowPill.frame.insetBy(dx: -4, dy: 0)
+        for label in ticks where !label.isHidden {
+            let textWidth = min(label.bounds.width, label.intrinsicContentSize.width + 8)
+            let textFrame = CGRect(x: label.frame.minX, y: label.frame.minY, width: textWidth, height: label.frame.height)
+            label.alpha = !nowPill.isHidden && textFrame.intersects(pillCover) ? 0 : 1
+        }
         nowLine.frame = CGRect(x: now * layout.scale, y: 0, width: 1, height: CGFloat(channels.count) * layout.row)
         nowLine.isHidden = now < 0; collection.bringSubviewToFront(nowLine)
     }

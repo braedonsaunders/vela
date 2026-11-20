@@ -105,7 +105,7 @@ export const collection: Node = {
                 },
                 {
                   type: 'text',
-                  text: '{t:ui.collection}',
+                  text: '{collection.kindLabel}',
                   style: { ...eyebrow, 'font-size': '10px', color: '$ui.accent' } as Style,
                 },
               ],

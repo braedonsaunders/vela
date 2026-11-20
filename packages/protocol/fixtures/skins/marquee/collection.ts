@@ -94,7 +94,7 @@ export const collectionRoute: Node = {
               children: [
                 {
                   type: 'text',
-                  text: '{s:collection}',
+                  text: '{collection.kindLabel}',
                   style: {
                     'font-size': '11px',
                     'font-weight': '700',

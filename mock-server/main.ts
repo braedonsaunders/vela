@@ -553,7 +553,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
           seasonNumber: index + 1,
         }))
       : raw.seasons;
-    const d = { ...raw, seasons: scaledSeasons, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
+    const mockTitle = process.env.VELA_MOCK_RAW_RATING === '1' && raw.title.id === 'title-1-1'
+      ? { ...raw.title, rating: 'gb/U' }
+      : raw.title;
+    const d = { ...raw, title: mockTitle, seasons: scaledSeasons, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
     if (method === 'POST' && titleMatch[2] === 'watch') {
       const t = allTitles.find(t => t.id === titleMatch[1])!;
       t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };

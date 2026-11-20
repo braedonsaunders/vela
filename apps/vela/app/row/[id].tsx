@@ -17,7 +17,7 @@ export default function RowPage() {
   const shape = row?.cardStyle ?? (row?.items.length && row.items.every(item => item.kind === 'episode' || (item.progressSeconds > 0 && !item.played)) ? 'landscape' : 'poster');
   const page = (host: SkinHost): SkinHost => ({ ...host,
     env: { ...host.env, load: current?.load === 'failed' ? 'failed' : row ? 'ready' : 'loading',
-      collection: { model: row ? { name: row.name, items: row.items.map(card => libraryCardArtwork(card, shape)), more: !!row.nextCursor, complete: row.continuation === 'exhausted' } : undefined, moreLoading: current?.load === 'loading', card: shape },
+      collection: { kind: 'row', model: row ? { name: row.name, items: row.items.map(card => libraryCardArtwork(card, shape)), more: !!row.nextCursor, complete: row.continuation === 'exhausted' } : undefined, moreLoading: current?.load === 'loading', card: shape },
     },
     dispatch: (action, arg) => {
       if (action === 'collectionMore') { if (current?.load !== 'failed') void store.rows.load(id, true); return; }

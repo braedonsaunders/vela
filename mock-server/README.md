@@ -139,6 +139,8 @@ genres. IDs and programme facts remain stable across overlapping guide windows.
 
 Set `VELA_MOCK_SEASONS=50` to expose a long named season list on Meridian Station
 for title-page selector checks.
+Set `VELA_MOCK_RAW_RATING=1` to return the first movie's rating as `gb/U` for
+title-page rating normalization checks.
 The existing24h window cap and100-item maximum pages still apply.
 
 Initial API track selection and in-session track mutation are advertised unavailable

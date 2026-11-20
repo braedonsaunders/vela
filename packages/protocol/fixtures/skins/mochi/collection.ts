@@ -42,7 +42,7 @@ export const collection: Node = {
       style: { ...col, gap: '26px', 'padding-bottom': '80px', 'padding-top': '10px' },
       small: { gap: '18px', 'padding-top': '6px' },
       children: [
-        pageHeading('{s:collection}', '{collection.name}', undefined, true),
+        pageHeading('{collection.kindLabel}', '{collection.name}', undefined, true),
         {
           ...emptyState('sleepy', '{s:nothingHereYet}', ''),
           when: [is('collection.itemCount', '0')],

@@ -15,6 +15,17 @@ test('cast links require both a person ID and filmography capability', () => {
   expect(detailModel(detail, undefined, 2560, false, false, true).castPeople.map(person => !!person.canOpen)).toEqual([true, false]);
 });
 
+test('display ratings omit wire region prefixes and credits pair each role with its person', () => {
+  expect(card({ ...title, rating: 'gb/12A' })).toMatchObject({ rating: '12A' });
+  expect(card({ ...title, rating: 'ca/14A' }).facts).toContain('14A');
+  expect(card({ ...title, rating: 'NR' }).rating).toBe('NR');
+  const model = detailModel({ title, extras: [], chapters: [], cast: [], crew: [
+    { name: 'Greig Fraser', role: 'Cinematographer' },
+    { name: 'Daniel Pemberton', role: 'Composer' },
+  ] });
+  expect(model.crew).toEqual(['Greig Fraser (Cinematographer)', 'Daniel Pemberton (Composer)']);
+});
+
 test('episode details show series context including specials, with separate portrait and landscape art', () => {
   const model = detailModel({ title, extras: [], chapters: [], cast: [] } satisfies TitleDetail).title[0]!;
   expect(model.episodeContext).toBe('Meridian Station · Season 0, Episode 3');
