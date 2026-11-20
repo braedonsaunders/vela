@@ -80,6 +80,8 @@ const PointerInheritance = createContext<PointerMode>('auto');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
+/** Visible content inside a labelled press target is presentation; the overlay button names it. */
+const PressLabelContent = createContext(false);
 /** First content layout releases the skeleton covering a newly loaded route. */
 const InstantContent = createContext(false);
 const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
@@ -333,13 +335,15 @@ function translatedBox(rows: Css, viewport: Viewport, fontSize: number) {
 }
 
 function a11yProps(node: RNode, c: Ctx, e: Env) {
-  const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : undefined;
+  const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : node.role === 'group' ? 'group' : node.role === 'region' ? 'summary' : undefined;
   const label = node.label ? fill(node.label, c, e) : undefined;
   const state = node.a11y && {
     selected: node.a11y.selected ? holds(node.a11y.selected, c, e) : undefined,
     expanded: node.a11y.expanded ? holds(node.a11y.expanded, c, e) : undefined,
     checked: node.a11y.checked ? holds(node.a11y.checked, c, e) : undefined,
   };
+  const current = node.a11y?.current ? holds(node.a11y.current, c, e) : undefined;
+  const pressed = node.a11y?.pressed ? holds(node.a11y.pressed, c, e) : undefined;
   return {
     accessibilityRole: role,
     role: web && node.role === 'status' ? ('status' as const) : web && node.role === 'navigation' ? ('navigation' as const) : undefined,
@@ -347,6 +351,11 @@ function a11yProps(node: RNode, c: Ctx, e: Env) {
       ? ('polite' as const) : undefined,
     accessibilityLabel: label || undefined,
     accessibilityState: state,
+    ...(web && node.role === 'heading' && node.level ? { 'aria-level': node.level } : {}),
+    ...(web && current !== undefined ? { 'aria-current': current ? 'page' : undefined } : {}),
+    ...(web && pressed !== undefined ? { 'aria-pressed': pressed } : {}),
+    ...(web && node.a11y?.haspopup ? { 'aria-haspopup': node.a11y.haspopup } : {}),
+    ...(web && node.a11y?.title ? { title: fill(node.a11y.title, c, e) } : {}),
     accessibilityElementsHidden: node.hidden || undefined,
     importantForAccessibility: node.hidden ? ('no-hide-descendants' as const) : undefined,
     testID: node.testId ? fill(node.testId, c, e) : undefined,
@@ -548,6 +557,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
     }
   }
+  if (node.press) content = <PressLabelContent.Provider value>{content}</PressLabelContent.Provider>;
   const layers = (
     <>
       {fx.backdropBlur ? <Backdrop blur={fx.backdropBlur} glass={style.backgroundColor !== undefined} /> : null}
@@ -613,7 +623,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         onLayout={onPagerLayout} onContentSizeChange={onPagerContent}
         {...(web && horizontal && rowId ? { dataSet: { velaRow: rowId } } : {})}
-        {...a11y}>
+        {...a11y} {...(web && route ? (env.route === 'title' || env.route === 'person'
+          ? { role: 'dialog', 'aria-modal': true, 'aria-label': env.detail?.title[0]?.name ?? 'Details' }
+          : { role: 'main' }) : {})}>
         {content}
       </AScroll>
     );
@@ -1029,8 +1041,10 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
     () => textStyle({ ...text.rows, ...pick(own, ['text-overflow', 'line-clamp']) }, measure(viewport, text.fontSize)));
   const Frame = frameFor(node);
   const Line = web || needsAnimatedFrame(node) ? AText : Text;
+  const labelContent = useContext(PressLabelContent);
   if (fx.hidden) return null;
   const value = fill(node.text, ctx, env);
+  const presentation = labelContent && !node.role ? { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const, ...(web ? { 'aria-hidden': true } : {}) } : {};
   const lines = { numberOfLines: drawn.numberOfLines, ellipsizeMode: drawn.ellipsize ? ('tail' as const) : undefined };
   if (node.summary && (env.route === 'title' || env.route === 'person')) {
     return <ExpandableSummary key={env.entry} value={value} lines={drawn.numberOfLines ?? 3}
@@ -1041,13 +1055,13 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
   // paints its box (an initial in a gradient disc) draws as that box with the text centred inside.
   if (!web && (style.backgroundImage || style.boxShadow)) {
     return (
-      <Frame style={style as ViewStyle} {...a11yProps(node, ctx, env)}>
+      <Frame style={style as ViewStyle} {...a11yProps(node, ctx, env)} {...presentation}>
         <Text style={[drawn.style, centredLine(own, text.rows)]} {...lines}>{value}</Text>
       </Frame>
     );
   }
   return (
-    <Line style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)}>
+    <Line style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)} {...presentation}>
       {value}
     </Line>
   );
@@ -1092,12 +1106,15 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
   const host = useHost();
   const { style, fx } = useLeafStyle(node, ctx);
   const Frame = frameFor(node);
+  const labelContent = useContext(PressLabelContent);
   if (fx.hidden) return null;
   const source = host.image(fill(node.src, ctx, host.env));
   const alt = node.alt ? fill(node.alt, ctx, host.env) : '';
+  const hidden = labelContent || !alt;
   // The box carries the node's style and motion; the image fills it.
   return (
-    <Frame style={style as ViewStyle} pointerEvents="none" accessible={!!alt} accessibilityLabel={alt || undefined} accessibilityRole={alt ? 'image' : undefined}>
+    <Frame style={style as ViewStyle} pointerEvents="none" accessible={!hidden} accessibilityLabel={hidden ? undefined : alt} accessibilityRole={!hidden ? 'image' : undefined}
+      accessibilityElementsHidden={hidden || undefined} importantForAccessibility={hidden ? 'no-hide-descendants' : undefined} {...(web && hidden ? { 'aria-hidden': true } : {})}>
       {source ? (
         <Image
           source={source}
@@ -1105,6 +1122,8 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
           contentFit={fx.contentFit ?? 'fill'}
           blurRadius={fx.imageBlur}
           transition={node.fade ? 420 : 0}
+          accessible={!hidden}
+          accessibilityLabel={hidden ? '' : alt}
         />
       ) : null}
     </Frame>
@@ -1120,7 +1139,8 @@ function Icon({ node, ctx }: { node: Extract<RNode, { kind: 'icon' }>; ctx: Ctx 
   const color = textStyle(text.rows, { viewport: { width: 0, height: 0, insets: { top: 0, right: 0, bottom: 0, left: 0 } }, fontSize: text.fontSize, axis: 'x' }).style.color as string | undefined ?? '#fff';
   const size = text.fontSize;
   return (
-    <Frame style={[{ width: size, height: size }, style as ViewStyle]} pointerEvents="none">
+    <Frame style={[{ width: size, height: size }, style as ViewStyle]} pointerEvents="none" accessible={false}
+      accessibilityElementsHidden importantForAccessibility="no-hide-descendants" {...(web ? { 'aria-hidden': true } : {})}>
       <Svg width="100%" height="100%" viewBox={node.viewBox ?? '0 0 24 24'}>
         {paths.map((d, i) => symbol?.stroke && !node.paths
           ? <Path key={i} d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />

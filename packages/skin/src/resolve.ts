@@ -49,7 +49,7 @@ interface Common {
   testId?: Template;
   id?: Template;
   hidden?: boolean;
-  a11y?: { selected?: Test[]; expanded?: Test[]; current?: Test[]; pressed?: Test[]; checked?: Test[] };
+  a11y?: { selected?: Test[]; expanded?: Test[]; current?: Test[]; pressed?: Test[]; checked?: Test[]; haspopup?: string; title?: Template };
   group: boolean;
   /** Flags Escape closes while open (`escape: "menu drawer"`), and the element id focus returns to. */
   escape?: string[];
@@ -266,7 +266,8 @@ function convert(node: Node, depth: number, r: Context): RNode {
     id: compile(node.id, r),
     hidden: node.a11y?.hidden,
     a11y: node.a11y && { selected: node.a11y.selected && tests(node.a11y.selected), expanded: node.a11y.expanded && tests(node.a11y.expanded),
-      current: node.a11y.current && tests(node.a11y.current), pressed: node.a11y.pressed && tests(node.a11y.pressed), checked: node.a11y.checked && tests(node.a11y.checked) },
+      current: node.a11y.current && tests(node.a11y.current), pressed: node.a11y.pressed && tests(node.a11y.pressed), checked: node.a11y.checked && tests(node.a11y.checked),
+      haspopup: node.a11y.haspopup, title: compile(node.a11y.title, r) },
     group: node.group === true,
     escape: node.escape ? node.escape.split(/\s+/).filter(Boolean) : undefined,
     returnFocus: compile(node.returnFocus, r),

@@ -18,7 +18,7 @@ export function RowLink({ ctx, params }: WidgetProps) {
   const does = `row:${row?.id}:${end ? 'end' : 'heading'}`;
   useEffect(() => available ? trackButton(ref.current, does) : undefined, [available, does]);
   if (!row) return null;
-  if (!available) return end ? null : <Text style={ink.style} accessibilityRole="header">{row.name}</Text>;
+  if (!available) return end ? null : <Text style={ink.style} accessibilityRole="header" aria-level={2}>{row.name}</Text>;
   const href = host.rowHref?.(row);
   return <Pressable ref={ref} accessibilityRole={href ? 'link' : 'button'} accessibilityLabel={`See all ${row.name}`}
     {...(href ? { href } : {})}

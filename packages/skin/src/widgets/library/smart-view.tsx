@@ -74,7 +74,7 @@ export function LibrarySmartView(_props: WidgetProps) {
     {groups.map(group => <View key={group.key} style={{ gap: 8 }}>
       <View style={[look.box({ 'background-color': '$ui.page', 'border-bottom-width': '1px', 'border-bottom-color': '$ui.glassEdge', 'z-index': '3' }),
         { position: Platform.OS === 'web' ? 'sticky' as never : 'relative', top: Platform.OS === 'web' ? look.ui.controlHeight + 22 : undefined, paddingHorizontal: side, paddingVertical: 8 }]}>
-        <Text accessibilityRole="header" style={look.text({ color: '$ui.ink', 'font-size': '16px', 'font-weight': '700' })}>{group.label}</Text>
+        <Text accessibilityRole="header" aria-level={2} style={look.text({ color: '$ui.ink', 'font-size': '16px', 'font-weight': '700' })}>{group.label}</Text>
       </View>
       <View style={{ paddingHorizontal: side, gap: 8 }}>{group.items.map(card => <SmartRow key={card.id} card={card} timeline />)}</View>
     </View>)}

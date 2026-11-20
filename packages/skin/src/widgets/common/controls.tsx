@@ -109,7 +109,7 @@ export function Heading({ eyebrow: over, title, lines = 2 }: { eyebrow?: string;
   return (
     <View style={{ gap: layout?.tight ? 4 : 10 }}>
       {over && !layout?.tight ? <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.accent' }}>{over}</Words> : null}
-      <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines} accessibilityRole="header">
+      <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines} accessibilityRole="header" aria-level={1}>
         {title}
       </Words>
     </View>

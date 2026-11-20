@@ -190,7 +190,8 @@ function Speaker({
     <Press
       label={muted ? msg('live.unmutePreview') : msg('live.mutePreview')}
       selected={!muted}
-      role="togglebutton"
+      role="button"
+      toggled={!muted}
       onPress={onPress}
       style={({ hovered, focused }) => ({
         position: 'absolute',

@@ -84,8 +84,8 @@ export function IconButton({
     <Press
       lift
       label={label}
-      selected={on}
-      role={on === undefined ? 'button' : 'togglebutton'}
+      toggled={on}
+      role="button"
       onPress={onPress}
       style={({ hovered, focused, pressed }) => ({
         width: 38,

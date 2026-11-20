@@ -251,6 +251,7 @@ export function MenuHeading({ look, text, sticky }: { look: PlayerLook; text: st
   return (
     <Text
       accessibilityRole={sticky ? 'header' : undefined}
+      aria-level={sticky ? 3 : undefined}
       style={[
         look.text(11, 650, look.inkQuiet),
         {

@@ -66,6 +66,15 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
     if (timer === undefined) frame = requestAnimationFrame(focus);
     return () => { clearTimeout(timer); cancelAnimationFrame(frame); };
   }, [route, isCurrent, focusSearch, setFlag]);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !isCurrent || (route !== 'title' && route !== 'person') || host?.env.load !== 'ready') return;
+    let frame = 0, attempts = 0;
+    const focus = () => {
+      if (!focusElement('detail-close') && ++attempts < 120) frame = requestAnimationFrame(focus);
+    };
+    frame = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(frame);
+  }, [route, isCurrent, host?.env.load, entry]);
   if (vela.docError) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>

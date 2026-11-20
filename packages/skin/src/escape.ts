@@ -52,7 +52,9 @@ export function focusElement(id: string): boolean {
 
 function domElement(id: string): Focusable | undefined {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
-  return document.getElementById(id) ?? undefined;
+  return document.getElementById(id)
+    ?? document.querySelector<HTMLElement>(`[data-testid=${JSON.stringify(id)}]`)
+    ?? undefined;
 }
 
 /** A ref callback that registers a press button under its element id while it is mounted. */

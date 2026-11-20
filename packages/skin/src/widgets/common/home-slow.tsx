@@ -26,7 +26,7 @@ export function HomeSlowWidget(_props: WidgetProps) {
     style={[{ minHeight: Math.max(360, host.viewport.height - 160), width: '100%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 72 },
       look.box({ 'background-color': '$ui.page' })]}>
     <View style={{ width: '100%', maxWidth: 720, alignItems: 'center', gap: 14 }}>
-      <Text accessibilityRole="header" accessibilityLiveRegion="polite"
+      <Text accessibilityRole="header" aria-level={1} accessibilityLiveRegion="polite"
         style={[look.text({ 'font-size': 'clamp(24px, 4vw, 38px)', 'font-weight': '700', 'line-height': '1.15', 'text-align': 'center' })]}>
         {msg('home.stillPreparing')}
       </Text>

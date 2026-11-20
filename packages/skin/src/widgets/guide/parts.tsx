@@ -83,7 +83,8 @@ interface PressProps {
   nativeID?: string;
   testID?: string;
   selected?: boolean;
-  role?: 'button' | 'tab' | 'togglebutton';
+  role?: 'button' | 'tab';
+  toggled?: boolean;
   /** Web keyboard: a key pressed while this has focus. */
   onKey?: (key: string, prevent: () => void) => void;
   /** Whether the TV focus engine may land here. */
@@ -95,7 +96,7 @@ interface PressProps {
 
 /** A pressable that tracks its own hover and focus, so focus looks work on web, TV and touch alike. */
 export function Press(props: PressProps) {
-  const { onPress, onFocus, label, style, children, nativeID, testID, selected, role = 'button', onKey } = props;
+  const { onPress, onFocus, label, style, children, nativeID, testID, selected, toggled, role = 'button', onKey } = props;
   const navigation = useGuideNavigation();
   const nativeGuide = useLiveContext()?.GuideSurface !== undefined;
   const region = useContext(GuideRegion);
@@ -158,9 +159,10 @@ export function Press(props: PressProps) {
         onFocus?.();
       }}
       onBlur={() => { navigation?.blurred(id); setFocused(false); }}
-      accessibilityRole={role === 'togglebutton' ? 'togglebutton' : role === 'tab' ? 'tab' : 'button'}
+      accessibilityRole={role === 'tab' ? 'tab' : 'button'}
       accessibilityLabel={label}
-      accessibilityState={selected === undefined ? undefined : { selected }}
+      accessibilityState={selected === undefined && toggled === undefined ? undefined : { selected }}
+      {...(Platform.OS === 'web' && toggled !== undefined ? { 'aria-pressed': toggled } : {})}
       nativeID={nativeID}
       testID={testID}
       focusable={props.focusable}

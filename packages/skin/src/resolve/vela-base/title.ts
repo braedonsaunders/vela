@@ -1064,7 +1064,7 @@ export const title: Node = {
         // actions. The strip takes no pointer itself.
         {
           type: 'box',
-          role: 'navigation',
+          role: 'group',
           label: '{t:ui.close}',
           style: {
             position: 'absolute',

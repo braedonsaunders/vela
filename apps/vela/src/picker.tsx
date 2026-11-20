@@ -52,7 +52,7 @@ export function AppearancePicker({ documents, current, locked, image, branding, 
     <View style={[styles.scrim, { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left }]} accessibilityViewIsModal>
       <View style={[styles.panel, small && styles.panelSmall]}>
         <View style={styles.header}>
-          <Text style={styles.title} accessibilityRole="header">{msg('ui.appearance')}</Text>
+          <Text style={styles.title} accessibilityRole="header" aria-level={2}>{msg('ui.appearance')}</Text>
           <Choice style={styles.close} focusedStyle={styles.closeFocused} label={msg('ui.close')} onPress={onClose}>
             <Text style={styles.closeText}>✕</Text>
           </Choice>
