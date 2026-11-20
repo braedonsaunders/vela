@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { beginPlexHomeSignIn, selectPlexHomeProfile } from '../src/adapter/ether/plex';
-import { device, restoreFetch, routeFetch, tokens } from './helpers';
+import { EtherAdapter } from '../src/adapter/ether';
+import { FakeCredentials, device, restoreFetch, routeFetch, tokens } from './helpers';
 
 afterEach(restoreFetch);
 const origin = 'https://ether.example';
@@ -24,6 +25,28 @@ test('profile completion sends only the challenge, selection and optional PIN', 
   expect(await selectPlexHomeProfile(origin, request)).toEqual(issued);
   expect(seen[0]?.body).toEqual(request);
   expect(JSON.stringify(seen[0]?.body)).not.toContain('plex-secret');
+});
+
+test('signed-in switching authenticates its challenge and atomically stores the replacement', async () => {
+  const old = tokens('old-access', 'owner'), next = tokens('new-access', 'kids');
+  const credentials = new FakeCredentials(old);
+  const selection = { selectionToken: 'switch-once', expiresAt: '2099-01-01T00:00:00Z', profiles: [
+    { id: 'owner', name: 'Owner', protected: false }, { id: 'kids', name: 'Kids', protected: false },
+  ] };
+  const seen = routeFetch({
+    'POST /vela/v0/auth/plex/profiles/challenge': selection,
+    'POST /vela/v0/auth/plex/profile': next,
+  });
+  const adapter = new EtherAdapter(origin, credentials, '');
+  expect(await adapter.startPlexProfileSwitch({ device, idempotencyKey: 'challenge-once' })).toEqual(selection);
+  expect(seen[0]?.headers.get('authorization')).toBe('Bearer old-access');
+  expect(seen[0]?.headers.get('x-vela-device-id')).toBe(device.id);
+  expect(seen[0]?.body).toEqual({ device, idempotencyKey: 'challenge-once' });
+  const request = { selectionToken: 'switch-once', profileId: 'kids', device, idempotencyKey: 'complete-once' };
+  expect(await adapter.completePlexProfileSwitch(request)).toEqual(next);
+  expect(seen[1]?.headers.has('authorization')).toBe(false);
+  expect(seen[1]?.body).toEqual(request);
+  expect(credentials.current).toEqual(next);
 });
 
 test('an invalid profile selection is never accepted as credentials', async () => {

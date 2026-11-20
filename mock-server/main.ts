@@ -46,15 +46,15 @@ const visibleLibraries: V.Library[] = process.env.VELA_MOCK_OLD === '1' ? librar
   const { collectionId: _collectionId, ...filters } = library.browse.filters;
   return { ...legacy, tabs: undefined, presentation: undefined, browse: { ...library.browse, filters: { ...filters, facets: undefined } } };
 }) : libraries;
-interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; client?: V.ClientCapabilities }
+interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; viewer: { id: string; name: string }; client?: V.ClientCapabilities }
 const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
-function issue(device: V.Device): V.Tokens {
+function issue(device: V.Device, profile: { id: string; name: string } = { id: viewer.id, name: viewer.name }): V.Tokens {
   if (!device?.id) fail('request', 'device_required', 'A device id is required');
-  const g: Grant = { id: crypto.randomUUID(), device, access: crypto.randomUUID(), refresh: crypto.randomUUID(), expires: Date.now() + 3600000, revoked: false };
+  const g: Grant = { id: crypto.randomUUID(), device, access: crypto.randomUUID(), refresh: crypto.randomUUID(), expires: Date.now() + 3600000, revoked: false, viewer: profile };
   grants.set(g.id, g); access.set(g.access, g); refresh.set(g.refresh, g);
   return tokens(g);
 }
-function tokens(g: Grant): V.Tokens { return { accessToken: g.access, refreshToken: g.refresh, expiresAt: new Date(g.expires).toISOString(), viewer }; }
+function tokens(g: Grant): V.Tokens { return { accessToken: g.access, refreshToken: g.refresh, expiresAt: new Date(g.expires).toISOString(), viewer: { ...g.viewer, policyRevision: viewer.policyRevision } }; }
 if (process.env.VELA_MOCK_TOKEN) { const t = issue({ id: 'vela-dev', name: 'Development', platform: 'web', appVersion: '0.1' }); const g = access.get(t.accessToken)!; access.delete(g.access); g.access = process.env.VELA_MOCK_TOKEN; access.set(g.access, g); }
 function authenticate(req: Request): Grant {
   const g = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '');
@@ -214,6 +214,16 @@ function unprocessable(code: string, message: string): never {
     { status: 422, headers: { 'Cache-Control': 'no-store' } });
 }
 function revoke(g: Grant) { g.revoked = true; for (const p of previewSessions.values()) if (p.owner === g.id) p.ended = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const close of s.listeners.values()) close(); s.listeners.clear(); } }
+const plexSelections = new Map<string, { expires: number; deviceId: string; old?: Grant; consumed: boolean; attempts: number }>();
+const plexProfiles: V.PlexHomeProfile[] = [
+  { id: 'owner', name: 'Demo Owner', protected: true, avatarUrl: '/vela/v0/images/plexavatar-owner' },
+  { id: 'kids', name: 'Kids', protected: false, restricted: true, avatarUrl: '/vela/v0/images/plexavatar-kids' },
+];
+function plexSelection(deviceId: string, old?: Grant): V.PlexHomeSelection {
+  const selectionToken = crypto.randomUUID(), expires = Date.now() + 300000;
+  plexSelections.set(selectionToken, { expires, deviceId, old, consumed: false, attempts: 0 });
+  return { selectionToken, expiresAt: new Date(expires).toISOString(), profiles: plexProfiles };
+}
 function currentSession(id: string, g: Grant): Session { const s = sessions.get(id); if (!s || s.owner !== g.id || s.expires <= Date.now()) fail('not-found', 'session_not_found', 'Session not found'); return s; }
 
 async function api(req: Request, url: URL, body: any): Promise<Response> {
@@ -222,16 +232,28 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'GET' && path === '/appearance') return cached(req, appearance(), 'public');
   if (method === 'POST' && path === '/auth/plex') {
     if (body.plexToken !== 'mock-plex-approved') return Response.json({ error: 'not_shared' }, {status: 403});
-    if (capabilities.plexHomeProfiles && body.selectProfile === true) return json({ selectionToken: 'mock-plex-home', expiresAt: new Date(Date.now() + 600000).toISOString(), profiles: [
-      { id: 'owner', name: 'Demo Owner', protected: true, avatarUrl: '/vela/v0/images/plexavatar-owner' },
-      { id: 'kids', name: 'Kids', protected: false, restricted: true, avatarUrl: '/vela/v0/images/plexavatar-kids' },
-    ] } satisfies V.PlexHomeSelection);
+    if (capabilities.plexHomeProfiles && body.selectProfile === true) return json(plexSelection(body.device?.id));
     return json(issue(body.device));
   }
+  if (method === 'POST' && path === '/auth/plex/profiles/challenge') {
+    if (!capabilities.plexHomeProfiles) fail('request', 'unsupported', 'Plex Home profiles are unavailable', {}, 404);
+    if (!body.device?.id) fail('request', 'device_required', 'A device id is required');
+    return json(plexSelection(body.device?.id, authenticate(req)));
+  }
   if (method === 'POST' && path === '/auth/plex/profile') {
-    if (body.selectionToken !== 'mock-plex-home' || !['owner', 'kids'].includes(body.profileId)) return Response.json({ error: 'invalid_selection' }, {status: 403});
-    if (body.profileId === 'owner' && body.pin !== '1234') return Response.json({ error: 'invalid_pin' }, {status: 401});
-    return json(issue(body.device));
+    const selection = plexSelections.get(body.selectionToken);
+    if (!selection || selection.expires <= Date.now()) fail('conflict', 'selection_expired', 'This profile selection expired', {}, 410);
+    if (selection.consumed) fail('conflict', 'selection_consumed', 'This profile selection was already used');
+    if (!body.device?.id || body.device.id !== selection.deviceId) fail('policy', 'selection_device_mismatch', 'This profile selection belongs to another device');
+    const profile = plexProfiles.find(value => value.id === body.profileId);
+    if (!profile) fail('policy', 'profile_ineligible', 'This profile is unavailable');
+    if (profile.protected && selection.attempts >= 5) { selection.consumed = true; fail('capacity', 'rate_limited', 'Too many PIN attempts; start again', {}, 429); }
+    if (profile.protected) selection.attempts++;
+    if (profile.id === 'owner' && body.pin !== '1234') fail('auth', 'invalid_pin', 'Incorrect PIN');
+    selection.consumed = true;
+    const issued = issue(body.device, { id: profile.id, name: profile.name });
+    if (selection.old) revoke(selection.old);
+    return json(issued);
   }
   if (method === 'POST' && path === '/auth/sign-in') { if (body.username !== 'demo' || body.password !== 'vela') fail('auth', 'invalid_credentials', 'Invalid sign-in'); return json(issue(body.device)); }
   if (method === 'POST' && path === '/auth/refresh') {

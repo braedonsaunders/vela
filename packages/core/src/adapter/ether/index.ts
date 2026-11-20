@@ -28,6 +28,7 @@ import type {
 import type { TitleActions } from '../capabilities';
 import { VelaError } from '../errors';
 import { EtherTransport } from './transport';
+import { plexHomeSelection, plexTokens } from './plex';
 
 const CACHED = { cacheable: true };
 const BOOTSTRAP_CACHED = { cacheable: true, persistent: true };
@@ -127,7 +128,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return [];
   }
 
-  constructor(origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void) {
+  constructor(private readonly origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void) {
     this.credentials = credentials;
     this.http = new EtherTransport(origin, credentials, capabilityContext, onSessionRejected);
   }
@@ -184,6 +185,21 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   pollQuickConnect(request: V.QuickPollRequest) {
     return this.http.request<V.GrantPoll>('POST', '/auth/quick-connect/poll', request, PUBLIC);
+  }
+
+  async startPlexProfileSwitch(request: V.PlexHomeChallengeRequest): Promise<V.PlexHomeSelection> {
+    const answer = await this.http.request<V.PlexAccountSignIn>('POST', '/auth/plex/profiles/challenge', request, { retryAuth: false });
+    return plexHomeSelection(this.origin, answer);
+  }
+
+  /** Completion revokes the bearer used to create the challenge; save its replacement atomically. */
+  completePlexProfileSwitch(request: V.PlexHomeSignInRequest): Promise<V.Tokens> {
+    return this.http.replaceSession(async () => {
+      const answer = await this.http.request<V.PlexAccountSignIn>('POST', '/auth/plex/profile', request, { auth: false });
+      const tokens = plexTokens(answer);
+      await this.credentials.set(tokens);
+      return tokens;
+    });
   }
 
   // The server and its look

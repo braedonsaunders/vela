@@ -97,6 +97,11 @@ export class EtherTransport {
     return value;
   }
 
+  /** Replace the current viewer while holding the same cross-window lock as token refresh. */
+  replaceSession<T>(work: () => Promise<T>): Promise<T> {
+    return acrossWindows(`vela-refresh:${this.origin}`, work);
+  }
+
   /** Rotate the session's tokens once, shared by every request that found them rejected. */
   refresh(tokens: V.Tokens): Promise<V.Tokens> {
     if (!this.refreshing) {

@@ -20,6 +20,7 @@ import {
   Words,
 } from '../../common/controls';
 import { useLook } from '../../common/look';
+import { useFocusClaim } from '../../common/focus-claim';
 import type { PlexChoice, PlexLink } from './model';
 import { nextProfilePin, profileGridColumns, profileInitials } from './plex-profile';
 export { nextProfilePin, profileGridColumns, profileInitials } from './plex-profile';
@@ -84,7 +85,7 @@ export function PlexStep({
   );
 }
 
-function ProfilePicker({ profiles, busy, onChoose }: { profiles: Profile[]; busy: boolean; onChoose(id: string, pin?: string): void }) {
+export function ProfilePicker({ profiles, busy, currentProfileId = '', onChoose }: { profiles: Profile[]; busy: boolean; currentProfileId?: string; onChoose(id: string, pin?: string): void }) {
   const width = useWindowDimensions().width;
   const [protectedId, setProtectedId] = useState('');
   const [pin, setPin] = useState('');
@@ -106,26 +107,28 @@ function ProfilePicker({ profiles, busy, onChoose }: { profiles: Profile[]; busy
   const columns = profileGridColumns(width);
   return <View style={{ gap: 12 }}>
     <Label>WHO’S WATCHING?</Label>
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
+    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }} keyboardShouldPersistTaps="handled">
       {profiles.map(profile => <ProfileCard key={profile.id} profile={profile} columns={columns} disabled={busy}
-        onPress={() => profile.protected ? setProtectedId(profile.id) : onChoose(profile.id)} />)}
-    </View>
+        current={profile.id === currentProfileId} onPress={() => profile.protected ? setProtectedId(profile.id) : onChoose(profile.id)} />)}
+    </ScrollView>
   </View>;
 }
 
 type Profile = { id: string; name: string; protected: boolean; avatarUrl?: string; restricted?: boolean };
 
-function ProfileCard({ profile, columns, disabled, onPress }: { profile: Profile; columns: 2 | 3 | 4; disabled: boolean; onPress(): void }) {
+function ProfileCard({ profile, columns, disabled, current, onPress }: { profile: Profile; columns: 2 | 3 | 4; disabled: boolean; current: boolean; onPress(): void }) {
   const look = useLook();
   const { state, handlers } = useInteraction();
+  const preferred = useFocusClaim(current);
   const [failed, setFailed] = useState(false);
   const size = columns === 2 ? 82 : 76;
   const rows = overlaid({ padding: '7px 4px', 'border-radius': '16px', 'align-items': 'center', gap: '7px' }, state, {
     hover: { 'background-color': '$ui.controlHover' },
     focus: { 'background-color': '$ui.control', 'box-shadow': '0px 0px 0px 3px $ui.accent' },
   }, disabled);
-  const marker = profile.restricted ? (/kid/i.test(profile.name) ? 'Kids' : 'Restricted') : '';
-  return <APressable accessibilityRole="button" accessibilityLabel={`${profile.name}${profile.protected ? ', PIN required' : ''}${marker ? `, ${marker}` : ''}`}
+  const marker = current ? 'Current' : profile.restricted ? (/kid/i.test(profile.name) ? 'Kids' : 'Restricted') : '';
+  return <APressable accessibilityRole="button" accessibilityLabel={`${profile.name}${current ? ', current profile' : ''}${profile.protected ? ', PIN required' : ''}${marker ? `, ${marker}` : ''}`}
+    accessibilityState={{ selected: current }} hasTVPreferredFocus={preferred}
     disabled={disabled} onPress={onPress} testID={`plex-profile-${profile.id}`} {...handlers}
     style={[look.box(rows), { width: `${Math.floor(100 / columns) - 2}%` }, NO_RING]}>
     <View style={{ width: size, height: size }}>

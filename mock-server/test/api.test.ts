@@ -62,7 +62,25 @@ describe('mock server: public and auth', () => {
     expect(refused.status).toBe(401);
     const accepted = await post('/auth/plex/profile', { selectionToken: selection.selectionToken, profileId: 'owner', pin: '1234', device, idempotencyKey: key() });
     expect(accepted.status).toBe(200);
-    expect(await accepted.json()).toMatchObject({ viewer: { id: 'viewer-demo' } });
+    expect(await accepted.json()).toMatchObject({ viewer: { id: 'owner', name: 'Demo Owner' } });
+  });
+
+  test('Plex Home switching requires auth, consumes its challenge and revokes the old session', async () => {
+    const old = await signIn();
+    const anonymous = await post('/auth/plex/profiles/challenge', { device, idempotencyKey: key() });
+    expect(anonymous.status).toBe(401);
+    const challenge = await post('/auth/plex/profiles/challenge', { device, idempotencyKey: key() }, authed(old));
+    expect(challenge.status).toBe(200);
+    const selection = await challenge.json() as V.PlexHomeSelection;
+    const switched = await post('/auth/plex/profile', { selectionToken: selection.selectionToken, profileId: 'kids', device, idempotencyKey: key() });
+    expect(switched.status).toBe(200);
+    const next = await switched.json() as V.Tokens;
+    expect(next.viewer).toMatchObject({ id: 'kids', name: 'Kids' });
+    expect((await call('/libraries', { headers: authed(old) })).status).toBe(401);
+    expect((await call('/libraries', { headers: authed(next) })).status).toBe(200);
+    const reused = await post('/auth/plex/profile', { selectionToken: selection.selectionToken, profileId: 'kids', device, idempotencyKey: key() });
+    expect(reused.status).toBe(409);
+    expect(await errorCode(reused)).toBe('selection_consumed');
   });
 
   test('a session needs both the bearer and its device id', async () => {

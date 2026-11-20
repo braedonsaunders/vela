@@ -43,6 +43,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     still: view.still,
     canLive: home.value?.liveAvailable ?? false,
     canPlaylists: home.value?.playlistsAvailable ?? false,
+    canSwitchProfile: state.auth.phase === 'signed-in' && state.auth.plexHomeAvailable,
     width,
     home: home.value,
     heroIndex: home.value ? view.heroIndex % Math.max(1, home.value.hero.length) : 0,
@@ -80,7 +81,7 @@ export function createEnvironmentReader() {
     const waitingForResume = !selection && !home && state.home.load !== 'failed' && !title?.value?.nextUp?.length;
     const season = waitingForResume ? '' : selectedDetailSeason(title?.value, selection, resume);
     if (season && !defaults.has(entry)) defaults.set(entry, season);
-    const inputs = [state.auth.viewer, state.home, state.libraries.value, state.search.query,
+    const inputs = [state.auth.viewer, state.auth.plexHomeAvailable, state.home, state.libraries.value, state.search.query,
       route === 'home' ? state.search : undefined, title, state.titles[season],
       view.season, view.flags, view.pagers, view.heroIndex, view.still,
       input.live, input.width, input.skinCount, input.skinName, library, state.previews.cardId, state.previews.heroId];

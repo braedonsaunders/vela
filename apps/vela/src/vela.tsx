@@ -20,8 +20,9 @@ import {
   type SkinHost,
   type Viewport,
 } from '@vela/skin';
+import { HostContext } from '@vela/skin/src/host';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
-import { ServersProvider } from '@vela/skin/src/widgets/auth';
+import { PlexProfileDialog, ServersProvider } from '@vela/skin/src/widgets/auth';
 import { LiveProvider, useLiveView } from '@vela/skin/src/widgets/guide';
 import { GuideRowDrawing, GuideSurface } from '@vela/guide-native';
 import { holdBack } from '@vela/skin/src/menu-key';
@@ -200,7 +201,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const appearance = state.appearance.value;
   const [assetData, setAssetData] = useState<Record<string, string>>({});
   const [installed, setInstalled] = useState<SkinDocument[]>([]);
-  const preferenceKey = `${SKIN_PREFERENCE}.${origin}.${state.auth.viewer}`;
+  const preferenceKey = `${SKIN_PREFERENCE}.${origin}.${state.auth.viewerId || state.auth.viewer}`;
   const [choice, setChoice] = useState(() => preferences.get(preferenceKey) || preferences.get(SKIN_PREFERENCE) || (picked ? DOCUMENTS[docIndex]!.id : ''));
   useEffect(() => { setChoice(preferences.get(preferenceKey) || preferences.get(SKIN_PREFERENCE) || ''); }, [preferenceKey]);
   useEffect(() => {
@@ -409,6 +410,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     () => ({ store, host, doc: resolved.doc, docError: resolved.error, openTitle, authArt: art }),
     [store, host, resolved, openTitle, art],
   );
+  const overlayHost = state.auth.plexSwitching ? host('home', '') : null;
   return (
     <VelaContext.Provider value={value}>
       <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error, state.home.slow)}
@@ -418,6 +420,10 @@ function AppHost({ store, state, live, children }: AppHostProps) {
         </Previews>
         {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} branding={appearance?.branding} onPick={pickDocument} onClose={closePicker} /> : null}
         {playlistTarget ? <AddToPlaylist {...playlistTarget} close={closeAddToPlaylist} /> : null}
+        {state.auth.plexSwitching && overlayHost ? <HostContext.Provider value={overlayHost}>
+          <PlexProfileDialog profiles={state.auth.plex?.profiles ?? []} currentProfileId={state.auth.viewerId} error={state.auth.error}
+            onChoose={(id, pin) => store.auth.choosePlexProfile(id, pin)} onRestart={() => store.auth.startPlexProfileSwitch()} onClose={() => store.auth.cancelPlex()} />
+        </HostContext.Provider> : null}
       </LaunchGate>
     </VelaContext.Provider>
   );

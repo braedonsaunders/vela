@@ -52,6 +52,7 @@ export interface PlexHomeProfile {
 }
 export interface PlexHomeSelection { selectionToken: string; expiresAt: Timestamp; profiles: PlexHomeProfile[] }
 export type PlexAccountSignIn = Tokens | PlexHomeSelection;
+export interface PlexHomeChallengeRequest extends Mutation { device: Device }
 export interface PlexHomeSignInRequest extends Mutation { selectionToken: string; profileId: ID; pin?: string; device: Device }
 export interface SignInRequest extends Mutation { username: string; password: string; device: Device }
 export interface RefreshRequest extends Mutation { refreshToken: string; device: Device }

@@ -5,4 +5,5 @@ export type { Outcome, ServerActions, ServerOption, ServerProbe, ServersView } f
 export type { AuthView } from './model';
 export { ServersProvider, type ServerSwitch } from './servers';
 export { SignedOut, type AuthActions, type SessionAuth, type SignedOutProps } from './signed-out';
+export { PlexProfileDialog } from './plex-profile-dialog';
 export { Stage } from './stage';

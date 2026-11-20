@@ -155,6 +155,10 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
         return openHit(store, arg);
       case 'openPicker':
         return openPicker();
+      case 'switchProfile':
+        actions.resetFlags();
+        void store.auth.startPlexProfileSwitch();
+        return;
       case 'playlists':
         actions.resetFlags();
         return router.push('/playlists');

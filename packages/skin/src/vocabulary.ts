@@ -35,6 +35,7 @@ export interface Env {
   still: boolean;
   canLive: boolean;
   canPlaylists: boolean;
+  canSwitchProfile: boolean;
   width: number;
   home?: HomeModel;
   heroIndex: number;
@@ -258,6 +259,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.searchFocused': (_, e) => yes(e.flags.includes('search-focused')),
   'env.canLive': (_, e) => yes(e.canLive),
   'env.canPlaylists': (_, e) => yes(e.canPlaylists),
+  'env.canSwitchProfile': (_, e) => yes(e.canSwitchProfile),
   'env.heroCount': (_, e) => (e.home ? String(e.home.hero.length) : ''),
   'env.heroIndex': (_, e) => String(e.heroIndex),
   'env.rowCount': (_, e) => (e.home ? String(e.home.rows.length) : ''),

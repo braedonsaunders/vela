@@ -367,6 +367,13 @@ export const shell: Node = {
         },
         { type: 'box', style: { height: '1px', 'background-color': '$ui.glassEdge' } },
         {
+          type: 'box', when: [{ test: 'env.canSwitchProfile' }], press: { action: 'switchProfile' }, label: '{t:ui.switchProfile}', testId: 'switch-profile',
+          style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', height: '48px',
+            'box-sizing': 'border-box', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', 'font-size': '14px', color: '$ui.ink' },
+          hover: { 'background-color': '$ui.control' }, focus: navFocus,
+          children: [{ type: 'icon', symbol: 'person', style: { width: '16px', height: '16px' } }, { type: 'text', text: '{t:ui.switchProfile}' }],
+        },
+        {
           type: 'box', when: [{ test: 'env.canPlaylists' }], press: { action: 'playlists' }, label: 'Playlists', testId: 'profile-playlists',
           style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', height: '48px',
             'box-sizing': 'border-box', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', 'font-size': '14px', color: '$ui.ink' },

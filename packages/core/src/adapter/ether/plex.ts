@@ -17,6 +17,26 @@ export async function selectPlexHomeProfile(origin: string, request: PlexHomeSig
   return plexRequest(origin, '/auth/plex/profile', request, false) as Promise<Tokens>;
 }
 
+/** Validate and resolve the common profile-selection response used by sign-in and switching. */
+export function plexHomeSelection(origin: string, value: PlexAccountSignIn): import('../../wire').PlexHomeSelection {
+  if (!validSelection(value)) throw new Error('Ether returned an invalid Plex Home profile selection.');
+  return { ...value, profiles: value.profiles.map(profile => {
+    const { avatarUrl, ...rest } = profile;
+    const avatar = profileAvatar(origin, avatarUrl);
+    return avatar ? { ...rest, avatarUrl: avatar } : rest;
+  }) };
+}
+
+export function plexTokens(value: PlexAccountSignIn): Tokens {
+  const tokens = value as Tokens;
+  if (!tokens || typeof tokens.accessToken !== 'string' || !tokens.accessToken || typeof tokens.refreshToken !== 'string' || !tokens.refreshToken ||
+      typeof tokens.expiresAt !== 'string' || !Number.isFinite(Date.parse(tokens.expiresAt)) || !tokens.viewer || typeof tokens.viewer.id !== 'string' || !tokens.viewer.id ||
+      typeof tokens.viewer.name !== 'string' || typeof tokens.viewer.policyRevision !== 'string') {
+    throw new Error('Ether returned an invalid sign-in response.');
+  }
+  return tokens;
+}
+
 async function plexRequest(origin: string, path: string, body: object, allowSelection: boolean): Promise<PlexAccountSignIn> {
   const response = await fetch(`${origin}/vela/v0${path}`, {
     method: 'POST', credentials: 'omit', redirect: 'error', signal: timeoutSignal(15000),
@@ -33,19 +53,9 @@ async function plexRequest(origin: string, path: string, body: object, allowSele
   }
   const value = await response.json() as PlexAccountSignIn;
   if (allowSelection && validSelection(value)) {
-    return { ...value, profiles: value.profiles.map(profile => {
-      const { avatarUrl, ...rest } = profile;
-      const avatar = profileAvatar(origin, avatarUrl);
-      return avatar ? { ...rest, avatarUrl: avatar } : rest;
-    }) };
+    return plexHomeSelection(origin, value);
   }
-  const tokens = value as Tokens;
-  if (!tokens || typeof tokens.accessToken !== 'string' || !tokens.accessToken || typeof tokens.refreshToken !== 'string' || !tokens.refreshToken ||
-      typeof tokens.expiresAt !== 'string' || !Number.isFinite(Date.parse(tokens.expiresAt)) || !tokens.viewer || typeof tokens.viewer.id !== 'string' || !tokens.viewer.id ||
-      typeof tokens.viewer.name !== 'string' || typeof tokens.viewer.policyRevision !== 'string') {
-    throw new Error('Ether returned an invalid sign-in response.');
-  }
-  return tokens;
+  return plexTokens(value);
 }
 
 function validSelection(value: PlexAccountSignIn): value is import('../../wire').PlexHomeSelection {

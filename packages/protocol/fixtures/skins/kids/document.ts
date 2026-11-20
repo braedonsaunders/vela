@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.14';
+const version = '1.2.15';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -125,6 +125,7 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
     { ...question(2, '{s:gateTwo}', [4, 7, 5, 9, 6, 8], 6), when: [{ test: 'flag:g2' }, { test: 'flag:parent', not: true }] },
     { type: 'box', when: [{ test: 'flag:parent' }], style: { display: 'flex', 'flex-direction': 'column', width: '100%' }, children: [
       { type: 'text', text: '{s:signedInAs} {env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft', 'padding-bottom': '16px' } },
+      { ...menuRow({ action: 'switchProfile' }, '{s:switchProfile}', 'person', 'switch-profile'), when: [{ test: 'env.canSwitchProfile' }] },
       { ...menuRow({ action: 'playlists' }, 'Playlists', 'layers', 'kids-playlists'), when: [{ test: 'env.canPlaylists' }] },
       menuRow({ action: 'openPicker' }, '{s:changeLook}', 'sparkles', 'skin-picker'),
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
@@ -465,7 +466,7 @@ const kids: SkinDocument = {
   strings: { en: {
     velaHome: 'Vela home', mainNav: 'Main', watch: 'Watch', search: 'Search', grownUps: 'Grown-ups', tryAgain: 'Try again', close: 'Close',
     gateOne: 'What is 6 × 3?', gateTwo: 'And 14 − 8?', signedInAs: 'Watching as', changeLook: 'Change the look',
-    install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', backToWatching: 'Back to watching',
+    install: 'Install Vela', update: 'Update ready, reload', switchProfile: 'Switch profile', signOut: 'Sign out', backToWatching: 'Back to watching',
     moreInfo: 'More info', featured: 'Featured', back: 'Back', opening: 'Getting it ready…', failed: 'Oops, this one won’t open right now.',
     episodes: 'Episodes', seasons: 'Seasons', details: 'Details', behindStory: 'Behind the story', cast: 'Cast', extras: 'Extras', moreLikeThis: 'More like this',
   } },

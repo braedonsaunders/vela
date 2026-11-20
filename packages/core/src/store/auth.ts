@@ -8,6 +8,7 @@ import type { Connection } from '../adapter/connection';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasEventStream, hasPasswordSignIn, hasQuickConnectSignIn, hasWebCodeSignIn } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
+import { EtherAdapter } from '../adapter/ether';
 import type { ServerKind } from '../session/servers';
 import { msg, time } from '../i18n';
 import type { VelaPlatform } from './platform';
@@ -38,9 +39,11 @@ export interface AuthState {
   serverKind: ServerKind | '';
   serverName: string;
   viewer: string;
+  viewerId: string;
   passwordAvailable: boolean;
   plexAvailable: boolean;
   plexHomeAvailable: boolean;
+  plexSwitching: boolean;
   plex: null | { code: string; linkUrl: string; state: 'waiting' | 'expired' | 'failed' | 'profiles'; choices: never[]; profiles: V.PlexHomeProfile[] };
   quickAvailable: boolean;
   /** The server's HTTPS origin this http: page may hand its session to; '' when none. */
@@ -58,9 +61,9 @@ export const initialAuth: AuthState = {
   serverId: '',
   serverKind: '',
   serverName: '',
-  viewer: '',
+  viewer: '', viewerId: '',
   passwordAvailable: false,
-  plexAvailable: false, plexHomeAvailable: false, plex: null,
+  plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plex: null,
   quickAvailable: false,
   secureOrigin: '',
   error: '',
@@ -76,7 +79,7 @@ export class Auth {
   private plexGeneration = 0;
   private plexTimer?: ReturnType<typeof setTimeout>;
   private plexAuthorization?: { navigate(url: string): void; close(): void };
-  private plexSelection?: { token: string; expiresAt: string; serverId: string };
+  private plexSelection?: { token: string; expiresAt: string; serverId: string; switching: boolean };
   private starting: Promise<void> | undefined;
   private retrying: Promise<void> | undefined;
   private linkError = '';
@@ -245,8 +248,8 @@ export class Auth {
   private noServer(): void {
     this.cancelReconnect();
     this.patch({
-      phase: 'signed-out', serverId: '', serverKind: '', serverName: '', viewer: '',
-      passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, plex: null, secureOrigin: '', error: '',
+      phase: 'signed-out', serverId: '', serverKind: '', serverName: '', viewer: '', viewerId: '',
+      passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plex: null, secureOrigin: '', error: '',
       revision: this.session.epoch, quick: null,
     });
   }
@@ -283,6 +286,7 @@ export class Auth {
       serverKind: connection.record.kind,
       serverName: this.session.names.get(connection.record.id) ?? connection.record.name,
       viewer: tokens?.viewer.name ?? '',
+      viewerId: tokens?.viewer.id ?? '',
       ...options,
       error,
       revision: this.session.epoch,
@@ -313,7 +317,29 @@ export class Auth {
     this.plexAuthorization?.close();
     this.plexAuthorization = undefined;
     this.plexSelection = undefined;
-    this.patch({ plex: null });
+    this.patch({ plex: null, plexSwitching: false, error: '' });
+  }
+
+  /** Open a fresh profile challenge for the currently signed-in Plex account. */
+  async startPlexProfileSwitch(): Promise<void> {
+    this.cancelPlex();
+    const generation = this.plexGeneration;
+    const connection = this.session.selected();
+    const epoch = this.session.epoch;
+    this.patch({ plexSwitching: true, error: '', plex: { code: '', linkUrl: '', state: 'waiting', choices: [], profiles: [] } });
+    try {
+      if (this.box.get().auth.phase !== 'signed-in' || !this.box.get().auth.plexHomeAvailable || !(connection.adapter instanceof EtherAdapter)) {
+        throw new Error('Plex Home profile switching is not offered by this server.');
+      }
+      const answer = await connection.adapter.startPlexProfileSwitch({ device: this.session.device, idempotencyKey: this.session.key() });
+      if (generation !== this.plexGeneration || epoch !== this.session.epoch || connection !== this.session.selected()) return;
+      this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id, switching: true };
+      this.patch({ error: '', plexSwitching: true, plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
+    } catch (error) {
+      if (generation === this.plexGeneration && epoch === this.session.epoch) {
+        this.patch({ plexSwitching: true, error: this.profileSwitchMessage(error), plex: null });
+      }
+    }
   }
 
   async startPlex(): Promise<void> {
@@ -334,7 +360,7 @@ export class Auth {
         if (!current() || !('profiles' in answer)) return;
         authorization?.close();
         this.plexAuthorization = undefined;
-        this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id };
+        this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id, switching: false };
         this.patch({ error: '', plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
         return;
       }
@@ -355,7 +381,7 @@ export class Auth {
             if ('profiles' in answer) {
               this.plexAuthorization?.close();
               this.plexAuthorization = undefined;
-              this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id };
+              this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id, switching: false };
               this.patch({ plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
               return;
             }
@@ -383,21 +409,41 @@ export class Auth {
     const selection = this.plexSelection;
     const connection = this.session.selected();
     if (!selection || selection.serverId !== connection.record.id || Date.parse(selection.expiresAt) <= Date.now()) {
+      const switching = selection?.switching === true;
       this.cancelPlex();
-      this.patch({ error: 'Plex profile selection expired. Sign in with Plex again.' });
+      this.patch({ plexSwitching: switching, error: switching ? 'This profile selection expired. Start again.' : 'Plex profile selection expired. Sign in with Plex again.' });
       return;
     }
     try {
-      const tokens = await selectPlexHomeProfile(connection.record.origin, {
+      const request = {
         selectionToken: selection.token, profileId, pin: pin || undefined,
         device: this.session.device, idempotencyKey: this.session.key(),
-      });
-      await connection.credentials.set(tokens);
+      };
+      if (selection.switching) {
+        if (!(connection.adapter instanceof EtherAdapter)) throw new Error('Plex Home profile switching is not offered by this server.');
+        await connection.adapter.completePlexProfileSwitch(request);
+      } else {
+        const tokens = await selectPlexHomeProfile(connection.record.origin, request);
+        await connection.credentials.set(tokens);
+      }
       this.cancelPlex();
       this.session.resetSession();
     } catch (error) {
-      this.patch({ error: message(error, 'Could not select this Plex profile. Try again.') });
+      const ended = error instanceof VelaError && (error.detail.code === 'selection_consumed' || error.detail.code === 'selection_expired');
+      if (ended) this.plexSelection = undefined;
+      this.patch({ error: selection.switching ? this.profileSwitchMessage(error) : message(error, 'Could not select this Plex profile. Try again.'),
+        plex: ended ? null : this.box.get().auth.plex });
     }
+  }
+
+  private profileSwitchMessage(error: unknown): string {
+    if (error instanceof VelaError) {
+      if (error.detail.code === 'invalid_pin') return 'That Plex Home PIN was not accepted.';
+      if (error.detail.code === 'profile_ineligible') return 'This Plex Home profile is not available on this server.';
+      if (error.detail.code === 'selection_consumed') return 'This profile selection was already used. Start again.';
+      if (error.detail.code === 'selection_expired') return 'This profile selection expired. Start again.';
+    }
+    return message(error, 'Could not switch Plex Home profile. Try again.');
   }
 
   async signIn(username: string, password: string): Promise<boolean> {
