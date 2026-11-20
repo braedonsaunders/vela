@@ -33,6 +33,7 @@ import { ExpandableSummary } from './summary';
 import { VersionsControl } from './widgets/title-actions';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
+import { needsAnimatedFrame } from './animated-frame';
 import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
@@ -89,6 +90,7 @@ const Masked = MaskedView as unknown as ComponentType<{ style?: ViewStyle; maskE
 
 const AView = Animated.View;
 const AText = Animated.Text;
+const frameFor = (node: RNode) => web || needsAnimatedFrame(node) ? AView : View;
 const AScroll = Animated.ScrollView;
 const web = Platform.OS === 'web';
 /** A box that is also a TV focus guide (react-native-web has no focus guide, so only on TV). */
@@ -649,7 +651,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const barLayout = revealing && node.role === 'navigation'
       ? { onLayout: (e: LayoutChangeEvent) => noteTopBar(e.nativeEvent.layout.height, style.position === 'absolute') }
       : {};
-    const Frame = (guide ? AGuide : AView) as typeof AView;
+    const Frame = (guide ? AGuide : frameFor(node)) as typeof AView;
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
         {...barLayout} {...swipe} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}>
@@ -955,6 +957,8 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
   const textKey = `t${viewport.width}x${viewport.height}|${text.fontSize}|${JSON.stringify(text.rows)}`;
   const drawn = cached(`${textKey}|${own['text-overflow'] ?? ''}|${own['line-clamp'] ?? ''}`,
     () => textStyle({ ...text.rows, ...pick(own, ['text-overflow', 'line-clamp']) }, measure(viewport, text.fontSize)));
+  const Frame = frameFor(node);
+  const Line = web || needsAnimatedFrame(node) ? AText : Text;
   if (fx.hidden) return null;
   const value = fill(node.text, ctx, env);
   const lines = { numberOfLines: drawn.numberOfLines, ellipsizeMode: drawn.ellipsize ? ('tail' as const) : undefined };
@@ -967,15 +971,15 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
   // paints its box (an initial in a gradient disc) draws as that box with the text centred inside.
   if (!web && (style.backgroundImage || style.boxShadow)) {
     return (
-      <AView style={style as ViewStyle} {...a11yProps(node, ctx, env)}>
+      <Frame style={style as ViewStyle} {...a11yProps(node, ctx, env)}>
         <Text style={[drawn.style, centredLine(own, text.rows)]} {...lines}>{value}</Text>
-      </AView>
+      </Frame>
     );
   }
   return (
-    <AText style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)}>
+    <Line style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)}>
       {value}
-    </AText>
+    </Line>
   );
 }
 
@@ -1017,12 +1021,13 @@ function pick(rows: Css, keys: string[]): Css {
 function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx: Ctx }) {
   const host = useHost();
   const { style, fx } = useLeafStyle(node, ctx);
+  const Frame = frameFor(node);
   if (fx.hidden) return null;
   const source = host.image(fill(node.src, ctx, host.env));
   const alt = node.alt ? fill(node.alt, ctx, host.env) : '';
   // The box carries the node's style and motion; the image fills it.
   return (
-    <AView style={style as ViewStyle} pointerEvents="none" accessible={!!alt} accessibilityLabel={alt || undefined} accessibilityRole={alt ? 'image' : undefined}>
+    <Frame style={style as ViewStyle} pointerEvents="none" accessible={!!alt} accessibilityLabel={alt || undefined} accessibilityRole={alt ? 'image' : undefined}>
       {source ? (
         <Image
           source={source}
@@ -1032,25 +1037,26 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
           transition={node.fade ? 420 : 0}
         />
       ) : null}
-    </AView>
+    </Frame>
   );
 }
 
 function Icon({ node, ctx }: { node: Extract<RNode, { kind: 'icon' }>; ctx: Ctx }) {
   const { style, text, fx } = useLeafStyle(node, ctx);
+  const Frame = frameFor(node);
   if (fx.hidden) return null;
   const symbol = node.symbol ? SYMBOLS[node.symbol] : undefined;
   const paths = node.paths ?? symbol?.paths ?? [];
   const color = textStyle(text.rows, { viewport: { width: 0, height: 0, insets: { top: 0, right: 0, bottom: 0, left: 0 } }, fontSize: text.fontSize, axis: 'x' }).style.color as string | undefined ?? '#fff';
   const size = text.fontSize;
   return (
-    <AView style={[{ width: size, height: size }, style as ViewStyle]} pointerEvents="none">
+    <Frame style={[{ width: size, height: size }, style as ViewStyle]} pointerEvents="none">
       <Svg width="100%" height="100%" viewBox={node.viewBox ?? '0 0 24 24'}>
         {paths.map((d, i) => symbol?.stroke && !node.paths
           ? <Path key={i} d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           : <Path key={i} d={d} fill={color} fillRule={node.fillRule ?? 'nonzero'} />)}
       </Svg>
-    </AView>
+    </Frame>
   );
 }
 
@@ -1058,6 +1064,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const host = useHost();
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
+  const Frame = frameFor(node);
   if (fx.hidden) return null;
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
   const box = <View style={inner as ViewStyle}>{content}</View>;
@@ -1069,7 +1076,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
     : box;
   return (
     <Inherited.Provider value={text}>
-      <AView style={style as ViewStyle}>{reachable}</AView>
+      <Frame style={style as ViewStyle}>{reachable}</Frame>
     </Inherited.Provider>
   );
 }
@@ -1091,11 +1098,12 @@ function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: 
   }), [group, routeFocus]);
   const { style, text, fx } = useLeafStyle(node, ctx, ui);
   const Part = WIDGETS[node.widget];
+  const Frame = frameFor(node);
   if (fx.hidden || !Part) return null;
   return (
     <Inherited.Provider value={text}>
       <WidgetInteractionContext.Provider value={interaction}>
-        <AView style={style as ViewStyle}><Part params={node.params} ctx={ctx} /></AView>
+        <Frame style={style as ViewStyle}><Part params={node.params} ctx={ctx} /></Frame>
       </WidgetInteractionContext.Provider>
     </Inherited.Provider>
   );
