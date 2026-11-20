@@ -9,6 +9,7 @@ import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
+import { searchStickyTop } from './search-sticky';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -1183,6 +1184,13 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const Frame = frameFor(node);
   if (fx.hidden) return null;
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
+  const pinned = web && host.env.route === 'home' && node.slot === 'searchField'
+    ? {
+        position: 'sticky',
+        top: searchStickyTop(host.doc.document.slots?.shell, host.env.small, host.viewport, Number(style.paddingTop) || 0),
+        zIndex: 19,
+      } as unknown as ViewStyle
+    : undefined;
   const box = <View style={inner as ViewStyle}>{content}</View>;
   // The search field is centred and narrower than the page; the TV focus engine only moves to
   // what lies in line with the focused item, so a guide across the slot's full width hands
@@ -1192,7 +1200,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
     : box;
   return (
     <Inherited.Provider value={text}>
-      <Frame style={style as ViewStyle}>{reachable}</Frame>
+      <Frame style={[style as ViewStyle, pinned]}>{reachable}</Frame>
     </Inherited.Provider>
   );
 }
