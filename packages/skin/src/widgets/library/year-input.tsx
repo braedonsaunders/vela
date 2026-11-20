@@ -55,7 +55,7 @@ export function YearInput({ params }: WidgetProps) {
       }
       accessibilityLabel={params.label || params.placeholder || undefined}
       testID={params.testId}
-      style={[drawn.style, style]}
+      style={[drawn.style, style, Platform.OS === 'web' && { fontSize: 16 }]}
     />
   );
 }

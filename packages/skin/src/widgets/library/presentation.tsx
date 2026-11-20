@@ -14,6 +14,7 @@ import { Select } from '../common/select';
 import { YearInput } from './year-input';
 import type { ReactNode, ComponentRef } from 'react';
 import { TextField } from '../common/text-field';
+import { singleLibraryStrip, tabOverflow } from './toolbar-layout';
 
 // All toolbar surfaces share these rows; skins own their dimensions, shape, font and colours.
 const control = { height: '$ui.controlHeight', padding: '0px 12px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', 'justify-content': 'center', 'flex-shrink': '0' };
@@ -110,6 +111,7 @@ export function LibraryToolbar(props: WidgetProps) {
   const page = host.env.library;
   const model = page?.model;
   const tabsInShell = host.env.small && shellHasLibraryTabs(host.doc.document.slots?.shell);
+  const singleStrip = singleLibraryStrip(host.viewport.width, Platform.isTV);
   const browse = (page?.view ?? 'library') === 'library';
   const select = (params: Record<string, string>, width?: number) => <ToolbarField width={width ?? (Platform.OS === 'web' ? undefined : 180)}><Select ctx={props.ctx} params={params} /></ToolbarField>;
   const filters = <>
@@ -127,10 +129,14 @@ export function LibraryToolbar(props: WidgetProps) {
     {model.sorts.find(sort => sort.id === model.sort)?.directions.length === 2 && <Button label={model.direction === 'asc' ? 'Ascending' : 'Descending'} onPress={() => host.dispatch('librarySortFlip', '')} />}
   </View>;
   const strip = (children: ReactNode, flex = true) => <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-    style={{ flex: flex ? 1 : undefined, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
+    style={flex
+      ? [Platform.OS === 'web' ? { width: 'max-content', maxWidth: '100%', flexGrow: 0, flexShrink: 0 } as never : { flex: 1 }, { minWidth: 0 }]
+      : { width: '100%', minWidth: 0 }}
+    contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>;
   if (tabsInShell && !browse && !tabSearchEnabled(page?.model?.tabs?.find(tab => tab.id === page.tabId))) return null;
-  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ minHeight: look.ui.controlHeight + 22, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
-    {!tabsInShell && <LibraryTabs />}{strip(filters)}{sort}
+  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel="Library toolbar" style={{ minHeight: look.ui.controlHeight + 22, paddingVertical: 8, flexDirection: 'row', flexWrap: singleStrip ? 'wrap' : 'nowrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
+    {!tabsInShell && <LibraryTabs />}
+    {singleStrip ? <View style={{ width: '100%', minWidth: 0 }}>{strip(<>{filters}{sort}</>, false)}</View> : <>{strip(filters)}{sort}</>}
     {page?.extrasFailed && <Button label="Try again" onPress={() => host.dispatch('retry', '')} />}
   </View>;
 }
@@ -159,7 +165,7 @@ function TabSearch() {
   if (!allowed) return null;
   const placeholder = tab?.searchPlaceholder || `Search ${tab?.label}`;
   return <TextField accessibilityLabel={placeholder} placeholder={placeholder} value={text} maxLength={100} onChangeText={setText} placeholderTextColor={look.ui.inkSecondary}
-    style={[look.text(controlText), look.box({ ...control, width: '220px' })]} />;
+    style={[look.text(controlText), look.box({ ...control, width: '220px' }), Platform.OS === 'web' && { fontSize: 16 }]} />;
 }
 
 export function LibraryFacets() {
@@ -189,7 +195,7 @@ export function LibraryFacets() {
   }, [search, model?.query, host.dispatch]);
   if (!model?.canSearch) return null;
   const searchField = <TextField accessibilityLabel="Search this library" placeholder="Search this library" placeholderTextColor={look.ui.inkSecondary} value={search} onChangeText={setSearch}
-    style={[look.text(controlText), look.box({ ...control, width: '220px' })]} />;
+    style={[look.text(controlText), look.box({ ...control, width: '220px' }), Platform.OS === 'web' && { fontSize: 16 }]} />;
   function choose(facet: LibraryFacet, id: string) {
     const next = { ...model!.facetFilters };
     const selected = next[facet.id] ?? [];
