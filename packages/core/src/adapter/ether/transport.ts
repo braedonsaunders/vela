@@ -11,6 +11,8 @@ export interface RequestOptions {
   auth?: boolean;
   /** Revalidate with the server's ETag and keep the answer (default false). */
   cacheable?: boolean;
+  /** On web, retain this ETag answer across a full reload in this tab. */
+  persistent?: boolean;
   /** Replace cached grants without sending an old ETag. */
   fresh?: boolean;
   /** Refresh and resend once on 401 (default true). */
@@ -53,13 +55,14 @@ export class EtherTransport {
   }
 
   async request<T>(method: Method, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
-    const { auth = true, cacheable = false, fresh = false, retryAuth = true, signal } = options;
+    const { auth = true, cacheable = false, persistent = false, fresh = false, retryAuth = true, signal } = options;
     signal?.throwIfAborted();
     let tokens = auth ? await abortable(this.credentials.get(), signal) : null;
     if (auth && !tokens) throw new Error('Sign in required');
     const identity = method === 'GET' ? path : JSON.stringify([method, path, body]);
     const key = this.cacheKey(tokens, identity);
-    const cached = cacheable && !fresh ? this.cache.get(key) : undefined;
+    const cached = cacheable && !fresh ? this.cache.get(key) ?? (persistent ? persistentRead(key) : undefined) : undefined;
+    if (cached && !this.cache.has(key)) this.cache.set(key, cached);
     const send = (token: Token, useCache = true) => {
       const headers: Record<string, string> = {};
       if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -83,8 +86,14 @@ export class EtherTransport {
     const sameIdentity = !tokens || key === this.cacheKey(tokens, identity);
     // A partial answer (a title still being filled) says no-store: it is never kept or revalidated.
     const storable = !/(^|,)\s*no-store\s*(,|$)/i.test(response.headers.get('cache-control') ?? '');
-    if (etag && cacheable && sameIdentity && storable) this.cache.set(key, { etag, body: value });
-    else if (cacheable && !storable) this.cache.delete(key);
+    if (etag && cacheable && sameIdentity && storable) {
+      const entry = { etag, body: value };
+      this.cache.set(key, entry);
+      if (persistent) persistentWrite(key, entry);
+    } else if (cacheable && !storable) {
+      this.cache.delete(key);
+      if (persistent) persistentDelete(key);
+    }
     return value;
   }
 
@@ -182,6 +191,29 @@ export class EtherTransport {
     }
     return fetch(this.boundURL(path), { ...init, redirect: 'error', headers });
   }
+}
+
+type CacheEntry = { etag: string; body: unknown };
+interface SessionCache { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
+const storage = (): SessionCache | undefined => {
+  try { return (globalThis as typeof globalThis & { sessionStorage?: SessionCache }).sessionStorage; } catch { return undefined; }
+};
+const persistentKey = (key: string) => `vela.bootstrap.${refreshIdempotencyKey(key)}`;
+function persistentRead(key: string): CacheEntry | undefined {
+  try {
+    const saved = storage()?.getItem(persistentKey(key));
+    if (!saved) return undefined;
+    const parsed = JSON.parse(saved) as { key?: unknown; entry?: CacheEntry };
+    if (parsed.key === key && typeof parsed.entry?.etag === 'string') return parsed.entry;
+  } catch { /* Storage is an optional reload optimization. */ }
+  persistentDelete(key);
+  return undefined;
+}
+function persistentWrite(key: string, entry: CacheEntry): void {
+  try { storage()?.setItem(persistentKey(key), JSON.stringify({ key, entry })); } catch { /* Private/quota-limited browsers keep the memory cache. */ }
+}
+function persistentDelete(key: string): void {
+  try { storage()?.removeItem(persistentKey(key)); } catch { /* Optional storage. */ }
 }
 
 /** How long to wait before the next refresh attempt, or undefined when the server forbids another. */

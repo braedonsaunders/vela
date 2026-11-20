@@ -18,3 +18,11 @@ test('the proxy width is untouched on native and on foreign artwork origins', ()
   expect(artworkURL({ ...image, sizes: [{ ...image.sizes[0]!, url: foreign }] }, 1440, 900,
     { origin, fitProxyWidth: true })).toBe(foreign);
 });
+
+test('unmeasured proxy artwork never requests the original with w=0', () => {
+  const unmeasured: ArtworkRef = { id: 'poster', kind: 'poster', tag: '', sizes: [{ width: 0, height: 0, url: '/vela/v0/images/poster?w=0&signature=x' }] };
+  expect(artworkURL(unmeasured, 400, 600, { origin, fitProxyWidth: true }))
+    .toBe(`${origin}/vela/v0/images/poster?w=400&signature=x`);
+  expect(artworkURL({ ...unmeasured, sizes: [{ ...unmeasured.sizes[0]!, url: '/vela/v0/images/poster?signature=x' }] }, 400, 600, { origin, fitProxyWidth: true }))
+    .toBe(`${origin}/vela/v0/images/poster?signature=x&w=400`);
+});

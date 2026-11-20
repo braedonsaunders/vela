@@ -30,6 +30,7 @@ import { VelaError } from '../errors';
 import { EtherTransport } from './transport';
 
 const CACHED = { cacheable: true };
+const BOOTSTRAP_CACHED = { cacheable: true, persistent: true };
 const PUBLIC = { auth: false };
 const PUBLIC_CACHED = { auth: false, cacheable: true };
 
@@ -225,7 +226,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   /** A home whose continuation the server has expired is read again without revalidation. */
   async home(fresh = false, signal?: AbortSignal): Promise<Home> {
     try {
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...CACHED, fresh, signal });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...BOOTSTRAP_CACHED, fresh, signal });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     } catch (error) {

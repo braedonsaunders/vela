@@ -26,13 +26,16 @@ export function artworkURL(artwork: ArtworkRef, width: number, height: number, i
     const widths = resolved.searchParams.getAll('w');
     if (!widths.length) {
       const maximum = Math.max(0, ...sizes.map(size => size.width));
-      const target = maximum > 0 ? Math.max(1, Math.ceil(Math.min(width, maximum))) : 0;
+      const target = Math.max(1, Math.ceil(maximum > 0 ? Math.min(width, maximum) : width));
       resolved.search = `${resolved.search}${resolved.search ? '&' : '?'}w=${target}`;
-    } else if (images.fitProxyWidth && widths.length === 1 && size.width > 0 && size.height > 0) {
+    } else if (images.fitProxyWidth && widths.length === 1) {
       const advertised = Number(widths[0]);
       // A cover crop also needs enough source rows to fill the requested height.
-      const target = Math.ceil(Math.max(1, width, height * size.width / size.height));
-      if (target < advertised) resolved.search = resolved.search.replace(/([?&]w=)\d+(?=&|$)/, (_, prefix) => prefix + target);
+      const cover = size.width > 0 && size.height > 0 ? height * size.width / size.height : width;
+      const target = Math.ceil(Math.max(1, width, cover));
+      if (!Number.isFinite(advertised) || advertised <= 0 || target < advertised) {
+        resolved.search = resolved.search.replace(/([?&]w=)[^&]*(?=&|$)/, (_, prefix) => prefix + target);
+      }
     }
   }
   return resolved.href;

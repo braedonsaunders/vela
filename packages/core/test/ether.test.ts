@@ -156,6 +156,33 @@ describe('EtherAdapter', () => {
     expect((await adapter.channels()).items).toEqual([]);
   });
 
+  test('bootstrap ETag and body survive a full web reload in the same tab', async () => {
+    const values = new Map<string, string>();
+    const previous = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+    Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    } });
+    try {
+      let calls = 0;
+      const answer = { viewer: { id: 'viewer' }, capabilities: { features: {} }, rows: [] };
+      const seen = routeFetch({ 'GET /vela/v0/bootstrap': (request: { headers: Headers }) => {
+        calls++;
+        return calls === 1
+          ? Response.json(answer, { headers: { ETag: '"bootstrap-1"' } })
+          : new Response(null, { status: 304 });
+      } });
+      expect(await ether().home()).toEqual(answer as never);
+      expect(await ether().home()).toEqual(answer as never);
+      expect(seen[1]!.headers.get('if-none-match')).toBe('"bootstrap-1"');
+      expect(values.size).toBe(1);
+    } finally {
+      if (previous) Object.defineProperty(globalThis, 'sessionStorage', previous);
+      else Reflect.deleteProperty(globalThis, 'sessionStorage');
+    }
+  });
+
   test('a no-store answer is never kept', async () => {
     const seen = routeFetch({ 'GET /vela/v0/titles/t1': () => new Response(JSON.stringify({ partial: true }), { headers: { ETag: 'W/"p"', 'Cache-Control': 'private, no-store' } }) });
     const adapter = ether();
