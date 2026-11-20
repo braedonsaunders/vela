@@ -60,6 +60,7 @@ internal class PlanPath(
   /** The original's verified frame rate (OriginalVideo), for display matching before the first frame. */
   val originalFrameRate: Double?,
   val expectsVideo: Boolean = false,
+  val timelineOriginSeconds: Double = 0.0,
 ) {
   /** An original file the server serves by byte range: the native engine's input. */
   val isOriginalFile: Boolean
@@ -78,9 +79,17 @@ internal class PlanPath(
         original = value["original"] == true,
         originalFrameRate = value.map("originalVideo")?.number("frameRate"),
         expectsVideo = value.map("originalVideo") != null,
+        timelineOriginSeconds = value.number("timelineOriginSeconds")?.takeIf { it.isFinite() && it >= 0 } ?: 0.0,
       )
     }
   }
+}
+
+/** HLS prepared after a seek starts its local clock at zero, while the UI uses title time. */
+internal class MediaTimeline(origin: Double = 0.0) {
+  val origin = origin.takeIf { it.isFinite() && it >= 0 } ?: 0.0
+  fun mediaTime(titleSeconds: Double) = (titleSeconds - origin).coerceAtLeast(0.0)
+  fun titleTime(mediaSeconds: Double) = origin + mediaSeconds.coerceAtLeast(0.0)
 }
 
 internal class PlanTrack(

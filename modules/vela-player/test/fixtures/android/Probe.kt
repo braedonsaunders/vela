@@ -13,6 +13,17 @@ private fun plan(selected: String = "original", session: String = "one", fallbac
 ))!!
 
 fun main() {
+  val shifted = PlanPath.from(mapOf("id" to "converted", "kind" to "transcode", "transport" to "hls", "readiness" to "ready", "timelineOriginSeconds" to 74.0))!!
+  val timeline = MediaTimeline(shifted.timelineOriginSeconds)
+  check(timeline.mediaTime(74.0) == 0.0) // switching audio must not seek a second 74 seconds
+  check(timeline.mediaTime(104.0) == 30.0)
+  check(timeline.mediaTime(10.0) == 0.0)
+  check(timeline.titleTime(30.0) == 104.0)
+  check(timeline.titleTime(6369.0) == 6443.0) // preserve the full title's duration
+  check(MediaTimeline().mediaTime(104.0) == 104.0)
+  check(MediaTimeline().titleTime(104.0) == 104.0)
+  check(MediaTimeline(Double.NaN).origin == 0.0)
+  check(MediaTimeline(-1.0).origin == 0.0)
   val sdrDecoder = VideoDecoderFacts("avc", "h264", "video/avc", 1920, 1080, 60.0, listOf(8 to 4096), emptySet())
   val hdrDecoder = VideoDecoderFacts("hevc", "hevc", "video/hevc", 3840, 2160, 30.0, listOf(2 to 16384), setOf("hdr10", "hlg"))
   check(playableHdr(listOf("hdr10", "hlg", "dv"), listOf(sdrDecoder)).isEmpty())

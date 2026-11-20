@@ -49,6 +49,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
       .setTargetBufferBytes(if (preview) 8 * 1024 * 1024 else 64 * 1024 * 1024).build())
     .build()
   private var plan: PlaybackPlan? = null
+  private var timeline = MediaTimeline()
   private var refused = false
   private val choices = mutableMapOf<Long, Pair<Tracks.Group, Int>>()
   private val tick = object : Runnable {
@@ -97,6 +98,9 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
 
   override fun load(url: Uri, plan: PlaybackPlan?, position: Double, loop: Boolean) {
     this.plan = plan
+    // Live windows have their own clock; never rebase them or move them to the edge.
+    timeline = MediaTimeline(if (plan?.live != true && plan?.selectedPath?.transport == "hls") plan?.selectedPath?.timelineOriginSeconds ?: 0.0 else 0.0)
+    if (!preview) Log.i("vela-media3", "media timeline origin ${timeline.origin}s")
     state.position = position
     refused = false
     val builder = MediaItem.Builder().setUri(url)
@@ -119,7 +123,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
         .setLanguage(track.language).setLabel(track.name).build()
     })
     player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-    player.setMediaItem(builder.build(), (position * 1000).toLong())
+    player.setMediaItem(builder.build(), (timeline.mediaTime(position) * 1000).toLong())
     player.prepare()
   }
 
@@ -153,8 +157,8 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
     state.paused = !player.playWhenReady
     state.pausedForCache = player.playbackState == Player.STATE_BUFFERING
     state.finished = player.playbackState == Player.STATE_ENDED
-    state.position = player.currentPosition.coerceAtLeast(0) / 1000.0
-    state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)
+    state.position = timeline.titleTime(player.currentPosition.coerceAtLeast(0) / 1000.0)
+    state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let(timeline::titleTime)
     state.cacheAhead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000.0
     player.videoFormat?.let { format ->
       state.videoCodec = format.sampleMimeType
@@ -169,7 +173,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
   override fun attach(surface: Surface?) { player.setVideoSurface(surface) }
   override fun play(playing: Boolean) { player.playWhenReady = playing }
   override fun volume(value: Float) { player.volume = value }
-  override fun seek(seconds: Double) { player.seekTo((seconds * 1000).toLong()) }
+  override fun seek(seconds: Double) { player.seekTo((timeline.mediaTime(seconds) * 1000).toLong()) }
   override fun select(type: String, id: Long?) {
     val trackType = if (type == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
     val params = selector.buildUponParameters().clearOverridesOfType(trackType).setTrackTypeDisabled(trackType, id == null)
