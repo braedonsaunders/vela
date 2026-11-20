@@ -87,7 +87,7 @@ function peopleTile(node: Node): Node {
 }
 
 export const libraryAlternative: Node = {
-  type: 'box', id: 'vela-library-alternative', when: [ready, { test: 'library.view', is: 'ne', value: 'library' }],
+  type: 'box', id: 'vela-library-alternative', when: [ready, { test: 'library.catalogView', is: 'ne', value: 'library' }],
   style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
   children: [
     { type: 'widget', widget: 'contentLoader', when: [is('library.viewLoad', 'loading')] },

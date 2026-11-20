@@ -185,6 +185,19 @@ test('inherited library reserves header space only for overlay navigation', asyn
   expect(topPadding(kids)).toEqual(['100px', '68px']);
 });
 
+test('live library tabs use the catalogue grid without an empty alternative-view spacer', async () => {
+  const { holds, resolveDocument } = await import('../src/resolve');
+  const { velaBase } = await import('../src/resolve/base');
+  const route = resolveDocument(velaBase, 1440).routes.library!;
+  const find = (node: RNode): RNode | undefined => node.id === 'vela-library-alternative' ? node
+    : node.kind === 'box' ? node.children.map(find).find(Boolean)
+    : node.kind === 'repeat' ? find(node.item) : undefined;
+  const alternative = find(route);
+  expect(alternative).toBeDefined();
+  const env = { load: 'ready', library: { view: 'live' } } as unknown as import('../src/vocabulary').Env;
+  expect(holds(alternative?.when, { index: 0 }, env)).toBe(false);
+});
+
 test('a custom library route inherits the shared view switch and alternative views', async () => {
   const { withBase } = await import('../src/resolve/inherit');
   const { velaBase } = await import('../src/resolve/base');
