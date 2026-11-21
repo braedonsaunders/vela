@@ -10,7 +10,7 @@ import { msg } from '@vela/core';
 import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
-import { LiveDial, LivePanel, type LiveWatch } from './live';
+import { LiveDial, LiveMark, LiveStatusLine, LiveZap, type LiveWatch } from './live';
 import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
@@ -154,7 +154,7 @@ export function BottomBar(props: BottomProps) {
           {props.live.live ? (
             <View style={{ alignItems: look.small ? 'stretch' : 'flex-start', gap: look.size(10) }}>
               <LiveDial plan={state.plan} small={look.small} still={look.still} />
-              <LivePanel snapshot={state.snapshot} watch={props.live} send={props.send} />
+              <LiveStatusLine look={look} watch={props.live} />
             </View>
           ) : (
             <Timeline {...props} />
@@ -204,7 +204,8 @@ function Controls({
   live,
   visible,
 }: BottomProps) {
-  // A channel plays at the live edge: no ten-second steps, no speed, no chapters.
+  // A channel plays at the live edge: channel up and down and the LIVE mark take the place of
+  // the ten-second steps; no speed, no chapters.
   const timeline = !live.live;
   const gap = look.size(look.small ? 4 : 8);
   const anchorRef = useRef<ComponentRef<typeof View>>(null);
@@ -277,7 +278,9 @@ function Controls({
       ) : null}
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
+      {timeline ? null : <LiveZap look={look} watch={live} disabled={!state.plan} />}
       <Volume look={look} view={view} send={send} onActive={onActive} />
+      {timeline ? null : <LiveMark look={look} watch={live} send={send} />}
       <View style={cluster}>
         {look.small ? null : (
           <Text

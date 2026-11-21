@@ -8,4 +8,5 @@ export { LiveTileWidget, TilePicture } from './picture';
 export { liveSource, type LiveAdapter, type LiveSource } from './source';
 export type { TileState, TileView } from './tile';
 export { LIVE_VOCABULARY, liveCollection, type LiveCtx, type LiveEnv } from './vocabulary';
-export { LiveControls, liveNeedsAttention, liveWatchKey, useLiveWatch } from './watch-controls';
+export { liveBehind, liveNeedsAttention, liveNotices } from './live-notices';
+export { liveWatchKey, useLiveWatch } from './watch-controls';

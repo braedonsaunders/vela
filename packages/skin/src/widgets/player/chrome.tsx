@@ -10,10 +10,11 @@ import { msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, type Opened } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
+import { holdsChrome } from './hold';
 import { useIdle } from './idle';
 import { useScreenAwake } from './wake-lock';
 import { InfoCard } from './info-card';
-import { useLiveWatchChrome } from './live';
+import { LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
 import { present, type PlayerView } from './present';
@@ -58,7 +59,14 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
   const live = useLiveWatchChrome(state.plan, state.snapshot);
-  const idle = useIdle(!view.playing || opened !== null || active || !!failed || live.attention);
+  // The session that has played, so a later wait in it reads as a stall rather than a start.
+  const playedSession = useRef('');
+  const sessionId = state.plan?.sessionId ?? '';
+  if (view.playing && sessionId) playedSession.current = sessionId;
+  const idle = useIdle(holdsChrome({
+    state: view.state, started: !!sessionId && playedSession.current === sessionId,
+    menuOpen: opened !== null, active, failed: !!failed,
+  }));
   // No screensaver or display sleep over a playing film (web and desktop; native players hold it themselves).
   useScreenAwake(view.playing);
   const { send } = state;
@@ -167,6 +175,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           onClose={state.close}
         />
       </View>
+      {!idle.visible && !failed ? <LiveNotice look={look} watch={live} /> : null}
       {info && !failed ? <InfoCard look={look} view={view} top={top} /> : null}
     </View>
   );

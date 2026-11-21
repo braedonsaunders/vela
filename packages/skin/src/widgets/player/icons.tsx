@@ -19,6 +19,9 @@ export type PlayerIconName =
   | 'chapters'
   | 'pip'
   | 'fullscreen'
+  | 'channelUp'
+  | 'channelDown'
+  | 'live'
   | 'alert'
   | 'check';
 
@@ -121,6 +124,17 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
       );
     case 'fullscreen':
       return <Path d={FULLSCREEN} stroke={color} {...STROKE} strokeWidth={1.8} />;
+    case 'channelUp':
+      return <Path d="M6 15l6-6 6 6" stroke={color} {...STROKE} strokeWidth={2} />;
+    case 'channelDown':
+      return <Path d="M6 9l6 6 6-6" stroke={color} {...STROKE} strokeWidth={2} />;
+    case 'live':
+      return (
+        <>
+          <Circle cx={12} cy={12} r={2.6} fill={color} />
+          <Path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4" stroke={color} {...STROKE} />
+        </>
+      );
     case 'alert':
       return <Path d="M12 3.5l9.5 16.5h-19zM12 10v4.5M12 17.4v.1" stroke={color} {...STROKE} />;
     case 'check':

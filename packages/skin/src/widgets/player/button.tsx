@@ -1,10 +1,10 @@
-// An icon-only chrome control. Pointer platforms wash it on hover; keyboards and TV remotes
+// A chrome control: an icon, or an icon with a short word (Go live). Pointer platforms wash it on hover; keyboards and TV remotes
 // show the document's accent ring on the button itself, and on TV the focused control fills
 // with the ink and wears the ring too, so it reads from across the room and stands apart from
 // the play toggle, which is always filled.
 import { FocusPressable as Pressable } from '../../focus';
 import { useState, type Ref } from 'react';
-import { View, type ViewStyle } from 'react-native';
+import { Text, View, type ViewStyle } from 'react-native';
 import type { Focusable } from '../../escape';
 import { isFocusVisible } from '../../focus-visible';
 import { PlayerIcon, type PlayerIconName } from './icons';
@@ -15,6 +15,8 @@ interface Props {
   look: PlayerLook;
   icon: PlayerIconName;
   label: string;
+  /** A word drawn beside the icon: the button widens to fit it, with the same face and focus. */
+  text?: string;
   onPress(): void;
   /** The play toggle: filled with the ink. */
   primary?: boolean;
@@ -35,6 +37,7 @@ export function ChromeButton({
   look,
   icon,
   label,
+  text,
   onPress,
   primary,
   disabled,
@@ -53,8 +56,9 @@ export function ChromeButton({
   const face = compact && !look.tv ? look.size(32) : box;
   const filled = primary || (look.tv && focus);
   const wash = selected || hover ? look.controlHover : 'transparent';
+  const ink = filled ? look.inkInverse : look.ink;
   const style: ViewStyle = {
-    width: box,
+    width: text ? undefined : box,
     height: box,
     alignItems: 'center',
     justifyContent: 'center',
@@ -63,9 +67,12 @@ export function ChromeButton({
     transform: [{ scale: look.tv && focus && !look.still ? 1.1 : 1 }],
   };
   const faceStyle: ViewStyle = {
-    width: face,
+    width: text ? undefined : face,
     height: face,
     borderRadius: Math.min(look.radiusControl, face / 2),
+    flexDirection: 'row',
+    gap: look.size(6),
+    paddingHorizontal: text ? look.size(12) : 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: filled ? look.ink : wash,
@@ -99,7 +106,8 @@ export function ChromeButton({
       style={style}
     >
       <View pointerEvents="none" style={faceStyle}>
-        <PlayerIcon name={icon} size={look.size(22)} color={filled ? look.inkInverse : look.ink} />
+        <PlayerIcon name={icon} size={look.size(text ? 18 : 22)} color={ink} />
+        {text ? <Text numberOfLines={1} style={look.text(13, 600, ink)}>{text}</Text> : null}
       </View>
     </Pressable>
   );

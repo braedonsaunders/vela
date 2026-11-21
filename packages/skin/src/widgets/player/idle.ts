@@ -1,5 +1,6 @@
-// Auto-hide: the chrome stands while playback is paused, waiting or being worked (a menu open,
-// a scrub, a drag), and fades out after a few idle seconds of playback. Any pointer movement,
+// Auto-hide: the chrome stands while holdsChrome (hold.ts) says so (paused, ended, failed, not yet
+// started, or being worked: a menu open, a scrub, a drag), and fades out after a few idle seconds
+// otherwise, a live channel included. Any pointer movement,
 // key or remote press brings it back.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
