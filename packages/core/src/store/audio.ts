@@ -69,6 +69,8 @@ export class Audio {
   private sessionId = '';
   private url = '';
   private loadToken: object | undefined;
+  /** Whether the item being loaded starts playing once its plan arrives (a pause while loading clears it). */
+  private autoplay = true;
   private sequence = 0;
   private lastObservation = 0;
   private lastPatch = 0;
@@ -113,13 +115,16 @@ export class Audio {
 
   pause(): void {
     this.engine?.pause();
-    if (this.state.phase === 'loading') this.loadToken = undefined;
+    this.autoplay = false;
     this.patch({ phase: 'paused' });
     this.observe('paused');
+    this.held('paused');
   }
 
   resume(): void {
     if (!current(this.state.queue)) return;
+    // Still waiting for the plan: play once it arrives.
+    if (this.loadToken && !this.sessionId) { this.autoplay = true; this.patch({ phase: 'loading' }); return; }
     // The session was taken (a video played) or ended: ask for a new one at the same place.
     if (!this.ours() || this.state.phase === 'ended' || this.state.phase === 'failed') { void this.load(this.state.phase === 'ended' ? 0 : this.state.positionSeconds); return; }
     this.engine?.play();
@@ -176,9 +181,11 @@ export class Audio {
   /** Stop and clear the queue; the server keeps the resume point. */
   async stop(): Promise<void> {
     this.observe('paused');
+    // Asked before the queue and session are cleared: they are how the playback is known as ours.
+    const owns = this.ownsPlayback();
     this.halt();
     this.box.update('audio', audio => ({ ...initialAudio, rate: audio.rate, unsupported: audio.unsupported }));
-    if (this.ownsPlayback()) await this.playback.stop();
+    if (owns) await this.playback.stop();
   }
 
   /** Start the current item's session and load the engine when its plan arrives. */
@@ -187,12 +194,14 @@ export class Audio {
     if (!item) return;
     const token = {};
     this.loadToken = token;
+    this.autoplay = true;
     this.engine?.unload();
     this.sessionId = ''; this.url = '';
     this.patch({ phase: this.engine ? 'loading' : 'failed', positionSeconds: startSeconds, durationSeconds: item.durationSeconds, error: '' });
     if (!this.engine) return;
     await this.playback.start({ kind: 'title', id: item.id, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}) });
     if (this.loadToken !== token) return;
+    this.loadToken = undefined;
     const playback = this.box.get().playback;
     if (playback.phase === 'failed' || !playback.plan) {
       this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
@@ -214,7 +223,8 @@ export class Audio {
     const start = plan.positionSeconds > 0 ? plan.positionSeconds : startSeconds;
     this.patch({ chapters: plan.chapters ?? [], durationSeconds: plan.durationSeconds ?? this.state.durationSeconds, positionSeconds: start });
     this.engine.load(path.url, start, this.state.rate);
-    this.engine.play();
+    if (this.autoplay) this.engine.play();
+    else this.held('paused');
   }
 
   private follow(): void {
@@ -231,7 +241,23 @@ export class Audio {
       }
       return;
     }
-    if (playback.phase === 'preparing' && playback.target?.kind === 'title' && playback.target.id === current(this.state.queue)?.id) return;
+    const item = current(this.state.queue);
+    const mine = playback.target?.kind === 'title' && playback.target.id === item?.id;
+    if (playback.phase === 'preparing' && mine) return;
+    // Playback recovered this item on a new session (a lost event stream, a stall): carry on there,
+    // paused if the viewer had paused, so the new session is not taken for a stalled one.
+    const recovered = mine && playback.phase === 'playing' && playback.plan ? playback.plan.paths.find(p => p.id === playback.plan!.selectedPathId) : undefined;
+    if (recovered && 'url' in recovered && recovered.url) {
+      const at = this.engine?.position() || playback.plan?.positionSeconds || this.state.positionSeconds;
+      this.sessionId = playback.sessionId;
+      this.url = recovered.url;
+      this.sequence = 0;
+      this.engine?.load(recovered.url, at, this.state.rate);
+      // After playback has finished taking the new plan (it arms its watchdog as it does).
+      if (this.state.phase === 'paused') queueMicrotask(() => this.held('paused'));
+      else this.engine?.play();
+      return;
+    }
     // Another session took over.
     if (playback.sessionId !== this.sessionId && playback.phase !== 'preparing') {
       this.engine?.pause();
@@ -247,7 +273,7 @@ export class Audio {
     const position = engine.position();
     switch (event) {
       case 'playing': this.patch({ phase: 'playing', positionSeconds: position }); this.observe('playing'); break;
-      case 'paused': if (this.state.phase !== 'ended') { this.patch({ phase: 'paused', positionSeconds: position }); this.observe('paused'); } break;
+      case 'paused': if (this.state.phase !== 'ended') { this.patch({ phase: 'paused', positionSeconds: position }); this.observe('paused'); this.held('paused'); } break;
       case 'waiting': this.patch({ phase: 'buffering' }); break;
       case 'duration': if (engine.duration() > 0) this.patch({ durationSeconds: engine.duration() }); break;
       case 'error': this.patch({ phase: 'failed', error: engine.error() || 'Playback failed' }); break;
@@ -276,10 +302,14 @@ export class Audio {
 
   private ended(): void {
     this.observe('ended');
+    this.held('ended');
     if (this.state.sleep.mode === 'item' || this.state.sleep.mode === 'chapter') {
+      // Asleep on the next item: its session starts when the viewer resumes.
       this.patch({ sleep: { mode: 'off', endsAt: 0 }, phase: 'paused' });
       const after = this.state.queue && next(this.state.queue, true);
-      if (after) this.patch({ queue: after, positionSeconds: 0 });
+      if (after) this.patch({ queue: after, positionSeconds: 0, chapters: [] });
+      this.halt();
+      void this.playback.stop();
       return;
     }
     const after = this.state.queue && next(this.state.queue, true);
@@ -305,6 +335,15 @@ export class Audio {
       playableRanges: this.engine?.buffered() ?? [], selectedPathId: plan.selectedPathId,
       sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
     }).catch(() => undefined);
+  }
+
+  /**
+   * Tell playback the engine stopped on purpose. Without it the session's stall watchdog reads a
+   * paused or finished item as a stalled one and replaces the session every few seconds.
+   */
+  private held(state: 'paused' | 'ended'): void {
+    if (!this.sessionId) return;
+    this.playback.snapshot({ sessionId: this.sessionId, live: null, position: this.engine?.position() ?? this.state.positionSeconds, state });
   }
 
   private ours(): boolean { return !!this.sessionId && this.box.get().playback.sessionId === this.sessionId; }
