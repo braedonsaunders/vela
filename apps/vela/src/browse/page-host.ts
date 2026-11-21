@@ -76,6 +76,20 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
   };
 }
 
+/** libraryHost for one retained library section, with the same dispatch, href and loadMore for
+ * its life: they read the latest page when called. New functions on each update made the whole
+ * page redraw (its tree compares host functions) whenever any store value changed. */
+export function libraryHostBuilder(): (host: SkinHost, id: string, query: LibraryQuery, library: LibraryState) => SkinHost {
+  let latest: SkinHost;
+  const dispatch: SkinHost['dispatch'] = (action, arg) => latest.dispatch(action, arg);
+  const href: NonNullable<SkinHost['href']> = (action, arg) => latest.href?.(action, arg);
+  const loadMore: SkinHost['loadMore'] = (on, entry) => latest.loadMore(on, entry);
+  return (host, id, query, library) => {
+    latest = libraryHost(host, id, query, library);
+    return { ...latest, dispatch, href: latest.href ? href : undefined, loadMore };
+  };
+}
+
 export function collectionHost(host: SkinHost, collection: CollectionState): SkinHost {
   const dispatch: SkinHost['dispatch'] = (action, arg) => {
     if (action === 'collectionMore') return collection.more();

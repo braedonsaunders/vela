@@ -6,6 +6,7 @@ import { searchView, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
 import type { ViewState } from './view-state';
+import { NO_PAGERS, pagerScope } from './pagers';
 
 export interface EnvInput {
   state: VelaState;
@@ -61,10 +62,11 @@ export function environment({ state, view, live, route, entry, library, width, s
     entry,
     flags: view.flags,
     rowLoading: home.rowsLoading,
-    pagers: view.pagers,
+    pagers: view.pagers[pagerScope(route, entry)] ?? NO_PAGERS,
     search: route === 'home' ? searchView(state.search) : undefined,
     live,
-    preview: { cardId: state.previews.cardId, heroId: state.previews.heroId },
+    // Only home draws heroes: its hero preview starting or stopping need not redraw other routes.
+    preview: { cardId: state.previews.cardId, heroId: route === 'home' ? state.previews.heroId : '' },
   };
 }
 
@@ -84,8 +86,8 @@ export function createEnvironmentReader() {
     if (season && !defaults.has(entry)) defaults.set(entry, season);
     const inputs = [state.auth.viewer, state.auth.plexHomeAvailable, state.home, state.libraries.value, state.search.query,
       route === 'home' ? state.search : undefined, title, state.titles[season],
-      view.season, view.flags, view.pagers, view.heroIndex, view.still,
-      input.live, input.width, input.skinCount, input.skinName, library, state.previews.cardId, state.previews.heroId];
+      view.season, view.flags, view.pagers[pagerScope(route, entry)], view.heroIndex, view.still,
+      input.live, input.width, input.skinCount, input.skinName, library, state.previews.cardId, route === 'home' ? state.previews.heroId : ''];
     const key = `${route}:${entry}:${library ?? ''}`, previous = routes.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.env;
     const env = environment({ ...input, view: { ...view, season: selection || season } });

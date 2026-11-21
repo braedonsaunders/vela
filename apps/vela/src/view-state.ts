@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { Env } from '@vela/skin';
 import { shouldRotateHero } from '@vela/skin/src/hero-rotation';
+import { withPager } from './pagers';
 
 const HERO_SECONDS = 9;
 
@@ -17,8 +18,10 @@ export interface ViewState {
   resetFlags(): void;
   season: string;
   setSeason(id: string): void;
-  pagers: Env['pagers'];
-  setPager(rowId: string, state: { atStart: boolean; atEnd: boolean }): void;
+  /** Each route's row pagers, by route (`route:entry`): a row reporting its ends changes its own
+   * route's environment, not every retained route's. */
+  pagers: Record<string, Env['pagers']>;
+  setPager(scope: string, rowId: string, state: { atStart: boolean; atEnd: boolean }): void;
   heroIndex: number;
   setHeroIndex(index: number): void;
   still: boolean;
@@ -27,7 +30,7 @@ export interface ViewState {
 export function useViewState(heroCount: number, query: string, heroPreviewing: boolean, onHome = true): ViewState {
   const [flags, setFlags] = useState<string[]>([]);
   const [season, setSeason] = useState('');
-  const [pagers, setPagers] = useState<Env['pagers']>({});
+  const [pagers, setPagers] = useState<Record<string, Env['pagers']>>({});
   const [heroIndex, setHeroIndex] = useState(0);
   const [still, setStill] = useState(false);
 
@@ -48,7 +51,8 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
   const setFlag = useCallback((flag: string, on: boolean) => {
     setFlags(list => {
       if (on) return list.includes(flag) ? list : [...list, flag];
-      return list.filter(f => f !== flag);
+      // An unchanged list stays the same value: every route's host follows it.
+      return list.includes(flag) ? list.filter(f => f !== flag) : list;
     });
   }, []);
   const toggleFlag = useCallback((flag: string) => {
@@ -57,9 +61,9 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
   const onlyFlag = useCallback((flag: string) => {
     setFlags(list => (list.includes(flag) ? list.filter(f => f !== flag) : [...list.filter(f => f.startsWith('keep-')), flag]));
   }, []);
-  const resetFlags = useCallback(() => setFlags(list => list.filter(f => f.startsWith('keep-'))), []);
-  const setPager = useCallback((rowId: string, state: { atStart: boolean; atEnd: boolean }) => {
-    setPagers(p => (p[rowId]?.atStart === state.atStart && p[rowId]?.atEnd === state.atEnd ? p : { ...p, [rowId]: state }));
+  const resetFlags = useCallback(() => setFlags(list => list.every(f => f.startsWith('keep-')) ? list : list.filter(f => f.startsWith('keep-'))), []);
+  const setPager = useCallback((scope: string, rowId: string, state: { atStart: boolean; atEnd: boolean }) => {
+    setPagers(all => withPager(all, scope, rowId, state));
   }, []);
 
   return useMemo(() => ({

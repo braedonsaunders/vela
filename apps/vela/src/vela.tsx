@@ -38,6 +38,7 @@ import { useLast } from '@vela/skin/src/presence';
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
+import { pagerScope } from './pagers';
 import { useLiveController } from './live';
 import { LaunchGate } from './launch';
 import { launchReady } from './launch-state';
@@ -351,7 +352,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [searching, store]);
 
   const readEnvironment = useMemo(createEnvironmentReader, [state.auth.revision]);
-  const hosts = useRef(new Map<string, { inputs: unknown[]; host: SkinHost }>());
+  const hosts = useRef(new Map<string, { inputs: unknown[]; host: SkinHost; libraries: unknown }>());
   const host = useCallback((route: RouteName, entry: string, library?: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;
     const env = readEnvironment({
@@ -376,7 +377,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       viewport: routeViewport,
       dispatch: previous && inputs.slice(3).every((v, i) => v === previous.inputs[i + 3])
         ? previous.host.dispatch : (action, arg) => dispatch({ route, entry, library }, action, arg),
-      href: Platform.OS === 'web' ? (action, arg) => {
+      // A route's tree redraws whole when its host's functions change; keep them while what they read is the same.
+      href: previous && previous.libraries === state.libraries.value ? previous.host.href : Platform.OS === 'web' ? (action, arg) => {
         const liveLibrary = action === 'library' && state.libraries.value?.find(item => item.id === arg)?.kind === 'live';
         const href = liveLibrary ? '/live' : actionHref({ route, entry, library }, action, arg);
         return href && webHref(href);
@@ -387,14 +389,14 @@ function AppHost({ store, state, live, children }: AppHostProps) {
         store.rows.seed(row);
         router.push({ pathname: '/row/[id]', params: { id: row.id } });
       }),
-      rowHref: Platform.OS === 'web' ? row => webHref(row.items.some(item => item.kind === 'channel') ? '/live' : `/row/${encodeURIComponent(row.id)}`) : undefined,
+      rowHref: previous ? previous.host.rowHref : Platform.OS === 'web' ? row => webHref(row.items.some(item => item.kind === 'channel') ? '/live' : `/row/${encodeURIComponent(row.id)}`) : undefined,
       refreshHeroArtwork: previous?.host.refreshHeroArtwork ?? (id => store.home.refreshArtwork(id)),
       setQuery,
       setFlag: view.setFlag,
-      setPager: view.setPager,
+      setPager: previous?.host.setPager ?? ((rowId, pager) => view.setPager(pagerScope(route, entry), rowId, pager)),
       loadMore,
     };
-    hosts.current.set(key, { inputs, host: result });
+    hosts.current.set(key, { inputs, host: result, libraries: state.libraries.value });
     return result;
   }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore]);
 

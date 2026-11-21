@@ -83,7 +83,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     if (!id || !kind || !focused || liveTab || viewTab) return;
     // A modal person page keeps this library mounted. Keep its accumulated pages on return.
     if (extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.tab === collectionTab && extraState.query === tabQuery && extraState.attempt === extraAttempt && extraState.value && !extraState.loading && !extraState.failed && !extraState.value.failed) {
-      setExtraState(previous => ({ ...previous, moreLoading: false }));
+      setExtraState(previous => previous.moreLoading ? { ...previous, moreLoading: false } : previous);
       return;
     }
     let active = true;

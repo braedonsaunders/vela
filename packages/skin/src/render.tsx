@@ -704,6 +704,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     if (view) pagers.set(rowId, { view, ...pagerMetrics.current });
     const frame = web && view ? requestAnimationFrame(() => {
       const element = view as unknown as HTMLElement;
+      if (!element.clientWidth) return;
       pagerMetrics.current.width = element.clientWidth;
       pagerMetrics.current.contentWidth = element.scrollWidth;
       const pager = pagers.get(rowId);
@@ -818,6 +819,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       host.setPager(rowId, { atStart: contentOffset.x <= 1, atEnd: contentOffset.x + layoutMeasurement.width >= contentSize.width - 1 });
     } : undefined;
     const onPagerLayout = node.pager && rowId ? (e: LayoutChangeEvent) => {
+      // A hidden scene (a retained section behind another) lays out at no width: its row has not
+      // moved, and reporting it redrew the whole route when hidden and again when shown.
+      if (!e.nativeEvent.layout.width) return;
       pagerMetrics.current.width = e.nativeEvent.layout.width;
       const pager = pagers.get(rowId);
       if (pager) pager.width = pagerMetrics.current.width;
@@ -825,6 +829,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       if (metrics.contentWidth) host.setPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= metrics.contentWidth - 1 });
     } : undefined;
     const onPagerContent = node.pager && rowId ? (width: number) => {
+      if (!width) return;
       pagerMetrics.current.contentWidth = width;
       const pager = pagers.get(rowId);
       if (pager) pager.contentWidth = width;
