@@ -20,7 +20,7 @@ const engines = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example
 // Skin documents (packages/protocol/skin.ts): whole skins as data, drawn by the client's doc engine.
 // Besides cinematic, every `packages/protocol/fixtures/skins/<id>/document.ts` (default export) is
 // installed, its files in `<id>/assets/` served at `/vela/v0/appearance/skins/<id>/<version>/<file>`.
-const skinsDir = new URL('../packages/protocol/fixtures/skins', import.meta.url);
+const skinsDir = new URL('../packages/protocol/fixtures/skins/', import.meta.url);
 const packaged: { doc: SkinDocument; assets?: URL }[] = [{ doc: cinematicDoc }];
 for (const entry of readdirSync(skinsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)))
   if (entry.isDirectory() && existsSync(new URL(`${entry.name}/document.ts`, skinsDir)))
