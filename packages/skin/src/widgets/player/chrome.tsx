@@ -5,7 +5,7 @@
 // playback runs untouched and comes back on any pointer, key or remote input.
 import { FocusPressable as Pressable } from '../../focus';
 import { useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View, Text } from 'react-native';
 import { msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, type Opened } from './bars';
@@ -179,6 +179,15 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         />
       </View>
       {!idle.visible && !failed ? <LiveNotice look={look} watch={live} /> : null}
+      {state.versionMessage && !failed ? (
+        // A version switch reports here, not only inside the quality menu, which has closed by
+        // the time the server answers: a refused switch must never look like a click that did nothing.
+        <View pointerEvents="none" accessibilityLiveRegion="polite" testID="player-version-notice"
+          style={{ position: 'absolute', top: top + look.size(64), alignSelf: 'center', maxWidth: '80%',
+            paddingVertical: look.size(8), paddingHorizontal: look.size(14), borderRadius: look.radiusControl, backgroundColor: look.scrim }}>
+          <Text style={look.text(14, 500, look.ink)}>{state.versionMessage}</Text>
+        </View>
+      ) : null}
       {info && !failed ? <InfoCard look={look} view={view} top={top} /> : null}
     </View>
   );

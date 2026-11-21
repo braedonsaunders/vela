@@ -166,7 +166,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
           return;
         }
         setPendingVersionId(undefined);
-        setVersionMessage(detail?.code === 'version_unavailable' ? 'This version is no longer available. Playback continues.' : error instanceof Error ? error.message : 'Could not switch version. Playback continues.');
+        setVersionMessage(detail?.code === 'version_unavailable' ? 'This version is no longer available. Playback continues.'
+          : detail?.code === 'feature_unavailable' ? 'This server cannot switch versions during playback. Playback continues.'
+          : 'Could not switch version. Playback continues.');
+        // The notice stays long enough to read, then clears itself.
+        versionTimer.current = setTimeout(() => { if (versionAttempt.current === token) setVersionMessage(''); }, 6000);
       }
     };
     void attempt(1);
