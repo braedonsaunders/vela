@@ -41,6 +41,7 @@ import { VersionsControl } from './widgets/title-actions';
 import { SeasonSelector } from './widgets/season-selector';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
+import { EASE_IN, MOTION } from './presence';
 import { needsAnimatedFrame } from './animated-frame';
 import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
@@ -89,6 +90,9 @@ const PressLabelContent = createContext(false);
 const HeroInteraction = createContext(false);
 /** First content layout releases the skeleton covering a newly loaded route. */
 const InstantContent = createContext(false);
+/** A menu or drawer (a box with `escape`) whose flag has just closed: drawn a moment longer while it
+ * leaves (MenuPresence). */
+const Leaving = createContext(false);
 const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
 const LoadingLibraryNav = createContext(false);
 const HiddenLibraryNav = createContext(false);
@@ -304,6 +308,28 @@ function SkeletonCover({ host, node, ground, leaving, onGone }: {
   );
 }
 
+/** A menu's leaving motion: it lifts a little and fades, quicker than it came (presence.tsx). It
+ * takes no presses while it goes. */
+const MENU_LEAVE = {
+  animationName: { from: { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] }, to: { opacity: 0, transform: [{ translateY: -4 }, { scale: 0.97 }] } },
+  animationDuration: MOTION.quick, animationTimingFunction: EASE_IN, animationFillMode: 'both', pointerEvents: 'none',
+};
+
+/** Keeps a closed menu drawn while its leaving motion runs. The box stays the same element from
+ * open to gone, so nothing is mounted twice. */
+function MenuPresence({ shown, still, children }: { shown: boolean; still: boolean; children: ReactElement }) {
+  const [state, setState] = useState({ shown, leaving: false });
+  const closing = state.shown && !shown && !still;
+  if (state.shown !== shown) setState({ shown, leaving: closing });
+  useEffect(() => {
+    if (!state.leaving) return;
+    const timer = setTimeout(() => setState(current => ({ ...current, leaving: false })), MOTION.quick);
+    return () => clearTimeout(timer);
+  }, [state.leaving]);
+  if (!shown && !state.leaving && !closing) return null;
+  return <Leaving.Provider value={!shown}>{children}</Leaving.Provider>;
+}
+
 function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
@@ -332,6 +358,11 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
         })}
       </>
     );
+  }
+  // A menu or drawer that opens with a motion also leaves with one (not on TV, whose focus motion
+  // is the only one).
+  if (node.kind === 'box' && node.escape?.length && node.motion && !Platform.isTV) {
+    return <MenuPresence shown={holds(node.when, ctx, env)} still={env.still}><Box node={node} ctx={ctx} route={route} after={after} hero={hero} /></MenuPresence>;
   }
   if (!holds(node.when, ctx, env)) return null;
   switch (node.kind) {
@@ -604,7 +635,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
   const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
   const instant = useContext(InstantContent);
-  const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
+  const leaving = useContext(Leaving) && !!node.escape?.length;
+  const opening = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
+  const motion = leaving ? MENU_LEAVE : opening;
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {

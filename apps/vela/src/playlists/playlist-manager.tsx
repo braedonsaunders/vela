@@ -1,8 +1,9 @@
 import { createElement, useRef, useState, type ComponentRef } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
+import { SheetModal } from '@vela/skin/src/widgets/common/sheet-modal';
 import { useVela } from '../vela';
 
 const DraggableRow = View as unknown as (props: Record<string, unknown>) => React.JSX.Element;
@@ -43,7 +44,7 @@ export function PlaylistManager({ playlistId }: { playlistId: string }) {
   };
   return <>
     <Pressable testID="manage-playlist" accessibilityRole="button" onPress={() => { setName(model.name); setOpen(true); }} style={styles.entry}><Text style={styles.entryText}>{model.smart ? 'Smart playlist' : 'Manage playlist'}</Text></Pressable>
-    <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+    <SheetModal open={open} scrim={SCRIM} onRequestClose={close}>
       <View style={styles.scrim} accessibilityViewIsModal><Pressable accessible={false} focusable={false} onPress={close} style={StyleSheet.absoluteFill} />
         <View style={styles.sheet}>
           <View style={styles.header}><View style={{ flex: 1 }}><Text style={styles.title}>{model.name}</Text><Text style={styles.sub}>{model.items.length} entries{model.smart ? ' · Smart playlist · Read only' : ''}</Text></View>
@@ -79,10 +80,11 @@ export function PlaylistManager({ playlistId }: { playlistId: string }) {
             <Pressable accessibilityRole="button" testID="confirm-delete-playlist" onPress={() => void store.playlists.delete(playlistId).then(done => { if (done) router.back(); })} style={styles.confirmDelete}><Text style={styles.buttonText}>Delete</Text></Pressable></View> : null}
         </View>
       </View>
-    </Modal>
+    </SheetModal>
   </>;
 }
 
+const SCRIM = 'rgba(3,5,8,.76)';
 const styles = StyleSheet.create({ entry: { position: 'absolute', right: 32, bottom: 28, zIndex: 20, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#eee5da' }, entryText: { color: '#15171b', fontWeight: '800' },
-  scrim: { flex: 1, backgroundColor: 'rgba(3,5,8,.76)', alignItems: 'center', justifyContent: 'center', padding: 20 }, sheet: { width: '100%', maxWidth: 780, maxHeight: '88%', borderRadius: 22, borderWidth: 1, borderColor: '#363b45', backgroundColor: '#15181e', padding: 22, gap: 14 }, header: { flexDirection: 'row', alignItems: 'center', gap: 12 }, title: { color: '#f5f0e9', fontSize: 26, fontWeight: '700' }, sub: { color: '#aeb4bf', marginTop: 4 }, icon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: '#292d35' }, iconText: { color: '#fff', fontSize: 26 },
+  scrim: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }, sheet: { width: '100%', maxWidth: 780, maxHeight: '88%', borderRadius: 22, borderWidth: 1, borderColor: '#363b45', backgroundColor: '#15181e', padding: 22, gap: 14 }, header: { flexDirection: 'row', alignItems: 'center', gap: 12 }, title: { color: '#f5f0e9', fontSize: 26, fontWeight: '700' }, sub: { color: '#aeb4bf', marginTop: 4 }, icon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: '#292d35' }, iconText: { color: '#fff', fontSize: 26 },
   rename: { flexDirection: 'row', gap: 10 }, input: { flex: 1, borderWidth: 1, borderColor: '#464c58', borderRadius: 12, color: '#fff', paddingHorizontal: 13, minHeight: 46 }, save: { backgroundColor: '#8f593a', borderRadius: 12, justifyContent: 'center', paddingHorizontal: 16 }, buttonText: { color: '#fff', fontWeight: '700' }, list: { minHeight: 120, maxHeight: 500 }, row: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#22262d', borderRadius: 12, padding: 10 }, dragging: { opacity: .55, borderWidth: 1, borderColor: '#d5a676' }, grip: { color: '#9ba1ad', fontSize: 22, paddingHorizontal: 4 }, name: { color: '#fff', fontSize: 15, fontWeight: '600' }, meta: { color: '#9ea4af', marginTop: 2, fontSize: 12 }, small: { width: 38, height: 38, borderRadius: 10, backgroundColor: '#353a44', alignItems: 'center', justifyContent: 'center' }, smallText: { color: '#fff', fontSize: 19 }, remove: { height: 38, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 10, backgroundColor: '#432b2b' }, removeText: { color: '#ffc7bd', fontWeight: '700', fontSize: 12 }, disabled: { opacity: .3 }, delete: { alignSelf: 'flex-start', padding: 10 }, deleteText: { color: '#ff9e91', fontWeight: '700' }, confirm: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#352425', borderRadius: 12, padding: 10 }, confirmText: { color: '#ffd7d1', flex: 1 }, smallConfirm: { paddingHorizontal: 14, minHeight: 40, justifyContent: 'center', borderRadius: 10, backgroundColor: '#3b404a' }, confirmDelete: { paddingHorizontal: 14, minHeight: 40, justifyContent: 'center', borderRadius: 10, backgroundColor: '#8c3f3a' }, error: { color: '#ffd0c9', backgroundColor: '#512a2a', padding: 10, borderRadius: 10 } });

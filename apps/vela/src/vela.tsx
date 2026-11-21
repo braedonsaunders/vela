@@ -33,6 +33,7 @@ import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents'
 import { preferences } from './data/preferences';
 import { AppearancePicker } from './picker';
 import { AddToPlaylist } from './playlists/add-to-playlist';
+import { useLast } from '@vela/skin/src/presence';
 
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
@@ -290,6 +291,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const [playlistTarget, setPlaylistTarget] = useState<{ titleId: string; titleKind?: string } | null>(null);
   const openAddToPlaylist = useCallback((titleId: string, titleKind?: string) => setPlaylistTarget({ titleId, titleKind }), []);
   const closeAddToPlaylist = useCallback(() => setPlaylistTarget(null), []);
+  // The sheet stays drawn while it leaves (presence.tsx).
+  const shownPlaylistTarget = useLast(playlistTarget);
   const pickDocument = useCallback((index: number) => {
     if (appearance?.force) return;
     setChoice(documents[index]!.id);
@@ -414,7 +417,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
           {children}
         </Previews>
         {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} branding={appearance?.branding} onPick={pickDocument} onClose={closePicker} /> : null}
-        {playlistTarget ? <AddToPlaylist {...playlistTarget} close={closeAddToPlaylist} /> : null}
+        {shownPlaylistTarget ? <AddToPlaylist key={shownPlaylistTarget.titleId} {...shownPlaylistTarget} open={!!playlistTarget} close={closeAddToPlaylist} /> : null}
         {state.auth.plexSwitching && overlayHost ? <HostContext.Provider value={overlayHost}>
           <PlexProfileDialog profiles={state.auth.plex?.profiles ?? []} currentProfileId={state.auth.viewerId} error={state.auth.error}
             onChoose={(id, pin) => store.auth.choosePlexProfile(id, pin)} onRestart={() => store.auth.startPlexProfileSwitch()} onClose={() => store.auth.cancelPlex()} />

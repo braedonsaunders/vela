@@ -19,6 +19,7 @@ import {
 import { cardContextActions, supportsTitleActions, type CardContextAction, type CardPress } from '../card-context-actions';
 import { placeAtPoint, placeAtRect, type Point, type Rect, type Size } from '../card-context-placement';
 import { DismissScope, type Focusable } from '../escape';
+import { MOTION } from '../presence';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
 import { Glyph } from './common/controls';
@@ -104,15 +105,27 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
     return () => { live = false; };
   }, [vela, card.id, card.kind]);
 
+  // It opens once it has measured itself and is placed (so the motion is never spent unseen), and
+  // leaves with the reverse, quicker, before it unmounts (presence.tsx's timings).
+  const measured = menuSize.height > 1;
   useEffect(() => {
+    if (!measured) return;
     if (look.still) { openValue.setValue(1); return; }
     Animated.timing(openValue, {
       toValue: 1,
-      duration: 120,
-      easing: Easing.out(Easing.cubic),
+      duration: MOTION.enter,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
       useNativeDriver: true,
     }).start();
-  }, [look.still, openValue]);
+  }, [look.still, openValue, measured]);
+  const [leaving, setLeaving] = useState(false);
+  const leave = useCallback(() => {
+    if (leaving) return;
+    if (look.still || Platform.isTV) { close(); return; }
+    setLeaving(true);
+    openValue.stopAnimation();
+    Animated.timing(openValue, { toValue: 0, duration: MOTION.quick, easing: Easing.bezier(0.4, 0, 1, 1), useNativeDriver: true }).start(() => close());
+  }, [leaving, look.still, close, openValue]);
 
   const link = web && href ? new URL(href, window.location.href).href : undefined;
   const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link }), [card, primary, management, continueWatching, host.env.canPlaylists, link]);
@@ -132,10 +145,11 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
     ? placeAtPoint(anchor.point, menuSize, viewport)
     : placeAtRect(anchor.rect, menuSize, viewport);
 
+  // A command that goes somewhere (a dispatch, a link) closes at once; otherwise the menu leaves.
   const dismiss = useCallback((returnFocus = true) => {
-    close();
-    if (returnFocus) restore(opener);
-  }, [close, opener]);
+    if (returnFocus) { leave(); restore(opener); }
+    else close();
+  }, [close, leave, opener]);
 
   const run = useCallback(async (item: CardContextAction) => {
     if (busy) return;
@@ -198,9 +212,9 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   const meta = episodeLine(card);
 
   return (
-    <DismissScope open dismiss={close} returnTarget={opener} guide={guide}>
+    <DismissScope open dismiss={leave} returnTarget={opener} guide={guide}>
       <Modal visible transparent onRequestClose={() => dismiss()} supportedOrientations={['portrait', 'landscape']}>
-        <View style={StyleSheet.absoluteFill} accessibilityViewIsModal importantForAccessibility="yes">
+        <View style={StyleSheet.absoluteFill} accessibilityViewIsModal importantForAccessibility="yes" pointerEvents={leaving ? 'none' : 'auto'}>
           <FocusPressable
             style={StyleSheet.absoluteFill}
             onPress={() => dismiss()}

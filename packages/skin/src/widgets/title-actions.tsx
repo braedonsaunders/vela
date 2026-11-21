@@ -2,11 +2,12 @@
 import { msg, type TitleActions as Actions } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import { useCallback, useEffect, useState, type ComponentRef } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
 import { holdBack } from '../menu-key';
 import { Glyph } from './common/controls';
+import { SheetModal } from './common/sheet-modal';
 import { useLook } from './common/look';
 import type { TitleVersions, VersionItem } from '@vela/core';
 import { versionAvailability, versionBadge, versionChips } from './versions';
@@ -41,8 +42,8 @@ export function VersionsControl() {
   };
   return <>
     <VersionButton label={`Versions, ${current.label}`} text="Versions" detail={current.label} badge={badge} run={() => setOpen(true)} />
-    <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.scrim, justifyContent: 'center', alignItems: 'center', padding: 16 }]}>
+    <SheetModal open={open} scrim={look.ui.scrim} still={look.still} onRequestClose={() => setOpen(false)}>
+      <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: 16 }]}>
         <ScrollView testID="versions-sheet" style={{ maxHeight: '88%', width: 680, maxWidth: '100%', backgroundColor: look.ui.page, borderRadius: 24 }} contentContainerStyle={{ padding: 24, gap: 12 }}>
           <Text style={look.text({ 'font-size': '28px', 'font-weight': '700' })}>Versions</Text>
           <Text style={look.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>Choose the original you want to play. Converted quality options remain available in the player.</Text>
@@ -53,7 +54,7 @@ export function VersionsControl() {
           <VersionButton label="Close" run={() => setOpen(false)} disabled={busy} />
         </ScrollView>
       </View>
-    </Modal>
+    </SheetModal>
   </>;
 }
 

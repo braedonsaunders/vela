@@ -1,6 +1,6 @@
 import { ContentLoader } from '../common/loading';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { msg, number, plural } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import { shellHasLibraryTabs } from './navigation';
@@ -16,6 +16,7 @@ import { YearInput } from './year-input';
 import type { ReactNode, ComponentRef } from 'react';
 import { TextField } from '../common/text-field';
 import { singleLibraryStrip, tabOverflow } from './toolbar-layout';
+import { SheetModal } from '../common/sheet-modal';
 
 // All toolbar surfaces share these rows; skins own their dimensions, shape, font and colours.
 const control = { height: '$ui.controlHeight', padding: '0px 12px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', 'justify-content': 'center', 'flex-shrink': '0' };
@@ -294,9 +295,9 @@ function FacetPicker({ facet, selected, onChoose, onClose, onLabels }: {
     }, 250);
     return () => { active = false; generation.current++; clearTimeout(timer); };
   }, [store, libraryId, facet.id, query, attempt]);
-  return <Modal transparent visible animationType="fade" onRequestClose={onClose} supportedOrientations={['portrait', 'landscape']}>
-    <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 20 }]}>
-      <FocusPressable style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.scrim }]} focusable={false} accessibilityLabel={`Close ${facet.label}`} onPress={onClose} />
+  return <SheetModal open scrim={look.ui.scrim} still={look.still} onRequestClose={onClose}>
+    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 20 }]}>
+      <FocusPressable style={StyleSheet.absoluteFill} focusable={false} accessibilityLabel={`Close ${facet.label}`} onPress={onClose} />
       <View accessibilityViewIsModal accessibilityRole="dialog" accessibilityLabel={facet.label}
         style={look.box({ width: '100%', 'max-width': '420px', 'max-height': '80vh', padding: '16px', gap: '12px', 'border-radius': '$ui.radiusPanel', 'background-color': '$ui.popover', border: '1px solid $ui.glassEdgeStrong', 'box-shadow': '0px 24px 80px $ui.shadow' })}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -322,5 +323,5 @@ function FacetPicker({ facet, selected, onChoose, onClose, onLabels }: {
         </>}
       </View>
     </View>
-  </Modal>;
+  </SheetModal>;
 }

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { DismissScope } from '@vela/skin/src/escape';
+import { SheetModal } from '@vela/skin/src/widgets/common/sheet-modal';
 
 /** The single app-owned sheet opened by the shared title and card action definitions. */
-export function AddToPlaylist({ titleId, titleKind, close }: { titleId: string; titleKind?: string; close(): void }) {
+/** `open`: it stays drawn while it leaves, then the app lets it go. */
+export function AddToPlaylist({ titleId, titleKind, open, close }: { titleId: string; titleKind?: string; open: boolean; close(): void }) {
   const store = useVela();
   const memberships = useVelaState(state => state.playlists.memberships[titleId]);
   const notice = useVelaState(state => state.playlists.notice);
@@ -14,13 +16,14 @@ export function AddToPlaylist({ titleId, titleKind, close }: { titleId: string; 
   const first = useRef<ComponentRef<typeof Pressable> | null>(null);
   useEffect(() => { void Promise.all([store.playlists.load(), store.playlists.memberships(titleId, true)]); }, [store, titleId]);
   useEffect(() => {
+    if (!open) return;
     const frame = requestAnimationFrame(() => (first.current as unknown as { focus?(): void; requestTVFocus?(): void } | null)?.focus?.());
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [open]);
   if (!available) return null;
   const dismiss = () => { store.playlists.clearNotice(); close(); };
-  return <DismissScope open dismiss={dismiss}>
-    <Modal visible transparent animationType="fade" onRequestClose={dismiss}>
+  return <DismissScope open={open} dismiss={dismiss}>
+    <SheetModal open={open} scrim={SCRIM} onRequestClose={dismiss}>
       <View style={styles.scrim} accessibilityViewIsModal>
         <Pressable accessible={false} focusable={false} onPress={dismiss} style={StyleSheet.absoluteFill} />
         <View style={styles.sheet}>
@@ -50,12 +53,13 @@ export function AddToPlaylist({ titleId, titleKind, close }: { titleId: string; 
           </View>
         </View>
       </View>
-    </Modal>
+    </SheetModal>
   </DismissScope>;
 }
 
+const SCRIM = 'rgba(3,5,8,.72)';
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(3,5,8,.72)', alignItems: 'center', justifyContent: Platform.isTV ? 'center' : 'flex-end', padding: 20 },
+  scrim: { flex: 1, alignItems: 'center', justifyContent: Platform.isTV ? 'center' : 'flex-end', padding: 20 },
   sheet: { width: '100%', maxWidth: 600, maxHeight: '82%', backgroundColor: '#171a20', borderColor: '#353943', borderWidth: 1, borderRadius: 24, padding: 22, gap: 14, boxShadow: '0 30px 90px rgba(0,0,0,.6)' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 16 }, title: { color: '#f6f1e8', fontSize: 25, fontWeight: '700' },
   hint: { color: '#b7bbc4', marginTop: 5, fontSize: 14 }, close: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#282c34', alignItems: 'center', justifyContent: 'center' }, closeText: { color: '#fff', fontSize: 26 },
