@@ -101,3 +101,18 @@ export function resolveTimeTarget(target: TimeTarget, starts: Record<number, num
   const left = Math.max(0, Math.min(Math.max(0, total - visible), target.kind === 'now' ? desired - visible / 3 : desired));
   return { left, minute: target.kind === 'now' ? Math.max(0, Math.min(total - 0.01, desired)) : left + visible / 3 };
 }
+
+/** The presses the shell's own Live TV destination carries: `live`, or a live library's page. */
+export function liveDestinations(liveLibraries: readonly string[]): string[] {
+  return ['live:', ...liveLibraries.map(id => `library:${id}`)];
+}
+
+/** Whether the guide is scrolled deep enough to offer Back to top: more than a screenful down. */
+export function deepInGuide(offset: number, viewport: number): boolean {
+  return viewport > 0 && offset > viewport;
+}
+
+/** What a key does inside the guide on the web and desktop: Escape and Home leave for the top bar. */
+export function guideEscapeKey(key: string): boolean {
+  return key === 'Escape' || key === 'Home';
+}

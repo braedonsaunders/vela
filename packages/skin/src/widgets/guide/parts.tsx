@@ -14,6 +14,7 @@ import { SYMBOLS } from '../../icons';
 import { useLiveContext } from './live';
 import { logoIdentity } from './logo';
 import { programmeFocusFrame, monogram } from './geometry';
+import { guideEscapeKey } from './navigation';
 import type { GuideLook } from './look';
 
 export function Glyph({ name, size, color }: { name: string; size: number; color: string }) {
@@ -137,6 +138,7 @@ export function Press(props: PressProps) {
             const key = (e.nativeEvent as { key?: string }).key ?? '';
             if (onKey) onKey(key, () => e.preventDefault());
             else if (region === 'toolbar' && key === 'ArrowDown') { e.preventDefault(); navigation?.enter(); }
+            else if (navigation && guideEscapeKey(key)) { e.preventDefault(); navigation.escape(); }
           },
         }
       : {};

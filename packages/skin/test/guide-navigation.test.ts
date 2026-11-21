@@ -123,3 +123,15 @@ test('network lookahead follows the scroll direction in stable bounded batches',
   expect(prefetchRows(0, 4, 4)).toEqual({ start: 0, end: 4 });
   expect(prefetchRows(0, 0, 4)).toEqual({ start: 0, end: 0 });
 });
+test('the guide leaves for the top bar by its Live TV destination and offers Back to top past a screenful', async () => {
+  const { deepInGuide, guideEscapeKey, liveDestinations } = await import('../src/widgets/guide/navigation');
+  expect(liveDestinations([])).toEqual(['live:']);
+  expect(liveDestinations(['tv-1'])).toEqual(['live:', 'library:tv-1']);
+  expect(deepInGuide(0, 600)).toBe(false);
+  expect(deepInGuide(600, 600)).toBe(false);
+  expect(deepInGuide(601, 600)).toBe(true);
+  expect(deepInGuide(5000, 0)).toBe(false);
+  expect(guideEscapeKey('Escape')).toBe(true);
+  expect(guideEscapeKey('Home')).toBe(true);
+  expect(guideEscapeKey('ArrowUp')).toBe(false);
+});

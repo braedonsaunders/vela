@@ -4,6 +4,7 @@ import { useLiveContext } from './live';
 import { remoteDirection } from './navigation';
 import type { Focusable } from '../../escape';
 import { useRemote, pressed } from '../player/remote';
+import { holdBack } from '../../menu-key';
 
 type Key = (key: string, prevent: () => void) => void;
 interface Entry { target: Focusable; key?: Key; toolbar?: boolean; nativeGrid?: boolean }
@@ -15,6 +16,12 @@ interface Navigation {
   toolbar(): void;
   enter(): void;
   inGrid(): boolean;
+  /** Back, Menu or Escape in the grid: focus the top bar and take the guide back to the top. */
+  escape(): void;
+  /** Up from the first channel on a TV: focus the top bar. */
+  top(): void;
+  /** Back to top: the guide goes back to its first channel at now; focus stays where it is. */
+  rewind(): void;
 }
 export const GuideRegion = createContext<'header' | 'toolbar'>('header');
 export function GuideToolbar({ children }: { children: ReactNode }) { return <GuideRegion.Provider value="toolbar">{children}</GuideRegion.Provider>; }
@@ -22,12 +29,30 @@ export const GuideNavigation = createContext<Navigation | null>(null);
 export const useGuideNavigation = () => useContext(GuideNavigation);
 
 /** Native and DOM targets share one pending destination. Mounting it fulfils the request. */
-export function GuideFocusScope({ children, enter, onHold, leave, active = true }: { children: ReactNode; enter(): void; leave(): void; onHold(holding: boolean): void; active?: boolean }) {
+export function GuideFocusScope({ children, enter, onHold, leave, escape, top, rewind, active = true }: { children: ReactNode; enter(): void; leave(): void; onHold(holding: boolean): void; escape(): void; top(): void; rewind(): void; active?: boolean }) {
   const nativeGuide = useLiveContext()?.GuideSurface !== undefined;
   const enabled = useRef(active); enabled.current = active;
   const latest = useRef(enter); latest.current = enter;
   const holding = useRef(onHold); holding.current = onHold;
   const leaving = useRef(leave); leaving.current = leave;
+  const escaping = useRef({ escape, top, rewind }); escaping.current = { escape, top, rewind };
+  // On a TV, Back (Menu) is the guide's while the grid has focus: the first press goes to the top
+  // bar; once focus is there the key is the system's again, so a second press backs out as usual.
+  const releaseBack = useRef<(() => void) | undefined>(undefined);
+  const holdGridBack = (on: boolean) => {
+    if (on && !releaseBack.current && Platform.isTV) {
+      releaseBack.current = holdBack(() => {
+        holdGridBack(false);
+        escaping.current.escape();
+        return true;
+      });
+    } else if (!on && releaseBack.current) {
+      const release = releaseBack.current;
+      releaseBack.current = undefined;
+      release();
+    }
+  };
+  useEffect(() => () => holdGridBack(false), []);
   const androidDown = useRef(new Set<string>());
   const repeating = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const stopRepeat = () => { clearInterval(repeating.current); repeating.current = undefined; holding.current(false); };
@@ -52,8 +77,9 @@ export function GuideFocusScope({ children, enter, onHold, leave, active = true 
         const previous = gridOwned, previousId = current || blurredFrom;
         blurredFrom = '';
         current = id; gridOwned = Boolean(entries.get(id)?.key || entries.get(id)?.nativeGrid);
+        holdGridBack(gridOwned);
         if (!gridOwned) { if (entries.get(id)?.toolbar) toolbar = id; if (previous || previousId && previousId !== id) { pending = ''; leaving.current(); } } },
-      blurred(id) { if (current === id) { blurredFrom = id; current = ''; stopRepeat(); if (Platform.OS !== 'web') { gridOwned = false; pending = ''; leaving.current(); } } },
+      blurred(id) { if (current === id) { blurredFrom = id; current = ''; stopRepeat(); if (Platform.OS !== 'web') { gridOwned = false; holdGridBack(false); pending = ''; leaving.current(); } } },
       request(id) {
         pending = '';
         // The TV anchor already owns native focus while logical programme focus moves.
@@ -66,8 +92,11 @@ export function GuideFocusScope({ children, enter, onHold, leave, active = true 
       toolbar() { navigation.request(entries.has(toolbar) ? toolbar : 'guide-toolbar-now'); },
       enter() { latest.current(); },
       inGrid() { return gridOwned; },
+      escape() { stopRepeat(); escaping.current.escape(); },
+      top() { stopRepeat(); escaping.current.top(); },
+      rewind() { stopRepeat(); escaping.current.rewind(); },
     };
-    return { navigation, deactivate() { current = ''; blurredFrom = ''; pending = ''; gridOwned = false; leaving.current(); }, externalFocus(target: EventTarget | null) {
+    return { navigation, deactivate() { current = ''; blurredFrom = ''; pending = ''; gridOwned = false; holdGridBack(false); leaving.current(); }, externalFocus(target: EventTarget | null) {
       if (target === document.body || [...entries.values()].some(entry => entry.target === target)) return;
       if (gridOwned || current || blurredFrom) { pending = ''; leaving.current(); } current = ''; blurredFrom = ''; gridOwned = false;
     }, key(key: string) {

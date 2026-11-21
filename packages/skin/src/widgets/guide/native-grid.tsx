@@ -19,7 +19,8 @@ export interface NativeGuideProps {
   diagnostics: boolean;
   onWindow(event: { nativeEvent: { first: number; last: number; from: number; to: number } }): void;
   onProgramme(event: { nativeEvent: { channel: string; minute: number; press: boolean } }): void;
-  onExit(event: { nativeEvent: { toolbar: boolean } }): void;
+  /** Focus left the grid: for the toolbar, or (`navigation`) up from the first channel to the top bar. */
+  onExit(event: { nativeEvent: { toolbar: boolean; navigation?: boolean } }): void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -68,6 +69,17 @@ export function NativeGuideGrid(props: GridProps & { Surface: ComponentType<Nati
     jumpNow() { waiting.current = { kind: 'now', offset: 0 }; return applyTime(); },
     shift(hours) { if (waiting.current) { waiting.current.offset += hours * 60; applyTime(); } else { time.current = Math.max(0, Math.min(model.minutes - 1, viewport.from + hours * 60 + 60)); enter(undefined, time.current, false); } return 0; },
     jumpDay(day) { waiting.current = { kind: 'day', day, offset: 0 }; return applyTime(); },
+    toTop() {
+      const channel = rows[0];
+      if (!channel) return;
+      clearTimeout(selectionTimer.current); selectionTimer.current = undefined; pendingSelection.current = null;
+      const now = props.liveView().guide?.nowMinute ?? model.nowMinute;
+      // Not today yet (the day is still loading): the first channel now, once now is known.
+      latest.current.onSelect(channel, now >= 0 ? programmeOverlapping(channel, now) ?? null : null);
+      if (now < 0) { waiting.current = { kind: 'now', offset: 0 }; return; }
+      waiting.current = null; time.current = now;
+      enter(channel.id, now, false);
+    },
   }));
   const previousLineup = useRef<ReturnType<typeof nativeGuideLineup>>([]);
   const channels = useMemo(() => {
@@ -98,7 +110,9 @@ export function NativeGuideGrid(props: GridProps & { Surface: ComponentType<Nati
     if (e.press) { if (programme) p.onPress(channel, programme); else p.onWatch(channel.id); }
   }, [navigation, flushSelection]);
   const onExit = useCallback(({ nativeEvent: e }: Parameters<NativeGuideProps['onExit']>[0]) => {
-    flushSelection(); navigation?.blurred('guide-native-grid'); if (e.toolbar) navigation?.toolbar();
+    flushSelection();
+    if (e.navigation) { navigation?.top(); return; }
+    navigation?.blurred('guide-native-grid'); if (e.toolbar) navigation?.toolbar();
   }, [navigation, flushSelection]);
   return <Surface channels={channels} diagnostics={process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1'} style={[surfaceStyle, { backgroundColor: look.page }]} data={data} command={command} active={props.active}
     onWindow={onWindow} onProgramme={onProgramme} onExit={onExit} />;

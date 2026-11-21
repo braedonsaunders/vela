@@ -80,6 +80,20 @@ export function trackButton(target: Focusable | null, does: string) {
   };
 }
 
+/** Move focus to a drawn press button that does one of `does` (`action:arg`), trying them in order:
+ * how a page hands focus to the shell's destination for itself (the guide's Back to the top bar).
+ * False when none is drawn. */
+export function focusPressDoing(does: readonly string[]): boolean {
+  for (const wanted of does) {
+    for (const [target, doing] of mounted) {
+      if (doing !== wanted) continue;
+      focusOn(target);
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Remember the button pressed last: a route it opens returns focus to it when it closes. */
 export function notePress(button: Focusable | null, does: string): void {
   lastPressed = button ? { target: button, does } : null;

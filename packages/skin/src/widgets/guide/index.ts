@@ -1,5 +1,6 @@
 // Live TV: the guide, the preview tile, live watch's controls and the live home vocabulary.
 export { liveAction } from './actions';
+export { requestGuideTop } from './top';
 export { LiveController, type LiveOptions, type LiveView, type Surface } from './controller';
 export { Guide, GuideWidget, type GuideFocus } from './guide';
 export { LiveProvider, useLiveContext, useLiveSurface, useLiveView } from './live';

@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import type { Vela as Store } from '@vela/core';
 import { focusElement, page, type SkinHost } from '@vela/skin';
-import { liveAction, type LiveController } from '@vela/skin/src/widgets/guide';
+import { liveAction, requestGuideTop, type LiveController } from '@vela/skin/src/widgets/guide';
 import type { Action } from '../../../packages/protocol/skin';
 import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra, switchSection } from './browse/open';
 import type { ViewState } from './view-state';
@@ -155,9 +155,12 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
         return loadMore('library', arg);
       case 'live':
         actions.resetFlags();
+        // The Live TV destination pressed again over the guide takes the guide back to the top.
+        if (place.route === 'live' && requestGuideTop()) return;
         return switchSection(options => router.push('/live', options));
       case 'library':
         actions.resetFlags();
+        if (place.route === 'live' && store.getState().libraries.value?.find(d => d.id === arg)?.kind === 'live' && requestGuideTop()) return;
         return openLibrary(store, arg, place.route);
       case 'playExtra':
         return playExtra(arg);

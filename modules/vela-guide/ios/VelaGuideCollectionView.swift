@@ -484,6 +484,19 @@ final class VelaGuideCollectionView: ExpoView, UICollectionViewDataSource, UICol
     func indexPathForPreferredFocusedView(in collectionView: UICollectionView) -> IndexPath? { target }
     private func canFocus(_ p: IndexPath) -> Bool { enabled && layout.isAnchor(p) }
     func collectionView(_ collectionView: UICollectionView, canFocusItemAt indexPath: IndexPath) -> Bool { canFocus(indexPath) }
+    // Up from the first channel goes to the top bar, as the Apple TV app's guide does, rather than
+    // to whatever the focus engine finds above the grid: JavaScript moves focus to the bar's
+    // destination, and this update is held so focus does not stop on the way.
+    func collectionView(_ collectionView: UICollectionView, shouldUpdateFocusIn context: UICollectionViewFocusUpdateContext) -> Bool {
+        #if os(tvOS)
+        if context.focusHeading.contains(.up), context.nextFocusedIndexPath == nil,
+           let previous = context.previouslyFocusedIndexPath, previous.section == 0 {
+            onExit(["toolbar": false, "navigation": true])
+            return false
+        }
+        #endif
+        return true
+    }
     func collectionView(_ collectionView: UICollectionView, didUpdateFocusIn context: UICollectionViewFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         if let p = context.nextFocusedIndexPath {
             focusMinute = CGFloat(p.item)

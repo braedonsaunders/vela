@@ -120,6 +120,7 @@ export function DayChips({
   return (
     <ScrollView
       horizontal
+      scrollsToTop={false}
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0, flexShrink: 1 }}
       contentContainerStyle={{ gap: 6, alignItems: 'center', paddingHorizontal: side }}
@@ -367,6 +368,7 @@ export function GuideTabs({
   return (
     <ScrollView
       horizontal
+      scrollsToTop={false}
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0, flexShrink: 0, marginBottom: small ? 8 : 10 }}
       contentContainerStyle={{

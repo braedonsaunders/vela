@@ -22,6 +22,7 @@ import { useGuideLook, type GuideLook } from './look';
 import { NowList } from './now-list';
 import { GuideStatus } from './status';
 import { tvPixelScale } from '../../tv-pixel-scale';
+import { focusShellNavigation, useGuideTopRequest } from './top';
 
 /** A search hand-off: open on this channel (and programme) at this minute of the shown day. */
 export interface GuideFocus {
@@ -102,6 +103,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const [expanded, setExpanded] = useState(false);
   const [holding, setHolding] = useState(false);
   const grid = useRef<GridHandle>(null);
+  const nowList = useRef<{ toTop(): void }>(null);
   const visible = active && !view.tile.fullscreen;
   const wasVisible = useRef(visible);
   useEffect(() => {
@@ -159,6 +161,16 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
     controller.chooseDay(0);
     grid.current?.jumpNow();
   };
+  // Back to the first channel at now; Back, Menu or Escape also hands focus to the top bar.
+  const liveLibraries = (env.libraries ?? []).filter(library => library.kind === 'live').map(library => library.id);
+  const rewind = () => {
+    if (controller.view().day !== 0) controller.chooseDay(0);
+    grid.current?.toTop();
+    nowList.current?.toTop();
+  };
+  const toNavigation = () => { focusShellNavigation(liveLibraries); };
+  const escape = () => { toNavigation(); rewind(); };
+  useGuideTopRequest(visible, rewind);
   const shift = (hours: number) => {
     const runOff = grid.current?.shift(hours) ?? 0;
     if (runOff !== 0) pickDay(model.day + runOff);
@@ -193,7 +205,8 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   if (handOffOffset === undefined) return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
 
   return (
-    <GuideFocusScope active={visible} enter={() => grid.current?.focusGrid()} leave={() => grid.current?.leaveGrid()} onHold={setHolding}>
+    <GuideFocusScope active={visible} enter={() => grid.current?.focusGrid()} leave={() => grid.current?.leaveGrid()} onHold={setHolding}
+      escape={escape} top={toNavigation} rewind={rewind}>
     <View style={page}>
       {(showGrid || cinematic) && !expanded ? (
         <View style={{ height: headerHeight, flexShrink: 0, overflow: 'hidden' }}>
@@ -332,6 +345,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
         landing={landing}
         gridKey={gridKey.current}
         grid={grid}
+        nowList={nowList}
         onSelect={select}
         onPress={press}
         onWatch={watch}
@@ -358,6 +372,7 @@ interface BodyProps {
   landing: { minute: number; channelId: string };
   gridKey: string;
   grid: React.RefObject<GridHandle | null>;
+  nowList: React.RefObject<{ toTop(): void } | null>;
   onSelect(channel: GuideChannel, programme: GuideProgramme | null): void;
   onPress(channel: GuideChannel, programme: GuideProgramme): void;
   onWatch(channelId: string): void;
@@ -373,7 +388,7 @@ function GuideBody(props: BodyProps) {
     return (
       <GuideStatus look={look} text={msg('live.noMatches')} action={msg('live.allChannels')} onRetry={props.onAll} />
     );
-  if (!props.showGrid) return <NowList look={look} rows={rows} onWatch={props.onWatch} onVisible={props.onVisible} />;
+  if (!props.showGrid) return <NowList handle={props.nowList} look={look} rows={rows} onWatch={props.onWatch} onVisible={props.onVisible} />;
   return (
     <View
       style={{

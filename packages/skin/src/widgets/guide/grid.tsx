@@ -6,7 +6,8 @@
 import { NativeGuideGrid } from './native-grid';
 import { useLiveContext } from './live';
 import { useGuideNavigation } from './focus';
-import { bandOffset, ProgrammeSlots, programmeMinute, gapStep, resolveTimeTarget, rowWindow, prefetchRows, type TimeTarget } from './navigation';
+import { bandOffset, deepInGuide, guideEscapeKey, ProgrammeSlots, programmeMinute, gapStep, resolveTimeTarget, rowWindow, prefetchRows, type TimeTarget } from './navigation';
+import { BackToTop } from './back-to-top';
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { FlatList, Platform, Text, TVFocusGuideView, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { runOnJS, scrollTo as scrollNative, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -36,6 +37,8 @@ export interface GridHandle {
   /** Step the time by hours; the day before or after when that runs off this one. */
   shift(hours: number): -1 | 0 | 1;
   jumpDay(day: number): boolean;
+  /** Back to the first channel at now (today), selecting it without taking focus. */
+  toTop(): void;
 }
 
 export interface GridProps {
@@ -251,6 +254,21 @@ function SharedGuideGrid(props: GridProps) {
       waitingTime.current = { kind: 'now', offset: 0 };
       return applyTimeTarget();
     },
+    toTop() {
+      pending.current = null; deferredEnter.current = false; deferredChannel.current = undefined; initialFocus.current = true;
+      const channel = rows[0];
+      if (!channel) return;
+      position.current.y = 0;
+      setRowBase(0);
+      if (Platform.isTV) targetY.value = still ? 0 : withSpring(0, { damping: 30, stiffness: 240, overshootClamping: true });
+      else { setPaintRow(0); list.current?.scrollToOffset({ offset: 0, animated: !still }); }
+      // Entering again lands at now on the first channel; its details show meanwhile.
+      waitingTime.current = { kind: 'now', offset: 0 };
+      applyTimeTarget();
+      const now = props.liveView().guide?.nowMinute ?? model.nowMinute;
+      if (now >= 0) focusMinute.current = now;
+      props.onSelect(channel, now >= 0 ? programmeOverlapping(channel, now) ?? null : null);
+    },
     shift(hours) {
       pending.current = null; deferredEnter.current = false; initialFocus.current = true;
       if (waitingTime.current) { waitingTime.current.offset += hours * 60; applyTimeTarget(); return 0; }
@@ -309,11 +327,13 @@ function SharedGuideGrid(props: GridProps) {
       reveal(index, next);
       return;
     }
+    if (Platform.OS === 'web' && guideEscapeKey(key)) { prevent(); navigation?.escape(); return; }
     const steps: Record<string, number> = { ArrowUp: -1, ArrowDown: 1, PageUp: -6, PageDown: 6 };
     const step = steps[key];
     if (step === undefined) return;
     prevent();
-    if (index === 0 && step < 0) { navigation?.toolbar(); return; }
+    // Up from the first channel: a TV goes on to the top bar, a keyboard to the guide's toolbar.
+    if (index === 0 && step < 0) { if (Platform.isTV) navigation?.top(); else navigation?.toolbar(); return; }
     const target = Math.max(0, Math.min(rows.length - 1, index + step));
     const minute = focusMinute.current >= 0 ? focusMinute.current : Math.max(p?.at ?? landing.minute, currentX() / scale);
     focusMinute.current = minute;
@@ -476,6 +496,9 @@ function SharedGuideGrid(props: GridProps) {
             ref={timeline}
             horizontal
             scrollEnabled={!Platform.isTV}
+            // iOS scrolls to the top on a status-bar tap only when one scroller on screen asks to:
+            // the channel list, not the sideways timeline.
+            scrollsToTop={false}
             onScroll={onTimeline}
             onContentSizeChange={Platform.isTV ? width => setCanvas(old => old.width === width ? old : { ...old, width }) : undefined}
             scrollEventThrottle={16}
@@ -518,6 +541,13 @@ function SharedGuideGrid(props: GridProps) {
           </Animated.ScrollView>
         </View>
       ) : null}
+      {!Platform.isTV && body.width > 0 && deepInGuide(rowBase * row, listHeight)
+        ? <BackToTop look={look} onPress={() => {
+          navigation?.rewind();
+          // The button leaves with the depth: keyboard focus goes on to the first channel at now.
+          const first = rows[0]?.id;
+          if (Platform.OS === 'web' && first) requestAnimationFrame(() => enterGrid(first));
+        }} /> : null}
       {/* The native anchor lives outside the scrollers: tvOS must not auto-scroll a recycled
           cell into view. Logical programme focus and its ring move only after data is ready. */}
       {Platform.isTV && body.width > 0 ? <TVFocusGuideView trapFocusUp trapFocusDown trapFocusLeft trapFocusRight
