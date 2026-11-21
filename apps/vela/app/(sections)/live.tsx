@@ -4,8 +4,8 @@
 // the guide on that programme's day, channel and time.
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo } from 'react';
-import { View } from 'react-native';
-import { guideFocus } from '@vela/core';
+import { Platform, Text, View, type TextStyle } from 'react-native';
+import { guideFocus, msg } from '@vela/core';
 import { Guide, useLiveContext, useLiveSurface, useLiveView, type GuideFocus } from '@vela/skin/src/widgets/guide';
 import { useVela } from '../../src/vela';
 import { useSectionFocus } from '../../src/section-focus';
@@ -18,8 +18,11 @@ export default function Live() {
   useLiveSurface('guide', active);
   const focus = useHandOff(ch, prog, at);
   if (!host) return <View style={{ flex: 1 }} />;
-  const content = <Guide focus={focus} active={active} />;
-  return content;
+  // The page's own heading: the guide's programme titles are the headings below it.
+  return <View style={{ flex: 1 }}>
+    {Platform.OS === 'web' && <Text accessibilityRole="header" {...{ 'aria-level': 1 }} style={VISUALLY_HIDDEN}>{msg('ui.live')}</Text>}
+    <Guide focus={focus} active={active} />
+  </View>;
 }
 
 /** A hand-off's channel and minute, once its day is the one the guide shows. */
@@ -34,3 +37,5 @@ function useHandOff(channelId: string, programmeId: string, at: string): GuideFo
   if (place && (place.day < 0 || place.day !== day)) return undefined;
   return { channelId, programmeId, minute: place ? place.minute : -1 };
 }
+
+const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' } as TextStyle;

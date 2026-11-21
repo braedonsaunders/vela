@@ -15,8 +15,11 @@ test('cast links require both a person ID and filmography capability', () => {
   expect(detailModel(detail, undefined, 2560, false, false, true).castPeople.map(person => !!person.canOpen)).toEqual([true, false]);
 });
 
-test('display ratings omit wire region prefixes and credits pair each role with its person', () => {
-  expect(card({ ...title, rating: 'gb/12A' })).toMatchObject({ rating: '12A' });
+test('display ratings drop the viewer\'s own region prefix and credits pair each role with its person', () => {
+  const inRegion = (locale: string) => JSON.stringify({ locale, resolvedLocale: 'en', formatLocale: locale, timeZone: 'UTC', utcOffset: 0 });
+  withLocale(inRegion('en-GB'), () => expect(card({ ...title, rating: 'gb/12A' })).toMatchObject({ rating: '12A' }));
+  // A certificate from elsewhere says where it is from (#32).
+  withLocale(inRegion('en-US'), () => expect(card({ ...title, rating: 'gb/12A' })).toMatchObject({ rating: 'UK 12A' }));
   expect(card({ ...title, rating: 'ca/14A' }).facts).toContain('14A');
   expect(card({ ...title, rating: 'NR' }).rating).toBe('NR');
   const model = detailModel({ title, extras: [], chapters: [], cast: [], crew: [

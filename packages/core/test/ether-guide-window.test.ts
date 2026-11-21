@@ -35,3 +35,11 @@ test('bootstrap advertises bulk reads and different POST bodies never share URL-
   adapter.resetOptionalCapabilities();
   expect(await adapter.guideWindow(query)).toBeNull();
 });
+
+test('capability reads made together while a page loads share one request', async () => {
+  const seen = routeFetch({ 'GET /vela/v0/capabilities': {} });
+  const adapter = new EtherAdapter('https://ether.example', new FakeCredentials(), 'web');
+  await Promise.all([adapter.describe(), adapter.describe()]);
+  await adapter.describe();
+  expect(seen).toHaveLength(1);
+});

@@ -40,16 +40,19 @@ interface LineProps {
   /** Lines before the text ends in an ellipsis; 0 lets it wrap. */
   lines?: number;
   tabular?: boolean;
+  /** A heading at this level (the programme on show), for screen readers. */
+  heading?: number;
   style?: StyleProp<TextStyle>;
   children: ReactNode;
 }
 
 /** Text in the document's body face. */
-export function Line({ look, size, weight = 400, color, lines = 1, tabular, style, children }: LineProps) {
+export function Line({ look, size, weight = 400, color, lines = 1, tabular, heading, style, children }: LineProps) {
   const face = look.font(weight);
   const variant: TextStyle = tabular ? { fontVariant: ['tabular-nums'] } : {};
   return (
     <Text
+      {...(heading ? { accessibilityRole: 'header' as const, ...(Platform.OS === 'web' ? { 'aria-level': heading } : {}) } : {})}
       numberOfLines={lines || undefined}
       style={[face, { fontSize: Platform.isTV ? size * 1.3 : size, color: color ?? look.ink }, variant, style]}
     >

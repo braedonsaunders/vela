@@ -12,6 +12,8 @@ import type { VelaState } from './index';
 
 const LOCAL: V.Appearance = { revision: 0, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: [] };
 const MAX_FOLLOW_FAILURES = 5;
+/** How long a finished read still answers callers that ask again while the app starts. */
+const APPEARANCE_REUSE_MS = 3000;
 
 /** An unchanged appearance keeps its identity, so a refresh (returning to the app, coming back
  * online) does not re-resolve the skin and replay the page's entrance. */
@@ -58,8 +60,22 @@ export class Appearance {
     return this.appOrigin ?? this.origin;
   }
 
-  /** Read the selected server's appearance (or the local one). */
-  async load(): Promise<void> {
+  private reading?: { key: string; at: number; done: boolean; promise: Promise<void> };
+
+  /** Read the selected server's appearance (or the local one). Callers that ask at once while the
+   * app starts (start, the host, a session reset) share one read; a later call reads again. */
+  load(): Promise<void> {
+    const key = `${this.session.epoch}|${this.origin}`;
+    const now = Date.now();
+    const last = this.reading;
+    if (last && last.key === key && (!last.done || now - last.at < APPEARANCE_REUSE_MS)) return last.promise;
+    const entry = { key, at: now, done: false, promise: Promise.resolve() };
+    entry.promise = this.read().finally(() => { entry.done = true; entry.at = Date.now(); });
+    this.reading = entry;
+    return entry.promise;
+  }
+
+  private async read(): Promise<void> {
     const epoch = this.session.epoch;
     this.box.update('appearance', refreshing);
     try {

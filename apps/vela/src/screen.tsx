@@ -106,7 +106,8 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
     <ScreenActive.Provider value={isCurrent}>
       {/* On TV a covered screen (home under a title page, a section behind another) takes no focus. */}
       <FocusBoundary active={isCurrent} entered={false} style={{ flex: 1 }}>
-        <SkipToContent target={mainId} />
+        {/* A shared section shell draws its own first, before its navigation. */}
+        {!sharedShell && <SkipToContent target={mainId} />}
         {shell ? <SkinRoot host={{ ...host, children: main }} node={shell} /> : main}
       </FocusBoundary>
     </ScreenActive.Provider>

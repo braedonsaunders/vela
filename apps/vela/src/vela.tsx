@@ -45,6 +45,7 @@ import { createHostStateSelector } from './host-state';
 import { useViewState } from './view-state';
 import { actionHref, webHref } from './action-href';
 import { useSearchAddress } from './use-search-address';
+import { pageTitle } from './page-title';
 
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
@@ -196,9 +197,6 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const session = `${state.auth.phase === 'signed-in'}|${origin}`;
   useEffect(() => resetFlags(), [session, resetFlags]);
 
-  useEffect(() => {
-    if (Platform.OS === 'web') document.title = state.appearance.value?.branding?.name || 'Vela';
-  }, [state.appearance.value?.branding?.name]);
   const appearance = state.appearance.value;
   const [assetData, setAssetData] = useState<Record<string, string>>({});
   const [installed, setInstalled] = useState<SkinDocument[]>([]);
@@ -409,6 +407,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const overlayHost = state.auth.plexSwitching ? host('home', '') : null;
   return (
     <VelaContext.Provider value={value}>
+      {Platform.OS === 'web' && <DocumentTitle pathname={pathname} />}
       <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error, state.home.slow)}
         brandingReady={state.appearance.load === 'ready' || state.appearance.load === 'failed'} branding={appearance?.branding}>
         <Previews store={store} state={state} onHome={pathname === '/' && !pickerOpen} heroIndex={view.heroIndex} still={view.still} searchFocused={view.flags.includes('search-focused')}>
@@ -423,4 +422,12 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       </LaunchGate>
     </VelaContext.Provider>
   );
+}
+
+/** Names the web page after what is on show and the server, route by route. */
+function DocumentTitle({ pathname }: { pathname: string }) {
+  const title = useVelaState(state => pageTitle(pathname, typeof location === 'undefined' ? '' : location.search, state,
+    state.appearance.value?.branding?.name || state.servers.list.find(server => server.selected)?.name || 'Vela'));
+  useEffect(() => { document.title = title; }, [title]);
+  return null;
 }

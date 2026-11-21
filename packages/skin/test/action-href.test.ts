@@ -13,6 +13,12 @@ describe('document action links', () => {
     expect(actionHref({ route: 'home', entry: 'home' }, 'select', 'favourites|playlist')).toBe('/collection/favourites?playlist=1');
   });
 
+  test('Resume and Restart have different addresses', () => {
+    expect(actionHref({ route: 'home', entry: 'home' }, 'play', 'movie-1')).toBe('/watch/movie-1');
+    expect(actionHref({ route: 'home', entry: 'home' }, 'play', 'movie-1|||0')).toBe('/watch/movie-1?positionSeconds=0');
+    expect(actionHref({ route: 'home', entry: 'home' }, 'play', 'news-1|channel')).toBe('/watch/news-1?kind=channel');
+  });
+
   test('shell destinations and people have shareable URLs', () => {
     expect(actionHref({ route: 'home', entry: 'home' }, 'library', 'kids & family')).toBe('/library/kids%20%26%20family');
     expect(actionHref({ route: 'title', entry: 'movie-1', library: 'films' }, 'person', 'Ada Lovelace'))

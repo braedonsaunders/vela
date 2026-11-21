@@ -210,6 +210,7 @@ function ProgrammeCopy({
       </View>
       <Line
         look={look}
+        heading={2}
         size={compact ? 20 : spacious ? 32 : small ? 24 : 26}
         style={[
           look.display(),
@@ -281,7 +282,7 @@ function SpaciousProgrammeCopy({ look, channel, programme, onWatch }: {
         {programme.airing ? <LiveBadge look={look} /> : null}
         <Eyebrow look={look}>{`${channel.number} · ${channel.name}`}</Eyebrow>
       </View>
-      <Line look={look} size={44} lines={1} style={look.display()}>{programme.name}</Line>
+      <Line look={look} size={44} lines={1} heading={2} style={look.display()}>{programme.name}</Line>
       <View style={{ gap: 8, maxWidth: 760 }}>
         <Line look={look} size={16} weight={600} tabular>
           {msg('ui.startEnd', { start: programme.startLabel, end: programme.endLabel })}
@@ -319,7 +320,7 @@ function ChannelCopy({
   return (
     <>
       <Eyebrow look={look}>{channel.number}</Eyebrow>
-      <Line look={look} size={small ? 24 : 26} style={look.display()}>
+      <Line look={look} size={small ? 24 : 26} heading={2} style={look.display()}>
         {channel.name}
       </Line>
       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>

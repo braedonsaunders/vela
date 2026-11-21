@@ -94,7 +94,7 @@ function RailText({ look, channel: original }: { look: GuideLook; channel: Guide
   return (
     <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
       <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-        <Line look={look} size={14} weight={620} style={{ flexShrink: 1 }}>
+        <Line look={look} size={14} weight={620} lines={2} style={{ flexShrink: 1 }}>
           {channel.name}
         </Line>
         {channel.favorite ? (
@@ -103,15 +103,12 @@ function RailText({ look, channel: original }: { look: GuideLook; channel: Guide
           </View>
         ) : null}
       </View>
+      {/* The airing programme's own cell says how long is left; the rail keeps the channel's
+          name whole and shows only how far along it is. */}
       {channel.nowId ? (
-        <>
-          <View style={{ marginTop: 3 }}>
-            <Progress look={look} percent={channel.nowProgress} height={2} />
-          </View>
-          <Line look={look} size={12} color={look.inkQuiet} tabular>
-            {channel.nowRemaining}
-          </Line>
-        </>
+        <View style={{ marginTop: 3 }}>
+          <Progress look={look} percent={channel.nowProgress} height={2} />
+        </View>
       ) : (
         <Line look={look} size={12} color={look.inkQuiet}>
           {!channel.listingsLoaded || channel.listed ? channel.group : msg('live.noListings')}

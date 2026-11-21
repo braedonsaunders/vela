@@ -78,7 +78,9 @@ export interface ThemeMusic { url: string; expiresAt: Timestamp; durationSeconds
   /** Measured integrated loudness in LUFS; omitted when unmeasured. */ loudness?: number }
 export interface Title {
   id: ID; kind: TitleKind; name: string; summary: string; year?: number; /** Original air/release date, YYYY-MM-DD. */ airDate?: string; dateDisplay?: 'date'; genres: string[];
-  durationSeconds?: number; rating?: string; ratings?: TitleRating[]; artwork: ArtworkRef[]; watch?: WatchState; themeMusic?: ThemeMusic;
+  durationSeconds?: number; rating?: string;
+  /** The country `rating` is from (ISO 3166-1 alpha-2), when the server knows it; optional. */ ratingCountry?: string;
+  ratings?: TitleRating[]; artwork: ArtworkRef[]; watch?: WatchState; themeMusic?: ThemeMusic;
   showId?: ID; showName?: string; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
 }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;

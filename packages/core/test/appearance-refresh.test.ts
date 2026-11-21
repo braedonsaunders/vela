@@ -21,3 +21,23 @@ test('a changed or first appearance replaces the model', () => {
   expect(settled(model(3), next)).toBe(next);
   expect(settled(undefined, next)).toBe(next);
 });
+
+test('appearance loads asked for together while the app starts share one read', async () => {
+  const { Appearance } = await import('../src/store/appearance');
+  const { StateBox } = await import('../src/store/state');
+  let reads = 0;
+  const adapter = { skinDocument: async () => ({}), appearance: async () => { reads++; return { revision: 1, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: [] }; } };
+  const session = { epoch: 0, onReset() {}, hasServer: () => true, selected: () => ({ adapter, record: { origin: 'https://server.test' } }) };
+  const box = new StateBox({ appearance: { load: 'idle' } } as never);
+  const appearance = new Appearance(box as never, session as never, 16, 'https://app.test');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch;
+  try {
+    await Promise.all([appearance.load(), appearance.load(), appearance.load()]);
+    await appearance.load();
+    expect(reads).toBe(1);
+    session.epoch++;
+    await appearance.load();
+    expect(reads).toBe(2);
+  } finally { globalThis.fetch = realFetch; }
+});

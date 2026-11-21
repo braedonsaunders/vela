@@ -16,7 +16,7 @@ export function rowHeight(small: boolean, tv = false): number {
 }
 
 export function railWidth(small: boolean, tv = false): number {
-  return tv ? 320 : small ? 84 : 264;
+  return tv ? 320 : small ? 84 : 288;
 }
 
 /** The page gutter: 16 on phones, else 4% of the width, at least 28. */

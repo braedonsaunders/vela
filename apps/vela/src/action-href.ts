@@ -1,8 +1,10 @@
 import type { Action } from '../../../packages/protocol/skin';
 import type { Place } from './actions';
+import { playParams } from './play-action';
 
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
 const COLLECTION_KINDS = ['collection', 'directory', 'playlist'];
+const PLAY_KINDS = ['channel', 'extra', 'library-live'];
 
 function path(pathname: string, params: Record<string, string | undefined> = {}): string {
   const query = new URLSearchParams();
@@ -21,8 +23,12 @@ export function actionHref(place: Place, action: Action, arg: string): string | 
     case 'person': return place.entry && arg
       ? path('/person', { title: place.entry, name: arg, library: place.library }) : undefined;
     case 'play': {
-      const id = arg.split('|')[0];
-      return id ? path(`/watch/${encodeURIComponent(id)}`, { kind: arg.split('|')[1] }) : undefined;
+      const [id = '', second = ''] = arg.split('|');
+      if (!id) return undefined;
+      if (PLAY_KINDS.includes(second)) return path(`/watch/${encodeURIComponent(id)}`, { kind: second });
+      // The same parameters the press navigates with: Restart (`|||0`) is its own address.
+      const { id: _, ...params } = playParams(arg);
+      return path(`/watch/${encodeURIComponent(id)}`, params);
     }
     case 'select': {
       const [id = '', kind = '', , showId = ''] = arg.split('|');

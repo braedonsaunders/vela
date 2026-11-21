@@ -36,6 +36,8 @@ const PUBLIC = { auth: false };
 const PUBLIC_CACHED = { auth: false, cacheable: true };
 
 /** Ether speaks the v0 protocol natively, so it offers every capability Vela knows. */
+const DESCRIBE_REUSE_MS = 5000;
+
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions {
@@ -204,8 +206,18 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   // The server and its look
 
+  /** Concurrent and back-to-back reads (sign-in, the server list and the catalogue all ask while a
+   * page loads) share one request; a read a few seconds later asks the server again. */
+  private description?: { at: number; answer: Promise<V.ServerCapabilities> };
   async describe(): Promise<ServerDescription> {
-    const answer = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, PUBLIC_CACHED);
+    const now = Date.now();
+    if (!this.description || now - this.description.at > DESCRIBE_REUSE_MS) {
+      const answer = this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, PUBLIC_CACHED);
+      const entry = { at: now, answer };
+      this.description = entry;
+      answer.catch(() => { if (this.description === entry) this.description = undefined; });
+    }
+    const answer = await this.description.answer;
     this.guideWindowLimits = answer.liveGuideWindow;
     return answer;
   }

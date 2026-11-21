@@ -49,7 +49,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const position = title.watch?.positionSeconds ?? 0;
   const durationLabel = duration ? minute(Math.round(duration / 60)) : '';
   const yearLabel = title.year ? year(title.year) : '';
-  const rating = displayRating(title.rating);
+  const rating = displayRating(title.rating, title.ratingCountry);
   return withDateDisplay({
     id: title.id,
     kind: title.kind,
@@ -86,23 +86,45 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     progressLabel: duration ? percent(Math.min(1, Math.max(0, position / duration))) : '',
     seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '',
     episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
-    facts: [title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, rating, durationLabel].filter(Boolean).join(' · '),
+    facts: factsLine([title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, rating, durationLabel]),
     ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode'),
     receipt,
   }, title.dateDisplay);
 }
 
 /** Ether may qualify a certification with its region (`gb/12A`); cards show the mark itself. */
-export function displayRating(value: string | undefined): string {
-  const rating = value?.trim() ?? '';
-  return /^[a-z]{2,3}\//i.test(rating) ? rating.slice(rating.indexOf('/') + 1) : rating;
+/** The viewer's region from the locale ('en-GB' → 'GB'; a bare language has none). */
+function viewerRegion(): string {
+  const locale = localeContext().locale;
+  return /^[a-z]{2,3}[-_](?:[a-z]{4}[-_])?([a-z]{2})\b/i.exec(locale)?.[1]?.toUpperCase() ?? '';
+}
+
+/** A certificate as the viewer reads it. One from another country than the viewer's says which
+ * ("GB 15" beside "PG-13"), so mixed libraries are not a puzzle; one from the viewer's own
+ * country, or of unknown origin, is the certificate alone. Plex writes the country as a prefix
+ * ("gb/15"); Ether may name it in `ratingCountry`. */
+export function displayRating(value: string | undefined, country?: string, region = viewerRegion()): string {
+  let rating = value?.trim() ?? '';
+  let from = country?.trim().toUpperCase() ?? '';
+  const prefixed = /^([a-z]{2})\/(.+)$/i.exec(rating);
+  if (prefixed) { from = prefixed[1]!.toUpperCase(); rating = prefixed[2]!.trim(); }
+  else if (/^[a-z]{3}\//i.test(rating)) rating = rating.slice(rating.indexOf('/') + 1);
+  if (!rating || !/^[A-Z]{2}$/.test(from) || from === region) return rating;
+  return `${from === 'GB' ? 'UK' : from} ${rating}`;
+}
+
+/** A card's facts ("2012 · PG · 90 min"): a narrow card wraps between facts, never inside the
+ * certificate or the running time, so "min" is not left alone on a line. */
+export function factsLine([date, rating, length]: [string, string, string]): string {
+  const whole = (part: string) => part.replace(/ /g, '\u00a0');
+  return [date, whole(rating), whole(length)].filter(Boolean).join(' · ');
 }
 
 /** One shared library date rule for every card surface. Invalid/missing full dates fall back to year. */
 export function withDateDisplay(value: Card, display: 'year' | 'date' | undefined): Card {
   if (display !== 'date') return value;
   const label = /^\d{4}-\d{2}-\d{2}$/.test(value.airDate) ? value.airDate : value.year > 0 ? year(value.year) : '';
-  return { ...value, yearLabel: label, facts: [label, value.rating, value.durationLabel].filter(Boolean).join(' · ') };
+  return { ...value, yearLabel: label, facts: factsLine([label, value.rating, value.durationLabel]) };
 }
 
 export function detailDateDisplay(value: DetailModel, display: 'year' | 'date' | undefined): DetailModel {

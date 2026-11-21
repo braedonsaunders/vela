@@ -336,6 +336,17 @@ function translatedBox(rows: Css, viewport: Viewport, fontSize: number) {
   return cached(`b${viewport.width}x${viewport.height}|${fontSize}|${JSON.stringify(rows)}`, () => boxStyle(rows, measure(viewport, fontSize)));
 }
 
+/** The web ARIA a pressable box's own state carries, on the button that takes its focus. */
+function pressAria(a11y: ReturnType<typeof a11yProps>, node: RNode, expanded: boolean | undefined): Record<string, unknown> {
+  const own = a11y as Record<string, unknown>;
+  return {
+    ...(a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {}),
+    ...(expanded !== undefined ? { 'aria-expanded': expanded, 'aria-haspopup': node.a11y?.haspopup ?? 'true' } : {}),
+    ...(own['aria-current'] !== undefined ? { 'aria-current': own['aria-current'] } : {}),
+    ...(own['aria-pressed'] !== undefined ? { 'aria-pressed': own['aria-pressed'] } : {}),
+  };
+}
+
 function a11yProps(node: RNode, c: Ctx, e: Env) {
   const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : node.role === 'group' ? 'group' : node.role === 'region' ? 'summary' : undefined;
   const label = node.label ? fill(node.label, c, e) : undefined;
@@ -705,6 +716,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
       if (focus) requestAnimationFrame(() => focusElement(focus));
     });
+    // A toggle opens what its flag names (a menu, a drawer): it says whether that is open.
+    const toggled = press?.action === 'toggle' && press.arg ? env.flags.includes(fill(press.arg, ctx, env)) : undefined;
+    const expanded = a11y.accessibilityState?.expanded ?? toggled;
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
         {...(href ? { href } : {})}
@@ -720,7 +734,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
           }
           if (buttonRef.current) episodeNav?.key(buttonRef.current, { key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() });
         } } : {})}
-        {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
+        {...(web ? pressAria(a11y, node, expanded) : {})}
         onLongPress={cardPrimary ? () => openAnchoredMenu(Platform.isTV ? 'tv' : 'touch') : undefined}
         {...(web && cardPrimary ? { onContextMenu: openPointerMenu } : {})}
         onPress={onPress}
@@ -735,7 +749,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
-        accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
+        accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={expanded === undefined ? a11y.accessibilityState : { ...a11y.accessibilityState, expanded }}
         testID={a11y.testID} />
     ) : null;
     const guide = node.press ? undefined : tvGuide(node, env.flags, band);

@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Pressable, Text, type HostInstance } from 'react-native';
+import { Pressable, Text, View, type HostInstance } from 'react-native';
 import { canSeeAll } from '@vela/core';
 import { useHost, useInheritedText, type WidgetProps } from '../host';
 import { notePress, trackButton } from '../escape';
@@ -20,7 +20,7 @@ export function RowLink({ ctx, params }: WidgetProps) {
   if (!row) return null;
   if (!available) return end ? null : <Text style={ink.style} accessibilityRole="header" aria-level={2}>{row.name}</Text>;
   const href = host.rowHref?.(row);
-  return <Pressable ref={ref} accessibilityRole={href ? 'link' : 'button'} accessibilityLabel={`See all ${row.name}`}
+  const link = <Pressable ref={ref} accessibilityRole={href ? 'link' : 'button'} accessibilityLabel={`See all ${row.name}`}
     {...(href ? { href } : {})}
     onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
     onPress={event => {
@@ -37,4 +37,6 @@ export function RowLink({ ctx, params }: WidgetProps) {
       ...(focused ? { borderWidth: 2, borderColor: look.ui.accent, borderRadius: 8 } : {}) }}>
     <Text style={ink.style}>{end ? 'See all' : row.name} ›</Text>
   </Pressable>;
+  // A row's name stays its heading when it also opens the whole row, as it is for rows without one.
+  return end ? link : <View accessibilityRole="header" aria-level={2} style={{ alignSelf: 'flex-start' }}>{link}</View>;
 }

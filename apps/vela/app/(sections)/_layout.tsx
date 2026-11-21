@@ -2,7 +2,7 @@ import { Navigator, useIsFocused, usePathname } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Platform, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
-import { ScreenActive, SkinRoot, type SkinHost } from '@vela/skin';
+import { ScreenActive, SkinRoot, SkipToContent, type SkinHost } from '@vela/skin';
 import { useVela } from '../../src/vela';
 import { retainedHost } from '../../src/retained-host';
 import Home from './index';
@@ -75,7 +75,8 @@ function SectionsContent() {
   ), [session, focused, key, reducedMotion, transition.current]);
   const framedHost = useMemo(() => shellHost ? { ...shellHost, children: content } : null, [shellHost, content]);
   if (!framedHost || !shell) return content;
-  const drawn = <SectionShellHostContext.Provider value={publishShellHost}><ScreenActive.Provider value={focused}><SkinRoot host={framedHost} node={shell} /></ScreenActive.Provider></SectionShellHostContext.Provider>;
+  // Skip to content comes before the shell's navigation, so it is the first tab stop.
+  const drawn = <SectionShellHostContext.Provider value={publishShellHost}><ScreenActive.Provider value={focused}><SkipToContent /><SkinRoot host={framedHost} node={shell} /></ScreenActive.Provider></SectionShellHostContext.Provider>;
   return Platform.isTV && Platform.OS === 'android'
     ? <FocusBoundary active={focused} style={{ flex: 1 }}>{drawn}</FocusBoundary>
     : drawn;

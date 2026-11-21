@@ -1,5 +1,7 @@
 import { Link, router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { msg } from '@vela/core';
+import { useVelaState } from '@vela/core/react';
 import { SkinRoot } from '@vela/skin';
 import { useVela } from '../src/vela';
 
@@ -7,14 +9,16 @@ export default function NotFound() {
   const vela = useVela();
   const host = vela.host('home', 'home');
   const shell = vela.doc?.shell;
+  // The server's own name on a branded server, as the page title has it.
+  const server = useVelaState(state => state.appearance.value?.branding?.name || state.servers.list.find(item => item.selected)?.name || 'Vela');
   const content = (
     <View style={styles.page} accessibilityRole="summary">
       <Text style={styles.eyebrow}>404</Text>
-      <Text style={styles.title}>This page drifted out of range.</Text>
-      <Text style={styles.copy}>The address doesn’t match anything in Vela.</Text>
+      <Text style={styles.title} accessibilityRole="header" {...{ 'aria-level': 1 }}>{msg('page.notFoundHeading')}</Text>
+      <Text style={styles.copy}>{msg('page.notFoundCopy', { server })}</Text>
       <Link href="/" asChild>
         <Pressable accessibilityRole="link" onPress={() => router.replace('/')} style={styles.button}>
-          <Text style={styles.buttonText}>Go home</Text>
+          <Text style={styles.buttonText}>{msg('page.goHome')}</Text>
         </Pressable>
       </Link>
     </View>
