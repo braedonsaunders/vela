@@ -131,6 +131,27 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
     return () => window.removeEventListener('keydown', onKey);
   }, [turn, toggle, panel, onClose, book?.rtl, chrome, showChrome, settings.flow]);
 
+  // With a mouse, the controls come back when the pointer nears the top or bottom edge, where
+  // the bars live, and step aside again a moment after it leaves those edges (a tap or key keeps
+  // working as before). Touch pointers are ignored: phones use the tap zones.
+  const hovered = useRef(false);
+  useEffect(() => {
+    if (!web || typeof window === 'undefined') return;
+    const edge = (y: number) => y <= (m.small ? 52 : 60) + 48 || y >= window.innerHeight - (m.small ? 46 : 52) - 48;
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerType && event.pointerType !== 'mouse') return;
+      if (edge(event.clientY)) {
+        if (!hovered.current || !chrome) { hovered.current = true; showChrome(true); }
+      } else if (hovered.current && !panelRef.current) {
+        hovered.current = false;
+        clearTimeout(hideLater.current);
+        hideLater.current = setTimeout(() => setChrome(false), 1200);
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [chrome, showChrome, m.small]);
+
   const position = readerPosition(location);
   const layout = readerLayout(m.width, m.height, settings.fontSize);
   const topBar = m.small ? 52 : 60, bottomBar = m.small ? 46 : 52;

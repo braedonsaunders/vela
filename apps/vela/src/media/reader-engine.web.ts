@@ -191,6 +191,19 @@ export function createReaderEngine(): ReaderEngine | null {
       else if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && settings?.flow !== 'scrolled') { event.preventDefault(); emit('show-chrome'); }
       else if (event.key === 'Escape') emit('escape');
     });
+    // A mouse moving over the book's frame never reaches the reader's window, so the reader could
+    // not bring its bars back on hover near the edges: forward it in window coordinates.
+    doc.addEventListener('pointermove', event => {
+      const e = event as PointerEvent;
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      const element = doc.defaultView?.frameElement as HTMLElement | null | undefined;
+      const frame = element?.getBoundingClientRect();
+      const top = host?.ownerDocument?.defaultView;
+      if (!frame || !top || !element) return;
+      const scale = element.offsetWidth ? frame.width / element.offsetWidth : 1;
+      top.dispatchEvent(new top.PointerEvent('pointermove', { pointerType: 'mouse',
+        clientX: frame.left + e.clientX * scale, clientY: frame.top + e.clientY * scale }));
+    });
     // Fixed-layout pages (comics, PDF) are scaled frames, and a reflowable section's frame scrolls
     // under its column: a tap's place maps through the frame's offset and scale onto the reader.
     tapper(doc, event => {
