@@ -628,6 +628,8 @@
   "media.ui.book": "Book",
   "media.ui.series": "Series",
   "media.ui.audiobook": "Audiobook",
+  "media.ui.song": "Song",
+  "media.ui.part": "Part",
   "media.ui.by": "by {name}",
   "media.ui.narratedBy": "Narrated by {name}",
   "media.ui.read": "Read",
