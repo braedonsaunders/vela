@@ -2,12 +2,14 @@
 // inherited text rows, and the nearest group's hover and focus. Widgets import these hooks; the
 // renderer provides them.
 import type { ImageSource } from 'expo-image';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Action } from '../../protocol/skin';
 import { PX, type Measure, type Viewport } from './css';
 import type { ResolvedDocument } from './resolve';
 import { textStyle, type Css } from './translate';
 import type { Ctx, Env } from './vocabulary';
+import { HostReader, HostSource } from './host-source';
+export { HostReader, HostSource } from './host-source';
 
 /** What the app gives the renderer. Areas add their capabilities (a live controller, the player
  * view) by augmenting this interface from their own files. */
@@ -40,14 +42,47 @@ export interface SkinHost {
 export interface InheritedText { rows: Css; fontSize: number }
 export interface GroupState { hover: boolean; focus: boolean; report(kind: 'hover' | 'focus', on: boolean): void }
 
-export const HostContext = createContext<SkinHost | null>(null);
+/** A route tree's host as its nodes read it (TrackedHost); any other provider gives a plain host. */
+export const HostContext = createContext<SkinHost | HostSource | null>(null);
 export const InheritedContext = createContext<InheritedText>({ rows: {}, fontSize: 16 * PX });
 export const GroupContext = createContext<GroupState | null>(null);
 
 export function useHost(): SkinHost {
-  const host = useContext(HostContext);
-  if (!host) throw new Error('Skin nodes draw inside <SkinRoot>');
-  return host;
+  const value = useContext(HostContext);
+  const tracked = useTrackedHost(value instanceof HostSource ? value : null);
+  if (tracked) return tracked;
+  if (!value) throw new Error('Skin nodes draw inside <SkinRoot>');
+  return value as SkinHost;
+}
+
+/** As useHost, or null outside any host (a guide over the player). */
+export function useOptionalHost(): SkinHost | null {
+  const value = useContext(HostContext);
+  const tracked = useTrackedHost(value instanceof HostSource ? value : null);
+  return tracked ?? (value as SkinHost | null);
+}
+
+type Listener = () => void;
+const unsubscribed = () => {};
+const noVersion = () => 0;
+
+function useTrackedHost(source: HostSource | null): SkinHost | null {
+  const reader = useRef<HostReader | null>(null);
+  if (source && reader.current?.source !== source) reader.current = new HostReader(source);
+  const current = source ? reader.current : null;
+  const subscribe = useCallback((notify: Listener) => (current ? current.source.subscribe(notify) : unsubscribed), [current]);
+  const snapshot = current ? current.snapshot : noVersion;
+  useSyncExternalStore(subscribe, snapshot, snapshot);
+  return current ? current.host : null;
+}
+
+/** Gives a tree its host through a tracked source (see useHost). */
+export function TrackedHost({ host, children }: { host: SkinHost; children: ReactNode }) {
+  const [source] = useState(() => new HostSource(host));
+  // Nodes drawn in this pass read the host being drawn; the rest hear of it once it is committed.
+  source.latest = host;
+  useLayoutEffect(() => source.publish(host), [source, host]);
+  return <HostContext.Provider value={source}>{children}</HostContext.Provider>;
 }
 
 /** The text rows in force where a widget draws, translated: colour, font, size, spacing. */

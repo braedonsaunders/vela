@@ -26,7 +26,7 @@ import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
-import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
+import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { useFocusStyles } from './focus';
@@ -129,11 +129,11 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
   const reportNav = useCallback((out: string[]) => setNavOut(old => (sameOverflow(old, out) ? old : out)), []);
   const drawn = useMemo(() => (navOut.length ? { ...host, env: { ...host.env, navOut } } : host), [host, navOut]);
   return (
-    <Host.Provider value={drawn}>
+    <TrackedHost host={drawn}>
       <NavFit.Provider value={reportNav}>
         <SkinNode node={node} ctx={ROOT_CONTEXT} />
       </NavFit.Provider>
-    </Host.Provider>
+    </TrackedHost>
   );
 }
 
@@ -250,7 +250,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
   const navTop = hasFlowHeader(host.doc.document.slots?.shell) ? 0 : 56 + host.viewport.insets.top;
   return (
     <View style={{ flex: 1 }}>
-      <Host.Provider value={host}><NavFit.Provider value={null}>
+      <TrackedHost host={host}><NavFit.Provider value={null}>
         <EpisodeNavigation.Provider value={episodeNav}><RouteFocusContext.Provider value={focus}>
           <RouteLayout.Provider value={layout}>
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
@@ -262,7 +262,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
             </InstantContent.Provider>
           </RouteLayout.Provider>
         </RouteFocusContext.Provider></EpisodeNavigation.Provider>
-      </NavFit.Provider></Host.Provider>
+      </NavFit.Provider></TrackedHost>
       {cover || leaving ? (
         <SkeletonCover key={cover ? 'held' : 'leaving'} host={(cover ?? leaving)!} node={node} ground={ground}
           leaving={!cover} onGone={clearLeaving} />
@@ -373,7 +373,7 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
   const hiddenLibraryNav = useContext(HiddenLibraryNav);
-  if (!loadingLibraryNav && env.route === 'library' && env.load !== 'ready' && node.id === 'vela-library-views') return null;
+  if (!loadingLibraryNav && node.id === 'vela-library-views' && env.route === 'library' && env.load !== 'ready') return null;
   if (hiddenLibraryNav && node.kind === 'box' && node.base.style.position === 'sticky'
     && node.children.some(child => child.id === 'vela-library-views')) {
     return <View style={{ opacity: 0, width: '100%' }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -620,7 +620,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const reportNav = useContext(NavFit);
   const { env, viewport } = host;
   const [cardMenu, setCardMenu] = useState<{ anchor: CardMenuAnchor; mode: CardMenuOpenMode } | null>(null);
-  const swipe = useHeroSwipe(!!hero, env.home?.hero.length ?? 0, env.heroIndex, host.dispatch);
+  // Only the hero reads the hero's count and index: every other box redraws without them.
+  const swipe = useHeroSwipe(!!hero, hero ? env.home?.hero.length ?? 0 : 0, hero ? env.heroIndex : 0, host.dispatch);
   const parentText = useContext(Inherited);
   const parentGroup = useContext(Group);
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
@@ -963,19 +964,19 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
-          if (inHero || (heroControl && visible)) host.setFlag('hero-interacting', true);
+          if (inHero || (heroControl && visible)) holdHero(host.setFlag, true);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => { set('focus', false); if (inHero || heroControl) host.setFlag('hero-interacting', false); }}
+        onBlur={() => { set('focus', false); if (inHero || heroControl) holdHero(host.setFlag, false); }}
         onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
         accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={expanded === undefined ? a11y.accessibilityState : { ...a11y.accessibilityState, expanded }}
         testID={a11y.testID} />
     ) : null;
-    const guide = node.press ? undefined : tvGuide(node, env.flags, band);
+    const guide = node.press ? undefined : tvGuide(node, env, band);
     // A reading stop takes focus without doing anything, so the remote can scroll to it.
     const stopProps = stop ? {
       focusable: true,
@@ -1052,6 +1053,17 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   return node.fit === 'nav' && reportNav ? <>{drawnBox}<NavFitMeasure node={node} ctx={ctx} report={reportNav} /></> : drawnBox;
 }
 
+/** Focus moving between the hero's controls blurs one and focuses the next: releasing the hold at
+ * once and taking it again changed the flags twice, and each change redrew the routes reading them.
+ * The release waits a turn, and a focus in the hero within it keeps the hold. */
+let heroRelease: ReturnType<typeof setTimeout> | undefined;
+function holdHero(setFlag: (flag: string, on: boolean) => void, on: boolean): void {
+  if (heroRelease !== undefined) clearTimeout(heroRelease);
+  heroRelease = undefined;
+  if (on) setFlag('hero-interacting', true);
+  else heroRelease = setTimeout(() => { heroRelease = undefined; setFlag('hero-interacting', false); }, 0);
+}
+
 const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretch', alignSelf: 'stretch', gap: 10 };
 
 /** On TV, the boxes the focus engine must treat as one region. A navigation bar or rail is one
@@ -1064,12 +1076,13 @@ const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretc
  * around the sign-in card kept the first D-pad press from reaching its fields. An escape scope
  * (a menu, a drawer) is one too, and while open it keeps focus inside: moving off its edges stays
  * on its items rather than reaching the page behind. */
-function tvGuide(node: Extract<RNode, { kind: 'box' }>, flags: string[], band: boolean) {
+function tvGuide(node: Extract<RNode, { kind: 'box' }>, env: Env, band: boolean) {
   if (!Platform.isTV) return undefined;
   const scope = !!node.escape?.length;
   const region = node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
   if (!scope && !region) return undefined;
-  const trap = scope && scopeOpen(node.escape!, flags);
+  // Flags are read only by a scope: a flag change redraws scopes, not every region.
+  const trap = scope && scopeOpen(node.escape!, env.flags);
   return { autoFocus: true, trapFocusUp: trap, trapFocusDown: trap, trapFocusLeft: trap, trapFocusRight: trap };
 }
 
@@ -1328,7 +1341,7 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
   // Natively a text view does not paint a gradient or a shadow (Android's never does): a text that
   // paints its box (an initial in a gradient disc) draws as that box with the text centred inside.
   // A viewer badge with a picture draws the same way, the picture clipped to the badge over its initial.
-  const avatar = viewerAvatarFor(node.avatar, own, env.viewerAvatar);
+  const avatar = viewerAvatarFor(node.avatar, own, node.avatar ? env.viewerAvatar : undefined);
   if (avatar || (!web && (style.backgroundImage || style.boxShadow))) {
     return (
       <Frame style={(avatar ? { ...style, overflow: 'hidden' } : style) as ViewStyle} {...a11yProps(node, ctx, env)} {...presentation}>

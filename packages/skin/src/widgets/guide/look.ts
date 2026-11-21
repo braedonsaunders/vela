@@ -1,12 +1,12 @@
 // The guide's palette, type and geometry, derived from the document's `ui` block so every
 // document gets a coherent guide through the Vela base. With Cinematic's values (the defaults)
 // it reproduces the compiled Cinematic guide's tokens (cinematic.guide-*).
-import { useContext, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { TextStyle } from 'react-native';
 import { resolveUi } from '../../resolve/ui';
 import type { UiTokens } from '../../resolve/ui-defaults';
 import { fontFace } from '../../fonts';
-import { HostContext } from '../../host';
+import { useOptionalHost } from '../../host';
 import { readableInk } from './contrast';
 
 /** Genre cues: the data module's tone slots (news, sport, film, kids, factual, drama, comedy,
@@ -179,7 +179,7 @@ export function guideLook(ui: UiTokens): GuideLook {
 
 /** The guide look for the document being drawn (Cinematic's outside a document, e.g. over the player). */
 export function useGuideLook(): GuideLook {
-  const host = useContext(HostContext);
+  const host = useOptionalHost();
   const block = host?.doc.document.ui;
   return useMemo(() => guideLook(resolveUi(block)), [block]);
 }
