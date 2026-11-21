@@ -129,7 +129,8 @@ export function mediaFacts(media: CardMedia, title: V.Title): string {
     case 'book': return [media.readingFraction > 0 && media.readingFraction < 0.98 ? msg('media.readPercent', { percent: percent(media.readingFraction) }) : year,
       media.pages ? msg(`media.pages.${plural(media.pages)}`, { count: number(media.pages) }) : ''].filter(Boolean).join(' · ');
     case 'audiobook': return [year, hours].filter(Boolean).join(' · ');
-    case 'part': return [media.indexLabel, hours].filter(Boolean).join(' · ');
+    // A part names its book: on a shelf it may stand alone (Continue listening).
+    case 'part': return [media.parent?.name, media.indexLabel, hours].filter(Boolean).join(' · ');
     default: return [year, hours].filter(Boolean).join(' · ');
   }
 }

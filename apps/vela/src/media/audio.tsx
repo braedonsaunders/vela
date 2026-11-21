@@ -27,6 +27,8 @@ export function AudioDock() {
     previous: () => store.audio.previous(), seek: seconds => store.audio.seek(seconds), skip: delta => store.audio.skip(delta),
   }), [store]);
   useEffect(() => syncMediaSession(audio, controls), [audio, controls]);
+  // The viewer sees plain copy; the cause goes to the console for whoever is debugging.
+  useEffect(() => { if (audio.error) console.warn(`Vela audio: ${audio.error}`); }, [audio.error]);
   useEffect(() => { if (!audio.queue) setOpen(false); }, [audio.queue]);
   const close = useCallback(() => setOpen(false), []);
   const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/')), []);

@@ -4,7 +4,7 @@
 import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/widgets/media/reader-engine';
 import { READER_THEMES } from '@vela/skin/src/widgets/media/reader-engine';
 
-type Input = 'next' | 'previous' | 'toggle-chrome' | 'escape';
+type Input = 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape';
 interface FoliateTocItem { label?: string; href?: string; subitems?: FoliateTocItem[] }
 interface FoliateView extends HTMLElement {
   book: { metadata?: { title?: unknown; author?: unknown }; toc?: FoliateTocItem[]; dir?: string; sections: unknown[]; rendition?: { layout?: string } };
@@ -33,8 +33,14 @@ function text(value: unknown): string {
   return String(value);
 }
 
+const FILE_NAME = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
+
+/** The contents as rows; entries a comic names after its image files are left out. */
 function flatten(items: FoliateTocItem[] | undefined, depth = 0): TocItem[] {
-  return (items ?? []).flatMap(item => [{ label: (item.label ?? '').trim(), href: item.href ?? '', depth }, ...flatten(item.subitems, depth + 1)]);
+  return (items ?? []).flatMap(item => {
+    const label = (item.label ?? '').trim();
+    return [...(label && !FILE_NAME.test(label) ? [{ label, href: item.href ?? '', depth }] : []), ...flatten(item.subitems, depth + 1)];
+  });
 }
 
 /** The book's injected style: the reading theme, face, size and leading. */
@@ -52,6 +58,10 @@ export function readerCss(settings: ReaderSettings): string {
     img, svg { max-width: 100%; }
     ${settings.theme === 'dark' ? 'img { filter: brightness(0.9); }' : ''}
   `;
+}
+
+function quiet(work: Promise<unknown> | undefined): void {
+  work?.catch(reason => console.warn('Vela reader: navigation did not complete', reason));
 }
 
 export function createReaderEngine(): ReaderEngine | null {
@@ -77,8 +87,15 @@ export function createReaderEngine(): ReaderEngine | null {
   };
 
   /** Taps in a page's outer thirds turn it; the middle shows or hides the chrome. */
+  // foliate fires `load` again when it re-lays out a page it already loaded; one set of listeners
+  // per document, or every tap would toggle the chrome twice.
+  const attached = new WeakSet<Document>();
   const attachInput = (doc: Document, host: HTMLElement) => {
+    if (attached.has(doc)) return;
+    attached.add(doc);
     doc.addEventListener('keydown', event => {
+      // Tab inside the book leaves it for the reader's controls.
+      if (event.key === 'Tab') { event.preventDefault(); emit('show-chrome'); return; }
       if (event.key === 'ArrowRight' || event.key === 'PageDown' || (event.key === ' ' && !event.shiftKey)) { event.preventDefault(); emit('next'); }
       else if (event.key === 'ArrowLeft' || event.key === 'PageUp' || (event.key === ' ' && event.shiftKey)) { event.preventDefault(); emit('previous'); }
       else if (event.key === 'Escape') emit('escape');
@@ -86,9 +103,12 @@ export function createReaderEngine(): ReaderEngine | null {
     doc.addEventListener('click', event => {
       if (event.defaultPrevented || (event.target as Element | null)?.closest?.('a[href]')) return;
       if (doc.getSelection()?.toString()) return;
-      const frame = doc.defaultView?.frameElement?.getBoundingClientRect();
+      // Fixed-layout pages (comics, PDF) are scaled frames: map the tap through the frame's scale.
+      const element = doc.defaultView?.frameElement as HTMLElement | null | undefined;
+      const frame = element?.getBoundingClientRect();
+      const scale = frame && element?.offsetWidth ? frame.width / element.offsetWidth : 1;
       const bounds = host.getBoundingClientRect();
-      const x = (frame?.left ?? 0) + event.clientX;
+      const x = (frame?.left ?? 0) + event.clientX * scale;
       const share = (x - bounds.left) / Math.max(1, bounds.width);
       emit(share < 0.28 ? 'previous' : share > 0.72 ? 'next' : 'toggle-chrome');
     });
@@ -107,6 +127,13 @@ export function createReaderEngine(): ReaderEngine | null {
       view.style.cssText = 'display:block;width:100%;height:100%;';
       host.replaceChildren(view);
       view.addEventListener('load', event => attachInput((event as CustomEvent<{ doc: Document }>).detail.doc, host));
+      // Taps beside the pages (a comic spread's gutter, the margins) turn and show the chrome too;
+      // taps inside a page's frame never reach here.
+      view.addEventListener('click', event => {
+        const bounds = host.getBoundingClientRect();
+        const share = (event.clientX - bounds.left) / Math.max(1, bounds.width);
+        emit(share < 0.28 ? 'previous' : share > 0.72 ? 'next' : 'toggle-chrome');
+      });
       view.addEventListener('relocate', event => {
         const detail = (event as CustomEvent<{ fraction?: number; cfi?: string; tocItem?: { label?: string; href?: string }; location?: { current: number; total: number }; section?: { current: number; total: number }; index?: number }>).detail;
         const index = detail.section?.current ?? detail.index ?? 0;
@@ -115,7 +142,8 @@ export function createReaderEngine(): ReaderEngine | null {
         const location: ReaderLocation = {
           locator: detail.cfi || `index:${index}`,
           fraction: Math.min(1, Math.max(0, fraction)),
-          chapter: detail.tocItem?.label?.trim() ?? '',
+          // A comic without contents names its pages by file; that is no chapter.
+          chapter: FILE_NAME.test(detail.tocItem?.label?.trim() ?? '') ? '' : detail.tocItem?.label?.trim() ?? '',
           tocHref: detail.tocItem?.href,
           ...(fixed ? { page: index + 1, pages: sections } : detail.location ? { page: detail.location.current + 1, pages: Math.max(1, detail.location.total) } : {}),
         };
@@ -130,17 +158,20 @@ export function createReaderEngine(): ReaderEngine | null {
       try {
         if (locator?.startsWith('index:')) { await view.init({ showTextStart: true }); await view.goTo(Number(locator.slice(6)) || 0); }
         else await view.init({ lastLocation: locator, showTextStart: !locator });
-      } catch {
+      } catch (reason) {
+        console.warn('Vela reader: the saved place could not be resolved; opening at its share of the book', reason);
         if (source.fraction && source.fraction > 0) await view.goToFraction(source.fraction).catch(() => view?.init({ showTextStart: true }));
         else await view.init({ showTextStart: true }).catch(() => undefined);
       }
       const book: ReaderBook = { title: text(view.book.metadata?.title), author: text(view.book.metadata?.author), toc: flatten(view.book.toc), rtl: view.book.dir === 'rtl' };
       return book;
     },
-    next() { void view?.next(); },
-    previous() { void view?.prev(); },
-    goTo(href) { void view?.goTo(href); },
-    goToFraction(fraction) { void view?.goToFraction(fraction); },
+    // A turn or jump that fails (a link into a missing section, a page still loading) leaves the
+    // reader where it was: nothing for the viewer to act on, so it is only logged.
+    next() { quiet(view?.next()); },
+    previous() { quiet(view?.prev()); },
+    goTo(href) { quiet(view?.goTo(href)); },
+    goToFraction(fraction) { quiet(view?.goToFraction(fraction)); },
     apply,
     onLocation(listener) { locations.add(listener); return () => locations.delete(listener); },
     onInput(listener) { inputs.add(listener); return () => inputs.delete(listener); },

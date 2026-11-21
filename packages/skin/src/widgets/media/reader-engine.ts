@@ -50,6 +50,6 @@ export interface ReaderEngine {
   apply(settings: ReaderSettings): void;
   onLocation(listener: (location: ReaderLocation) => void): () => void;
   /** Taps, clicks and keys inside the book's frame, which the page cannot see itself. */
-  onInput(listener: (input: 'next' | 'previous' | 'toggle-chrome' | 'escape') => void): () => void;
+  onInput(listener: (input: 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape') => void): () => void;
   destroy(): void;
 }

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'rea
 import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
 import { msg, number, percent, type Card } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
+import { focusElement } from '../../escape';
 import { NO_RING, useInteraction } from '../common/controls';
 import { MediaGlyph } from './icons';
 import { useMediaLook } from './parts';
@@ -29,7 +30,7 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
   const frame = useRef<ComponentRef<typeof View>>(null);
   const [book, setBook] = useState<ReaderBook | null>(null);
   const [location, setLocation] = useState<ReaderLocation | null>(null);
-  const [error, setError] = useState('');
+  const [failed, setFailed] = useState(false);
   const [chrome, setChrome] = useState(true);
   const [panel, setPanel] = useState<'' | 'contents' | 'type'>('');
   const theme = READER_THEMES[settings.theme];
@@ -42,7 +43,11 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
     const offLocation = engine.onLocation(next => { if (live) { setLocation(next); onLocation(next); } });
     void open().then(source => engine.open(source, frame.current, settingsRef.current, source.locator))
       .then(opened => { if (live) setBook(opened); })
-      .catch(reason => { if (live) setError(reason instanceof Error ? reason.message : String(reason)); });
+      .catch(reason => {
+        // The viewer sees plain copy; the cause goes to the console for whoever is debugging.
+        console.warn('Vela reader: the book could not be opened', reason);
+        if (live) setFailed(true);
+      });
     return () => { live = false; offLocation(); engine.destroy(); };
   // The document opens once per page; settings apply separately.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,6 +72,7 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
   useEffect(() => engine?.onInput(input => {
     if (input === 'next' || input === 'previous') turn(input);
     else if (input === 'toggle-chrome') { if (panel) setPanel(''); else nudge(!chrome); }
+    else if (input === 'show-chrome') { nudge(true); requestAnimationFrame(() => focusElement('reader-close')); }
     else if (input === 'escape') { if (panel) setPanel(''); else onClose(); }
   }), [engine, turn, panel, chrome, nudge, onClose]);
 
@@ -78,12 +84,13 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
       const inPanel = !!target?.closest?.('[data-reader-panel]');
       if (event.key === 'Escape') { event.preventDefault(); if (panel) setPanel(''); else onClose(); return; }
       if (inPanel) return;
+      if (event.key === 'Tab' && !chrome) nudge(true);
       if (['ArrowRight', 'PageDown'].includes(event.key) || (event.key === ' ' && !event.shiftKey && target?.getAttribute('role') !== 'button')) { event.preventDefault(); turn(book?.rtl && event.key === 'ArrowRight' ? 'previous' : 'next'); }
       else if (['ArrowLeft', 'PageUp'].includes(event.key) || (event.key === ' ' && event.shiftKey)) { event.preventDefault(); turn(book?.rtl && event.key === 'ArrowLeft' ? 'next' : 'previous'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [turn, panel, onClose, book?.rtl]);
+  }, [turn, panel, onClose, book?.rtl, chrome, nudge]);
 
   const progress = location ? percent(location.fraction) : '';
   const bar = (style: ViewStyle) => [{ position: 'absolute', left: 0, right: 0, backgroundColor: theme.page, opacity: chrome || panel ? 1 : 0,
@@ -96,14 +103,13 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
       {!engine ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32 }} accessibilityRole="alert">
         <Text style={m.text({ 'font-size': '16px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.unsupported')}</Text>
       </View> : null}
-      {engine && !book && !error ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
+      {engine && !book && !failed ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={m.text({ 'font-family': '"Iowan Old Style", Georgia, serif', 'font-size': '20px', 'font-style': 'italic', color: theme.quiet })}>{card.name}</Text>
       </View> : null}
-      {error ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 }} accessibilityRole="alert">
+      {failed ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 }} accessibilityRole="alert">
         <Text style={m.text({ 'font-size': '17px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.failed')}</Text>
-        <Text style={m.text({ 'font-size': '13px', color: theme.quiet, 'text-align': 'center' })}>{error}</Text>
       </View> : null}
-      <View pointerEvents={chrome || panel ? 'auto' : 'none'} style={bar({ top: 0, height: m.small ? 52 : 60, borderBottomWidth: 1, borderBottomColor: theme.rule })} testID="reader-top">
+      <View onFocus={() => nudge(true)} pointerEvents={chrome || panel ? 'auto' : 'none'} style={bar({ top: 0, height: m.small ? 52 : 60, borderBottomWidth: 1, borderBottomColor: theme.rule })} testID="reader-top">
         <ReaderButton icon="back" label={msg('media.ui.back')} onPress={onClose} color={theme.ink} testID="reader-close" nativeID="reader-close" />
         <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
           <Text numberOfLines={1} style={m.text({ 'font-family': '"Iowan Old Style", "Palatino Linotype", Georgia, serif', 'font-size': '15px', 'font-weight': '600', color: theme.ink })}>{book?.title || card.name}</Text>
@@ -112,7 +118,7 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
         <ReaderButton icon="contents" label={msg('media.reader.contents')} onPress={() => setPanel(panel === 'contents' ? '' : 'contents')} color={theme.ink} active={panel === 'contents'} testID="reader-contents" />
         <ReaderButton icon="text" label={msg('media.reader.type')} onPress={() => setPanel(panel === 'type' ? '' : 'type')} color={theme.ink} active={panel === 'type'} testID="reader-type" />
       </View>
-      <View pointerEvents={chrome || panel ? 'auto' : 'none'} style={bar({ bottom: 0, height: m.small ? 46 : 52, borderTopWidth: 1, borderTopColor: theme.rule })} testID="reader-bottom">
+      <View onFocus={() => nudge(true)} pointerEvents={chrome || panel ? 'auto' : 'none'} style={bar({ bottom: 0, height: m.small ? 46 : 52, borderTopWidth: 1, borderTopColor: theme.rule })} testID="reader-bottom">
         <ReaderButton icon="back" label={msg('media.reader.previous')} onPress={() => turn('previous')} color={theme.ink} testID="reader-previous" />
         <ProgressTrack fraction={location?.fraction ?? 0} color={theme.ink} rule={theme.rule} onSeek={fraction => engine?.goToFraction(fraction)} />
         <Text style={m.text({ 'font-size': '12px', color: theme.quiet, 'font-variant-numeric': 'tabular-nums', 'min-width': '92px', 'text-align': 'right' })} testID="reader-progress">

@@ -38,7 +38,8 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const selectedTab = tabs?.find(tab => tab.id === requestedView) ?? tabs?.[0];
   const collectionTab = (selectedTab?.kind === 'collections' || selectedTab?.kind === 'people') ? selectedTab.id : undefined;
   const liveTab = selectedTab?.kind === 'live' ? selectedTab.id : undefined;
-  const viewTab = selectedTab?.kind === 'view' ? selectedTab : undefined;
+  // A Smart View, or a library tab listing one level (Albums, Tracks; docs/media-kinds.md), is read by its tab.
+  const viewTab = selectedTab?.kind === 'view' || (selectedTab?.kind === 'library' && selectedTab.level) ? selectedTab : undefined;
   const [searchState, setSearchState] = useState({ tab: '', value: '' });
   const searchKey = `${id}:${collectionTab ?? liveTab ?? viewTab?.id ?? ''}`;
   const tabQuery = searchState.tab === searchKey ? searchState.value : '';

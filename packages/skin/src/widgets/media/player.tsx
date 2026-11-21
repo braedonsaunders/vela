@@ -47,7 +47,7 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={m.text({ 'font-size': '15px', 'font-weight': '650' })}>{item.name}</Text>
             <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>
-              {audio.phase === 'failed' ? audio.error || msg('media.player.failed') : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
+              {audio.phase === 'failed' ? msg('media.player.failed') : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
             </Text>
           </View>
         </Pressable>
@@ -187,7 +187,7 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
         {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
-      {audio.phase === 'failed' || audio.unsupported ? <Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : audio.error || msg('media.player.failed')}</Text> : null}
+      {audio.phase === 'failed' || audio.unsupported ? <Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text> : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         {book
           ? <RoundButton icon="speed" label={`${msg('media.player.speed')}: ${rateLabel(audio.rate)}`} onPress={() => setPanel(panel === 'speed' ? '' : 'speed')} active={audio.rate !== 1 || panel === 'speed'} testID="now-playing-speed" />
