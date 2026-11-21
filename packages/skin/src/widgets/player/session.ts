@@ -4,7 +4,7 @@
 // talks to the server and follows the session. Core owns the server; this owns the order of things.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
+import { commandOrigin, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
@@ -44,6 +44,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const nextId = useRef(0);
   const pendingQuality = useRef(0);
   const [pendingQualityId, setPendingQualityId] = useState<string>();
+  /** The viewer's quality pick awaiting the engine, read synchronously when the engine asks the server. */
+  const qualityPick = useRef<string | undefined>(undefined);
+  qualityPick.current = pendingQualityId;
   const [pendingVersionId, setPendingVersionId] = useState<string>();
   const [versionMessage, setVersionMessage] = useState('');
   const versionAttempt = useRef(0);
@@ -124,7 +127,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const send = useCallback((input: CommandInput) => {
     nextId.current += 1;
     setRefused('');
-    if (input.type === 'quality') { pendingQuality.current = nextId.current; setPendingQualityId(input.renditionId ?? 'auto'); }
+    if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
     setCommand({ ...input, id: nextId.current } as Command);
   }, []);
 
@@ -226,7 +229,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       });
     },
     onSessionCommand: event => {
-      if (event.sessionId === sessionId) void vela.playback.command(event.sessionId, event.command);
+      // A switch the engine chose on its own (automatic quality, recovery) is dropped if it goes
+      // stale; the viewer's pending quality pick is sent again at the newer generations.
+      if (event.sessionId === sessionId) void vela.playback.command(event.sessionId, event.command, commandOrigin(event.command, qualityPick.current));
     },
     // An expired grant or a stale reply: core re-reads the session's authoritative plan; a gone session starts over.
     onSessionRefresh: event => {

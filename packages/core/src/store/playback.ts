@@ -7,15 +7,15 @@ import { hasSubtitleSearch } from '../adapter/media-actions';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
 import { hasEventStream, hasLibraryLive, hasVersions } from '../adapter/capabilities';
-import { VelaError } from '../adapter/errors';
 import { startRefusal, startRetry } from './start-retry';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
+import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
 import type { Session } from './session';
-import { message, type StateBox } from './state';
+import type { StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
@@ -416,16 +416,23 @@ export class Playback {
     return plan.subtitleTracks.find(t => !previous?.subtitleTracks.some(p => p.id === t.id))?.id ?? null;
   }
 
-  /** A player's session command (seek, pause, track change, path switch, fallback, stop). */
-  async command(sessionId: string, command: V.SessionCommand): Promise<void> {
+  /**
+   * A player's session command (seek, pause, track change, path switch, fallback, stop). `origin`
+   * says whether the viewer asked for it (a quality pick) or the engine sent it on its own (an
+   * automatic or recovery switch). A failure never shows the server's words: the viewer's own
+   * command gets viewer copy, and one that lost to a newer generation, or that the engine sent
+   * on its own, is dropped silently (the engine plans again from the newer plan).
+   */
+  async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<void> {
     const current = this.box.get().playback;
     if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
     try {
       const connection = await this.session.ready();
-      const plan = await this.send(connection, sessionId, command);
+      const plan = await this.send(connection, sessionId, command, origin);
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
     } catch (error) {
-      if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback command failed') });
+      const words = commandFailure(command, error, origin);
+      if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
     }
   }
 
@@ -444,7 +451,7 @@ export class Playback {
     return next;
   }
 
-  private async send(connection: Connection, sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> {
+  private async send(connection: Connection, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<V.PlaybackPlan> {
     const api = connection.adapter;
     try {
       return await sendCommand(api, sessionId, command);
@@ -452,14 +459,21 @@ export class Playback {
       // A stop, seek, pause, resume or track change can race a generation the server moved on its own (an
       // authorized switch or recovery). Each names an absolute outcome, so it is retried once
       // when the server supplies the authoritative generations, with a new key because the
-      // rejected precondition is itself idempotently recorded. A switch is tied to the source it
-      // was planned against and is not.
-      const stale = error instanceof VelaError && error.detail.code === 'stale_generation';
-      const generations = stale ? error.detail.currentGenerations : undefined;
+      // rejected precondition is itself idempotently recorded. The viewer's own quality pick is
+      // still wanted after a version switch, so it is retried the same way while the session
+      // still offers its path. A switch the engine sent on its own is tied to the source it was
+      // planned against and is not: the engine plans again from the newer plan.
+      const generations = staleGeneration(error) ? error.detail.currentGenerations : undefined;
       const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks'].includes(command.kind);
-      if (!absolute || !generations) throw error;
+      const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
+      if ((!absolute && !wanted) || !generations) throw error;
       return sendCommand(api, sessionId, { ...command, ...generations, idempotencyKey: this.session.key() });
     }
+  }
+
+  private offersPath(sessionId: string, pathId: string): boolean {
+    const { plan } = this.box.get().playback;
+    return plan?.sessionId === sessionId && plan.paths.some(path => path.id === pathId);
   }
 
   /** Read the session's authoritative plan again (the player found its grant expired or a reply stale).
@@ -472,8 +486,8 @@ export class Playback {
       if (snapshot.plan.state === 'ended') return false;
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
       return true;
-    } catch (error) {
-      if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback refresh failed') });
+    } catch {
+      // The caller starts over; the server's words are not the viewer's.
       return false;
     }
   }
