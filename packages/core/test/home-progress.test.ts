@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { reconcileHomeProgress } from '../src/discovery/progress';
+import { freshCard, homeWatched, laterProgressRows, reconcileHomeProgress, reconcileProgressRows } from '../src/discovery/progress';
 import type { Card, HeroAction, HomeModel, Row } from '../src/models';
 
 const card = (id: string, progressSeconds = 0) => ({ id, progressSeconds, progressLabel: `${progressSeconds}`, played: false } as Card);
@@ -43,5 +43,78 @@ describe('Home progress reconciliation', () => {
     expect(merged.heroActions.map(value => value.heroId)).toEqual(['first', 'second']);
     expect(merged.heroActions[0]?.action).toBe('play');
     expect(merged.heroActions[1]).toBe(current.heroActions[1]);
+  });
+});
+
+describe('Progress shelves update in place (no visible refresh)', () => {
+  const book = (id: string, fraction: number, poster = `/art/${id}?sig=1`) =>
+    ({ id, progressSeconds: 0, progressLabel: '', played: false, poster, backdrop: '', logo: '', media: { readingFraction: fraction, readingLocator: `cfi-${fraction}` } } as unknown as Card);
+  const shelf = (id: string, purpose: Row['purpose'], items: Card[]): Row => ({
+    id, purpose, name: id, receipt: '', items, nextCursor: '', continuation: 'exhausted', previewOnFocus: false, presentation: '',
+  });
+
+  test('a library\'s Continue reading row takes the new place; every other shelf keeps its objects', () => {
+    const popular = shelf('popular', 'recommendation', [book('kings', 0.002), book('empire', 0)]);
+    const awards = shelf('awards', 'recommendation', [book('ender', 0)]);
+    const reading = shelf('continue', 'continue', [book('kings', 0.002)]);
+    const current = [reading, popular, awards];
+    const fresh = [shelf('continue', 'continue', [book('kings', 0.31, '/art/kings?sig=2')]), shelf('popular', 'recommendation', [book('empire', 0), book('kings', 0.31)]), awards];
+
+    const merged = reconcileProgressRows(current, fresh, true);
+
+    expect(merged.map(row => row.id)).toEqual(['continue', 'popular', 'awards']);
+    expect(merged[0]!.items[0]!.media?.readingFraction).toBe(0.31);
+    // The shown picture is kept: a re-signed URL for the same cover never reloads it.
+    expect(merged[0]!.items[0]!.poster).toBe('/art/kings?sig=1');
+    // A recommendation shelf keeps its order and its untouched cards; the book's progress is refreshed.
+    expect(merged[1]!.items.map(card => card.id)).toEqual(['kings', 'empire']);
+    expect(merged[1]!.items[0]!.media?.readingFraction).toBe(0.31);
+    expect(merged[1]!.items[1]).toBe(popular.items[1]);
+    expect(merged[2]).toBe(awards);
+  });
+
+  test('nothing changed: the very same rows come back, so nothing draws again', () => {
+    const current = [shelf('continue', 'continue', [book('kings', 0.2)]), shelf('popular', 'recommendation', [book('kings', 0.2)])];
+    const fresh = current.map(row => ({ ...row, items: row.items.map(card => ({ ...card, media: { ...card.media! } })) }));
+    expect(reconcileProgressRows(current, fresh, true)).toBe(current);
+  });
+
+  test('a finished book\'s Continue row goes when the whole list is fresh; a new one arrives beside its neighbour', () => {
+    const popular = shelf('popular', 'recommendation', [book('a', 0)]);
+    expect(reconcileProgressRows([shelf('continue', 'continue', [book('kings', 0.9)]), popular], [popular], true)).toEqual([popular]);
+    const listening = shelf('listening', 'continue', [book('habits', 0.1)]);
+    const merged = reconcileProgressRows([popular], [listening, popular], true);
+    expect(merged.map(row => row.id)).toEqual(['listening', 'popular']);
+  });
+
+  test('Home keeps a Continue row from a later page, and takes it from its own re-read', () => {
+    const first = shelf('recent', 'recentlyAdded', [book('x', 0)]);
+    const second = shelf('ordinary', 'recommendation', [book('y', 0)]);
+    const reading = shelf('continue-reading', 'continue', [book('kings', 0.1)]);
+    const later = shelf('more', 'recommendation', [book('z', 0)]);
+    const current = { rows: [first, second, reading, later], hero: [], heroActions: [] } as unknown as HomeModel;
+    const fresh = { rows: [first, second], hero: [], heroActions: [] } as unknown as HomeModel;
+    expect(laterProgressRows(current, fresh).map(row => row.id)).toEqual(['continue-reading']);
+    expect(reconcileHomeProgress(current, fresh).rows.map(row => row.id)).toEqual(['recent', 'ordinary', 'continue-reading', 'more']);
+    const reread = shelf('continue-reading', 'continue', [book('kings', 0.4)]);
+    const merged = reconcileHomeProgress(current, fresh, [reread]);
+    expect(merged.rows[2]!.items[0]!.media?.readingFraction).toBe(0.4);
+    expect(merged.rows[0]).toBe(first);
+    expect(merged.rows[3]).toBe(later);
+  });
+
+  test('a fresh card with nothing new is the shown card', () => {
+    const shown = book('kings', 0.2);
+    expect(freshCard(shown, { ...shown, media: { ...shown.media! } })).toBe(shown);
+    expect(freshCard(shown, book('kings', 0.3))).not.toBe(shown);
+  });
+
+  test('a watched film redraws only the rows that show it', () => {
+    const film = { ...card('film', 10), durationSeconds: 100 } as Card;
+    const other = row('other', 'recommendation');
+    const watching = { ...row('continue', 'continue'), items: [film] };
+    const next = homeWatched(home([watching, other]), { titleId: 'film', positionSeconds: 50, finished: false });
+    expect(next.rows[1]).toBe(other);
+    expect(next.rows[0]!.items[0]!.progressSeconds).toBe(50);
   });
 });

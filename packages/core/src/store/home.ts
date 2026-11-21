@@ -7,7 +7,7 @@ import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
 import { card, entry, feedRow, homeModel } from '../discovery/models';
-import { homeCard, homeWatched, reconcileHomeProgress, recorded, type Watched } from '../discovery/progress';
+import { homeCard, homeWatched, laterProgressRows, reconcileHomeProgress, recorded, type Watched } from '../discovery/progress';
 import type { Destination, HomeModel, Row } from '../models';
 import type { Session } from './session';
 import { failed, idle, loading, ready, type Load, type Loadable, type StateBox } from './state';
@@ -241,9 +241,16 @@ export class Home {
           continue;
         }
         if (!serverRecorded) return;
+        // Progress shelves that came with a later page (not in the fresh first page) are read
+        // again one by one; one that cannot be read keeps what it shows.
+        const shown = this.box.get().home.value;
+        const later = shown ? (await Promise.all(laterProgressRows(shown, fresh).map(row => connection.adapter.row(row.id, undefined, PAGE_ITEMS)
+          .then(value => feedRow(value, images, this.artWidth()), () => undefined)))).filter((row): row is Row => !!row) : [];
+        this.session.check(epoch, 'home progress');
+        if (signal.aborted || generation !== this.reconcileGeneration) return;
         this.box.update('home', home => ({
           ...home,
-          value: home.value ? reconcileHomeProgress(home.value, fresh) : home.value,
+          value: home.value ? reconcileHomeProgress(home.value, fresh, later) : home.value,
           progressRevision: home.progressRevision + 1,
         }));
         return;

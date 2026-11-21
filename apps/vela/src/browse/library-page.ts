@@ -2,7 +2,7 @@
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { libraryCardArtwork, libraryTabs, libraryKey, type Card, type LibraryExtras, type LibraryLiveModel, type LibraryQuery } from '@vela/core';
+import { libraryCardArtwork, libraryTabs, libraryKey, reconcileProgressRows, type Card, type LibraryExtras, type LibraryLiveModel, type LibraryQuery } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
 import type { LibraryPage } from '@vela/skin/src/widgets/library/model';
@@ -111,15 +111,18 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     // A refresh of the same view (progress moved, a retry) keeps what it shows meanwhile.
     const held = sameExtras(extraState, id, revision, collectionTab, tabQuery) && !extraState.failed ? extraState.value : undefined;
     setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: true, failed: false, value: held, refreshing: !!held });
+    // A refresh for progress takes the new places into the rows on show (reconcileProgressRows):
+    // unchanged rows and cards keep their objects, so only what moved draws again.
+    const merged = (shown: LibraryExtras['rows'], fresh: LibraryExtras['rows']) => held ? reconcileProgressRows(shown, fresh, true) : fresh;
     // The recommendations show as soon as they arrive; collections and genres follow.
     const rows = (value: LibraryExtras) => {
       if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.progressRevision === progressRevision && previous.loading
-        ? { ...previous, value: previous.value ? { ...previous.value, rows: value.rows, rowsLoad: value.rowsLoad } : value } : previous);
+        ? { ...previous, value: previous.value ? { ...previous.value, rows: merged(previous.value.rows, value.rows), rowsLoad: value.rowsLoad } : value } : previous);
     };
     // A quiet refresh lands as a transition: the page it redraws is already on show.
     const settle = (next: ExtraState) => { if (active) (held ? startTransition : run)(() => setExtraState(next)); };
     void store.catalogue.libraryExtras(id, kind, rows, collectionTab, tabQuery, progressRevision > 0).then(value => {
-      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value });
+      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value: held && value ? { ...value, rows: merged(held.rows, value.rows) } : value });
     }).catch(() => {
       settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: !held, value: held });
     });

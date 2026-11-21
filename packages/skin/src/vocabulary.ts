@@ -2,6 +2,7 @@
 // over the binding context (the repeated item a node sits in) and the environment (the app's
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
+import { identityKeys } from './identity-keys';
 import { duration, msg } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
@@ -95,8 +96,11 @@ export interface Ctx {
   ch?: GuideChannel;
   /** A kind, genre or sort of library.kinds, library.genres or library.sorts. */
   opt?: LibraryOption;
+  /** The identity of a row or card in a shelf (identityKeys): kept when the shelf reorders. */
+  key?: string;
   index: number;
 }
+
 
 export type Accessor = (c: Ctx, e: Env) => string;
 
@@ -398,8 +402,16 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'personPage.tv': return at((e.personPage?.items ?? []).filter(card => card.kind !== 'movie'), card => ({ card }));
     case 'detail.contextParts': return at(d?.title[0]?.contextParts ?? [], contextPart => ({ contextPart }));
     case 'card.contextParts': return at(c.card?.contextParts ?? [], contextPart => ({ contextPart }));
-    case 'home.rows': return at(e.home?.rows ?? [], row => ({ row }));
-    case 'row.items': return at(c.row?.items ?? [], card => ({ card }));
+    case 'home.rows': {
+      const rows = e.home?.rows ?? [];
+      const keys = identityKeys(rows.map(row => row.id));
+      return at(rows, (row, i) => ({ row, key: `row:${keys[i]}` }));
+    }
+    case 'row.items': {
+      const items = c.row?.items ?? [];
+      const keys = identityKeys(items.map(card => card.id));
+      return at(items, (card, i) => ({ card, key: `card:${keys[i]}` }));
+    }
     case 'home.heroes': return at(e.home?.hero ?? [], hero => ({ hero, heroAct: heroAct(hero.id) }));
     case 'home.hero': {
       const hero = e.home?.hero[e.heroIndex];
@@ -422,9 +434,15 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
   }
 }
 
-/** A stable key for a repeated item: its position and the id of the item it binds. */
+/** Shelves keyed by what they hold: a Continue row that moves a title to the front, or a progress
+ * shelf added above others, moves the drawn cards and rows instead of redrawing them in place. */
+const IDENTITY = new Set(['home.rows', 'row.items', 'library.rows']);
+
+/** A stable key for a repeated item: its position and the id of the item it binds; for shelves and
+ * their cards, their identity. */
 export function itemKey(c: Ctx, over?: string): string {
   if (over === 'detail.episodes' && c.card) return c.card.id;
+  if (over && IDENTITY.has(over) && c.key) return c.key;
   const item = Object.values(c).find((v): v is { id: string } => typeof v === 'object' && v !== null && typeof (v as { id?: unknown }).id === 'string');
   return `${c.index}:${item?.id ?? (typeof c.fact === 'string' ? c.fact : '')}`;
 }
