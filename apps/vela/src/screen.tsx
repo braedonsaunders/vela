@@ -3,7 +3,7 @@ import { retainedHost } from './retained-host';
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
 import { useIsFocused, usePathname } from 'expo-router';
-import { useCallback, useContext, useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, SkipToContent, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import type { RNode } from '@vela/skin/src/resolve';
@@ -42,8 +42,14 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const visibleRoute = !(Platform.isTV && Platform.OS === 'android') || documentIsVisible(route, entry, pathname);
   const isCurrent = (sectionFocused ?? navigationFocused) && visibleRoute;
   useReturnFocus(isCurrent);
+  // A section coming back shows what it held at once, and catches up with the live host in a
+  // deferred (interruptible) render: redrawing its whole tree before the switch could paint held
+  // the click for most of a second. A section's first draw is deferred the same way, so the shell
+  // and the slide start at once and the page draws without a long task.
+  const settled = useDeferredValue(isCurrent);
+  const drawn = useDeferredValue(true, !sharedShell);
   const held = useRef(host);
-  held.current = retainedHost(held.current, host, isCurrent);
+  held.current = retainedHost(held.current, host, isCurrent && settled);
   const contentHost = held.current;
   const publishShellHost = useContext(SectionShellHostContext);
   // LibraryState's wrapper/actions are recreated on render. Publish only when the base host or
@@ -87,7 +93,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
     );
   }
   const tree = node ?? vela.doc?.routes[route];
-  if (!host || !contentHost || !tree) return <View style={{ flex: 1 }} />;
+  if (!host || !contentHost || !tree || !drawn) return <View style={{ flex: 1 }} />;
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md).
   const search = route === 'home' && contentHost.env.query !== '' ? vela.doc?.routes.search : undefined;
   const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
@@ -110,8 +116,10 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
       </ModalView>
     </ScreenActive.Provider>
   );
+  // Activity reaches the page's moving parts (motion, in-view checks, Escape scopes) in the same
+  // deferred render: telling a whole retained section at once held the switch's first frame.
   return (
-    <ScreenActive.Provider value={isCurrent}>
+    <ScreenActive.Provider value={settled}>
       {/* On TV a covered screen (home under a title page, a section behind another) takes no focus. */}
       <FocusBoundary active={isCurrent} entered={false} style={{ flex: 1 }}>
         {/* A shared section shell draws its own first, before its navigation. */}
