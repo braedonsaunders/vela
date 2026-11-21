@@ -27,14 +27,17 @@ const rise = (delay: number) => ({
   still: { keyframes: 'dissolve', duration: 220 },
 });
 
+// Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/.
+const version = '1.0.17';
+
 const lounge: SkinDocument = {
   schema: 1,
   renderer: 16,
   id: 'lounge',
   name: 'Lounge',
-  version: '1.0.16',
+  version,
   tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
-  preview: '/vela/v0/appearance/skins/lounge/1.0.3/preview.jpg',
+  preview: `/vela/v0/appearance/skins/lounge/${version}/preview.jpg`,
   swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   // Lounge's deep ground and amber, for the routes it inherits (search).
   ui: {
@@ -59,6 +62,8 @@ const lounge: SkinDocument = {
   strings: {
     en: {
       mainNav: 'Main',
+      openNavigation: 'Open navigation',
+      closeNavigation: 'Close navigation',
       velaHome: 'Vela home',
       home: 'Home',
       search: 'Search',

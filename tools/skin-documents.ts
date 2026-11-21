@@ -68,6 +68,9 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
       text = JSON.stringify(packaged);
     }
     const checkAssets = (value: unknown): void => {
+      // Only the document's own version is rebased and published: an asset named at another
+      // version would reach the release still pointing into the mock's appearance tree.
+      if (typeof value === 'string' && value.startsWith('/vela/v0/appearance/skins/')) throw new Error(`Skin ${doc.id} ${doc.version} names an asset outside its own version: ${value}`);
       if (typeof value === 'string' && value.startsWith('/vela/skins/')) {
         const file = resolve(out, value.slice('/vela/skins/'.length));
         if (!file.startsWith(resolve(out) + '/') || !existsSync(file) || !statSync(file).isFile()) throw new Error(`Skin ${doc.id} references missing asset: ${value}`);

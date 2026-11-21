@@ -4,7 +4,7 @@
 // (`/vela/v0/appearance/skins/<id>/<version>/<file>`). SVGs arrive as data URIs (svg-transformer.js),
 // other files as bundled asset ids. Run: bun apps/vela/scripts/assets.ts
 import { readdir } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { join, relative } from 'node:path';
 
 const root = join(import.meta.dir, '../../..');
 const out = join(root, 'apps/vela/src/assets.generated.ts');
@@ -30,14 +30,10 @@ const skins = join(root, 'packages/protocol/fixtures/skins');
 for (const entry of await readdir(skins, { withFileTypes: true })) {
   if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
   const assets = join(skins, entry.name, 'assets');
-  const { default: doc } = await import(join(skins, entry.name, 'document.ts')) as { default: { id: string; version: string; preview?: string } };
+  const { default: doc } = await import(join(skins, entry.name, 'document.ts')) as { default: { id: string; version: string } };
   for (const file of await walk(assets).catch(() => [] as string[])) {
+    // tools/skin-documents.ts refuses a document naming its assets at any other version.
     entries.push([`/vela/v0/appearance/skins/${doc.id}/${doc.version}/${relative(assets, file)}`, file]);
-    // Some published documents retain an older preview URL. Bundle that exact
-    // reference too, so it never falls through to the selected media server.
-    if (doc.preview && basename(file) === basename(doc.preview) && doc.preview !== entries.at(-1)![0]) {
-      entries.push([doc.preview, file]);
-    }
   }
 }
 // The Cinematic document's preview is the app's own picture of it.

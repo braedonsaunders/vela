@@ -59,6 +59,153 @@ export const libraryTab: Node = {
   ...tab('{dest.name}', { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.on' }], 'nav-{dest.id}'),
 };
 
+// Live TV, when the server has it and no library already stands for it.
+const showLive: Node['when'] = [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }];
+const onHome: Node['when'] = [{ test: 'env.section', is: 'eq', value: 'home' }];
+const onLive: Node['when'] = [{ test: 'env.section', is: 'eq', value: 'live' }];
+
+// Phones have no room for the capsule of tabs: one capsule names the current section and
+// opens every destination in a sheet, the way the shared phone shell does.
+const sectionName = (text: string, when: Node['when']): Node => ({
+  type: 'text', when, text, style: { 'font-size': '15px', 'font-weight': '650', 'line-clamp': '1' },
+});
+const navigationTrigger: Node = {
+  type: 'box',
+  id: 'lounge-navigation',
+  press: { action: 'only', arg: 'navigation' },
+  controlStates: false,
+  label: '{s:openNavigation}',
+  testId: 'mobile-navigation',
+  a11y: { expanded: [{ test: 'flag:navigation' }], haspopup: 'dialog' },
+  style: { display: 'none' },
+  small: {
+    position: 'relative',
+    display: 'flex',
+    'flex-direction': 'row',
+    'align-items': 'center',
+    gap: '8px',
+    flex: '0 1 auto',
+    'min-width': '0px',
+    height: '44px',
+    'box-sizing': 'border-box',
+    padding: '0px 16px 0px 14px',
+    'border-radius': '999px',
+    color: '$ink',
+    'background-color': 'rgba(18, 20, 26, 0.55)',
+    'backdrop-filter': 'blur(30px) saturate(1.5)',
+    'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.08), 0px 20px 50px -20px rgba(0, 0, 0, 0.8)',
+    transition: lift,
+  },
+  focus: { 'background-color': '$ink', color: '$ground' },
+  hover: { 'background-color': 'rgba(255, 255, 255, 0.12)' },
+  children: [
+    { type: 'icon', symbol: 'menu', style: { width: '18px', height: '18px', 'flex-shrink': '0' } },
+    sectionName('{s:home}', onHome),
+    { type: 'repeat', over: 'nav.destinations', item: sectionName('{dest.name}', [{ test: 'dest.on' }]) },
+    sectionName('{s:liveTv}', onLive),
+  ],
+};
+
+const destination = (
+  label: string,
+  press: { action: 'home' | 'library' | 'live'; arg?: string },
+  on: Node['when'],
+  testId: string,
+): Node => ({
+  type: 'box',
+  press,
+  controlStates: false,
+  label,
+  testId,
+  a11y: { current: on },
+  style: { ...sheetRow(), 'min-height': '52px', 'font-size': '17px', 'font-weight': '650' },
+  focus: sheetFocus(),
+  hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
+  children: [
+    { type: 'text', text: label, style: { flex: '1', 'line-clamp': '1' } },
+    // The current section keeps Lounge's amber mark.
+    { type: 'box', when: on, style: { width: '8px', height: '8px', 'border-radius': '4px', 'background-color': '$amber', 'flex-shrink': '0' } },
+  ],
+});
+
+const navigationSheet: Node = {
+  type: 'box',
+  when: [{ test: 'env.viewer' }, { test: 'env.small' }, { test: 'flag:navigation' }],
+  escape: 'navigation',
+  returnFocus: 'lounge-navigation',
+  style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'z-index': '30' },
+  children: [
+    {
+      type: 'box',
+      press: { action: 'close', arg: 'navigation' },
+      controlStates: false,
+      label: '{s:closeNavigation}',
+      style: {
+        position: 'absolute',
+        top: '0px',
+        left: '0px',
+        right: '0px',
+        bottom: '0px',
+        'background-color': 'rgba(5, 6, 9, 0.6)',
+        'backdrop-filter': 'blur(6px)',
+      },
+    },
+    {
+      type: 'box',
+      role: 'navigation',
+      label: '{s:mainNav}',
+      motion: 'sheet',
+      style: {
+        position: 'absolute',
+        top: '68px',
+        left: '12px',
+        right: '12px',
+        'max-height': 'calc(100% - 92px)',
+        'overflow-y': 'auto',
+        'box-sizing': 'border-box',
+        padding: '12px',
+        display: 'flex',
+        'flex-direction': 'column',
+        gap: '2px',
+        'border-radius': '30px',
+        'background-color': 'rgba(24, 26, 32, 0.92)',
+        'backdrop-filter': 'blur(40px) saturate(1.5)',
+        'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.10), 0px 40px 90px -20px rgba(0, 0, 0, 0.9)',
+      },
+      children: [
+        destination('{s:home}', { action: 'home' }, onHome, 'nav-sheet-home'),
+        { type: 'repeat', over: 'nav.destinations', item: destination('{dest.name}', { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.on' }], 'nav-sheet-{dest.id}') },
+        { ...destination('{s:liveTv}', { action: 'live' }, onLive, 'nav-sheet-live'), when: showLive },
+      ],
+    },
+  ],
+};
+
+// Search stays one press away on phones, beside the profile.
+const phoneSearch: Node = {
+  type: 'box',
+  press: { action: 'search', focus: 'vela-search' },
+  controlStates: false,
+  label: '{s:search}',
+  testId: 'nav-search-phone',
+  style: { display: 'none' },
+  small: {
+    position: 'relative',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    width: '44px',
+    height: '44px',
+    'flex-shrink': '0',
+    'border-radius': '999px',
+    color: '$ink',
+    transition: lift,
+  },
+  focus: { 'background-color': '$ink', color: '$ground' },
+  hover: { 'background-color': 'rgba(255, 255, 255, 0.12)' },
+  children: [{ type: 'icon', symbol: 'search', style: { width: '20px', height: '20px' } }],
+};
+
 export const shell: Node = {
   type: 'box',
   style: {
@@ -151,7 +298,7 @@ export const shell: Node = {
                 'justify-content': 'center',
                 'min-width': '0px',
               },
-              small: { 'justify-content': 'flex-start' },
+              small: { display: 'none' },
               children: [
                 {
                   type: 'box',
@@ -172,13 +319,9 @@ export const shell: Node = {
                   },
                   small: { padding: '4px' },
                   children: [
-                    tab('{s:home}', { action: 'home' }, [{ test: 'env.section', is: 'eq', value: 'home' }], 'nav-home'),
+                    tab('{s:home}', { action: 'home' }, onHome, 'nav-home'),
                     { type: 'repeat', over: 'nav.destinations', item: libraryTab },
-                    // Live TV, when the server has it and no library already stands for it.
-                    {
-                      ...tab('{s:liveTv}', { action: 'live' }, [{ test: 'env.section', is: 'eq', value: 'live' }], 'nav-live'),
-                      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
-                    },
+                    { ...tab('{s:liveTv}', { action: 'live' }, onLive, 'nav-live'), when: showLive },
                     {
                       type: 'box',
                       press: { action: 'search', focus: 'vela-search' },
@@ -222,6 +365,9 @@ export const shell: Node = {
                 },
               ],
             },
+            navigationTrigger,
+            { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1', 'min-width': '0px' } },
+            phoneSearch,
             {
               type: 'box',
               id: 'lounge-profile',
@@ -258,7 +404,7 @@ export const shell: Node = {
                     color: '$ground',
                     'background-image': 'linear-gradient(140deg, #f5f1e9 0%, #dcb998 100%)',
                   },
-                  small: { width: '40px', height: '40px', 'font-size': '16px' },
+                  small: { width: '44px', height: '44px', 'font-size': '17px' },
                 },
               ],
             },
@@ -279,6 +425,7 @@ export const shell: Node = {
         width: '100%',
       } as Style,
     },
+    navigationSheet,
     // The profile sheet: large rows a remote can step through.
     {
       type: 'box',
