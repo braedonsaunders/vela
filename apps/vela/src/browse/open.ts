@@ -1,22 +1,30 @@
 // Where a document's browse presses go: a library (a live library is Live TV), a collection, an
 // extra played full screen, and a live hit from search (a channel's guide, or a programme: watched
 // while it airs, else the guide at its time).
+import { startTransition } from 'react';
 import { router } from 'expo-router';
 import type { Vela as Store } from '@vela/core';
 
 /** Row entries that open as a collection page rather than a title. */
 export const COLLECTION_KINDS = ['collection', 'directory', 'playlist'];
 
+/** A move between top-level sections renders as a transition: React draws it in slices between
+ * frames, rather than in the press's own task, and the router dispatches it the same way. The
+ * section on show stays until the next one is ready, which a retained section is at once. */
+export function switchSection(go: (options: { inTransition: true }) => void): void {
+  startTransition(() => go({ inTransition: true }));
+}
+
 /** A library from the shell or home. Moving between libraries replaces the page, so Back is home. */
 export function openLibrary(store: Store, id: string, fromRoute: string): void {
   const destination = store.getState().libraries.value?.find(d => d.id === id);
   if (destination?.kind === 'live') {
-    router.push('/live');
+    switchSection(options => router.push('/live', options));
     return;
   }
   const target = { pathname: '/library/[id]' as const, params: { id } };
-  if (fromRoute === 'library') router.replace(target);
-  else router.push(target);
+  if (fromRoute === 'library') switchSection(options => router.replace(target, options));
+  else switchSection(options => router.push(target, options));
 }
 
 export function openCollection(id: string, kind?: string): void {

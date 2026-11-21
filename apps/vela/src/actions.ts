@@ -7,7 +7,7 @@ import type { Vela as Store } from '@vela/core';
 import { focusElement, page, type SkinHost } from '@vela/skin';
 import { liveAction, type LiveController } from '@vela/skin/src/widgets/guide';
 import type { Action } from '../../../packages/protocol/skin';
-import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra } from './browse/open';
+import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra, switchSection } from './browse/open';
 import type { ViewState } from './view-state';
 
 import { playParams } from './play-action';
@@ -103,7 +103,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'home':
         actions.resetFlags();
         store.search.clear();
-        return router.dismissTo('/');
+        return switchSection(options => router.dismissTo('/', options));
       case 'back':
       case 'close':
         if (action === 'close' && arg) return actions.setFlag(arg, false);
@@ -155,7 +155,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
         return loadMore('library', arg);
       case 'live':
         actions.resetFlags();
-        return router.push('/live');
+        return switchSection(options => router.push('/live', options));
       case 'library':
         actions.resetFlags();
         return openLibrary(store, arg, place.route);
