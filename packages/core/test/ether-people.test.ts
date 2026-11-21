@@ -221,3 +221,26 @@ test('a plugin library whose row cursor expires mid-read is read again from the 
     expect(shelves.map(row => row.id)).toEqual(Array.from({ length: 30 }, (_, n) => n ? `creator-picks-${n + 1}` : 'creator-picks'));
   } finally { globalThis.fetch = request; await mock.stop(); }
 });
+
+test('a slow person probe does not hold the first title page back', async () => {
+  const { mock, adapter } = await connect();
+  // The first person filmography answer hangs (a cold server); the title is drawn anyway.
+  const slow = mock.url.replace(/\/$/, '');
+  const original = globalThis.fetch;
+  let release = () => {};
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.startsWith(slow) && /\/people\/[^/]+\/titles\?limit=1/.test(url)) await new Promise<void>(resolve => { release = resolve; });
+    return original(input, init);
+  }) as typeof fetch;
+  try {
+    const started = performance.now();
+    const detail = await adapter.detail('title-1-1');
+    expect(detail.title.id).toBe('title-1-1');
+    expect(performance.now() - started).toBeLessThan(5000);
+    expect(hasPersonFilmography(adapter)).toBe(false);
+    release();
+    await Bun.sleep(50);
+    expect(hasPersonFilmography(adapter)).toBe(true);
+  } finally { globalThis.fetch = original; release(); await mock.stop(); }
+});

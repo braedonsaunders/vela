@@ -35,6 +35,9 @@ const BOOTSTRAP_CACHED = { cacheable: true, persistent: true };
 const PUBLIC = { auth: false };
 const PUBLIC_CACHED = { auth: false, cacheable: true };
 
+/** How long a title page waits for the first person-page probe before it is drawn without credit links. */
+const PERSON_PROBE_WAIT_MS = 1500;
+
 /** Ether speaks the v0 protocol natively, so it offers every capability Vela knows. */
 const DESCRIBE_REUSE_MS = 5000;
 
@@ -50,10 +53,12 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   private librarySupport: 'unknown' | 'yes' | 'no' = 'unknown';
   private readonly declaredLibraries = new Map<string, V.Library>();
   private readonly missingPeople = new Set<string>();
+  private personProbe: Promise<void> | undefined;
 
   resetOptionalCapabilities(): void {
     this.guideWindowLimits = undefined;
     this.personSupport = this.librarySupport = 'unknown';
+    this.personProbe = undefined;
     this.missingPeople.clear();
     this.declaredLibraries.clear();
     this.supportsPersonFilmography = this.supportsLibraryRecommendations = false;
@@ -366,21 +371,13 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   async detail(id: string, fresh = false) {
     const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, { ...CACHED, fresh });
     if (this.personSupport === 'unknown') {
-      const ids = [...new Set([...(data.cast ?? []), ...(data.crew ?? [])].flatMap(person => person.id && !this.missingPeople.has(person.id) ? [person.id] : []))];
-      for (const personId of ids) {
-        try {
-          await this.personDetails(personId);
-          await this.http.request('GET', `/people/${segment(personId)}/titles?limit=1`);
-          this.personSupport = 'yes'; this.supportsPersonFilmography = true;
-          break;
-        }
-        catch (error) {
-          if (error instanceof VelaError && (error.status === 405 || error.status === 404 && ['endpoint_not_found', 'http_error'].includes(error.detail.code))) { this.personSupport = 'no'; break; }
-          if (error instanceof VelaError && error.status === 404) this.missingPeople.add(personId);
-          // Person discovery decorates credit links; it is never allowed to hide the title.
-          else break;
-        }
-      }
+      // One probe at a time; one that has not settled yet is retried by a later title.
+      const probe = this.personProbe ??= this.probePeople(data).finally(() => { if (this.personProbe === probe) this.personProbe = undefined; });
+      // Person discovery decorates credit links; it may not hold the title back for long
+      // (a cold person filmography can take many seconds to answer).
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([probe, new Promise<void>(resolve => { timer = setTimeout(resolve, PERSON_PROBE_WAIT_MS); })]);
+      clearTimeout(timer);
     }
     // Older Ether servers supply the show's id but omit its display name.
     if (data.title?.showId && data.title.showId !== id && !data.title.showName) {
@@ -484,6 +481,25 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   cancelAudioFallback(sessionId: string, audioId: string, request: V.Mutation, signal?: AbortSignal) {
     const path = `/sessions/${segment(sessionId)}/audio-fallback/${segment(audioId)}`;
     return this.http.request<V.Ack>('DELETE', path, request, { signal });
+  }
+
+  /** Whether this server has person pages: credits link to them when it does. */
+  private async probePeople(data: V.TitleDetail): Promise<void> {
+    const ids = [...new Set([...(data.cast ?? []), ...(data.crew ?? [])].flatMap(person => person.id && !this.missingPeople.has(person.id) ? [person.id] : []))];
+    for (const personId of ids) {
+      try {
+        await this.personDetails(personId);
+        await this.http.request('GET', `/people/${segment(personId)}/titles?limit=1`);
+        this.personSupport = 'yes'; this.supportsPersonFilmography = true;
+        break;
+      }
+      catch (error) {
+        if (error instanceof VelaError && (error.status === 405 || error.status === 404 && ['endpoint_not_found', 'http_error'].includes(error.detail.code))) { this.personSupport = 'no'; break; }
+        if (error instanceof VelaError && error.status === 404) this.missingPeople.add(personId);
+        // Person discovery decorates credit links; it is never allowed to hide the title.
+        else break;
+      }
+    }
   }
 
   // Live TV
