@@ -9,6 +9,7 @@ import { BlurView } from 'expo-blur';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, type TextStyle, type ViewStyle } from 'react-native';
 import { TextField } from '../common/text-field';
+import { ownKeyboard, TvKeyboard } from '../common/tv-keyboard';
 import Svg, { Path } from 'react-native-svg';
 import { useQueryText } from './query-text';
 import { resolveUi } from '../../resolve/ui';
@@ -80,8 +81,17 @@ export function SearchField({ ctx }: WidgetProps) {
   };
 
   // The search actions (`search`, `focusSearch`) focus the field by its id: the text input itself,
-  // which on a TV opens the system keyboard.
-  const input = useSearchFocus();
+  // which on Apple TV opens the system keyboard. Android TV types with Vela's own keyboard.
+  const [typing, setTyping] = useState(false);
+  const openKeyboard = () => {
+    setTyping(true);
+    focus(true);
+  };
+  const closeKeyboard = () => {
+    setTyping(false);
+    focus(false);
+  };
+  const input = useSearchFocus(OWN_KEYBOARD ? openKeyboard : undefined);
   const placeholder = host.env.home?.descriptiveAvailable
     ? msg('ui.searchPlaceholderDescriptive')
     : msg('ui.searchPlaceholder');
@@ -110,7 +120,7 @@ export function SearchField({ ctx }: WidgetProps) {
   const Frame = Platform.isTV ? PlainPressable : View;
   const tvProps = Platform.isTV
     ? {
-        onPress: () => input.current?.focus(),
+        onPress: () => (OWN_KEYBOARD ? openKeyboard() : input.current?.focus()),
         onFocus: () => {
           setTvFocused(true);
           onTvFocus();
@@ -142,6 +152,8 @@ export function SearchField({ ctx }: WidgetProps) {
           returnKeyType="search"
           testID={`search-${ctx.index}`}
           nativeID="vela-search"
+          // Android TV: the frame opens Vela's keyboard; the input only shows the query.
+          focusable={!OWN_KEYBOARD}
           {...clearOnEscape}
           onFocus={() => focus(true)}
           onBlur={() => focus(false)}
@@ -173,9 +185,24 @@ export function SearchField({ ctx }: WidgetProps) {
           <Glyph symbol="close" size={16} color={clearLit ? ui.inkInverse : ui.ink} />
         </Pressable>
       ) : null}
+      {typing ? (
+        <TvKeyboard
+          kind="search"
+          label={msg('ui.searchYourLibrary')}
+          value={query.text}
+          onChangeText={query.change}
+          placeholder={placeholder}
+          doneLabel="Done"
+          onDone={closeKeyboard}
+          onClose={closeKeyboard}
+          testID={`search-${ctx.index}-keyboard`}
+        />
+      ) : null}
     </View>
   );
 }
+
+const OWN_KEYBOARD = ownKeyboard(Platform.OS, Platform.isTV);
 
 /** How long opening search takes to lay out before the field is checked against the bar. */
 const SETTLE_MS = 250;

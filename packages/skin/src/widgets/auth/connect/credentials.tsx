@@ -26,7 +26,7 @@ export function Credentials({ busy, onSignIn, onQuick, canPassword = true, canQu
         <Field label={msg('ui.username')} value={username} onChangeText={setUsername}
           onSubmit={() => passwordInput.current?.focus()} kind="username" testID="connect-username" />
         <Field label={msg('ui.password')} value={password} onChangeText={setPassword} onSubmit={submit}
-          inputRef={passwordInput} kind="password" testID="connect-password" />
+          inputRef={passwordInput} kind="password" testID="connect-password" doneLabel={msg('ui.signIn')} />
         <Pill primary height={layout?.tight ? 44 : 52} label={msg('ui.signIn')} onPress={submit}
           disabled={!ready} busy={busy} testID="connect-sign-in" />
       </View> : null}

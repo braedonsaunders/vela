@@ -4,10 +4,11 @@
 // the tvOS focus engine and a D-pad.
 import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
-import { useState, type ReactNode, type Ref, type ComponentRef } from 'react';
+import { useImperativeHandle, useState, type ReactNode, type Ref, type ComponentRef } from 'react';
 import { Platform, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { useAuthLayout } from '../auth/layout-context';
 import { TextField } from './text-field';
+import { ownKeyboard, TvKeyboard } from './tv-keyboard';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { display, eyebrow, focusRing, pill } from '../../resolve/vela-base/look';
@@ -280,6 +281,8 @@ interface FieldProps {
   kind?: 'url' | 'username' | 'password';
   placeholder?: string;
   testID?: string;
+  /** Android TV's own keyboard: the words on its done key (Done, Next by default for a username). */
+  doneLabel?: string;
 }
 
 const KINDS = {
@@ -289,7 +292,70 @@ const KINDS = {
 } as const;
 
 /** The base's sign-in field: a label over a glass input that rings in the accent on focus. */
-export function Field({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef }: FieldProps) {
+export function Field(props: FieldProps) {
+  return OWN_KEYBOARD ? <KeyboardField {...props} /> : <SystemField {...props} />;
+}
+
+const OWN_KEYBOARD = ownKeyboard(Platform.OS, Platform.isTV);
+
+/** Android TV: the field is a button showing the text; selecting it opens Vela's keyboard
+ * (tv-keyboard.tsx). `inputRef`'s focus() opens it too (a username's Next opens the password's). */
+function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef, doneLabel }: FieldProps) {
+  const look = useLook();
+  const { state, handlers } = useInteraction();
+  const layout = useAuthLayout();
+  const [typing, setTyping] = useState(false);
+  useImperativeHandle(inputRef, () => ({ focus: () => setTyping(true) }) as unknown as ComponentRef<typeof TextField>, []);
+  const rows = overlaid({ ...fieldRows, ...(layout?.tight ? { height: '44px' } : {}) } as Css, state, {
+    hover: { 'border-color': '$ui.glassEdgeStrong' },
+    focus: { 'border-color': '$ui.accent', 'box-shadow': '0px 0px 0px 4px $ui.focusHalo' },
+  });
+  const size = rows['font-size'] ?? '16px';
+  const shown = kind === 'password' ? '\u2022'.repeat([...value].length) : value;
+  return (
+    <View style={{ gap: layout?.tight ? 4 : 8 }}>
+      {!layout?.minimal ? <Label>{label}</Label> : null}
+      <Pressable
+        focusable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityValue={kind === 'password' ? undefined : { text: value }}
+        testID={testID}
+        onPress={() => setTyping(true)}
+        onFocus={handlers.onFocus}
+        onBlur={handlers.onBlur}
+        style={[look.box(rows), { justifyContent: 'center' }, state.focus && { transform: [{ scale: 1.025 }] }]}
+      >
+        <Text
+          numberOfLines={1}
+          // The end of a long address is what was just typed.
+          ellipsizeMode="head"
+          style={look.text({ 'font-size': size, color: value ? (rows.color ?? '$ui.ink') : '$ui.inkQuiet' })}
+        >
+          {shown || placeholder || ''}
+        </Text>
+      </Pressable>
+      {typing ? (
+        <TvKeyboard
+          kind={kind}
+          label={label}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          doneLabel={doneLabel ?? (kind === 'username' ? 'Next' : 'Done')}
+          onDone={() => {
+            setTyping(false);
+            onSubmit?.();
+          }}
+          onClose={() => setTyping(false)}
+          testID={testID ? `${testID}-keyboard` : undefined}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function SystemField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef }: FieldProps) {
   const look = useLook();
   const { state, handlers } = useInteraction();
   const layout = useAuthLayout();
