@@ -25,7 +25,6 @@ export interface SkinHost {
   refreshHeroArtwork?(id: string): Promise<{ backdrop: string; poster: string } | undefined>;
   setQuery(query: string): void;
   setFlag(flag: string, on: boolean): void;
-  setPager(rowId: string, state: { atStart: boolean; atEnd: boolean }): void;
   /** Ask for the next page of a row, home, a library or a collection (the `sentinel` widget). */
   loadMore(on: 'row' | 'home' | 'library' | 'collection', id: string): void;
   /** A pointer is over, focus is on or a press began on a control with this press: the app may

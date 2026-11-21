@@ -3,6 +3,7 @@
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
 import { identityKeys } from './identity-keys';
+import { pagerBinding, pagerState } from './pager-book';
 import { duration, msg } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
@@ -56,8 +57,6 @@ export interface Env {
   entry: string;
   flags: string[];
   rowLoading: string[];
-  /** Per row: whether its pager is at its start and end. */
-  pagers: Record<string, { atStart: boolean; atEnd: boolean }>;
   /** The shell's navigation row (`fit: 'nav'`): the destinations it has no room for (section keys:
    *  a library id, `live`), and whether the hidden copy measuring it is drawing (the renderer's own). */
   navOut?: string[];
@@ -217,9 +216,9 @@ export const VOCABULARY: Record<string, Accessor> = {
   'row.resume': c => (c.row ? yes(c.row.items.length > 0 && c.row.items.every(i => i.progressSeconds > 0 && !i.played)) : ''),
   'row.previewOnFocus': c => (c.row ? yes(c.row.previewOnFocus) : ''),
   'row.loadingMore': (c, e) => (c.row ? yes(e.rowLoading.includes(c.row.id)) : ''),
-  'pager.overflows': (c, e) => (c.row ? yes(!(e.pagers[c.row.id]?.atStart ?? true) || !(e.pagers[c.row.id]?.atEnd ?? true)) : ''),
-  'pager.atStart': (c, e) => (c.row ? yes(e.pagers[c.row.id]?.atStart ?? true) : ''),
-  'pager.atEnd': (c, e) => (c.row ? yes(e.pagers[c.row.id]?.atEnd ?? true) : ''),
+  'pager.overflows': pagerBinding((c: Ctx) => (c.row ? yes(!(pagerState(c.row.id)?.atStart ?? true) || !(pagerState(c.row.id)?.atEnd ?? true)) : '')),
+  'pager.atStart': pagerBinding((c: Ctx) => (c.row ? yes(pagerState(c.row.id)?.atStart ?? true) : '')),
+  'pager.atEnd': pagerBinding((c: Ctx) => (c.row ? yes(pagerState(c.row.id)?.atEnd ?? true) : '')),
 
   'heroAct.reasonLabel': c => c.heroAct?.reasonLabel ?? '',
   'heroAct.actionLabel': c => c.heroAct?.actionLabel ?? '',

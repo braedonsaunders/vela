@@ -38,7 +38,6 @@ import { useLast } from '@vela/skin/src/presence';
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
-import { pagerScope } from './pagers';
 import { useLiveController } from './live';
 import { LaunchGate } from './launch';
 import { launchReady } from './launch-state';
@@ -381,7 +380,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     });
     const key = `${route}:${entry}:${library ?? ''}`;
     const routeViewport = route === 'watch' ? viewport : contentViewport;
-    const inputs = [resolved.doc, env, routeViewport, dispatch, image, setQuery, view.setFlag, view.setPager, loadMore];
+    const inputs = [resolved.doc, env, routeViewport, dispatch, image, setQuery, view.setFlag, loadMore];
     const previous = hosts.current.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.host;
     const result: SkinHost = {
@@ -406,7 +405,6 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       refreshHeroArtwork: previous?.host.refreshHeroArtwork ?? (id => store.home.refreshArtwork(id)),
       setQuery,
       setFlag: view.setFlag,
-      setPager: previous?.host.setPager ?? ((rowId, pager) => view.setPager(pagerScope(route, entry), rowId, pager)),
       loadMore,
       prefetch,
     };

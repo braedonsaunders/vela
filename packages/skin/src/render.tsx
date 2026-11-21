@@ -1,4 +1,5 @@
 import { ScreenActive } from './screen-active';
+import { pagerState, readsPager, reportPager, subscribePager } from './pager-book';
 export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
 import { WebLibraryGrid } from './web-library-grid';
@@ -20,7 +21,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Children, memo, cloneElement, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
+import { Children, memo, cloneElement, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -367,6 +368,8 @@ function HeroCopy({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx
 }
 
 function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
+  // A row's arrows read its pager: they, and nothing else, redraw when the row reports its ends.
+  usePager(readsPager(node) ? ctx.row?.id : undefined);
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
   const hiddenLibraryNav = useContext(HiddenLibraryNav);
@@ -413,6 +416,12 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     case 'slot': return <Slot node={node} ctx={ctx} />;
     case 'widget': return <Widget node={node} ctx={ctx} />;
   }
+}
+
+/** Redraw when the row's pager ends change (nothing without a row). */
+function usePager(rowId: string | undefined): void {
+  const subscribe = useCallback((listener: () => void) => (rowId ? subscribePager(rowId, listener) : () => {}), [rowId]);
+  useSyncExternalStore(subscribe, () => (rowId ? pagerState(rowId) : undefined));
 }
 
 // Local focus changes redraw that control/group, not every sibling in its row.
@@ -715,7 +724,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       pagerMetrics.current.contentWidth = element.scrollWidth;
       const pager = pagers.get(rowId);
       if (pager) { pager.width = element.clientWidth; pager.contentWidth = element.scrollWidth; }
-      host.setPager(rowId, { atStart: element.scrollLeft <= 1, atEnd: element.scrollLeft + element.clientWidth >= element.scrollWidth - 1 });
+      reportPager(rowId, { atStart: element.scrollLeft <= 1, atEnd: element.scrollLeft + element.clientWidth >= element.scrollWidth - 1 });
     }) : 0;
     return () => { if (frame) cancelAnimationFrame(frame); pagers.delete(rowId); };
   }, [node.pager, fx.scrollX, rowId, viewport.width]);
@@ -822,7 +831,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       pagerMetrics.current = { x: contentOffset.x, width: layoutMeasurement.width, contentWidth: contentSize.width };
       const pager = pagers.get(rowId);
       if (pager) { pager.x = contentOffset.x; pager.width = layoutMeasurement.width; pager.contentWidth = contentSize.width; }
-      host.setPager(rowId, { atStart: contentOffset.x <= 1, atEnd: contentOffset.x + layoutMeasurement.width >= contentSize.width - 1 });
+      reportPager(rowId, { atStart: contentOffset.x <= 1, atEnd: contentOffset.x + layoutMeasurement.width >= contentSize.width - 1 });
     } : undefined;
     const onPagerLayout = node.pager && rowId ? (e: LayoutChangeEvent) => {
       // A hidden scene (a retained section behind another) lays out at no width: its row has not
@@ -832,7 +841,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const pager = pagers.get(rowId);
       if (pager) pager.width = pagerMetrics.current.width;
       const metrics = pager ?? pagerMetrics.current;
-      if (metrics.contentWidth) host.setPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= metrics.contentWidth - 1 });
+      if (metrics.contentWidth) reportPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= metrics.contentWidth - 1 });
     } : undefined;
     const onPagerContent = node.pager && rowId ? (width: number) => {
       if (!width) return;
@@ -840,7 +849,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const pager = pagers.get(rowId);
       if (pager) pager.contentWidth = width;
       const metrics = pager ?? pagerMetrics.current;
-      host.setPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= width - 1 });
+      reportPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= width - 1 });
     } : undefined;
     // Android TV: the route's offset, for keeping focused controls below the shell's bar.
     const onScroll = route ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
