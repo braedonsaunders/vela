@@ -6,7 +6,7 @@ import type { LiveSource } from '../src/widgets/guide/source';
 import { startFailure, startFailureOf, startRetrying } from '../src/widgets/player/start-failure';
 import { liveWatchOf } from '../src/widgets/player/target';
 
-const initialPlayback: PlaybackState = { phase: 'idle', target: null, plan: null, sessionId: '', error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, live: null };
+const initialPlayback: PlaybackState = { phase: 'idle', target: null, plan: null, sessionId: '', error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, live: null, versions: null };
 const providerDown = (retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number }) => new VelaError(
   { class: 'source', code: 'network', message: 'The connection to the Live TV provider failed.', retry }, 503);
 const watching = { open: true, canPreview: true, quiet: false, order: ['shift', 'bbc'], remembered: '' };

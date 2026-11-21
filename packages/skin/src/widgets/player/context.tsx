@@ -50,6 +50,8 @@ export interface PlayerChromeState {
   versionMessage: string;
   send(command: CommandInput): void;
   switchVersion(versionId: string): void;
+  /** The quality menu opened: re-read the session's versions (the plan prop shows the result). */
+  refreshVersions?(): void;
   close(): void;
   retry(): void;
   /** A scrub thumbnail for a position (trickplay), once a session offers them. */

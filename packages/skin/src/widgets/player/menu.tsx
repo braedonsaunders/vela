@@ -211,6 +211,7 @@ export function VersionChoiceRow({ look, name, chips, status, selected, pending,
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ checked: selected, disabled: !enabled, busy: !!pending }}
+      {...(Platform.OS === 'web' ? { 'aria-checked': selected, 'aria-busy': !!pending } : {})}
       accessibilityLabel={`${name}, ${[...chips, status].filter(Boolean).join(', ')}`}
       disabled={!enabled}
       hasTVPreferredFocus={claim}

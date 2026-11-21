@@ -13,6 +13,7 @@ import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
+import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
 import type { Session } from './session';
 import { message, type StateBox } from './state';
 import type { VelaState } from './index';
@@ -40,6 +41,11 @@ export interface PlaybackState {
   /** After a refused start the server allows retrying: which retry is coming (1, 2, …), else 0. */
   retryAttempt: number;
   live: ReturnType<typeof liveStatus>;
+  /**
+   * The session's version list as last re-read (`refreshVersions`), for the chrome only: the
+   * engines receive `plan`, which a refresh never touches. Null until a read describes one.
+   */
+  versions: SessionVersions | null;
 }
 
 export const initialPlayback: PlaybackState = {
@@ -53,6 +59,7 @@ export const initialPlayback: PlaybackState = {
   retryAfterSeconds: 0,
   retryAttempt: 0,
   live: null,
+  versions: null,
 };
 
 /** The media authorization the trusted host passes to `VelaPlayer.setMediaAccess`. */
@@ -73,6 +80,8 @@ interface Intent {
 
 const MAX_PREPARATIONS = 30;
 const POLL_SECONDS = 5;
+/** A plan offered with placeholder versions is read once more this long after it starts. */
+const COLD_VERSIONS_SECONDS = 4;
 
 export class Playback {
   /** The current playback's own token: work for an older one stops when this changes. */
@@ -91,6 +100,9 @@ export class Playback {
   private follow: AbortController | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private media: { identity: string; handle: string } | undefined;
+  /** The version read in flight, so a second ask for the same session shares it. */
+  private versionsRead: { run: object; sessionId: string; done: Promise<void> } | undefined;
+  private versionsTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** The last progress report in flight, so a stop is followed by a read of what it recorded. */
   private reporting: Promise<unknown> = Promise.resolve();
@@ -237,9 +249,18 @@ export class Playback {
     this.recovering = false;
     this.established = true;
     this.cursor = plan.positionSeconds ?? 0;
-    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0 });
+    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
+    // Placeholder versions (Play pressed before the title's release search finished) are read
+    // again once, shortly after the start; opening the quality menu reads them again too.
+    if (hasColdVersion(plan.versions)) {
+      const sessionId = plan.sessionId;
+      this.versionsTimer = setTimeout(() => {
+        this.versionsTimer = undefined;
+        if (this.run === run) void this.refreshVersions(sessionId);
+      }, COLD_VERSIONS_SECONDS * 1000);
+    }
   }
 
   /**
@@ -321,7 +342,7 @@ export class Playback {
     const target = current.target.kind === 'title'
       ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
       : current.target;
-    this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1 });
+    this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1, versions: null });
     const old = current.plan;
     this.abandoned = old;
     const intent = { run: this.run, target, key: `recover-${randomId()}` };
@@ -457,6 +478,35 @@ export class Playback {
     }
   }
 
+  /**
+   * Read the session's version list again (the viewer opened the quality menu). Only the list,
+   * the current choice and the remembered choice change, in `versions`: never the plan, its
+   * generations or the engine. One read at a time per session; a failed read keeps the list.
+   */
+  refreshVersions(sessionId: string): Promise<void> {
+    const run = this.run;
+    const current = this.box.get().playback;
+    if (!run || this.recovering || !sessionId || current.sessionId !== sessionId || current.phase !== 'playing' || !current.plan?.versions?.length) return Promise.resolve();
+    if (this.versionsRead?.run === run && this.versionsRead.sessionId === sessionId) return this.versionsRead.done;
+    const read = { run, sessionId, done: Promise.resolve() };
+    read.done = (async () => {
+      try {
+        const connection = await this.session.ready();
+        const snapshot = await connection.adapter.sessionSnapshot(sessionId);
+        if (this.run !== run || this.recovering || this.box.get().playback.sessionId !== sessionId) return;
+        if (snapshot?.plan?.sessionId !== sessionId) return;
+        const versions = sessionVersionsOf(snapshot.plan);
+        if (versions) this.patch({ versions });
+      } catch {
+        // The menu keeps the list it has; the next open asks again.
+      } finally {
+        if (this.versionsRead === read) this.versionsRead = undefined;
+      }
+    })();
+    this.versionsRead = read;
+    return read.done;
+  }
+
   /** The player's progress report. */
   async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
     const ended = observation.state === 'ended';
@@ -554,6 +604,9 @@ export class Playback {
     this.follow = undefined;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
+    if (this.versionsTimer) clearTimeout(this.versionsTimer);
+    this.versionsTimer = undefined;
+    this.versionsRead = undefined;
   }
 
   /**

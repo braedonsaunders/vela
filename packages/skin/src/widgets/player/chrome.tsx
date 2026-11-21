@@ -83,7 +83,11 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     const limit = view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
     seek(Math.max(0, Math.min(limit, from + delta)));
   };
-  const toggle = (menu: Exclude<Opened, null>) => setOpened(current => (current === menu ? null : menu));
+  const toggle = (menu: Exclude<Opened, null>) => {
+    // One version read per opening of the quality menu, never a poll while it stands open.
+    if (menu === 'quality' && opened !== 'quality') state.refreshVersions?.();
+    setOpened(current => (current === menu ? null : menu));
+  };
   const toggleInfo = () => setInfo(on => !on);
   const togglePlay = () => {
     if (!view.ended && state.plan) send({ type: view.playing ? 'pause' : 'play' });

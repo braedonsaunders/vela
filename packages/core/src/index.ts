@@ -23,6 +23,7 @@ export type { HomeRetry, HomeState } from './store/home';
 export { libraryKey, type LibraryQuery } from './store/catalogue';
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
+export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
 export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse } from './wire';
 export type { LiveState, LiveTvAccess } from './store/live';

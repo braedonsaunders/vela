@@ -2,9 +2,9 @@
 // stop it when the route leaves, number the chrome's commands for the view, take the view's
 // snapshots and failures, and hand the engine's session commands and observations to core, which
 // talks to the server and follows the session. Core owns the server; this owns the order of things.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { VelaError, type PlaybackTarget, type StartRefusal } from '@vela/core';
+import { VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
@@ -175,6 +175,14 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     };
     void attempt(1);
   }, [vela, sessionId, pendingVersionId]);
+  // The quality menu opening re-reads the session's version list (a plan answered before the
+  // title's release search finished offers placeholders). The chrome shows the refreshed list;
+  // the engine keeps the plan it has, so playback never reloads for it.
+  const refreshVersions = useCallback(() => {
+    if (sessionId) void vela.playback.refreshVersions(sessionId);
+  }, [vela, sessionId]);
+  const versions = playback.versions;
+  const chromePlan = useMemo(() => (plan ? withSessionVersions(plan, versions) : null), [plan, versions]);
   useEffect(() => {
     if (pendingQualityId && qualityReached(pendingQualityId, snapshot, plan)) setPendingQualityId(undefined);
   }, [pendingQualityId, snapshot, plan]);
@@ -234,7 +242,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   return {
     chrome: {
       target: chromeTarget,
-      plan,
+      plan: chromePlan,
       snapshot: playback.phase === 'preparing' ? null : snapshot,
       startFailure: owner
         ? (owned?.failure ? startFailureOf(owned.failure, chromeTarget) : null)
@@ -249,6 +257,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       versionMessage,
       send,
       switchVersion,
+      refreshVersions,
       retry,
     },
     view,
