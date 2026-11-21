@@ -49,6 +49,7 @@ export function personContent(layout?: BoxNode): Node {
   return { ...scroll, children: nodes };
 }
 export const personRoute: Node = { ...root, children: [{ ...frame, children: [
-  { ...nav, children: [{ type: 'use', template: 'velaPersonClose' }] },
+  // No season chips for the close to float over: unlike the title page, it shows at every width.
+  { ...nav, when: undefined, children: [{ type: 'use', template: 'velaPersonClose' }] },
   personContent(),
 ] }] };

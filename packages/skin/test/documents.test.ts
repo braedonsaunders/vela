@@ -462,3 +462,29 @@ test('every built-in skin shows the viewer in a badge that can carry their avata
     }
   }
 });
+
+test('every person page scrolls in its frame and shows a close at every width', async () => {
+  const { holds, resolveDocument } = await import('../src/resolve');
+  type Env = import('../src/vocabulary').Env;
+  for (const [name, doc] of documents) for (const width of [390, 1440]) {
+    const person = resolveDocument(doc, width, 'en').routes.person!;
+    const env = { width, small: width < 640, load: 'ready', personPage: {} } as unknown as Env;
+    // The path from the route down to the filmography grid.
+    const path = (node: RNode, trail: RNode[]): RNode[] | undefined => {
+      if (node.kind === 'repeat' && node.over === 'personPage.movies') return trail;
+      if (node.kind === 'box') for (const child of node.children) { const found = path(child, [...trail, node]); if (found) return found; }
+      if (node.kind === 'repeat') return path(node.item, [...trail, node]);
+      return undefined;
+    };
+    const trail = path(person, [])!;
+    expect(trail, name).toBeDefined();
+    // The grid is never inside the close strip: an overlay with no height of its own to scroll in.
+    for (const ancestor of trail) expect(JSON.stringify(ancestor.base).includes('"pointer-events":"box-none"'), name).toBe(false);
+    const holdsClose = (node: RNode): boolean => node.kind === 'box' && node.press?.action === 'back';
+    const visibleClose = (node: RNode): boolean => holds(node.when, { index: 0 }, env)
+      && (holdsClose(node) || node.kind === 'box' && node.children.some(visibleClose));
+    expect(visibleClose(person), `${name} at ${width}`).toBe(true);
+    // The region the page scrolls in is on the path.
+    expect(trail.some(node => node.role === 'region'), `${name} at ${width}`).toBe(true);
+  }
+});

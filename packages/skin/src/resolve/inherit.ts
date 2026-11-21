@@ -121,16 +121,33 @@ function titleClose(node: Node | undefined): Node | undefined {
   return undefined;
 }
 
+/** Whether a node holds the page's scrolling region (and so is the frame, not a close strip). */
+function holdsScroll(node: Node): boolean {
+  if (node.type === 'repeat') return holdsScroll(node.item);
+  if (node.type !== 'box') return false;
+  const overflow = node.style?.['overflow-y'] ?? node.style?.overflow;
+  return node.role === 'region' || overflow === 'auto' || overflow === 'scroll' || (node.children ?? []).some(holdsScroll);
+}
+
+/** The person page has no season chips for a close to float over: its close shows at every width. */
+function alwaysShown(node: Node): Node {
+  if (node.type !== 'box' || !node.when) return node;
+  const when = node.when.filter(condition => condition.test !== 'env.small');
+  return { ...node, when: when.length ? when : undefined };
+}
+
 /** Reuse the title's own modal frame and close button, replacing only its scroll contents. */
-function personFrame(node: Node, content: Node): Node {
+export function personFrame(node: Node, content: Node): Node {
   if (node.type !== 'box') return node;
   const children = node.children ?? [];
   const direct = children.find(child => child.type === 'box' && (child.testId === 'detail-close' || child.testId === 'detail-back'));
-  const strip = children.find(child => child.type === 'box' && child.role === 'navigation' && titleClose(child));
+  // A strip around the close (a navigation bar, or an absolute row holding only the button) stays
+  // whole beside the content; the page never goes inside it, where it has no height to scroll in.
+  const strip = children.find(child => child.type === 'box' && titleClose(child) && !holdsScroll(child));
   if (direct || strip) {
     const close = direct?.type === 'box' && direct.style?.left && !direct.style.right
       ? { ...direct, style: { ...direct.style, right: direct.style.left, left: 'auto' } } as Node : direct ?? strip!;
-    return { ...node, children: [close, content] };
+    return { ...node, children: [alwaysShown(close), content] };
   }
   const containing = children.find(child => titleClose(child));
   return containing ? { ...node, children: [personFrame(containing, content)] } : node;
