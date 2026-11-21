@@ -193,7 +193,12 @@ interface ServerCapabilities { features: { /* existing … */
 ```
 
 Ether advertises each flag only once its side ships. Vela gates every new
-surface on them.
+surface on them, with one exception: audio-only titles play through the
+ordinary `POST /playback` path that servers already had, so listening (an
+audiobook's Listen and a series' Start listening, which always agree) is off
+only when a server explicitly sends `audioPlayback: { available: false }`;
+an absent flag allows it. Reading needs its own endpoint and stays gated on
+`features.reading`.
 
 ## 3. Vela behaviour (for reference; client-only)
 

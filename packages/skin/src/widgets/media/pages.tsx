@@ -6,11 +6,12 @@
 import { Image } from 'expo-image';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { ScrollView, Text, View, type ViewStyle } from 'react-native';
-import { clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable } from '@vela/core';
+import { clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
 import { useMediaActions, type MediaActions } from './context';
 import { alpha, Cover, CoverTile, ListRow, PillButton, Progress, RoundButton, SectionHeading, TextLink, TileGrid, useMediaLook, type MediaLook } from './parts';
+import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from './series';
 
 /** The roles this page draws; anything else stays with the document's title page. */
 export function isMediaPageRole(role: string): boolean {
@@ -387,15 +388,18 @@ function SeriesShelf({ seriesId, name, current }: { seriesId: string; name: stri
 
 function SeriesPage({ card }: { card: Card }) {
   const m = useMediaLook();
+  const store = useVela();
   const actions = useMediaActions();
   const bookItems = useChildrenItems(card.id);
-  const books = useMemo(() => [...bookItems].sort((a, b) => (a.media?.index ?? 0) - (b.media?.index ?? 0)), [bookItems]);
+  const books = useMemo(() => seriesOrder(bookItems), [bookItems]);
   const next = books.find(book => !book.played && (book.media?.readingFraction ?? 0) < 0.98) ?? books[0];
+  const canStart = seriesCanStart(next, store.media.features());
+  const start = next ? seriesStart(next) : null;
   const fan = books.slice(0, 3);
   const size = m.small ? 150 : 190;
   const byline = card.media?.byline || books[0]?.media?.byline || '';
   const { size: tile, gap } = tilesPerRow(m, m.small ? 130 : 170);
-  const books_ = books.length || card.media?.childCount || 0;
+  const copy = seriesCopy(seriesKind(books, card), books.length || card.media?.childCount || 0);
   return (
     <View>
       <Hero cover={
@@ -411,14 +415,15 @@ function SeriesPage({ card }: { card: Card }) {
         <Title>{card.name}</Title>
         {byline ? <TextLink label={msg('media.ui.by', { name: byline })} onPress={openByline(books[0] ?? card, actions)}
           style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
-        <Facts items={[books_ ? msg(`media.count.books.${books_ === 1 ? 'one' : 'other'}`, { count: number(books_) }) : '', card.genres.slice(0, 2).join(', ')]} />
+        <Facts items={[copy.count, card.genres.slice(0, 2).join(', ')]} />
         <Buttons>
-          {next ? <PillButton primary icon="book" label={(next.media?.readingFraction ?? 0) > 0 ? msg('media.ui.continueReading') : msg('media.ui.startReading')}
-            onPress={() => actions.openTitle(next)} testID="media-play" nativeID="media-primary" /> : null}
+          {next && start ? <PillButton primary icon={start.icon} label={start.label}
+            onPress={() => actions.openTitle(next)} disabled={!canStart} testID="media-play" nativeID="media-primary" /> : null}
         </Buttons>
+        {start && !canStart ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{start.unavailable}</Text> : null}
       </Hero>
       {card.summary ? <View style={{ marginBottom: 40 }}><Summary text={card.summary} serif /></View> : null}
-      <SectionHeading title={msg('media.ui.books')} />
+      <SectionHeading title={copy.heading} />
       <TileGrid gap={gap}>
         {books.map(book => <CoverTile key={book.id} card={book} size={tile} subtitle={[book.media?.indexLabel, book.yearLabel].filter(Boolean).join(' · ')}
           progress={book.media?.readingFraction} onPress={() => actions.openTitle(book)} testID={`media-book-${book.id}`} />)}
@@ -429,9 +434,33 @@ function SeriesPage({ card }: { card: Card }) {
 
 // ── Audiobook ────────────────────────────────────────────────────────────────
 
-function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
+/** "Narrated by …", each narrator linked to their person page like the author when the credit names one. */
+function Narrators({ credits }: { credits: readonly MediaCredit[] }) {
   const m = useMediaLook();
   const actions = useMediaActions();
+  const narrators = credits.filter(credit => credit.role === 'narrator');
+  if (!narrators.length) return null;
+  const style = m.text({ 'font-size': '15px', color: '$ui.inkSecondary' });
+  const link = (name: string, personId: string) => (personId ? () => actions.openPerson(personId, name) : undefined);
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline' }} testID="media-narrators">
+      {narrators.map((credit, i) => (
+        <View key={`${credit.personId || credit.name}-${i}`} style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          {i > 0 ? <Text style={style}>{', '}</Text> : null}
+          <TextLink label={i === 0 ? msg('media.ui.narratedBy', { name: credit.name }) : credit.name}
+            onPress={link(credit.name, credit.personId)} style={style} testID={`media-narrator-${i}`} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
+  const m = useMediaLook();
+  const store = useVela();
+  const actions = useMediaActions();
+  // The same rule as a series' Start listening, so the two always agree.
+  const canListen = store.media.features().audio;
   const media = card.media;
   const parts = playable(useChildrenItems(card.id)).sort((a, b) => (a.media?.index ?? 0) - (b.media?.index ?? 0));
   const chapters = detail.chapters ?? [];
@@ -453,7 +482,7 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
         <Title>{card.name}</Title>
         {media?.byline ? <TextLink label={msg('media.ui.by', { name: media.byline })} onPress={openByline(card, actions)} testID="media-byline"
           style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
-        {media?.narrator ? <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>{msg('media.ui.narratedBy', { name: media.narrator })}</Text> : null}
+        <Narrators credits={media?.credits ?? []} />
         <Facts items={[total ? durationLabel(total) : '', parts.length ? msg(`media.count.parts.${plural(parts.length)}`, { count: number(parts.length) })
           : chapters.length ? msg(`media.count.chapters.${plural(chapters.length)}`, { count: number(chapters.length) }) : '', card.genres[0] ?? '']} />
         {resumable && total ? (
@@ -463,9 +492,10 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
           </View>
         ) : null}
         <Buttons>
-          <PillButton primary icon={resumable ? 'play' : 'headphones'} label={resumable ? msg('media.ui.resume') : msg('media.ui.listen')} onPress={() => listen('resume')} testID="media-play" nativeID="media-primary" />
-          {resumable ? <PillButton icon="back15" label={msg('media.ui.startOver')} onPress={() => listen('start')} testID="media-start-over" /> : null}
+          <PillButton primary icon={resumable ? 'play' : 'headphones'} label={resumable ? msg('media.ui.resume') : msg('media.ui.listen')} onPress={() => listen('resume')} disabled={!canListen} testID="media-play" nativeID="media-primary" />
+          {resumable ? <PillButton icon="back15" label={msg('media.ui.startOver')} onPress={() => listen('start')} disabled={!canListen} testID="media-start-over" /> : null}
         </Buttons>
+        {!canListen ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotListen')}</Text> : null}
       </Hero>
       {card.summary ? <View style={{ marginBottom: 44 }}><Summary text={card.summary} serif /></View> : null}
       {parts.length ? (

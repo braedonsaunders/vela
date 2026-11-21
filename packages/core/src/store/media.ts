@@ -10,7 +10,13 @@ import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
 
 export interface ChildrenModel { items: Card[]; complete: boolean }
-export interface MediaFeatures { classes: V.MediaClass[]; reading: V.ReadingFormat[]; audio: boolean }
+export interface MediaFeatures {
+  classes: V.MediaClass[];
+  /** Readable formats: reading needs its own endpoint, so only what the server advertises. */
+  reading: V.ReadingFormat[];
+  /** Audio plays through the ordinary playback path: off only when the server says so. */
+  audio: boolean;
+}
 
 /** At most this many children are read for one page (an album's tracks, an artist's albums). */
 const MAX_CHILDREN = 1000;
@@ -35,7 +41,9 @@ export class Media {
     return {
       classes: features?.mediaClasses?.available ? features.mediaClasses.classes ?? [] : [],
       reading: features?.reading?.available ? features.reading.formats ?? [] : [],
-      audio: features?.audioPlayback?.available === true,
+      // A server that predates the flag already plays audio-only titles through POST /playback;
+      // only an explicit `audioPlayback: { available: false }` turns listening off.
+      audio: features?.audioPlayback?.available !== false,
     };
   }
 
