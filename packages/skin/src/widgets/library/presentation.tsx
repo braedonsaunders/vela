@@ -22,6 +22,9 @@ import { SheetModal } from '../common/sheet-modal';
 const control = { height: '$ui.controlHeight', padding: '0px 12px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', 'justify-content': 'center', 'flex-shrink': '0' };
 const controlText = { color: '$ui.ink', 'font-size': '$ui.controlFontSize', 'font-weight': '500' };
 
+/** A control label centred on its line: Android otherwise pads the line for accents above it. */
+const CENTRED = { textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' } as const;
+
 function Button({ label, onPress, selected = false, role = 'button', id, quiet = false, preferred = false, onLayout, onFocus }: {
   onLayout?(event: LayoutChangeEvent): void; onFocus?(): void; id?: string; label: string; onPress(): void; selected?: boolean; quiet?: boolean; preferred?: boolean; role?: 'button' | 'tab' | 'checkbox';
 }) {
@@ -37,11 +40,15 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
       'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
       'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : '$ui.glassEdge' })}>
     {/* A tab's bold selected label must not resize the strip while its scenes are moving. */}
-    {tab && <Text accessible={false} numberOfLines={1} style={[look.text({ ...controlText, 'font-weight': '700' }),
+    {tab && <Text accessible={false} numberOfLines={1} style={[look.text({ ...controlText, 'font-weight': '700' }), CENTRED,
       Platform.OS === 'web' ? { visibility: 'hidden' } as never : { opacity: 0 }]}>{label}</Text>}
-    <Text accessible={false} numberOfLines={1} style={[text, tab && { position: 'absolute', left: 12, right: 12, top: 0, height: look.ui.controlHeight, lineHeight: look.ui.controlHeight }]}>
-      {role === 'checkbox' && selected ? '✓ ' : ''}{label}
-    </Text>
+    {tab
+      // The label lies over the sizing copy, centred in the pill's inner box by layout rather than
+      // a line height: a TV draws the control's px larger, and fonts place a line's glyphs differently.
+      ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, look.box({ padding: control.padding, 'justify-content': 'center' })]}>
+        <Text accessible={false} numberOfLines={1} style={[text, CENTRED]}>{label}</Text>
+      </View>
+      : <Text accessible={false} numberOfLines={1} style={[text, CENTRED]}>{role === 'checkbox' && selected ? '✓ ' : ''}{label}</Text>}
 
   </FocusPressable>;
 }
