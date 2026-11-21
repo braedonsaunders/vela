@@ -6,6 +6,7 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, screen, session, shell } = require('electron');
 const { loadNativeHost, attachNativePlayer, attachFullscreen } = require('./native-player');
 const { attachLoadGuard } = require('./load-guard');
+const { bundleServer } = require('./bundle-server');
 const nativeAdapter = loadNativeHost();
 const fs = require('node:fs');
 const path = require('node:path');
@@ -37,40 +38,6 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 if (process.env.VELA_DEBUG_PORT) app.commandLine.appendSwitch('remote-debugging-port', process.env.VELA_DEBUG_PORT);
 if (process.env.VELA_DATA_DIR) app.setPath('userData', path.resolve(process.env.VELA_DATA_DIR));
-
-const TYPES = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
-  '.json': 'application/json', '.webmanifest': 'application/json', '.wasm': 'application/wasm', '.svg': 'image/svg+xml',
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon',
-  '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf', '.mp4': 'video/mp4', '.txt': 'text/plain',
-};
-
-/** /vela/... from the bundle; the app's routes are answered by index.html; anything else is a 404. */
-async function serve(request) {
-  const url = new URL(request.url);
-  if (url.host !== 'app' || request.method !== 'GET' || !(url.pathname === '/vela' || url.pathname.startsWith('/vela/'))) {
-    return new Response(null, { status: 404 });
-  }
-  const relative = decodeURIComponent(url.pathname.slice('/vela'.length)).replace(/^\/+/, '');
-  let file = path.resolve(UI, relative);
-  if (file !== UI && !file.startsWith(UI + path.sep)) return new Response(null, { status: 404 });
-  // The PWA's service worker belongs to the web; the app's bundle is its own cache.
-  if (relative === 'pwa.js' || relative === 'sw.js') return new Response('', { headers: { 'content-type': 'text/javascript' } });
-  let stat = await fs.promises.stat(file).catch(() => undefined);
-  if (!stat?.isFile() && !path.extname(relative)) {
-    file = path.join(UI, 'index.html');
-    stat = await fs.promises.stat(file).catch(() => undefined);
-  }
-  if (!stat?.isFile()) return new Response(null, { status: 404 });
-  const immutable = /^(_expo\/static|assets|player)\//.test(relative);
-  return new Response(fs.createReadStream(file), {
-    headers: {
-      'content-type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'content-length': String(stat.size),
-      'cache-control': immutable ? 'max-age=31536000, immutable' : 'no-cache',
-    },
-  });
-}
 
 // ---- Window placement: remembered, otherwise fitting the screen's height at 16:10 ----
 
@@ -257,7 +224,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   app.whenReady().then(() => {
-    protocol.handle(SCHEME, serve);
+    protocol.handle(SCHEME, bundleServer(UI));
     const trusted = event => event.senderFrame === event.sender.mainFrame
       && event.senderFrame?.url.startsWith(START);
     // Every document's preload checks in before the page's scripts run; the guard reloads a

@@ -31,6 +31,7 @@
       "build/icon.png",
       "native-player.js",
       "load-guard.js",
+      "bundle-server.js",
       "mac/**/*.js",
       "linux/**/*.js"
     ],
