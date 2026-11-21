@@ -4,7 +4,8 @@
 // fallen behind) with the same buttons as every other control. The mini guide shows while a
 // channel is being dialled, and the remote's channel keys flick channels. The delivery rule and
 // the flicking come from the live TV widgets (widgets/guide); this only places them.
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
+import { MOTION, Presence, useLast } from '../../presence';
 import { msg } from '@vela/core';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { liveBehind, liveNotices, liveWatchKey, MiniGuide, useLiveContext, useLiveView } from '../guide';
@@ -116,8 +117,13 @@ export function LiveStatusLine({ look, watch }: { look: PlayerLook; watch: LiveW
  * whole overlay): out of the focus tree and the pointer's way, gone once delivery recovers.
  */
 export function LiveNotice({ look, watch }: { look: PlayerLook; watch: LiveWatch }) {
-  if (!watch.live || !watch.notices.length) return null;
+  // It rises in and sinks away with the shared motion, still showing its last words as it goes.
+  const shown = watch.live && watch.notices.length > 0;
+  const notice = useLast(shown ? watch.notices[0] : undefined);
+  if (!notice) return null;
   return (
+    <Presence shown={shown} still={look.still || Platform.isTV} offstage={{ y: 8 }} exitMs={MOTION.quick}
+      style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 0 }}>
     <View
       pointerEvents="none"
       accessibilityLiveRegion="polite"
@@ -138,9 +144,10 @@ export function LiveNotice({ look, watch }: { look: PlayerLook; watch: LiveWatch
     >
       <View style={{ width: look.size(8), height: look.size(8), borderRadius: look.size(4), backgroundColor: look.live }} />
       <Text numberOfLines={1} style={[look.text(13, 500, look.inkSecondary), { flexShrink: 1, fontVariant: ['tabular-nums'] }]}>
-        {watch.notices[0]}
+        {notice}
       </Text>
     </View>
+    </Presence>
   );
 }
 

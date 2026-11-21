@@ -5,6 +5,8 @@ import { useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { SheetModal } from '@vela/skin/src/widgets/common/sheet-modal';
 import { useVela } from '../vela';
+import { useReducedMotion } from 'react-native-reanimated';
+import { Arrive } from '@vela/skin/src/presence';
 
 const DraggableRow = View as unknown as (props: Record<string, unknown>) => React.JSX.Element;
 
@@ -12,6 +14,7 @@ export function PlaylistManager({ playlistId }: { playlistId: string }) {
   const { store } = useVela();
   const model = useVelaState(state => state.collections[playlistId]?.value);
   const notice = useVelaState(state => state.playlists.notice);
+  const still = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [dragging, setDragging] = useState('');
@@ -49,7 +52,7 @@ export function PlaylistManager({ playlistId }: { playlistId: string }) {
         <View style={styles.sheet}>
           <View style={styles.header}><View style={{ flex: 1 }}><Text style={styles.title}>{model.name}</Text><Text style={styles.sub}>{model.items.length} entries{model.smart ? ' · Smart playlist · Read only' : ''}</Text></View>
             <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={close} style={styles.icon}><Text style={styles.iconText}>×</Text></Pressable></View>
-          {notice ? <Text accessibilityRole="alert" style={styles.error}>{notice}</Text> : null}
+          {notice ? <Arrive key={notice} still={still}><Text accessibilityRole="alert" style={styles.error}>{notice}</Text></Arrive> : null}
           {!model.smart ? <View style={styles.rename}><TextInput accessibilityLabel="Playlist name" value={name} onChangeText={setName} style={styles.input} />
             <Pressable accessibilityRole="button" disabled={!name.trim() || name.trim() === model.name} onPress={() => void store.playlists.rename(playlistId, name)} style={styles.save}><Text style={styles.buttonText}>Rename</Text></Pressable></View> : null}
           <ScrollView style={styles.list} contentContainerStyle={{ gap: 7 }}>

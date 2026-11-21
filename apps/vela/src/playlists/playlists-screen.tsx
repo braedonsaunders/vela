@@ -5,12 +5,15 @@ import { useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { useVela } from '../vela';
 import { openCollection } from '../browse/open';
+import { useReducedMotion } from 'react-native-reanimated';
+import { Arrive } from '@vela/skin/src/presence';
 
 export function PlaylistsScreen() {
   const { store } = useVela();
   const list = useVelaState(state => state.playlists.list);
   const available = useVelaState(state => state.home.value?.playlistsAvailable === true);
   const notice = useVelaState(state => state.playlists.notice);
+  const still = useReducedMotion();
   const [name, setName] = useState('');
   useEffect(() => { if (available) void store.playlists.load(); }, [available, store]);
   if (!available) return <View style={styles.page}><Text style={styles.title}>Playlists aren’t available on this server.</Text><Pressable onPress={() => router.back()} style={styles.button}><Text style={styles.buttonText}>Back</Text></Pressable></View>;
@@ -21,7 +24,7 @@ export function PlaylistsScreen() {
         onSubmitEditing={() => { const value = name; setName(''); void store.playlists.create(value); }} />
       <Pressable accessibilityRole="button" disabled={!name.trim()} onPress={() => { const value = name; setName(''); void store.playlists.create(value); }} style={[styles.button, !name.trim() && { opacity: .45 }]}><Text style={styles.buttonText}>New</Text></Pressable>
     </View>
-    {notice ? <Text accessibilityRole="alert" style={styles.error}>{notice}</Text> : null}
+    {notice ? <Arrive key={notice} still={still}><Text accessibilityRole="alert" style={styles.error}>{notice}</Text></Arrive> : null}
     {list.load === 'loading' && !list.value ? <ActivityIndicator color="#d5a676" size="large" /> : null}
     {list.load === 'failed' && !list.value ? <Pressable onPress={() => void store.playlists.load()} style={styles.button}><Text style={styles.buttonText}>Try again</Text></Pressable> : null}
     <FlatList data={list.value ?? []} keyExtractor={item => item.id} numColumns={3} contentContainerStyle={styles.grid} columnWrapperStyle={styles.columns}

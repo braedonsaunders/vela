@@ -4,6 +4,8 @@ import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { DismissScope } from '@vela/skin/src/escape';
 import { SheetModal } from '@vela/skin/src/widgets/common/sheet-modal';
+import { useReducedMotion } from 'react-native-reanimated';
+import { Arrive } from '@vela/skin/src/presence';
 
 /** The single app-owned sheet opened by the shared title and card action definitions. */
 /** `open`: it stays drawn while it leaves, then the app lets it go. */
@@ -11,6 +13,7 @@ export function AddToPlaylist({ titleId, titleKind, open, close }: { titleId: st
   const store = useVela();
   const memberships = useVelaState(state => state.playlists.memberships[titleId]);
   const notice = useVelaState(state => state.playlists.notice);
+  const still = useReducedMotion();
   const available = useVelaState(state => state.home.value?.playlistsAvailable === true);
   const [name, setName] = useState('');
   const first = useRef<ComponentRef<typeof Pressable> | null>(null);
@@ -31,7 +34,7 @@ export function AddToPlaylist({ titleId, titleKind, open, close }: { titleId: st
             {titleKind === 'show' || titleKind === 'season' ? <Text style={styles.hint}>All episodes will be added.</Text> : null}</View>
             <Pressable ref={first} accessibilityRole="button" accessibilityLabel="Close" onPress={dismiss} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
           </View>
-          {notice ? <Text accessibilityRole="alert" style={styles.error}>{notice}</Text> : null}
+          {notice ? <Arrive key={notice} still={still}><Text accessibilityRole="alert" style={styles.error}>{notice}</Text></Arrive> : null}
           {memberships?.load === 'loading' && !memberships.value ? <Text style={styles.muted}>Loading playlists…</Text> : null}
           {memberships?.load === 'failed' && !memberships.value ? <Pressable accessibilityRole="button" onPress={() => void store.playlists.memberships(titleId, true)} style={styles.retry}><Text style={styles.buttonText}>Try again</Text></Pressable> : null}
           <ScrollView style={styles.list} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
