@@ -96,6 +96,8 @@ export interface BoxNode extends NodeBase {
   controlStates?: boolean;
   children?: Node[];
 }
+/** A text. One that is exactly `{env.viewerInitial}` and sets its own width and height is the viewer's
+ * badge: the renderer draws the viewer's avatar over it, clipped to its shape, where the server gives one. */
 export interface TextNode extends NodeBase { type: 'text'; text: Template }
 /** Breakpoints at the document's own widths, evaluated against the slot's width. */
 export interface Breakpoints { below?: Record<string, Style>; above?: Record<string, Style> }

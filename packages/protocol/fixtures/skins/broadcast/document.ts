@@ -58,7 +58,8 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       iconButton('search', '{s:search}', 'search'),
       { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', width: '40px', height: '40px', 'border-radius': '3px', 'background-color': '$panel', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'flex-shrink': '0' },
         hover: { 'background-color': '$panel-hi' }, focus: ring, children: [
-          { type: 'text', text: '{env.viewerInitial}', style: { 'font-family': display, 'font-size': '18px', 'font-weight': '700', color: '$ink' } },
+          // The viewer's badge fills the button, so their avatar (where there is one) is the button's face.
+          { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': display, 'font-size': '18px', 'font-weight': '700', color: '$ink' } },
         ] },
     ] },
     // Phones: the sections as a scrolling strip under the bar.
@@ -364,7 +365,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 15, id: 'broadcast', name: 'Broadcast', version: '1.0.2', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 15, id: 'broadcast', name: 'Broadcast', version: '1.0.3', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },

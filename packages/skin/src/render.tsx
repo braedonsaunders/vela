@@ -35,6 +35,8 @@ import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { ExpandableSummary } from './summary';
+import { viewerAvatarFor } from './viewer-avatar';
+import { ViewerAvatar } from './widgets/common/viewer-avatar';
 import { VersionsControl } from './widgets/title-actions';
 import { SeasonSelector } from './widgets/season-selector';
 import { SearchField } from './widgets/search/search-field';
@@ -1129,10 +1131,13 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
 
   // Natively a text view does not paint a gradient or a shadow (Android's never does): a text that
   // paints its box (an initial in a gradient disc) draws as that box with the text centred inside.
-  if (!web && (style.backgroundImage || style.boxShadow)) {
+  // A viewer badge with a picture draws the same way, the picture clipped to the badge over its initial.
+  const avatar = viewerAvatarFor(node.avatar, own, env.viewerAvatar);
+  if (avatar || (!web && (style.backgroundImage || style.boxShadow))) {
     return (
-      <Frame style={style as ViewStyle} {...a11yProps(node, ctx, env)} {...presentation}>
+      <Frame style={(avatar ? { ...style, overflow: 'hidden' } : style) as ViewStyle} {...a11yProps(node, ctx, env)} {...presentation}>
         <Text style={[drawn.style, centredLine(own, text.rows)]} {...lines}>{value}</Text>
+        {avatar ? <ViewerAvatar src={avatar} /> : null}
       </Frame>
     );
   }

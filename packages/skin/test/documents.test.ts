@@ -440,3 +440,23 @@ test('every skin includes a focusable people grid and shared continuation at pho
     expect(find(library, n => n.kind === 'widget' && n.widget === 'sentinel' && n.params.on === 'library')).toBeDefined();
   }
 });
+
+test('every built-in skin shows the viewer in a badge that can carry their avatar', () => {
+  // Index has no profile control, only the reader's name in its rail; the others put the badge in the
+  // control that opens the profile menu (Kids: its grown-ups gate).
+  for (const [name, doc] of documents) for (const width of [390, 1440]) {
+    const badges: { pressed: boolean; style: Record<string, unknown> }[] = [];
+    const walk = (node: RNode, pressed: boolean) => {
+      if (node.kind === 'text' && node.avatar) badges.push({ pressed, style: node.base.style });
+      if (node.kind === 'box') node.children.forEach(child => walk(child, pressed || !!node.press));
+      if (node.kind === 'repeat') walk(node.item, pressed);
+    };
+    walk(resolveDocument(doc, width, 'en').shell!, false);
+    expect(badges.length, `${name} ${width}`).toBeGreaterThan(0);
+    if (name !== 'index') expect(badges.some(badge => badge.pressed), `${name} ${width}`).toBe(true);
+    for (const badge of badges) {
+      expect(badge.style.width, `${name} ${width}`).toBeDefined();
+      expect(badge.style.height, `${name} ${width}`).toBeDefined();
+    }
+  }
+});

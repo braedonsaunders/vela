@@ -11,7 +11,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.11';
+const version = '1.0.12';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -97,7 +97,11 @@ const nav: Node = {
     },
     { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
     { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-    { type: 'text', text: '{env.viewer}', when: [{ test: 'env.viewer' }], style: { 'font-size': '12px' } },
+    // The reader: a small printed plate (their avatar where the server gives one, else their initial) and their name.
+    { type: 'box', when: [{ test: 'env.viewer' }], style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', padding: '4px' }, children: [
+      { type: 'text', text: '{env.viewerInitial}', style: { width: '22px', height: '22px', 'flex-shrink': '0', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '1px solid $line', 'background-color': '$field', 'font-size': '12px' } },
+      { type: 'text', text: '{env.viewer}', style: { 'font-size': '12px' } },
+    ] },
     plain('{s:signOut}', { action: 'signOut' }, [{ test: 'env.viewer' }]),
   ],
 };

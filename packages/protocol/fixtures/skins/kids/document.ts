@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.16';
+const version = '1.2.17';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -70,6 +70,9 @@ const dock: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when
 const roundButton = (size: number): Style => ({ position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: `${size}px`, height: `${size}px`, 'border-radius': '999px', 'flex-shrink': '0',
   'background-color': '$card', 'box-shadow': ledge('rgba(27, 37, 80, 0.10)'), translate: '0px 0px', scale: '1', transition: `translate 380ms ${bouncy}, scale 380ms ${bouncy}` } as Style);
 
+// The viewer's initial on a sky disc; the renderer draws their avatar over it where there is one.
+const viewerBadge = (size: number, font: string): Node => ({ type: 'text', text: '{env.viewerInitial}', style: { width: `${size}px`, height: `${size}px`, 'border-radius': '999px', 'flex-shrink': '0',
+  display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2px solid #FFFFFF', 'background-color': '$sky-soft', color: '$ink', 'font-size': font, 'font-weight': '800' } });
 const bar: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when: [{ test: 'env.viewer' }], style: { color: '$ink', position: 'absolute', top: '0px', left: '0px', right: '0px', 'z-index': '20', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', height: '100px', 'box-sizing': 'border-box', ...gutter },
   small: { height: '68px', ...gutterSmall, gap: '10px' }, children: [
   // A soft frosted band, so rows scrolling under the bar stay quiet behind it.
@@ -90,7 +93,11 @@ const bar: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when:
   // The grown-ups corner: small and quiet, behind a gate.
   { type: 'box', press: { action: 'open', arg: 'gate' }, label: '{s:grownUps}', a11y: { haspopup: 'dialog' }, testId: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '44px', height: '44px', 'border-radius': '999px', 'flex-shrink': '0', opacity: '0.5', 'background-color': 'rgba(255, 255, 255, 0.5)', transition: 'opacity 160ms linear' },
     hover: { opacity: '1' }, focus: { opacity: '1', 'box-shadow': ring }, children: [
-    { type: 'icon', symbol: 'lock', style: { width: '18px', height: '18px', color: '$ink' } },
+    // The viewer's badge (their avatar where the server gives one), with a little lock: it is still the gate.
+    viewerBadge(44, '18px'),
+    { type: 'box', style: { position: 'absolute', right: '-3px', bottom: '-3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '20px', height: '20px', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 1px 3px rgba(27, 37, 80, 0.25)' }, children: [
+      { type: 'icon', symbol: 'lock', style: { width: '11px', height: '11px', color: '$ink' } },
+    ] },
   ] },
 ] };
 
@@ -124,7 +131,10 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
     { ...question(1, '{s:gateOne}', [12, 15, 18, 16, 9, 21], 18), when: [{ test: 'flag:g2', not: true }] },
     { ...question(2, '{s:gateTwo}', [4, 7, 5, 9, 6, 8], 6), when: [{ test: 'flag:g2' }, { test: 'flag:parent', not: true }] },
     { type: 'box', when: [{ test: 'flag:parent' }], style: { display: 'flex', 'flex-direction': 'column', width: '100%' }, children: [
-      { type: 'text', text: '{s:signedInAs} {env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft', 'padding-bottom': '16px' } },
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', gap: '10px', 'padding-bottom': '16px' }, children: [
+        viewerBadge(36, '16px'),
+        { type: 'text', text: '{s:signedInAs} {env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft', 'min-width': '0px', 'line-clamp': '1' } },
+      ] },
       { ...menuRow({ action: 'switchProfile' }, '{s:switchProfile}', 'person', 'switch-profile'), when: [{ test: 'env.canSwitchProfile' }] },
       { ...menuRow({ action: 'playlists' }, 'Playlists', 'layers', 'kids-playlists'), when: [{ test: 'env.canPlaylists' }] },
       menuRow({ action: 'openPicker' }, '{s:changeLook}', 'sparkles', 'skin-picker'),

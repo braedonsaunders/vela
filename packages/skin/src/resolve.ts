@@ -60,7 +60,7 @@ interface Common {
 
 export type RNode = Common & (
   | { kind: 'box'; children: RNode[]; press?: { action: Action; arg?: Template; focus?: Template }; pager?: { inset?: number; peek?: number }; controlStates: boolean }
-  | { kind: 'text'; text: Template; summary?: boolean }
+  | { kind: 'text'; text: Template; summary?: boolean; avatar?: boolean }
   | { kind: 'image'; src: Template; alt?: Template; fade: boolean }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
   | { kind: 'repeat'; over: string; limit: number; implicitLimit?: boolean; item: RNode }
@@ -285,7 +285,10 @@ function convert(node: Node, depth: number, r: Context): RNode {
         press: node.press && { action: node.press.action, arg: compile(node.press.arg, r), focus: compile(node.press.focus, r) }, pager: node.pager };
     }
     // Legacy and new documents get the same safe synopsis control from this binding.
-    case 'text': return { ...common, kind: 'text', text: compile(node.text, r)!, summary: ['{detail.summary}', '{personPage.biography}'].includes(node.text.trim()) };
+    // A text that is the viewer's initial is their badge: the renderer draws their avatar over it,
+    // in whatever shape the skin gives the badge, so every document's profile control shows it.
+    case 'text': return { ...common, kind: 'text', text: compile(node.text, r)!, summary: ['{detail.summary}', '{personPage.biography}'].includes(node.text.trim()),
+      avatar: node.text.trim() === '{env.viewerInitial}' };
     case 'image': return { ...common, kind: 'image', src: compile(node.src, r, true)!, alt: compile(node.alt, r), fade: node.fade === true };
     case 'icon': return { ...common, kind: 'icon', symbol: node.symbol, paths: node.paths, viewBox: node.viewBox, fillRule: node.fillRule };
     case 'repeat': return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000,
