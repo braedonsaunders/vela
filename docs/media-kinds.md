@@ -197,3 +197,15 @@ surface on them.
   MediaSession (Android).
 - Reader: EPUB first (paginated, font size, light/sepia/dark, contents, progress
   sync, keyboard/touch/remote page turns), PDF/CBZ when `reading.formats` lists them.
+
+## 4. Where Vela stands (2026-11-20)
+
+| Area | Web | Native (needs device work) |
+| --- | --- | --- |
+| Cards and pages | Square, round and bound-book covers in every document; album, artist, book, series, audiobook pages | Same React tree; not yet looked at on a device or TV focus engine |
+| Audio | One HTMLAudioElement, Media Session (lock screen, media keys) | Reports unsupported. Apple: audio-only plans in the player module with AVAudioSession `.playback`, MPNowPlayingInfoCenter and MPRemoteCommandCenter. Android: Media3 MediaSessionService with a notification. |
+| Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Reports unsupported. Plan: the same engine in an Expo DOM component (`@expo/dom-webview`), remote paging on TV. |
+
+Server notes for Ether: audio transcodes should prefer `transport: 'file'`
+(progressive AAC) because Chrome has no native HLS; grant and media URLs may be
+root-relative and are resolved on the server's origin (anything else is refused).

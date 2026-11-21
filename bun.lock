@@ -27,6 +27,7 @@
         "expo-secure-store": "~58.0.3",
         "expo-status-bar": "~58.0.5",
         "expo-system-ui": "~58.0.7",
+        "foliate-js": "github:johnfactotum/foliate-js#78914aef4466eb960965702401634c2cb348e9b1",
         "react": "19.3.0",
         "react-dom": "19.3.0",
         "react-native": "npm:react-native-tvos@0.88.1-0",
@@ -700,6 +701,8 @@
 
     "flow-parser": ["flow-parser@0.327.0", "", { "dependencies": { "flow-estree": "0.327.0" } }, "sha512-/MYZ5hXWf5ozpbdfUDmazMgQXviLxWEiRLH3MppEGDdW0itRVqmB5UaU7QX+SBCDNiq+gEesSVn8nlxmPDyDkw=="],
 
+    "foliate-js": ["foliate-js@github:johnfactotum/foliate-js#78914ae", {}, "johnfactotum-foliate-js-78914ae", "sha512-SrsmoMV2WpMXgoD+CAXtRfYZ8b1XGfOiP8YvdqNh/XCVuRAiuFIp1oGF7gddpYEUKPzvFG+w2c0JnwdxTqi2kQ=="],
+
     "foreground-child": ["foreground-child@3.3.1", "", { "dependencies": { "cross-spawn": "^7.0.6", "signal-exit": "^4.0.1" } }, "sha512-gIXjKqtFuWEgzFRJA9WCQeSJLZDjgJUOMCMzxtvFq/37KojM1BFGufqsCy0r4qSQmYLsZYMeyRqzIWOMup03sw=="],
 
     "fresh": ["fresh@0.5.2", "", {}, "sha512-zJ2mQYM18rEFOudeV4GShTGIQ7RbzA7ozbU9I/XBpm7kqgMywgmylMwXHxZJmkVoYkna9d2pVXVXPdYTP9ej8Q=="],
@@ -820,7 +823,7 @@
 
     "mdn-data": ["mdn-data@2.0.14", "", {}, "sha512-dn6wd0uw5GsdswPFfsgMp5NSB0/aDe6fK94YJV/AJDYXL6HVLWBsxeq7js7Ad+mU2K9LAlwpk6kN2D5mwCPVow=="],
 
-    "mediabunny": ["mediabunny@github:alchemyyy/mediabunny#e9303e8", { "dependencies": { "@types/dom-mediacapture-transform": "^0.1.11", "@types/dom-webcodecs": "0.1.13" } }, "alchemyyy-mediabunny-e9303e8"],
+    "mediabunny": ["mediabunny@github:alchemyyy/mediabunny#e9303e8", { "dependencies": { "@types/dom-mediacapture-transform": "^0.1.11", "@types/dom-webcodecs": "0.1.13" } }, "alchemyyy-mediabunny-e9303e8", "sha512-s871BAbBk0Ze3CWBqbDdhzm4icK6m5q2y1Q9rjMGupUlEJ/A9vD6dQJczw3NQEZSA/qs+l8he8hAw9LX4QZmzQ=="],
 
     "memoize-one": ["memoize-one@5.2.1", "", {}, "sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q=="],
 
@@ -1122,7 +1125,7 @@
 
     "wcwidth": ["wcwidth@1.0.1", "", { "dependencies": { "defaults": "^1.0.3" } }, "sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg=="],
 
-    "webgpu-player": ["webgpu-player@github:alchemyyy/WebGPU-Player#a7a95ef", {}, "alchemyyy-WebGPU-Player-a7a95ef"],
+    "webgpu-player": ["webgpu-player@github:alchemyyy/WebGPU-Player#a7a95ef", {}, "alchemyyy-WebGPU-Player-a7a95ef", "sha512-TnnNyVbO4cN76lowPV2ioocBMYMYN/0ZA6AU0S8th2QrLpiW8NRM9cms6DGRjXM4qJhSwoocKT+fLsXRXO1C/A=="],
 
     "webidl-conversions": ["webidl-conversions@3.0.1", "", {}, "sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ=="],
 
