@@ -11,7 +11,21 @@ export function appearanceAsset(value: string, origin: string): string {
   return url.href;
 }
 
-export function installedDocument(value: unknown, origin: string): SkinDocument {
+/** A digest of an installed skin's JSON for a renderer version (FNV-1a): a document this device has
+ * already resolved need not be resolved at every width again on each launch. */
+export function installedDigest(json: string, rendererVersion: number): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < json.length; i++) {
+    hash ^= json.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${rendererVersion}.${json.length}.${hash.toString(36)}`;
+}
+
+/** An installed skin, made safe. Unless `resolved` (this device resolved this very document
+ * before, installedDigest), it is also resolved at a phone's, a desktop's and a TV's width: a
+ * TV box spent most of a second of its launch doing that for each installed skin. */
+export function installedDocument(value: unknown, origin: string, resolved = false): SkinDocument {
   if (!value || typeof value !== 'object' || JSON.stringify(value).length > 1024 * 1024) throw new Error('Invalid skin');
   // JSON data only. Static image/font sources are scoped; renderer bindings continue to use
   // trusted catalogue artwork. CSS URLs are forbidden (images belong in image nodes).
@@ -33,6 +47,7 @@ export function installedDocument(value: unknown, origin: string): SkinDocument 
   };
   const doc = visit(value) as SkinDocument;
   if (doc.schema !== 1 || !doc.id || !doc.name || !Array.isArray(doc.swatches) || !Number.isInteger(doc.renderer)) throw new Error('Invalid skin metadata');
+  if (resolved) return doc;
   for (const width of [390, 1440, 1920]) resolveDocument(doc, width, 'en');
   if (portabilityReport(doc).some(f => f.level === 'error')) throw new Error('Nonportable skin');
   return doc;

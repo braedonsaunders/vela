@@ -36,3 +36,19 @@ test('packs layer supported palette roles on the engine without unknown ui keys'
   expect(doc.ui?.page).toBe('#123456');
   expect(() => resolveDocument(doc, 390, 'en', { wordmark: { url: pack.wordmark, width: 240, height: 60 } })).not.toThrow();
 });
+
+test('an installed skin digest follows its content and the renderer', async () => {
+  const { installedDigest } = await import('../src/installed');
+  const json = JSON.stringify({ schema: 1, id: 'owner', name: 'Owner' });
+  expect(installedDigest(json, 7)).toBe(installedDigest(json, 7));
+  expect(installedDigest(json, 7)).not.toBe(installedDigest(json, 8));
+  expect(installedDigest(json, 7)).not.toBe(installedDigest(json.replace('Owner', 'Owned'), 7));
+});
+
+test('a skin this device resolved before is made safe without resolving again', () => {
+  const unsafe = { schema: 1, id: 'x', name: 'x', swatches: [], renderer: 1, routes: { home: { type: 'image', src: 'https://bad.test/logo.png' } } };
+  expect(() => installedDocument(unsafe, origin, true)).toThrow();
+  const unresolvable = { schema: 1, id: 'x', name: 'x', swatches: [], renderer: 999 };
+  expect(() => installedDocument(unresolvable, origin)).toThrow();
+  expect(installedDocument(unresolvable, origin, true).id).toBe('x');
+});

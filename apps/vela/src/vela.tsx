@@ -1,4 +1,4 @@
-import { appearanceAsset, installedDocument, chosenSkin, packDocument } from '@vela/skin/src/installed';
+import { appearanceAsset, installedDigest, installedDocument, chosenSkin, packDocument } from '@vela/skin/src/installed';
 import type { SkinDocument } from '../../../packages/protocol/skin';
 // The app's state for its routes: the core store (sessions, servers, catalogue, search, playback,
 // live TV) under core's provider, the built-in skin documents, and the host each route draws
@@ -238,8 +238,14 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     setInstalled([]);
     void Promise.all((appearance?.docs ?? []).filter(ref => !DOCUMENTS.some(d => d.id === ref.id)).map(async ref => {
       try {
-        const doc = installedDocument(await store.appearance.document(ref.url), origin);
+        const value = await store.appearance.document(ref.url);
+        // A document resolved on this device before is not resolved at every width again.
+        const known = `skin-resolved.${ref.id}`;
+        const digest = installedDigest(JSON.stringify(value) ?? '', RENDERER_VERSION);
+        const resolved = preferences.get(known) === digest;
+        const doc = installedDocument(value, origin, resolved);
         if (doc.id !== ref.id) throw new Error('Skin id mismatch');
+        if (!resolved) void preferences.set(known, digest);
         return doc;
       } catch { console.info('Ignored invalid installed skin', ref.id); return null; }
     })).then(docs => { if (!cancelled) setInstalled(docs.filter((d): d is SkinDocument => d !== null)); });
