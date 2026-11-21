@@ -13,6 +13,7 @@ import { NO_RING, useInteraction } from '../common/controls';
 import { useMediaActions } from './context';
 import { MediaGlyph } from './icons';
 import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './parts';
+import { Arrive, MOTION, Presence, useLast } from '../../presence';
 
 const web = Platform.OS === 'web';
 
@@ -23,12 +24,16 @@ function spoken(item: Card | undefined): boolean {
 
 function useAudio(): AudioState { return useVelaState(state => state.audio); }
 
-/** The floating bar over every page while something is queued. */
+/** The mini player's height, px: where Now Playing rises from. */
+export const MINI_PLAYER_HEIGHT = 62;
+
+/** The floating bar over every page while something is queued. While it leaves (the queue
+ * stopped) it keeps showing what was playing. */
 export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number }) {
   const m = useMediaLook();
   const store = useVela();
   const audio = useAudio();
-  const item = currentInQueue(audio.queue);
+  const item = useLast(currentInQueue(audio.queue));
   const open = useInteraction();
   if (!item) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
@@ -149,9 +154,13 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
   const m = useMediaLook();
   const store = useVela();
   const actions = useMediaActions();
-  const audio = useAudio();
+  const live = useAudio();
+  // While it leaves (closed, or the queue stopped) it keeps showing what was playing.
+  const queue = useLast(live.queue);
+  const audio = { ...live, queue: live.queue ?? queue ?? null };
   const item = currentInQueue(audio.queue);
   const [panel, setPanel] = useState<'' | 'speed' | 'sleep'>('');
+  const shownPanel = useLast(panel || undefined);
   const [list, setList] = useState<'queue' | 'chapters'>('queue');
   const book = spoken(item);
   useEffect(() => { setList(book && audio.chapters.length ? 'chapters' : 'queue'); }, [book, audio.chapters.length, item?.id]);
@@ -189,35 +198,43 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
       {audio.phase === 'failed' || audio.unsupported ? <Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text> : null}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        {book
-          ? <RoundButton icon="speed" label={`${msg('media.player.speed')}: ${rateLabel(audio.rate)}`} onPress={() => setPanel(panel === 'speed' ? '' : 'speed')} active={audio.rate !== 1 || panel === 'speed'} testID="now-playing-speed" />
-          : <RoundButton icon="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={audio.queue.shuffle} testID="now-playing-shuffle" />}
-        {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={54} testID="now-playing-back15" />
-          : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={54} testID="now-playing-previous" iconSize={22} />}
-        <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()} testID="now-playing-toggle" nativeID="now-playing-toggle" />
-        {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={54} testID="now-playing-forward30" />
-          : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={54} testID="now-playing-next" iconSize={22} />}
-        {book
-          ? <RoundButton icon="moon" label={msg('media.player.sleep')} onPress={() => setPanel(panel === 'sleep' ? '' : 'sleep')} active={sleeping || panel === 'sleep'} testID="now-playing-sleep" />
-          : <RoundButton icon={audio.queue.repeat === 'one' ? 'repeatOne' : 'repeat'} label={audio.queue.repeat === 'one' ? msg('media.player.repeatOne') : msg('media.player.repeat')}
-              onPress={() => store.audio.cycleRepeat()} active={audio.queue.repeat !== 'off'} testID="now-playing-repeat" />}
+      <View style={{ zIndex: 3 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          {book
+            ? <RoundButton icon="speed" label={`${msg('media.player.speed')}: ${rateLabel(audio.rate)}`} onPress={() => setPanel(panel === 'speed' ? '' : 'speed')} active={audio.rate !== 1 || panel === 'speed'} testID="now-playing-speed" />
+            : <RoundButton icon="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={audio.queue.shuffle} testID="now-playing-shuffle" />}
+          {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={54} testID="now-playing-back15" />
+            : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={54} testID="now-playing-previous" iconSize={22} />}
+          <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()} testID="now-playing-toggle" nativeID="now-playing-toggle" />
+          {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={54} testID="now-playing-forward30" />
+            : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={54} testID="now-playing-next" iconSize={22} />}
+          {book
+            ? <RoundButton icon="moon" label={msg('media.player.sleep')} onPress={() => setPanel(panel === 'sleep' ? '' : 'sleep')} active={sleeping || panel === 'sleep'} testID="now-playing-sleep" />
+            : <RoundButton icon={audio.queue.repeat === 'one' ? 'repeatOne' : 'repeat'} label={audio.queue.repeat === 'one' ? msg('media.player.repeatOne') : msg('media.player.repeat')}
+                onPress={() => store.audio.cycleRepeat()} active={audio.queue.repeat !== 'off'} testID="now-playing-repeat" />}
+        </View>
+        {/* Speed and sleep open as a popover under the transport, over what follows, so nothing below
+            moves; it drops in and lifts away with the shared motion. */}
+        <Presence shown={!!panel} still={m.look.still} offstage={{ y: -8, scale: 0.98 }} exitMs={MOTION.quick} pointerEvents="auto" testID="now-playing-panel"
+          style={[{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 12, padding: 12, borderRadius: 18, backgroundColor: m.ui.popover, zIndex: 3 } as ViewStyle,
+            m.box({ 'box-shadow': '0px 18px 48px -12px rgba(0, 0, 0, 0.6), 0px 0px 0px 1px $ui.glassEdge' })]}>
+          {shownPanel === 'speed' ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.player.speed')}>
+              {AUDIO_RATES.map(rate => <Chip key={rate} label={rateLabel(rate)} selected={audio.rate === rate} onPress={() => { store.audio.setRate(rate); setPanel(''); }} testID={`speed-${rate}`} />)}
+            </View>
+          ) : shownPanel === 'sleep' ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.player.sleep')}>
+              <Chip label={msg('media.player.sleepOff')} selected={!sleeping} onPress={() => { store.audio.setSleep('off'); setPanel(''); }} testID="sleep-off" />
+              {[15, 30, 45, 60].map(minutes => <Chip key={minutes} label={msg('media.player.sleepMinutes', { count: number(minutes) })} selected={false} onPress={() => { store.audio.setSleep('timer', minutes); setPanel(''); }} testID={`sleep-${minutes}`} />)}
+              {audio.chapters.length ? <Chip label={msg('media.player.sleepChapter')} selected={audio.sleep.mode === 'chapter'} onPress={() => { store.audio.setSleep('chapter'); setPanel(''); }} testID="sleep-chapter" /> : null}
+            </View>
+          ) : null}
+        </Presence>
       </View>
-      {book && (audio.rate !== 1 || sleeping) && !panel ? (
+      {book && (audio.rate !== 1 || sleeping) ? (
         <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet', 'text-align': 'center' })}>
           {[audio.rate !== 1 ? rateLabel(audio.rate) : '', audio.sleep.mode === 'timer' ? msg('media.player.sleepIn', { time: durationLabel(sleepLeft) }) : audio.sleep.mode === 'chapter' ? msg('media.player.sleepChapter') : audio.sleep.mode === 'item' ? msg('media.player.sleepItem') : ''].filter(Boolean).join(' · ')}
         </Text>
-      ) : null}
-      {panel === 'speed' ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.player.speed')}>
-          {AUDIO_RATES.map(rate => <Chip key={rate} label={rateLabel(rate)} selected={audio.rate === rate} onPress={() => { store.audio.setRate(rate); setPanel(''); }} testID={`speed-${rate}`} />)}
-        </View>
-      ) : panel === 'sleep' ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.player.sleep')}>
-          <Chip label={msg('media.player.sleepOff')} selected={!sleeping} onPress={() => { store.audio.setSleep('off'); setPanel(''); }} testID="sleep-off" />
-          {[15, 30, 45, 60].map(minutes => <Chip key={minutes} label={msg('media.player.sleepMinutes', { count: number(minutes) })} selected={false} onPress={() => { store.audio.setSleep('timer', minutes); setPanel(''); }} testID={`sleep-${minutes}`} />)}
-          {audio.chapters.length ? <Chip label={msg('media.player.sleepChapter')} selected={audio.sleep.mode === 'chapter'} onPress={() => { store.audio.setSleep('chapter'); setPanel(''); }} testID="sleep-chapter" /> : null}
-        </View>
       ) : null}
     </View>
   );
@@ -256,13 +273,13 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
               <Artwork item={item} size={coverSize} playing={playing} />
               {controls}
             </View>
-            <View style={{ flex: 1, maxWidth: 520, paddingTop: 8 }}>{tabs}<View style={{ gap: 2 }}>{listItems}</View></View>
+            <View style={{ flex: 1, maxWidth: 520, paddingTop: 8 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
           </View>
         ) : (
           <View style={{ gap: 28, alignItems: 'center' }}>
             <Artwork item={item} size={coverSize} playing={playing} />
             {controls}
-            <View style={{ width: '100%', maxWidth: 560 }}>{tabs}<View style={{ gap: 2 }}>{listItems}</View></View>
+            <View style={{ width: '100%', maxWidth: 560 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
           </View>
         )}
       </ScrollView>
