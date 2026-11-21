@@ -802,6 +802,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const channel = channels.find(c => c.id === body.channelId);
     const title = allTitles.find(t => t.id === body.titleId), extra = extras.find(e => e.id === body.extraId);
     if (!title && !extra && !channel) fail('not-found', 'title_not_found', 'Playback target not found');
+    // VELA_MOCK_DOWN_CHANNELS (ids or numbers): channels whose provider is down, refused as final the way a lab's broken tuner is.
+    if (channel && (process.env.VELA_MOCK_DOWN_CHANNELS ?? '').split(',').some(down => down && (down === channel.id || down === String(channel.number)))) fail('source', 'network', 'The connection to the Live TV provider failed.', {}, 503);
     if (title && !['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Select an episode to play');
     const versionData = title ? versionsFor(title.id, g.id) : undefined;
     const requestedVersion = body.versionId ? versionData?.versions.find(version => version.id === body.versionId) : undefined;

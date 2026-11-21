@@ -90,7 +90,7 @@ const IDLE: LiveView = {
   zapping: '',
   tunedId: '',
   watchZap: '',
-  tile: { state: 'off', channelId: '', muted: true, fullscreen: false, plan: null, command: null },
+  tile: { state: 'off', channelId: '', muted: true, fullscreen: false, plan: null, command: null, failure: null, retrying: null },
 };
 const none = () => () => {};
 

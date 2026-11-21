@@ -264,6 +264,13 @@ export class LiveController {
     if (this.tile.view().state === 'playing') this.remember(this.tile.target);
   }
 
+  /** Live watch's Try again: the channel is asked for afresh, whether the server refused it or the engine failed. */
+  retryWatch(channelId: string): void {
+    if (!channelId) return;
+    this.tile.retryStop();
+    this.tile.restart(channelId);
+  }
+
   tileFailed(sessionId?: string): void {
     if (!sessionId || this.tile.view().plan?.sessionId === sessionId) this.tile.fail();
   }

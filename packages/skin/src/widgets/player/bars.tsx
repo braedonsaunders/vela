@@ -153,7 +153,7 @@ export function BottomBar(props: BottomProps) {
           ) : null}
           {props.live.live ? (
             <View style={{ alignItems: look.small ? 'stretch' : 'flex-start', gap: look.size(10) }}>
-              <LiveDial plan={state.plan} small={look.small} still={look.still} />
+              <LiveDial channelId={props.live.channelId} small={look.small} still={look.still} />
               <LiveStatusLine look={look} watch={props.live} />
             </View>
           ) : (
@@ -278,7 +278,7 @@ function Controls({
       ) : null}
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
-      {timeline ? null : <LiveZap look={look} watch={live} disabled={!state.plan} />}
+      {timeline ? null : <LiveZap look={look} watch={live} disabled={!live.canZap} />}
       <Volume look={look} view={view} send={send} onActive={onActive} />
       {timeline ? null : <LiveMark look={look} watch={live} send={send} />}
       <View style={cluster}>

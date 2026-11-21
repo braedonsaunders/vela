@@ -9,12 +9,17 @@ import { msg } from '@vela/core';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { liveBehind, liveNotices, liveWatchKey, MiniGuide, useLiveContext, useLiveView } from '../guide';
 import { ChromeButton } from './button';
-import type { CommandInput } from './context';
+import type { ChromeTarget, CommandInput } from './context';
+import { liveWatchOf } from './target';
 import type { PlayerLook } from './look';
 
 export interface LiveWatch {
   /** The session plays a channel. */
   live: boolean;
+  /** The channel being watched ('' for a live library or a film). */
+  channelId: string;
+  /** Channel up and down can dial from here (a live controller and a channel). */
+  canZap: boolean;
   /** What the viewer should be told about delivery (empty while the channel plays normally). */
   notices: string[];
   /** Whole seconds behind live when playback can catch up, else 0. */
@@ -24,14 +29,16 @@ export interface LiveWatch {
   zap(step: -1 | 1): void;
 }
 
-export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot | null): LiveWatch {
+export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot | null, target?: ChromeTarget): LiveWatch {
   const context = useLiveContext();
   const view = useLiveView();
-  const channelId = plan?.channelId ?? '';
+  const { live: isLive, channelId } = liveWatchOf(plan, target);
   const controller = context?.controller;
   const live = snapshot?.live ?? null;
   return {
-    live: !!channelId || !!plan?.live,
+    live: isLive,
+    channelId,
+    canZap: !!controller && !!channelId,
     notices: liveNotices(live),
     behind: liveBehind(live),
     key: key => (controller && channelId ? liveWatchKey(controller, key, channelId, view.watchZap !== '') : false),
@@ -138,7 +145,7 @@ export function LiveNotice({ look, watch }: { look: PlayerLook; watch: LiveWatch
 }
 
 /** The dialled channel between its neighbours, while flicking. */
-export function LiveDial({ plan, small, still }: { plan: PlaybackPlan | null; small: boolean; still: boolean }) {
-  if (!plan?.channelId) return null;
-  return <MiniGuide playingId={plan.channelId} small={small} still={still} />;
+export function LiveDial({ channelId, small, still }: { channelId: string; small: boolean; still: boolean }) {
+  if (!channelId) return null;
+  return <MiniGuide playingId={channelId} small={small} still={still} />;
 }

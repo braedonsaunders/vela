@@ -3,6 +3,7 @@
 // order, keeps that channel selected if it cannot play, and
 // owns the current session. Full watch shares that session without a server retune.
 import type { Command, Snapshot } from '@vela/player-api';
+import { startRefusal, startRetry, VelaError, type StartRefusal } from '@vela/core';
 import type { LivePreviewMode, PlaybackPlan } from '../../../../protocol/types';
 import type { LiveSource } from './source';
 import { previewFailure } from './diagnostics';
@@ -18,6 +19,10 @@ export interface TileView {
   plan: PlaybackPlan | null;
   /** The latest mute command for the player view. */
   command: Command | null;
+  /** Why the channel could not play (the server's refusal or the engine's failure), once given up. */
+  failure: StartRefusal | null;
+  /** The server allowed asking again: when the tile does, and why the last attempt was refused. */
+  retrying: { seconds: number; message: string } | null;
 }
 
 /** What the tile is allowed to want right now, decided by the controller. */
@@ -31,6 +36,15 @@ export interface TileInputs {
   quiet: boolean;
   /** The app can draw a picture (a player view exists). */
   canPreview: boolean;
+}
+
+/**
+ * Ether supersedes a client's live session when the same device tunes again, and a quick zap can
+ * overlap two tunes: the one it cancels may be the channel the viewer landed on. That refusal
+ * says nothing about the channel, so it is asked once more before anything is shown.
+ */
+function cancelledTune(error: unknown): boolean {
+  return error instanceof VelaError && error.detail.code === 'cancelled';
 }
 
 /** Waits before re-sending a stop the server did not confirm; after these the tile says so. */
@@ -58,6 +72,11 @@ export class Tile {
   private fullscreen = false;
   private mode: LivePreviewMode = 'auto';
   private readonly stopping = new Map<string, Stopping>();
+  private failure: StartRefusal | null = null;
+  private retries = 0;
+  private retryingIn = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private askedAgain = false;
 
   constructor(
     private readonly source: LiveSource,
@@ -93,6 +112,8 @@ export class Tile {
       fullscreen: this.fullscreen,
       plan: this.wanted ? this.held : null,
       command: this.command,
+      failure: this.givenUp ? this.failure ?? { message: '', code: '', errorClass: '' } : null,
+      retrying: this.retryingIn > 0 ? { seconds: this.retryingIn, message: this.failure?.message ?? '' } : null,
     };
   }
 
@@ -136,19 +157,55 @@ export class Tile {
         }
         this.held = plan;
         this.playing = false;
+        this.retries = 0;
+        this.retryingIn = 0;
+        this.askedAgain = false;
+        this.failure = null;
         this.changed();
       },
       error => {
         previewFailure('tune', error);
-        if (generation === this.generation) this.fail();
+        if (generation !== this.generation) return;
+        if (cancelledTune(error) && !this.askedAgain && this.wanted && channelId === this.target) {
+          this.askedAgain = true;
+          this.request();
+          return;
+        }
+        // A refusal the server allows retrying is asked again on its terms; anything else is final.
+        const seconds = startRetry(error, this.retries);
+        if (seconds <= 0) { this.fail(error); return; }
+        this.retries += 1;
+        this.retryingIn = seconds;
+        this.failure = startRefusal(error);
+        this.retryTimer = setTimeout(() => {
+          this.retryTimer = undefined;
+          this.retryingIn = 0;
+          if (generation !== this.generation) return;
+          if (this.wanted && channelId === this.target) this.request();
+          else this.requesting = -1;
+          this.changed();
+        }, seconds * 1000);
+        this.changed();
       },
     );
   }
 
   /** A failed channel stays selected until the viewer retries or explicitly changes it. */
-  fail(): void {
+  fail(reason?: unknown): void {
     this.drop();
     this.givenUp = true;
+    this.failure = reason === undefined ? null : startRefusal(reason);
+    this.settle();
+    this.changed();
+  }
+
+  /** Try the channel again from the start (the viewer's Try again), whatever state it is in. */
+  restart(channelId: string): void {
+    this.drop();
+    this.manual = true;
+    this.chosen = channelId;
+    this.givenUp = false;
+    this.failure = null;
     this.settle();
     this.changed();
   }
@@ -157,7 +214,7 @@ export class Tile {
   snapshot(snapshot: Snapshot): void {
     if (!this.held || snapshot.sessionId !== this.held.sessionId) return;
     if (snapshot.state === 'failed') {
-      this.fail();
+      this.fail(snapshot.failure ? new Error(snapshot.failure.message) : undefined);
       return;
     }
     const playing = snapshot.state === 'playing' && !snapshot.waiting && snapshot.totalFrames !== 0;
@@ -178,6 +235,7 @@ export class Tile {
     this.drop();
     this.chosen = channelId;
     this.givenUp = false;
+    this.failure = null;
     this.settle();
     this.changed();
   }
@@ -218,6 +276,7 @@ export class Tile {
     if (this.held?.sessionId === plan.sessionId || (this.fullscreen && plan.channelId === this.target)) {
       this.held = plan;
       this.givenUp = false;
+      this.failure = null;
       this.changed();
     }
   }
@@ -241,6 +300,7 @@ export class Tile {
 
   private forget(): void {
     this.givenUp = false;
+    this.failure = null;
     this.chosen = '';
     this.manual = false;
   }
@@ -257,6 +317,11 @@ export class Tile {
     this.held = null;
     this.playing = false;
     this.generation += 1;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
+    this.retries = 0;
+    this.retryingIn = 0;
+    this.askedAgain = false;
   }
 
   private stop(plan: PlaybackPlan): void {

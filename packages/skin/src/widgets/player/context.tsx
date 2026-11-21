@@ -16,12 +16,30 @@ export interface StartFailure {
   message: string;
 }
 
+/** A refused start the server allows retrying, while the next attempt is awaited. */
+export interface StartRetrying {
+  /** Seconds the client waits before asking again. */
+  seconds: number;
+  /** Why the last attempt was refused, in the server's words ("" when it gave none). */
+  message: string;
+}
+
+/** What the route asked to play: a channel or a live library plays live before (or without) a plan. */
+export interface ChromeTarget {
+  kind: 'title' | 'extra' | 'channel' | 'library-live';
+  id: string;
+}
+
 export interface PlayerChromeState {
   /** The heading: the title, or "Season 1, Episode 2: Name". */
   title: string;
+  /** What the route asked to play (absent for a host that only has a plan). */
+  target?: ChromeTarget;
   plan: PlaybackPlan | null;
   snapshot: Snapshot | null;
   startFailure: StartFailure | null;
+  /** A refused start being asked again on the server's terms (never an endless wait). */
+  retrying?: StartRetrying | null;
   /** A failure the view reported through onError. */
   failure: Failure | null;
   /** The last command the engine or the server refused, in words ("" when none). */

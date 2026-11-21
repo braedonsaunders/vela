@@ -14,7 +14,7 @@ import { holdsChrome } from './hold';
 import { useIdle } from './idle';
 import { useScreenAwake } from './wake-lock';
 import { InfoCard } from './info-card';
-import { LiveNotice, useLiveWatchChrome } from './live';
+import { LiveDial, LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
 import { present, type PlayerView } from './present';
@@ -58,7 +58,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
-  const live = useLiveWatchChrome(state.plan, state.snapshot);
+  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target);
   // The session that has played, so a later wait in it reads as a stall rather than a start.
   const playedSession = useRef('');
   const sessionId = state.plan?.sessionId ?? '';
@@ -171,8 +171,11 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           failed={failed}
           waiting={waiting}
           waitingLabel={waitingLabel(view)}
+          retrying={failed ? null : state.retrying ?? null}
           onRetry={state.retry}
           onClose={state.close}
+          zap={live.live && live.canZap ? live.zap : undefined}
+          dial={failed && live.canZap ? <LiveDial channelId={live.channelId} small={look.small} still={look.still} /> : null}
         />
       </View>
       {!idle.visible && !failed ? <LiveNotice look={look} watch={live} /> : null}

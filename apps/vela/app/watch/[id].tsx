@@ -37,10 +37,15 @@ export default function Watch() {
   const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId]);
   const live = useLiveContext();
   const liveView = useLiveView();
+  // A channel's session is the live controller's: its plan, its refusal (or a retry on the
+  // server's terms) and Try again all come from the tile tuned to this channel.
+  const tile = liveView.tile.channelId === id ? liveView.tile : null;
   const owned = target.kind === 'channel' && live ? {
-    plan: liveView.tile.channelId === id ? liveView.tile.plan : null,
+    plan: tile?.plan ?? null,
+    failure: tile?.failure ?? null,
+    retrying: tile?.retrying ?? null,
     snapshot: (value: Parameters<typeof live.controller.tileSnapshot>[0]) => live.controller.tileSnapshot(value),
-    failed: () => live.controller.tileFailed(),
+    retry: () => live.controller.retryWatch(id),
     updatePlan: (plan: Parameters<typeof live.controller.updateWatchPlan>[0]) => live.controller.updateWatchPlan(plan),
   } : undefined;
   const session = usePlaybackSession(target, owned);

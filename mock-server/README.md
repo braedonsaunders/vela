@@ -177,6 +177,8 @@ Programmes last 5–20 minutes and are generated only for requested channels and
 windows. `VELA_MOCK_GUIDE_WINDOW=1` advertises the optional complete-window API;
 omit it to verify paginated fallback. `VELA_MOCK_GUIDE_UNAVAILABLE=scale-5`
 simulates a retryable guide outage, distinct from a ready channel with no listings.
+`VELA_MOCK_DOWN_CHANNELS=<id or number,…>` refuses those channels' playback as
+final (503 `source`/`network`, retry not allowed), like a lab tuner whose provider is down.
 For a TV on the LAN, set `VELA_MOCK_HOST` to this machine's LAN address; the
 default remains loopback. Sign in with the mock's `demo` / `vela` account.
 `VELA_MOCK_GUIDE_GAPS=scale-1` adds a long empty interval around the current

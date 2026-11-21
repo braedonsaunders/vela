@@ -1,12 +1,14 @@
-// The middle of the screen: nothing while playback runs, the spinner while the engine waits,
+// The middle of the screen: nothing while playback runs, the spinner while the engine waits
+// (with "Retrying…" and the reason while a refused start is asked again on the server's terms),
 // and a failure card when playback cannot go on: what happened in the server's or engine's
-// words (all streams in use, a refusal, a decoder failure), with Try again and Close.
+// words (all streams in use, a refusal, a decoder failure), with Try again and Close, and on a
+// channel, channel up and down so the viewer can zap away.
 import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { msg } from '@vela/core';
-import { PlayerIcon } from './icons';
+import { PlayerIcon, type PlayerIconName } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';
 import { useFocusClaim } from '../common/focus-claim';
@@ -23,16 +25,37 @@ interface Props {
   waiting: boolean;
   /** What the engine is doing while it waits, for screen readers. */
   waitingLabel: string;
+  /** A refused start being asked again: shown in words under the spinner. */
+  retrying?: { seconds: number; message: string } | null;
   onRetry(): void;
   onClose(): void;
+  /** On a channel: channel up (-1) and down (+1) from the failure card. */
+  zap?: (step: -1 | 1) => void;
+  /** The channel being dialled from the failure card (the mini guide), or null. */
+  dial?: ReactNode;
 }
 
-export function Status({ look, failed, waiting, waitingLabel, onRetry, onClose }: Props) {
-  if (failed) return <FailureCard look={look} failed={failed} onRetry={onRetry} onClose={onClose} />;
-  if (!waiting) return null;
+export function Status({ look, failed, waiting, waitingLabel, retrying, onRetry, onClose, zap, dial }: Props) {
+  if (failed) {
+    return (
+      <View style={{ alignItems: 'center', gap: look.size(16) }} pointerEvents="box-none">
+        <FailureCard look={look} failed={failed} onRetry={onRetry} onClose={onClose} zap={zap} />
+        {dial}
+      </View>
+    );
+  }
+  if (!waiting && !retrying) return null;
   return (
-    <View pointerEvents="none" testID="player-status" style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <Spinner look={look} size={look.size(look.small ? 52 : 64)} label={waitingLabel} />
+    <View pointerEvents="none" testID="player-status" style={{ alignItems: 'center', justifyContent: 'center', gap: look.size(14), maxWidth: look.size(440), marginHorizontal: 16 }}>
+      <Spinner look={look} size={look.size(look.small ? 52 : 64)} label={retrying ? msg('player.retrying') : waitingLabel} />
+      {retrying ? (
+        <View accessibilityLiveRegion="polite" testID="player-retrying" style={{ alignItems: 'center', gap: look.size(6) }}>
+          <Text style={look.text(16, 600, look.ink)}>{msg('player.retrying')}</Text>
+          {retrying.message ? (
+            <Text style={[look.text(13, 400, look.inkSecondary), { textAlign: 'center', lineHeight: look.size(20) }]}>{retrying.message}</Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -42,11 +65,13 @@ function FailureCard({
   failed,
   onRetry,
   onClose,
+  zap,
 }: {
   look: PlayerLook;
   failed: Failed;
   onRetry(): void;
   onClose(): void;
+  zap?: (step: -1 | 1) => void;
 }) {
   return (
     <View
@@ -87,6 +112,12 @@ function FailureCard({
         <Pill look={look} label={msg('ui.tryAgain')} primary preferred onPress={onRetry} testID="player-retry" />
         <Pill look={look} label={msg('ui.closePlayer')} onPress={onClose} testID="player-failure-close" />
       </View>
+      {zap ? (
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: look.size(10) }}>
+          <Pill look={look} icon="channelUp" label={msg('live.channelUp')} onPress={() => zap(-1)} testID="player-failure-channel-up" />
+          <Pill look={look} icon="channelDown" label={msg('live.channelDown')} onPress={() => zap(1)} testID="player-failure-channel-down" />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -94,13 +125,15 @@ function FailureCard({
 interface PillProps {
   look: PlayerLook;
   label: string;
+  /** An icon-only pill (the label is for screen readers). */
+  icon?: PlayerIconName;
   primary?: boolean;
   preferred?: boolean;
   onPress(): void;
   testID: string;
 }
 
-function Pill({ look, label, primary, preferred, onPress, testID }: PillProps) {
+function Pill({ look, label, icon, primary, preferred, onPress, testID }: PillProps) {
   const claim = useFocusClaim(preferred);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -118,7 +151,7 @@ function Pill({ look, label, primary, preferred, onPress, testID }: PillProps) {
       onBlur={() => setFocus(false)}
       style={{
         height: look.size(44),
-        paddingHorizontal: look.size(24),
+        paddingHorizontal: look.size(icon ? 14 : 24),
         justifyContent: 'center',
         borderRadius: look.radiusControl >= look.size(22) ? look.size(22) : look.radiusControl,
         backgroundColor: filled ? look.ink : hover ? look.controlHover : look.control,
@@ -132,7 +165,11 @@ function Pill({ look, label, primary, preferred, onPress, testID }: PillProps) {
         transform: [{ scale: look.tv && focus && !look.still ? 1.06 : 1 }],
       }}
     >
-      <Text style={look.text(14, 600, filled ? look.inkInverse : look.ink)}>{label}</Text>
+      {icon ? (
+        <PlayerIcon name={icon} size={look.size(20)} color={filled ? look.inkInverse : look.ink} />
+      ) : (
+        <Text style={look.text(14, 600, filled ? look.inkInverse : look.ink)}>{label}</Text>
+      )}
     </Pressable>
   );
 }

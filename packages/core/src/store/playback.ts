@@ -8,6 +8,7 @@ import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
 import { hasEventStream, hasLibraryLive, hasVersions } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
+import { startRefusal, startRetry } from './start-retry';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
@@ -36,6 +37,8 @@ export interface PlaybackState {
   errorClass: string;
   /** While an extra is prepared, or after a failure the server allows retrying: when to ask again. */
   retryAfterSeconds: number;
+  /** After a refused start the server allows retrying: which retry is coming (1, 2, …), else 0. */
+  retryAttempt: number;
   live: ReturnType<typeof liveStatus>;
 }
 
@@ -48,6 +51,7 @@ export const initialPlayback: PlaybackState = {
   errorCode: '',
   errorClass: '',
   retryAfterSeconds: 0,
+  retryAttempt: 0,
   live: null,
 };
 
@@ -75,6 +79,8 @@ export class Playback {
   private run: object | undefined;
   private abandoned: V.PlaybackPlan | null = null;
   private recovering = false;
+  /** The current playback reached a session: a later drop is recovered patiently. */
+  private established = false;
   private recoveryAttempt = 0;
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   private cursor = 0;
@@ -139,6 +145,7 @@ export class Playback {
     const connection = await this.session.ready();
     if (this.run !== run) return;
     const plan = connection.plan(existing);
+    this.established = true;
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
@@ -228,33 +235,32 @@ export class Playback {
     }
     this.abandoned = null;
     this.recovering = false;
+    this.established = true;
     this.cursor = plan.positionSeconds ?? 0;
-    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0 });
+    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0 });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
   }
 
-  /** A failure the server allows retrying is retried on its terms (at most twice, within a minute). */
+  /**
+   * A refused start. A failure the server allows retrying is asked again on its terms
+   * (startRetry); anything else ends in the failed state with the server's words. Only a session
+   * that was already established keeps recovery's patient backoff.
+   */
   private failed(intent: Intent, error: unknown, attempt: number, preparation: number): void {
-    if (this.recovering) { this.scheduleRecovery(intent); return; }
-    if (!(error instanceof VelaError)) {
-      this.patch({ phase: 'failed', error: message(error, 'Playback failed'), errorCode: '', errorClass: '' });
-      return;
-    }
-    const retry = error.detail.retry;
-    const header = Number(error.retryAfter);
-    const hint = Number.isFinite(retry.afterSeconds) ? Math.max(0, retry.afterSeconds!) : 0;
-    const seconds = Math.max(2 ** Math.min(attempt, 5), hint, Number.isFinite(header) ? header : 0, 1);
-    const limit = Math.max(0, Math.min(2, (Number.isFinite(retry.maxAttempts) ? Math.floor(retry.maxAttempts!) : 3) - 1));
-    const again = retry.allowed === true && seconds <= 60 && attempt < limit;
+    if (this.recovering && this.established) { this.scheduleRecovery(intent); return; }
+    this.recovering = false;
+    const refusal = startRefusal(error, 'Playback failed');
+    const seconds = startRetry(error, attempt);
     this.patch({
       phase: 'failed',
-      error: error.message,
-      errorCode: error.detail.code,
-      errorClass: error.detail.class,
-      retryAfterSeconds: again ? seconds : 0,
+      error: refusal.message,
+      errorCode: refusal.code,
+      errorClass: refusal.errorClass,
+      retryAfterSeconds: seconds,
+      retryAttempt: seconds > 0 ? attempt + 1 : 0,
     });
-    if (again) this.timer = setTimeout(() => void this.request(intent, attempt + 1, preparation), seconds * 1000);
+    if (seconds > 0) this.timer = setTimeout(() => void this.request(intent, attempt + 1, preparation), seconds * 1000);
   }
 
   /** Follow the session until it ends or playback stops: events when the server streams them, else snapshots. */
@@ -303,7 +309,9 @@ export class Playback {
   /** Session-level recovery follows exhausted media read retries. One intent owns all triggers. */
   recover(sessionId: string): void {
     const current = this.box.get().playback;
-    if (!this.run || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
+    // Only an established session is recovered: a start that never reached one (no session id)
+    // already ended in its own failed or retrying state.
+    if (!this.run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
     this.recovering = true;
     this.follow?.abort();
     if (this.watchdog) clearTimeout(this.watchdog);
@@ -532,6 +540,7 @@ export class Playback {
   private end(): void {
     this.abandoned = null;
     this.recovering = false;
+    this.established = false;
     this.recoveryAttempt = 0;
     this.cursor = 0;
     this.localTracks = false;

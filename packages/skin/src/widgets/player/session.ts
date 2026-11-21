@@ -4,12 +4,13 @@
 // talks to the server and follows the session. Core owns the server; this owns the order of things.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { msg, VelaError, type PlaybackState, type PlaybackTarget } from '@vela/core';
+import { VelaError, type PlaybackTarget, type StartRefusal } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
-import type { CommandInput, PlayerChromeState, StartFailure } from './context';
+import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, qualityReached } from './present';
+import { startFailure, startFailureOf, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
 
 export interface PlaybackSession {
@@ -20,19 +21,16 @@ export interface PlaybackSession {
   stop(): void;
 }
 
-/** A start the server refused, unless core is already asking again on the server's terms. */
-function startFailure(playback: PlaybackState): StartFailure | null {
-  if (playback.phase !== 'failed' || playback.retryAfterSeconds > 0) return null;
-  return {
-    capacity: playback.errorClass === 'capacity',
-    message: playback.error || msg('ui.playbackCouldnTBeStarted'),
-  };
-}
-
+/** A live channel whose session another owner (the live controller's tile) starts and holds. */
 export interface LiveSessionOwner {
   plan: PlaybackPlan | null;
+  /** Why the owner could not start the channel, once it gave up. */
+  failure: StartRefusal | null;
+  /** The owner is asking again on the server's terms. */
+  retrying: StartRetrying | null;
   snapshot(snapshot: Snapshot): void;
-  failed(): void;
+  /** The viewer's Try again: the owner starts the channel afresh. */
+  retry(): void;
   updatePlan(plan: PlaybackPlan): void;
 }
 
@@ -137,7 +135,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       send({ type: 'retry' });
       return;
     }
-    if (external) ownerRef.current?.failed();
+    if (external) ownerRef.current?.retry();
     else begin(position.current > 0 ? position.current : undefined);
   }, [failure, playback.plan, send, begin, external]);
 
@@ -227,11 +225,19 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
   };
 
+  const chromeTarget: ChromeTarget = { kind, id };
+  const owned = owner && !ownedPlan ? owner : undefined;
   return {
     chrome: {
+      target: chromeTarget,
       plan,
       snapshot: playback.phase === 'preparing' ? null : snapshot,
-      startFailure: startFailure(playback),
+      startFailure: owner
+        ? (owned?.failure ? startFailureOf(owned.failure, chromeTarget) : null)
+        : startFailure(playback, chromeTarget),
+      retrying: owner
+        ? (owned && !owned.failure ? owned.retrying : null)
+        : startRetrying(playback),
       failure: playback.phase === 'preparing' ? null : failure,
       actionError: refused || (playback.phase === 'playing' ? playback.error : ''),
       pendingQualityId,
