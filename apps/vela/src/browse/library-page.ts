@@ -25,16 +25,12 @@ export interface LibraryState {
 interface ExtraState {
   id: string; tab?: string; query?: string; attempt?: number; revision: number; progressRevision: number;
   loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras;
-  /** Read again while the last answer stays on show. */
-  refreshing?: boolean;
 }
 
 /** Whether the extras held are this view's (of any progress revision: a stale answer shows while it refreshes). */
 function sameExtras(state: ExtraState, id: string, revision: number, tab: string | undefined, query: string): boolean {
   return state.id === id && state.revision === revision && state.tab === tab && state.query === query;
 }
-
-const run = (update: () => void) => update();
 
 export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: string, facetTitle?: string): LibraryState {
   const store = useVela();
@@ -73,6 +69,8 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const extraGeneration = useRef(0);
   const [extraAttempt, setExtraAttempt] = useState(0);
   const [rowLoading, setRowLoading] = useState<string[]>([]);
+  /** The last quiet re-read of the extras on show, so an unchanged answer is not read again on every return. */
+  const checked = useRef('');
   const [liveFilterState, setLiveFilterState] = useState({ tab: '', value: '' });
   const liveFilter = liveFilterState.tab === searchKey ? liveFilterState.value : '';
   const setLiveFilter = useCallback((value: string) => setLiveFilterState({ tab: searchKey, value: value.slice(0, 128) }), [searchKey]);
@@ -102,29 +100,43 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   useEffect(() => {
     if (!id || !kind || !focused || liveTab || viewTab) return;
     // A modal person page keeps this library mounted. Keep its accumulated pages on return.
-    if (extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.tab === collectionTab && extraState.query === tabQuery && extraState.attempt === extraAttempt && extraState.value && !extraState.loading && !extraState.failed && !extraState.value.failed) {
+    const check = `${id}|${revision}|${collectionTab ?? ''}|${tabQuery}|${progressRevision}|${extraAttempt}`;
+    const shown = sameExtras(extraState, id, revision, collectionTab, tabQuery) && !!extraState.value && !extraState.loading && !extraState.failed;
+    if (shown && (extraState.progressRevision === progressRevision && extraState.attempt === extraAttempt && !extraState.value!.failed || checked.current === check)) {
       setExtraState(previous => previous.moreLoading ? { ...previous, moreLoading: false } : previous);
       return;
     }
     let active = true;
     extraGeneration.current++;
-    // A refresh of the same view (progress moved, a retry) keeps what it shows meanwhile.
-    const held = sameExtras(extraState, id, revision, collectionTab, tabQuery) && !extraState.failed ? extraState.value : undefined;
-    setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: true, failed: false, value: held, refreshing: !!held });
-    // A refresh for progress takes the new places into the rows on show (reconcileProgressRows):
-    // unchanged rows and cards keep their objects, so only what moved draws again.
-    const merged = (shown: LibraryExtras['rows'], fresh: LibraryExtras['rows']) => held ? reconcileProgressRows(shown, fresh, true) : fresh;
+    if (shown) {
+      // A view on show is read again quietly (progress moved, part of it failed last time): it
+      // stays as it is, and changes only if the answer does. Redrawing a whole library page for an
+      // equal answer held a TV's JS thread for two seconds on every return to the section. A
+      // changed answer takes the new places into the rows on show (reconcileProgressRows):
+      // unchanged rows and cards keep their objects, so only what moved draws again.
+      const held = extraState.value!;
+      const heldAnswer = JSON.stringify(held);
+      void store.catalogue.libraryExtras(id, kind, undefined, collectionTab, tabQuery, progressRevision > 0).then(value => {
+        if (!active) return;
+        checked.current = check;
+        if (value && JSON.stringify(value) !== heldAnswer) {
+          startTransition(() => setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false,
+            value: { ...value, rows: reconcileProgressRows(held.rows, value.rows, true) } }));
+        }
+      }).catch(() => { if (active) checked.current = check; });
+      return () => { active = false; extraGeneration.current++; };
+    }
+    setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: true, failed: false });
     // The recommendations show as soon as they arrive; collections and genres follow.
     const rows = (value: LibraryExtras) => {
       if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.progressRevision === progressRevision && previous.loading
-        ? { ...previous, value: previous.value ? { ...previous.value, rows: merged(previous.value.rows, value.rows), rowsLoad: value.rowsLoad } : value } : previous);
+        ? { ...previous, value: previous.value ? { ...previous.value, rows: value.rows, rowsLoad: value.rowsLoad } : value } : previous);
     };
-    // A quiet refresh lands as a transition: the page it redraws is already on show.
-    const settle = (next: ExtraState) => { if (active) (held ? startTransition : run)(() => setExtraState(next)); };
+    const settle = (next: ExtraState) => { if (active) setExtraState(next); };
     void store.catalogue.libraryExtras(id, kind, rows, collectionTab, tabQuery, progressRevision > 0).then(value => {
-      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value: held && value ? { ...value, rows: merged(held.rows, value.rows) } : value });
+      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value });
     }).catch(() => {
-      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: !held, value: held });
+      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: true });
     });
     return () => { active = false; extraGeneration.current++; };
   }, [store, id, kind, revision, progressRevision, focused, extraAttempt, canRecommend, collectionTab, tabQuery, liveTab, viewTab]);
@@ -171,7 +183,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       liveAvailable,
       viewRequest: requestedView ?? '',
       extras,
-      extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.failed) || extraState.id === id && extraState.loading && !extraState.refreshing),
+      extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.failed) || extraState.id === id && extraState.loading),
       extrasFailed: usableView !== 'live' && extraState.id === id && extraState.progressRevision === progressRevision && (extraState.failed || !!extras?.failed),
     };
   }, [current, earlier, browseQuery, facetTitle, selectedTab?.id, selectedTab?.card, viewTab?.layout, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, progressRevision, tabQuery, liveFilter, liveState]);

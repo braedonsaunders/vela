@@ -1,7 +1,7 @@
 // The view state documents read beside the data: open flags (menus, panels), the chosen season,
 // each row pager's ends, the hero on show (rotating every 9 seconds unless motion is reduced, a
 // query is open or the hero's trailer is playing), and the system's reduced-motion setting.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { Env } from '@vela/skin';
 import { shouldRotateHero } from '@vela/skin/src/hero-rotation';
@@ -63,7 +63,8 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
   }, []);
   const resetFlags = useCallback(() => setFlags(list => list.every(f => f.startsWith('keep-')) ? list : list.filter(f => f.startsWith('keep-'))), []);
   const setPager = useCallback((scope: string, rowId: string, state: { atStart: boolean; atEnd: boolean }) => {
-    setPagers(all => withPager(all, scope, rowId, state));
+    // A pager report redraws its route: as a transition, a press that arrives meanwhile is not held behind it.
+    startTransition(() => setPagers(all => withPager(all, scope, rowId, state)));
   }, []);
 
   return useMemo(() => ({
