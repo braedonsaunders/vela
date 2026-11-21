@@ -10,6 +10,7 @@ import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
 import { searchStickyTop } from './search-sticky';
+import { heroSegmentDestination, isHeroControl, isHeroSegment } from './hero-pager';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -349,7 +350,9 @@ function pressAria(a11y: ReturnType<typeof a11yProps>, node: RNode, expanded: bo
 
 function a11yProps(node: RNode, c: Ctx, e: Env) {
   const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : node.role === 'group' ? 'group' : node.role === 'region' ? 'summary' : undefined;
-  const label = node.label ? fill(node.label, c, e) : undefined;
+  // The first state that holds may rename the control (a pause button that becomes play).
+  const named = node.states.find(state => holds(state.when, c, e))?.layer.label ?? node.label;
+  const label = named ? fill(named, c, e) : undefined;
   const state = node.a11y && {
     selected: node.a11y.selected ? holds(node.a11y.selected, c, e) : undefined,
     expanded: node.a11y.expanded ? holds(node.a11y.expanded, c, e) : undefined,
@@ -697,6 +700,10 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       return release;
     };
     const pressArg = press ? fill(press.arg, ctx, env) : '';
+    // The hero pager: a segment per featured title (one tab stop on the web), and its controls,
+    // which hold the rotation while keyboard focus is on them.
+    const heroSegment = web && isHeroSegment(press?.action, pressArg, ctx.index, !!ctx.hero);
+    const heroControl = isHeroControl(press?.action, pressArg);
     const href = cardHref;
     const onPress = press && ((event: GestureResponderEvent) => {
       if (web && href) {
@@ -709,9 +716,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
       notePress(buttonRef.current, `${press.action}:${arg}`);
-      // The pause and resume controls replace one another. Clear their focus-derived interaction
-      // before dispatch, because the focused control can unmount without delivering blur.
-      if (inHero && press.action === 'toggle' && arg === 'hero-paused') host.setFlag('hero-interacting', false);
+      // Pausing or playing the slideshow clears the hold its keyboard focus placed, so play takes
+      // effect while focus stays on the control.
+      if (heroControl && press.action === 'toggle') host.setFlag('hero-interacting', false);
       host.dispatch(press.action, arg);
       // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
       if (focus) requestAnimationFrame(() => focusElement(focus));
@@ -724,8 +731,16 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
         focusable={selectable(node)}
-        {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}) }, onKeyDown: (event) => {
+        {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}), ...(heroSegment ? { velaHeroSegment: String(ctx.index) } : {}) }, onKeyDown: (event) => {
           const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
+          const heroTo = heroSegment ? heroSegmentDestination(key, ctx.index, env.home?.hero.length ?? 0) : null;
+          if (heroTo !== null) {
+            event.preventDefault(); event.stopPropagation();
+            const group = (event.currentTarget as unknown as HTMLElement).closest('[role="group"]') ?? document;
+            host.dispatch('pickHero', String(heroTo));
+            requestAnimationFrame(() => group.querySelector<HTMLElement>(`[data-vela-hero-segment="${heroTo}"]`)?.focus());
+            return;
+          }
           if (cardPrimary && (key === 'ContextMenu' || (key === 'F10' && (event as unknown as { shiftKey?: boolean }).shiftKey))) {
             event.preventDefault(); event.stopPropagation(); openAnchoredMenu('keyboard'); return;
           }
@@ -735,17 +750,19 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
           if (buttonRef.current) episodeNav?.key(buttonRef.current, { key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() });
         } } : {})}
         {...(web ? pressAria(a11y, node, expanded) : {})}
+        {...(heroSegment ? { tabIndex: ctx.index === env.heroIndex ? 0 : -1, 'aria-current': ctx.index === env.heroIndex ? 'true' : undefined } : {})}
         onLongPress={cardPrimary ? () => openAnchoredMenu(Platform.isTV ? 'tv' : 'touch') : undefined}
         {...(web && cardPrimary ? { onContextMenu: openPointerMenu } : {})}
         onPress={onPress}
         onFocus={event => {
-          set('focus', isFocusVisible(event.currentTarget));
-          if (inHero) host.setFlag('hero-interacting', true);
+          const visible = isFocusVisible(event.currentTarget);
+          set('focus', visible);
+          if (inHero || (heroControl && visible)) host.setFlag('hero-interacting', true);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => { set('focus', false); if (inHero) host.setFlag('hero-interacting', false); }}
+        onBlur={() => { set('focus', false); if (inHero || heroControl) host.setFlag('hero-interacting', false); }}
         onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}

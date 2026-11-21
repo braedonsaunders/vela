@@ -5,6 +5,8 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   'play-fill': { paths: ['M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z'] },
   play: { paths: ['M7.5 5.2v13.6L19 12z'], stroke: true },
   pause: { paths: ['M8 5v14M16 5v14'], stroke: true },
+  /** Start a paused slideshow again: a turning arrow round a small play mark (not the play glyph). */
+  autoplay: { paths: ['M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4', 'M10.5 9.2v5.6l4.4-2.8z'], stroke: true },
   close: { paths: ['M6 6l12 12M18 6L6 18'], stroke: true },
   checkmark: { paths: ['M4.5 12.5l5 5L19.5 7'], stroke: true },
   'check-circle': { paths: ['M21 11.1V12a9 9 0 1 1-5.3-8.2M21 5l-10 10-3-3'], stroke: true },

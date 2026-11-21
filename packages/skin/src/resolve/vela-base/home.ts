@@ -296,7 +296,7 @@ export const heroCopy: Node = {
         level: 1,
         motion: enter(300),
         style: {
-          height: '150px',
+          height: 'clamp(110px, 14.5vh, 150px)',
           width: 'min(520px, 70%)',
           'max-width': 'min(520px, 70%)',
           'object-fit': 'contain',
@@ -316,7 +316,8 @@ export const heroCopy: Node = {
           'font-weight': '400',
           'letter-spacing': '-0.01em',
           'line-height': '0.98',
-          'font-size': '84px',
+          'font-size': 'clamp(56px, 7.4vh, 84px)',
+          'line-clamp': '2',
           'text-shadow': '0px 4px 40px $ui.shadow',
         },
         small: { 'font-size': '48px' },
@@ -369,46 +370,125 @@ export const heroCopy: Node = {
   },
 };
 
-// One dot per featured title; the current one widens and fills over the rotation interval.
-export const dot = (current: boolean): Node => ({
+// The featured titles' pager, a row of its own along the hero's foot (never inside the copy, so it
+// cannot sit on the actions): one short segment per title, the one on show filling over the
+// rotation interval and held full while the hero waits; a resume title's segment takes the accent.
+// Beside them "2 / 6 · Continue watching", then previous, pause and next. Each segment is one node
+// whatever its state, so focus stays on it as the hero changes; the renderer gives the segments one
+// tab stop and moves among them with the arrow keys.
+const segmentTrack = (color: string): Style => ({
+  position: 'relative',
+  width: 'calc(100% - 8px)',
+  height: '4px',
+  'border-radius': '2px',
+  'overflow-x': 'hidden',
+  'overflow-y': 'hidden',
+  'background-color': color,
+});
+const segmentFill: Style = { position: 'absolute', inset: '0px', 'border-radius': '2px', 'background-color': '$ui.ink' };
+export const segment: Node = {
   type: 'box',
   press: { action: 'pickHero', arg: '{index}' },
-  label: '{hero.name}',
-  when: [{ test: 'index.current', not: !current }],
+  label: '{hero.slideLabel}',
+  testId: 'hero-segment-{index}',
+  a11y: { current: [{ test: 'index.current' }] },
   style: {
     position: 'relative',
-    width: '44px',
+    width: '40px',
     height: '44px',
     display: 'flex',
     'align-items': 'center',
     'justify-content': 'center',
+    'border-radius': '8px',
   },
-  hover: { opacity: '0.82' },
+  small: { width: '30px' },
   focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
-  // The current dot is filled; while the carousel rotates the fill grows over the interval.
-  children: [{
-    type: 'box',
-    style: { position: 'relative', width: current ? '34px' : '8px', height: '8px', 'border-radius': '4px',
-      'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': current ? '$ui.trackStrong' : '$ui.glassEdgeStrong' },
-    children: current ? [
-      { type: 'box', when: [{ test: 'env.rotating' }], motion: 'velaHeroFill', style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': '$ui.ink' } },
-      { type: 'box', when: [{ test: 'env.rotating', not: true }], style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': '$ui.ink' } },
-    ] : [],
-  }],
-});
-const rotationControl = (paused: boolean): Node => ({
-  type: 'box', press: { action: 'toggle', arg: 'hero-paused' },
-  label: paused ? 'Resume featured titles' : 'Pause featured titles',
-  when: [{ test: 'env.heroPaused', not: !paused }],
-  style: { position: 'relative', width: '44px', height: '44px', display: 'flex', 'align-items': 'center', 'justify-content': 'center',
-    'border-radius': '$ui.radiusControl', color: '$ui.ink', 'background-color': '$ui.control' },
-  hover: { 'background-color': '$ui.controlHover' }, focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
-  children: [{ type: 'icon', symbol: paused ? 'play' : 'pause', style: { width: '16px', height: '16px' } }],
-});
-export const dots: Node = {
+  children: [
+    {
+      type: 'box',
+      style: segmentTrack('color-mix(in srgb, $ui.ink 36%, transparent)'),
+      states: [{ when: [{ test: 'heroAct.hasProgress' }], style: segmentTrack('color-mix(in srgb, $ui.accent 72%, transparent)') }],
+      groupHover: { 'background-color': 'color-mix(in srgb, $ui.ink 62%, transparent)' },
+      children: [
+        { type: 'box', when: [{ test: 'index.current' }, { test: 'env.rotating' }], motion: 'velaHeroFill', style: segmentFill },
+        { type: 'box', when: [{ test: 'index.current' }, { test: 'env.rotating', not: true }], style: segmentFill },
+      ],
+    },
+  ],
+  group: true,
+};
+const pagerButton: Style = {
+  position: 'relative',
+  width: '36px',
+  height: '36px',
+  display: 'flex',
+  'align-items': 'center',
+  'justify-content': 'center',
+  'flex-shrink': '0',
+  'border-radius': '$ui.radiusControl',
+  color: '$ui.ink',
+  border: '1px solid $ui.glassEdge',
+  'background-color': '$ui.glass',
+  'backdrop-filter': 'blur(14px)',
+};
+const step = (direction: 'prev' | 'next'): Node => ({
   type: 'box',
-  role: 'group',
-  label: '{t:ui.featuredTitles}',
+  press: { action: 'pickHero', arg: direction === 'prev' ? '{env.heroPrev}' : '{env.heroNext}' },
+  label: direction === 'prev' ? '{t:hero.previous}' : '{t:hero.next}',
+  testId: `hero-${direction}`,
+  style: pagerButton,
+  small: { display: 'none' },
+  hover: { 'background-color': '$ui.controlHover' },
+  focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
+  children: [{ type: 'icon', symbol: direction === 'prev' ? 'back' : 'forward-chevron', style: { width: '14px', height: '14px' } }],
+});
+// One control whose name and glyph follow the state, so focus stays on it when pressed. Paused, it
+// shows a turning arrow, not the play triangle the hero's own play buttons use.
+const slideshowControl: Node = {
+  type: 'box',
+  press: { action: 'toggle', arg: 'hero-paused' },
+  label: '{t:hero.slideshowPause}',
+  testId: 'hero-slideshow',
+  style: pagerButton,
+  states: [{ when: [{ test: 'env.heroPaused' }], style: pagerButton, label: '{t:hero.slideshowPlay}' }],
+  hover: { 'background-color': '$ui.controlHover' },
+  focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
+  children: [
+    { type: 'icon', when: [{ test: 'env.heroPaused', not: true }], symbol: 'pause', style: { width: '13px', height: '13px' } },
+    { type: 'icon', when: [{ test: 'env.heroPaused' }], symbol: 'autoplay', style: { width: '17px', height: '17px' } },
+  ],
+};
+const caption: Node = {
+  type: 'repeat',
+  over: 'home.hero',
+  item: {
+    type: 'box',
+    a11y: { hidden: true },
+    style: { display: 'flex', 'flex-direction': 'row', gap: '6px', 'align-items': 'baseline', 'min-width': '0px', 'margin-left': '10px' },
+    small: { 'margin-left': '6px' },
+    children: [
+      {
+        type: 'text',
+        text: '{index.label} / {env.heroCount}',
+        style: { 'font-size': '13px', 'font-weight': '650', color: '$ui.ink', 'font-variant-numeric': 'tabular-nums', 'white-space': 'nowrap' },
+      },
+      {
+        type: 'text',
+        text: '· {heroAct.reasonLabel}',
+        style: { 'font-size': '13px', color: '$ui.inkSecondary', 'white-space': 'nowrap', 'line-clamp': '1' },
+        small: { display: 'none' },
+      },
+      {
+        type: 'text',
+        when: [{ test: 'env.heroPaused' }],
+        text: '· {t:hero.paused}',
+        style: { 'font-size': '13px', color: '$ui.inkSecondary', 'white-space': 'nowrap' },
+      },
+    ],
+  },
+};
+export const heroPager: Node = {
+  type: 'box',
   motion: enter(560),
   when: [
     { test: 'env.searching', not: true },
@@ -416,28 +496,35 @@ export const dots: Node = {
     { test: 'env.heroCount', is: 'gt', value: '1' },
   ],
   style: {
+    position: 'relative',
     display: 'flex',
     'flex-direction': 'row',
     gap: '8px',
     'align-items': 'center',
     ...gutter,
-    'padding-top': '22px',
+    'padding-top': '18px',
+    'text-shadow': '0px 1px 12px $ui.shadow',
   } as Style,
-  small: { ...gutterSmall, 'padding-top': '16px' } as Style,
+  small: { ...gutterSmall, 'padding-top': '12px', gap: '4px' } as Style,
   children: [
     {
-      type: 'repeat',
-      over: 'home.heroes',
-      item: { type: 'box', style: { display: 'flex' }, children: [dot(true), dot(false)] },
+      type: 'box',
+      role: 'group',
+      label: '{t:ui.featuredTitles}',
+      style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'margin-left': '-4px' },
+      children: [{ type: 'repeat', over: 'home.heroes', item: segment }],
     },
-    rotationControl(false),
-    rotationControl(true),
+    caption,
+    { type: 'box', style: { flex: '1', 'min-width': '8px' } },
+    step('prev'),
+    slideshowControl,
+    step('next'),
   ],
 };
-// The hero copy and its dots. Compiled draws them in one column with the search field below
-// (at least the hero's height, copy at its foot; folded to the field while searching or with
-// no featured title); a slot stands at the top of its tree, so here the field follows this
-// column and each height leaves out its block: 34 + 60 + 14 px wide, 26 + 60 + 10 on phones.
+// The search field below the hero's copy and pager (folded to the field while searching or with
+// no featured title); a slot stands at the top of its tree, so here the field follows the copy
+// column and its pager: 34 + 60 + 14 px wide, 26 + 60 + 10 on phones. It scrolls away with the
+// hero; the top bar keeps its own Search.
 export const searchSlot: Node = {
   type: 'slot',
   slot: 'searchField',
@@ -462,14 +549,17 @@ export const searchSlot: Node = {
     animation: 'vr-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both',
   },
 };
+// The copy column keeps the hero's height steady from title to title: it reserves room for a
+// two-line title (the title never takes more), three summary lines and the actions, and grows
+// rather than letting them overlap where even that is not enough.
+const reserve = 'max(calc(clamp(500px, 62vh, 700px) - 108px), calc(345px + 1.96 * clamp(56px, 7.4vh, 84px)))';
 export const copyBase: Style = {
   position: 'relative',
   display: 'flex',
   'flex-direction': 'column',
   'justify-content': 'flex-end',
   'box-sizing': 'border-box',
-  'min-height': 'calc(clamp(500px, 62vh, 700px) - 108px)',
-  height: 'calc(clamp(500px, 62vh, 700px) - 108px)',
+  'min-height': reserve,
   'padding-top': 'calc(56px + 32px + env(safe-area-inset-top))',
 };
 export const folded = (height: string): Style => ({
@@ -494,13 +584,12 @@ export const copyColumn: Node = {
       when: [small],
       style: {
         ...copyBase,
-        'min-height': '424px',
-        height: '424px',
+        'min-height': '440px',
         'padding-top': 'calc(56px + 22px + env(safe-area-inset-top))',
       },
     },
   ],
-  children: [heroCopy, dots],
+  children: [heroCopy],
 };
 
 export const homeLoading: Node = {
@@ -557,6 +646,7 @@ export const home: Node = {
     homeLoading,
     failure('{t:ui.yourLibraryCouldnTBeReachedCheckYourServerConnection}'),
     { ...copyColumn, when: [ready] } as Node,
+    { ...heroPager, when: [ready, ...(heroPager.when ?? [])] } as Node,
     { ...searchSlot, when: [ready] } as Node,
     {
       type: 'box',

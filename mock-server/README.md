@@ -12,6 +12,7 @@ Optional `VELA_MOCK_DELAY_MS=1800` delays API answers (up to 30 seconds), exclud
 preflight and artwork, to inspect loading states.
 Optional `VELA_MOCK_BOOTSTRAP_DELAY_MS=10000` delays only Home bootstrap (up to two minutes),
 so libraries remain independently usable while inspecting the slow-Home state.
+Optional `VELA_MOCK_LONG_HEROES=1` gives the featured titles names long enough to take two lines in the hero.
 Optional `VELA_MOCK_TOKEN=dev-token` seeds that fixed bearer/device for development.
 Optional `VELA_MOCK_PLEX_HOME=1` advertises Plex Home selection; after signing out, Vela's Plex
 button opens mock profiles directly (the protected owner profile uses PIN `1234`).

@@ -3,6 +3,7 @@
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
 import { duration, msg } from '@vela/core';
+import { shouldRotateHero } from './hero-rotation';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
 import type { AuthView } from './widgets/auth/model';
@@ -215,6 +216,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'heroAct.progressPct': c => (c.heroAct ? String(c.heroAct.progress * 100) : ''),
   'heroAct.hasProgress': c => (c.heroAct ? yes(c.heroAct.progress > 0) : ''),
   'heroAct.playable': c => (c.heroAct ? yes(c.heroAct.action !== 'details' && c.heroAct.targetId !== '') : ''),
+  /** A featured title's pager label: its place among them, name and why it is featured. */
+  'hero.slideLabel': (c, e) => (c.hero ? t('hero.slide', { index: String(c.index + 1), count: String(e.home?.hero.length ?? 0), name: c.hero.name, reason: c.heroAct?.reasonLabel ?? '' }) : ''),
 
   'dest.id': c => c.dest?.id ?? '',
   'dest.name': c => c.dest?.name ?? '',
@@ -266,9 +269,13 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.heroCount': (_, e) => (e.home ? String(e.home.hero.length) : ''),
   'env.heroIndex': (_, e) => String(e.heroIndex),
   'env.rowCount': (_, e) => (e.home ? String(e.home.rows.length) : ''),
-  'env.rotating': (_, e) => (e.home ? yes(e.home.hero.length > 1 && !e.still && e.query === ''
-    && !e.flags.includes('hero-paused') && !e.flags.includes('hero-interacting')) : ''),
+  // As the app's rotation (hero-rotation.ts): a playing hero trailer holds the hero too.
+  'env.rotating': (_, e) => (e.home ? yes(shouldRotateHero({ onHome: true, heroCount: e.home.hero.length, still: e.still,
+    query: e.query, heroPreviewing: !!e.preview?.heroId, flags: e.flags })) : ''),
   'env.heroPaused': (_, e) => yes(e.flags.includes('hero-paused')),
+  /** The featured titles before and after the one on show, wrapping round (pickHero's argument). */
+  'env.heroPrev': (_, e) => (e.home?.hero.length ? String((e.heroIndex - 1 + e.home.hero.length) % e.home.hero.length) : ''),
+  'env.heroNext': (_, e) => (e.home?.hero.length ? String((e.heroIndex + 1) % e.home.hero.length) : ''),
   'env.width': (_, e) => String(e.width),
   'env.skinCount': (_, e) => String(e.skinCount),
   'env.skinName': (_, e) => e.skinName,

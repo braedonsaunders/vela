@@ -22,6 +22,8 @@ const guide = (from: number, until: number, ids: string[]) => fixtureGuide(from,
   !gapChannels.has(programme.channelId) || Date.parse(programme.end) <= gapHour - 3 * 3600000 || Date.parse(programme.start) >= gapHour + 5 * 3600000);
 
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
+// VELA_MOCK_LONG_HEROES=1: featured titles with names long enough to take two lines in the hero.
+const longHeroes = process.env.VELA_MOCK_LONG_HEROES === '1';
 const bootstrapDelayMs = Math.min(120_000, Math.max(0, Number(process.env.VELA_MOCK_BOOTSTRAP_DELAY_MS) || 0));
 const secret = crypto.randomUUID();
 // The demo viewer is Plex-linked: bootstrap carries its avatar as a session-length image address.
@@ -490,7 +492,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
     if (bootstrapDelayMs) await Bun.sleep(bootstrapDelayMs);
-    const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
+    const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, ...(longHeroes ? { title: { ...hero.title, name: `${hero.title.name}: The Long Way Round to the Edge of Everything` } } : {}), receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
     const home = homeRows(g, firstPage);
     return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}) } satisfies V.Bootstrap, g.id);
