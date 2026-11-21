@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type * as V from '../../packages/protocol/types';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { launchMock, type RunningMock } from './launch';
+import { mediaRoot } from '../media';
+
+// Starting playback needs the generated HLS fixture (mock-server/scripts/make-media.ts); CI has none.
+const mediaGenerated = existsSync(join(mediaRoot, 'master.m3u8'));
 
 const CHANNELS = 24;
 const device: V.Device = { id: 'test-device', name: 'Test', platform: 'web', appVersion: '0.1.0' };
@@ -286,7 +292,7 @@ describe('mock server: catalogue and live', () => {
     expect(result.selectedVersionId).toBe(result.versions[0]?.id);
   });
 
-  test('a fetching version prepares once then switches the same session and generations', async () => {
+  test.skipIf(!mediaGenerated)('a fetching version prepares once then switches the same session and generations', async () => {
     const versions = await get<V.TitleVersions>('/titles/title-1-2/versions');
     const initial = versions.versions[1]!;
     const fetching = versions.versions.find(version => version.availability === 'fetch')!;
