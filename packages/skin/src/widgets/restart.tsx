@@ -11,10 +11,10 @@ export function Restart({ arg, hero = false, onPlay }: { arg: string; hero?: boo
   const look = useLook();
   const [focused, focus] = useState(false);
   const [id, source = '', audio = ''] = arg.split('|');
-  return <FocusPressable accessibilityRole="button" accessibilityLabel={msg('ui.playFromBeginning')}
+  return <FocusPressable accessibilityRole="button" accessibilityLabel={msg('ui.restart')}
     onFocus={() => focus(true)} onBlur={() => focus(false)}
     onPress={() => { onPlay?.(); host.dispatch('play', `${id}|${source}|${audio}|0`); }}
     style={{ padding: 12, minHeight: 44, justifyContent: 'center', borderRadius: 9999, backgroundColor: focused ? look.ui.ink : look.ui.control }}>
-    <Text style={look.text({ 'font-size': '14px', color: focused ? '$ui.inkInverse' : '$ui.ink' })}>{msg(hero ? 'ui.fromBeginning' : 'ui.playFromBeginning')}</Text>
+    <Text style={look.text({ 'font-size': '14px', color: focused ? '$ui.inkInverse' : '$ui.ink' })}>{msg('ui.restart')}</Text>
   </FocusPressable>;
 }

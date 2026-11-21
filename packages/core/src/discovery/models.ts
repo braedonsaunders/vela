@@ -3,7 +3,7 @@
 import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, Title, TitleDetail } from '../wire';
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
-import { clock, minute, msg, number, percent, plural, localeContext } from '../i18n';
+import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
   const ref = artwork.find(item => item.kind === kind);
@@ -235,7 +235,7 @@ function heroAction(hero: WireHero, rows: WireRow[]): HeroAction {
     targetId: action.titleId,
     targetKind: target.kind,
     actionLabel,
-    actionDetail: remaining !== undefined ? msg('hero.detail.remaining', { time: minute(Math.ceil(remaining / 60)) }) : '',
+    actionDetail: remaining !== undefined ? msg('hero.detail.remaining', { time: timeLeft(remaining) }) : '',
     progress: position !== undefined && duration && duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0,
   };
 }

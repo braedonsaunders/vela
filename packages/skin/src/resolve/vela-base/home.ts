@@ -153,7 +153,7 @@ export const heroPrimary: Node = {
   when: [{ test: 'heroAct.playable' }],
   style: { ...pill(true), position: 'relative' },
   states: firstHeroHalo({ ...pill(true), position: 'relative' }),
-  small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' },
+  small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px', 'justify-content': 'center' },
   hover: { 'background-color': '$ui.inkHover' },
   focus: { 'box-shadow': focusRing },
   children: [
@@ -175,7 +175,7 @@ export const heroPrimary: Node = {
               type: 'text',
               when: [{ test: 'heroAct.actionDetail' }],
               text: '{heroAct.actionDetail}',
-              style: { 'font-size': '12px', 'font-weight': '600', opacity: '0.62', 'line-height': '1' },
+              style: { 'font-size': '12px', 'font-weight': '600', opacity: '0.62', 'line-height': '1', 'white-space': 'nowrap' },
             },
           ],
         },
@@ -215,8 +215,8 @@ export const heroMore = (primary: boolean): Node => ({
   style: morePill(primary),
   states: primary ? firstHeroHalo(morePill(true)) : undefined,
   small: primary
-    ? { height: '50px', 'padding-left': '22px', 'padding-right': '24px' }
-    : { height: '52px', 'padding-left': '20px', 'padding-right': '22px' },
+    ? { height: '50px', 'padding-left': '22px', 'padding-right': '24px', 'justify-content': 'center', 'flex-shrink': '0' }
+    : { height: '48px', 'padding-left': '20px', 'padding-right': '22px', 'justify-content': 'center', 'flex-shrink': '0' },
   hover: primary
     ? { 'background-color': '$ui.inkHover' }
     : { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
@@ -361,7 +361,8 @@ export const heroCopy: Node = {
           'flex-wrap': 'wrap',
           'margin-top': '8px',
         } as Style,
-        small: { 'margin-top': '4px' } as Style,
+        // Phones stack the actions full width, so no label wraps inside its pill.
+        small: { 'margin-top': '4px', 'flex-direction': 'column', 'flex-wrap': 'nowrap', 'align-items': 'stretch', gap: '10px' } as Style,
         children: [heroPrimary, heroMore(false), heroMore(true)],
       },
     ],

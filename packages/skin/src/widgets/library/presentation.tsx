@@ -139,7 +139,8 @@ function FilterStrip({ children }: { children: ReactNode }) {
 function ToolbarField({ children, width }: { children: ReactNode; width?: number }) {
   const look = useLook();
   return <InheritedContext.Provider value={{ rows: { color: look.ui.ink, 'font-family': look.ui.font, 'font-size': `${look.ui.controlFontSize}px`, 'font-weight': '500' }, fontSize: look.ui.controlFontSize }}>
-    <View style={[look.box(control), width ? { width } : {}]}>{children}</View>
+    {/* On the web the edge is drawn inside, so the select or field itself fills the whole 44px target. */}
+    <View style={[look.box(control), width ? { width } : {}, Platform.OS === 'web' && { borderWidth: 0, boxShadow: `inset 0px 0px 0px 1px ${look.ui.glassEdge}` } as never]}>{children}</View>
   </InheritedContext.Provider>;
 }
 

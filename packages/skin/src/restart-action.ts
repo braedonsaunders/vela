@@ -14,7 +14,10 @@ export function secondaryPlayAction(root: RNode | undefined): Box | undefined {
   return undefined;
 }
 
-export function restartAction(primary: Box, secondary: Box | undefined, arg: string, label: string): Box {
+const drawn = (node: RNode): boolean => node.kind !== 'box' || node.children.some(drawn);
+
+/** `compact` draws the restart mark alone in a 44px circle, for a row with no room for words. */
+export function restartAction(primary: Box, secondary: Box | undefined, arg: string, label: string, compact = false): Box {
   const template = secondary ?? primary;
   let labelled = false;
   const content = (node: RNode): RNode[] => {
@@ -23,10 +26,19 @@ export function restartAction(primary: Box, secondary: Box | undefined, arg: str
       labelled = true;
       return [{ ...node, when: [], text: label }];
     }
-    return [{ ...node, when: [], ...(node.kind === 'box' ? { children: node.children.flatMap(content) } : {}) }];
+    if (node.kind !== 'box') return [{ ...node, when: [] }];
+    // A box with no words or marks in it is decoration, such as the primary's progress track:
+    // a restart starts from nothing, so it draws none.
+    const children = node.children.flatMap(content);
+    return children.some(drawn) ? [{ ...node, when: [], children }] : [];
   };
-  return { ...template, id: undefined, testId: undefined, motion: undefined, stagger: undefined,
+  const restart: Box = { ...template, id: undefined, testId: undefined, motion: undefined, stagger: undefined,
     when: [], disabled: undefined, states: [], label, press: { action: 'play', arg },
-    base: { ...template.base, style: { ...template.base.style, 'border-radius': '9999px' } },
+    base: { ...template.base, style: { ...template.base.style, 'border-radius': '9999px', 'justify-content': 'center' } },
     children: template.children.flatMap(content) };
+  if (!compact) return restart;
+  const mark: RNode = { kind: 'icon', symbol: 'restart', when: [], states: [], group: false, order: 0, base: { style: { width: '18px', height: '18px' } } };
+  return { ...restart, children: [mark], base: { ...restart.base, style: { ...restart.base.style,
+    width: '44px', height: '44px', 'min-width': '44px', padding: '0px', 'padding-left': '0px', 'padding-right': '0px',
+    display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'flex-shrink': '0' } } };
 }

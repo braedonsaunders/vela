@@ -2,7 +2,7 @@
 // title's resume point, its cards' progress (Continue Watching, the hero) and the hero's resume
 // detail. The server's next read replaces these with its own.
 import type { Card, DetailModel, HeroAction, HomeModel, Row } from '../models';
-import { clock, minute, msg, percent } from '../i18n';
+import { clock, duration as timeLeft, msg, percent } from '../i18n';
 
 /** Where the viewer left a title: a position, or finished. */
 export interface Watched {
@@ -31,7 +31,7 @@ function heroAction(action: HeroAction, hero: Card | undefined, watched: Watched
   return {
     ...action,
     progress: duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0,
-    actionDetail: remaining > 0 ? msg('hero.detail.remaining', { time: minute(Math.ceil(remaining / 60)) }) : '',
+    actionDetail: remaining > 0 ? msg('hero.detail.remaining', { time: timeLeft(remaining) }) : '',
   };
 }
 

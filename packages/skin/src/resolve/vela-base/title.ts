@@ -1,4 +1,4 @@
-import type { Node, Style } from '../../../../protocol/skin';
+import type { BoxNode, Node, Style } from '../../../../protocol/skin';
 import { card } from './cards';
 import {
   bone,
@@ -321,7 +321,8 @@ export const band: Node = {
             'flex-wrap': 'wrap',
             'margin-top': '10px',
           },
-          small: { 'margin-top': '6px' },
+          // Phones stack the actions full width: nothing runs past the edge.
+          small: { 'margin-top': '6px', 'flex-direction': 'column', 'flex-wrap': 'nowrap', 'align-items': 'stretch', gap: '10px' },
           children: [
             {
               type: 'box',
@@ -344,7 +345,7 @@ export const band: Node = {
                 'font-weight': '650',
                 transition: 'background-color 180ms linear',
               },
-              small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' },
+              small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px', 'justify-content': 'center' },
               hover: { 'background-color': '$ui.inkHover' },
               focus: { 'box-shadow': focusRing },
               children: [
@@ -353,7 +354,22 @@ export const band: Node = {
                   style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' },
                   children: [
                     { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
-                    { type: 'text', text: '{detail.playLabel}', style: { 'font-size': '16px' } },
+                    { type: 'text', text: '{detail.playLabel}', style: { 'font-size': '16px', 'white-space': 'nowrap' } },
+                    // Progress belongs to Resume, as on Home's hero.
+                    {
+                      type: 'box',
+                      when: [{ test: 'detail.hasResume' }],
+                      style: {
+                        width: '44px',
+                        height: '3px',
+                        'margin-left': '4px',
+                        'border-radius': '2px',
+                        'background-color': 'color-mix(in srgb, $ui.inkInverse 20%, transparent)',
+                        'overflow-x': 'hidden',
+                        'overflow-y': 'hidden',
+                      },
+                      children: [{ type: 'box', style: { height: '3px', width: '{detail.resumePct}%', 'background-color': '$ui.inkInverse' } }],
+                    },
                   ],
                 },
               ],
@@ -375,7 +391,7 @@ export const band: Node = {
                 'padding-left': '22px',
                 'padding-right': '26px',
               },
-              small: { height: '52px' },
+              small: { height: '52px', 'justify-content': 'center' },
               hover: { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
               focus: { 'box-shadow': focusRing },
               children: [
@@ -391,26 +407,6 @@ export const band: Node = {
             },
             { type: 'widget', widget: 'titleActions' },
             pendingStatus('detail.trailerPending', '{t:jellytwin.trailer}'),
-          ],
-        },
-        {
-          type: 'box',
-          when: [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }],
-          motion: enter(440),
-          style: {
-            width: '260px',
-            height: '3px',
-            'border-radius': '2px',
-            'background-color': '$ui.trackStrong',
-            'overflow-x': 'hidden',
-            'overflow-y': 'hidden',
-          },
-          small: { width: '60%' },
-          children: [
-            {
-              type: 'box',
-              style: { height: '3px', width: '{detail.resumePct}%', 'background-color': '$ui.accent' },
-            },
           ],
         },
       ],
@@ -1018,6 +1014,46 @@ export const titleLoading: Node = {
     bone('170px', '56px', 28),
   ],
 };
+// The close button's strip across the frame's top.
+const closeStrip: BoxNode = {
+  type: 'box',
+  role: 'group',
+  label: '{t:ui.close}',
+  style: {
+    position: 'absolute',
+    top: '0px',
+    left: '0px',
+    right: '0px',
+    'z-index': '10',
+    display: 'flex',
+    'flex-direction': 'row',
+    'justify-content': 'flex-end',
+    padding: '20px',
+    'pointer-events': 'box-none',
+  },
+  // On a phone the page is full-bleed under the shell's bar and tabs: the button sits below them.
+  small: { 'padding-top': 'calc(56px + env(safe-area-inset-top))', 'padding-right': '16px' },
+  children: [
+    {
+      type: 'box',
+      press: { action: 'back' },
+      label: '{t:ui.close}',
+      testId: 'detail-close',
+      style: {
+        width: '44px',
+        height: '44px',
+        'box-sizing': 'border-box',
+        padding: '13px',
+        'border-radius': '22px',
+        border: '1px solid $ui.glassEdge',
+        'background-color': '$ui.glass',
+        'backdrop-filter': 'blur(20px) saturate(1.3)',
+      },
+      children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }],
+    },
+  ],
+};
+
 // The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
 // The frame starts below the shell's 56px bar, so its close button never sits on the bar's
 // profile (a 540px-tall TV screen leaves only 22px of 4vh). Its spacing is the frame's margin:
@@ -1027,102 +1063,68 @@ export const title: Node = {
   // The web host closes the page on a click that lands here but outside the frame.
   testId: 'detail-route',
   style: {
-    position: 'absolute',
-    inset: '0px',
-    display: 'flex',
-    'flex-direction': 'column',
-    color: '$ui.ink',
-    'font-family': sans,
+  position: 'absolute',
+  inset: '0px',
+  display: 'flex',
+  'flex-direction': 'column',
+  color: '$ui.ink',
+  'font-family': sans,
   },
   children: [
-    {
-      type: 'box',
-      motion: 'velaOpen',
-      testId: 'detail-frame',
-      style: {
-        position: 'relative',
-        display: 'flex',
-        'flex-direction': 'column',
-        // A fixed frame, exactly the screen less its margins: the route itself never scrolls,
-        // only the region inside the frame does. Otherwise a TV's focus engine scrolls the whole
-        // page to the focused action and carries the frame and its close button under the bar.
-        height: 'calc(100vh - max(4vh, 92px) - 4vh)',
-        'flex-shrink': '0',
-        'overflow-x': 'hidden',
-        'overflow-y': 'hidden',
-        'border-radius': '$ui.radiusPanel',
-        'background-color': '$ui.page',
-        'box-shadow': '0px 50px 160px $ui.shadow, 0px 0px 0px 1px $ui.glassEdge',
-        margin: '4vh 4vw',
-        'margin-top': 'max(4vh, 92px)',
-      },
-      small: { 'border-radius': '0px', margin: '0px', 'margin-top': '0px', height: '100dvh' },
-      children: [
-        // The close button stands in a strip across the frame's top. On a TV the strip is a focus
-        // region: up from anything at the top of the page lands on the button, which tvOS's focus
-        // engine (moving only to what lies in line) otherwise never reaches from the left-hand
-        // actions. The strip takes no pointer itself.
-        {
-          type: 'box',
-          role: 'group',
-          label: '{t:ui.close}',
-          style: {
-            position: 'absolute',
-            top: '0px',
-            left: '0px',
-            right: '0px',
-            'z-index': '10',
-            display: 'flex',
-            'flex-direction': 'row',
-            'justify-content': 'flex-end',
-            padding: '20px',
-            'pointer-events': 'box-none',
-          },
-          // On a phone the page is full-bleed under the shell's bar and tabs: the button sits below them.
-          small: { 'padding-top': 'calc(56px + env(safe-area-inset-top))', 'padding-right': '16px' },
-          children: [
-        {
-          type: 'box',
-          press: { action: 'back' },
-          label: '{t:ui.close}',
-          testId: 'detail-close',
-          style: {
-            width: '44px',
-            height: '44px',
-            'box-sizing': 'border-box',
-            padding: '13px',
-            'border-radius': '22px',
-            border: '1px solid $ui.glassEdge',
-            'background-color': '$ui.glass',
-            'backdrop-filter': 'blur(20px) saturate(1.3)',
-          },
-          children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }],
-        },
-          ],
-        },
-        {
-          type: 'box',
-          id: '{env.route}-scroll-{env.entry}',
-          role: 'region',
-          style: {
-            flex: '1',
-            'min-height': '0px',
-            // Scrolls vertically only. An overflow-x: hidden here becomes overflow: hidden on
-            // native and on the web, which stops the region scrolling at all.
-            'overflow-y': 'auto',
-            display: 'flex',
-            'flex-direction': 'column',
-            gap: '52px',
-            'padding-bottom': '72px',
-          },
-          small: { gap: '36px' },
-          children: [
-            titleLoading,
-            failure('{env.loadMessage}'),
-            ...detailSections,
-          ],
-        },
-      ],
-    },
+  {
+  type: 'box',
+  motion: 'velaOpen',
+  testId: 'detail-frame',
+  style: {
+position: 'relative',
+display: 'flex',
+'flex-direction': 'column',
+// A fixed frame, exactly the screen less its margins: the route itself never scrolls,
+// only the region inside the frame does. Otherwise a TV's focus engine scrolls the whole
+// page to the focused action and carries the frame and its close button under the bar.
+height: 'calc(100vh - max(4vh, 92px) - 4vh)',
+'flex-shrink': '0',
+'overflow-x': 'hidden',
+'overflow-y': 'hidden',
+'border-radius': '$ui.radiusPanel',
+'background-color': '$ui.page',
+'box-shadow': '0px 50px 160px $ui.shadow, 0px 0px 0px 1px $ui.glassEdge',
+margin: '4vh 4vw',
+'margin-top': 'max(4vh, 92px)',
+  },
+  small: { 'border-radius': '0px', margin: '0px', 'margin-top': '0px', height: '100dvh' },
+  children: [
+// The close button stands in a strip across the frame's top. On a TV the strip is a focus
+// region: up from anything at the top of the page lands on the button, which tvOS's focus
+// engine (moving only to what lies in line) otherwise never reaches from the left-hand
+// actions. The strip takes no pointer itself.
+{ ...closeStrip, when: [{ ...small, not: true }] },
+{
+  type: 'box',
+  id: '{env.route}-scroll-{env.entry}',
+  role: 'region',
+  style: {
+    flex: '1',
+    'min-height': '0px',
+    // Scrolls vertically only. An overflow-x: hidden here becomes overflow: hidden on
+    // native and on the web, which stops the region scrolling at all.
+    'overflow-y': 'auto',
+    display: 'flex',
+    'flex-direction': 'column',
+    gap: '52px',
+    'padding-bottom': '72px',
+  },
+  small: { gap: '36px', position: 'relative' },
+  children: [
+    titleLoading,
+    failure('{env.loadMessage}'),
+    ...detailSections,
+    // A phone's close button scrolls away with the page instead of floating over it
+    // (over a show's season chips).
+    { ...closeStrip, when: [small] },
+  ],
+},
+  ],
+  },
   ],
 };

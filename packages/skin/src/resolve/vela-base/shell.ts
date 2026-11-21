@@ -61,7 +61,7 @@ const compactNavigation: Node = {
   style: { display: 'none' },
   small: {
     position: 'relative', display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px',
-    height: '40px', 'box-sizing': 'border-box', padding: '0px 12px', gap: '8px', 'align-items': 'center',
+    height: '44px', 'box-sizing': 'border-box', padding: '0px 12px', gap: '8px', 'align-items': 'center',
     'border-radius': '$ui.radiusControl', border: '1px solid $ui.glassEdge',
     'background-color': '$ui.control', color: '$ui.ink',
   },

@@ -2,7 +2,7 @@
 // over the binding context (the repeated item a node sits in) and the environment (the app's
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
-import { msg } from '@vela/core';
+import { duration, msg } from '@vela/core';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
 import type { AuthView } from './widgets/auth/model';
@@ -331,7 +331,10 @@ export const VOCABULARY: Record<string, Accessor> = {
         episode: card.episodeNumberLabel,
       });
     }
-    return d.canPlay && d.resumeSeconds > 0 ? t('ui.resumePositionIn', { position: d.resumePosition }) : t('ui.play');
+    if (!d.canPlay || d.resumeSeconds <= 0) return t('ui.play');
+    const length = d.title[0]?.durationSeconds ?? 0;
+    // The same wording as Home's hero: what is left, not where the position is.
+    return length > d.resumeSeconds ? t('ui.resumeTimeLeft', { time: duration(length - d.resumeSeconds) }) : t('ui.resumePositionIn', { position: d.resumePosition });
   }),
   'detail.hasResume': detail(d => yes(!!detailPlaybackCard(d) && hasProgress(detailPlaybackCard(d)!)), 'false'),
   'detail.hasSeasons': detail(d => yes(d.seasons.length > 1), 'false'),

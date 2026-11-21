@@ -3,7 +3,7 @@
 // the React bindings are `@vela/core/react`.
 export { artworkURL, type Images } from './discovery/artwork';
 export { card, detailDateDisplay, detailModel, entry, feedRow, homeModel, libraryLiveCard, withDateDisplay } from './discovery/models';
-export { clock, localeContext, minute, msg, number, percent, plural, second, setLocale, time, withLocale } from './i18n';
+export { clock, duration, localeContext, minute, msg, number, percent, plural, second, setLocale, time, withLocale } from './i18n';
 export type { LocaleContext } from './i18n';
 export { VelaError } from './adapter/errors';
 export type { FailureKind } from './store/state';

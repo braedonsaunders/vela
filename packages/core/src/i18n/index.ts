@@ -61,6 +61,13 @@ export function plural(value: number): string {
 export function minute(value: number): string {
   return msg(`unit.minute.${plural(value)}`, { count: number(value) });
 }
+/** A remaining running time, the one wording everywhere: "2 h 29 min", "2 h", "30 min". */
+export function duration(seconds: number): string {
+  const total = Math.max(1, Math.ceil(seconds / 60));
+  const hours = Math.floor(total / 60), minutes = total % 60;
+  if (!hours) return minute(minutes);
+  return minutes ? msg('unit.hoursMinutes', { hours: number(hours), minutes: number(minutes) }) : msg('unit.hours', { hours: number(hours) });
+}
 export function second(value: number, maximumFractionDigits = 0): string {
   return msg(`unit.second.${plural(value)}`, { count: number(value, { maximumFractionDigits }) });
 }
