@@ -22,7 +22,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, memo, cloneElement, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -94,7 +94,30 @@ const InstantContent = createContext(false);
 /** A menu or drawer (a box with `escape`) whose flag has just closed: drawn a moment longer while it
  * leaves (MenuPresence). */
 const Leaving = createContext(false);
-const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
+interface ScrollListeners {
+  scrolled(): void;
+  onScroll(listener: () => void): () => void;
+}
+function scrollListeners(): ScrollListeners {
+  const listeners = new Set<() => void>();
+  return {
+    scrolled() { for (const listener of listeners) listener(); },
+    onScroll(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+  };
+}
+interface RouteLayoutValue {
+  grid(): void;
+  drawn(): void;
+  /** The route scrolled: grids drawing ahead of the viewer hear of it. */
+  scrolled(): void;
+  onScroll(listener: () => void): () => void;
+}
+const RouteLayout = createContext<RouteLayoutValue | null>(null);
+/** A horizontal row's scroll, which its lazily drawn items hear of (LazyRepeat). */
+const RowScroll = createContext<ScrollListeners | null>(null);
 const LoadingLibraryNav = createContext(false);
 const HiddenLibraryNav = createContext(false);
 /** The shell's navigation row (`fit: 'nav'`) reports the destinations it has no room for here. */
@@ -212,7 +235,8 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
   const [, reveal] = useState(0);
   const section = host.env.route === 'home' || host.env.route === 'library';
   if (section && host.env.load === 'loading') loading.current = host;
-  const layout = useMemo(() => ({
+  const layout = useMemo<RouteLayoutValue>(() => ({
+    ...scrollListeners(),
     grid() { gridWaiting.current = true; },
     drawn() {
       if (!loading.current) return;
@@ -393,14 +417,12 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     if (node.over === 'detail.seasons' && (env.detail?.seasons.length ?? 0) > 8) {
       return <SeasonSelector ctx={ctx} />;
     }
-    return (
-      <>
-        {collection(node.over, ctx, env, node.limit).map(c => {
-          const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
-          return holds(node.when, c, env) ? <SkinNode key={itemKey(c, node.over)} node={node.item} ctx={context} hero={node.over === 'home.hero'} /> : null;
-        })}
-      </>
-    );
+    const items = collection(node.over, ctx, env, node.limit).flatMap(c => {
+      const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
+      return holds(node.when, c, env) ? [<SkinNode key={itemKey(c, node.over)} node={node.item} ctx={context} hero={node.over === 'home.hero'} />] : [];
+    });
+    const lazy = LAZY_REPEATS[node.over];
+    return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{items}</LazyRepeat> : <>{items}</>;
   }
   // A menu or drawer that opens with a motion also leaves with one (not on TV, whose focus motion
   // is the only one).
@@ -431,6 +453,11 @@ const SkinNode = memo(SkinNodeView, (a, b) => a.node === b.node && a.route === b
     && (Object.keys(a.ctx) as (keyof Ctx)[]).every(key => a.ctx[key] === b.ctx[key])));
 
 // ---- Style: layers, overlays, translation ----
+
+/** Whether a node's motion depends on its screen being active: only an endless one does. */
+function readsActivity(node: RNode): boolean {
+  return node.motion?.iterations === 'infinite';
+}
 
 const MOVES = new Set(['scale', 'translate', 'rotate', 'transition', 'animation']);
 
@@ -627,6 +654,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
   const [groupUi, setGroupUi] = useState({ hover: false, focus: false });
   const scrollRef = useRef<Scroller>(null);
+  const rowScrollRef = useRef<ScrollListeners | null>(null);
+  const rowScrolls = rowScrollRef.current ?? (rowScrollRef.current = scrollListeners());
   const pagerMetrics = useRef({ x: 0, width: viewport.width, contentWidth: 0 });
   const buttonRef = useRef<Focusable | null>(null);
   const suppressPress = useRef(false);
@@ -691,9 +720,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
   const instant = useContext(InstantContent);
   const leaving = useContext(Leaving) && !!node.escape?.length;
-  // Only a node with motion reads the screen's activity (use() may be conditional): a section
-  // coming or going redraws those nodes, not every box in it.
-  const opening = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, node.motion ? use(ScreenActive) : true);
+  // Only a node with endless motion reads the screen's activity (use() may be conditional): a
+  // finite motion runs whatever the screen (keyframes.ts runs), so a section coming or going
+  // redraws those few nodes, not every card that arrived with a motion.
+  const opening = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, readsActivity(node) ? use(ScreenActive) : true);
   const motion = leaving ? MENU_LEAVE : opening;
   const rowId = ctx.row?.id ?? '';
 
@@ -853,10 +883,17 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       reportPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= width - 1 });
     } : undefined;
     // Android TV: the route's offset, for keeping focused controls below the shell's bar.
+    const routeLayout = route ? use(RouteLayout) : null;
+    const rowScroll = horizontal && lazyRepeats ? rowScrolls : null;
     const onScroll = route ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (routeReveal) offsetY.current = e.nativeEvent.contentOffset.y;
       noteScrolled(e.nativeEvent.contentOffset.y);
+      routeLayout?.scrolled();
+    } : rowScroll ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onPagerScroll?.(e);
+      rowScroll.scrolled();
     } : onPagerScroll;
+    if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
@@ -1194,8 +1231,82 @@ const ANDROID_VEIL = 0.7;
 const ROUTE_SCROLL: ViewStyle = { flex: 1 };
 const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
 
+/** Android draws a page's rows, and a row's items, as they come within reach of the screen rather
+ * than all at once: home and a library's rows are dozens of cards each, almost all off screen, and
+ * drawing every one held a section switch for seconds on a TV box. */
+const lazyRepeats = Platform.OS === 'android';
+const LAZY_REPEATS: Record<string, { axis: 'x' | 'y'; first: number; batch: number } | undefined> = lazyRepeats ? {
+  'home.rows': { axis: 'y', first: 3, batch: 2 },
+  'library.rows': { axis: 'y', first: 3, batch: 2 },
+  'row.items': { axis: 'x', first: 8, batch: 6 },
+} : {};
+/** How far past the screen's edge, in screen lengths, lazily drawn items are drawn ahead. */
+const LAZY_REACH = 1;
+
+/** Items drawn as they come within reach, the rest held by a spacer of their estimated extent (the
+ * drawn items' average pitch), so a row's scroll extent and a page's height stay as they were.
+ * Items never leave once drawn. Growth is checked after each draw, as the route scrolls and as the
+ * row scrolls. */
+function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: number; batch: number; children: ReactElement[] }) {
+  const [count, setCount] = useState(first);
+  const [pitch, setPitch] = useState(0);
+  const spacer = useRef<HostInstance>(null);
+  const counted = useRef(count);
+  counted.current = count;
+  const total = useRef(children.length);
+  total.current = children.length;
+  // The spacer's offset at an earlier count: its movement per item is the items' pitch.
+  const sample = useRef<{ count: number; at: number } | null>(null);
+  const route = useContext(RouteLayout);
+  const row = useContext(RowScroll);
+  const shown = Math.min(count, children.length);
+  const complete = shown >= children.length;
+  const ahead = useCallback(() => {
+    const at = counted.current;
+    spacer.current?.measureInWindow((x, y, w, h) => {
+      // A hidden scene (a retained section behind another) has no size: it draws nothing ahead.
+      if (!w && !h) return;
+      const screen = Dimensions.get('window');
+      const near = axis === 'y'
+        ? y < screen.height * (1 + LAZY_REACH)
+        : x < screen.width * (1 + LAZY_REACH) && y < screen.height * (1 + LAZY_REACH) && y + h > -screen.height * LAZY_REACH;
+      if (near) setCount(n => (n === at && n < total.current ? n + batch : n));
+    });
+  }, [axis, batch]);
+  useEffect(() => {
+    if (complete) return;
+    const frame = requestAnimationFrame(ahead);
+    return () => cancelAnimationFrame(frame);
+  }, [count, complete, ahead]);
+  useEffect(() => (complete || !route ? undefined : route.onScroll(ahead)), [complete, route, ahead]);
+  useEffect(() => (complete || !row || axis !== 'x' ? undefined : row.onScroll(ahead)), [complete, row, ahead, axis]);
+  // Until two counts have been laid out, a row's items are taken to start its content and a page's
+  // rows to be a third of the screen apart.
+  const guess = axis === 'x' ? 0 : Dimensions.get('window').height / 3;
+  const extent = Math.max(1, (children.length - shown) * (pitch || guess));
+  // The same two slots whether or not anything is left to draw, so drawn items are never remounted.
+  return (
+    <>
+      {children.slice(0, shown)}
+      {complete ? null : <View key="lazy-rest" ref={spacer} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        style={axis === 'x' ? { width: extent, alignSelf: 'stretch' } : { height: extent }}
+        onLayout={e => {
+          const at = axis === 'x' ? e.nativeEvent.layout.x : e.nativeEvent.layout.y;
+          const previous = sample.current;
+          if (previous && previous.count !== shown && at !== previous.at) setPitch(Math.max(1, (at - previous.at) / (shown - previous.count)));
+          else if (axis === 'x' && !previous && at > 0 && shown > 0) setPitch(at / shown);
+          sample.current = { count: shown, at };
+          // Shown again (a retained section coming back) or moved: draw ahead if now within reach.
+          ahead();
+        }} />}
+    </>
+  );
+}
+
 const GRID_FIRST = 24;
 const GRID_BATCH = 24;
+/** How far below the screen's bottom, in screen heights, a grid draws ahead of the viewer. */
+const GRID_REACH = 1.5;
 
 function WindowedGrid(props: Omit<React.ComponentProps<typeof WebLibraryGrid>, 'drawn'>) {
   const layout = useContext(RouteLayout);
@@ -1208,15 +1319,35 @@ function WindowedGrid(props: Omit<React.ComponentProps<typeof WebLibraryGrid>, '
  * auto-fill takes as many columns as fit at the minimum, then stretches them to fill the row. */
 function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>; rowGap: unknown; items: ReactElement[] }) {
   const [width, setWidth] = useState(0);
-  // A library page is a hundred cards: the first screenful draws at once and the rest a batch a
-  // frame, so switching to a grid answers at once rather than after every card has been made.
+  // A library page is a hundred cards: the first screenful draws at once and the rest a batch at a
+  // time while they are within reach of the screen (GRID_REACH), so switching to a grid answers at
+  // once and a long grid is drawn as the viewer moves down it rather than all before it. Cells
+  // never leave once drawn; the rows not yet drawn are held by a spacer of their estimated height,
+  // so the scroll extent and what follows the grid (its next-page sentinel) stay where they are.
   const [drawn, setDrawn] = useState(GRID_FIRST);
-  useEffect(() => {
-    if (drawn >= items.length) return;
-    const frame = requestAnimationFrame(() => setDrawn(count => count + GRID_BATCH));
-    return () => cancelAnimationFrame(frame);
-  }, [drawn, items.length]);
+  const [rowHeight, setRowHeight] = useState(0);
+  const spacer = useRef<HostInstance>(null);
+  const total = useRef(items.length);
+  total.current = items.length;
+  const shownRef = useRef(drawn);
+  shownRef.current = drawn;
   const layout = useContext(RouteLayout);
+  const ahead = useCallback(() => {
+    const at = shownRef.current;
+    spacer.current?.measureInWindow((_x, y, w, h) => {
+      // A hidden scene (a retained section behind another) has no size: it draws nothing ahead.
+      if (!w && !h) return;
+      // One batch per drawn state, however many scroll events asked for it.
+      if (y < Dimensions.get('window').height * (1 + GRID_REACH)) setDrawn(count => count === at && count < total.current ? count + GRID_BATCH : count);
+    });
+  }, []);
+  const complete = drawn >= items.length;
+  useEffect(() => {
+    if (complete) return;
+    const frame = requestAnimationFrame(ahead);
+    return () => cancelAnimationFrame(frame);
+  }, [drawn, complete, ahead, rowHeight, width]);
+  useEffect(() => (complete || !layout ? undefined : layout.onScroll(ahead)), [complete, layout, ahead]);
   useLayoutEffect(() => { if (items.length) layout?.grid(); }, [layout, items.length]);
   const gap = grid.gap;
   const count = grid.count ?? Math.max(1, Math.floor((width + gap) / ((grid.min ?? 160) + gap)));
@@ -1224,6 +1355,9 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
   // the track and wrap: layout reports a rounded width (1325 for a 1324.81 px track on the web).
   const cell = Math.floor(((width - 1 - gap * (count - 1)) / count) * 100) / 100;
   const track = { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', rowGap, columnGap: gap } as ViewStyle;
+  const shown = Math.min(drawn, items.length);
+  const rowsLeft = Math.ceil((items.length - shown) / count);
+  const gapPoints = typeof rowGap === 'number' ? rowGap : 0;
   return (
     <View style={track} onLayout={e => {
       // Hidden retained sections report zero width. Keep their cells and scroll
@@ -1234,7 +1368,13 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
       // committed layout is enough, including after a populated grid becomes empty.
       if (next > 0 && !items.length) layout?.drawn();
     }}>
-      {width > 0 ? items.slice(0, drawn).map((item, index) => <View key={item.key} style={{ width: cell }} onLayout={index === 0 ? () => layout?.drawn() : undefined}>{item}</View>) : null}
+      {width > 0 ? items.slice(0, shown).map((item, index) => <View key={item.key} style={{ width: cell }} onLayout={index === 0 ? e => {
+        layout?.drawn();
+        const height = e.nativeEvent.layout.height;
+        if (height > 0) setRowHeight(height);
+      } : undefined}>{item}</View>) : null}
+      {width > 0 && rowsLeft > 0 ? <View ref={spacer} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        style={{ width: '100%', height: Math.max(1, rowsLeft * (rowHeight + gapPoints) - gapPoints) }} /> : null}
     </View>
   );
 }
@@ -1314,7 +1454,7 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const instant = useContext(InstantContent);
-  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, node.motion ? use(ScreenActive) : true);
+  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, readsActivity(node) ? use(ScreenActive) : true);
   const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
   return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion,
     ...(!web && pointer.content === 'none' ? { pointerEvents: 'none' } : {}) } as Record<string, unknown>, fx };
