@@ -495,8 +495,13 @@ function pressAria(a11y: ReturnType<typeof a11yProps>, node: RNode, expanded: bo
   };
 }
 
+/** `group` is a web (ARIA) role only: React Native's Android accessibility delegate throws on it
+ * (opening a title page closed the app) and iOS has no such role. Native draws a group as a plain
+ * view, which TalkBack and VoiceOver already read as one. */
+const GROUP_ROLE = Platform.OS === 'web' ? 'group' : undefined;
+
 function a11yProps(node: RNode, c: Ctx, e: Env) {
-  const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : node.role === 'group' ? 'group' : node.role === 'region' ? 'summary' : undefined;
+  const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : node.role === 'group' ? GROUP_ROLE : node.role === 'region' ? 'summary' : undefined;
   // The first state that holds may rename the control (a pause button that becomes play).
   const named = node.states.find(state => holds(state.when, c, e))?.layer.label ?? node.label;
   const label = named ? fill(named, c, e) : undefined;

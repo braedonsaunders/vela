@@ -30,7 +30,7 @@ export function PlexProfileDialog({ profiles, currentProfileId, error, onChoose,
     return () => sub.remove();
   }, [onClose]);
   return <Modal visible transparent animationType="fade" onRequestClose={onClose} supportedOrientations={['portrait', 'landscape']}>
-    <View accessibilityViewIsModal accessibilityRole="dialog" accessibilityLabel="Switch Plex Home profile"
+    <View accessibilityViewIsModal accessibilityRole={Platform.OS === 'web' ? 'dialog' as never : undefined} accessibilityLabel="Switch Plex Home profile"
       style={[look.box({ position: 'absolute', top: '0px', right: '0px', bottom: '0px', left: '0px', 'background-color': '#050608dd', 'align-items': 'center', 'justify-content': 'center', padding: '16px' })]}>
       <View style={[look.box({ width: 'min(680px, 96%)', 'max-height': '92%', padding: '24px', gap: '16px', 'border-radius': '24px', border: '1px solid $ui.glassEdgeStrong', 'background-color': '$ui.popover' })]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

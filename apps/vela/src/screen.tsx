@@ -99,7 +99,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
   const shell = route === 'title' || route === 'person' || sharedShell ? undefined : vela.doc?.shell;
   const mainId = `vela-main-${route}-${library ?? 'all'}`.replace(/[^a-z0-9_-]/gi, '-');
-  const main = <View nativeID={mainId} accessibilityRole="main" {...(Platform.OS === 'web' ? { tabIndex: -1 } : {})} style={{ flex: 1 }}>{content}</View>;
+  const main = <View nativeID={mainId} accessibilityRole={Platform.OS === 'web' ? 'main' as never : undefined} {...(Platform.OS === 'web' ? { tabIndex: -1 } : {})} style={{ flex: 1 }}>{content}</View>;
   // The transparent navigator modal fills the viewport, including the section shell's header.
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.
   if (route === 'title' || route === 'person') return (

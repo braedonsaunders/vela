@@ -298,7 +298,7 @@ function FacetPicker({ facet, selected, onChoose, onClose, onLabels }: {
   return <SheetModal open scrim={look.ui.scrim} still={look.still} onRequestClose={onClose}>
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 20 }]}>
       <FocusPressable style={StyleSheet.absoluteFill} focusable={false} accessibilityLabel={`Close ${facet.label}`} onPress={onClose} />
-      <View accessibilityViewIsModal accessibilityRole="dialog" accessibilityLabel={facet.label}
+      <View accessibilityViewIsModal accessibilityRole={Platform.OS === 'web' ? 'dialog' as never : undefined} accessibilityLabel={facet.label}
         style={look.box({ width: '100%', 'max-width': '420px', 'max-height': '80vh', padding: '16px', gap: '12px', 'border-radius': '$ui.radiusPanel', 'background-color': '$ui.popover', border: '1px solid $ui.glassEdgeStrong', 'box-shadow': '0px 24px 80px $ui.shadow' })}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={look.text({ 'font-size': '18px', 'font-weight': '650' })}>{facet.label}</Text>
