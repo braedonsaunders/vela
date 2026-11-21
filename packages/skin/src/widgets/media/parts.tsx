@@ -70,7 +70,7 @@ export function Cover({ uri, shape, size, title, byline, accent, lift = 1 }: {
         {byline ? <Text numberOfLines={1} style={text({ 'font-size': `${Math.max(9, Math.round(size / 18))}px`, color: '#f7f2e8cc', 'letter-spacing': '0.08em', 'text-transform': 'uppercase' })}>{byline}</Text> : null}
       </View>;
   return (
-    <View style={{ width: size, height }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View style={{ width: size, height }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID="media-cover">
       {book ? (
         // The text block's page edges, peeking out under the cover at the fore-edge and foot.
         <View style={[{ position: 'absolute', top: 3, left: 4, right: -3, bottom: -3, borderRadius: radius, backgroundColor: '#efe8da' },

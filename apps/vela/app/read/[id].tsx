@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { HostContext } from '@vela/skin/src/host';
 import { ReaderPage } from '@vela/skin/src/widgets/media/reader';
+import { takeReaderOrigin } from '@vela/skin/src/widgets/media/reader-origin';
 import { DEFAULT_READER_SETTINGS, type ReaderLocation, type ReaderSettings } from '@vela/skin/src/widgets/media/reader-engine';
 import { preferences } from '../../src/data/preferences';
 import { createReaderEngine } from '../../src/media/reader-engine';
@@ -22,6 +23,8 @@ export default function Read() {
   const card = detail?.value?.title[0];
   const host = vela.host('title', id, library);
   const engine = useMemo(() => createReaderEngine(), []);
+  // The cover Read was pressed on: the reader opens out of it and closes back into it.
+  const [origin] = useState(takeReaderOrigin);
   const [settings, setSettings] = useState<ReaderSettings>(() => {
     try { return { ...DEFAULT_READER_SETTINGS, ...JSON.parse(preferences.get(SETTINGS) || '{}') as Partial<ReaderSettings> }; }
     catch { return DEFAULT_READER_SETTINGS; }
@@ -59,7 +62,7 @@ export default function Read() {
   if (!host || !card) return <View style={{ flex: 1, backgroundColor: '#fbf9f4' }} />;
   return (
     <HostContext.Provider value={host}>
-      <ReaderPage card={card} open={open} engine={engine} settings={settings} onSettings={changeSettings} onLocation={onLocation} onClose={close} />
+      <ReaderPage card={card} open={open} engine={engine} settings={settings} onSettings={changeSettings} onLocation={onLocation} onClose={close} origin={origin} />
     </HostContext.Provider>
   );
 }
