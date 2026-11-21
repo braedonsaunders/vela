@@ -371,9 +371,11 @@ test('the shared shell offers Live TV on a library page without a live library',
   };
   walk(shell);
   expect(live.length).toBeGreaterThan(0);
-  const env = (canLive: boolean, libraries: { kind: string }[]) => ({ canLive, libraries }) as unknown as Env;
+  const env = (canLive: boolean, libraries: { kind: string }[], navOut: string[] = []) => ({ canLive, libraries, navOut }) as unknown as Env;
   for (const node of live) {
-    expect(holds(node.when, { index: 0 }, env(true, [{ kind: 'movies' }, { kind: 'shows' }]))).toBe(true);
+    // In the bar, or in its More menu while the bar has no room for it.
+    const movies = [{ kind: 'movies' }, { kind: 'shows' }];
+    expect(holds(node.when, { index: 0 }, env(true, movies)) || holds(node.when, { index: 0 }, env(true, movies, ['live']))).toBe(true);
     expect(holds(node.when, { index: 0 }, env(false, []))).toBe(false);
     expect(holds(node.when, { index: 0 }, env(true, [{ kind: 'live' }]))).toBe(false);
   }

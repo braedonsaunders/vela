@@ -13,6 +13,8 @@ export const strings: Record<string, string> = {
   user: 'User',
   sections: 'Sections',
   liveTv: 'Live TV',
+  more: 'More',
+  moreSections: 'More sections',
   home: 'Home',
   appearance: 'Change appearance',
   install: 'Install Vela',

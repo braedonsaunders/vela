@@ -9,7 +9,7 @@ type Press = NonNullable<BoxNode['press']>;
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/,
 // and only that version's files are published and bundled.
-const id = 'broadcast', version = '1.0.4';
+const id = 'broadcast', version = '1.0.5';
 const ASSETS = `/vela/v0/appearance/skins/${id}/${version}`;
 const display = '"Barlow Condensed", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif';
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
@@ -25,8 +25,8 @@ const caps = (size: string, extra: Style = {}): Style => ({ 'font-family': displ
 
 // ---------------------------------------------------------------- shell
 
-const tab = (label: string, press: Press, on: Node['when']): Node => ({
-  type: 'box', group: true, press, label, style: { position: 'relative', ...row('8px'), height: '64px', padding: '0px 14px', color: '$ink2', ...caps('16px', { 'letter-spacing': '0.06em' }), 'white-space': 'nowrap', transition: 'color 160ms linear' },
+const tab = (label: string, press: Press, on: Node['when'], testId?: string): Node => ({
+  type: 'box', group: true, press, label, testId, style: { position: 'relative', ...row('8px'), height: '64px', padding: '0px 14px', color: '$ink2', ...caps('16px', { 'letter-spacing': '0.06em' }), 'white-space': 'nowrap', transition: 'color 160ms linear' },
   hover: { color: '$ink' }, focus: { color: '$ink', 'background-color': '$panel' }, small: { height: '44px', padding: '0px 12px', 'font-size': '15px' },
   children: [
     { type: 'text', text: label },
@@ -36,6 +36,26 @@ const tab = (label: string, press: Press, on: Node['when']): Node => ({
 const homeTab = tab('{s:live}', { action: 'home' }, [{ test: 'env.section', is: 'eq', value: 'home' }]);
 const guideTab: Node = { ...tab('{s:guide}', { action: 'live' }, [{ test: 'env.section', is: 'eq', value: 'live' }]), when: [{ test: 'env.canLive' }] };
 const destTab: Node = { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: tab('{dest.name}', { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.on' }]) };
+
+// More: the bar keeps the sections it has room for (the renderer measures them) and the rest wait in a
+// panel under this tab, which carries the red bar while the section on show is one of them.
+const moreOn: Node['when'] = [{ test: 'nav.moreOn' }];
+const moreRow = (label: string, press: Press, on: Node['when'], testId: string): Node => ({ type: 'box', press, label, testId, a11y: { current: on },
+  style: { position: 'relative', ...row('12px'), 'min-height': '44px', padding: '0px 12px', 'border-radius': '3px', color: '$ink2', ...caps('16px', { 'letter-spacing': '0.06em' }) },
+  hover: { color: '$ink', 'background-color': '$panel-hi' }, focus: { color: '$ink', 'background-color': '$panel-hi', ...ring }, children: [
+    { type: 'text', text: label, style: { flex: '1', 'line-clamp': '1' } },
+    { type: 'box', when: on, style: { width: '3px', height: '18px', 'background-color': '$signal', 'flex-shrink': '0' } },
+  ] });
+const moreTab: Node = { type: 'box', when: [{ test: 'nav.more' }], style: { position: 'relative', ...row('0px'), 'flex-shrink': '0' }, children: [
+  { ...tab('{s:more}', { action: 'only', arg: 'more', focus: 'broadcast-more-menu' }, moreOn, 'nav-more'), id: 'broadcast-more', label: '{s:moreSections}',
+    a11y: { current: moreOn, expanded: [{ test: 'flag:more' }], haspopup: 'menu' } } as Node,
+  { type: 'box', id: 'broadcast-more-menu', when: [{ test: 'flag:more' }], motion: 'drop', role: 'navigation', label: '{s:moreSections}', escape: 'more', returnFocus: 'broadcast-more',
+    style: { position: 'absolute', top: '100%', right: '0px', 'margin-top': '6px', 'z-index': '30', width: '280px', 'max-height': '70vh', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '12px', ...col('2px'),
+      'border-radius': '4px', 'background-color': '$panel', 'box-shadow': '0px 24px 60px rgba(0, 0, 0, 0.6), inset 0px 3px 0px $signal' } as Style,
+    children: [
+      { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }, { test: 'dest.more' }], item: moreRow('{dest.name}', { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.on' }], 'nav-more-{dest.id}') },
+    ] },
+] };
 
 /** The station clock: the guide's minute clock, tabular, with an on-air lamp. */
 const clock: Node = { type: 'box', when: [{ test: 'env.clock' }], role: 'timer', label: '{s:clockLabel}', style: { ...row('10px'), height: '36px', padding: '0px 14px', 'background-color': '$panel', 'border-radius': '3px', 'flex-shrink': '0' } as Style,
@@ -55,7 +75,14 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', ...row('0px'), 'margin-right': '26px', 'flex-shrink': '0' }, small: { 'margin-right': '0px' }, children: [
         { type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: '74px', height: '28px' }, small: { width: '58px', height: '22px' } },
       ] },
-      { type: 'box', style: { ...row('0px'), flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, small: { display: 'none' }, children: [homeTab, guideTab, destTab] },
+      // The sections keep to the room they have (`fit`); those that do not fit wait behind More.
+      { type: 'box', style: { position: 'relative', ...row('0px'), flex: '1', 'min-width': '0px' }, small: { display: 'none' }, children: [
+        { type: 'box', fit: 'nav', style: { ...row('0px'), 'max-width': '100%' }, children: [
+          homeTab, guideTab,
+          { ...destTab, item: { ...(destTab as { item: Node }).item, when: [{ test: 'dest.more', not: true }] } } as Node,
+          moreTab,
+        ] },
+      ] },
       { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
       clock,
       iconButton('search', '{s:search}', 'search'),
@@ -368,7 +395,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 15, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 17, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },
@@ -391,7 +418,7 @@ const broadcastDoc: SkinDocument = {
     signal: '#ff3d2e', cue: '#ffc23d',
   },
   strings: { en: {
-    velaHome: 'Vela home', live: 'Live', guide: 'Guide', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Broadcast',
+    velaHome: 'Vela home', live: 'Live', guide: 'Guide', more: 'More', moreSections: 'More sections', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Broadcast',
     install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', clockLabel: 'Time now, {env.clock}',
     onAir: 'On air', lineup: '{env.channelCount} channels', liveBug: 'Live', monitor: 'Now playing on {tile.channelName}', monitorControls: 'Monitor controls',
     tuneInTo: 'Tune in to {tile.channelName}', tuning: 'Tuning {tile.channelNumber}', noPicture: 'No picture on {tile.channelNumber}', noPictureHint: 'Pick another channel, or try again from the guide.',

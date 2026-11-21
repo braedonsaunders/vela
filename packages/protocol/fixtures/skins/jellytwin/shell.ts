@@ -28,27 +28,82 @@ const onHome: Condition = { test: 'env.section', is: 'eq', value: 'home' };
 // The header's sections: Home, the server's libraries in order (live only when offered),
 // and Live TV when no library is live.
 const sectionBar = { name: 'jt-tab', bottom: 2 };
-const sections = (style: Style, below: Style): Node => ({
+// More (`fit`, the header's tabs): the bar keeps the tabs it has room for (the renderer measures
+// them) and the rest wait in a menu under this tab, which is the current one while their section is.
+const moreOn: Condition = { test: 'nav.moreOn' };
+const moreRow = (label: string, on: Condition, press: Press, testId: string, when: Condition[]): Node => ({
+  type: 'box', press, label, testId, when, a11y: { current: [on] },
+  style: menuRow, states: [{ when: [on], style: { ...menuRow, color: '$accent', 'font-weight': '600' } }],
+  hover: { 'background-color': '$hover' }, focus: { outline: 'auto', 'background-color': '$hover' },
+  children: [{ type: 'text', text: label, style: { flex: '1', 'line-clamp': '1' } }],
+});
+// More is a 44px target (the bar's own tabs are 40px).
+const tall = (node: Node): Node => {
+  const box = node as Node & { style: Style; states: { when: Condition[]; style: Style }[] };
+  return { ...box, style: { ...box.style, height: '44px' }, states: box.states.map(state => ({ ...state, style: { ...state.style, height: '44px' } })) } as Node;
+};
+const moreTab: Node = {
+  type: 'box',
+  when: [{ test: 'nav.more' }],
+  style: row({ position: 'relative', 'flex-shrink': '0' }),
+  children: [
+    tall(tabNode('{s:more}', moreOn, { action: 'only', arg: 'more', focus: 'jt-more-menu' }, sectionBar, {
+      id: 'jt-more', testId: 'nav-more', label: '{s:moreSections}',
+      a11y: { current: [moreOn], expanded: [{ test: 'flag:more' }], haspopup: 'menu' },
+    })),
+    {
+      type: 'box',
+      when: [{ test: 'flag:more' }],
+      id: 'jt-more-menu',
+      role: 'navigation',
+      label: '{s:moreSections}',
+      motion: 'menuIn',
+      escape: 'more',
+      returnFocus: 'jt-more',
+      style: { ...sheet, ...col({ position: 'absolute', top: '100%', right: '0px', 'margin-top': '8px', 'z-index': '30', width: '240px', 'max-height': '70vh', 'overflow-y': 'auto', padding: '8px', gap: '2px', 'transform-origin': 'top right' }) },
+      children: [
+        {
+          type: 'repeat',
+          over: 'nav.destinations',
+          when: [{ test: 'dest.more' }],
+          item: {
+            type: 'box',
+            style: col(),
+            children: [
+              moreRow('{dest.name}', onLive, { action: 'live' }, 'nav-more-{dest.id}', [isLive, { test: 'env.canLive' }]),
+              moreRow('{dest.name}', { test: 'dest.on' }, { action: 'library', arg: '{dest.id}' }, 'nav-more-{dest.id}', [not(isLive)]),
+            ],
+          },
+        },
+        moreRow('{s:liveTv}', onLive, { action: 'live' }, 'nav-more-live', [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }]),
+      ],
+    },
+  ],
+};
+
+// `fit`: the bar's tabs keep to the room between the wordmark and Search; the strip under a compact
+// bar scrolls.
+const sections = (style: Style, below: Style, fit = false): Node => ({
   type: 'box',
   role: 'tablist',
   label: '{s:sections}',
+  ...(fit ? { fit: 'nav' as const } : {}),
   style: row({
     'align-items': 'center',
     'min-width': '0px',
-    'overflow-x': 'auto',
-    'overflow-y': 'hidden',
-    'scrollbar-width': 'none',
+    ...(fit ? { 'max-width': '100%' } : { 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }),
     ...style,
   }),
   below: { [COMPACT]: below },
   children: [
-    { type: 'box', style: { flex: '1' } },
+    ...(fit ? [] : [{ type: 'box', style: { flex: '1' } } as Node]),
     tabNode('{s:home}', onHome, { action: 'home' }, sectionBar, { testId: 'nav-{s:home}' }),
     {
       type: 'repeat',
       over: 'nav.destinations',
       item: {
         type: 'box',
+        ...(fit ? { when: [{ test: 'dest.more', not: true }] } : {}),
         style: row({ 'flex-shrink': '0' }),
         children: [
           tabNode('{dest.name}', onLive, { action: 'live' }, sectionBar, {
@@ -64,9 +119,9 @@ const sections = (style: Style, below: Style): Node => ({
     },
     tabNode('{s:liveTv}', onLive, { action: 'live' }, sectionBar, {
       testId: 'nav-{s:liveTv}',
-      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
+      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, ...(fit ? [{ test: 'nav.liveMore', not: true }] : [])],
     }),
-    { type: 'box', style: { flex: '1' } },
+    ...(fit ? [moreTab] : [{ type: 'box', style: { flex: '1' } } as Node]),
   ],
 });
 
@@ -126,7 +181,13 @@ const header: Node = {
           style: { position: 'relative', padding: '0px 8px', 'flex-shrink': '0', color: '$ink-strong' },
           children: [wordmark],
         },
-        sections({ flex: '1' }, { display: 'none' }),
+        // The room the tabs fit to, centring them.
+        {
+          type: 'box',
+          style: row({ position: 'relative', flex: '1', 'min-width': '0px', 'align-items': 'center', 'justify-content': 'center' }),
+          below: { [COMPACT]: { display: 'none' } },
+          children: [sections({}, {}, true)],
+        },
         { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { display: 'flex', flex: '1' } } },
         {
           type: 'box',

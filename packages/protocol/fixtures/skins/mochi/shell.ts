@@ -129,7 +129,8 @@ export const libIcon = (on: Condition[]): Node[] => [
 ];
 // Home, the server's libraries in order (a live library opens the guide), and Live when
 // the server offers it without a live library.
-export const destinations = (): Node[] => [
+// `fit`: in the bar, a library waits in More while the bar has no room for it (`dest.more`).
+export const destinations = (fit = false): Node[] => [
   navItem('{s:home}', navIcon('home'), [is('env.section', 'home')], { action: 'home' }),
   // One entry per library in server order: a live library opens Live TV.
   {
@@ -138,6 +139,7 @@ export const destinations = (): Node[] => [
     // A slot per library holding its one pill (none for a live library the viewer can't use).
     item: {
       type: 'box',
+      ...(fit ? { when: [not('dest.more')] } : {}),
       style: { ...row, 'flex-shrink': '0' },
       states: [{ when: [is('dest.kind', 'live'), not('env.canLive')], style: { display: 'none' } }],
       children: [
@@ -163,9 +165,89 @@ export const destinations = (): Node[] => [
     navIcon('tv'),
     [is('env.section', 'live')],
     { action: 'live' },
-    { when: [set('env.canLive'), not('env.hasLiveLibrary')] },
+    { when: [set('env.canLive'), not('env.hasLiveLibrary'), ...(fit ? [not('nav.liveMore')] : [])] },
   ),
+  ...(fit ? [navMore] : []),
 ];
+
+// More and its rows are 44px targets (the bar's own pills are 42px).
+const tall = (node: Node): Node => {
+  const box = node as Node & { style: Style; states: { when: Condition[]; style: Style }[] };
+  return { ...box, style: { ...box.style, height: '44px' }, states: box.states.map(state => ({ ...state, style: { ...state.style, height: '44px' } })) } as Node;
+};
+
+// The destinations the bar had no room for, as pills in a card under More.
+const moreMenu: Node = {
+  type: 'box',
+  id: 'mochi-more-menu',
+  role: 'navigation',
+  label: '{s:morePlaces}',
+  when: [set('flag:more')],
+  escape: 'more',
+  returnFocus: 'mochi-more',
+  motion: 'menuPop',
+  style: {
+    ...col,
+    position: 'absolute',
+    top: 'calc(100% + 22px)',
+    right: '-6px',
+    'z-index': '30',
+    width: '260px',
+    'max-height': '70vh',
+    'overflow-y': 'auto',
+    'box-sizing': 'border-box',
+    padding: '12px',
+    gap: '6px',
+    border: '3px solid $ink',
+    'border-radius': '24px',
+    'background-color': '$card',
+    color: '$ink',
+    'box-shadow': '6px 6px 0px $lavender',
+    'transform-origin': 'top right',
+  },
+  children: [
+    {
+      type: 'repeat',
+      over: 'nav.destinations',
+      when: [set('dest.more')],
+      item: {
+        type: 'box',
+        style: { ...col, 'align-items': 'stretch' },
+        states: [{ when: [is('dest.kind', 'live'), not('env.canLive')], style: { display: 'none' } }],
+        children: [
+          tall(navItem('{dest.name}', navIcon('tv'), [is('env.section', 'live')], { action: 'live' },
+            { when: [is('dest.kind', 'live'), set('env.canLive')], testId: 'nav-more-{dest.id}' })),
+          tall(navItem('{dest.name}', libIcon, [set('dest.on')], { action: 'library', arg: '{dest.id}' },
+            { when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], testId: 'nav-more-{dest.id}' })),
+        ],
+      },
+    },
+    {
+      ...tall(navItem('{s:live}', navIcon('tv'), [is('env.section', 'live')], { action: 'live' }, { testId: 'nav-more-live' })),
+      when: [set('env.canLive'), not('env.hasLiveLibrary'), set('nav.liveMore')],
+    },
+  ],
+};
+
+// More: the bar keeps the pills it has room for (the renderer measures them) and the rest wait in a
+// card under this pill, which turns pink while the place on show is one of them.
+const moreOn: Condition[] = [set('nav.moreOn')];
+const navMore: Node = {
+  type: 'box',
+  when: [set('nav.more')],
+  style: { ...row, position: 'relative', 'flex-shrink': '0' },
+  children: [
+    {
+      ...tall(navItem('{s:more}', navIcon('sparkle'), moreOn, { action: 'home' })),
+      id: 'mochi-more',
+      press: { action: 'only', arg: 'more', focus: 'mochi-more-menu' },
+      label: '{s:morePlaces}',
+      testId: 'nav-more',
+      a11y: { current: moreOn, expanded: [set('flag:more')], haspopup: 'menu' },
+    } as Node,
+    moreMenu,
+  ],
+};
 
 // The speech bubble under the search button (look.contract SpeechBubble, side "below"):
 // shown on hover or focus, never over the open menu or on a compact bar.
@@ -292,21 +374,26 @@ export const nav: Node = {
             },
           ],
         },
-        // The destinations scroll inside the bar; compact bars move them to a strip below.
+        // The bar keeps the destinations it has room for and More the rest (`fit`); compact bars
+        // move them all to a strip below.
         {
           type: 'box',
           style: {
             ...row,
+            position: 'relative',
             flex: '1',
             'min-width': '0px',
-            'overflow-x': 'auto',
-            'overflow-y': 'hidden',
-            'scrollbar-width': 'none',
-            gap: '4px',
             'align-items': 'center',
           },
           below: { [COMPACT]: { display: 'none' } },
-          children: destinations(),
+          children: [
+            {
+              type: 'box',
+              fit: 'nav',
+              style: { ...row, gap: '4px', 'align-items': 'center', 'max-width': '100%' },
+              children: destinations(true),
+            },
+          ],
         },
         { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { display: 'flex', flex: '1' } } },
         {

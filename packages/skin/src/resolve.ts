@@ -18,7 +18,7 @@ import { documentKeyframes, type Motion } from './keyframes';
 import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). */
-export const RENDERER_VERSION = 16;
+export const RENDERER_VERSION = 17;
 
 const MAX_NODES = 4000;
 const MAX_DEPTH = 32;
@@ -56,10 +56,13 @@ interface Common {
   returnFocus?: Template;
   /** The static `order` row, used to reorder siblings. */
   order: number;
+  /** Drawn only while a navigation row has destinations it cannot fit (`when` holds `nav.more`): the
+   * row's More control, which its measuring copy counts as shown. */
+  navMore?: boolean;
 }
 
 export type RNode = Common & (
-  | { kind: 'box'; children: RNode[]; press?: { action: Action; arg?: Template; focus?: Template }; pager?: { inset?: number; peek?: number }; controlStates: boolean }
+  | { kind: 'box'; children: RNode[]; press?: { action: Action; arg?: Template; focus?: Template }; pager?: { inset?: number; peek?: number }; fit?: 'nav'; controlStates: boolean }
   | { kind: 'text'; text: Template; summary?: boolean; avatar?: boolean }
   | { kind: 'image'; src: Template; alt?: Template; fade: boolean }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
@@ -272,6 +275,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
     escape: node.escape ? node.escape.split(/\s+/).filter(Boolean) : undefined,
     returnFocus: compile(node.returnFocus, r),
     order: Number(style.order) || 0,
+    ...(node.when?.some(test => test.test === 'nav.more' && !test.not && (test.is ?? 'set') === 'set') ? { navMore: true } : {}),
   };
   for (const row of ['grid-row', 'grid-column', 'grid-template-rows', '-webkit-text-stroke']) if (style[row as keyof Style]) r.unsupported.add(row);
   if (style['box-sizing'] === 'content-box') r.unsupported.add('box-sizing: content-box');
@@ -282,7 +286,8 @@ function convert(node: Node, depth: number, r: Context): RNode {
       const children = (node.children ?? []).map(child => convert(child, depth + 1, r));
       if (children.some(child => child.order !== 0)) children.sort((a, b) => a.order - b.order);
       return { ...common, kind: 'box', children, controlStates: node.controlStates !== false,
-        press: node.press && { action: node.press.action, arg: compile(node.press.arg, r), focus: compile(node.press.focus, r) }, pager: node.pager };
+        press: node.press && { action: node.press.action, arg: compile(node.press.arg, r), focus: compile(node.press.focus, r) }, pager: node.pager,
+        ...(node.fit === 'nav' ? { fit: 'nav' as const } : {}) };
     }
     // Legacy and new documents get the same safe synopsis control from this binding.
     // A text that is the viewer's initial is their badge: the renderer draws their avatar over it,

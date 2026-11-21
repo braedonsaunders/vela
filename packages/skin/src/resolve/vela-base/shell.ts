@@ -54,6 +54,79 @@ export const navItem = (on: Condition[], press: BoxNode['press'], label: string)
   ],
 });
 
+// The chevron a More control wears: the document's own glyph, painted in its ink.
+export const moreChevron = (size: string): Node => ({
+  type: 'icon',
+  paths: ['M6.7 9.3a1 1 0 0 1 1.4 0L12 13.2l3.9-3.9a1 1 0 1 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4z'],
+  viewBox: '0 0 24 24',
+  style: { position: 'relative', width: size, height: size, 'flex-shrink': '0' },
+});
+
+// More: the bar keeps the destinations it has room for (the renderer measures them, `fit`) and the
+// rest wait in a menu behind this control, which shows as current while the section is one of them.
+const moreNavButton: Node = {
+  type: 'box',
+  group: true,
+  press: { action: 'only', arg: 'more', focus: 'vela-more-menu' },
+  label: '{t:ui.moreNavLabel}',
+  testId: 'nav-more',
+  id: 'vela-more-trigger',
+  style: { ...navBase, gap: '4px' },
+  states: [{ when: [{ test: 'nav.moreOn' }], style: { ...navBase, gap: '4px', color: '$ui.ink', 'font-weight': '650' } }],
+  a11y: { current: [{ test: 'nav.moreOn' }], expanded: [{ test: 'flag:more' }], haspopup: 'menu' },
+  hover: { 'background-color': '$ui.control', color: '$ui.ink' },
+  focus: navFocus,
+  children: [
+    { type: 'text', text: '{t:ui.moreNav}', style: { 'font-weight': '550' }, states: [{ when: [{ test: 'nav.moreOn' }], style: { 'font-weight': '650' } }] },
+    moreChevron('16px'),
+    navUnderline([{ test: 'nav.moreOn' }]),
+  ],
+};
+
+const moreDestination = (on: Condition[], press: BoxNode['press'], label: string, testId: string): Node => ({
+  type: 'box', press, label, testId, a11y: { current: on },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px',
+    'min-height': '44px', padding: '0px 12px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '14px' },
+  states: [{ when: on, style: { 'background-color': '$ui.control', 'font-weight': '700' } }],
+  hover: { 'background-color': '$ui.control' }, focus: navFocus,
+  children: [
+    { type: 'text', text: label, style: { flex: '1', 'line-clamp': '1' } },
+    { type: 'box', when: on, style: { width: '6px', height: '6px', 'border-radius': '3px', 'background-color': '$ui.accent', 'flex-shrink': '0' } },
+  ],
+});
+
+// The destinations the bar had no room for, hanging from the More control.
+const moreMenu: Node = {
+  type: 'box',
+  when: [{ test: 'flag:more' }],
+  id: 'vela-more-menu',
+  role: 'navigation',
+  label: '{t:ui.moreNavLabel}',
+  escape: 'more',
+  returnFocus: 'vela-more-trigger',
+  motion: 'velaPop',
+  style: {
+    position: 'absolute', top: '100%', right: '0px', 'margin-top': '6px', 'z-index': '30',
+    width: '240px', 'max-height': '70vh', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '8px',
+    display: 'flex', 'flex-direction': 'column', gap: '2px',
+    border: '1px solid $ui.glassEdge', 'border-radius': '16px', 'background-color': '$ui.popover',
+    'backdrop-filter': 'blur(24px)', 'box-shadow': '0px 24px 70px $ui.shadow',
+  },
+  children: [
+    { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.more' }],
+      item: moreDestination([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}', 'nav-more-{dest.id}') },
+    { ...moreDestination([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}', 'nav-more-live'),
+      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }] },
+  ],
+};
+
+const moreNavItem: Node = {
+  type: 'box',
+  when: [{ test: 'nav.more' }],
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'flex-shrink': '0' },
+  children: [moreNavButton, moreMenu],
+};
+
 // On phones one labelled control opens every destination in a modal menu. Keeping library view
 // tabs in their page toolbar leaves the library name and selected view visible together.
 const compactNavigation: Node = {
@@ -199,39 +272,47 @@ export const shell: Node = {
               small: { 'margin-right': '0px' } as Style,
               children: [wordmark(24, 24)],
             },
+            // The room the destinations fit to (`fit`): the row keeps what fits, More the rest.
             {
               type: 'box',
               style: {
+                position: 'relative',
                 display: 'flex',
                 'flex-direction': 'row',
                 flex: '1',
                 'min-width': '0px',
-                'overflow-x': 'auto',
-                'overflow-y': 'hidden',
-                'scrollbar-width': 'none',
-                gap: '2px',
                 'align-items': 'center',
-                'mask-image': 'linear-gradient(90deg, black 0%, black 90%, transparent 100%)',
               },
               small: { display: 'none' },
               children: [
-                navItem(
-                  [{ test: 'env.section', is: 'eq', value: 'home' }],
-                  { action: 'home' },
-                  '{t:ui.home}',
-                ),
                 {
-                  type: 'repeat',
-                  over: 'nav.destinations',
-                  item: navItem(
-                    [{ test: 'dest.on' }],
-                    { action: 'library', arg: '{dest.id}' },
-                    '{dest.name}',
-                  ),
-                },
-                {
-                  ...navItem([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
-                  when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
+                  type: 'box',
+                  fit: 'nav',
+                  style: { display: 'flex', 'flex-direction': 'row', gap: '2px', 'align-items': 'center', 'max-width': '100%' },
+                  children: [
+                    navItem(
+                      [{ test: 'env.section', is: 'eq', value: 'home' }],
+                      { action: 'home' },
+                      '{t:ui.home}',
+                    ),
+                    {
+                      type: 'repeat',
+                      over: 'nav.destinations',
+                      item: {
+                        ...navItem(
+                          [{ test: 'dest.on' }],
+                          { action: 'library', arg: '{dest.id}' },
+                          '{dest.name}',
+                        ),
+                        when: [{ test: 'dest.more', not: true }],
+                      },
+                    },
+                    {
+                      ...navItem([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
+                      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore', not: true }],
+                    },
+                    moreNavItem,
+                  ],
                 },
               ],
             },
@@ -307,6 +388,16 @@ export const shell: Node = {
       } as Style,
     },
     compactMenu,
+    // Under the bar (whose More menu stays above it), a transparent layer owns the first press
+    // outside More's menu and closes it.
+    {
+      type: 'box',
+      when: [{ test: 'env.viewer' }, { test: 'flag:more' }],
+      press: { action: 'close', arg: 'more' },
+      label: '{t:ui.closeMoreNav}',
+      testId: 'nav-more-dismiss',
+      style: { position: 'absolute', top: '0px', right: '0px', bottom: '0px', left: '0px', 'z-index': '19', 'background-color': 'transparent' },
+    },
     // A transparent modal layer owns the first press outside the profile menu. Besides closing
     // the menu, this keeps that press from selecting a card or navigation control underneath it.
     {

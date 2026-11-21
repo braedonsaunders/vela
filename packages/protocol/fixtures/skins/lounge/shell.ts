@@ -1,12 +1,12 @@
-import type { Node, Style } from '../../../skin';
+import type { BoxNode, Node, Style } from '../../../skin';
 import { gutter, gutterSmall, lift, sans, side } from './look';
 
 export const tab = (
   label: string,
-  press: { action: 'home' | 'library' | 'live'; arg?: string },
+  press: BoxNode['press'],
   on: Node['when'],
   testId: string,
-): Node => ({
+): BoxNode => ({
   type: 'box',
   press,
   controlStates: false,
@@ -55,14 +55,89 @@ export const tab = (
   ],
 });
 
+// A library's tab, while the bar has room for it (else it waits in More).
 export const libraryTab: Node = {
   ...tab('{dest.name}', { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.on' }], 'nav-{dest.id}'),
+  when: [{ test: 'dest.more', not: true }],
 };
 
 // Live TV, when the server has it and no library already stands for it.
 const showLive: Node['when'] = [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }];
 const onHome: Node['when'] = [{ test: 'env.section', is: 'eq', value: 'home' }];
 const onLive: Node['when'] = [{ test: 'env.section', is: 'eq', value: 'live' }];
+
+// More: the bar keeps as many tabs as its capsule has room for (the renderer measures them) and
+// the rest wait behind this tab, which wears the current mark while the section is one of them.
+const moreTabBase = tab('{s:more}', { action: 'only', arg: 'more', focus: 'lounge-more-menu' }, [{ test: 'nav.moreOn' }], 'nav-more');
+const moreTab: Node = {
+  ...moreTabBase,
+  id: 'lounge-more',
+  when: [{ test: 'nav.more' }],
+  label: '{s:moreSections}',
+  a11y: { current: [{ test: 'nav.moreOn' }], expanded: [{ test: 'flag:more' }], haspopup: 'menu' },
+  children: [...moreTabBase.children!, {
+    type: 'icon',
+    paths: ['M6.7 9.3a1 1 0 0 1 1.4 0L12 13.2l3.9-3.9a1 1 0 1 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4z'],
+    viewBox: '0 0 24 24',
+    style: { position: 'relative', width: 'clamp(16px, 1.1vw, 22px)', height: 'clamp(16px, 1.1vw, 22px)', 'flex-shrink': '0', opacity: '0.8' },
+  }],
+};
+
+const moreRow = (
+  label: string,
+  press: { action: 'home' | 'library' | 'live'; arg?: string },
+  on: Node['when'],
+  testId: string,
+): Node => ({
+  type: 'box',
+  press,
+  controlStates: false,
+  label,
+  testId,
+  a11y: { current: on },
+  style: { ...sheetRow(), 'font-size': 'clamp(17px, 1.25vw, 24px)', 'font-weight': '650' },
+  focus: sheetFocus(),
+  hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
+  children: [
+    { type: 'text', text: label, style: { flex: '1', 'line-clamp': '1' } },
+    { type: 'box', when: on, style: { width: '10px', height: '10px', 'border-radius': '5px', 'background-color': '$amber', 'flex-shrink': '0' } },
+  ],
+});
+
+// The tabs the bar had no room for, under the end of the capsule: large rows a remote steps through.
+const moreMenu: Node = {
+  type: 'box',
+  id: 'lounge-more-menu',
+  when: [{ test: 'nav.more' }, { test: 'flag:more' }],
+  motion: 'sheet',
+  role: 'navigation',
+  label: '{s:moreSections}',
+  escape: 'more',
+  returnFocus: 'lounge-more',
+  style: {
+    position: 'absolute',
+    top: '100%',
+    right: '0px',
+    'margin-top': '14px',
+    'z-index': '30',
+    width: 'clamp(280px, 22vw, 420px)',
+    'max-height': '70vh',
+    'overflow-y': 'auto',
+    'box-sizing': 'border-box',
+    padding: 'clamp(10px, 0.8vw, 16px)',
+    display: 'flex',
+    'flex-direction': 'column',
+    gap: '2px',
+    'border-radius': '30px',
+    'background-color': 'rgba(24, 26, 32, 0.92)',
+    'backdrop-filter': 'blur(40px) saturate(1.5)',
+    'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.10), 0px 40px 90px -20px rgba(0, 0, 0, 0.9)',
+  },
+  children: [
+    { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.more' }], item: moreRow('{dest.name}', { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.on' }], 'nav-more-{dest.id}') },
+    { ...moreRow('{s:liveTv}', { action: 'live' }, onLive, 'nav-more-live'), when: [...showLive!, { test: 'nav.liveMore' }] },
+  ],
+};
 
 // Phones have no room for the capsule of tabs: one capsule names the current section and
 // opens every destination in a sheet, the way the shared phone shell does.
@@ -288,10 +363,12 @@ export const shell: Node = {
                 },
               ],
             },
-            // The tabs float in one glass capsule, centred like a TV's top bar.
+            // The tabs float in one glass capsule, centred like a TV's top bar. This box is the
+            // room the capsule fits its tabs to; More's menu hangs from its end.
             {
               type: 'box',
               style: {
+                position: 'relative',
                 flex: '1',
                 display: 'flex',
                 'flex-direction': 'row',
@@ -302,6 +379,7 @@ export const shell: Node = {
               children: [
                 {
                   type: 'box',
+                  fit: 'nav',
                   style: {
                     display: 'flex',
                     'flex-direction': 'row',
@@ -313,15 +391,13 @@ export const shell: Node = {
                     'backdrop-filter': 'blur(30px) saturate(1.5)',
                     'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.08), 0px 20px 50px -20px rgba(0, 0, 0, 0.8)',
                     'max-width': '100%',
-                    'overflow-x': 'auto',
-                    'overflow-y': 'hidden',
-                    'scrollbar-width': 'none',
                   },
                   small: { padding: '4px' },
                   children: [
                     tab('{s:home}', { action: 'home' }, onHome, 'nav-home'),
                     { type: 'repeat', over: 'nav.destinations', item: libraryTab },
-                    { ...tab('{s:liveTv}', { action: 'live' }, onLive, 'nav-live'), when: showLive },
+                    { ...tab('{s:liveTv}', { action: 'live' }, onLive, 'nav-live'), when: [...showLive!, { test: 'nav.liveMore', not: true }] },
+                    moreTab,
                     {
                       type: 'box',
                       press: { action: 'search', focus: 'vela-search' },
@@ -363,6 +439,7 @@ export const shell: Node = {
                     },
                   ],
                 },
+                moreMenu,
               ],
             },
             navigationTrigger,

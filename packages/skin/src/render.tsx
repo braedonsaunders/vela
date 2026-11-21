@@ -50,6 +50,7 @@ import { collection, itemKey, type Card, type Ctx, type Env } from './vocabulary
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { moveWebRowFocus } from './web-row-navigation';
+import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
 function contextCard(id: string, kind: string, name: string, image = ''): Card {
@@ -91,6 +92,10 @@ const InstantContent = createContext(false);
 const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
 const LoadingLibraryNav = createContext(false);
 const HiddenLibraryNav = createContext(false);
+/** The shell's navigation row (`fit: 'nav'`) reports the destinations it has no room for here. */
+const NavFit = createContext<((out: string[]) => void) | null>(null);
+/** Inside the hidden copy that measures a navigation row: boxes draw their layout only. */
+const Measuring = createContext(false);
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x?: number; y?: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number; contentWidth: number }>();
@@ -114,10 +119,80 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
   useEffect(() => {
     if (host.doc.unsupported.length) console.warn(`${host.doc.name}: rows outside the React Native style matrix: ${host.doc.unsupported.join(', ')}`);
   }, [host.doc]);
+  // The destinations the navigation row has no room for (nav.more, dest.more): the shell's own state.
+  const [navOut, setNavOut] = useState<string[]>([]);
+  const reportNav = useCallback((out: string[]) => setNavOut(old => (sameOverflow(old, out) ? old : out)), []);
+  const drawn = useMemo(() => (navOut.length ? { ...host, env: { ...host.env, navOut } } : host), [host, navOut]);
   return (
-    <Host.Provider value={host}>
-      <SkinNode node={node} ctx={ROOT_CONTEXT} />
+    <Host.Provider value={drawn}>
+      <NavFit.Provider value={reportNav}>
+        <SkinNode node={node} ctx={ROOT_CONTEXT} />
+      </NavFit.Provider>
     </Host.Provider>
+  );
+}
+
+/** The hidden copy of a navigation row (`fit: 'nav'`): a zero-height layer across its parent's box
+ * (the room), in which every item and the More control lie side by side at natural width; it reports
+ * which destinations do not fit. Nothing in it takes focus or is read out. */
+function NavFitMeasure({ node, ctx, report }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; report(out: string[]): void }) {
+  const host = useHost();
+  const measuringHost = useMemo(() => ({ ...host, env: { ...host.env, navMeasuring: true, navOut: [] } }), [host]);
+  const copy = useMemo(() => measureCopy(node), [node]);
+  const room = useRef(0);
+  const row = useRef(0);
+  const items = useRef(new Map<string, FitItem>());
+  const frame = useRef(0);
+  const update = useCallback(() => {
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => {
+      const measured = [...items.current.values()].sort((a, b) => a.x - b.x);
+      report(navOverflow(room.current, row.current, measured));
+    });
+  }, [report]);
+  useEffect(() => () => { cancelAnimationFrame(frame.current); report([]); }, [report]);
+  const measure = useMemo<FitMeasure>(() => ({
+    row(width) { row.current = width; update(); },
+    item(key, item) {
+      if (item) items.current.set(key, item); else items.current.delete(key);
+      update();
+    },
+  }), [update]);
+  return (
+    <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 0, overflow: 'hidden', opacity: 0 }}
+      onLayout={event => { room.current = event.nativeEvent.layout.width; update(); }}>
+      <View style={{ position: 'absolute', left: 0, top: 0, width: 10000, flexDirection: 'row', alignItems: 'flex-start' }}>
+        <Host.Provider value={measuringHost}>
+          <Measuring.Provider value>
+            <Box node={copy} ctx={ctx} measure={measure} />
+          </Measuring.Provider>
+        </Host.Provider>
+      </View>
+    </View>
+  );
+}
+
+/** The first press drawn in a node (its own, else a drawn descendant's), with its argument filled. */
+function drawnPress(node: RNode, c: Ctx, e: Env): { action: string; arg: string } | undefined {
+  if (node.kind !== 'box' || !holds(node.when, c, e)) return undefined;
+  if (node.press) return { action: node.press.action, arg: fill(node.press.arg, c, e) };
+  for (const child of node.children) {
+    const press = drawnPress(child, c, e);
+    if (press) return press;
+  }
+  return undefined;
+}
+
+interface FitMeasure { row(width: number): void; item(key: string, item: FitItem | null): void }
+
+/** One item of the measuring copy, reporting its extent (and leaving the count when it goes). */
+function FitCell({ id, fit, measure, children }: { id: string; fit: string | null; measure: FitMeasure; children: ReactNode }) {
+  useEffect(() => () => measure.item(id, null), [id, measure]);
+  return (
+    <View onLayout={event => { const { x, width } = event.nativeEvent.layout; measure.item(id, { key: fit, x, width }); }}>
+      {children}
+    </View>
   );
 }
 
@@ -170,7 +245,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
   const navTop = hasFlowHeader(host.doc.document.slots?.shell) ? 0 : 56 + host.viewport.insets.top;
   return (
     <View style={{ flex: 1 }}>
-      <Host.Provider value={host}>
+      <Host.Provider value={host}><NavFit.Provider value={null}>
         <EpisodeNavigation.Provider value={episodeNav}><RouteFocusContext.Provider value={focus}>
           <RouteLayout.Provider value={layout}>
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
@@ -182,7 +257,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
             </InstantContent.Provider>
           </RouteLayout.Provider>
         </RouteFocusContext.Provider></EpisodeNavigation.Provider>
-      </Host.Provider>
+      </NavFit.Provider></Host.Provider>
       {cover || leaving ? (
         <SkeletonCover key={cover ? 'held' : 'leaving'} host={(cover ?? leaving)!} node={node} ground={ground}
           leaving={!cover} onGone={clearLeaving} />
@@ -454,8 +529,10 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
   </RNAnimated.View>;
 });
 
-function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
+function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; measure?: FitMeasure }) {
   const host = useHost();
+  const measuring = useContext(Measuring);
+  const reportNav = useContext(NavFit);
   const { env, viewport } = host;
   const [cardMenu, setCardMenu] = useState<{ anchor: CardMenuAnchor; mode: CardMenuOpenMode } | null>(null);
   const swipe = useHeroSwipe(!!hero, env.home?.hero.length ?? 0, env.heroIndex, host.dispatch);
@@ -592,6 +669,28 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
       content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
     }
+  }
+  if (measuring) {
+    // The measuring copy: layout only (no button, name, hover or motion). Its root draws each item,
+    // a repeat's one by one, in a cell that reports the item's extent.
+    const cell = (child: RNode, c: Ctx, id: string) => (
+      <FitCell key={id} id={id} fit={fitKey(child, drawnPress(child, c, env), c.dest?.id)} measure={measure!}>
+        <SkinNode node={child} ctx={c} />
+      </FitCell>
+    );
+    const cells = measure ? node.children.flatMap((child, i) => child.kind === 'repeat'
+      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env) && holds(child.item.when, c, env))
+        .map(c => cell(child.item, c, `${i}:${itemKey(c, child.over)}`))
+      : holds(child.when, ctx, env) ? [cell(child, ctx, String(i))] : []) : children;
+    return (
+      <Inherited.Provider value={text}>
+        <Direction.Provider value={String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column'}>
+          <View style={style as ViewStyle} onLayout={measure ? event => measure.row(event.nativeEvent.layout.width) : undefined}>
+            {cells}
+          </View>
+        </Direction.Provider>
+      </Inherited.Provider>
+    );
   }
   if (node.press) content = <PressLabelContent.Provider value>{content}</PressLabelContent.Provider>;
   if (hero) content = <HeroInteraction.Provider value>{content}</HeroInteraction.Provider>;
@@ -839,7 +938,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     );
   }
   const direction = fx.grid || (fx.scrollX && !fx.scrollY) || String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
-  return (
+  const drawnBox = (
     <Inherited.Provider value={text}>
       <PointerInheritance.Provider value={web ? 'auto' : pointer.content}>
       <Group.Provider value={groupValue}>
@@ -854,6 +953,8 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       </PointerInheritance.Provider>
     </Inherited.Provider>
   );
+  // A navigation row measures a hidden copy of itself in its parent's box (the room it has).
+  return node.fit === 'nav' && reportNav ? <>{drawnBox}<NavFitMeasure node={node} ctx={ctx} report={reportNav} /></> : drawnBox;
 }
 
 const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretch', alignSelf: 'stretch', gap: 10 };

@@ -5,9 +5,9 @@ import { episodePage } from '../../../episode-page';
 // reduced motion, and a grown-ups corner behind a two-question gate so settings and
 // sign-out stay out of small hands. Assets are this document's own, served beside it
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
-import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
+import type { BoxNode, Condition, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.17';
+const version = '1.2.18';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -47,9 +47,31 @@ const navWatch: Node = { type: 'box', press: { action: 'home' }, label: '{s:watc
   { type: 'image', src: art('watch.svg'), alt: '', style: { width: '40px', height: '40px', position: 'relative' } },
   { type: 'text', text: '{s:watch}', style: pillText },
 ] };
-const navLibrary: Node = { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: { type: 'box', press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}', a11y: { current: [{ test: 'dest.on' }] }, testId: 'kids-nav-{dest.id}', style: pill, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
+const navLibrary: Node = { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: { type: 'box', when: [{ test: 'dest.more', not: true }], press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}', a11y: { current: [{ test: 'dest.on' }] }, testId: 'kids-nav-{dest.id}', style: pill, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
   ...kindFill(pillFill), ...kindIcon(40), { type: 'text', text: '{dest.name}', style: pillText },
 ] } };
+
+// More: the bar keeps the pills it has room for (the renderer measures them) and the rest wait in a
+// little card under this pill, which lights up while the library on show is one of them.
+const moreOn: Condition[] = [{ test: 'nav.moreOn' }];
+const moreRow: Node = { type: 'box', press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}', a11y: { current: [{ test: 'dest.on' }] }, testId: 'kids-more-{dest.id}',
+  style: { ...pill, height: '60px', 'box-shadow': 'none', 'background-color': '$cream' }, hover: { ...lift, 'background-color': '$sun-soft' }, focus: { ...lift, 'background-color': '$sun-soft', 'box-shadow': ring }, children: [
+  ...kindFill(pillFill), ...kindIcon(40), { type: 'text', text: '{dest.name}', style: { ...pillText, 'max-width': 'none', flex: '1' } },
+] };
+const navMore: Node = { type: 'box', when: [{ test: 'nav.more' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'flex-shrink': '0' }, children: [
+  { type: 'box', id: 'kids-more', press: { action: 'only', arg: 'more', focus: 'kids-more-menu' }, label: '{s:moreWaysIn}', testId: 'kids-nav-more',
+    a11y: { current: moreOn, expanded: [{ test: 'flag:more' }], haspopup: 'menu' }, style: { ...pill, padding: '0px 18px 0px 10px' }, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
+    { type: 'box', when: moreOn, style: { ...pillFill, 'background-color': '$mint' } },
+    { type: 'box', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '40px', height: '40px', 'border-radius': '999px', 'background-color': '$sun-soft' }, children: [
+      { type: 'icon', paths: ['M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z'], viewBox: '0 0 24 24', style: { width: '20px', height: '20px', color: '$ink' } }] },
+    { type: 'text', text: '{s:more}', style: pillText },
+    { type: 'icon', paths: ['M6.7 9.3a1 1 0 0 1 1.4 0L12 13.2l3.9-3.9a1 1 0 1 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4z'], viewBox: '0 0 24 24', style: { position: 'relative', width: '22px', height: '22px', color: '$ink' } },
+  ] },
+  { type: 'box', id: 'kids-more-menu', when: [{ test: 'flag:more' }], role: 'navigation', label: '{s:moreWaysIn}', escape: 'more', returnFocus: 'kids-more', motion: 'popIn',
+    style: { position: 'absolute', top: '100%', right: '0px', 'margin-top': '18px', 'z-index': '30', width: '320px', 'max-height': '70vh', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '14px',
+      display: 'flex', 'flex-direction': 'column', gap: '10px', 'border-radius': '32px', 'background-color': '$card', 'box-shadow': '0px 8px 0px rgba(27, 37, 80, 0.10), 0px 30px 70px -20px rgba(27, 37, 80, 0.5)' },
+    children: [{ type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }, { test: 'dest.more' }], item: moreRow }] },
+] };
 
 // The phone dock: the same three ways in, as big thumb targets along the bottom.
 const dockItem: Style = { position: 'relative', display: 'flex', 'flex-direction': 'column', 'border-radius': '22px', 'align-items': 'center', gap: '4px', flex: '1', 'min-width': '0px', 'padding-top': '10px', 'font-size': '12px', 'font-weight': '800' };
@@ -81,11 +103,10 @@ const bar: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when:
     small: { height: '44px', padding: '0px 4px', 'margin-right': '0px' }, children: [
     { type: 'image', src: 'assets/brand/vela-lockup-paper.svg', alt: '', style: { width: '74px', height: '28px' }, small: { width: '63px', height: '24px' } },
   ] },
-  // Centred while it fits; when it doesn't, the auto margins collapse and the row scrolls from Watch.
-  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', padding: '6px 4px 14px 4px', 'margin-bottom': '-8px',
-    'mask-image': 'linear-gradient(90deg, transparent 0px, black 6px, black calc(100% - 36px), transparent 100%)' },
+  // Centred in the room between the logo and Search; the pills that do not fit wait behind More.
+  { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'justify-content': 'center', flex: '1', 'min-width': '0px', padding: '6px 0px 14px 0px', 'margin-bottom': '-8px' },
     small: { display: 'none' }, children: [
-      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'margin-left': 'auto', 'margin-right': 'auto', 'flex-shrink': '0' }, children: [navWatch, navLibrary] }] },
+      { type: 'box', fit: 'nav', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', padding: '0px 4px', 'max-width': '100%' }, children: [navWatch, navLibrary, navMore] }] },
   { type: 'box', when: [{ test: 'env.small' }], style: { flex: '1' } },
   { type: 'box', press: { action: 'search' }, label: '{s:search}', testId: 'kids-search', style: roundButton(60), hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), small: { width: '48px', height: '48px' }, children: [
     { type: 'icon', symbol: 'search', style: { width: '26px', height: '26px', color: '$ink' }, small: { width: '22px', height: '22px' } },
@@ -454,7 +475,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 
 const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
-  schema: 1, renderer: 16, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
+  schema: 1, renderer: 17, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   // Kids' cream, navy ink and a deep sky accent (readable as text on cream; the sun stays a fill),
   // for the routes it inherits (search, library, collection, sign-in).
@@ -475,7 +496,7 @@ const kids: SkinDocument = {
   },
   fonts: { rounded: { family: 'Kids Nunito', files: [{ url: art('nunito.woff2'), weight: '200 1000', style: 'normal' }] } },
   strings: { en: {
-    velaHome: 'Vela home', mainNav: 'Main', watch: 'Watch', search: 'Search', grownUps: 'Grown-ups', tryAgain: 'Try again', close: 'Close',
+    velaHome: 'Vela home', mainNav: 'Main', watch: 'Watch', more: 'More', moreWaysIn: 'More ways in', search: 'Search', grownUps: 'Grown-ups', tryAgain: 'Try again', close: 'Close',
     gateOne: 'What is 6 × 3?', gateTwo: 'And 14 − 8?', signedInAs: 'Watching as', changeLook: 'Change the look',
     install: 'Install Vela', update: 'Update ready, reload', switchProfile: 'Switch profile', signOut: 'Sign out', backToWatching: 'Back to watching',
     moreInfo: 'More info', featured: 'Featured', back: 'Back', opening: 'Getting it ready…', failed: 'Oops, this one won’t open right now.',

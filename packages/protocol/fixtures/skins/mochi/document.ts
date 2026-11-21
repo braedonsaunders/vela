@@ -77,7 +77,7 @@ const each = <T extends Record<string, Node>>(o: T): T =>
 
 export default {
   schema: 1,
-  renderer: 16,
+  renderer: 17,
   id,
   name: 'Mochi',
   version,
@@ -154,6 +154,8 @@ export default {
       velaHome: 'Vela home',
       mainNavigation: 'Main navigation',
       home: 'Home',
+      more: 'More',
+      morePlaces: 'More places',
       live: 'Live TV',
       search: 'Search',
       profileAndAppearance: 'Profile and appearance',

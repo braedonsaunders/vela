@@ -94,6 +94,13 @@ export interface BoxNode extends NodeBase {
   pager?: { inset?: number; peek?: number };
   /** A pressable box shows Exact's hover wash under its content (as a compiled button does) unless false. */
   controlStates?: boolean;
+  /** Renderer 17, in the shell: a navigation row kept to one line in the room its parent box gives it (the
+   *  parent's width, so give the row a parent whose width does not follow it). The renderer measures every
+   *  child of the row, a repeat's items one by one; the destinations (children pressing home, library or live)
+   *  that do not fit beside the others leave from the row's end, last first, and Home always stays. Then
+   *  `nav.more` holds (draw a More control in the row on it: it is measured as if shown), `dest.more` holds for
+   *  each library left out, `nav.liveMore` for Live TV, and `nav.moreOn` while the current section is one of them. */
+  fit?: 'nav';
   children?: Node[];
 }
 /** A text. One that is exactly `{env.viewerInitial}` and sets its own width and height is the viewer's

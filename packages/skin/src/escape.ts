@@ -52,9 +52,12 @@ export function focusElement(id: string): boolean {
 
 function domElement(id: string): Focusable | undefined {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
-  return document.getElementById(id)
+  const element = document.getElementById(id)
     ?? document.querySelector<HTMLElement>(`[data-testid=${JSON.stringify(id)}]`)
     ?? undefined;
+  // A box that is not itself a control (a menu a press opens) gives focus to its first control.
+  if (!element || element.hasAttribute('tabindex') || element.matches('a[href], button, input, select, textarea')) return element;
+  return element.querySelector<HTMLElement>('[tabindex]:not([tabindex="-1"]), a[href], button, input, select, textarea') ?? element;
 }
 
 /** A ref callback that registers a press button under its element id while it is mounted. */

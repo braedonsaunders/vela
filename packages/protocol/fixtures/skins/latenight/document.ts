@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.14';
+const id = 'latenight', version = '1.0.15';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -39,9 +39,10 @@ const snow = (motion: string, extra: Partial<Node> = {}): Node => ({ type: 'box'
 const wordmark = (h: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${Math.round(h * 2.629)}px`, height: `${h}px` } });
 
 // A channel on the dial: number, then name. The current one is lit like a VCR menu row.
-const channel = (num: string, name: string, on: Node['when'], press: { action: 'home' | 'library' | 'live'; arg?: string }, testId?: string): Node => ({
+// `tall`: a 44px target (More and its menu's rows).
+const channel = (num: string, name: string, on: Node['when'], press: { action: 'home' | 'library' | 'live'; arg?: string }, testId?: string, tall = false): Node => ({
   type: 'box', group: true, press, label: name, testId, a11y: { current: on },
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '7px 7px', height: '36px', 'box-sizing': 'border-box', padding: '9px 12px 0px 10px', 'border-radius': '3px', color: '$ink-dim', 'white-space': 'nowrap', 'flex-shrink': '0', transition: 'background-color 120ms linear, color 120ms linear' },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '7px 7px', height: tall ? '44px' : '36px', 'box-sizing': 'border-box', padding: tall ? '13px 12px 0px 10px' : '9px 12px 0px 10px', 'border-radius': '3px', color: '$ink-dim', 'white-space': 'nowrap', 'flex-shrink': '0', transition: 'background-color 120ms linear, color 120ms linear' },
   hover: { color: '$ink', 'background-color': '$glass' }, focus: { color: '$ink', 'background-color': '$vcr-blue' },
   children: [
     { type: 'text', text: num, style: { ...osdText('17px', 'inherit'), 'text-shadow': 'none', opacity: '0.6', 'font-variant-numeric': 'tabular-nums' } },
@@ -53,6 +54,23 @@ const channel = (num: string, name: string, on: Node['when'], press: { action: '
 const liveChannel: Node = { ...channel('04', '{s:liveTv}', [{ test: 'env.section', is: 'eq', value: 'live' }], { action: 'live' }, 'channel-live'),
   when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] };
 
+// More: the dial keeps the channels it has room for (the renderer measures them) and the rest wait
+// in a setup menu under this button, which is lit while the channel on show is one of them.
+const moreOn: Node['when'] = [{ test: 'nav.moreOn' }];
+const moreChannels: Node = { type: 'box', when: [{ test: 'nav.more' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'flex-shrink': '0' }, children: [
+  { ...channel('▾', '{s:more}', moreOn, { action: 'home' }, 'nav-more', true), id: 'latenight-more', press: { action: 'only', arg: 'more', focus: 'latenight-more-menu' }, label: '{s:moreChannels}',
+    a11y: { current: moreOn, expanded: [{ test: 'flag:more' }], haspopup: 'menu' } } as Node,
+  { type: 'box', id: 'latenight-more-menu', when: [{ test: 'flag:more' }], motion: 'pop', role: 'navigation', label: '{s:moreChannels}', escape: 'more', returnFocus: 'latenight-more',
+    style: { position: 'absolute', top: '100%', right: '0px', 'margin-top': '19px', 'z-index': '30', width: '380px', 'max-width': 'calc(100vw - 80px)', 'max-height': '70vh', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '14px 12px 12px', display: 'flex', 'flex-direction': 'column', gap: '2px 2px',
+      'border-radius': '4px', border: '2px solid $ink', 'background-color': '$vcr-menu', 'box-shadow': '8px 8px 0px $shadow, 0px 30px 80px $shadow' },
+    children: [
+      { type: 'text', text: '{s:moreTitle}', style: { ...osdText('18px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.16em', opacity: '0.75', padding: '0px 10px 8px' } },
+      { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.more' }], item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, 'nav-more-{dest.id}', true) },
+      { ...channel('04', '{s:liveTv}', [{ test: 'env.section', is: 'eq', value: 'live' }], { action: 'live' }, 'nav-more-live', true),
+        when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }] },
+    ] },
+] };
+
 const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn', escape: 'menu', returnFocus: 'latenight-profile',
   style: { position: 'absolute', ...inset(bezel.normal), bottom: 'auto', 'z-index': '20', 'pointer-events': 'none' },
   wide: { ...inset(bezel.wide), bottom: 'auto' }, small: { ...inset(bezel.small), bottom: 'auto' }, children: [
@@ -61,11 +79,15 @@ const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer'
     { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px 8px', height: '78px', 'box-sizing': 'border-box', ...gutter, 'pointer-events': 'auto' },
       small: { height: '58px', ...gutterSmall, gap: '6px 6px', 'padding-top': '0px' } as Style, children: [
         { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', 'margin-right': '18px', 'flex-shrink': '0' }, small: { 'margin-right': '6px' }, children: [wordmark(26)] },
-        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '2px 2px', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 92%, transparent 100%)' },
+        // The dial keeps to the room it has (`fit`); the channels that do not fit wait behind More.
+        { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', flex: '1', 'min-width': '0px' },
           small: { display: 'none' }, children: [
-            channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, 'channel-home'),
-            liveChannel,
-            { type: 'repeat', over: 'nav.destinations', item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }) },
+            { type: 'box', fit: 'nav', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '2px 2px', 'max-width': '100%' }, children: [
+              channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, 'channel-home'),
+              { ...liveChannel, when: [...liveChannel.when!, { test: 'nav.liveMore', not: true }] },
+              { type: 'repeat', over: 'nav.destinations', item: { ...channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }), when: [{ test: 'dest.more', not: true }] } },
+              moreChannels,
+            ] },
           ] },
         { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
         // The channel bug: always on, the way a set shows what it is tuned to.
@@ -462,7 +484,7 @@ const fadeStill = { keyframes: 'dissolve', duration: 200 };
 const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
 
 export default {
-  schema: 1, renderer: 16, id, name: 'Late Night', version,
+  schema: 1, renderer: 17, id, name: 'Late Night', version,
   tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
   preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
   // Late Night's dark set, OSD green and the VCR's blue menus, for the routes it inherits (search, library, collection, sign-in).
@@ -493,7 +515,7 @@ export default {
     'scrim-solid': 'rgba(7, 8, 11, 0.97)', 'scrim-top': 'rgba(7, 8, 11, 0.86)', 'scrim-deep': 'rgba(7, 8, 11, 0.9)', 'scrim-mid': 'rgba(7, 8, 11, 0.55)', 'scrim-strong': 'rgba(7, 8, 11, 0.78)', 'scrim-clear': 'rgba(7, 8, 11, 0)',
   },
   strings: { en: {
-    velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', menu: 'Profile menu', menuTitle: 'Setup menu',
+    velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', menu: 'Profile menu', menuTitle: 'Setup menu', more: 'More', moreChannels: 'More channels', moreTitle: 'More channels',
     appearance: 'Appearance', skinName: 'Late Night', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
     moreInfo: 'Info', play: 'Play', featured: 'Featured titles', presets: 'Preset', watched: 'Watched', live: 'Live', liveTv: 'Live TV', tunedTo: 'Tuned channel',
     back: 'Back', opening: 'Searching', noSignal: 'No signal', failed: 'This title could not be opened. Try again in a moment.', seasons: 'Seasons', extras: 'Extras', cast: 'Cast', retry: 'Try again',

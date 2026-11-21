@@ -57,6 +57,10 @@ export interface Env {
   rowLoading: string[];
   /** Per row: whether its pager is at its start and end. */
   pagers: Record<string, { atStart: boolean; atEnd: boolean }>;
+  /** The shell's navigation row (`fit: 'nav'`): the destinations it has no room for (section keys:
+   *  a library id, `live`), and whether the hidden copy measuring it is drawing (the renderer's own). */
+  navOut?: string[];
+  navMeasuring?: boolean;
   /** The open query's search answer (routes.search); none while no query is open. */
   search?: SearchView;
   /** The signed-out page (routes.auth); none while signed in. */
@@ -228,6 +232,11 @@ export const VOCABULARY: Record<string, Accessor> = {
   'dest.name': c => c.dest?.name ?? '',
   'dest.kind': c => c.dest?.kind ?? '',
   'dest.backdrop': c => c.dest?.backdrop ?? '',
+  'dest.more': (c, e) => (c.dest ? yes(!e.navMeasuring && (e.navOut ?? []).includes(c.dest.id)) : ''),
+  'nav.more': (_, e) => yes(!!e.navMeasuring || (e.navOut?.length ?? 0) > 0),
+  'nav.liveMore': (_, e) => yes(!e.navMeasuring && (e.navOut ?? []).includes('live')),
+  'nav.moreOn': (_, e) => yes(!e.navMeasuring && (e.navOut ?? []).some(key => key === e.section
+    || (e.section === 'live' && e.libraries.some(l => l.id === key && l.kind === 'live')))),
   'dest.on': (c, e) => (c.dest ? yes(c.dest.kind === 'live' ? e.section === 'live' : e.section === c.dest.id) : ''),
   'dest.seed': c => (c.dest ? String(c.dest.id.length) : ''),
   'dest.nameLength': c => (c.dest ? String(c.dest.name.length) : ''),
