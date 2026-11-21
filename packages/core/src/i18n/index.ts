@@ -86,5 +86,8 @@ export function time(value: number): string {
 }
 export function clock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
-  return `${number(Math.floor(whole / 60), { useGrouping: false })}:${number(whole % 60, { minimumIntegerDigits: 2, useGrouping: false })}`;
+  const two = (value: number) => number(value, { minimumIntegerDigits: 2, useGrouping: false });
+  // An hour or more (an audiobook, a long film) reads as hours, minutes and seconds.
+  if (whole >= 3600) return `${number(Math.floor(whole / 3600), { useGrouping: false })}:${two(Math.floor(whole / 60) % 60)}:${two(whole % 60)}`;
+  return `${number(Math.floor(whole / 60), { useGrouping: false })}:${two(whole % 60)}`;
 }

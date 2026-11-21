@@ -10,6 +10,8 @@ test('formatter reuse preserves locale, time zone, and numeric option boundaries
       expect(number(1234.5, { useGrouping: false })).toBe(new Intl.NumberFormat(formatLocale, { useGrouping: false }).format(1234.5));
       expect(minute(2)).toContain('2');
       expect(clock(65)).toBe('1:05');
+      expect(clock(3599)).toBe('59:59');
+      expect(clock(20107)).toBe('5:35:07');
     });
   }
 });
