@@ -5,7 +5,7 @@
 // document's `ui` look.
 import { Image } from 'expo-image';
 import { useEffect, useMemo, type ReactNode } from 'react';
-import { ScrollView, Text, View, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
 import { clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
@@ -336,6 +336,10 @@ const EMPTY: Card[] = [];
 
 // ── Book ─────────────────────────────────────────────────────────────────────
 
+/** Books are read on phones, tablets, the web and desktop. A TV offers no Read at all (a book's page
+ * there is its details; audiobooks and music still play). */
+const READS_HERE = !Platform.isTV;
+
 function readLabel(card: Card): string {
   const fraction = card.media?.readingFraction ?? 0;
   if (card.played || fraction >= 0.98) return msg('media.ui.readAgain');
@@ -369,10 +373,10 @@ function BookPage({ card }: { card: Card }) {
             <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{[msg('media.ui.readProgress', { percent: percent(fraction) }), media.readingLabel].filter(Boolean).join(' · ')}</Text>
           </View>
         ) : card.played || fraction >= 0.98 ? <Text style={m.text({ 'font-size': '13px', color: '$ui.accent', 'font-weight': '600' })}>{msg('media.ui.finished')}</Text> : null}
-        <Buttons>
+        {READS_HERE ? <Buttons>
           <PillButton primary icon="book" label={readLabel(card)} onPress={() => actions.read(card)} disabled={!canRead} testID="media-read" nativeID="media-primary" />
-        </Buttons>
-        {!canRead ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotRead')}</Text> : null}
+        </Buttons> : null}
+        {READS_HERE && !canRead ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotRead')}</Text> : null}
       </Hero>
       {card.summary ? <View style={{ marginBottom: 44 }}><Summary text={card.summary} serif /></View> : null}
       <FactList card={card} />
@@ -431,10 +435,10 @@ function SeriesPage({ card }: { card: Card }) {
           style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
         <Facts items={[copy.count, card.genres.slice(0, 2).join(', ')]} />
         <Buttons>
-          {next && start ? <PillButton primary icon={start.icon} label={start.label}
+          {next && start && (READS_HERE || start.icon !== 'book') ? <PillButton primary icon={start.icon} label={start.label}
             onPress={() => actions.openTitle(next)} disabled={!canStart} testID="media-play" nativeID="media-primary" /> : null}
         </Buttons>
-        {start && !canStart ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{start.unavailable}</Text> : null}
+        {start && !canStart && (READS_HERE || start.icon !== 'book') ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{start.unavailable}</Text> : null}
       </Hero>
       {card.summary ? <View style={{ marginBottom: 40 }}><Summary text={card.summary} serif /></View> : null}
       <SectionHeading title={copy.heading} />

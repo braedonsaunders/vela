@@ -91,6 +91,15 @@ export function isTap(down: { x: number; y: number; t: number }, up: { x: number
   return Math.hypot(up.x - down.x, up.y - down.y) < 12 && up.t - down.t < 600;
 }
 
+/** A quick, mostly sideways swipe turns the page: towards the start for a swipe to the right, in the
+ * book's direction; anything else (slow, short or mostly vertical) is no turn. foliate turns
+ * reflowable pages on a swipe itself; fixed-layout pages (comics, PDFs) rely on this. */
+export function swipeTurn(down: { x: number; y: number; t: number }, up: { x: number; y: number; t: number }, rtl = false): 'next' | 'previous' | null {
+  const dx = up.x - down.x, dy = up.y - down.y;
+  if (!(Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy) * 1.5 && up.t - down.t < 800)) return null;
+  return (dx < 0) !== rtl ? 'next' : 'previous';
+}
+
 // ── The position line ────────────────────────────────────────────────────────
 
 /** A share of the book, 0..1, or null when it is not known yet (never NaN). */

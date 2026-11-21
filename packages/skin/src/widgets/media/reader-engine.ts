@@ -1,5 +1,6 @@
 // The reader's engine boundary (docs/media-kinds.md): what the reader page asks of whatever
-// renders the book (foliate-js on the web; the same engine in a DOM component on devices).
+// renders the book (foliate-js on the web; the same engine in a DOM component on phones and tablets).
+import type { ComponentType } from 'react';
 
 export type ReaderTheme = 'light' | 'sepia' | 'dark';
 export type ReaderFont = 'serif' | 'sans' | 'publisher';
@@ -50,7 +51,10 @@ export interface ReaderBook {
 }
 
 export interface ReaderEngine {
-  /** Open the document into `host` (a DOM element on the web) at a saved locator. */
+  /** What draws the pages where the page cannot hand the engine an element (phones and tablets: a
+   * web view), rendered in the reader's page area. The web engine draws into `host` instead. */
+  Surface?: ComponentType<{ page: string }>;
+  /** Open the document into `host` (a DOM element on the web; unused with a Surface) at a saved locator. */
   open(source: { url: string; format: 'epub' | 'pdf' | 'cbz'; mimeType: string; /** The saved share of the book, when the locator cannot be resolved. */ fraction?: number }, host: unknown, settings: ReaderSettings, locator?: string): Promise<ReaderBook>;
   next(): void;
   previous(): void;

@@ -716,7 +716,7 @@
   "media.reader.layout": "Layout",
   "media.reader.flow.paginated": "Pages",
   "media.reader.flow.scrolled": "Scroll",
-  "media.reader.unsupported": "Reading on this device needs the native reader (coming soon).",
+  "media.reader.unsupported": "Reading is available on phones, tablets, web and desktop.",
   "media.count.parts.one": "{count} part",
   "media.count.parts.other": "{count} parts",
   "media.count.chapters.one": "{count} chapter",

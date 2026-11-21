@@ -224,9 +224,25 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   `readerLayout` (one page or a spread by width, a measure that grows with text
   size, the bars in the top and bottom margins); pictures keep their shape and a
   picture-only page is centred. Taps: outer quarters turn, the middle (or Enter, a
-  remote's select) toggles the controls. The position line never shows an unknown
+  remote's select) toggles the controls. A swipe turns the page: foliate's own for
+  reflowable books, `swipeTurn` for fixed-layout ones (comics, PDFs), which foliate
+  does not swipe. The position line never shows an unknown
   value (`readerPosition`). Leaving a book merges the new place into the shown
   Continue rows in place (`reconcileProgressRows`), as watching and listening do.
+- Reader on iPhone, iPad and Android phones and tablets: the same foliate engine in
+  an Expo DOM component (`apps/vela/src/media/reader-surface.tsx`, on
+  `@expo/dom-webview`), drawn as the engine's `Surface` inside the shared reader page,
+  whose chrome (bars, contents, type settings, progress) stays React Native. The app
+  downloads the document with its own networking (the read URL is a same-origin ticket;
+  the web view never sees a server address or credential, and Ether's read route needs
+  no CORS) and the web view pulls the bytes in 2 MB base64 slices
+  (`reader-bytes.ts`), opening them from a blob. Taps and swipes inside the page come
+  back as the engine's inputs; Android's Back closes a panel, then the book. The bars
+  keep clear of the safe areas and the paper runs beneath the system bars; rotation
+  re-lays out in place. The cover opens from the middle of the screen (no card to grow
+  from). If the system reclaims the web view it reopens at the last reported place.
+- TV (Android TV, tvOS) has no reader: a book's page offers no Read and a book
+  series no Start; audiobooks and music still play.
 
 ## 4. Where Vela stands (2026-11-20)
 
@@ -234,6 +250,6 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
 | --- | --- | --- |
 | Cards and pages | Square, round and bound-book covers in every document; album, artist, book, series, audiobook pages | Same React tree; not yet looked at on a device or TV focus engine |
 | Audio | One HTMLAudioElement, Media Session (lock screen, media keys) | Reports unsupported. Apple: audio-only plans in the player module with AVAudioSession `.playback`, MPNowPlayingInfoCenter and MPRemoteCommandCenter. Android: Media3 MediaSessionService with a notification. |
-| Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Reports unsupported. Plan: the same engine in an Expo DOM component (`@expo/dom-webview`), remote paging on TV. |
+| Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Phones and tablets: the same engine in an Expo DOM component (`@expo/dom-webview`). TV: no Read action. |
 
 Server notes for Ether are in section 2 (URLs, file transport for audio, progress ordering).

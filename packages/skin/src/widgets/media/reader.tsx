@@ -2,13 +2,17 @@
 // chrome that steps aside while reading (a tap in the middle of the page, Enter or a remote's
 // select brings it back); contents and type settings in side panels; page turns by tap at the
 // page's outer quarters, swipe, arrow keys, Page Up/Down, Space and a remote's left and right.
-// On the web it opens out of the book's cover (reader-opening.tsx). Where the viewer is goes to
-// the server as they read.
+// It opens out of the book's cover (reader-opening.tsx): from the card it was pressed on on the
+// web, from the middle of the screen on phones and tablets, where the pages are the same engine in
+// a web view (the engine's Surface) and the bars keep clear of the system's. Where the viewer is
+// goes to the server as they read.
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, StatusBar, Text, View, type ViewStyle } from 'react-native';
 import { msg, percent, type Card } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { focusElement } from '../../escape';
+import { useHost } from '../../host';
+import { holdBack } from '../../menu-key';
 import { NO_RING, useInteraction } from '../common/controls';
 import { MediaGlyph } from './icons';
 import { useMediaLook } from './parts';
@@ -39,7 +43,8 @@ export interface ReaderPageProps {
 export function ReaderPage({ card, open, engine, settings, onSettings, onLocation, onClose: leave, origin = null }: ReaderPageProps) {
   const m = useMediaLook();
   const still = m.look.still;
-  const animated = web && !still;
+  const animated = !still && !Platform.isTV;
+  const insets = useSafeInsets();
   const frame = useRef<ComponentRef<typeof View>>(null);
   const [book, setBook] = useState<ReaderBook | null>(null);
   const [location, setLocation] = useState<ReaderLocation | null>(null);
@@ -152,24 +157,34 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
     return () => window.removeEventListener('pointermove', onMove);
   }, [chrome, showChrome, m.small]);
 
+  // Back (Android's, or a keyboard's on a tablet) closes a side panel, then the book.
+  useEffect(() => holdBack(() => {
+    if (panelRef.current) setPanel(''); else onClose();
+    return true;
+  }), [onClose]);
+
   const position = readerPosition(location);
   const layout = readerLayout(m.width, m.height, settings.fontSize);
-  const topBar = m.small ? 52 : 60, bottomBar = m.small ? 46 : 52;
+  const topBar = (m.small ? 52 : 60) + insets.top, bottomBar = (m.small ? 46 : 52) + insets.bottom;
   // The bars step aside up and down, and come back the same way (presence.tsx).
   const bars = !!(chrome || panel) && !closing;
   const bar = (style: ViewStyle, edge: 1 | -1) => [{ position: 'absolute', left: 0, right: 0, backgroundColor: theme.page,
-    flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: m.small ? 10 : 18, zIndex: 5 } as ViewStyle, style,
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: (m.small ? 10 : 18) + insets.left, paddingRight: (m.small ? 10 : 18) + insets.right, zIndex: 5 } as ViewStyle, style,
     presenceStyle(bars, { y: edge * 14 }, still)];
   const sheet = usePresence(!!panel, MOTION.exit, still);
   const shownPanel = useLast(panel || undefined);
   return (
-    <View style={{ flex: 1 }} testID="reader" pointerEvents={closing ? 'none' : 'box-none'}>
+    // A modal over the page it opened from: assistive technologies stay in the book.
+    <View style={{ flex: 1 }} testID="reader" pointerEvents={closing ? 'none' : 'box-none'} accessibilityViewIsModal>
+      {!web ? <StatusBar barStyle={settings.theme === 'dark' ? 'light-content' : 'dark-content'} animated /> : null}
       {animated ? <BookOpening cover={card.poster} sharper={book?.cover} title={card.name} byline={card.media?.byline} accent={card.accent} origin={origin}
         paper={theme.page} endpaper={theme.rule} opening={opening} closing={closing} /> : null}
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.page }, animated ? readerLayerStyle(opening, closing) : null]} testID="reader-layer">
         {/* The pages: the text block sits between the bars' places, so the bars never cover a line. */}
-        <View ref={frame} style={{ position: 'absolute', top: layout.top, bottom: layout.bottom, left: 0, right: 0 }} testID="reader-frame"
-          accessibilityLabel={card.name} />
+        <View ref={frame} style={{ position: 'absolute', top: layout.top + insets.top, bottom: layout.bottom + insets.bottom, left: insets.left, right: insets.right }} testID="reader-frame"
+          accessibilityLabel={card.name}>
+          {engine?.Surface ? <engine.Surface page={theme.page} /> : null}
+        </View>
         {!engine ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32 }} accessibilityRole="alert">
           <Text style={m.text({ 'font-size': '16px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.unsupported')}</Text>
         </View> : null}
@@ -179,7 +194,7 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
         {failed ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 }} accessibilityRole="alert">
           <Text style={m.text({ 'font-size': '17px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.failed')}</Text>
         </View> : null}
-        <Animated.View onFocus={() => showChrome(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ top: 0, height: topBar, borderBottomWidth: 1, borderBottomColor: theme.rule }, -1)} testID="reader-top">
+        <Animated.View onFocus={() => showChrome(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ top: 0, height: topBar, paddingTop: insets.top, borderBottomWidth: 1, borderBottomColor: theme.rule }, -1)} testID="reader-top">
           <ReaderButton icon="back" label={msg('media.ui.back')} onPress={onClose} color={theme.ink} testID="reader-close" nativeID="reader-close" />
           <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
             <Text numberOfLines={1} style={m.text({ 'font-family': '"Iowan Old Style", "Palatino Linotype", Georgia, serif', 'font-size': '15px', 'font-weight': '600', color: theme.ink })}>{book?.title || card.name}</Text>
@@ -188,7 +203,7 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
           <ReaderButton icon="contents" label={msg('media.reader.contents')} onPress={() => setPanel(panel === 'contents' ? '' : 'contents')} color={theme.ink} active={panel === 'contents'} testID="reader-contents" />
           <ReaderButton icon="text" label={msg('media.reader.type')} onPress={() => setPanel(panel === 'type' ? '' : 'type')} color={theme.ink} active={panel === 'type'} testID="reader-type" />
         </Animated.View>
-        <Animated.View onFocus={() => showChrome(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ bottom: 0, height: bottomBar, borderTopWidth: 1, borderTopColor: theme.rule }, 1)} testID="reader-bottom">
+        <Animated.View onFocus={() => showChrome(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ bottom: 0, height: bottomBar, paddingBottom: insets.bottom, borderTopWidth: 1, borderTopColor: theme.rule }, 1)} testID="reader-bottom">
           <ReaderButton icon="back" label={msg('media.reader.previous')} onPress={() => turn('previous')} color={theme.ink} testID="reader-previous" />
           <ProgressTrack fraction={safeFraction(location?.fraction) ?? 0} color={theme.ink} rule={theme.rule} onSeek={fraction => engine?.goToFraction(fraction)} />
           {/* Unknown parts are left out (reader-layout.ts readerPosition), never drawn as NaN. */}
@@ -198,7 +213,7 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
           <View style={{ transform: [{ scaleX: -1 }] }}><ReaderButton icon="back" label={msg('media.reader.next')} onPress={() => turn('next')} color={theme.ink} testID="reader-next" /></View>
         </Animated.View>
         {!bars && position.line ? <Text pointerEvents="none" testID="reader-hint" style={[m.text({ 'font-size': '11px', color: theme.quiet, 'font-variant-numeric': 'tabular-nums' }),
-          { position: 'absolute', bottom: Math.max(10, Math.round((layout.bottom - 14) / 2)), alignSelf: 'center' }]}>{m.small ? position.percent : position.line}</Text> : null}
+          { position: 'absolute', bottom: insets.bottom + Math.max(10, Math.round((layout.bottom - 14) / 2)), alignSelf: 'center' }]}>{m.small ? position.percent : position.line}</Text> : null}
         {sheet.mounted && shownPanel ? <Panel theme={settings.theme} visible={sheet.visible} still={still} onClose={() => setPanel('')} title={shownPanel === 'contents' ? msg('media.reader.contents') : msg('media.reader.type')}>
           {shownPanel === 'contents'
             ? (book?.toc.length ? book.toc.map((item, i) => <TocRow key={`${item.href}-${i}`} item={item} theme={settings.theme} current={location?.tocHref === item.href}
@@ -209,6 +224,14 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
       </Animated.View>
     </View>
   );
+}
+
+/** Where the system's bars, notches and camera cut-outs are. The reader draws beneath them, edge to
+ * edge (its route is not padded): the sides an app's screens are otherwise padded by
+ * (viewport.sides) count here as insets. */
+function useSafeInsets(): { top: number; right: number; bottom: number; left: number } {
+  const { insets, sides } = useHost().viewport;
+  return { top: insets.top, bottom: insets.bottom, left: insets.left + (sides?.left ?? 0), right: insets.right + (sides?.right ?? 0) };
 }
 
 function ReaderButton({ icon, label, onPress, color, active = false, testID, nativeID }: { icon: string; label: string; onPress(): void; color: string; active?: boolean; testID?: string; nativeID?: string }) {
@@ -240,7 +263,8 @@ function ProgressTrack({ fraction, color, rule, onSeek }: { fraction: number; co
 function Panel({ theme, title, visible, still, onClose, children }: { theme: ReaderTheme; title: string; visible: boolean; still: boolean; onClose(): void; children: React.ReactNode }) {
   const m = useMediaLook();
   const colours = READER_THEMES[theme];
-  const width = Math.min(380, m.width - 32);
+  const insets = useSafeInsets();
+  const width = Math.min(380, m.width - 32) + insets.right;
   return (
     <>
       <Animated.View pointerEvents={visible ? 'auto' : 'none'} style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 8 }, presenceStyle(visible, { opacity: 0 }, still)]}>
@@ -248,11 +272,11 @@ function Panel({ theme, title, visible, still, onClose, children }: { theme: Rea
       </Animated.View>
       <Animated.View {...({ dataSet: { readerPanel: '1' } } as object)} pointerEvents={visible ? 'auto' : 'none'} style={[{ position: 'absolute', top: 0, bottom: 0, right: 0, width, backgroundColor: colours.page, zIndex: 9,
         borderLeftWidth: 1, borderLeftColor: colours.rule }, m.box({ 'box-shadow': '-24px 0px 48px -24px rgba(0, 0, 0, 0.35)' }), presenceStyle(visible, { opacity: 1, x: width + 24 }, still)]} accessibilityViewIsModal testID="reader-panel">
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, height: 60, borderBottomWidth: 1, borderBottomColor: colours.rule }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 20 + insets.right, paddingTop: insets.top, height: 60 + insets.top, borderBottomWidth: 1, borderBottomColor: colours.rule }}>
           <Text accessibilityRole="header" style={m.text({ 'font-family': '"Iowan Old Style", Georgia, serif', 'font-size': '20px', color: colours.ink })}>{title}</Text>
           <ReaderButton icon="close" label={msg('media.reader.closePanel')} onPress={onClose} color={colours.ink} testID="reader-panel-close" />
         </View>
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 2 }}>{children}</ScrollView>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingRight: 16 + insets.right, paddingBottom: 16 + insets.bottom, gap: 2 }}>{children}</ScrollView>
       </Animated.View>
     </>
   );

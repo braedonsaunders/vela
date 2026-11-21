@@ -4,7 +4,7 @@
 // come back as page turns and the controls' toggle.
 import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/widgets/media/reader-engine';
 import { READER_THEMES } from '@vela/skin/src/widgets/media/reader-engine';
-import { isTap, readerLayout, safeFraction, startTarget, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/widgets/media/reader-layout';
+import { isTap, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/widgets/media/reader-layout';
 
 type Input = 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape';
 interface FoliateTocItem { label?: string; href?: string; subitems?: FoliateTocItem[] }
@@ -145,8 +145,9 @@ export function createReaderEngine(): ReaderEngine | null {
   };
 
   /** A press that stayed put and was quick, by where it landed across the reader. Links, selections
-   * and swipes (foliate turns the page itself) are not taps. Pointer events, not clicks: Safari
-   * sends no click for a tap on plain text in a frame. */
+   * and swipes are not taps; a swipe on fixed-layout pages turns the page (foliate turns reflowable
+   * pages on a swipe itself). Pointer events, not clicks: Safari sends no click for a tap on plain
+   * text in a frame. */
   const tapper = (target: EventTarget, place: (event: PointerEvent) => number) => {
     let down: { x: number; y: number; t: number; id: number; selected: boolean } | null = null;
     target.addEventListener('pointerdown', event => {
@@ -160,7 +161,13 @@ export function createReaderEngine(): ReaderEngine | null {
       const e = event as PointerEvent;
       const start = down;
       down = null;
-      if (!start || e.pointerId !== start.id || start.selected || !isTap(start, { x: e.screenX, y: e.screenY, t: e.timeStamp })) return;
+      if (!start || e.pointerId !== start.id || start.selected) return;
+      const end = { x: e.screenX, y: e.screenY, t: e.timeStamp };
+      if (!isTap(start, end)) {
+        const turn = view?.isFixedLayout && e.pointerType !== 'mouse' ? swipeTurn(start, end, rtl) : null;
+        if (turn) emit(turn);
+        return;
+      }
       const element = e.target as Element | null;
       if (element?.closest?.('a[href], button, input, select, textarea, audio, video')) return;
       if (element?.ownerDocument?.getSelection?.()?.toString()) return;

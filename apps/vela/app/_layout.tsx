@@ -50,9 +50,10 @@ function Screens() {
       {/* Playback must present above title/person modals. A card is pushed beneath their
           native controller on iOS and Android, hiding the playing film and its controls. */}
       <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' || Platform.OS === 'android' ? 'fullScreenModal' : 'card', ...(Platform.OS === 'android' ? { statusBarHidden: true, navigationBarHidden: true } : {}), contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: '#000' } }} />
-      {/* On the web the reader grows out of the book's cover over the page it opened from, so that
-          page stays drawn beneath it (media/reader.tsx); native hosts fade it in as a card. */}
-      {Platform.OS === 'web' ? <Stack.Screen name="read/[id]" options={{ presentation: 'transparentModal', contentStyle: { ...sides0, backgroundColor: 'transparent' } }} /> : null}
+      {/* The reader grows out of the book's cover over the page it opened from, so that page stays
+          drawn beneath it (media/reader.tsx). Like playback it presents above the title modal, and
+          it keeps clear of the system bars itself, so its paper runs beneath them. */}
+      <Stack.Screen name="read/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : 'transparentModal', contentStyle: { ...sides0, backgroundColor: 'transparent' } }} />
       <Stack.Screen name="row/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' ? 'fullScreenModal' : 'card' }} />
       <Stack.Screen name="person" options={{ presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal', contentStyle: { ...bars, backgroundColor: 'transparent' } }} />
     </Stack>

@@ -1,7 +1,7 @@
 // The reader's page decisions (widgets/media/reader-layout.ts): where a book opens, its layout at a
 // window size, tap zones and the position line.
 import { expect, test } from 'bun:test';
-import { coverSection, isTap, readerLayout, readerPosition, safeFraction, startTarget, tapZone } from '../src/widgets/media/reader-layout';
+import { coverSection, isTap, readerLayout, readerPosition, safeFraction, startTarget, swipeTurn, tapZone } from '../src/widgets/media/reader-layout';
 
 // The Way of Kings as calibre packs it: the cover page first, named only by the EPUB 2 guide.
 const calibre = [{ id: 'titlepage.xhtml' }, { id: 'The_Way_of_Kings_split_000.html' }, { id: 'The_Way_of_Kings_split_001.html' }];
@@ -88,4 +88,15 @@ test('the position line never shows NaN: unknown parts are left out', () => {
   expect(readerPosition({ locator: 'x', fraction: 0.1, chapter: '', pagesLeft: 1 }).detail).toBe('1 page left in chapter');
   expect(readerPosition({ locator: 'x', fraction: 0.1, chapter: '', pagesLeft: 0 }).detail).toBe('Last page in chapter');
   for (const line of [readerPosition({ locator: 'x', fraction: Infinity, chapter: '', pagesLeft: NaN }).line]) expect(line).not.toContain('NaN');
+});
+
+test('a quick sideways swipe turns the page in the book\'s direction; slow, short or vertical ones do not', () => {
+  const at = (x: number, y: number, t: number) => ({ x, y, t });
+  expect(swipeTurn(at(300, 400, 0), at(120, 410, 200))).toBe('next');
+  expect(swipeTurn(at(120, 400, 0), at(300, 390, 200))).toBe('previous');
+  expect(swipeTurn(at(300, 400, 0), at(120, 410, 200), true)).toBe('previous');
+  expect(swipeTurn(at(120, 400, 0), at(300, 390, 200), true)).toBe('next');
+  expect(swipeTurn(at(300, 400, 0), at(280, 400, 100))).toBeNull();
+  expect(swipeTurn(at(300, 400, 0), at(200, 600, 200))).toBeNull();
+  expect(swipeTurn(at(300, 400, 0), at(100, 400, 1500))).toBeNull();
 });

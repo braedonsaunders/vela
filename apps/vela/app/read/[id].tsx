@@ -2,7 +2,8 @@
 // when it opens, the viewer's place saved as they read and when they leave.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVelaState } from '@vela/core/react';
 import { HostContext } from '@vela/skin/src/host';
 import { ReaderPage } from '@vela/skin/src/widgets/media/reader';
@@ -21,7 +22,13 @@ export default function Read() {
   const store = vela.store;
   const detail = useVelaState(state => state.titles[id]);
   const card = detail?.value?.title[0];
-  const host = vela.host('title', id, library);
+  const titleHost = vela.host('title', id, library);
+  // The reader's paper runs beneath the system bars and keeps its bars clear of them itself
+  // (reader.tsx); Android's content routes are handed a viewport with the bars already taken off.
+  const safe = useSafeAreaInsets();
+  const host = useMemo(() => titleHost && Platform.OS === 'android' && !Platform.isTV
+    ? { ...titleHost, viewport: { ...titleHost.viewport, height: titleHost.viewport.height + safe.top + safe.bottom, insets: safe } }
+    : titleHost, [titleHost, safe]);
   const engine = useMemo(() => createReaderEngine(), []);
   // The cover Read was pressed on: the reader opens out of it and closes back into it.
   const [origin] = useState(takeReaderOrigin);
