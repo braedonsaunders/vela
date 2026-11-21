@@ -10,7 +10,7 @@ import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
-import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
+import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
 import { renderCover } from './covers';
 
 import { scaleGuide } from './guide-fixture';
@@ -673,11 +673,14 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       return json(grant);
     }
     if (method === 'POST' && action === 'reading-progress') {
-      const { locator, fraction, label } = body as Partial<V.ReadingProgressRequest>;
+      const { locator, fraction, label, observedAt } = body as Partial<V.ReadingProgressRequest>;
       if (typeof locator !== 'string' || !locator || locator.length > 4096 || typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction < 0 || fraction > 1
-        || (label !== undefined && (typeof label !== 'string' || label.length > 200))) fail('request', 'invalid_reading_progress', 'locator (1–4096 chars), fraction 0–1 and an optional label up to 200 chars are required');
-      const reading: V.ReadingProgress = { locator, fraction, ...(label ? { label } : {}), updatedAt: new Date().toISOString() };
-      setReadingState(viewerId, mediaItem.id, { reading, played: readingState(viewerId, mediaItem).played || fraction >= 0.98 });
+        || (label !== undefined && (typeof label !== 'string' || label.length > 200))
+        || (observedAt !== undefined && (typeof observedAt !== 'string' || !Number.isFinite(Date.parse(observedAt))))) fail('request', 'invalid_reading_progress', 'locator (1–4096 chars), fraction 0–1, an optional label up to 200 chars and an optional RFC3339 observedAt are required');
+      const previous = readingState(viewerId, mediaItem);
+      const updatedAt = readingWriteTime(previous.reading?.updatedAt, observedAt, Date.now());
+      // An older observed write (a device syncing late) is acknowledged and dropped.
+      if (updatedAt) setReadingState(viewerId, mediaItem.id, { reading: { locator, fraction, ...(label ? { label } : {}), updatedAt }, played: previous.played || fraction >= 0.98 });
       viewer.policyRevision = `mock-${++viewerRevision}`;
       return json({ accepted: true } satisfies V.Ack);
     }

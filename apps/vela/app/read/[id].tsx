@@ -32,16 +32,17 @@ export default function Read() {
     try { preferences.set(SETTINGS, JSON.stringify(next)); } catch { /* Kept for this visit only. */ }
   }, []);
   // Where the viewer is, sent a moment after they stop turning pages and when they leave.
-  const pending = useRef<ReaderLocation | null>(null);
+  const pending = useRef<(ReaderLocation & { observedAt: string }) | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const flush = useCallback(() => {
     clearTimeout(timer.current);
     const location = pending.current;
     pending.current = null;
-    if (location) void store.media.saveReadingProgress(id, location.locator, location.fraction, location.chapter || undefined).catch(() => undefined);
+    if (location) void store.media.saveReadingProgress(id, location.locator, location.fraction, location.chapter || undefined, location.observedAt).catch(() => undefined);
   }, [store, id]);
   const onLocation = useCallback((location: ReaderLocation) => {
-    pending.current = location;
+    // When the reader was there, so a late sync cannot overwrite newer progress from another device.
+    pending.current = { ...location, observedAt: new Date().toISOString() };
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_AFTER_MS);
   }, [flush]);

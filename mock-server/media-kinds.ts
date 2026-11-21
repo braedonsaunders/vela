@@ -97,3 +97,13 @@ export function withReading(viewerId: string, title: Title): Title {
   const { reading: _reading, ...watch } = title.watch ?? { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
   return { ...title, watch: { ...watch, played: state.played, ...(state.reading ? { reading: state.reading, lastViewedAt: state.reading.updatedAt } : {}) } };
 }
+
+/** Shared reading progress ordering (docs/media-kinds.md): a write with observedAt wins only when it is the newest
+ * observed, its time clamped to the server's + 5 min; without observedAt it wins on arrival. Returns the write's
+ * time, or undefined when an older observed write must be dropped. */
+export function readingWriteTime(previous: string | undefined, observedAt: string | undefined, now: number): string | undefined {
+  if (observedAt === undefined) return new Date(now).toISOString();
+  const at = Math.min(Date.parse(observedAt), now + 5 * 60_000);
+  if (previous !== undefined && at < Date.parse(previous)) return undefined;
+  return new Date(at).toISOString();
+}

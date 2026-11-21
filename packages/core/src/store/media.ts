@@ -70,12 +70,12 @@ export class Media {
   }
 
   /** Save where the viewer is; every drawn copy of the title shows it at once. */
-  async saveReadingProgress(id: string, locator: string, fraction: number, label?: string): Promise<void> {
+  async saveReadingProgress(id: string, locator: string, fraction: number, label?: string, observedAt = new Date().toISOString()): Promise<void> {
     const value = Math.min(1, Math.max(0, Number.isFinite(fraction) ? fraction : 0));
     this.applyReading(id, locator, value, label);
     const adapter = (await this.session.ready()).adapter;
     if (!hasReading(adapter)) return;
-    await adapter.saveReadingProgress(id, { idempotencyKey: this.session.key(), locator, fraction: value, ...(label ? { label } : {}) });
+    await adapter.saveReadingProgress(id, { idempotencyKey: this.session.key(), locator, fraction: value, ...(label ? { label } : {}), observedAt });
   }
 
   private applyReading(id: string, locator: string, fraction: number, label?: string): void {

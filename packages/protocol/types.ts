@@ -375,4 +375,6 @@ export interface AudioFallbackResponse { id: ID; audioGeneration: number; trackI
 export interface ReadingRequest extends Mutation {}
 /** A short-lived, range-capable document URL (Ether's kind-media ticket); fetched without the bearer. */
 export interface ReadingGrant { titleId: ID; format: ReadingFormat; mimeType: string; url: string; expiresAt: Timestamp; byteLength?: number; progress?: ReadingProgress }
-export interface ReadingProgressRequest extends Mutation { locator: string; fraction: number; label?: string }
+/** observedAt: when the reader was there (client clock). The server keeps the newest observed write, clamping
+ * observedAt to its own time + 5 min; a write without it is accepted on arrival. */
+export interface ReadingProgressRequest extends Mutation { locator: string; fraction: number; label?: string; observedAt?: Timestamp }

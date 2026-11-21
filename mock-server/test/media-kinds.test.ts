@@ -134,6 +134,19 @@ describe('media kinds', () => {
     expect(cleared.reading).toBeUndefined();
   });
 
+  test('reading progress keeps the newest observed write', async () => {
+    const id = 'book-patient-garden';
+    const at = (offset: number) => new Date(Date.now() + offset).toISOString();
+    expect((await post(`/titles/${id}/reading-progress`, { idempotencyKey: key(), locator: 'a', fraction: 0.2, observedAt: 'yesterday' })).status).toBe(400);
+    await post(`/titles/${id}/reading-progress`, { idempotencyKey: key(), locator: 'newer', fraction: 0.6, observedAt: at(-1_000) });
+    // A device syncing late is acknowledged and dropped.
+    expect((await post(`/titles/${id}/reading-progress`, { idempotencyKey: key(), locator: 'older', fraction: 0.3, observedAt: at(-3_600_000) })).status).toBe(200);
+    expect((await get<V.TitleDetail>(`/titles/${id}`)).title.watch?.reading?.locator).toBe('newer');
+    // A write without observedAt wins on arrival.
+    await post(`/titles/${id}/reading-progress`, { idempotencyKey: key(), locator: 'plain', fraction: 0.4 });
+    expect((await get<V.TitleDetail>(`/titles/${id}`)).title.watch?.reading?.locator).toBe('plain');
+  });
+
   test('home places the media rows after the first two rows', async () => {
     const rows = (await get<V.Page<V.Row>>('/rows?placement=home&limit=10')).items;
     expect(rows.slice(2, 5).map(row => [row.id, row.style])).toEqual([['media-recent-albums', 'square'], ['media-continue-reading', 'poster'], ['media-continue-listening', 'square']]);
@@ -161,4 +174,12 @@ test('the book ZIP writer stores mimetype first, uncompressed, with a correct CR
   expect(view.getUint32(14, true)).toBe(crc32(new TextEncoder().encode('application/epub+zip')));
   expect(new TextDecoder().decode(epubBytes.slice(30, 58))).toBe('mimetypeapplication/epub+zip');
   expect(view.getUint32(epubBytes.length - 22, true)).toBe(0x06054b50);
+});
+
+test('a skewed clock cannot pin reading progress beyond five minutes ahead', async () => {
+  const { readingWriteTime } = await import('../media-kinds');
+  const now = Date.parse('2026-11-20T12:00:00Z');
+  expect(readingWriteTime(undefined, '2027-01-01T00:00:00Z', now)).toBe('2026-11-20T12:05:00.000Z');
+  expect(readingWriteTime('2026-11-20T12:05:00.000Z', '2026-11-20T12:04:00Z', now + 600_000)).toBeUndefined();
+  expect(readingWriteTime('2026-11-20T12:05:00.000Z', undefined, now)).toBe('2026-11-20T12:00:00.000Z');
 });

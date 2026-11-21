@@ -151,7 +151,7 @@ interface ReadingProgress {
   label?: string;
   updatedAt: Timestamp;
 }
-interface ReadingProgressRequest extends Mutation { locator: string; fraction: number; label?: string }
+interface ReadingProgressRequest extends Mutation { locator: string; fraction: number; label?: string; observedAt?: Timestamp }
 ```
 
 | Method | Path | Request | Response |
@@ -164,7 +164,18 @@ interface ReadingProgressRequest extends Mutation { locator: string; fraction: n
 watch state, not a Vela side table: the same `{locator, fraction}` surfaces as
 `PlayedPercentage`/UserData in Jellyfin and Emby and as a view offset or
 percentage in Plex where a client can show it. The `/read` URL reuses the
-existing kind-media ticket and Range path; there is no new media server. The last
+existing kind-media ticket and Range path; there is no new media server.
+
+Ordering (approved 2026-11-20, applies to every frontend progress write through
+shared watch state): a write with `observedAt` (the client's time when the
+reader was there) is kept only when it is the newest observed; `observedAt` is
+clamped to the server's time + 5 min so a skewed clock cannot pin progress. A
+write without `observedAt` wins on arrival. Played at `fraction ≥ 0.98` stays
+played until `POST /titles/:id/watch {played:false}`.
+
+URLs in grants and plans may be root-relative; clients resolve them on the
+server origin and refuse other origins or credentialed URLs. Audio-only plans
+offer `transport: 'file'` (progressive AAC with Range) alongside HLS. The last
 write wins; the server stamps `updatedAt`. In-progress books join the library's
 Continue row like video.
 
@@ -206,6 +217,4 @@ surface on them.
 | Audio | One HTMLAudioElement, Media Session (lock screen, media keys) | Reports unsupported. Apple: audio-only plans in the player module with AVAudioSession `.playback`, MPNowPlayingInfoCenter and MPRemoteCommandCenter. Android: Media3 MediaSessionService with a notification. |
 | Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Reports unsupported. Plan: the same engine in an Expo DOM component (`@expo/dom-webview`), remote paging on TV. |
 
-Server notes for Ether: audio transcodes should prefer `transport: 'file'`
-(progressive AAC) because Chrome has no native HLS; grant and media URLs may be
-root-relative and are resolved on the server's origin (anything else is refused).
+Server notes for Ether are in section 2 (URLs, file transport for audio, progress ordering).
