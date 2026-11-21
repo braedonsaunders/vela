@@ -206,7 +206,11 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   covers with a spine for `book`. Library grids pick the column width per shape.
 - Pages: artist (hero, top tracks, albums), album (cover, tracklist, play/shuffle),
   series (books in order), book (cover, author, Read, progress), audiobook (cover,
-  narrator, chapters, Listen/Resume).
+  narrator, chapters, Listen/Resume). Each opens in the document's own title page,
+  exactly as a film does (the framed modal on desktop and tablets, full-bleed on
+  phones): the client draws the media page in the title page's scroll region, the
+  box with id `{env.route}-scroll-{env.entry}`, and keeps the frame, its motion and
+  its close control. A title page without that region gets a page of its own.
 - Player: persistent mini player + Now Playing (queue, shuffle, repeat), audiobook
   mode (chapters, speed, sleep timer), web Media Session. Native lock-screen
   controls need AVAudioSession/MPNowPlayingInfoCenter (Apple) and Media3

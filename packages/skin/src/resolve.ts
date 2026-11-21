@@ -4,6 +4,7 @@ import type { Branding } from '../../protocol/types';
 import { withRowLinks } from './resolve/row-links';
 import { withLibraryPresentation } from './resolve/library-presentation';
 import { withHeroArtwork } from './resolve/hero-artwork';
+import { mediaTitleTree } from './resolve/media-title';
 // A skin document resolved for the React renderer: inherited over the Vela base, templates
 // inlined, viewport variants applied for the current width class, tokens substituted, client
 // and document strings filled, templates and conditions compiled to accessors. Done once per
@@ -84,6 +85,9 @@ export interface ResolvedDocument {
   libraryViews?: RNode;
   /** Every route the document draws (home from slots.home or routes.home), resolved. */
   routes: Partial<Record<RouteName, RNode>>;
+  /** The title page with the media page in its scroll region, for music, book and audiobook
+   * titles (resolve/media-title.ts); none when the title page has no such region. */
+  mediaTitle?: RNode;
   motion: Record<string, Motion>;
   keyframes: ReturnType<typeof documentKeyframes>;
   /** Rows the style matrix refuses, named once per document. */
@@ -332,6 +336,7 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en',
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
   const r: Context = { doc, ui: resolveUi(doc.ui), strings, width, count: 0, unsupported: new Set() };
   const home = doc.slots?.home ?? doc.routes?.home;
+  const mediaTitle = mediaTitleTree(doc.routes?.title);
   return {
     id: doc.id,
     name: doc.name,
@@ -344,6 +349,8 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en',
       ...(home ? [['home', convert(withHeroArtwork(home), 1, r)]] : []),
       ...Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree).map(([name, tree]) => { const resolved = convert(tree as Node, 1, r); return [name, name === 'collection' ? collectionContinuation(resolved, r) : resolved]; }),
     ]) as ResolvedDocument['routes'],
+    // Derived by the client, so it never counts against the document's own node budget.
+    mediaTitle: mediaTitle && convert(mediaTitle, 1, { ...r, count: 0 }),
     motion: (doc.motion ?? {}) as Record<string, Motion>,
     keyframes: documentKeyframes(doc.keyframes),
     unsupported: [...r.unsupported],

@@ -18,15 +18,17 @@ export function isMediaPageRole(role: string): boolean {
   return ['artist', 'album', 'track', 'series', 'book', 'audiobook', 'part'].includes(role);
 }
 
-export function MediaTitlePage({ id }: { id: string }) {
+/** `framed`: drawn inside the document's title frame (the `mediaPage` widget), which brings the
+ * scrim, the opening motion and the close control; otherwise a page of its own. */
+export function MediaTitlePage({ id, framed = false }: { id: string; framed?: boolean }) {
   const detail = useDetail(id);
   const card = detail.value?.title[0];
   const role = card?.media?.role ?? '';
   const parent = card?.media?.parent;
   // A track opens its album, a part its audiobook, with the item marked.
-  if ((role === 'track' || role === 'part') && parent) return <MediaTitlePage key={parent.id} id={parent.id} />;
+  if ((role === 'track' || role === 'part') && parent) return <MediaTitlePage key={parent.id} id={parent.id} framed={framed} />;
   return (
-    <Frame accent={card?.accent ?? ''} backdrop={card ? (role === 'artist' && card.backdrop !== card.poster ? card.backdrop : card.poster) : ''} wideArt={role === 'artist' && !!card && card.backdrop !== card.poster}>
+    <Frame framed={framed} accent={card?.accent ?? ''} backdrop={card ? (role === 'artist' && card.backdrop !== card.poster ? card.backdrop : card.poster) : ''} wideArt={role === 'artist' && !!card && card.backdrop !== card.poster}>
       {!card ? <Pending load={detail} id={id} />
         : role === 'album' ? <AlbumPage card={card} detail={detail.value!} />
         : role === 'artist' ? <ArtistPage card={card} />
@@ -51,21 +53,33 @@ function useChildren(id: string | undefined): Loadable<ChildrenModel> | undefine
   return children;
 }
 
-/** The page: its colour wash from the cover, a blurred cover behind the hero, the back control. */
-function Frame({ accent, backdrop, wideArt, children }: { accent: string; backdrop: string; wideArt: boolean; children: ReactNode }) {
+/** The page: its colour wash from the cover, a blurred cover behind the hero, the back control.
+ * Framed, the document's title frame is the page: the wash and the content scroll in its region
+ * and the frame's own close control closes it. */
+function Frame({ framed, accent, backdrop, wideArt, children }: { framed: boolean; accent: string; backdrop: string; wideArt: boolean; children: ReactNode }) {
   const host = useHost();
   const m = useMediaLook();
   const actions = useMediaActions();
   const tint = accent || m.ui.accent;
   const top = m.tv ? 32 : Math.max(16, host.viewport.insets.top + 12);
+  const wash = (
+    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: wideArt ? Math.min(640, m.height * 0.8) : 620, overflow: 'hidden' }}>
+      {backdrop ? <Image source={host.image(backdrop)} contentFit="cover" blurRadius={wideArt ? 0 : 70} transition={framed ? 240 : 0}
+        style={{ position: 'absolute', top: wideArt ? 0 : -80, left: wideArt ? 0 : -80, right: wideArt ? 0 : -80, bottom: 0, opacity: wideArt ? 0.6 : 0.42 } as never} /> : null}
+      <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+        m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.34)} 0%, ${alpha(m.ui.page, 0.55)} 55%, ${m.ui.page} 100%)` })]} />
+    </View>
+  );
+  if (framed) return (
+    // A phone's frame is full-bleed under the shell's bar, its close control at the region's top.
+    <View testID="media-page" style={{ position: 'relative' }}>
+      {wash}
+      <View testID="media-scroll" style={{ paddingTop: m.tv ? 72 : m.small ? host.viewport.insets.top + 56 + 72 : 72, paddingBottom: 24, paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{children}</View>
+    </View>
+  );
   return (
     <View style={{ flex: 1, backgroundColor: m.ui.page }} testID="media-page">
-      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: wideArt ? Math.min(640, m.height * 0.8) : 620, overflow: 'hidden' }}>
-        {backdrop ? <Image source={host.image(backdrop)} contentFit="cover" blurRadius={wideArt ? 0 : 70}
-          style={{ position: 'absolute', top: wideArt ? 0 : -80, left: wideArt ? 0 : -80, right: wideArt ? 0 : -80, bottom: 0, opacity: wideArt ? 0.6 : 0.42 } as never} /> : null}
-        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-          m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.34)} 0%, ${alpha(m.ui.page, 0.55)} 55%, ${m.ui.page} 100%)` })]} />
-      </View>
+      {wash}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: top + 56, paddingBottom: 140 }} testID="media-scroll">
         <View style={{ paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{children}</View>
       </ScrollView>

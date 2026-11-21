@@ -20,9 +20,11 @@ interface Props {
   library?: string;
   page?: (host: SkinHost) => SkinHost;
   sharedShell?: boolean;
+  /** A tree drawn in place of the document's own for the route (a media title's page). */
+  node?: RNode;
 }
 
-export function DocumentScreen({ route, entry, library, page, sharedShell = false }: Props) {
+export function DocumentScreen({ route, entry, library, page, sharedShell = false, node }: Props) {
   const vela = useVela();
   const sides = useSideInsets();
   const app = vela.host(route, entry, library);
@@ -82,7 +84,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
       </View>
     );
   }
-  const tree = vela.doc?.routes[route];
+  const tree = node ?? vela.doc?.routes[route];
   if (!host || !contentHost || !tree) return <View style={{ flex: 1 }} />;
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md).
   const search = route === 'home' && contentHost.env.query !== '' ? vela.doc?.routes.search : undefined;
