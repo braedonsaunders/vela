@@ -5,6 +5,7 @@
 'use strict';
 const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, screen, session, shell } = require('electron');
 const { loadNativeHost, attachNativePlayer, attachFullscreen } = require('./native-player');
+const { attachLoadGuard } = require('./load-guard');
 const nativeAdapter = loadNativeHost();
 const fs = require('node:fs');
 const path = require('node:path');
@@ -95,6 +96,17 @@ function remember(window) {
   } catch {}
 }
 
+/** What the shell had to do for the page to come up, kept beside the profile for a bug report. */
+function launchLog(line) {
+  const entry = `${new Date().toISOString()} ${line}`;
+  console.warn(`[vela] ${entry}`);
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'launch.log'), entry + '\n'); } catch {}
+}
+
+// Test only: answer the next document's (or every document's) preload as if it never ran, to
+// prove the page and the load guard recover from a missing preload. Unset in normal use.
+let droppedPreloads = { once: 1, always: Infinity }[process.env.VELA_TEST_DROP_PRELOAD] ?? 0;
+
 function openExternal(address) {
   try {
     const url = new URL(address);
@@ -156,7 +168,12 @@ function createWindow() {
   });
   const detachFullscreen = attachFullscreen(window);
   window.once('closed', detachFullscreen);
-  void window.loadURL(START);
+  // A failed load is reported (and recovered) through did-fail-load.
+  const load = () => window.loadURL(START).catch(() => {});
+  const guard = attachLoadGuard(window, { load, log: launchLog });
+  window.__velaLoadGuard = guard;
+  window.once('closed', guard.dispose);
+  void load();
   return window;
 }
 
@@ -243,7 +260,19 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle(SCHEME, serve);
     const trusted = event => event.senderFrame === event.sender.mainFrame
       && event.senderFrame?.url.startsWith(START);
-    ipcMain.on('vela:native-available', event => { event.returnValue = trusted(event) && !!nativeAdapter; });
+    // Every document's preload checks in before the page's scripts run; the guard reloads a
+    // document that finishes loading without it.
+    ipcMain.on('vela:shell-ready', event => {
+      if (!trusted(event)) { event.returnValue = { native: false }; return; }
+      if (droppedPreloads > 0) {
+        droppedPreloads -= 1;
+        launchLog('test: treating this document\'s preload as missing (VELA_TEST_DROP_PRELOAD)');
+        event.returnValue = { drop: true };
+        return;
+      }
+      BrowserWindow.fromWebContents(event.sender)?.__velaLoadGuard?.checkIn();
+      event.returnValue = { native: !!nativeAdapter };
+    });
     ipcMain.on('vela:native-message', (event, message) => {
       if (!trusted(event) || !nativeAdapter) return;
       const window = BrowserWindow.fromWebContents(event.sender);

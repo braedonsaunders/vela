@@ -30,6 +30,7 @@
       "package.json",
       "build/icon.png",
       "native-player.js",
+      "load-guard.js",
       "mac/**/*.js",
       "linux/**/*.js"
     ],

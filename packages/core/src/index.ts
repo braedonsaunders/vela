@@ -11,7 +11,7 @@ export type { FailureKind } from './store/state';
 export { advanceGuideClock, guideFocus, liveIdentity, loadGuide } from './live/guide';
 export { guideRetry } from './live/retry';
 export { liveSearch } from './live/search';
-export { consoleURL, parseWebHandoff } from './session/web-handoff';
+export { consoleURL, pageServerOrigin, parseWebHandoff } from './session/web-handoff';
 export { randomId } from './protocol/id';
 export * from './models';
 export { createVela, type Vela, type VelaOptions, type VelaState } from './store';

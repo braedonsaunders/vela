@@ -5,7 +5,7 @@ import { Dimensions, PixelRatio } from 'react-native';
 import type { VelaPlatform } from '@vela/core';
 import { VelaPlayer } from '@vela/player';
 import { config, DEVELOPMENT_SERVER } from './config';
-import { consoleURL, parseWebHandoff } from '@vela/core';
+import { consoleURL, pageServerOrigin, parseWebHandoff } from '@vela/core';
 import { secrets } from './secrets';
 
 let handoff: { code?: string; consoleUrl?: string } | undefined;
@@ -66,7 +66,9 @@ export function platform(): VelaPlatform {
   const desktop = desktopShell();
   const link = webHandoff(!!desktop);
   return {
-    etherOrigin: development || (desktop ? undefined : location.origin),
+    // Only an http(s) page was served by an Ether server. A desktop bundle whose shell declaration
+    // is missing (vela-app://app) must still reach sign-in rather than fail on its own origin.
+    etherOrigin: development || (desktop ? undefined : pageServerOrigin(location.origin)),
     secrets,
     device: desktop
       ? { name: `Vela for ${DESKTOP_NAMES[desktop.platform]}`, platform: desktop.platform === 'mac' ? 'macos' : desktop.platform }
