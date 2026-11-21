@@ -9,3 +9,14 @@ export function behindLive(lagSeconds: number | null, wasBehind: boolean, segmen
   if (lagSeconds === null) return false;
   return wasBehind ? lagSeconds > 3 : lagSeconds >= Math.max(10, 2 * segmentSeconds);
 }
+
+/**
+ * Seconds playback trails its usual live position (the edge less the latency target), or null when
+ * that cannot be told yet: no edge, or a position outside the live window (0 while a channel starts
+ * or recovers), which is where the engine is about to be put, not a lag the viewer should hear about.
+ */
+export function liveLag(edge: number | null, start: number | null, targetSeconds: number, position: number): number | null {
+  if (edge === null || !Number.isFinite(position)) return null;
+  if (start !== null && position < start - 1) return null;
+  return Math.max(0, edge - targetSeconds - position);
+}

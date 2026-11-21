@@ -1,6 +1,6 @@
 import { bufferAhead } from '../pipeline';
 import type { LiveSnapshot } from '../model';
-import { behindLive } from '../live-behind';
+import { behindLive, liveLag } from '../live-behind';
 import type { HostContext } from './state';
 import { snapshotBitrate, readPosition } from './position';
 export function adaptLive(context: HostContext) {
@@ -71,8 +71,7 @@ export function liveBounds(context: HostContext): {
 export function liveSnapshot(context: HostContext): LiveSnapshot | null {
   if (!context.session.current?.live) return null;
   const { edge, start, source } = liveBounds(context);
-  // Seconds behind the usual live position (the edge less the latency target), not the edge itself.
-  const lag = edge === null ? null : Math.max(0, edge - context.live.targetSeconds - readPosition(context));
+  const lag = liveLag(edge, start, context.live.targetSeconds, readPosition(context));
   const segment = context.media.runtime?.live?.segmentSeconds ?? context.media.pipeline?.nominalSegmentSeconds ?? 2;
   context.live.behind = behindLive(lag, context.live.behind, segment) && catchUpTarget(context) !== null;
   return {
