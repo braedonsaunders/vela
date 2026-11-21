@@ -19,6 +19,7 @@ import { initialPlaylists, Playlists, type PlaylistsState } from './playlists';
 import { Receipts } from './receipts';
 import { initialSearch, Search, type SearchState } from './search';
 import { Media, type ChildrenModel } from './media';
+import { Audio, initialAudio, type AudioState } from './audio';
 import { initialServers, Servers, type ServersState } from './servers';
 import { Session } from './session';
 import { idle, StateBox, type Loadable } from './state';
@@ -42,6 +43,8 @@ export interface VelaState {
   playlists: PlaylistsState;
   search: SearchState;
   playback: PlaybackState;
+  /** The audio queue and its engine's state (music, audiobooks). */
+  audio: AudioState;
   live: LiveState;
   appearance: Loadable<AppearanceModel>;
   /** The trailer preview playing now. */
@@ -80,6 +83,7 @@ export interface Vela {
   previews: Previews;
   playlists: Playlists;
   media: Media;
+  audio: Audio;
 }
 
 const initialState: VelaState = {
@@ -96,6 +100,7 @@ const initialState: VelaState = {
   playlists: initialPlaylists,
   search: initialSearch,
   playback: initialPlayback,
+  audio: initialAudio,
   live: initialLive,
   appearance: idle(),
   previews: initialPreviews,
@@ -165,6 +170,7 @@ export function createVela(options: VelaOptions): Vela {
     receipts: new Receipts(session),
     previews,
     media: new Media(box, session, width),
+    audio: new Audio(box, session, playback),
   };
 }
 

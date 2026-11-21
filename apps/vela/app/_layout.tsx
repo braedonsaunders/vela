@@ -5,12 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSideInsets, useVela, VelaProvider } from '../src/vela';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { systemBarStyle } from '../src/system-bar-style';
+import { AudioDock } from '../src/media/audio';
 
 export default function Layout() {
   return (
     <VelaProvider>
       <SystemBar />
       <Screens />
+      <AudioDock />
     </VelaProvider>
   );
 }
