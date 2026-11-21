@@ -18,7 +18,8 @@ import { useRouteFocusContext } from '../../route-focus';
 import { RevealContext } from '../../tv-reveal';
 import { measure, useHost, type WidgetProps } from '../../host';
 import { SYMBOLS } from '../../icons';
-import { textStyle } from '../../translate';
+import { fontSizeOf, textStyle } from '../../translate';
+import { placeholderRows } from './placeholder-text';
 
 function Glyph({ symbol, size, color }: { symbol: 'search' | 'close'; size: number; color: string }) {
   return (
@@ -41,10 +42,17 @@ export function SearchField({ ctx }: WidgetProps) {
   // On TV the focused clear button fills with the ink, as the player's controls do.
   const [clearFocus, setClearFocus] = useState(false);
   const clearLit = Platform.isTV && clearFocus;
-  const text = useMemo(
-    () => textStyle({ 'font-family': ui.font, 'font-size': '17px', color: ui.ink }, measure(host.viewport, 17)).style,
-    [ui, host.viewport],
-  );
+  // Typed text in the body size and ink; while empty the field draws its placeholder as the
+  // document's secondary text (placeholder-text.ts).
+  const { text, quiet } = useMemo(() => {
+    const rows = { 'font-family': ui.font, 'font-size': '17px', color: ui.ink };
+    const m = measure(host.viewport, 17);
+    const hint = placeholderRows(rows, fontSizeOf(rows['font-size'], 17, m), fontSizeOf('100px', 17, m) / 100);
+    return {
+      text: textStyle(rows, measure(host.viewport, 17)).style,
+      quiet: textStyle(hint.rows, measure(host.viewport, hint.fontSize)).style,
+    };
+  }, [ui, host.viewport]);
 
   // The document's control corners: a pill by default, square for square-control documents.
   const radius = Math.min(ui.radiusControl, FIELD_HEIGHT / 2);
@@ -137,7 +145,7 @@ export function SearchField({ ctx }: WidgetProps) {
           {...clearOnEscape}
           onFocus={() => focus(true)}
           onBlur={() => focus(false)}
-          style={[text, styles.input] as TextStyle[]}
+          style={[query.text === '' ? quiet : text, styles.input] as TextStyle[]}
         />
       </Frame>
       {query.text !== '' ? (

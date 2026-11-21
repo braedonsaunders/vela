@@ -23,3 +23,18 @@ test('custom search fields receive concrete document and UI placeholder colours'
 test('an unknown placeholder colour token is rejected like a style token', () => {
   expect(() => placeholder('$missing')).toThrow('Unknown token $missing');
 });
+
+test('a search placeholder is regular secondary text a step under the typed text', async () => {
+  const { placeholderRows, placeholderSize } = await import('../src/widgets/search/placeholder-text');
+  expect(placeholderSize(17)).toBe(15);
+  expect(placeholderSize(16)).toBe(14);
+  expect(placeholderSize(15)).toBe(14);
+  expect(placeholderSize(13)).toBe(13);
+  expect(placeholderSize(28)).toBe(25);
+  const rows = { 'font-family': 'Fredoka', 'font-size': '17px', 'font-weight': '550', color: '#fff' };
+  // A TV draws a px as 1.25 points: the 17px field is 21.25 points and its placeholder 15px.
+  expect(placeholderRows(rows, 21.25, 1.25)).toEqual({
+    rows: { 'font-family': 'Fredoka', 'font-size': '15px', 'font-weight': '400', color: '#fff' },
+    fontSize: 18.75,
+  });
+});
