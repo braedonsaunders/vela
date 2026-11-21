@@ -3,8 +3,6 @@ import { useVela } from '@vela/core/react';
 import { BlurView } from 'expo-blur';
 import { forwardRef, Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
-  Animated,
-  Easing,
   Modal,
   Platform,
   ScrollView,
@@ -19,7 +17,8 @@ import {
 import { cardContextActions, supportsTitleActions, type CardContextAction, type CardPress } from '../card-context-actions';
 import { placeAtPoint, placeAtRect, type Point, type Rect, type Size } from '../card-context-placement';
 import { DismissScope, type Focusable } from '../escape';
-import { MOTION } from '../presence';
+import Reanimated from 'react-native-reanimated';
+import { MOTION, presenceStyle } from '../presence';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
 import { Glyph } from './common/controls';
@@ -93,7 +92,6 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   const [busy, setBusy] = useState(false);
   const first = useRef<ComponentRef<typeof FocusPressable> | null>(null);
   const guide = useRef<Focusable | null>(null);
-  const openValue = useRef(new Animated.Value(look.still ? 1 : 0)).current;
 
   useEffect(() => {
     let live = true;
@@ -106,26 +104,16 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   }, [vela, card.id, card.kind]);
 
   // It opens once it has measured itself and is placed (so the motion is never spent unseen), and
-  // leaves with the reverse, quicker, before it unmounts (presence.tsx's timings).
+  // leaves with the reverse, quicker, before it unmounts: Reanimated CSS transitions (presence.tsx),
+  // on the compositor on the web and the UI thread on native, so a busy page never stutters them.
   const measured = menuSize.height > 1;
-  useEffect(() => {
-    if (!measured) return;
-    if (look.still) { openValue.setValue(1); return; }
-    Animated.timing(openValue, {
-      toValue: 1,
-      duration: MOTION.enter,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
-      useNativeDriver: true,
-    }).start();
-  }, [look.still, openValue, measured]);
   const [leaving, setLeaving] = useState(false);
   const leave = useCallback(() => {
     if (leaving) return;
     if (look.still || Platform.isTV) { close(); return; }
     setLeaving(true);
-    openValue.stopAnimation();
-    Animated.timing(openValue, { toValue: 0, duration: MOTION.quick, easing: Easing.bezier(0.4, 0, 1, 1), useNativeDriver: true }).start(() => close());
-  }, [leaving, look.still, close, openValue]);
+    setTimeout(close, MOTION.quick);
+  }, [leaving, look.still, close]);
 
   const link = web && href ? new URL(href, window.location.href).href : undefined;
   const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link }), [card, primary, management, continueWatching, host.env.canPlaylists, link]);
@@ -207,8 +195,6 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   const radius = kids ? 20 : broadcast ? 5 : 13;
   const layer = look.layer(panelRows);
   const Trap = Platform.isTV ? TVFocusGuideView : View;
-  const scale = openValue.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
-  const hidden = menuSize.height <= 1;
   const meta = episodeLine(card);
 
   return (
@@ -223,7 +209,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
             focusable={false}
             testID="card-context-dismiss"
           />
-          <Animated.View
+          <Reanimated.View
             onLayout={onLayout}
             testID="card-context-menu"
             accessibilityRole="menu"
@@ -233,8 +219,8 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
               { borderRadius: radius },
               {
                 position: 'absolute', left: placement.x, top: placement.y, overflow: 'hidden',
-                opacity: hidden ? 0 : openValue, transform: [{ scale }],
               } as ViewStyle,
+              presenceStyle(measured && !leaving, { scale: 0.96, y: -4 }, look.still || Platform.isTV, MOTION.enter, MOTION.quick),
             ]}
           >
             {layer.blur ? <BlurView intensity={Math.min(100, Math.round(layer.blur * 2.5))} tint={blurTint(look.ui.popover)} style={StyleSheet.absoluteFill} /> : null}
@@ -273,7 +259,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
               </Trap>
               {error ? <Text accessibilityRole="alert" style={[look.text({ 'font-size': '13px', color: '$ui.accent' }), { padding: 10 }]}>{error}</Text> : null}
             </ScrollView>
-          </Animated.View>
+          </Reanimated.View>
         </View>
       </Modal>
     </DismissScope>
