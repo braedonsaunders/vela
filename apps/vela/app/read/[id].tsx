@@ -46,7 +46,8 @@ export default function Read() {
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_AFTER_MS);
   }, [flush]);
-  useEffect(() => () => flush(), [flush]);
+  // Leaving the book: its last place is saved, then Continue rows are read again.
+  useEffect(() => () => { flush(); void store.media.finishedReading(); }, [flush, store]);
   const open = useCallback(async () => {
     const grant = await store.media.openReading(id);
     return { url: grant.url, format: grant.format, mimeType: grant.mimeType, locator: grant.progress?.locator, fraction: grant.progress?.fraction };

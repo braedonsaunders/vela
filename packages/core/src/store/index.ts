@@ -169,7 +169,7 @@ export function createVela(options: VelaOptions): Vela {
     appearance,
     receipts: new Receipts(session),
     previews,
-    media: new Media(box, session, width),
+    media: new Media(box, session, width, () => void home.refreshProgress()),
     audio: new Audio(box, session, playback),
   };
 }

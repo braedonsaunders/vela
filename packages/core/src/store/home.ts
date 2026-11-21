@@ -38,6 +38,8 @@ const LIBRARY_PAGES = 100;
 const RECONCILE_RETRIES = 2;
 const RECONCILE_DELAY_MS = 500;
 export const HOME_SLOW_MS = 7_000;
+/** A reconcile that takes the server's answer as it is. */
+const ANY_PROGRESS: Watched = { titleId: '', positionSeconds: 0, finished: false };
 
 export type HomePresentation = 'skeleton' | 'slow' | 'ready' | 'failed';
 
@@ -188,6 +190,14 @@ export class Home {
     this.box.update('home', home => (home.value ? { ...home, value: homeWatched(home.value, watched) } : home));
   }
 
+  /**
+   * Re-read the progress shelves once, with no position to wait for: reading progress (a book's
+   * place is a locator, not seconds) changes Continue rows the way a playback stop does.
+   */
+  refreshProgress(): Promise<void> {
+    return this.reconcile(ANY_PROGRESS);
+  }
+
   /** Re-read only the server-owned progress presentation after a confirmed playback stop. */
   reconcile(watched: Watched): Promise<void> {
     this.reconcilePending = watched;
@@ -225,7 +235,7 @@ export class Home {
         if (signal.aborted || generation !== this.reconcileGeneration) return;
         const fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
         const value = homeCard(fresh, watched.titleId);
-        const serverRecorded = (watched.finished || value !== undefined) && recorded(value, watched);
+        const serverRecorded = watched === ANY_PROGRESS || (watched.finished || value !== undefined) && recorded(value, watched);
         if (!serverRecorded && attempt < RECONCILE_RETRIES) {
           await wait(this.reconcileDelayMs * (attempt + 1), signal);
           continue;

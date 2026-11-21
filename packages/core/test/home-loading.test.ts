@@ -169,3 +169,17 @@ test('a session reset cancels Home progress reconciliation and drops its answer'
   await reading;
   expect(box.get().home).toEqual(initialHome);
 });
+
+test('reading progress re-reads the progress shelves once and advances the library revision', async () => {
+  const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
+  const fresh: boolean[] = [];
+  const api = { home: async (value = false) => { fresh.push(value); return bootstrap; } };
+  const session = { epoch: 0, onReset() {}, negotiate: async () => {},
+    ready: async () => ({ adapter: api, images: async () => undefined }), check: () => {} };
+  const home = new Home(box, session as unknown as Session, () => 640, 5);
+  await home.ensure();
+  // A book's place is a locator, not a position: nothing to wait for, the server's answer stands.
+  await home.refreshProgress();
+  expect(fresh).toEqual([false, true]);
+  expect(box.get().home.progressRevision).toBe(1);
+});

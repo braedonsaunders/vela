@@ -16,10 +16,15 @@ export interface MediaFeatures { classes: V.MediaClass[]; reading: V.ReadingForm
 const MAX_CHILDREN = 1000;
 
 export class Media {
+  /** The last reading-progress write, so leaving a book waits for it before shelves are re-read. */
+  private saving: Promise<unknown> = Promise.resolve();
+
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly artWidth: () => number,
+    /** Continue rows (Home's and the libraries') are read again: they show the book's new place. */
+    private readonly progressChanged: () => void = () => {},
   ) {
     session.onReset(() => this.box.update('children', () => ({})));
   }
@@ -73,9 +78,19 @@ export class Media {
   async saveReadingProgress(id: string, locator: string, fraction: number, label?: string, observedAt = new Date().toISOString()): Promise<void> {
     const value = Math.min(1, Math.max(0, Number.isFinite(fraction) ? fraction : 0));
     this.applyReading(id, locator, value, label);
-    const adapter = (await this.session.ready()).adapter;
-    if (!hasReading(adapter)) return;
-    await adapter.saveReadingProgress(id, { idempotencyKey: this.session.key(), locator, fraction: value, ...(label ? { label } : {}), observedAt });
+    const save = (async () => {
+      const adapter = (await this.session.ready()).adapter;
+      if (!hasReading(adapter)) return;
+      await adapter.saveReadingProgress(id, { idempotencyKey: this.session.key(), locator, fraction: value, ...(label ? { label } : {}), observedAt });
+    })();
+    this.saving = save.catch(() => undefined);
+    await save;
+  }
+
+  /** The viewer left a book: once its last place is saved, the progress shelves are read again. */
+  async finishedReading(): Promise<void> {
+    await this.saving;
+    this.progressChanged();
   }
 
   private applyReading(id: string, locator: string, fraction: number, label?: string): void {
