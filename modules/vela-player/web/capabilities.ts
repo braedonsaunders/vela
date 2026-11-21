@@ -30,6 +30,19 @@ const audioFormats: [string, string][] = [
   ['opus', 'audio/webm; codecs="opus"'],
   ['ac3', 'audio/mp4; codecs="ac-3"'],
   ['eac3', 'audio/mp4; codecs="ec-3"'],
+  // Music and audiobooks play these directly in the browser's own <audio> element.
+  ['flac', 'audio/flac'],
+  ['mp3', 'audio/mpeg'],
+  ['vorbis', 'audio/ogg; codecs="vorbis"'],
+  ['alac', 'audio/mp4; codecs="alac"'],
+  ['pcm', 'audio/wav; codecs="1"'],
+];
+/** Audio-only files the browser opens itself (m4a and m4b are mp4). */
+const audioContainers: [string, string][] = [
+  ['flac', 'audio/flac'],
+  ['mp3', 'audio/mpeg'],
+  ['ogg', 'audio/ogg'],
+  ['wav', 'audio/wav'],
 ];
 
 function validList(list: unknown): list is string[] {
@@ -99,7 +112,10 @@ async function probe(signal: AbortSignal): Promise<PlayerCapabilities> {
   const overlays = payload ? ['webvtt', 'ether-vtt-window', ...embedded] : [];
   return {
     ...(original ? { originalPlayback: original } : {}),
-    containers: ['mp4', 'webm'].filter((container) => supports(`video/${container}`)),
+    containers: [
+      ...['mp4', 'webm'].filter((container) => supports(`video/${container}`)),
+      ...audioContainers.filter(([, mime]) => supports(mime)).map(([name]) => name),
+    ],
     videoCodecs: videoFormats.filter(([name, mime]) => name === 'h264' && supports(mime)).map(([name]) => name),
     audioCodecs: audioFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
     subtitleFormats: [...new Set([...(typeof VTTCue === 'function' ? ['webvtt'] : []), ...overlays])],
