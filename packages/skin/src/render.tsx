@@ -2,6 +2,7 @@ import { ScreenActive } from './screen-active';
 import { pagerState, readsPager, reportPager, subscribePager } from './pager-book';
 export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
+import { lazyExtent, lazyNear, lazyPitch, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
 import { msg } from '@vela/core';
 import { restartAction, secondaryPlayAction } from './restart-action';
@@ -1256,7 +1257,7 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
   const total = useRef(children.length);
   total.current = children.length;
   // The spacer's offset at an earlier count: its movement per item is the items' pitch.
-  const sample = useRef<{ count: number; at: number } | null>(null);
+  const sample = useRef<LazySample | null>(null);
   const route = useContext(RouteLayout);
   const row = useContext(RowScroll);
   const shown = Math.min(count, children.length);
@@ -1266,11 +1267,7 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
     spacer.current?.measureInWindow((x, y, w, h) => {
       // A hidden scene (a retained section behind another) has no size: it draws nothing ahead.
       if (!w && !h) return;
-      const screen = Dimensions.get('window');
-      const near = axis === 'y'
-        ? y < screen.height * (1 + LAZY_REACH)
-        : x < screen.width * (1 + LAZY_REACH) && y < screen.height * (1 + LAZY_REACH) && y + h > -screen.height * LAZY_REACH;
-      if (near) setCount(n => (n === at && n < total.current ? n + batch : n));
+      if (lazyNear(axis, { x, y, height: h }, Dimensions.get('window'), LAZY_REACH)) setCount(n => (n === at && n < total.current ? n + batch : n));
     });
   }, [axis, batch]);
   useEffect(() => {
@@ -1283,7 +1280,7 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
   // Until two counts have been laid out, a row's items are taken to start its content and a page's
   // rows to be a third of the screen apart.
   const guess = axis === 'x' ? 0 : Dimensions.get('window').height / 3;
-  const extent = Math.max(1, (children.length - shown) * (pitch || guess));
+  const extent = lazyExtent(children.length - shown, pitch, guess);
   // The same two slots whether or not anything is left to draw, so drawn items are never remounted.
   return (
     <>
@@ -1292,9 +1289,8 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
         style={axis === 'x' ? { width: extent, alignSelf: 'stretch' } : { height: extent }}
         onLayout={e => {
           const at = axis === 'x' ? e.nativeEvent.layout.x : e.nativeEvent.layout.y;
-          const previous = sample.current;
-          if (previous && previous.count !== shown && at !== previous.at) setPitch(Math.max(1, (at - previous.at) / (shown - previous.count)));
-          else if (axis === 'x' && !previous && at > 0 && shown > 0) setPitch(at / shown);
+          const next = lazyPitch(sample.current, shown, at, axis);
+          if (next !== undefined) setPitch(next);
           sample.current = { count: shown, at };
           // Shown again (a retained section coming back) or moved: draw ahead if now within reach.
           ahead();
