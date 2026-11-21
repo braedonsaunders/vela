@@ -217,6 +217,16 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   MediaSession (Android).
 - Reader: EPUB first (paginated, font size, light/sepia/dark, contents, progress
   sync, keyboard/touch/remote page turns), PDF/CBZ when `reading.formats` lists them.
+  A book opens exactly at its saved locator; one the copy cannot resolve opens at the
+  saved fraction; a first open lands on the title page a landmark names, else the first
+  page after the cover (the cover is the opening motion: it grows from the card and
+  swings open on its spine; instant under reduced motion). Pages follow
+  `readerLayout` (one page or a spread by width, a measure that grows with text
+  size, the bars in the top and bottom margins); pictures keep their shape and a
+  picture-only page is centred. Taps: outer quarters turn, the middle (or Enter, a
+  remote's select) toggles the controls. The position line never shows an unknown
+  value (`readerPosition`). Leaving a book merges the new place into the shown
+  Continue rows in place (`reconcileProgressRows`), as watching and listening do.
 
 ## 4. Where Vela stands (2026-11-20)
 

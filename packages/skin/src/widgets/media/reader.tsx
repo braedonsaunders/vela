@@ -1,27 +1,27 @@
 // The eBook reader (docs/media-kinds.md): the book full screen on paper, light, sepia or dark;
-// chrome that steps aside while reading (a tap in the middle brings it back); contents and
-// type settings in side panels; page turns by tap, swipe, arrow keys, Page Up/Down, Space and a
-// remote's left and right. Where the viewer is goes to the server as they read.
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+// chrome that steps aside while reading (a tap in the middle of the page, Enter or a remote's
+// select brings it back); contents and type settings in side panels; page turns by tap at the
+// page's outer quarters, swipe, arrow keys, Page Up/Down, Space and a remote's left and right.
+// On the web it opens out of the book's cover (reader-opening.tsx). Where the viewer is goes to
+// the server as they read.
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
-import { msg, number, percent, type Card } from '@vela/core';
+import { msg, percent, type Card } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { focusElement } from '../../escape';
 import { NO_RING, useInteraction } from '../common/controls';
 import { MediaGlyph } from './icons';
 import { useMediaLook } from './parts';
 import { READER_THEMES, type ReaderBook, type ReaderEngine, type ReaderLocation, type ReaderSettings, type ReaderTheme } from './reader-engine';
-import Animated, { cubicBezier } from 'react-native-reanimated';
-import { EASE_IN, EASE_OUT, MOTION, presenceStyle, useLast, usePresence } from '../../presence';
-import { zoomOnto, type Rect } from './reader-origin';
-
-/** Opening out of the cover is a long move; closing back into it quicker. */
-const READER_OPEN_MS = 480;
-const READER_CLOSE_MS = 300;
-/** Growing out of the cover reads only if the growth is seen: an even start, a soft landing. */
-const GROW = cubicBezier(0.2, 0, 0, 1);
+import Animated from 'react-native-reanimated';
+import { MOTION, presenceStyle, useLast, usePresence } from '../../presence';
+import { type Rect } from './reader-origin';
+import { readerLayout, readerPosition, safeFraction } from './reader-layout';
+import { BookOpening, CLOSING_TOTAL, readerLayerStyle, useOpening } from './reader-opening';
 
 const web = Platform.OS === 'web';
+/** The controls shown as the book opens step aside after this long; shown by the viewer, they stay. */
+const HINT_MS = 3500;
 
 export interface ReaderPageProps {
   card: Card;
@@ -36,28 +36,32 @@ export interface ReaderPageProps {
   origin?: Rect | null;
 }
 
-export function ReaderPage({ card, open, engine, settings, onSettings, onLocation, onClose: leave, origin }: ReaderPageProps) {
+export function ReaderPage({ card, open, engine, settings, onSettings, onLocation, onClose: leave, origin = null }: ReaderPageProps) {
   const m = useMediaLook();
   const still = m.look.still;
-  // On the web the reader leaves with its motion before the route goes; native routes fade.
-  const [leaving, setLeaving] = useState(false);
-  const left = useRef(false);
-  const onClose = useCallback(() => {
-    if (left.current) return;
-    left.current = true;
-    if (!web || still) { leave(); return; }
-    setLeaving(true);
-    setTimeout(leave, READER_CLOSE_MS);
-  }, [leave, still]);
+  const animated = web && !still;
   const frame = useRef<ComponentRef<typeof View>>(null);
   const [book, setBook] = useState<ReaderBook | null>(null);
   const [location, setLocation] = useState<ReaderLocation | null>(null);
   const [failed, setFailed] = useState(false);
-  const [chrome, setChrome] = useState(true);
+  const [chrome, setChrome] = useState(false);
   const [panel, setPanel] = useState<'' | 'contents' | 'type'>('');
   const theme = READER_THEMES[settings.theme];
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // The book opens out of its cover once its pages are drawn (or cannot be).
+  const opening = useOpening(animated, !!book || failed || !engine);
+  // On the web the reader leaves with its motion before the route goes; native routes fade.
+  const [closing, setClosing] = useState(false);
+  const left = useRef(false);
+  const onClose = useCallback(() => {
+    if (left.current) return;
+    left.current = true;
+    if (!animated) { leave(); return; }
+    setPanel('');
+    setClosing(true);
+    setTimeout(leave, CLOSING_TOTAL);
+  }, [leave, animated]);
 
   useEffect(() => {
     if (!engine || !frame.current) return;
@@ -76,104 +80,113 @@ export function ReaderPage({ card, open, engine, settings, onSettings, onLocatio
   }, [engine]);
   useEffect(() => { engine?.apply(settings); }, [engine, settings]);
 
-  // The chrome steps aside a few seconds after the book opens and after each page turn.
+  // The controls: shown briefly as the book opens, then out of the way. A tap in the middle of the
+  // page (or Enter) shows them until the next tap or page turn.
   const hideLater = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const nudge = useCallback((show: boolean) => {
+  const showChrome = useCallback((show: boolean, briefly = false) => {
     clearTimeout(hideLater.current);
     setChrome(show);
-    if (show) hideLater.current = setTimeout(() => setChrome(false), 4000);
+    if (show && briefly) hideLater.current = setTimeout(() => setChrome(false), HINT_MS);
   }, []);
-  useEffect(() => { if (book) nudge(true); return () => clearTimeout(hideLater.current); }, [book, nudge]);
+  const opened = !!book && (opening === 'done' || opening === 'fill');
+  useEffect(() => { if (opened) showChrome(true, true); return () => clearTimeout(hideLater.current); }, [opened, showChrome]);
 
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
   const turn = useCallback((direction: 'next' | 'previous') => {
     if (!engine) return;
     if (direction === 'next') engine.next(); else engine.previous();
-    if (!panel) setChrome(false);
-  }, [engine, panel]);
+    if (!panelRef.current) showChrome(false);
+  }, [engine, showChrome]);
+  const toggle = useCallback(() => {
+    if (panelRef.current) { setPanel(''); return; }
+    clearTimeout(hideLater.current);
+    setChrome(shown => !shown);
+  }, []);
 
   useEffect(() => engine?.onInput(input => {
     if (input === 'next' || input === 'previous') turn(input);
-    else if (input === 'toggle-chrome') { if (panel) setPanel(''); else nudge(!chrome); }
-    else if (input === 'show-chrome') { nudge(true); requestAnimationFrame(() => focusElement('reader-close')); }
-    else if (input === 'escape') { if (panel) setPanel(''); else onClose(); }
-  }), [engine, turn, panel, chrome, nudge, onClose]);
+    else if (input === 'toggle-chrome') toggle();
+    else if (input === 'show-chrome') { showChrome(true); requestAnimationFrame(() => focusElement('reader-close')); }
+    else if (input === 'escape') { if (panelRef.current) setPanel(''); else onClose(); }
+  }), [engine, turn, toggle, showChrome, onClose]);
 
   useEffect(() => {
     if (!web || typeof window === 'undefined') return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (event.defaultPrevented || target?.tagName === 'INPUT') return;
+      if (event.defaultPrevented || target?.tagName === 'INPUT' || event.altKey || event.ctrlKey || event.metaKey) return;
       const inPanel = !!target?.closest?.('[data-reader-panel]');
+      const onControl = !!target?.closest?.('[role="button"], [role="link"], [role="radio"], [role="adjustable"], a, button');
       if (event.key === 'Escape') { event.preventDefault(); if (panel) setPanel(''); else onClose(); return; }
       if (inPanel) return;
-      if (event.key === 'Tab' && !chrome) nudge(true);
-      if (['ArrowRight', 'PageDown'].includes(event.key) || (event.key === ' ' && !event.shiftKey && target?.getAttribute('role') !== 'button')) { event.preventDefault(); turn(book?.rtl && event.key === 'ArrowRight' ? 'previous' : 'next'); }
+      if (event.key === 'Tab' && !chrome) showChrome(true);
+      // Enter on the page (a remote's select) shows or hides the controls; on a control it presses it.
+      if (event.key === 'Enter' && !onControl) { event.preventDefault(); toggle(); return; }
+      if (['ArrowRight', 'PageDown'].includes(event.key) || (event.key === ' ' && !event.shiftKey && !onControl)) { event.preventDefault(); turn(book?.rtl && event.key === 'ArrowRight' ? 'previous' : 'next'); }
       else if (['ArrowLeft', 'PageUp'].includes(event.key) || (event.key === ' ' && event.shiftKey)) { event.preventDefault(); turn(book?.rtl && event.key === 'ArrowLeft' ? 'next' : 'previous'); }
+      else if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && !onControl && settings.flow !== 'scrolled') { event.preventDefault(); showChrome(true); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [turn, panel, onClose, book?.rtl, chrome, nudge]);
+  }, [turn, toggle, panel, onClose, book?.rtl, chrome, showChrome, settings.flow]);
 
-  const progress = location ? percent(location.fraction) : '';
+  const position = readerPosition(location);
+  const layout = readerLayout(m.width, m.height, settings.fontSize);
+  const topBar = m.small ? 52 : 60, bottomBar = m.small ? 46 : 52;
   // The bars step aside up and down, and come back the same way (presence.tsx).
-  const bars = !!(chrome || panel);
+  const bars = !!(chrome || panel) && !closing;
   const bar = (style: ViewStyle, edge: 1 | -1) => [{ position: 'absolute', left: 0, right: 0, backgroundColor: theme.page,
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: m.small ? 10 : 18, zIndex: 5 } as ViewStyle, style,
     presenceStyle(bars, { y: edge * 14 }, still)];
   const sheet = usePresence(!!panel, MOTION.exit, still);
   const shownPanel = useLast(panel || undefined);
-  // Out of the cover (or up from a little smaller, opened another way), and back into it.
-  // Kept stable across renders, so a page turn never restarts it.
-  const motion = useMemo(() => {
-    if (!web || still) return {};
-    const zoom = origin ? zoomOnto(origin, { width: m.width, height: m.height }) : { x: 0, y: 12, scale: 0.97 };
-    const away = { opacity: 0, transform: [{ translateX: zoom.x }, { translateY: zoom.y }, { scale: zoom.scale }] };
-    const home = { opacity: 1, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }] };
-    return leaving
-      ? { animationName: { from: home, to: away }, animationDuration: READER_CLOSE_MS, animationTimingFunction: EASE_IN, animationFillMode: 'both' }
-      : { animationName: { from: away, to: home }, animationDuration: origin ? READER_OPEN_MS : MOTION.enter, animationTimingFunction: origin ? GROW : EASE_OUT, animationFillMode: 'both' };
-  // The viewport at opening; a resize later must not replay it.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [still, origin, leaving]);
   return (
-    <Animated.View style={[{ flex: 1, backgroundColor: theme.page }, motion as ViewStyle]} testID="reader" pointerEvents={leaving ? 'none' : 'auto'}>
-      <View ref={frame} style={{ position: 'absolute', top: m.small ? 52 : 60, bottom: m.small ? 46 : 52, left: 0, right: 0 }} testID="reader-frame"
-        accessibilityLabel={card.name} />
-      {!engine ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32 }} accessibilityRole="alert">
-        <Text style={m.text({ 'font-size': '16px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.unsupported')}</Text>
-      </View> : null}
-      {engine && !book && !failed ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={m.text({ 'font-family': '"Iowan Old Style", Georgia, serif', 'font-size': '20px', 'font-style': 'italic', color: theme.quiet })}>{card.name}</Text>
-      </View> : null}
-      {failed ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 }} accessibilityRole="alert">
-        <Text style={m.text({ 'font-size': '17px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.failed')}</Text>
-      </View> : null}
-      <Animated.View onFocus={() => nudge(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ top: 0, height: m.small ? 52 : 60, borderBottomWidth: 1, borderBottomColor: theme.rule }, -1)} testID="reader-top">
-        <ReaderButton icon="back" label={msg('media.ui.back')} onPress={onClose} color={theme.ink} testID="reader-close" nativeID="reader-close" />
-        <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-          <Text numberOfLines={1} style={m.text({ 'font-family': '"Iowan Old Style", "Palatino Linotype", Georgia, serif', 'font-size': '15px', 'font-weight': '600', color: theme.ink })}>{book?.title || card.name}</Text>
-          {location?.chapter ? <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: theme.quiet })}>{location.chapter}</Text> : null}
-        </View>
-        <ReaderButton icon="contents" label={msg('media.reader.contents')} onPress={() => setPanel(panel === 'contents' ? '' : 'contents')} color={theme.ink} active={panel === 'contents'} testID="reader-contents" />
-        <ReaderButton icon="text" label={msg('media.reader.type')} onPress={() => setPanel(panel === 'type' ? '' : 'type')} color={theme.ink} active={panel === 'type'} testID="reader-type" />
+    <View style={{ flex: 1 }} testID="reader" pointerEvents={closing ? 'none' : 'box-none'}>
+      {animated ? <BookOpening cover={card.poster} sharper={book?.cover} title={card.name} byline={card.media?.byline} accent={card.accent} origin={origin}
+        paper={theme.page} endpaper={theme.rule} opening={opening} closing={closing} /> : null}
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.page }, animated ? readerLayerStyle(opening, closing) : null]} testID="reader-layer">
+        {/* The pages: the text block sits between the bars' places, so the bars never cover a line. */}
+        <View ref={frame} style={{ position: 'absolute', top: layout.top, bottom: layout.bottom, left: 0, right: 0 }} testID="reader-frame"
+          accessibilityLabel={card.name} />
+        {!engine ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32 }} accessibilityRole="alert">
+          <Text style={m.text({ 'font-size': '16px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.unsupported')}</Text>
+        </View> : null}
+        {engine && !book && !failed ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={m.text({ 'font-family': '"Iowan Old Style", Georgia, serif', 'font-size': '20px', 'font-style': 'italic', color: theme.quiet })}>{card.name}</Text>
+        </View> : null}
+        {failed ? <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 }} accessibilityRole="alert">
+          <Text style={m.text({ 'font-size': '17px', color: theme.ink, 'text-align': 'center' })}>{msg('media.reader.failed')}</Text>
+        </View> : null}
+        <Animated.View onFocus={() => showChrome(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ top: 0, height: topBar, borderBottomWidth: 1, borderBottomColor: theme.rule }, -1)} testID="reader-top">
+          <ReaderButton icon="back" label={msg('media.ui.back')} onPress={onClose} color={theme.ink} testID="reader-close" nativeID="reader-close" />
+          <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
+            <Text numberOfLines={1} style={m.text({ 'font-family': '"Iowan Old Style", "Palatino Linotype", Georgia, serif', 'font-size': '15px', 'font-weight': '600', color: theme.ink })}>{book?.title || card.name}</Text>
+            {location?.chapter ? <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: theme.quiet })}>{location.chapter}</Text> : null}
+          </View>
+          <ReaderButton icon="contents" label={msg('media.reader.contents')} onPress={() => setPanel(panel === 'contents' ? '' : 'contents')} color={theme.ink} active={panel === 'contents'} testID="reader-contents" />
+          <ReaderButton icon="text" label={msg('media.reader.type')} onPress={() => setPanel(panel === 'type' ? '' : 'type')} color={theme.ink} active={panel === 'type'} testID="reader-type" />
+        </Animated.View>
+        <Animated.View onFocus={() => showChrome(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ bottom: 0, height: bottomBar, borderTopWidth: 1, borderTopColor: theme.rule }, 1)} testID="reader-bottom">
+          <ReaderButton icon="back" label={msg('media.reader.previous')} onPress={() => turn('previous')} color={theme.ink} testID="reader-previous" />
+          <ProgressTrack fraction={safeFraction(location?.fraction) ?? 0} color={theme.ink} rule={theme.rule} onSeek={fraction => engine?.goToFraction(fraction)} />
+          {/* Unknown parts are left out (reader-layout.ts readerPosition), never drawn as NaN. */}
+          <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: theme.quiet, 'font-variant-numeric': 'tabular-nums', 'min-width': '92px', 'text-align': 'right' })} testID="reader-progress">
+            {m.small ? position.percent : position.line}
+          </Text>
+          <View style={{ transform: [{ scaleX: -1 }] }}><ReaderButton icon="back" label={msg('media.reader.next')} onPress={() => turn('next')} color={theme.ink} testID="reader-next" /></View>
+        </Animated.View>
+        {!bars && position.line ? <Text pointerEvents="none" testID="reader-hint" style={[m.text({ 'font-size': '11px', color: theme.quiet, 'font-variant-numeric': 'tabular-nums' }),
+          { position: 'absolute', bottom: Math.max(10, Math.round((layout.bottom - 14) / 2)), alignSelf: 'center' }]}>{m.small ? position.percent : position.line}</Text> : null}
+        {sheet.mounted && shownPanel ? <Panel theme={settings.theme} visible={sheet.visible} still={still} onClose={() => setPanel('')} title={shownPanel === 'contents' ? msg('media.reader.contents') : msg('media.reader.type')}>
+          {shownPanel === 'contents'
+            ? (book?.toc.length ? book.toc.map((item, i) => <TocRow key={`${item.href}-${i}`} item={item} theme={settings.theme} current={location?.tocHref === item.href}
+                onPress={() => { engine?.goTo(item.href); setPanel(''); setChrome(false); }} />)
+              : <Text style={m.text({ 'font-size': '14px', color: theme.quiet })}>{msg('media.reader.noContents')}</Text>)
+            : <TypeSettings settings={settings} onChange={onSettings} />}
+        </Panel> : null}
       </Animated.View>
-      <Animated.View onFocus={() => nudge(true)} pointerEvents={bars ? 'auto' : 'none'} style={bar({ bottom: 0, height: m.small ? 46 : 52, borderTopWidth: 1, borderTopColor: theme.rule }, 1)} testID="reader-bottom">
-        <ReaderButton icon="back" label={msg('media.reader.previous')} onPress={() => turn('previous')} color={theme.ink} testID="reader-previous" />
-        <ProgressTrack fraction={location?.fraction ?? 0} color={theme.ink} rule={theme.rule} onSeek={fraction => engine?.goToFraction(fraction)} />
-        <Text style={m.text({ 'font-size': '12px', color: theme.quiet, 'font-variant-numeric': 'tabular-nums', 'min-width': '92px', 'text-align': 'right' })} testID="reader-progress">
-          {location?.page && location.pages ? msg('media.reader.pageOf', { page: number(location.page), pages: number(location.pages) }) + ' · ' : ''}{progress}
-        </Text>
-        <View style={{ transform: [{ scaleX: -1 }] }}><ReaderButton icon="back" label={msg('media.reader.next')} onPress={() => turn('next')} color={theme.ink} testID="reader-next" /></View>
-      </Animated.View>
-      {!chrome && !panel && location ? <Text pointerEvents="none" style={[m.text({ 'font-size': '11px', color: theme.quiet }), { position: 'absolute', bottom: 14, alignSelf: 'center' }]}>{progress}</Text> : null}
-      {sheet.mounted && shownPanel ? <Panel theme={settings.theme} visible={sheet.visible} still={still} onClose={() => setPanel('')} title={shownPanel === 'contents' ? msg('media.reader.contents') : msg('media.reader.type')}>
-        {shownPanel === 'contents'
-          ? (book?.toc.length ? book.toc.map((item, i) => <TocRow key={`${item.href}-${i}`} item={item} theme={settings.theme} current={location?.tocHref === item.href}
-              onPress={() => { engine?.goTo(item.href); setPanel(''); setChrome(false); }} />)
-            : <Text style={m.text({ 'font-size': '14px', color: theme.quiet })}>{msg('media.reader.noContents')}</Text>)
-          : <TypeSettings settings={settings} onChange={onSettings} />}
-      </Panel> : null}
-    </Animated.View>
+    </View>
   );
 }
 
