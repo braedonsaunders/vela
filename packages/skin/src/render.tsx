@@ -9,7 +9,6 @@ import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
-import { searchStickyTop } from './search-sticky';
 import { heroSegmentDestination, isHeroControl, isHeroSegment } from './hero-pager';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
@@ -474,6 +473,16 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
   const offsetY = useRef(0);
+  // A route scrolled off its top sets flag keep-page-scrolled (kept through flag resets), so a
+  // shell can back its bar once the page moves under it (cleared as the route leaves).
+  const scrolled = useRef(false);
+  const noteScrolled = (y: number) => {
+    const on = y > 24;
+    if (on === scrolled.current) return;
+    scrolled.current = on;
+    host.setFlag('keep-page-scrolled', on);
+  };
+  useEffect(() => () => { if (route && scrolled.current) host.setFlag('keep-page-scrolled', false); }, []);
   const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY) : null), [route]);
   const inHero = useContext(HeroInteraction) || !!hero;
 
@@ -647,8 +656,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       host.setPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= width - 1 });
     } : undefined;
     // Android TV: the route's offset, for keeping focused controls below the shell's bar.
-    const onScroll = routeReveal ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      offsetY.current = e.nativeEvent.contentOffset.y;
+    const onScroll = route ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (routeReveal) offsetY.current = e.nativeEvent.contentOffset.y;
+      noteScrolled(e.nativeEvent.contentOffset.y);
     } : onPagerScroll;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
@@ -1223,13 +1233,6 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const Frame = frameFor(node);
   if (fx.hidden) return null;
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
-  const pinned = web && host.env.route === 'home' && node.slot === 'searchField'
-    ? {
-        position: 'sticky',
-        top: searchStickyTop(host.doc.document.slots?.shell, host.env.small, host.viewport, Number(style.paddingTop) || 0),
-        zIndex: 19,
-      } as unknown as ViewStyle
-    : undefined;
   const box = <View style={inner as ViewStyle}>{content}</View>;
   // The search field is centred and narrower than the page; the TV focus engine only moves to
   // what lies in line with the focused item, so a guide across the slot's full width hands
@@ -1239,7 +1242,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
     : box;
   return (
     <Inherited.Provider value={text}>
-      <Frame style={[style as ViewStyle, pinned]}>{reachable}</Frame>
+      <Frame style={style as ViewStyle}>{reachable}</Frame>
     </Inherited.Provider>
   );
 }

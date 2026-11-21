@@ -185,7 +185,14 @@ export const shell: Node = {
             // One even band behind both control rows; fading inside it visually shifts its centre.
             'background-color': veil(70),
             'backdrop-filter': 'blur(16px) saturate(1.2)',
+            transition: 'background-color 240ms linear',
           },
+          // Once the page scrolls under it the band is all but solid, so rows never read through
+          // the navigation; over the hero at rest the art still shows behind it.
+          states: [{ when: [{ test: 'flag:keep-page-scrolled' }], style: {
+            position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'pointer-events': 'none',
+            'background-color': veil(94), 'backdrop-filter': 'blur(24px) saturate(1.2)', transition: 'background-color 240ms linear',
+          } }],
         },
         {
           type: 'box',
