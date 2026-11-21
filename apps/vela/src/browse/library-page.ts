@@ -32,6 +32,15 @@ function sameExtras(state: ExtraState, id: string, revision: number, tab: string
   return state.id === id && state.revision === revision && state.tab === tab && state.query === query;
 }
 
+/** Whether a re-read answer shows the same as the one on show, rows aside (they reconcile by
+ * progress): every response carries fresh ranking receipts, so the answers never compare equal whole. */
+function sameExtrasAnswer(held: LibraryExtras, value: LibraryExtras): boolean {
+  const ids = (cards: LibraryExtras['collections']) => cards.map(card => card.id).join('\u0000');
+  return held.failed === value.failed && held.rowsLoad === value.rowsLoad && held.collectionsLoad === value.collectionsLoad
+    && held.genresLoad === value.genresLoad && held.collectionCursor === value.collectionCursor
+    && ids(held.collections) === ids(value.collections) && JSON.stringify(held.genres) === JSON.stringify(value.genres);
+}
+
 export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: string, facetTitle?: string): LibraryState {
   const store = useVela();
   useVelaState(state => state.libraries.load);
@@ -101,28 +110,30 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     if (!id || !kind || !focused || liveTab || viewTab) return;
     // A modal person page keeps this library mounted. Keep its accumulated pages on return.
     const check = `${id}|${revision}|${collectionTab ?? ''}|${tabQuery}|${progressRevision}|${extraAttempt}`;
-    const shown = sameExtras(extraState, id, revision, collectionTab, tabQuery) && !!extraState.value && !extraState.loading && !extraState.failed;
-    if (shown && (extraState.progressRevision === progressRevision && extraState.attempt === extraAttempt && !extraState.value!.failed || checked.current === check)) {
+    // On show: this view's answer, possibly partial (a read cut short when the section was left).
+    const shown = sameExtras(extraState, id, revision, collectionTab, tabQuery) && !!extraState.value && !extraState.failed;
+    if (shown && !extraState.loading && (extraState.progressRevision === progressRevision && extraState.attempt === extraAttempt && !extraState.value!.failed || checked.current === check)) {
       setExtraState(previous => previous.moreLoading ? { ...previous, moreLoading: false } : previous);
       return;
     }
     let active = true;
     extraGeneration.current++;
     if (shown) {
-      // A view on show is read again quietly (progress moved, part of it failed last time): it
-      // stays as it is, and changes only if the answer does. Redrawing a whole library page for an
-      // equal answer held a TV's JS thread for two seconds on every return to the section. A
-      // changed answer takes the new places into the rows on show (reconcileProgressRows):
-      // unchanged rows and cards keep their objects, so only what moved draws again.
+      // A view on show is read again quietly (progress moved, part of it failed last time, or its
+      // read was cut short when the section was left): it stays as it is, and changes only if
+      // what it shows does. Redrawing a whole library page for an equal answer held a TV's JS
+      // thread for 0.6-2 s on returns to the section. A changed answer takes the new places into
+      // the rows on show (reconcileProgressRows): unchanged rows and cards keep their objects, so
+      // only what moved draws again.
       const held = extraState.value!;
-      const heldAnswer = JSON.stringify(held);
+      const partial = extraState.loading;
       void store.catalogue.libraryExtras(id, kind, undefined, collectionTab, tabQuery, progressRevision > 0).then(value => {
         if (!active) return;
         checked.current = check;
-        if (value && JSON.stringify(value) !== heldAnswer) {
-          startTransition(() => setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false,
-            value: { ...value, rows: reconcileProgressRows(held.rows, value.rows, true) } }));
-        }
+        if (!value) return;
+        const rows = reconcileProgressRows(held.rows, value.rows, true);
+        if (!partial && rows === held.rows && sameExtrasAnswer(held, value)) return;
+        startTransition(() => setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value: { ...value, rows } }));
       }).catch(() => { if (active) checked.current = check; });
       return () => { active = false; extraGeneration.current++; };
     }
