@@ -41,7 +41,7 @@ import { VersionsControl } from './widgets/title-actions';
 import { SeasonSelector } from './widgets/season-selector';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
-import { EASE_IN, MOTION } from './presence';
+import { Arrive, EASE_IN, MOTION } from './presence';
 import { needsAnimatedFrame } from './animated-frame';
 import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
@@ -330,6 +330,42 @@ function MenuPresence({ shown, still, children }: { shown: boolean; still: boole
   return <Leaving.Provider value={!shown}>{children}</Leaving.Provider>;
 }
 
+/** The hero's artwork stage crossfades: the featured title arriving exposes over the one leaving,
+ * which stays drawn beneath until the arrival's motion has run, instead of the page's ground
+ * showing between them. Only a stage drawn out of flow (absolute) is layered; copy in flow simply
+ * re-enters. */
+function HeroStage({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx: Ctx }) {
+  const { env } = useHost();
+  const current = collection(node.over, ctx, env, node.limit).find(c => holds(node.when, c, env));
+  const key = current ? itemKey(current, node.over) : '';
+  const layers = useRef<{ key: string; ctx: Ctx }[]>([]);
+  const [, refresh] = useState(0);
+  if (!current) layers.current = [];
+  else if (layers.current[layers.current.length - 1]?.key !== key) layers.current = [...layers.current.filter(layer => layer.key !== key).slice(-1), { key, ctx: current }];
+  else layers.current = [...layers.current.slice(0, -1), { key, ctx: current }];
+  const settle = (node.item.motion?.duration ?? 0) + (node.item.motion?.delay ?? 0) + 60;
+  useEffect(() => {
+    if (layers.current.length < 2) return;
+    const timer = setTimeout(() => { layers.current = layers.current.slice(-1); refresh(value => value + 1); }, settle);
+    return () => clearTimeout(timer);
+  }, [key, settle]);
+  return <>{layers.current.map(layer => <SkinNode key={layer.key} node={node.item} ctx={layer.ctx} hero />)}</>;
+}
+
+/** The hero's copy: the first featured title draws as the section does (instantly once ready); each
+ * one after it arrives with the shared motion, so the copy never snaps from one title to the next. */
+function HeroCopy({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx: Ctx }) {
+  const { env } = useHost();
+  const items = collection(node.over, ctx, env, node.limit).filter(c => holds(node.when, c, env));
+  const first = useRef<string | null>(null);
+  if (first.current === null && items[0]) first.current = itemKey(items[0], node.over);
+  return <>{items.map(c => {
+    const key = itemKey(c, node.over);
+    const item = <SkinNode key={key} node={node.item} ctx={c} hero />;
+    return key === first.current ? item : <Arrive key={key} still={env.still}>{item}</Arrive>;
+  })}</>;
+}
+
 function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
@@ -347,6 +383,10 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     </View>;
   }
   if (node.kind === 'repeat') {
+    if (node.over === 'home.hero' && node.item.kind === 'box' && node.item.base.style.position === 'absolute' && !focusableWithin(node.item) && !Platform.isTV && !env.still) {
+      return <HeroStage node={node} ctx={ctx} />;
+    }
+    if (node.over === 'home.hero' && !Platform.isTV && !env.still) return <HeroCopy node={node} ctx={ctx} />;
     if (node.over === 'detail.seasons' && (env.detail?.seasons.length ?? 0) > 8) {
       return <SeasonSelector ctx={ctx} />;
     }
