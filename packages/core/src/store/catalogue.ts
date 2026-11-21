@@ -127,6 +127,17 @@ export class Catalogue {
     catch { return false; }
   }
   private readonly libraryReads = new Map<string, { pages: number; promise: Promise<void> }>();
+  /** Each library view's last recommendations, collections and genres in this session (a few
+   * dozen views at most), so a section drawn again or prefetched shows them at once. */
+  private readonly extrasHeld = new Map<string, { epoch: number; progressRevision: number; value: LibraryExtras }>();
+  /** Reads of extras in flight, shared by a prefetch and the page that then opens. */
+  private readonly extrasReads = new Map<string, { progressRevision: number; promise: Promise<LibraryExtras | undefined> }>();
+
+  /** The session's last answer for a library view's extras, with the progress revision it was read at. */
+  cachedLibraryExtras(id: string, tab?: string, search?: string): { progressRevision: number; value: LibraryExtras } | undefined {
+    const held = this.extrasHeld.get(extrasKey(id, tab, search));
+    return held && held.epoch === this.session.epoch ? held : undefined;
+  }
   private readonly librarySnapshots = new Map<string, { cursor?: string; seen: Set<string>; indices: Map<string, number> }>();
   /** What each collection has read so far, and where the server said to continue. */
   private readonly collectionReads = new Map<string, { items: V.RowEntry[]; cursor?: string; continuation: string }>();
@@ -272,6 +283,31 @@ export class Catalogue {
   /** A library's recommendations, collections and genres, read together. `onRows` has the
    * recommendations as soon as they arrive, so they show while the others are still read. */
   async libraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void, tab?: string, search?: string, freshRows = false): Promise<LibraryExtras | undefined> {
+    const key = extrasKey(id, tab, search);
+    const progressRevision = this.box.get().home?.progressRevision ?? 0;
+    const shared = this.extrasReads.get(key);
+    if (shared && shared.progressRevision === progressRevision) {
+      const value = await shared.promise;
+      if (value) onRows?.(value);
+      return value;
+    }
+    const epoch = this.session.epoch;
+    const promise = this.readLibraryExtras(id, kind, onRows, tab, search, freshRows);
+    this.extrasReads.set(key, { progressRevision, promise });
+    try {
+      const value = await promise;
+      if (value && !value.failed && epoch === this.session.epoch) {
+        this.extrasHeld.delete(key);
+        this.extrasHeld.set(key, { epoch, progressRevision, value });
+        for (const old of this.extrasHeld.keys()) { if (this.extrasHeld.size <= EXTRAS_HELD) break; this.extrasHeld.delete(old); }
+      }
+      return value;
+    } finally {
+      if (this.extrasReads.get(key)?.promise === promise) this.extrasReads.delete(key);
+    }
+  }
+
+  private async readLibraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void, tab?: string, search?: string, freshRows = false): Promise<LibraryExtras | undefined> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     if (!hasLibraryRecommendations(adapter)) return undefined;
@@ -495,4 +531,9 @@ function libraryModel(
     ...(Number.isSafeInteger(result.total) && result.total! >= 0 ? { total: result.total } : {}),
     pages,
   };
+}
+
+const EXTRAS_HELD = 24;
+function extrasKey(id: string, tab?: string, search?: string): string {
+  return `${id}\u0000${tab ?? ''}\u0000${search ?? ''}`;
 }

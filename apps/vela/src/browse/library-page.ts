@@ -1,7 +1,7 @@
 // One library page: its view (the URL's sort and filters) read from core's store when it is not
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { libraryCardArtwork, libraryTabs, libraryKey, type Card, type LibraryExtras, type LibraryLiveModel, type LibraryQuery } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
@@ -21,6 +21,20 @@ export interface LibraryState {
   /** Read the view again after a failure. */
   retry(): void;
 }
+
+interface ExtraState {
+  id: string; tab?: string; query?: string; attempt?: number; revision: number; progressRevision: number;
+  loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras;
+  /** Read again while the last answer stays on show. */
+  refreshing?: boolean;
+}
+
+/** Whether the extras held are this view's (of any progress revision: a stale answer shows while it refreshes). */
+function sameExtras(state: ExtraState, id: string, revision: number, tab: string | undefined, query: string): boolean {
+  return state.id === id && state.revision === revision && state.tab === tab && state.query === query;
+}
+
+const run = (update: () => void) => update();
 
 export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: string, facetTitle?: string): LibraryState {
   const store = useVela();
@@ -65,7 +79,13 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const liveGeneration = useRef(0);
   const [liveAttempt, setLiveAttempt] = useState(0);
   const [liveState, setLiveState] = useState<{ key: string; loading: boolean; failed: boolean; moreLoading?: boolean; items: Card[]; filters: LibraryLiveModel['filters']; cursor: string }>({ key: '', loading: false, failed: false, items: [], filters: [], cursor: '' });
-  const [extraState, setExtraState] = useState<{ id: string; tab?: string; query?: string; attempt?: number; revision: number; progressRevision: number; loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras }>({ id: '', revision: -1, progressRevision: -1, loading: false, failed: false });
+  // A section drawn again (Android releases hidden ones) or prefetched starts from the
+  // session's last answer for this view, and refreshes it quietly if progress moved since.
+  const [extraState, setExtraState] = useState<ExtraState>(() => {
+    const cached = store.catalogue.cachedLibraryExtras(id, collectionTab, tabQuery);
+    return cached ? { id, tab: collectionTab, query: tabQuery, attempt: 0, revision, progressRevision: cached.progressRevision, loading: false, failed: false, value: cached.value }
+      : { id: '', revision: -1, progressRevision: -1, loading: false, failed: false };
+  });
 
   useEffect(() => {
     if (!id || !liveTab || !focused || !kind) return;
@@ -88,19 +108,24 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     }
     let active = true;
     extraGeneration.current++;
-    setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: true, failed: false });
+    // A refresh of the same view (progress moved, a retry) keeps what it shows meanwhile.
+    const held = sameExtras(extraState, id, revision, collectionTab, tabQuery) && !extraState.failed ? extraState.value : undefined;
+    setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: true, failed: false, value: held, refreshing: !!held });
     // The recommendations show as soon as they arrive; collections and genres follow.
     const rows = (value: LibraryExtras) => {
-      if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.progressRevision === progressRevision && previous.loading ? { ...previous, value } : previous);
+      if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.progressRevision === progressRevision && previous.loading
+        ? { ...previous, value: previous.value ? { ...previous.value, rows: value.rows, rowsLoad: value.rowsLoad } : value } : previous);
     };
+    // A quiet refresh lands as a transition: the page it redraws is already on show.
+    const settle = (next: ExtraState) => { if (active) (held ? startTransition : run)(() => setExtraState(next)); };
     void store.catalogue.libraryExtras(id, kind, rows, collectionTab, tabQuery, progressRevision > 0).then(value => {
-      if (active) setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value });
+      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: false, value });
     }).catch(() => {
-      if (active) setExtraState({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: true });
+      settle({ id, tab: collectionTab, query: tabQuery, attempt: extraAttempt, revision, progressRevision, loading: false, failed: !held, value: held });
     });
     return () => { active = false; extraGeneration.current++; };
   }, [store, id, kind, revision, progressRevision, focused, extraAttempt, canRecommend, collectionTab, tabQuery, liveTab, viewTab]);
-  const nativeExtras = extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.tab === collectionTab && extraState.query === tabQuery ? extraState.value : undefined;
+  const nativeExtras = sameExtras(extraState, id, revision, collectionTab, tabQuery) ? extraState.value : undefined;
   const rawExtras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
@@ -130,7 +155,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       layout: viewTab?.layout ?? 'grid',
       viewLoad: usableView === 'live' ? liveState.failed ? 'failed' : liveState.loading ? 'loading' : 'ready'
         : usableView === 'library' || usableView === 'view' || usableView === 'genres' && !canRecommend ? current?.load ?? 'idle'
-        : extraState.id !== id || extraState.revision !== revision || extraState.progressRevision !== progressRevision || extraState.tab !== collectionTab || extraState.query !== tabQuery ? 'idle'
+        : !sameExtras(extraState, id, revision, collectionTab, tabQuery) ? 'idle'
         : extraState.failed ? 'failed'
         : (usableView === 'recommended' ? nativeExtras?.rowsLoad : usableView === 'genres' ? nativeExtras?.genresLoad : nativeExtras?.collectionsLoad)
           ?? (extraState.loading ? 'loading' : nativeExtras?.failed ? 'failed' : nativeExtras ? 'ready' : 'idle'),
@@ -143,7 +168,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       liveAvailable,
       viewRequest: requestedView ?? '',
       extras,
-      extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.failed) || extraState.id === id && extraState.loading),
+      extrasLoading: usableView !== 'live' && canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.progressRevision === progressRevision && extraState.failed) || extraState.id === id && extraState.loading && !extraState.refreshing),
       extrasFailed: usableView !== 'live' && extraState.id === id && extraState.progressRevision === progressRevision && (extraState.failed || !!extras?.failed),
     };
   }, [current, earlier, browseQuery, facetTitle, selectedTab?.id, selectedTab?.card, viewTab?.layout, usableView, requestedView, extras, extraState, canRecommend, liveAvailable, nativeExtras, id, revision, progressRevision, tabQuery, liveFilter, liveState]);

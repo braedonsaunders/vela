@@ -689,6 +689,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const set = (kind: keyof Interaction, on: boolean) => {
     setUi(u => (u[kind] === on ? u : { ...u, [kind]: on }));
     if (kind !== 'active') groupValue?.report(kind, on);
+    if (on && node.press) host.prefetch?.(node.press.action, cardArg);
   };
 
   // Opening search folds the route (home's hero) and pins the field at its top: the route starts

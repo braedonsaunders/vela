@@ -205,3 +205,23 @@ test('a server-counted total reaches the library model; a missing or invalid one
     expect(g.box.get().library[libraryKey('movies', {})]?.value).not.toHaveProperty('total');
   }
 });
+
+test('a library view\'s extras are held for the session and one read serves a prefetch and its page', async () => {
+  const box = new StateBox({ library: {}, titles: {}, related: {}, collections: {}, home: { progressRevision: 3 } } as unknown as VelaState);
+  let reads = 0;
+  const rows = deferred<never[]>();
+  const adapter = { libraryRows: () => { reads++; return rows.promise; }, libraryCollections: async () => ({ items: [] }), libraryGenres: async () => [] };
+  const session = { epoch: 1, onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
+  expect(catalogue.cachedLibraryExtras('movies', undefined, '')).toBeUndefined();
+  const prefetch = catalogue.libraryExtras('movies', 'movies', undefined, undefined, '');
+  const page = catalogue.libraryExtras('movies', 'movies', undefined, undefined, '');
+  rows.resolve([]);
+  expect(await page).toBe(await prefetch);
+  expect(reads).toBe(1);
+  expect(catalogue.cachedLibraryExtras('movies', undefined, '')?.progressRevision).toBe(3);
+  expect(catalogue.cachedLibraryExtras('movies', 'collections-tab', '')).toBeUndefined();
+  // Another session's answer is never shown.
+  session.epoch = 2;
+  expect(catalogue.cachedLibraryExtras('movies', undefined, '')).toBeUndefined();
+});

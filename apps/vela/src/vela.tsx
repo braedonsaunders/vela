@@ -48,6 +48,7 @@ import { useViewState } from './view-state';
 import { actionHref, webHref } from './action-href';
 import { useSearchAddress } from './use-search-address';
 import { pageTitle } from './page-title';
+import { prefetchLibrary, prefetchLibrariesWhenIdle } from './browse/prefetch';
 
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
@@ -137,6 +138,14 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
     void store.home.ensure();
     store.home.ensureLibraries();
   }, [store, signedIn, state.home.load, state.libraries.load]);
+  // Once home has drawn, read the first libraries' first pages while the app is idle, so their
+  // first visit draws at once.
+  const homeReady = signedIn && state.home.load === 'ready';
+  const libraryIds = (state.libraries.value ?? []).filter(library => library.kind !== 'live').map(library => library.id).join(',');
+  useEffect(() => {
+    if (!homeReady || !libraryIds) return;
+    return prefetchLibrariesWhenIdle(store, libraryIds.split(','));
+  }, [store, homeReady, libraryIds, auth.revision]);
 
   const serverSwitch = useMemo(
     () => ({ servers, actions: store.servers, brandingName: state.appearance.value?.branding?.name, consoleUrl, openConnect: () => router.push('/connect') }),
@@ -352,6 +361,10 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [searching, store]);
 
   const readEnvironment = useMemo(createEnvironmentReader, [state.auth.revision]);
+  // A pointer over (or focus on) a section's destination reads its first page ahead.
+  const prefetch = useCallback<NonNullable<SkinHost['prefetch']>>((action, arg) => {
+    if (action === 'library' && arg) void prefetchLibrary(store, arg).catch(() => {});
+  }, [store]);
   const hosts = useRef(new Map<string, { inputs: unknown[]; host: SkinHost; libraries: unknown }>());
   const host = useCallback((route: RouteName, entry: string, library?: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;
@@ -395,10 +408,11 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       setFlag: view.setFlag,
       setPager: previous?.host.setPager ?? ((rowId, pager) => view.setPager(pagerScope(route, entry), rowId, pager)),
       loadMore,
+      prefetch,
     };
     hosts.current.set(key, { inputs, host: result, libraries: state.libraries.value });
     return result;
-  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore]);
+  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore, prefetch]);
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(
