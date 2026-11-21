@@ -132,6 +132,7 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
   const lit = state.hover || state.focus;
   return (
     <Pressable {...handlers} onPress={onPress} testID={testID} accessibilityRole="radio" accessibilityState={{ checked: selected }}
+      {...(Platform.OS === 'web' ? { 'aria-checked': selected } : {})}
       style={[NO_RING, { paddingHorizontal: 14, height: 34, borderRadius: 17, justifyContent: 'center',
         backgroundColor: selected ? m.ui.ink : lit ? m.ui.controlHover : m.ui.control },
         state.focus ? m.box({ 'box-shadow': `0px 0px 0px 3px ${m.ui.focusHalo}` }) : {}]}>

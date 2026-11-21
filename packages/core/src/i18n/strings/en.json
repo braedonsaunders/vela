@@ -685,6 +685,8 @@
   "media.reader.theme.sepia": "Sepia",
   "media.reader.theme.dark": "Dark",
   "media.reader.size": "Text size",
+  "media.reader.smaller": "Smaller text",
+  "media.reader.larger": "Larger text",
   "media.reader.font": "Font",
   "media.reader.font.serif": "Serif",
   "media.reader.font.sans": "Sans",

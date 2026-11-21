@@ -204,7 +204,7 @@ function TypeSettings({ settings, onChange }: { settings: ReaderSettings; onChan
   return (
     <View style={{ paddingHorizontal: 4 }}>
       {label(msg('media.reader.theme'))}
-      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup">
+      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.reader.theme')}>
         {(['light', 'sepia', 'dark'] as const).map(theme => (
           <Option key={theme} selected={settings.theme === theme} onPress={() => set({ theme })} colours={colours} testID={`reader-theme-${theme}`}
             swatch={READER_THEMES[theme]} label={msg(`media.reader.theme.${theme}`)} />
@@ -212,33 +212,35 @@ function TypeSettings({ settings, onChange }: { settings: ReaderSettings; onChan
       </View>
       {label(msg('media.reader.size'))}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Option label="A−" selected={false} onPress={() => set({ fontSize: Math.max(70, settings.fontSize - 10) })} colours={colours} testID="reader-smaller" small />
+        <Option label="A−" name={msg('media.reader.smaller')} onPress={() => set({ fontSize: Math.max(70, settings.fontSize - 10) })} colours={colours} testID="reader-smaller" small />
         <Text style={m.text({ flex: '1', 'text-align': 'center', 'font-size': '14px', color: colours.ink, 'font-variant-numeric': 'tabular-nums' })} testID="reader-size">{percent(settings.fontSize / 100)}</Text>
-        <Option label="A+" selected={false} onPress={() => set({ fontSize: Math.min(220, settings.fontSize + 10) })} colours={colours} testID="reader-larger" />
+        <Option label="A+" name={msg('media.reader.larger')} onPress={() => set({ fontSize: Math.min(220, settings.fontSize + 10) })} colours={colours} testID="reader-larger" />
       </View>
       {label(msg('media.reader.font'))}
-      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup">
+      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.reader.font')}>
         {(['serif', 'sans', 'publisher'] as const).map(font => <Option key={font} label={msg(`media.reader.font.${font}`)} selected={settings.font === font} onPress={() => set({ font })} colours={colours} testID={`reader-font-${font}`} />)}
       </View>
       {label(msg('media.reader.spacing'))}
-      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup">
+      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.reader.spacing')}>
         {[1.3, 1.5, 1.8].map(lineHeight => <Option key={lineHeight} label={msg(`media.reader.spacing.${lineHeight === 1.3 ? 'tight' : lineHeight === 1.5 ? 'normal' : 'loose'}`)} selected={settings.lineHeight === lineHeight} onPress={() => set({ lineHeight })} colours={colours} />)}
       </View>
       {label(msg('media.reader.layout'))}
-      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup">
+      <View style={{ flexDirection: 'row', gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel={msg('media.reader.layout')}>
         {(['paginated', 'scrolled'] as const).map(flow => <Option key={flow} label={msg(`media.reader.flow.${flow}`)} selected={settings.flow === flow} onPress={() => set({ flow })} colours={colours} testID={`reader-flow-${flow}`} />)}
       </View>
     </View>
   );
 }
 
-function Option({ label, selected, onPress, colours, swatch, testID, small = false }: {
-  label: string; selected: boolean; onPress(): void; colours: (typeof READER_THEMES)[ReaderTheme]; swatch?: (typeof READER_THEMES)[ReaderTheme]; testID?: string; small?: boolean;
+/** One choice of a setting (a radio), or with no `selected` an action such as a size step (a button named `name`). */
+function Option({ label, name, selected, onPress, colours, swatch, testID, small = false }: {
+  label: string; name?: string; selected?: boolean; onPress(): void; colours: (typeof READER_THEMES)[ReaderTheme]; swatch?: (typeof READER_THEMES)[ReaderTheme]; testID?: string; small?: boolean;
 }) {
   const m = useMediaLook();
   const { state, handlers } = useInteraction();
   return (
-    <Pressable {...handlers} onPress={onPress} testID={testID} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={label}
+    <Pressable {...handlers} onPress={onPress} testID={testID} accessibilityLabel={name ?? label}
+      {...(selected === undefined ? { accessibilityRole: 'button' as const } : { accessibilityRole: 'radio' as const, accessibilityState: { checked: selected }, ...(Platform.OS === 'web' ? { 'aria-checked': selected } : {}) })}
       style={[NO_RING, { flex: 1, height: swatch ? 64 : 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 4,
         backgroundColor: swatch ? swatch.page : state.hover || state.focus ? `${colours.ink}12` : `${colours.ink}08`,
         borderWidth: selected ? 2 : 1, borderColor: selected ? colours.link : colours.rule, outlineColor: colours.ink, outlineWidth: state.focus ? 2 : 0, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle]}>
