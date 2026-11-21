@@ -31,14 +31,23 @@ export interface ReaderLocation {
   fraction: number;
   /** The chapter the page is in. */
   chapter: string;
-  /** Page within the book when the engine knows it (1-based), and the total. */
+  /** Page within the book (1-based) and the total, for fixed-layout books (comics, PDFs) whose pages are real. */
   page?: number;
   pages?: number;
+  /** Pages left in the chapter, for paginated reflowable books, when known. */
+  pagesLeft?: number;
   /** The current TOC entry's href, to mark it in the contents. */
   tocHref?: string;
 }
 
-export interface ReaderBook { title: string; author: string; toc: TocItem[]; rtl: boolean }
+export interface ReaderBook {
+  title: string;
+  author: string;
+  toc: TocItem[];
+  rtl: boolean;
+  /** The book's own cover image (an object URL owned by the engine), often sharper than the server's. */
+  cover?: string;
+}
 
 export interface ReaderEngine {
   /** Open the document into `host` (a DOM element on the web) at a saved locator. */
@@ -49,7 +58,8 @@ export interface ReaderEngine {
   goToFraction(fraction: number): void;
   apply(settings: ReaderSettings): void;
   onLocation(listener: (location: ReaderLocation) => void): () => void;
-  /** Taps, clicks and keys inside the book's frame, which the page cannot see itself. */
+  /** Taps, clicks and keys inside the book's frame, which the page cannot see itself. Taps are
+   * already sorted by where they land: the outer quarters turn the page, the middle toggles the controls. */
   onInput(listener: (input: 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape') => void): () => void;
   destroy(): void;
 }
