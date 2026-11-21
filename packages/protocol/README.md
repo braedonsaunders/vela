@@ -44,6 +44,8 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
 | GET | /titles/:id/trailer-preview | — | TrailerPreviewResponse |
 | POST | /titles/:id/watch | WatchRequest | Ack |
+| POST | /titles/:id/read | ReadingRequest | ReadingGrant (features.reading) |
+| POST | /titles/:id/reading-progress | ReadingProgressRequest | Ack (features.reading) |
 | POST | /search | SearchRequest | SearchResponse |
 | POST | /search/ai | AISearchRequest | AISearchJob |
 | GET | /search/ai/:id | — | AISearchJob |
@@ -688,3 +690,14 @@ unavailable. A `guide_window_too_dense` error includes
 `suggest: { maxChannels, maxWindowMinutes }`; split the request rather than treating
 an incomplete row as ready. Servers without this capability retain the paginated
 `GET /live/guide` path.
+
+## Media classes, audio and reading
+
+Music, books, audiobooks and podcasts follow [media kinds](../../docs/media-kinds.md).
+`Library.media` and `Title.media` (class, role, index, disc, parents, credits,
+reading) are additive; `Title.kind` keeps the movie/show/season/episode projection.
+Audio plays through `POST /playback` with `PlaybackPlan.media = 'audio'`. Readable
+titles open with `POST /titles/:id/read` (a short-lived range-capable URL) and
+save `{locator, fraction}` with `POST /titles/:id/reading-progress`; the progress
+returns as `WatchState.reading`. Clients gate on `features.mediaClasses`,
+`features.audioPlayback` and `features.reading`.

@@ -1,25 +1,33 @@
-import { router, useFocusEffect, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { router, useFocusEffect, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useCallback, useEffect } from 'react';
 import { BackHandler, Platform } from 'react-native';
 import { backFromNavigation, useBackHeld } from '@vela/skin/src/menu-key';
 import { DocumentScreen } from '../../src/screen';
 import { useVela } from '../../src/vela';
 import { clearTitleNavigation, isTitleNavigation } from '../../src/title-origin';
+import { useVelaState } from '@vela/core/react';
+import { isMediaPageRole } from '@vela/skin/src/widgets/media';
+import { MediaTitleScreen } from '../../src/media/screen';
 
 export default function Title() {
-  const { id, library } = useLocalSearchParams<{ id: string; library?: string }>();
+  const { id, library, media } = useLocalSearchParams<{ id: string; library?: string; media?: string }>();
+  // A music, book or audiobook title draws its own page (docs/media-kinds.md): known from the card
+  // that opened it, or from the title once read.
+  const role = useVelaState(state => state.titles[id ?? '']?.value?.title[0]?.media?.role);
+  const mediaPage = isMediaPageRole(role ?? media ?? '');
   const { openTitle } = useVela();
   const openedInApp = isTitleNavigation(id);
   // tvOS Menu also reaches the native stack. Close an open description/menu first.
   usePreventRemove(useBackHeld(), backFromNavigation);
   useEffect(() => (id ? openTitle(id) : undefined), [id, openTitle]);
   useEffect(() => () => clearTitleNavigation(id), [id]);
+  const back = useCallback(() => {
+    if (openedInApp && router.canGoBack()) router.back();
+    else if (library) router.replace({ pathname: '/library/[id]', params: { id: library } });
+    else router.replace('/');
+  }, [library, openedInApp]);
+  const focused = useIsFocused();
   useFocusEffect(useCallback(() => {
-    const back = () => {
-      if (openedInApp && router.canGoBack()) router.back();
-      else if (library) router.replace({ pathname: '/library/[id]', params: { id: library } });
-      else router.replace('/');
-    };
     if (Platform.OS !== 'web') {
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => { back(); return true; });
       return () => subscription.remove();
@@ -36,6 +44,7 @@ export default function Title() {
     window.addEventListener('keydown', onKey);
     window.addEventListener('click', onClick);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); };
-  }, [library, openedInApp]));
+  }, [back]));
+  if (mediaPage) return <MediaTitleScreen id={id ?? ''} library={library} active={focused} back={back} />;
   return <DocumentScreen route="title" entry={id ?? ''} library={library} />;
 }

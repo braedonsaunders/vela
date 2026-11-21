@@ -18,6 +18,7 @@ import { initialPreviews, Previews, type PreviewState } from './previews';
 import { initialPlaylists, Playlists, type PlaylistsState } from './playlists';
 import { Receipts } from './receipts';
 import { initialSearch, Search, type SearchState } from './search';
+import { Media, type ChildrenModel } from './media';
 import { initialServers, Servers, type ServersState } from './servers';
 import { Session } from './session';
 import { idle, StateBox, type Loadable } from './state';
@@ -36,6 +37,8 @@ export interface VelaState {
   library: Record<string, Loadable<LibraryModel>>;
   /** Collections by collection ID. */
   collections: Record<string, Loadable<CollectionModel>>;
+  /** A media title's children (tracks, albums, books, parts) by title ID. */
+  children: Record<string, Loadable<ChildrenModel>>;
   playlists: PlaylistsState;
   search: SearchState;
   playback: PlaybackState;
@@ -76,6 +79,7 @@ export interface Vela {
   receipts: Receipts;
   previews: Previews;
   playlists: Playlists;
+  media: Media;
 }
 
 const initialState: VelaState = {
@@ -88,6 +92,7 @@ const initialState: VelaState = {
   rows: {},
   library: {},
   collections: {},
+  children: {},
   playlists: initialPlaylists,
   search: initialSearch,
   playback: initialPlayback,
@@ -159,6 +164,7 @@ export function createVela(options: VelaOptions): Vela {
     appearance,
     receipts: new Receipts(session),
     previews,
+    media: new Media(box, session, width),
   };
 }
 

@@ -2,6 +2,7 @@
 // and the libraries the shell lists as destinations. A failed home is retried on the server's
 // terms (its retry policy and Retry-After), at most twice, then left for the viewer to retry.
 import type * as V from '../wire';
+import { mediaClass } from '../media';
 import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
@@ -341,9 +342,9 @@ export class Home {
       let cursor: string | undefined;
       for (let n = 0; n < LIBRARY_PAGES; n++) {
         const page = await connection.adapter.libraries({ cursor, limit: 100 });
-        for (const { id, name, kind, artwork, dateDisplay = 'year' } of page.items) {
+        for (const { id, name, kind, artwork, dateDisplay = 'year', media } of page.items) {
           const image = artwork.find(a => a.kind === 'backdrop');
-          items.push({ id, name, kind, dateDisplay, backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
+          items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
         }
         if (page.continuation === 'exhausted') {
           const first = items.find(item => item.kind !== 'live');

@@ -351,6 +351,18 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.TitlePlaylists>('GET', `/titles/${segment(titleId)}/playlists`, undefined, CACHED);
   }
 
+  children(id: string, cursor?: string, limit?: number) {
+    return this.http.request<V.ChildrenPage>('GET', `/titles/${segment(id)}/children${query({ cursor, limit: limit === undefined ? undefined : String(limit) })}`, undefined, CACHED);
+  }
+
+  openReading(id: string, request: V.ReadingRequest) {
+    return this.http.request<V.ReadingGrant>('POST', `/titles/${segment(id)}/read`, request);
+  }
+
+  saveReadingProgress(id: string, request: V.ReadingProgressRequest) {
+    return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/reading-progress`, request);
+  }
+
   async detail(id: string, fresh = false) {
     const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, { ...CACHED, fresh });
     if (this.personSupport === 'unknown') {

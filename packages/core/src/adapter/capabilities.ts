@@ -77,6 +77,24 @@ export function hasLibraryLive(adapter: ServerAdapter): adapter is ServerAdapter
     && 'startLibraryLive' in adapter && typeof adapter.startLibraryLive === 'function';
 }
 
+/** A title's children (an artist's albums, an album's tracks, a series' books), page by page. */
+export interface TitleChildren {
+  children(id: string, cursor?: string, limit?: number): Promise<V.ChildrenPage>;
+}
+export function hasTitleChildren(adapter: ServerAdapter): adapter is ServerAdapter & TitleChildren {
+  return 'children' in adapter && typeof adapter.children === 'function';
+}
+
+/** Readable documents (docs/media-kinds.md): a short-lived document URL and shared reading progress. */
+export interface Reading {
+  openReading(id: string, request: V.ReadingRequest): Promise<V.ReadingGrant>;
+  saveReadingProgress(id: string, request: V.ReadingProgressRequest): Promise<V.Ack>;
+}
+export function hasReading(adapter: ServerAdapter): adapter is ServerAdapter & Reading {
+  return 'openReading' in adapter && typeof adapter.openReading === 'function'
+    && 'saveReadingProgress' in adapter && typeof adapter.saveReadingProgress === 'function';
+}
+
 /** Filmography by server person identifier, optionally within one library. */
 export interface PersonFilmography {
   personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>>;

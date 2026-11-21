@@ -8,6 +8,7 @@ import {
   hasLiveTv,
   hasLibraryLive,
   hasPasswordSignIn,
+  hasReading,
   hasProactiveFallback,
   hasQuickConnectSignIn,
   hasTrackChanges,
@@ -52,6 +53,10 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(hasViewerPlaylists(adapter) && description.features.playlists
         ? { playlists: description.features.playlists }
         : {}),
+      // Media classes (docs/media-kinds.md): stated by the server; reading also needs the adapter.
+      ...(description.features.mediaClasses ? { mediaClasses: description.features.mediaClasses } : {}),
+      ...(description.features.audioPlayback ? { audioPlayback: description.features.audioPlayback } : {}),
+      ...(hasReading(adapter) && description.features.reading ? { reading: description.features.reading } : {}),
     },
   };
 }

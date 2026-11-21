@@ -36,7 +36,13 @@ export interface ServerCapabilities {
   plexHomeProfiles?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
     descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
-    playlists?: Feature & { maxEntries: number } };
+    playlists?: Feature & { maxEntries: number };
+    /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
+    mediaClasses?: Feature & { classes: MediaClass[] };
+    /** POST /titles/:id/read and reading progress, for these formats. */
+    reading?: Feature & { formats: ReadingFormat[] };
+    /** Audio-only plans (PlaybackPlan.media = 'audio'). */
+    audioPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -71,7 +77,28 @@ export interface ArtworkRef {
   sizes: { width: number; height: number; url: string }[]; blurHash?: string; thumbHash?: string; color?: string;
 }
 export type TitleKind = 'movie' | 'show' | 'season' | 'episode';
-export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean; /** Most recent viewing activity, RFC3339. */ lastViewedAt?: Timestamp }
+/** What a library holds (docs/media-kinds.md). Clients read an unknown value as 'video'. */
+export type MediaClass = 'video' | 'music' | 'audiobook' | 'book' | 'podcast' | 'photo';
+/** What one level of a kind is. Clients read an unknown value as 'item'. */
+export type MediaRole = 'item' | 'artist' | 'album' | 'track' | 'series' | 'book' | 'audiobook' | 'part' | 'show' | 'episode' | 'collection';
+export type ReadingFormat = 'epub' | 'pdf' | 'cbz';
+export type MediaCreditRole = 'artist' | 'albumArtist' | 'author' | 'narrator' | 'composer' | 'illustrator' | 'translator' | 'host';
+/** A title's media class, role and structure. Title.kind keeps the movie/show/season/episode projection. */
+export interface TitleMedia {
+  class: MediaClass; role: MediaRole;
+  /** Position inside the parent: track number, book number in a series, part number. */ index?: number;
+  /** Disc or volume, for multi-disc albums. */ disc?: number;
+  /** Ancestors, nearest first: a track's [album, artist]; a book's [series]. */ parents?: { id: ID; name: string; role: MediaRole }[];
+  /** Direct children: tracks on an album, albums by an artist, books in a series. */ childCount?: number;
+  /** personId is the plugin's people-facet person, so /people/:id opens. */
+  credits?: { name: string; role: MediaCreditRole | string; personId?: ID }[];
+  /** Readable documents only. */ reading?: { format: ReadingFormat; pages?: number };
+  /** Plain facts a page shows as written (label, publisher, ISBN). */ facts?: { label: string; value: string }[];
+}
+/** Opaque locator (EPUB CFI, page index) plus the share of the whole document; shared Ether watch state. */
+export interface ReadingProgress { locator: string; fraction: number; label?: string; updatedAt: Timestamp }
+export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean; /** Most recent viewing activity, RFC3339. */ lastViewedAt?: Timestamp;
+  /** Readable titles: where the viewer is. fraction >= 0.98 marks the title played. */ reading?: ReadingProgress }
 /** Actual server-sourced rating; scale is the maximum possible value. */
 export interface TitleRating { source: string; kind: 'critic' | 'audience'; value: number; scale: number; state?: string; votes?: number; url?: string }
 export interface ThemeMusic { url: string; expiresAt: Timestamp; durationSeconds?: number;
@@ -82,6 +109,7 @@ export interface Title {
   /** The country `rating` is from (ISO 3166-1 alpha-2), when the server knows it; optional. */ ratingCountry?: string;
   ratings?: TitleRating[]; artwork: ArtworkRef[]; watch?: WatchState; themeMusic?: ThemeMusic;
   showId?: ID; showName?: string; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
+  /** Media class, role and relations; omitted for video by servers that predate it. */ media?: TitleMedia;
 }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;
   durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp }; availability: 'ready' | 'unresolved' | 'unavailable' }
@@ -196,6 +224,7 @@ export interface TrickplayMetadata {
 }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; libraryId?: ID; liveItemId?: ID; title?: string; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
+  /** Audio-only plans say so; omitted: 'video'. */ media?: 'video' | 'audio';
   paths: PlaybackPath[]; selectedPathId: ID; audioTracks: Track[]; subtitleTracks: Track[];
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
   /** Also carried by SessionSnapshot.plan and full plan events. */
@@ -265,7 +294,7 @@ export interface TitlePlaylists { items: TitlePlaylistMembership[] }
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated' | 'lastViewed';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; layout?: 'grid' | 'list' | 'timeline'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
+export interface LibraryTab { /** A library or view tab listing one level (a level key) instead of the root. */ level?: string; search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; layout?: 'grid' | 'list' | 'timeline'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }
@@ -275,7 +304,7 @@ export interface LibraryBrowseOptions {
   /** Boolean fields declare support; kind lists supported values. */
   filters: { facets?: LibraryFacet[]; kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean; collectionId?: boolean };
 }
-export interface Library { presentation?: { card: LibraryCard }; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
+export interface Library { /** Omitted: 'video'. */ media?: MediaClass; presentation?: { card: LibraryCard }; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }
 export interface LibraryBrowseQuery extends LibrariesQuery {
   tab?: string; query?: string; facets?: Record<string, string[]>;
@@ -343,3 +372,7 @@ export interface WebCodeIssueResponse { code: string; targetOrigin: string; expi
 
 export interface AudioFallbackRequest extends Mutation, Generations { trackId: ID; positionSeconds: number; preferredCodec: 'aac' }
 export interface AudioFallbackResponse { id: ID; audioGeneration: number; trackId: ID; url: string; mimeType: 'application/vnd.apple.mpegurl'; codec: 'mp4a.40.2'; timelineOriginSeconds: 0 }
+export interface ReadingRequest extends Mutation {}
+/** A short-lived, range-capable document URL (Ether's kind-media ticket); fetched without the bearer. */
+export interface ReadingGrant { titleId: ID; format: ReadingFormat; mimeType: string; url: string; expiresAt: Timestamp; byteLength?: number; progress?: ReadingProgress }
+export interface ReadingProgressRequest extends Mutation { locator: string; fraction: number; label?: string }

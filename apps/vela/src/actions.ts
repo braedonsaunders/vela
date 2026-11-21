@@ -11,6 +11,7 @@ import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra } fro
 import type { ViewState } from './view-state';
 
 import { playParams } from './play-action';
+import { openMediaTitle } from './media/actions';
 import { isTitleNavigation, noteTitleNavigation } from './title-origin';
 
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
@@ -37,6 +38,9 @@ interface Context {
   setQuery(query: string): void;
 }
 
+/** Music, book and audiobook cards carry their role as kind (docs/media-kinds.md). */
+const MEDIA_KINDS = ['artist', 'album', 'track', 'series', 'book', 'audiobook', 'part'];
+
 function notYet(action: string, arg: string): void {
   console.info(`Vela: ${action} ${arg} is not carried out yet`);
 }
@@ -62,6 +66,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       }
     }
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
+    else if (id && MEDIA_KINDS.includes(kind)) openMediaTitle(id, kind, place.route === 'library' ? place.entry : place.library);
     else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id, kind);
     else if (id && TITLE_KINDS.includes(kind)) {
       noteTitleNavigation(id);

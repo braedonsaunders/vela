@@ -2,6 +2,7 @@
 // and filters, and a collection read page by page. Each is kept by key for the current session
 // and dropped when the session or server changes.
 import type * as V from '../wire';
+import { mediaClass } from '../media';
 import { libraryCardArtwork } from '../library-presentation';
 import { VelaError } from '../adapter/errors';
 import { hasTitleManagement } from '../adapter/capabilities';
@@ -462,8 +463,10 @@ function libraryModel(
     const card = withDateDisplay(entry(item, images, artWidth), library.dateDisplay);
     return libraryCardArtwork(card, library.presentation?.card);
   });
+  const media = mediaClass(library.media);
   return {
-    presentation: library.presentation,
+    presentation: library.presentation ?? (media === 'music' || media === 'audiobook' || media === 'podcast' ? { card: 'square' } : undefined),
+    media,
     tabs: library.tabs,
     facets: filters.facets,
     query: query.query,

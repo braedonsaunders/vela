@@ -1,0 +1,489 @@
+// Purpose-built pages for media titles (docs/media-kinds.md): an album with its tracklist, an
+// artist with songs and albums, a book with its cover, author, series and reading progress, a
+// series of books, an audiobook with chapters or parts. A track opens its album and a part its
+// audiobook. The app draws one of these in place of the document's title page; each takes the
+// document's `ui` look.
+import { Image } from 'expo-image';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import { ScrollView, Text, View, type ViewStyle } from 'react-native';
+import { clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable } from '@vela/core';
+import { useVela, useVelaState } from '@vela/core/react';
+import { useHost } from '../../host';
+import { useMediaActions, type MediaActions } from './context';
+import { alpha, Cover, CoverTile, ListRow, PillButton, Progress, RoundButton, SectionHeading, TextLink, TileGrid, useMediaLook, type MediaLook } from './parts';
+
+/** The roles this page draws; anything else stays with the document's title page. */
+export function isMediaPageRole(role: string): boolean {
+  return ['artist', 'album', 'track', 'series', 'book', 'audiobook', 'part'].includes(role);
+}
+
+export function MediaTitlePage({ id }: { id: string }) {
+  const detail = useDetail(id);
+  const card = detail.value?.title[0];
+  const role = card?.media?.role ?? '';
+  const parent = card?.media?.parent;
+  // A track opens its album, a part its audiobook, with the item marked.
+  if ((role === 'track' || role === 'part') && parent) return <MediaTitlePage key={parent.id} id={parent.id} />;
+  return (
+    <Frame accent={card?.accent ?? ''} backdrop={card ? (role === 'artist' && card.backdrop !== card.poster ? card.backdrop : card.poster) : ''} wideArt={role === 'artist' && !!card && card.backdrop !== card.poster}>
+      {!card ? <Pending load={detail} id={id} />
+        : role === 'album' ? <AlbumPage card={card} detail={detail.value!} />
+        : role === 'artist' ? <ArtistPage card={card} />
+        : role === 'book' ? <BookPage card={card} />
+        : role === 'series' ? <SeriesPage card={card} />
+        : <AudiobookPage card={card} detail={detail.value!} />}
+    </Frame>
+  );
+}
+
+function useDetail(id: string): Loadable<DetailModel> {
+  const store = useVela();
+  const detail = useVelaState(state => state.titles[id]);
+  useEffect(() => { if (id) void store.catalogue.title(id); }, [store, id]);
+  return detail ?? { load: 'loading', error: '' };
+}
+
+function useChildren(id: string | undefined): Loadable<ChildrenModel> | undefined {
+  const store = useVela();
+  const children = useVelaState(state => id ? state.children[id] : undefined);
+  useEffect(() => { if (id) void store.media.children(id); }, [store, id]);
+  return children;
+}
+
+/** The page: its colour wash from the cover, a blurred cover behind the hero, the back control. */
+function Frame({ accent, backdrop, wideArt, children }: { accent: string; backdrop: string; wideArt: boolean; children: ReactNode }) {
+  const host = useHost();
+  const m = useMediaLook();
+  const actions = useMediaActions();
+  const tint = accent || m.ui.accent;
+  const top = m.tv ? 32 : Math.max(16, host.viewport.insets.top + 12);
+  return (
+    <View style={{ flex: 1, backgroundColor: m.ui.page }} testID="media-page">
+      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: wideArt ? Math.min(640, m.height * 0.8) : 620, overflow: 'hidden' }}>
+        {backdrop ? <Image source={host.image(backdrop)} contentFit="cover" blurRadius={wideArt ? 0 : 70}
+          style={{ position: 'absolute', top: wideArt ? 0 : -80, left: wideArt ? 0 : -80, right: wideArt ? 0 : -80, bottom: 0, opacity: wideArt ? 0.6 : 0.42 } as never} /> : null}
+        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+          m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.34)} 0%, ${alpha(m.ui.page, 0.55)} 55%, ${m.ui.page} 100%)` })]} />
+      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: top + 56, paddingBottom: 140 }} testID="media-scroll">
+        <View style={{ paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{children}</View>
+      </ScrollView>
+      <View style={{ position: 'absolute', top, left: m.gutter - 6 }}>
+        <RoundButton icon="back" label={msg('media.ui.back')} onPress={actions.back} nativeID="detail-close" testID="detail-close" size={42} />
+      </View>
+    </View>
+  );
+}
+
+function Pending({ load, id }: { load: Loadable<DetailModel>; id: string }) {
+  const m = useMediaLook();
+  const store = useVela();
+  if (load.load === 'failed') return (
+    <View style={{ paddingVertical: 80, gap: 18, alignItems: 'flex-start' }} accessibilityRole="alert">
+      <Text style={m.text({ 'font-size': '18px' })}>{msg('media.ui.loadFailed')}</Text>
+      <PillButton label={msg('media.ui.retry')} onPress={() => void store.catalogue.title(id, true)} />
+    </View>
+  );
+  const size = heroCover(m);
+  return (
+    <View style={{ flexDirection: m.small ? 'column' : 'row', gap: 32, opacity: 0.7 }} accessibilityLabel="Loading" accessibilityRole="progressbar">
+      <View style={{ width: size, height: size, borderRadius: 10, backgroundColor: m.ui.skeleton }} />
+      <View style={{ flex: 1, gap: 14, justifyContent: 'flex-end' }}>
+        {[0.2, 0.6, 0.35].map((w, i) => <View key={i} style={{ width: `${w * 100}%`, height: i === 1 ? 44 : 14, borderRadius: 8, backgroundColor: m.ui.skeletonLight }} />)}
+      </View>
+    </View>
+  );
+}
+
+function heroCover(m: MediaLook): number {
+  return m.small ? Math.min(300, m.width - m.gutter * 2 - 40) : m.wide ? 320 : 260;
+}
+
+/** Cover beside the title block on wide screens, above it on phones. */
+function Hero({ cover, children }: { cover: ReactNode; children: ReactNode }) {
+  const m = useMediaLook();
+  return (
+    <View style={{ flexDirection: m.small ? 'column' : 'row', alignItems: m.small ? 'center' : 'flex-end', gap: m.small ? 24 : 44, marginBottom: m.small ? 32 : 48 }}>
+      {cover}
+      <View style={{ flex: m.small ? undefined : 1, alignSelf: 'stretch', justifyContent: 'flex-end', gap: 12, minWidth: 0 }}>{children}</View>
+    </View>
+  );
+}
+
+function Eyebrow({ children }: { children: string }) {
+  const m = useMediaLook();
+  return <Text style={m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{children}</Text>;
+}
+
+function Title({ children }: { children: string }) {
+  const m = useMediaLook();
+  const size = m.small ? 36 : m.wide ? (children.length > 28 ? 52 : 64) : 46;
+  return <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': `${size}px`, 'line-height': '1.02', 'letter-spacing': '-0.015em', color: '$ui.ink' })}>{children}</Text>;
+}
+
+function Facts({ items }: { items: string[] }) {
+  const m = useMediaLook();
+  const line = items.filter(Boolean).join('  ·  ');
+  return line ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{line}</Text> : null;
+}
+
+function Summary({ text, serif = false }: { text: string; serif?: boolean }) {
+  const m = useMediaLook();
+  if (!text) return null;
+  return <Text style={m.text({ 'font-size': serif ? '17px' : '15px', 'line-height': '1.6', color: '$ui.inkSecondary', 'max-width': '760px',
+    ...(serif ? { 'font-family': '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif' } : {}) })}>{text}</Text>;
+}
+
+function Buttons({ children }: { children: ReactNode }) {
+  return <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>{children}</View>;
+}
+
+function openByline(card: Card, actions: MediaActions): (() => void) | undefined {
+  const target = card.media?.bylineTarget ?? '';
+  if (target.startsWith('title:')) return () => actions.openTitle({ id: target.slice(6), kind: 'artist' });
+  if (target.startsWith('person:')) return () => actions.openPerson(target.slice(7), card.media?.byline ?? '');
+  return undefined;
+}
+
+function tilesPerRow(m: MediaLook, min: number): { size: number; gap: number } {
+  const gap = m.small ? 16 : 24;
+  const inner = Math.min(1360, m.width) - m.gutter * 2;
+  const count = Math.max(2, Math.floor((inner + gap) / (min + gap)));
+  return { size: Math.floor((inner - gap * (count - 1)) / count), gap };
+}
+
+function playable(cards: Card[]): Card[] {
+  return cards.filter(card => card.media?.audio);
+}
+
+// ── Album ────────────────────────────────────────────────────────────────────
+
+function AlbumPage({ card, detail: _detail }: { card: Card; detail: DetailModel }) {
+  const m = useMediaLook();
+  const actions = useMediaActions();
+  const children = useChildren(card.id);
+  const tracks = useMemo(() => [...(children?.value?.items ?? [])].sort((a, b) =>
+    (a.media?.disc ?? 0) - (b.media?.disc ?? 0) || (a.media?.index ?? 0) - (b.media?.index ?? 0)), [children?.value]);
+  const discs = new Set(tracks.map(track => track.media?.disc ?? 0));
+  const total = tracks.reduce((sum, track) => sum + track.durationSeconds, 0);
+  const artist = card.media?.parents.find(parent => parent.role === 'artist');
+  const source = { id: card.id, name: card.name };
+  const play = (index: number, shuffle = false) => actions.play({ items: playable(tracks), index, shuffle, source });
+  const count = tracks.length || card.media?.childCount || 0;
+  return (
+    <View>
+      <Hero cover={<Cover uri={card.poster} shape="square" size={heroCover(m)} title={card.name} byline={card.media?.byline} accent={card.accent} lift={1.6} />}>
+        <Eyebrow>{[msg('media.ui.album'), card.yearLabel].filter(Boolean).join(' · ')}</Eyebrow>
+        <Title>{card.name}</Title>
+        {card.media?.byline ? <TextLink label={card.media.byline} onPress={openByline(card, actions)} testID="media-byline"
+          style={m.text({ 'font-size': '19px', 'font-weight': '600', color: '$ui.ink' })} /> : null}
+        <Facts items={[count ? msg(`media.count.tracks.${count === 1 ? 'one' : 'other'}`, { count: number(count) }) : '', total ? durationLabel(total) : '', card.genres[0] ?? '']} />
+        <Buttons>
+          <PillButton primary icon="play" label={msg('media.ui.play')} onPress={() => play(0)} disabled={!tracks.length} testID="media-play" nativeID="media-primary" />
+          <PillButton icon="shuffle" label={msg('media.ui.shuffle')} onPress={() => play(0, true)} disabled={tracks.length < 2} testID="media-shuffle" />
+        </Buttons>
+      </Hero>
+      <View style={{ gap: 2, marginBottom: 40 }} testID="media-tracklist">
+        {children?.load === 'loading' && !tracks.length ? <ListSkeleton rows={Math.min(10, count || 8)} /> : null}
+        {children?.load === 'failed' && !tracks.length ? <ChildrenFailed id={card.id} /> : null}
+        {tracks.map((track, i) => (
+          <View key={track.id}>
+            {discs.size > 1 && (i === 0 || tracks[i - 1]!.media?.disc !== track.media?.disc)
+              ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: i ? 22 : 4, paddingBottom: 8 }}>
+                  <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', 'letter-spacing': '0.14em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>{msg('media.ui.disc', { disc: number(track.media?.disc || 1) })}</Text>
+                </View> : null}
+            <ListRow number={track.media?.index ? number(track.media.index) : number(i + 1)} title={track.name}
+              subtitle={track.media?.byline && track.media.byline !== card.media?.byline ? track.media.byline : undefined}
+              trailing={track.media?.clockLabel || (track.durationSeconds ? clock(track.durationSeconds) : '')}
+              current={actions.nowPlaying?.id === track.id} playing={actions.nowPlaying?.playing}
+              onPress={() => play(playable(tracks).findIndex(t => t.id === track.id))} testID={`media-track-${track.id}`} />
+          </View>
+        ))}
+      </View>
+      {card.summary ? <View style={{ marginBottom: 40 }}><Summary text={card.summary} /></View> : null}
+      <FactList card={card} />
+      {artist ? <MoreBy artistId={artist.id} name={artist.name} exclude={card.id} /> : null}
+    </View>
+  );
+}
+
+function ChildrenFailed({ id }: { id: string }) {
+  const m = useMediaLook();
+  const store = useVela();
+  return (
+    <View style={{ paddingVertical: 24, gap: 14, alignItems: 'flex-start' }} accessibilityRole="alert">
+      <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>{msg('media.ui.loadFailed')}</Text>
+      <PillButton compact label={msg('media.ui.retry')} onPress={() => void store.media.children(id, true)} testID="media-children-retry" />
+    </View>
+  );
+}
+
+function ListSkeleton({ rows }: { rows: number }) {
+  const m = useMediaLook();
+  return <>{Array.from({ length: rows }, (_, i) => <View key={i} style={{ height: 44, marginVertical: 3, borderRadius: 10, backgroundColor: i % 2 ? m.ui.skeleton : m.ui.skeletonLight }} />)}</>;
+}
+
+function FactList({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const facts = card.media?.facts ?? [];
+  if (!facts.length) return null;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 40, rowGap: 14, marginBottom: 48 }}>
+      {facts.map(fact => (
+        <View key={fact.label} style={{ gap: 3, minWidth: 140 }}>
+          <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>{fact.label}</Text>
+          <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{fact.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function MoreBy({ artistId, name, exclude }: { artistId: string; name: string; exclude: string }) {
+  const m = useMediaLook();
+  const actions = useMediaActions();
+  const albums = (useChildren(artistId)?.value?.items ?? []).filter(album => album.id !== exclude);
+  if (!albums.length) return null;
+  const { size, gap } = tilesPerRow(m, m.small ? 140 : 190);
+  return (
+    <View style={{ marginBottom: 32 }}>
+      <SectionHeading title={msg('media.ui.moreBy', { name })} />
+      <TileGrid gap={gap}>
+        {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={album.yearLabel} onPress={() => actions.openTitle(album)} testID={`media-album-${album.id}`} />)}
+      </TileGrid>
+    </View>
+  );
+}
+
+// ── Artist ───────────────────────────────────────────────────────────────────
+
+function ArtistPage({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const store = useVela();
+  const actions = useMediaActions();
+  const albumItems = useChildrenItems(card.id);
+  const albums = useMemo(() => [...albumItems].sort((a, b) => b.year - a.year), [albumItems]);
+  const newest = albums[0];
+  const songs = useChildren(newest?.id)?.value?.items ?? [];
+  const top = playable(songs).slice(0, 5);
+  const playAll = async (shuffle: boolean) => {
+    const tracks: Card[] = [];
+    for (const album of albums) {
+      await store.media.children(album.id);
+      tracks.push(...playable(store.getState().children[album.id]?.value?.items ?? []));
+    }
+    if (tracks.length) actions.play({ items: tracks, index: 0, shuffle, source: { id: card.id, name: card.name } });
+  };
+  const portrait = m.small ? 200 : m.wide ? 260 : 220;
+  const { size, gap } = tilesPerRow(m, m.small ? 140 : 200);
+  return (
+    <View>
+      <Hero cover={<Cover uri={card.poster} shape="round" size={portrait} title={card.name} accent={card.accent} lift={1.4} />}>
+        <Eyebrow>{msg('media.ui.artist')}</Eyebrow>
+        <Title>{card.name}</Title>
+        <Facts items={[card.facts, card.genres.slice(0, 2).join(', ')]} />
+        <Buttons>
+          <PillButton primary icon="play" label={msg('media.ui.play')} onPress={() => void playAll(false)} disabled={!albums.length} testID="media-play" nativeID="media-primary" />
+          <PillButton icon="shuffle" label={msg('media.ui.shuffle')} onPress={() => void playAll(true)} disabled={!albums.length} testID="media-shuffle" />
+        </Buttons>
+      </Hero>
+      {top.length ? (
+        <View style={{ marginBottom: 44 }}>
+          <SectionHeading title={msg('media.ui.songs')} detail={newest?.name} />
+          <View style={{ gap: 2 }}>
+            {top.map((track, i) => (
+              <ListRow key={track.id} number={number(i + 1)} title={track.name} subtitle={track.media?.parent?.name}
+                trailing={track.media?.clockLabel} current={actions.nowPlaying?.id === track.id} playing={actions.nowPlaying?.playing}
+                onPress={() => actions.play({ items: playable(songs), index: playable(songs).findIndex(t => t.id === track.id), source: { id: newest!.id, name: newest!.name } })}
+                testID={`media-track-${track.id}`} />
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {albums.length ? (
+        <View style={{ marginBottom: 40 }}>
+          <SectionHeading title={msg('media.ui.albums')} />
+          <TileGrid gap={gap}>
+            {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={[album.yearLabel, album.media?.childCount ? msg(`media.count.tracks.${album.media.childCount === 1 ? 'one' : 'other'}`, { count: number(album.media.childCount) }) : ''].filter(Boolean).join(' · ')}
+              onPress={() => actions.openTitle(album)} testID={`media-album-${album.id}`} />)}
+          </TileGrid>
+        </View>
+      ) : null}
+      {card.summary ? <View style={{ marginBottom: 40 }}><SectionHeading title={msg('media.ui.details')} /><Summary text={card.summary} /></View> : null}
+    </View>
+  );
+}
+
+function useChildrenItems(id: string): Card[] {
+  return useChildren(id)?.value?.items ?? EMPTY;
+}
+const EMPTY: Card[] = [];
+
+// ── Book ─────────────────────────────────────────────────────────────────────
+
+function readLabel(card: Card): string {
+  const fraction = card.media?.readingFraction ?? 0;
+  if (card.played || fraction >= 0.98) return msg('media.ui.readAgain');
+  return fraction > 0 ? msg('media.ui.continueReading') : msg('media.ui.read');
+}
+
+function BookPage({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const store = useVela();
+  const actions = useMediaActions();
+  const media = card.media!;
+  const series = media.parents.find(parent => parent.role === 'series');
+  const canRead = !!media.readingFormat && store.media.features().reading.includes(media.readingFormat);
+  const fraction = media.readingFraction;
+  const size = m.small ? Math.min(230, m.width - m.gutter * 2 - 60) : m.wide ? 280 : 230;
+  return (
+    <View>
+      <Hero cover={<View style={{ paddingRight: 6, paddingBottom: 6 }}><Cover uri={card.poster} shape="book" size={size} title={card.name} byline={media.byline} accent={card.accent} lift={1.7} /></View>}>
+        {series ? <TextLink label={media.index ? msg('media.ui.bookOf', { index: number(media.index), series: series.name }) : series.name}
+          onPress={() => actions.openTitle({ id: series.id, kind: 'series' })} testID="media-series"
+          style={m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })} />
+          : <Eyebrow>{msg('media.ui.book')}</Eyebrow>}
+        <Title>{card.name}</Title>
+        {media.byline ? <TextLink label={msg('media.ui.by', { name: media.byline })} onPress={openByline(card, actions)} testID="media-byline"
+          style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
+        <Facts items={[card.yearLabel, media.pages ? msg(`media.pages.${media.pages === 1 ? 'one' : 'other'}`, { count: number(media.pages) }) : '',
+          media.readingFormat ? msg(`media.ui.format.${media.readingFormat}`) : '', card.genres.slice(0, 2).join(', ')]} />
+        {fraction > 0 && fraction < 0.98 ? (
+          <View style={{ gap: 8, maxWidth: 420, marginTop: 4 }} testID="media-reading-progress">
+            <Progress fraction={fraction} height={5} />
+            <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{[msg('media.ui.readProgress', { percent: percent(fraction) }), media.readingLabel].filter(Boolean).join(' · ')}</Text>
+          </View>
+        ) : card.played || fraction >= 0.98 ? <Text style={m.text({ 'font-size': '13px', color: '$ui.accent', 'font-weight': '600' })}>{msg('media.ui.finished')}</Text> : null}
+        <Buttons>
+          <PillButton primary icon="book" label={readLabel(card)} onPress={() => actions.read(card)} disabled={!canRead} testID="media-read" nativeID="media-primary" />
+        </Buttons>
+        {!canRead ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotRead')}</Text> : null}
+      </Hero>
+      {card.summary ? <View style={{ marginBottom: 44 }}><Summary text={card.summary} serif /></View> : null}
+      <FactList card={card} />
+      {series ? <SeriesShelf seriesId={series.id} name={series.name} current={card.id} /> : null}
+    </View>
+  );
+}
+
+function SeriesShelf({ seriesId, name, current }: { seriesId: string; name: string; current: string }) {
+  const m = useMediaLook();
+  const actions = useMediaActions();
+  const books = useChildrenItems(seriesId).filter(book => book.id !== current);
+  if (!books.length) return null;
+  const { size, gap } = tilesPerRow(m, m.small ? 120 : 160);
+  return (
+    <View style={{ marginBottom: 32 }}>
+      <SectionHeading title={msg('media.ui.moreIn', { name })} />
+      <TileGrid gap={gap}>
+        {books.map(book => <CoverTile key={book.id} card={book} size={size} subtitle={book.media?.indexLabel || book.yearLabel}
+          progress={book.media?.readingFraction} onPress={() => actions.openTitle(book)} testID={`media-book-${book.id}`} />)}
+      </TileGrid>
+    </View>
+  );
+}
+
+// ── Series ───────────────────────────────────────────────────────────────────
+
+function SeriesPage({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const actions = useMediaActions();
+  const bookItems = useChildrenItems(card.id);
+  const books = useMemo(() => [...bookItems].sort((a, b) => (a.media?.index ?? 0) - (b.media?.index ?? 0)), [bookItems]);
+  const next = books.find(book => !book.played && (book.media?.readingFraction ?? 0) < 0.98) ?? books[0];
+  const fan = books.slice(0, 3);
+  const size = m.small ? 150 : 190;
+  const byline = card.media?.byline || books[0]?.media?.byline || '';
+  const { size: tile, gap } = tilesPerRow(m, m.small ? 130 : 170);
+  const books_ = books.length || card.media?.childCount || 0;
+  return (
+    <View>
+      <Hero cover={
+        <View style={{ width: size + (fan.length - 1) * size * 0.32, height: size * 1.5 + 12 }} accessibilityElementsHidden>
+          {(fan.length ? fan : [card]).map((book, i, all) => (
+            <View key={book.id} style={{ position: 'absolute', left: i * size * 0.32, top: (all.length - 1 - i) * 4, zIndex: all.length - i,
+              transform: [{ rotate: `${(i - (all.length - 1) / 2) * 3}deg` }] }}>
+              <Cover uri={book.poster} shape="book" size={size} title={book.name} byline={book.media?.byline} accent={book.accent} lift={1.3} />
+            </View>
+          )).reverse()}
+        </View>}>
+        <Eyebrow>{msg('media.ui.series')}</Eyebrow>
+        <Title>{card.name}</Title>
+        {byline ? <TextLink label={msg('media.ui.by', { name: byline })} onPress={openByline(books[0] ?? card, actions)}
+          style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
+        <Facts items={[books_ ? msg(`media.count.books.${books_ === 1 ? 'one' : 'other'}`, { count: number(books_) }) : '', card.genres.slice(0, 2).join(', ')]} />
+        <Buttons>
+          {next ? <PillButton primary icon="book" label={(next.media?.readingFraction ?? 0) > 0 ? msg('media.ui.continueReading') : msg('media.ui.startReading')}
+            onPress={() => actions.openTitle(next)} testID="media-play" nativeID="media-primary" /> : null}
+        </Buttons>
+      </Hero>
+      {card.summary ? <View style={{ marginBottom: 40 }}><Summary text={card.summary} serif /></View> : null}
+      <SectionHeading title={msg('media.ui.books')} />
+      <TileGrid gap={gap}>
+        {books.map(book => <CoverTile key={book.id} card={book} size={tile} subtitle={[book.media?.indexLabel, book.yearLabel].filter(Boolean).join(' · ')}
+          progress={book.media?.readingFraction} onPress={() => actions.openTitle(book)} testID={`media-book-${book.id}`} />)}
+      </TileGrid>
+    </View>
+  );
+}
+
+// ── Audiobook ────────────────────────────────────────────────────────────────
+
+function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
+  const m = useMediaLook();
+  const actions = useMediaActions();
+  const media = card.media;
+  const parts = playable(useChildrenItems(card.id)).sort((a, b) => (a.media?.index ?? 0) - (b.media?.index ?? 0));
+  const chapters = detail.chapters ?? [];
+  // A multi-file book resumes in the part the viewer stopped in.
+  const resumePart = Math.max(0, parts.findIndex(part => part.progressSeconds > 0 && !part.played));
+  const partsBefore = parts.slice(0, resumePart).reduce((sum, part) => sum + part.durationSeconds, 0);
+  const position = parts.length ? (parts[resumePart]?.progressSeconds ?? 0) + partsBefore : card.progressSeconds;
+  const resumable = position > 0 && !card.played;
+  const total = card.durationSeconds || parts.reduce((sum, part) => sum + part.durationSeconds, 0);
+  const source = { id: card.id, name: card.name };
+  const listen = (from: 'resume' | 'start') => parts.length
+    ? actions.play({ items: parts, index: from === 'resume' ? resumePart : 0, positionSeconds: from === 'resume' ? parts[resumePart]?.progressSeconds : 0, source })
+    : actions.play({ items: [card], index: 0, positionSeconds: from === 'resume' ? position : 0, source });
+  const chapter = [...chapters].reverse().find(c => c.startSeconds <= position);
+  return (
+    <View>
+      <Hero cover={<Cover uri={card.poster} shape="square" size={heroCover(m)} title={card.name} byline={media?.byline} accent={card.accent} lift={1.6} />}>
+        <Eyebrow>{[msg('media.ui.audiobook'), card.yearLabel].filter(Boolean).join(' · ')}</Eyebrow>
+        <Title>{card.name}</Title>
+        {media?.byline ? <TextLink label={msg('media.ui.by', { name: media.byline })} onPress={openByline(card, actions)} testID="media-byline"
+          style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
+        {media?.narrator ? <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>{msg('media.ui.narratedBy', { name: media.narrator })}</Text> : null}
+        <Facts items={[total ? durationLabel(total) : '', parts.length ? msg(`media.count.parts.${plural(parts.length)}`, { count: number(parts.length) })
+          : chapters.length ? msg(`media.count.chapters.${plural(chapters.length)}`, { count: number(chapters.length) }) : '', card.genres[0] ?? '']} />
+        {resumable && total ? (
+          <View style={{ gap: 8, maxWidth: 420, marginTop: 4 }} testID="media-listen-progress">
+            <Progress fraction={position / total} height={5} />
+            <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{[msg('media.ui.left', { time: durationLabel(Math.max(0, total - position)) }), chapter?.name].filter(Boolean).join(' · ')}</Text>
+          </View>
+        ) : null}
+        <Buttons>
+          <PillButton primary icon={resumable ? 'play' : 'headphones'} label={resumable ? msg('media.ui.resume') : msg('media.ui.listen')} onPress={() => listen('resume')} testID="media-play" nativeID="media-primary" />
+          {resumable ? <PillButton icon="back15" label={msg('media.ui.startOver')} onPress={() => listen('start')} testID="media-start-over" /> : null}
+        </Buttons>
+      </Hero>
+      {card.summary ? <View style={{ marginBottom: 44 }}><Summary text={card.summary} serif /></View> : null}
+      {parts.length ? (
+        <View style={{ marginBottom: 40 }}>
+          <SectionHeading title={msg('media.ui.parts')} />
+          {parts.map((part, i) => <ListRow key={part.id} number={number(part.media?.index || i + 1)} title={part.name} trailing={part.durationSeconds ? durationLabel(part.durationSeconds) : ''}
+            current={actions.nowPlaying?.id === part.id} playing={actions.nowPlaying?.playing} dim={part.played}
+            onPress={() => actions.play({ items: parts, index: i, source })} testID={`media-part-${part.id}`} />)}
+        </View>
+      ) : chapters.length ? (
+        <View style={{ marginBottom: 40 }}>
+          <SectionHeading title={msg('media.ui.chapters')} detail={total ? durationLabel(total) : undefined} />
+          {chapters.map((c, i) => <ListRow key={c.id} number={number(i + 1)} title={c.name} trailing={clock(c.startSeconds)}
+            current={actions.nowPlaying?.id === card.id && chapter?.id === c.id} playing={actions.nowPlaying?.playing} dim={c.startSeconds < position && chapter?.id !== c.id}
+            onPress={() => actions.play({ items: [card], index: 0, positionSeconds: c.startSeconds, source })} testID={`media-chapter-${i}`} />)}
+        </View>
+      ) : null}
+      <FactList card={card} />
+    </View>
+  );
+}

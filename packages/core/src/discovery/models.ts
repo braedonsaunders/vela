@@ -4,6 +4,7 @@ import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, 
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
+import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts } from '../media';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
   const ref = artwork.find(item => item.kind === kind);
@@ -50,9 +51,10 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const durationLabel = duration ? minute(Math.round(duration / 60)) : '';
   const yearLabel = title.year ? year(title.year) : '';
   const rating = displayRating(title.rating, title.ratingCountry);
-  return withDateDisplay({
+  const media = cardMedia(title);
+  return withMedia(withDateDisplay({
     id: title.id,
-    kind: title.kind,
+    kind: mediaCardKind(media, title.kind),
     name: title.name,
     summary: title.summary,
     airDate: title.airDate ?? '',
@@ -87,9 +89,25 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '',
     episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
     facts: factsLine([title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, rating, durationLabel]),
-    ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode'),
+    ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode' && !media),
     receipt,
-  }, title.dateDisplay);
+  }, title.dateDisplay), media, title);
+}
+
+/** A media title's card: its role as kind, its cover shape and the facts a shelf of it shows. */
+function withMedia(value: Card, media: ReturnType<typeof cardMedia>, title: Title): Card {
+  if (!media) return value;
+  const facts = mediaCardFacts(media, title);
+  // Media covers are the poster art; landscape art falls back to it so a backdrop-less album still fills a hero.
+  // The video projection's show/season/episode context does not apply: the byline replaces it.
+  const artist = media.bylineTarget.startsWith('title:') ? media.bylineTarget.slice(6) : '';
+  // An artist's own credit is its name: no byline under it.
+  const byline = media.byline === value.name ? '' : media.byline;
+  const contextParts = byline ? [{ label: byline, select: artist ? `${artist}|artist` : '' }] : [];
+  return { ...value, media, shape: media.shape, facts, episodeContext: byline, contextParts,
+    showId: '', showName: '', seasonId: '', seasonNumber: 0, episodeNumber: 0, seasonNumberLabel: '', episodeNumberLabel: '',
+    progressLabel: media.readingFraction > 0 ? percent(media.readingFraction) : value.progressLabel,
+    backdrop: value.backdrop || value.poster, thumbnail: value.thumbnail || value.poster };
 }
 
 /** Ether may qualify a certification with its region (`gb/12A`); cards show the mark itself. */
@@ -460,5 +478,6 @@ export function detailModel(
     cast: data.cast.map(credit),
     castPeople: data.cast.map(person),
     pending: data.pending ?? [],
+    ...(titleCard.media && data.chapters?.length ? { chapters: data.chapters } : {}),
   };
 }

@@ -6,7 +6,7 @@ interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs }
 export const sessions = new Map<string, Session>();
 export function snapshot(s: Session): SessionSnapshot {
-  return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
+  return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: s.plan.durationSeconds ?? fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
 }
 const encode = (event: SessionEvent) => new TextEncoder().encode(`id: ${event.cursor}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
 export function publish(s: Session) {

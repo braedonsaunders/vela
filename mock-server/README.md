@@ -185,3 +185,26 @@ hour on that channel to verify that vertical focus retains time across gaps.
 `rangeFailSeconds` fails byte-range requests with HTTP 503 for N seconds from
 the first media request after the setting changes. Set it to zero and make a
 media request before rearming the same duration. Non-range requests continue.
+
+Music, books and audiobooks ([media kinds](../docs/media-kinds.md)): the `music`, `books`
+and `audiobooks` libraries (fixtures in `packages/protocol/fixtures/media.ts`, all fictional)
+carry `Library.media` and `Title.media`, list their root level by default and one level per
+`tab` with a `level` (Albums, Tracks, All books, Series). Artists, albums, series and
+multi-part audiobooks page their children (tracks by disc then index); Home gains
+"Recently added albums", "Continue reading" and "Continue listening" after its first two
+rows, and artist pages get a `:top` detail row. Tracks, audiobooks and parts play through
+`POST /playback` as `media: 'audio'` plans with one direct, range-capable file; books open
+with `POST /titles/:id/read` (a fifteen-minute `/reading/media/<token>/<file>` URL, no bearer,
+byte ranges) and save `POST /titles/:id/reading-progress`, which returns per viewer as
+`WatchState.reading` (`fraction >= 0.98` marks played; `watch {played:false}` clears it).
+Covers, book jackets and portraits are original SVG from `covers.ts`. `VELA_MOCK_OLD=1` and
+`VELA_MOCK_LAB=1` omit these libraries and the `mediaClasses`/`reading`/`audioPlayback` flags.
+
+Generate their media once (scratch, not committed; files are served 503 until present):
+`bun mock-server/scripts/make-music-media.ts` synthesizes six original clips (AAC, MP3,
+FLAC) and a chaptered spoken-word stand-in per audiobook file into
+`~/.scratch/tmp/vela/media-music/` (needs ffmpeg; about 30 seconds), and checks each file's
+duration against the fixture. `bun mock-server/scripts/make-book-media.ts` writes the EPUB 3
+books, the PDF field guide and the CBZ comic into `~/.scratch/tmp/vela/media-books/` without
+dependencies. Both take an output directory argument; `VELA_MOCK_MUSIC_ROOT` and
+`VELA_MOCK_BOOKS_ROOT` point the mock (and the scripts' defaults) elsewhere.

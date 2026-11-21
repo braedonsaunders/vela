@@ -116,7 +116,8 @@ function seasonEpisodes(d: DetailModel | undefined, season: string): Card[] {
   const selected = selectedSeason(d, season);
   return (d?.episodes ?? []).filter(card => !selected || card.seasonId === selected);
 }
-const hasProgress = (x: Card) => x.progressSeconds > 0 && x.durationSeconds > 0 && !x.played;
+const reading = (x: Card) => x.media?.readingFraction ?? 0;
+const hasProgress = (x: Card) => !x.played && (x.progressSeconds > 0 && x.durationSeconds > 0 || reading(x) > 0 && reading(x) < 0.98);
 
 export function seasonDisplayName(card: Card): string {
   const name = card.name.trim();
@@ -175,7 +176,11 @@ export const VOCABULARY: Record<string, Accessor> = {
   'card.played': from('card', x => yes(x.played)),
   'card.episodeNumberLabel': from('card', x => x.episodeNumberLabel),
   'card.durationLabel': from('card', x => x.durationLabel),
-  'card.progressPct': from('card', x => pct(x.progressSeconds, x.durationSeconds)),
+  'card.progressPct': from('card', x => reading(x) > 0 ? pct(reading(x), 1) : pct(x.progressSeconds, x.durationSeconds)),
+  /** Music, book and audiobook cards (docs/media-kinds.md): the cover shape ('' follows the row or library), role and byline. */
+  'card.shape': from('card', x => x.shape ?? ''),
+  'card.role': from('card', x => x.media?.role ?? ''),
+  'card.byline': from('card', x => x.media?.byline ?? ''),
   'card.hasProgress': from('card', x => yes(hasProgress(x))),
   'card.label': from('card', cardName),
   'card.kindId': from('card', kindId),

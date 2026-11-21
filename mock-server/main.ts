@@ -9,6 +9,9 @@ import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
+import { audioSourceFor, isMediaLibrary, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
+import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
+import { renderCover } from './covers';
 
 import { scaleGuide } from './guide-fixture';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
@@ -32,14 +35,28 @@ const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevisio
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
 const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+// Music, books and audiobooks (docs/media-kinds.md). VELA_MOCK_OLD=1 is a server from before them,
+// and the VELA_MOCK_LAB=1 preset mirrors a lab server's video-only libraries.
+const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
+if (mediaEnabled) Object.assign(capabilities.features, {
+  mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook'] },
+  reading: { available: true, formats: ['epub', 'pdf', 'cbz'] },
+  audioPlayback: yes,
+} satisfies Partial<V.ServerCapabilities['features']>);
 if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
 const labPreset = process.env.VELA_MOCK_LAB === '1';
-const libraries: V.Library[] = labPreset ? [
+const videoLibraries: V.Library[] = labPreset ? [
   { ...fixtureLibraries[0]!, id: '1', browse: { ...fixtureLibraries[0]!.browse, filters: { ...fixtureLibraries[0]!.browse.filters, genres: undefined } } },
   { ...fixtureLibraries[1]!, id: '2', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
   { ...fixtureLibraries[1]!, id: '4', name: 'Anime Shows', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
 ] : fixtureLibraries;
-const libraryEntries = (id: string) => fixtureLibraryEntries(labPreset ? id === '1' ? 'movies' : id === '2' || id === '4' ? 'shows' : id : id);
+const libraries: V.Library[] = [...videoLibraries, ...(mediaEnabled ? mediaLibraries : [])];
+const isMedia = (libraryId: string) => mediaEnabled && isMediaLibrary(libraryId);
+/** A library's entries; media libraries list the root level, or `level` when a tab names one. */
+const libraryEntries = (id: string, level?: string): V.RowEntry[] => isMedia(id) ? mediaLibraryEntries(id, level) ?? []
+  : fixtureLibraryEntries(labPreset ? id === '1' ? 'movies' : id === '2' || id === '4' ? 'shows' : id : id);
+const findMediaTitle = (id: string) => mediaEnabled ? mediaTitle(id) : undefined;
+const findTitle = (id: string): V.Title | undefined => allTitles.find(title => title.id === id) ?? findMediaTitle(id);
 const libraryLiveItems = Array.from({ length: 75 }, (_, index): V.LibraryLiveItem => ({
   id: `stream-${index + 1}`, title: ['Conference keynote', 'City harbour camera', 'Creator Q&A'][index % 3]!,
   subtitle: ['Main stage', 'Waterfront', 'Community stream'][index % 3]!, badge: index % 2 ? 'Public webcam' : 'LIVE',
@@ -111,7 +128,56 @@ function episodesByShow(): V.Title[][] {
   }
   return [...grouped.values()];
 }
+/** Signs a media person portrait the same way as video person artwork. */
+function signedMediaPortrait(g: Grant, personId: string): V.ArtworkRef {
+  const ref = mediaPersonArtwork(personId), token = `${g.id}.${mac(`${g.id}|${ref.kind}|${personId}`)}`;
+  return { ...ref, sizes: ref.sizes.map(size => ({ ...size, url: `${size.url}&grant=${token}` })) };
+}
+/** A title as this viewer sees it (books carry the viewer's reading progress). */
+const present = (g: Grant, title: V.Title): V.Title => title.media ? withReading(g.viewer.id, title) : title;
+const presentEntry = (g: Grant, entry: V.RowEntry): V.RowEntry => entry.kind === 'title' && entry.title.media ? { ...entry, title: present(g, entry.title) } : entry;
+const titleRow = (id: string, name: string, purpose: V.Row['purpose'], style: string, items: V.Title[]): V.Row[] => items.length ? [{
+  id, name, purpose, style, receiptToken: '', continuation: 'exhausted', items: items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title, receiptToken: '' })) }] : [];
+const recentFirst = (a: V.Title, b: V.Title) => (b.watch?.lastViewedAt ?? '').localeCompare(a.watch?.lastViewedAt ?? '');
+const continueReading = (g: Grant) => mediaGroups.books.map(title => present(g, title))
+  .filter(title => !!title.watch?.reading && !title.watch.played && !removedContinue.has(title.id)).sort(recentFirst);
+// Audiobooks and their parts resume; music never enters Continue.
+const continueListening = () => [...mediaGroups.audiobooks, ...mediaGroups.parts]
+  .filter(title => (title.watch?.positionSeconds ?? 0) > 0 && !title.watch?.played && !removedContinue.has(title.id)).sort(recentFirst);
+const recentAlbums = () => [...mediaGroups.albums].sort((a, b) => (b.airDate ?? '').localeCompare(a.airDate ?? ''));
+function mediaHomeRows(g: Grant): V.Row[] {
+  if (!mediaEnabled || labPreset) return [];
+  return [...titleRow('media-recent-albums', 'Recently added albums', 'recentlyAdded', 'square', recentAlbums().slice(0, 12)),
+    ...titleRow('media-continue-reading', 'Continue reading', 'continue', 'poster', continueReading(g)),
+    ...titleRow('media-continue-listening', 'Continue listening', 'continue', 'square', continueListening())];
+}
+function mediaLibraryRows(g: Grant, libraryId: string): V.Row[] {
+  if (libraryId === 'music') return [...titleRow('music-recent-albums', 'Recently added albums', 'recentlyAdded', 'square', recentAlbums()),
+    ...titleRow('music-artists', 'Artists to explore', 'recommendation', 'square', mediaGroups.artists),
+    ...titleRow('music-quick-picks', 'Quick picks', 'recommendation', 'square', mediaGroups.tracks.filter((_, index) => index % 7 === 2))];
+  if (libraryId === 'books') return [...titleRow('books-continue', 'Continue reading', 'continue', 'poster', continueReading(g)),
+    ...titleRow('books-series', 'Series to start', 'recommendation', 'poster', mediaGroups.series),
+    ...titleRow('books-standalone', 'Standalone reads', 'collection', 'poster', mediaGroups.books.filter(book => !book.media?.parents?.length).map(book => present(g, book)))];
+  return [...titleRow('audiobooks-continue', 'Continue listening', 'continue', 'square', continueListening()),
+    ...titleRow('audiobooks-recent', 'Recently added', 'recentlyAdded', 'square', [...mediaGroups.audiobooks].sort((a, b) => (b.year ?? 0) - (a.year ?? 0)))];
+}
+/** Playlist members: playable leaves of a media container (an album's tracks, an artist's albums). */
+function mediaLeaves(title: V.Title): V.Title[] {
+  if (audioSourceFor(title.id)) return [title];
+  // Books are read, not played: they join no playlist.
+  return mediaChildren(title.id).flatMap(mediaLeaves);
+}
+function recordListening(session: Session, title: V.Title, ended: boolean): void {
+  const position = session.plan.positionSeconds ?? 0, finished = ended || position >= (session.plan.durationSeconds ?? 0) - 1;
+  const watch = title.watch ?? { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
+  // Tracks never store a resume point; audiobooks and parts do, as video.
+  title.watch = { ...watch, positionSeconds: finished || title.media?.role === 'track' ? 0 : position,
+    played: title.media?.role === 'track' ? watch.played || finished : finished, lastViewedAt: new Date().toISOString() };
+  viewer.policyRevision = `mock-${++viewerRevision}`;
+}
 function recordPlayback(session: Session, ended: boolean): void {
+  const media = session.plan.titleId ? findMediaTitle(session.plan.titleId) : undefined;
+  if (media) return recordListening(session, media, ended);
   const title = allTitles.find(value => value.id === session.plan.titleId);
   if (!title) return;
   const position = session.plan.positionSeconds ?? 0;
@@ -119,11 +185,11 @@ function recordPlayback(session: Session, ended: boolean): void {
   title.watch = { ...(title.watch ?? { favorite: false, watchlisted: false }), positionSeconds: finished ? 0 : position, played: finished };
   viewer.policyRevision = `mock-${++viewerRevision}`;
 }
-function homeScope() { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows]))}`; }
+function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g)]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const source = row.purpose === 'continue' ? { ...row, items: row.items.filter(item => item.kind !== 'title' || !removedContinue.has(item.title.id)) } : row;
   const bound = boundRow(g, source);
-  return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope()}`, 20) };
+  return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope(g)}`, 20) };
 }
 const labRows: V.Row[] = [
   ['Trending Now', 30], ['Top 10 on Ether On Air Lab Today', 10], ['New & Noteworthy', 17],
@@ -142,7 +208,10 @@ const labHomeRows: V.Row[] = [
   { ...labRows[0]!, id: 'lab-home-trending', items: labRows[0]!.items.slice(0, 20) },
 ];
 function homeRows(g: Grant, url: URL): V.Page<V.Row> {
-  const result = page(labPreset ? labHomeRows : [...progressRows(), ...rows], url, g, `home-rows:${homeScope()}`, labPreset ? 5 : 2);
+  // Media rows follow the first couple of rows (Continue Watching, Next Up).
+  const ordered = [...progressRows(), ...rows];
+  ordered.splice(2, 0, ...mediaHomeRows(g));
+  const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
   return { ...result, items: result.items.map(row => homeRow(g, row, firstItems)) };
 }
@@ -204,6 +273,8 @@ const playlistCard = (g: Grant, value: MockPlaylist): V.PlaylistCard => ({ id: v
 function playlistTitles(ids: string[]): V.Title[] {
   const result: V.Title[] = [];
   for (const id of ids) {
+    const media = findMediaTitle(id);
+    if (media) { result.push(...mediaLeaves(media)); continue; }
     const title = allTitles.find(item => item.id === id);
     if (!title) fail('not-found', 'not_found', 'Title not found');
     if (title.kind === 'movie' || title.kind === 'episode') result.push(title);
@@ -315,8 +386,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (!value) fail('not-found', 'not_found', 'Playlist not found');
       if (method === 'GET') {
         const items: V.RowEntry[] = value.entries.flatMap(member => {
-          const title = allTitles.find(item => item.id === member.titleId); return title ? [{ id: title.id, entryId: member.entryId, kind: 'title' as const,
-            title: { ...title, artwork: title.artwork.map(ref => signedArtwork(g, title.id, ref.kind)) }, receiptToken: '' }] : [];
+          const title = findTitle(member.titleId); return title ? [{ id: title.id, entryId: member.entryId, kind: 'title' as const,
+            title: title.media ? present(g, title) : { ...title, artwork: title.artwork.map(ref => signedArtwork(g, title.id, ref.kind)) }, receiptToken: '' }] : [];
         });
         return cached(req, { collection: { id: value.id, kind: 'playlist', name: value.name, artwork: playlistCard(g, value).artwork,
           smart: value.smart, entryCount: value.entries.length, updatedAt: value.updatedAt }, ...page(items, url, g, `playlist:${id}:${value.updatedAt}`) } satisfies V.CollectionContents, g.id);
@@ -364,6 +435,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'GET' && libraryRowsMatch) {
     const library = libraries.find(l => l.id === decodeURIComponent(libraryRowsMatch[1]!));
     if (!library) fail('not-found', 'not_found', 'Library not found');
+    if (isMedia(library.id)) { const shelves = mediaLibraryRows(g, library.id); return cached(req, page(shelves.map(row => boundRow(g, row)), url, g, `library-rows:${library.id}:${mac(JSON.stringify(shelves))}`), g.id); }
     if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${library.id}`), g.id); }
     const items = libraryEntries(library.id);
     const ids = new Set(items.filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
@@ -384,6 +456,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const query = (url.searchParams.get('query') ?? '').trim();
     if (query && tab?.search === false) fail('request', 'unsupported_library_query', 'Tab search is disabled');
     const matches = (name: string) => matchesLibrarySearch(name, query);
+    if (tab?.kind === 'people' && isMedia(library.id)) {
+      const entries: V.LibraryPersonEntry[] = mediaLibraryPeople(library.id, tab.facet ?? 'author').map(({ person, itemCount }) => ({
+        id: `person:${person.id}`, kind: 'person', person: { id: person.id, name: person.name, photo: signedMediaPortrait(g, person.id) }, itemCount }));
+      entries.sort((a, b) => tab.order === 'count' ? b.itemCount - a.itemCount || a.person.name.localeCompare(b.person.name) : a.person.name.localeCompare(b.person.name));
+      return cached(req, page(entries.filter(entry => matches(entry.person.name)), url, g, `library-people:${library.id}:${tab.id}:${query}`), g.id);
+    }
     if (tab?.kind === 'people') {
       const entries: V.LibraryPersonEntry[] = Array.from({ length: 105 }, (_, index) => ({
         id: `person:performer-${index}`, kind: 'person',
@@ -412,6 +490,17 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, page(entries.filter(entry => matches(entry.collection.name)), url, g, `library-collections:${library.id}:${query}`), g.id);
   }
   const personMatch = /^\/people\/([^/]+)(\/titles)?$/.exec(path);
+  const creditedPerson = personMatch && mediaEnabled ? mediaPerson(decodeURIComponent(personMatch[1]!)) : undefined;
+  if (method === 'GET' && creditedPerson) {
+    if (!personMatch![2]) return cached(req, { id: creditedPerson.id, name: creditedPerson.name, photo: signedMediaPortrait(g, creditedPerson.id), roles: creditedPerson.roles,
+      knownFor: creditedPerson.knownFor, biography: creditedPerson.biography } satisfies V.PersonDetail, g.id);
+    const libraryId = url.searchParams.get('libraryId');
+    const library = libraryId ? libraries.find(l => l.id === libraryId) : undefined;
+    if (libraryId && !library) fail('not-found', 'not_found', 'Library not found');
+    const items: V.RowEntry[] = mediaPersonTitles(creditedPerson.id).filter(({ title }) => !library || library.media === title.media?.class)
+      .map(({ title, role }) => ({ id: `${creditedPerson.id}:${title.id}`, kind: 'title', title: present(g, title), role, receiptToken: '' }));
+    return cached(req, page(items, url, g, `person:${creditedPerson.id}:${libraryId ?? ''}`), g.id);
+  }
   if (method === 'GET' && personMatch && process.env.VELA_MOCK_OLD !== '1') {
     const performer = /^performer-(\d+)$/.exec(personMatch[1]!);
     const performerIndex = performer ? Number(performer[1]) : -1;
@@ -454,8 +543,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const q = url.searchParams, options = library.browse;
     const invalid = () => fail('request', 'invalid_library_query', 'Unsupported or malformed library query');
     for (const key of q.keys()) if (key.startsWith('facet.') ? !options.filters.facets?.some(f => `facet.${f.id}` === key) : !['cursor','limit','tab','sort','direction','kind','genre','year','played','favorite','collectionId','query'].includes(key) || q.getAll(key).length !== 1) invalid();
-    const tab = q.get('tab') ? library.tabs?.find(candidate => candidate.id === q.get('tab') && candidate.kind === 'view') : undefined;
-    if ((q.has('tab') && !tab) || (tab && q.has('query') && !tab.search)) invalid();
+    // View tabs, and library tabs that list one level (Albums, Tracks, Series) or a media library's root.
+    const tab = q.get('tab') ? library.tabs?.find(candidate => candidate.id === q.get('tab') && (candidate.kind === 'view' || candidate.kind === 'library' && (candidate.level !== undefined || isMedia(library.id)))) : undefined;
+    if ((q.has('tab') && !tab) || (tab?.kind === 'view' && q.has('query') && !tab.search)) invalid();
     const collectionId = q.get('collectionId');
     if (collectionId && (process.env.VELA_MOCK_OLD === '1' || !options.filters.collectionId || collectionId !== 'fixture-collection')) invalid();
     const sort = q.get('sort') ?? options.defaultSort, direction = q.get('direction') ?? options.defaultDirection;
@@ -465,7 +555,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (genre !== null && (!options.filters.genre || !genre.trim() || genre.length > 100)) invalid();
     if (year !== null && (!options.filters.year || !/^\d{1,4}$/.test(year) || Number(year) < 1)) invalid();
     for (const key of ['played','favorite'] as const) if (q.has(key) && (!options.filters[key] || !['true','false'].includes(q.get(key)!))) invalid();
-    let items = libraryEntries(library.id).filter(e => {
+    let items = libraryEntries(library.id, tab?.level).map(e => presentEntry(g, e)).filter(e => {
       if (e.kind !== 'title') return true;
       const t = e.title;
       if (q.get('query') && !t.name.toLowerCase().includes(q.get('query')!.toLowerCase())) return false;
@@ -484,7 +574,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const scope = `library:${library.id}:${viewer.policyRevision}:${mac(JSON.stringify([query, q.getAll('query'), [...q].filter(([key]) => key.startsWith('facet.')), items]))}`;
     items = items.map(i => ({ ...i, receiptToken: receipt(g, `library:${scope}:${i.id}`) }));
     const paging = new URL(url);
-    if (tab) paging.searchParams.set('limit', '6');
+    if (tab?.kind === 'view') paging.searchParams.set('limit', '6');
     return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, paging, g, scope), total: items.length } satisfies V.LibraryContents, g.id);
   }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
@@ -502,6 +592,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const libraryId = url.searchParams.get('libraryId');
     if (url.searchParams.getAll('libraryId').length > 1 || libraryId && placement !== 'library') fail('request', 'invalid_request', 'Invalid library placement');
     if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
+    if (libraryId && isMedia(libraryId)) { const shelves = mediaLibraryRows(g, libraryId); return cached(req, page(shelves.map(row => boundRow(g, row)), url, g, `library-rows:${libraryId}:${mac(JSON.stringify(shelves))}`), g.id); }
     if (libraryId && process.env.VELA_MOCK_OLD !== '1') {
       if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${libraryId}`), g.id); }
       const ids = new Set(libraryEntries(libraryId).filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
@@ -512,6 +603,13 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     }
     if (!['home','detail','library'].includes(placement)) fail('request', 'invalid_placement', 'Unknown row placement');
     if (placement === 'detail') {
+      const media = findMediaTitle(url.searchParams.get('titleId') ?? '');
+      if (media) {
+        // An artist page's top tracks: purpose 'recommendation', id suffix ':top'.
+        const top = media.media?.role === 'artist' ? titleRow(`${media.id}:top`, 'Top tracks', 'recommendation', 'square',
+          mediaGroups.tracks.filter(track => track.showId === media.id && (track.media?.index ?? 0) % 3 === 1).slice(0, 5)) : [];
+        return cached(req, { items: top.map(row => boundRow(g, row)), continuation: 'exhausted' } satisfies V.Page<V.Row>, g.id);
+      }
       if (!detail(url.searchParams.get('titleId') ?? '')) fail('not-found', 'title_not_found', 'Detail title not found');
       return cached(req, { items: [], continuation: 'exhausted' }, g.id);
     }
@@ -524,7 +622,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { collection: { id: row.id, kind: 'collection', name: row.name, artwork: [] }, ...page(boundRow(g, row).items, url, g, `collection:${row.id}`) } satisfies V.CollectionContents, g.id);
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
-  if (method === 'GET' && rowMatch) { const r = [...rows, ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
+  if (method === 'GET' && rowMatch) { const r = [...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
   if (versionsMatch) {
     if (capabilities.features.versions?.available !== true) fail('policy', 'feature_unavailable', 'Versions are unavailable');
@@ -547,6 +645,42 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const response = json(result);
     if (result.state === 'preparing') response.headers.set('Retry-After', String(result.retryAfterSeconds));
     return response;
+  }
+  const mediaMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch|read|reading-progress))?$/.exec(path);
+  const mediaItem = mediaMatch ? findMediaTitle(decodeURIComponent(mediaMatch[1]!)) : undefined;
+  if (mediaMatch && mediaItem) {
+    const action = mediaMatch[2], viewerId = g.viewer.id;
+    if (method === 'GET' && !action) {
+      const d = mediaDetail(mediaItem.id)!;
+      return cached(req, { ...d, title: present(g, d.title), ...(d.seasons ? { seasons: d.seasons.map(t => present(g, t)) } : {}), ...(d.episodes ? { episodes: d.episodes.map(t => present(g, t)) } : {}) } satisfies V.TitleDetail, g.id);
+    }
+    // Ordered children: an artist's albums, an album's tracks by disc then index, a series' books, an audiobook's parts.
+    if (method === 'GET' && action === 'children') return cached(req, page(mediaChildren(mediaItem.id).map(t => present(g, t)), url, g, `children:${mediaItem.id}`), g.id);
+    if (method === 'GET' && action === 'extras') return cached(req, { items: [] } satisfies V.ExtrasResponse, g.id);
+    if (method === 'POST' && action === 'watch') {
+      mediaItem.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
+      for (const key of ['played', 'favorite', 'watchlisted'] as const) if (typeof body[key] === 'boolean') mediaItem.watch[key] = body[key];
+      // Played/unplayed on a book is the viewer's own reading state; unplayed clears the progress.
+      if (mediaItem.media?.reading && typeof body.played === 'boolean') setReadingState(viewerId, mediaItem.id, body.played ? { ...readingState(viewerId, mediaItem), played: true } : { played: false });
+      if (body.continueWatching === false) removedContinue.add(mediaItem.id);
+      viewer.policyRevision = `mock-${++viewerRevision}`;
+      return json({ accepted: true } satisfies V.Ack);
+    }
+    if (method === 'POST' && (action === 'read' || action === 'reading-progress') && !mediaItem.media?.reading) fail('request', 'not_readable', 'Only books open in the reader');
+    if (method === 'POST' && action === 'read') {
+      const grant = await issueReadGrant(g.id, mediaItem, readingState(viewerId, mediaItem).reading);
+      if (!grant) fail('source', 'media_not_generated', `Run bun ${bookGenerator} first`);
+      return json(grant);
+    }
+    if (method === 'POST' && action === 'reading-progress') {
+      const { locator, fraction, label } = body as Partial<V.ReadingProgressRequest>;
+      if (typeof locator !== 'string' || !locator || locator.length > 4096 || typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction < 0 || fraction > 1
+        || (label !== undefined && (typeof label !== 'string' || label.length > 200))) fail('request', 'invalid_reading_progress', 'locator (1–4096 chars), fraction 0–1 and an optional label up to 200 chars are required');
+      const reading: V.ReadingProgress = { locator, fraction, ...(label ? { label } : {}), updatedAt: new Date().toISOString() };
+      setReadingState(viewerId, mediaItem.id, { reading, played: readingState(viewerId, mediaItem).played || fraction >= 0.98 });
+      viewer.policyRevision = `mock-${++viewerRevision}`;
+      return json({ accepted: true } satisfies V.Ack);
+    }
   }
   if (titleMatch) {
     const requestedSeason = /^season-meridian-(\d+)$/.exec(titleMatch[1]);
@@ -603,7 +737,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (body.library !== undefined && !visibleLibraries.some(l => l.id === body.library)) fail('request', 'invalid_library', 'Invalid library');
     const libraryIds = body.library ? new Set(libraryEntries(body.library).flatMap(e => e.kind === 'title' ? [e.title.id] : [])) : undefined;
     const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
-    const items = titles.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (body.mode === 'fast' ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
+    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks].map(t => present(g, t)) : [])];
+    const items = searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (body.mode === 'fast' ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
     if (body.sort && body.sort !== 'relevance') items.sort((a, b) => (body.direction === 'desc' ? -1 : 1) * (body.sort === 'title' ? a.name.localeCompare(b.name) : (a.year ?? 0) - (b.year ?? 0)));
     const paging = new URL(url); if (body.cursor) paging.searchParams.set('cursor', body.cursor); if (body.limit) paging.searchParams.set('limit', String(body.limit));
     const titlePage = page(items, paging, g, `search:${body.mode}:${body.query}:${body.sort ?? ""}:${body.direction ?? ""}:${body.kind ?? ""}:${body.library ?? ""}`);
@@ -651,6 +786,16 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path === '/playback') {
     if (body.audioTrackId !== undefined || body.subtitleTrackId != null) fail('policy', 'feature_unavailable', 'Initial track selection is unavailable; use native HLS audio and sidecar subtitles');
     if (!body.client || [body.titleId, body.channelId, body.extraId].filter(Boolean).length !== 1) fail('request', 'invalid_target', 'Exactly one playback target required');
+    const listening = body.titleId ? findMediaTitle(body.titleId) : undefined;
+    if (listening) {
+      const source = audioSourceFor(listening.id);
+      if (!source) fail('request', 'not_playable', listening.media?.reading ? 'Books open with POST /titles/:id/read' : 'Select a track, audiobook or part to play');
+      if (faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted');
+      if (body.positionSeconds !== undefined && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > source.durationSeconds)) fail('request', 'invalid_position', `Position must be 0–${source.durationSeconds}`);
+      const s = await createAudioSession(g.id, body, listening);
+      if (!s) fail('source', 'media_not_generated', `Run bun ${musicGenerator} first`);
+      return json(s.plan);
+    }
     const channel = channels.find(c => c.id === body.channelId);
     const title = allTitles.find(t => t.id === body.titleId), extra = extras.find(e => e.id === body.extraId);
     if (!title && !extra && !channel) fail('not-found', 'title_not_found', 'Playback target not found');
@@ -705,7 +850,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
         }
       }
       if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch', 'version'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
-      if (body.kind === 'seek' && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > fixtureDurationSeconds)) fail('request', 'invalid_position', `Position must be 0–${fixtureDurationSeconds}`);
+      const duration = s.plan.durationSeconds ?? fixtureDurationSeconds;
+      if (body.kind === 'seek' && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > duration)) fail('request', 'invalid_position', `Position must be 0–${duration}`);
       if (body.kind === 'tracks') fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
       if (body.kind === 'stop') recordPlayback(s, false);
@@ -737,10 +883,14 @@ async function dispatch(req: Request): Promise<Response> {
     }
     const s = sessions.get(media[1]), g = s && grants.get(s.owner);
     if (!s || !g || g.revoked || g.expires < Date.now() || s.expires <= Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant');
+    if (s.plan.media === 'audio') return serveAudioSession(req, s, media[3]);
     const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]));
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
   }
+  // Reading grants: opaque short-lived document URLs, fetched without the bearer.
+  const reading = /^\/reading\/media\/([a-f0-9]+)\/([^/]+)$/.exec(url.pathname);
+  if (reading) return serveReadTicket(req, reading[1]!, reading[2]!, owner => { const g = grants.get(owner); return !!g && !g.revoked && g.expires > Date.now(); });
   // Plex Home avatars, as Ether serves them: a sealed same-server path, plain GET, no headers.
   const avatar = /^\/vela\/v0\/images\/plexavatar-([a-z0-9-]+)$/.exec(url.pathname);
   if (avatar && req.method === 'GET') return new Response(renderArtwork(`profile-${avatar[1]}`, 'avatar', 240), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'private, no-store' } });
@@ -753,7 +903,8 @@ async function dispatch(req: Request): Promise<Response> {
     }
     // Only synthetic assets: no private or remotely fetched imagery.
     const width = Math.max(120, Math.min(1920, Number(url.searchParams.get('width')) || 480));
-    return new Response(renderArtwork(art[1], url.searchParams.get('kind') ?? 'poster', width), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': url.searchParams.has('grant') ? 'private, no-store' : 'public, max-age=86400' } });
+    const kind = url.searchParams.get('kind') ?? 'poster';
+    return new Response((mediaEnabled ? renderCover(art[1]!, kind, width) : undefined) ?? renderArtwork(art[1]!, kind, width), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': url.searchParams.has('grant') ? 'private, no-store' : 'public, max-age=86400' } });
   }
   const packFile = req.method === 'GET' ? await packAsset(url.pathname) : undefined;
   if (packFile) return packFile;
@@ -788,6 +939,7 @@ function facetValues(entry: V.RowEntry, field: string): string[] {
   if (field === 'studios') return [['Studio North', 'Pixel Workshop', 'Moonlight Pictures', 'Observatory Films'][(entry.title.year ?? 0) % 4]!];
   if (field === 'topic') return entry.title.genres;
   if (field === 'creator') return [(entry.title.year ?? 0) % 2 ? 'Studio North' : 'Pixel Workshop'];
+  if ((field === 'author' || field === 'narrator') && entry.title.media) return (entry.title.media.credits ?? []).filter(credit => credit.role === field).map(credit => credit.name);
   if (field === 'length') return [(entry.title.durationSeconds ?? 0) < 6000 ? 'Under 100 min' : '100 min or longer'];
   return [];
 }

@@ -3,6 +3,7 @@
 // selected server. They replace the shapes Exact generated from app.contract (app.contract.d.ts),
 // field for field, so the projections in discovery/, live/ and appearance/ did not change.
 import type * as V from './wire';
+import type { CardMedia, CardShape } from './media';
 
 /** A labelled piece of a title's parent context and its select action, when known. */
 export interface ContextPart { label: string; select: string }
@@ -47,6 +48,10 @@ export interface Card {
   receipt: string;
   /** Stable playlist member identity; absent outside playlist contents. */
   entryId?: string;
+  /** Music, book and audiobook facts (docs/media-kinds.md); absent for video. */
+  media?: CardMedia;
+  /** The card's own cover shape ('' or absent: the row's or library's). */
+  shape?: CardShape;
 }
 
 /** A row of cards, in the server's order. */
@@ -153,6 +158,8 @@ export interface DetailModel {
   castPeople: Person[];
   /** Parts the server is still making (`seasons`, `episodes`, `extras`, `trailer`): not yet there, not absent. */
   pending: V.PendingPart[];
+  /** Chapters of a playable title (an audiobook's), in order. */
+  chapters?: V.Chapter[];
 }
 
 /** A library as a destination in the shell. */
@@ -160,6 +167,8 @@ export interface Destination {
   id: string;
   name: string;
   kind: string;
+  /** What the library holds; 'video' for servers without media classes. */
+  media?: V.MediaClass;
   dateDisplay: 'year' | 'date';
   backdrop: string;
 }
@@ -177,6 +186,8 @@ export interface SortChoice extends Choice {
 export interface LibraryModel {
   canSearch?: boolean;
   presentation?: V.Library["presentation"];
+  /** What the library holds; 'video' for servers without media classes. */
+  media?: V.MediaClass;
   tabs?: V.LibraryTab[];
   facets?: V.LibraryFacet[];
   query?: string;

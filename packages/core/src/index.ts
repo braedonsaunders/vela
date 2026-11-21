@@ -40,3 +40,5 @@ export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libra
 
 export { canSeeAll } from './store/rows';
 export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFlowEvent, type AuthStep } from './store/auth-flow';
+export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, opensMediaPage, shapeOf, MEDIA_PAGE_ROLES, type CardMedia, type CardShape, type MediaCredit, type MediaParent } from './media';
+export type { ChildrenModel, MediaFeatures } from './store/media';
