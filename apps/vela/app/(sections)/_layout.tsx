@@ -70,9 +70,9 @@ function SectionsContent() {
   const session = useVelaState(state => state.auth.revision);
   const content = useMemo(() => (
     <View style={{ flex: 1, overflow: 'hidden' }}>
-      <SectionScenes key={session} focused={focused} sectionKey={key} reducedMotion={reducedMotion} transition={transition.current} />
+      <SectionScenes key={session} focused={focused} sectionKey={key} reducedMotion={reducedMotion} reducedMotionSetting={reducedMotionSetting} transition={transition.current} />
     </View>
-  ), [session, focused, key, reducedMotion, transition.current]);
+  ), [session, focused, key, reducedMotion, reducedMotionSetting, transition.current]);
   const framedHost = useMemo(() => shellHost ? { ...shellHost, children: content } : null, [shellHost, content]);
   if (!framedHost || !shell) return content;
   // Skip to content comes before the shell's navigation, so it is the first tab stop.
@@ -83,10 +83,11 @@ function SectionsContent() {
 }
 
 /** Keep visited sections mounted; only the active and briefly outgoing scenes are visible. */
-function SectionScenes({ focused, sectionKey, reducedMotion, transition }: {
+function SectionScenes({ focused, sectionKey, reducedMotion, reducedMotionSetting, transition }: {
   focused: boolean;
   sectionKey: string;
   reducedMotion: boolean;
+  reducedMotionSetting: boolean;
   transition: { direction: SectionDirection; animated: boolean };
 }) {
   const { state, descriptors } = Navigator.useContext();
@@ -130,6 +131,7 @@ function SectionScenes({ focused, sectionKey, reducedMotion, transition }: {
             current={isCurrent}
             visible={visible}
             animated={transition.animated && !reducedMotion}
+            fade={Platform.isTV && !reducedMotionSetting}
             direction={transition.direction}
             transitionKey={sectionKey}
           >

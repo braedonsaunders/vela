@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Platform, useWindowDimensions, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import {
+  SECTION_FADE_MS,
   SECTION_SLIDE_MS,
   slideInBackward,
   slideInForward,
@@ -20,7 +21,7 @@ const WEB_SCENE = { flex: 1 } as const;
 const HIDDEN_WEB_SCENE = { flex: 1, visibility: 'hidden' } as const;
 
 /** One scene in the directional slide shared by top-level sections and in-page library tabs. */
-export function SectionScene({ children, current, visible = true, animated, direction, offset, testID, transitionKey }: {
+export function SectionScene({ children, current, visible = true, animated, direction, offset, testID, transitionKey, fade = false }: {
   children: ReactNode;
   current: boolean;
   visible?: boolean;
@@ -29,9 +30,11 @@ export function SectionScene({ children, current, visible = true, animated, dire
   offset?: Animated.Value;
   testID?: string;
   transitionKey?: string;
+  /** On TV, where sections switch in place: the incoming scene fades in briefly. */
+  fade?: boolean;
 }) {
   if (Platform.OS !== 'web' && transitionKey !== undefined) return <RetainedNativeScene current={current}
-    visible={visible} animated={animated} direction={direction} section={transitionKey} testID={testID}>{children}</RetainedNativeScene>;
+    visible={visible} animated={animated} direction={direction} section={transitionKey} testID={testID} fade={fade}>{children}</RetainedNativeScene>;
   const wanted = visible && animated && Platform.OS === 'web' ? WEB_SLIDES[`${current ? 'in' : 'out'}${direction}`] : undefined;
   // Reanimated's web view applies a CSS animation while it renders, not when React commits. A
   // section switch renders as a transition, in slices, so the leaving scene began its slide up to
@@ -65,18 +68,24 @@ export function SectionScene({ children, current, visible = true, animated, dire
 
 /** A retained view owns its native value for life. Swapping incoming/outgoing values left
  * Fabric's retained Home at the outgoing transform when search returned to it. */
-function RetainedNativeScene({ children, current, visible, animated, direction, section, testID }: {
+function RetainedNativeScene({ children, current, visible, animated, direction, section, testID, fade }: {
   children: ReactNode; current: boolean; visible: boolean; animated: boolean;
-  direction: SectionDirection; section: string; testID?: string;
+  direction: SectionDirection; section: string; testID?: string; fade: boolean;
 }) {
   const { width } = useWindowDimensions();
   const offset = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
   const previous = useRef<ScenePosition | null>(null);
   const [settled, setSettled] = useState(true);
   useLayoutEffect(() => {
     const next = { section, current, visible, width };
     const motion = sceneMotion(previous.current, next, animated, direction);
+    const arriving = fade && current && visible && !!previous.current && !previous.current.current;
     previous.current = next;
+    if (arriving) {
+      opacity.setValue(0);
+      Animated.timing(opacity, { toValue: 1, duration: SECTION_FADE_MS, easing: Easing.out(Easing.ease), useNativeDriver: true }).start();
+    } else if (!current) opacity.setValue(1);
     offset.setValue(motion.from);
     if (motion.from === motion.to) { setSettled(true); return; }
     setSettled(false);
@@ -84,11 +93,11 @@ function RetainedNativeScene({ children, current, visible, animated, direction, 
       easing: Easing.inOut(Easing.ease), useNativeDriver: true });
     slide.start(({ finished }) => { if (finished) setSettled(true); });
     return () => slide.stop();
-  }, [section, current, visible, width, animated, direction, offset]);
+  }, [section, current, visible, width, animated, direction, offset, fade, opacity]);
   return <Animated.View testID={testID} pointerEvents={current ? 'auto' : 'none'}
     accessibilityElementsHidden={!current} importantForAccessibility={current ? 'auto' : 'no-hide-descendants'}
     style={{ display: visible ? 'flex' : 'none', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
-      transform: [{ translateX: offset }] }}
+      transform: [{ translateX: offset }], opacity }}
     passthroughAnimatedPropExplicitValues={settled && current ? { style: { transform: [{ translateX: 0 }] } } : undefined}>
     {children}
   </Animated.View>;

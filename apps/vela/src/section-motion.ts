@@ -1,5 +1,7 @@
 // The same directional slide is used for section tabs and library views.
 export const SECTION_SLIDE_MS = 260;
+/** A TV switches sections in place; the incoming one fades in over this. */
+export const SECTION_FADE_MS = 160;
 export type SectionDirection = 1 | -1;
 
 export function sectionDirection(next: number, previous: number): SectionDirection {
