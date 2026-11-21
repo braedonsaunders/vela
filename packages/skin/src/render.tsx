@@ -20,7 +20,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Children, memo, cloneElement, createContext, forwardRef, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
+import { Children, memo, cloneElement, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { Animated as RNAnimated, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -676,7 +676,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
   const instant = useContext(InstantContent);
   const leaving = useContext(Leaving) && !!node.escape?.length;
-  const opening = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
+  // Only a node with motion reads the screen's activity (use() may be conditional): a section
+  // coming or going redraws those nodes, not every box in it.
+  const opening = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, node.motion ? use(ScreenActive) : true);
   const motion = leaving ? MENU_LEAVE : opening;
   const rowId = ctx.row?.id ?? '';
 
@@ -1279,7 +1281,7 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const instant = useContext(InstantContent);
-  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
+  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, node.motion ? use(ScreenActive) : true);
   const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
   return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion,
     ...(!web && pointer.content === 'none' ? { pointerEvents: 'none' } : {}) } as Record<string, unknown>, fx };

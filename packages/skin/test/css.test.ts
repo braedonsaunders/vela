@@ -191,3 +191,15 @@ test('nested inherited font sizes stay in points on TV instead of scaling at eac
   expect(third.fontSize).toBe(first.fontSize);
   expect(inheritText(third, { 'font-size': '150%' }, viewport).fontSize).toBe(first.fontSize * 1.5);
 });
+
+test('equal inherited text from the same parent is the same value, so boxes below need not redraw', async () => {
+  const { inheritText } = await import('../src/text-inheritance');
+  platform.OS = 'web'; platform.isTV = false;
+  const viewport = measure(1440, 900).viewport;
+  const parent = { rows: {}, fontSize: 16 };
+  const first = inheritText(parent, { color: '#eee', 'font-size': '18px' }, viewport);
+  expect(inheritText(parent, { 'font-size': '18px', color: '#eee' }, viewport)).toBe(first);
+  expect(inheritText(parent, { color: '#fff', 'font-size': '18px' }, viewport)).not.toBe(first);
+  expect(inheritText(parent, { color: '#eee', 'font-size': '18px' }, measure(800, 600).viewport)).not.toBe(first);
+  expect(inheritText(first, {}, viewport)).toBe(first);
+});
