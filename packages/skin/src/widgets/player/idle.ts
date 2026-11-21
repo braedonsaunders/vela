@@ -4,7 +4,7 @@
 // key or remote press brings it back.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { fromViewer, useRemote } from './remote';
+import { fromViewer, pressed, useRemote } from './remote';
 
 /** A television is watched from across the room and worked with a remote: it waits longer. */
 const IDLE_MS = Platform.isTV ? 6000 : 3500;
@@ -78,8 +78,10 @@ export function useIdle(hold: boolean): Idle {
   // by the focus engine and never arrive here (nor, on the new architecture, do focus changes):
   // the chrome wakes on its bars' focus for those. A focus event that does arrive counts only while
   // the chrome stands (hiding moves focus to the stage, which would otherwise wake it at once).
+  // Only a completed press counts: a chrome brought up on Android's key-down would take the native
+  // focus from the picture before the key-up, which the shortcuts read (remote-actions.ts).
   useRemote(event => {
-    if (fromViewer(event) || shown.current) wake();
+    if (pressed(event) && (fromViewer(event) || shown.current)) wake();
   });
 
   return { visible, wake, stir, hide };

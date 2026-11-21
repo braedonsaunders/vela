@@ -1,6 +1,8 @@
 // React Native's bridgeless Android surface does not reliably forward hardware presses to
 // useTVEventHandler. Capture at the activity, before native focus consumes the arrows, and
-// leave normal dispatch (including BackHandler and button presses) intact.
+// leave normal dispatch (including BackHandler and button presses) intact. Phone remote apps send
+// the same D-pad and media keys as the remote; Enter, the numeric pad's Enter and the headset
+// hook stand for select and play/pause, the skip keys for the ten-second steps.
 const { withMainActivity } = require('expo/config-plugins');
 
 module.exports = function withAndroidTVKeys(config) {
@@ -18,12 +20,13 @@ module.exports = function withAndroidTVKeys(config) {
         android.view.KeyEvent.KEYCODE_DPAD_DOWN -> "down"
         android.view.KeyEvent.KEYCODE_DPAD_LEFT -> "left"
         android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
-        android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> "select"
-        android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "playPause"
+        android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER,
+        android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> "select"
+        android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_HEADSETHOOK -> "playPause"
         android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
-        android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> "pause"
-        android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> "rewind"
-        android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "fastForward"
+        android.view.KeyEvent.KEYCODE_MEDIA_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_STOP -> "pause"
+        android.view.KeyEvent.KEYCODE_MEDIA_REWIND, android.view.KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> "rewind"
+        android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, android.view.KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> "fastForward"
         android.view.KeyEvent.KEYCODE_CHANNEL_UP -> "channelUp"
         android.view.KeyEvent.KEYCODE_CHANNEL_DOWN -> "channelDown"
         else -> null
@@ -32,6 +35,11 @@ module.exports = function withAndroidTVKeys(config) {
         val data = com.facebook.react.bridge.Arguments.createMap().apply {
           putString("eventType", type)
           putInt("eventKeyAction", event.action)
+          // What has native focus as the press arrives: the testID of the focused view, "" for a
+          // view without one, "none" when nothing is focused. The player acts on presses that no
+          // control will take (the picture is focused) without trusting a re-rendered flag.
+          val focused = currentFocus
+          putString("focus", if (focused == null) "none" else (focused.getTag(com.facebook.react.R.id.react_test_id) as? String) ?: "")
         }
         reactHost?.currentReactContext?.emitDeviceEvent("velaAndroidTVKey", data)
       }

@@ -4,11 +4,11 @@
 // controls with their menus, and the info card sits at the top right. It hides itself while
 // playback runs untouched and comes back on any pointer, key or remote input.
 import { FocusPressable as Pressable } from '../../focus';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
 import { msg } from '@vela/core';
 import { useHost } from '../../host';
-import { BottomBar, TopBar, type Opened } from './bars';
+import { BottomBar, TopBar, type Opened, type Reveal } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
 import { holdsChrome } from './hold';
 import { useIdle } from './idle';
@@ -18,10 +18,12 @@ import { LiveDial, LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
 import { present, type PlayerView } from './present';
+import { PICTURE_TEST_ID } from './remote-actions';
 import { Status, type Failed } from './status';
 
 /** Rapid steps add up from the last target, not from a position the engine has yet to report. */
 const STEP_MEMORY_MS = 1500;
+const ANDROID_TV = Platform.OS === 'android' && Platform.isTV;
 
 /** Draws nothing outside a watch route (the route provides the chrome's state). */
 export function PlayerChrome() {
@@ -53,6 +55,9 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const [opened, setOpened] = useState<Opened>(null);
   const [info, setInfo] = useState(false);
   const [active, setActive] = useState(false);
+  /** What a hidden chrome focuses when it comes up (TV): the play toggle, or the timeline after a
+   * step from the remote, so that the next side presses keep stepping. */
+  const [reveal, setReveal] = useState<Reveal>('toggle');
   const lastStep = useRef<{ seconds: number; at: number } | null>(null);
 
   const failed = failureOf(state, view);
@@ -75,11 +80,11 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     lastStep.current = { seconds, at: Date.now() };
     send({ type: 'seek', seconds });
   };
+  const recentStep = () =>
+    lastStep.current && Date.now() - lastStep.current.at < STEP_MEMORY_MS ? lastStep.current.seconds : null;
   const seekBy = (delta: number) => {
     if (blocked) return;
-    const recent =
-      lastStep.current && Date.now() - lastStep.current.at < STEP_MEMORY_MS ? lastStep.current.seconds : null;
-    const from = recent ?? view.position;
+    const from = recentStep() ?? view.position;
     const limit = view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
     seek(Math.max(0, Math.min(limit, from + delta)));
   };
@@ -99,9 +104,18 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     if (state.plan && view.playing) send({ type: 'pause' });
   };
 
+  const wake = (focus?: Reveal) => {
+    if (focus) setReveal(focus);
+    idle.wake();
+  };
+  // A chrome brought up by anything else (a press up or down, a pause) comes up on the toggle.
+  useEffect(() => {
+    if (!idle.visible) setReveal('toggle');
+  }, [idle.visible]);
+
   useShortcuts({
     visible: idle.visible,
-    wake: idle.wake,
+    wake,
     menuOpen: opened !== null,
     togglePlay,
     play,
@@ -132,8 +146,10 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           mounted preferred target competing with the control row during native layout. */}
       {(!Platform.isTV || !idle.visible) && <Pressable
         accessible={false}
-        testID="player-stage-input"
-        onPress={tapStage}
+        testID={PICTURE_TEST_ID}
+        // Android TV's remote presses on the picture are the shortcuts' (remotePress): select plays
+        // or pauses there, which a press here would undo.
+        onPress={ANDROID_TV ? undefined : tapStage}
         style={StyleSheet.absoluteFill}
         focusable={Platform.isTV ? !idle.visible : Platform.OS === 'android'}
         hasTVPreferredFocus={Platform.isTV}
@@ -152,6 +168,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           state={state}
           view={view}
           visible={idle.visible && !failed}
+          reveal={reveal}
+          stepFrom={recentStep}
           blocked={blocked}
           opened={opened}
           info={info}

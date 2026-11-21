@@ -14,6 +14,7 @@ import type { PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { timecode, type PlayerView } from './present';
 import { pressed, useRemote } from './remote';
+import { useFocusClaim } from '../common/focus-claim';
 
 const STEP_SECONDS = 10;
 const PAGE_SECONDS = 60;
@@ -31,9 +32,14 @@ interface Props {
   /** Dragging or stepping: the chrome stays up meanwhile. */
   onActive(active: boolean): void;
   thumbnail?: PlayerChromeState['thumbnail'];
+  /** TV: take focus as the chrome comes up (after a step from the remote). */
+  preferred?: boolean;
+  /** The target of a step the chrome took a moment ago, not yet reported by the engine. */
+  stepFrom?(): number | null;
 }
 
-export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: Props) {
+export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, preferred, stepFrom }: Props) {
+  const claim = useFocusClaim(preferred);
   const box = useRef<ComponentRef<typeof View>>(null);
   const frame = useRef({ left: 0, width: 1 });
   const [target, setTarget] = useState<number | null>(null);
@@ -107,7 +113,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
     if (!focused || disabled) return;
     if (event.eventType !== 'left' && event.eventType !== 'right') return;
     if (!pressed(event)) return;
-    const from = target ?? held?.seconds ?? view.position;
+    const from = target ?? held?.seconds ?? stepFrom?.() ?? view.position;
     const next = Math.max(0, Math.min(duration, from + (event.eventType === 'right' ? STEP_SECONDS : -STEP_SECONDS)));
     onActive(true);
     setTarget(next);
@@ -154,6 +160,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
         disabled={disabled || duration <= 0}
         focusable={(look.tv || Platform.OS === 'web') && !disabled && duration > 0}
         testID="player-scrub"
+        hasTVPreferredFocus={claim}
         {...(Platform.OS === 'web' ? { dataSet: { velaFocus: 'timeline' } } : {})}
         onFocus={() => setFocused(true)}
         onBlur={() => {

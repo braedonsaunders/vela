@@ -20,6 +20,8 @@ import { Scrubber } from './scrubber';
 import { Volume } from './volume';
 
 export type Opened = MenuName | 'chapters' | null;
+/** Where a TV chrome's focus lands as it comes up. */
+export type Reveal = 'toggle' | 'timeline';
 
 /** `#rrggbb[aa]` with no alpha, so a gradient fades in the colour itself rather than through black. */
 function clear(colour: string): string {
@@ -109,6 +111,9 @@ interface BottomProps {
   state: PlayerChromeState;
   view: PlayerView;
   visible: boolean;
+  reveal: Reveal;
+  /** The target of a step taken a moment ago, which the engine has yet to report. */
+  stepFrom(): number | null;
   blocked: boolean;
   opened: Opened;
   info: boolean;
@@ -167,12 +172,14 @@ export function BottomBar(props: BottomProps) {
 }
 
 /** The timeline and the clock under it. */
-function Timeline({ look, state, view, blocked, seek, onActive }: BottomProps) {
+function Timeline({ look, state, view, blocked, seek, onActive, visible, reveal, stepFrom }: BottomProps) {
   return (
     <View>
       <Scrubber
         look={look}
         view={view}
+        preferred={Platform.isTV && visible && !blocked && reveal === 'timeline'}
+        stepFrom={stepFrom}
         disabled={blocked}
         onSeek={seek}
         onActive={onActive}
@@ -203,6 +210,7 @@ function Controls({
   onActive,
   live,
   visible,
+  reveal,
 }: BottomProps) {
   // A channel plays at the live edge: channel up and down and the LIVE mark take the place of
   // the ten-second steps; no speed, no chapters.
@@ -250,7 +258,7 @@ function Controls({
         key={Platform.isTV && visible && !blocked ? 'focus-ready' : 'inactive'}
         look={look}
         primary
-        preferred={Platform.isTV && visible && !blocked}
+        preferred={Platform.isTV && visible && !blocked && (reveal === 'toggle' || !timeline)}
         icon={view.playing ? 'pause' : 'play'}
         label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
         disabled={blocked}

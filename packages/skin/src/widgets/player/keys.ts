@@ -3,6 +3,7 @@
 // fullscreen, Escape closes a menu. On a TV remote: play/pause always toggles (Android's
 // separate play, pause, rewind and fast-forward keys do what they say), Back (Menu on tvOS)
 // closes an open menu; directional input wakes hidden controls and otherwise belongs to focus.
+// On Android TV a press on the hidden chrome's picture also plays, pauses or steps (remote-actions.ts).
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { holdBack } from '../../menu-key';
@@ -12,7 +13,8 @@ import { remotePress } from './remote-actions';
 export interface Shortcuts {
   /** The chrome stands (a hidden chrome's first press only wakes it). */
   visible: boolean;
-  wake(): void;
+  /** Show the chrome; a hidden chrome comes up with focus on the play toggle, or on the timeline. */
+  wake(focus?: 'toggle' | 'timeline'): void;
   /** A menu or the chapter strip is open: arrows belong to it. */
   menuOpen: boolean;
   togglePlay(): void;
@@ -124,6 +126,6 @@ export function useShortcuts(shortcuts: Shortcuts): void {
   }, [menuOpen]);
 
   useRemote(event => {
-    if (pressed(event)) remotePress(event.eventType, latest.current);
+    if (pressed(event)) remotePress(event.eventType, latest.current, event.focus);
   });
 }

@@ -3,7 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { DeviceEventEmitter, Platform, useTVEventHandler, type TVRemoteEvent } from 'react-native';
 
-export type RemoteEvent = TVRemoteEvent;
+/** Android TV adds what had native focus as the press arrived (android-tv-keys.js): a testID,
+ * "" for a view without one, or "none". */
+export type RemoteEvent = TVRemoteEvent & { focus?: string };
 
 const none = (_handler: (event: RemoteEvent) => void) => undefined;
 
