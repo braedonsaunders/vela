@@ -3,7 +3,7 @@ import { retainedHost } from './retained-host';
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
 import { useIsFocused, usePathname } from 'expo-router';
-import { useCallback, useContext, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, SkipToContent, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import type { RNode } from '@vela/skin/src/resolve';
@@ -12,6 +12,8 @@ import { FocusBoundary } from './focus-boundary';
 import { documentIsVisible } from './visible-route';
 import { SectionShellHostContext, useSectionFocus } from './section-focus';
 import { SectionScene, sectionSlide } from './section-scene';
+import Reanimated from 'react-native-reanimated';
+import { MODAL_ENTER_KEYFRAMES, MODAL_ENTER_MS, MODAL_TEST_ID } from './modal-motion';
 import { SECTION_SLIDE_MS, sectionDirection, type SectionDirection } from './section-motion';
 
 interface Props {
@@ -96,12 +98,16 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.
   if (route === 'title' || route === 'person') return (
     <ScreenActive.Provider value={isCurrent}>
-      {/* On TV the title page is presented in the app's root view, so it stays in the tree under
-          the player: while covered it must take no focus (no interaction, which the focus engine
-          honours), or the remote's arrows move focus into it and never reach the player. */}
-      <FocusBoundary active={isCurrent} enterWhenReady={host.env.load === 'ready'} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', paddingLeft: sides.paddingLeft, paddingRight: sides.paddingRight }} accessibilityViewIsModal>
-        {content}
-      </FocusBoundary>
+      {/* The web's scrim dissolves in as the frame rises (modal-motion.ts); native hosts fade
+          the whole modal in with the navigator. */}
+      <ModalView still={host.env.still}>
+        {/* On TV the title page is presented in the app's root view, so it stays in the tree under
+            the player: while covered it must take no focus (no interaction, which the focus engine
+            honours), or the remote's arrows move focus into it and never reach the player. */}
+        <FocusBoundary active={isCurrent} enterWhenReady={host.env.load === 'ready'} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', paddingLeft: sides.paddingLeft, paddingRight: sides.paddingRight }} accessibilityViewIsModal>
+          {content}
+        </FocusBoundary>
+      </ModalView>
     </ScreenActive.Provider>
   );
   return (
@@ -113,6 +119,19 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
         {shell ? <SkinRoot host={{ ...host, children: main }} node={shell} /> : main}
       </FocusBoundary>
     </ScreenActive.Provider>
+  );
+}
+
+/** The title or person modal's own view: on the web, the scrim's dissolve in and the element
+ * closeModal fades out. */
+function ModalView({ still, children }: { still: boolean; children: ReactNode }) {
+  if (Platform.OS !== 'web') return <>{children}</>;
+  return (
+    <Reanimated.View testID={MODAL_TEST_ID} style={{ flex: 1, ...(still ? {} : {
+      animationName: MODAL_ENTER_KEYFRAMES, animationDuration: MODAL_ENTER_MS, animationTimingFunction: 'ease-out', animationFillMode: 'both',
+    }) }}>
+      {children}
+    </Reanimated.View>
   );
 }
 

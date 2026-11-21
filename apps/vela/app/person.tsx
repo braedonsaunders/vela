@@ -5,6 +5,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import type { Card, Load } from '@vela/core';
 import type { SkinHost } from '@vela/skin';
 import { DocumentScreen } from '../src/screen';
+import { closeModal } from '../src/modal-motion';
 
 /** A person's server-provided filmography, drawn by the active skin. */
 export default function PersonPage() {
@@ -43,7 +44,7 @@ function PersonContent() {
     return () => { active = false; };
   }, [store, person?.id, person?.canOpen]);
   useFocusEffect(useCallback(() => {
-    const back = () => { if (router.canGoBack()) router.back(); else router.replace('/'); };
+    const back = () => closeModal(() => { if (router.canGoBack()) router.back(); else router.replace('/'); });
     if (Platform.OS !== 'web') {
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => { back(); return true; });
       return () => subscription.remove();

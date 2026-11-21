@@ -13,6 +13,7 @@ import type { ViewState } from './view-state';
 import { playParams } from './play-action';
 import { openMediaTitle } from './media/actions';
 import { isTitleNavigation, noteTitleNavigation } from './title-origin';
+import { closeModal } from './modal-motion';
 
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
 
@@ -40,6 +41,8 @@ interface Context {
 
 /** Music, book and audiobook cards carry their role as kind (docs/media-kinds.md). */
 const MEDIA_KINDS = ['artist', 'album', 'track', 'series', 'book', 'audiobook', 'part'];
+
+const run = (go: () => void) => go();
 
 function notYet(action: string, arg: string): void {
   console.info(`Vela: ${action} ${arg} is not carried out yet`);
@@ -104,13 +107,15 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'back':
       case 'close':
         if (action === 'close' && arg) return actions.setFlag(arg, false);
-        if (place.route === 'title' && !isTitleNavigation(place.entry)) {
-          if (place.library) return router.replace({ pathname: '/library/[id]', params: { id: place.library } });
-          return router.replace('/');
-        }
-        if (router.canGoBack()) router.back();
-        else router.replace('/');
-        return;
+        // A title or person page leaves with its modal's exit motion (modal-motion.ts).
+        return (place.route === 'title' || place.route === 'person' ? closeModal : run)(() => {
+          if (place.route === 'title' && !isTitleNavigation(place.entry)) {
+            if (place.library) return router.replace({ pathname: '/library/[id]', params: { id: place.library } });
+            return router.replace('/');
+          }
+          if (router.canGoBack()) router.back();
+          else router.replace('/');
+        });
       case 'toggle':
         return actions.toggleFlag(arg);
       case 'open':

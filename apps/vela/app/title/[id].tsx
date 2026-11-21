@@ -8,6 +8,7 @@ import { clearTitleNavigation, isTitleNavigation } from '../../src/title-origin'
 import { useVelaState } from '@vela/core/react';
 import { isMediaPageRole } from '@vela/skin/src/widgets/media';
 import { MediaTitleScreen } from '../../src/media/screen';
+import { closeModal } from '../../src/modal-motion';
 
 export default function Title() {
   const { id, library, media } = useLocalSearchParams<{ id: string; library?: string; media?: string }>();
@@ -21,11 +22,11 @@ export default function Title() {
   usePreventRemove(useBackHeld(), backFromNavigation);
   useEffect(() => (id ? openTitle(id) : undefined), [id, openTitle]);
   useEffect(() => () => clearTitleNavigation(id), [id]);
-  const back = useCallback(() => {
+  const back = useCallback(() => closeModal(() => {
     if (openedInApp && router.canGoBack()) router.back();
     else if (library) router.replace({ pathname: '/library/[id]', params: { id: library } });
     else router.replace('/');
-  }, [library, openedInApp]);
+  }), [library, openedInApp]);
   const focused = useIsFocused();
   useFocusEffect(useCallback(() => {
     if (Platform.OS !== 'web') {
