@@ -4,7 +4,7 @@
     "slug": "vela",
     "icon": "./assets/brand/vela-app-icon-1024.png",
     "scheme": "vela",
-    "version": "0.2.37",
+    "version": "0.2.38",
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#090b0e",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "app.ether.vela",
-      "versionCode": 2037
+      "versionCode": 2038
     },
     "web": {
       "output": "single",
