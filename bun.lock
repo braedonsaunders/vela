@@ -7,7 +7,7 @@
     },
     "apps/vela": {
       "name": "vela",
-      "version": "0.2.35",
+      "version": "0.2.36",
       "dependencies": {
         "@react-native-masked-view/masked-view": "0.3.2",
         "@vela/core": "workspace:*",
