@@ -7,6 +7,7 @@ import type { ClientCapabilities } from '../wire';
 export type MediaCapabilities = Pick<
   ClientCapabilities,
   'containers' | 'videoCodecs' | 'audioCodecs' | 'subtitleFormats' | 'hls' | 'mse' | 'hdr' | 'maxWidth' | 'maxHeight' | 'originalPlayback'
+  | 'dolbyVisionProfiles' | 'dolbyVisionReshape' | 'audioOutput'
 >;
 
 export interface VelaPlatform {
