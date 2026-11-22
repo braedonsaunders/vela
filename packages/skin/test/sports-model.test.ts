@@ -143,3 +143,8 @@ test('a plugin link is not where a game airs', () => {
   const e = event({ broadcasts: [{ name: 'ESPN+', kind: 'stream' }], watch: [{ kind: 'plugin', name: 'Commentary', live: true, confidence: 0.5 }] });
   expect(airingText(e)).toBe('ESPN+');
 });
+
+test('the situation leaves out what only repeats the clock', () => {
+  const m = matchup(event({ status: { state: 'in', detail: "90'+2'", clock: "90'+2'" }, situation: { Clock: "90'+2'", 'Last goal': "M. Talbi 45'" } }));
+  expect(m.situation).toBe("M. Talbi 45'");
+});

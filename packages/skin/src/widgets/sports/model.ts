@@ -58,9 +58,16 @@ export function matchup(event: LiveEvent, now = Date.now()): Matchup {
     title: event.title || (both ? `${both[0].short} ${msg('sports.at')} ${both[1].short}` : event.league.name),
     league: leagueLabel(event.league),
     status: statusText(event, phase, now),
-    situation: spoiler ? '' : Object.values(event.situation ?? {}).slice(0, 2).join(' · '),
+    situation: spoiler ? '' : situationEntries(event).slice(0, 2).map(([, value]) => value).join(' · '),
     close: !spoiler && event.status.close === true,
   };
+}
+
+/** The situation's label/value pairs, less any that only repeat the status (a "Clock" equal to the
+ * clock already shown). */
+export function situationEntries(event: LiveEvent): [string, string][] {
+  const shown = new Set([event.status.detail, event.status.clock].filter(Boolean).map(text => String(text).trim()));
+  return Object.entries(event.situation ?? {}).filter(([, value]) => typeof value === 'string' && value.trim() !== '' && !shown.has(value.trim()));
 }
 
 /** The status line: the clock while live, the start for an upcoming event, "Final" after. */

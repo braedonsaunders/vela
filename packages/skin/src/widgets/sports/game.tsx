@@ -9,7 +9,7 @@ import { msg, venueText, type LiveEvent, type LiveEventDetail, type LivePlay } f
 import { useVela, useVelaState } from '@vela/core/react';
 import { useLiveEvent, useSportsActions } from './context';
 import { useSportsLook, type SportsLook } from './look';
-import { airingText, heroTint, newestFirst, matchup, probabilityLead, targetLabel, tunable, type Matchup, type Side } from './model';
+import { airingText, heroTint, newestFirst, situationEntries, matchup, probabilityLead, targetLabel, tunable, type Matchup, type Side } from './model';
 import { Crest, Glyph, GridMark, LiveBadge, Pill, Placeholder, ProbabilityBar, Rise, Score, Surface, Txt } from './parts';
 import { Ranking, TableView } from './cards';
 import { ProbabilityGraph, readableTeam } from './graph';
@@ -137,9 +137,9 @@ function ScoreBand({ look, event, m, close }: { look: SportsLook; event: LiveEve
         ) : (
           <Txt look={look} size={compact ? 26 : 40} weight={800} color={WHITE} lines={2}>{m.title}</Txt>
         )}
-        {!m.spoiler && event.situation && Object.keys(event.situation).length ? (
+        {!m.spoiler && situationEntries(event).length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: away ? 'center' : 'flex-start', gap: look.px(10) }}>
-            {Object.entries(event.situation).map(([label, value]) => (
+            {situationEntries(event).map(([label, value]) => (
               <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(7), paddingHorizontal: look.px(12), height: look.px(30), borderRadius: look.px(15), backgroundColor: alpha(WHITE, 0.12) }}>
                 <Txt look={look} size={11.5} weight={600} color={alpha(WHITE, 0.7)}>{label}</Txt>
                 <Txt look={look} size={13} weight={750} color={WHITE} digits>{value}</Txt>
