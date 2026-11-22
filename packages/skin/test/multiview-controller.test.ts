@@ -319,10 +319,10 @@ test('the bug prints away first and hides a spoiler or a game not yet started', 
   expect(bugSides(event('in'))).toEqual({ left: 'NYG', right: 'PHI', score: '24–27' });
   expect(bugSides(event('pre'))?.score).toBe('');
   expect(bugSides(event('in', true))?.score).toBe('');
-  const race: BugEvent = { league: { id: 'f1', name: 'Formula 1', abbr: 'F1' }, title: 'Las Vegas', status: { state: 'in', detail: 'Lap 31/50' }, competitors: [],
+  const race: BugEvent = { league: { id: 'f1', name: 'Formula 1', abbr: 'F1' }, title: 'Las Vegas Grand Prix', status: { state: 'in', detail: 'Lap 31/50' }, competitors: [],
     ranking: [{ pos: 1, name: 'Verstappen', abbr: 'VER' }] };
   expect(bugSides(race)).toBeNull();
-  expect(bugTitle(race)).toBe('Las Vegas');
+  expect(bugTitle(race)).toBe('F1 · Las Vegas');
   expect(bugLeader(race)).toBe('VER P1');
   expect(bugLeader({ ...race, spoiler: true })).toBe('');
 });

@@ -178,12 +178,13 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
 
   // The chrome keeps its own size on screen whatever the tile's scale: it is drawn inside the moving
   // view at 1/scale, and grows a little at full screen.
-  const visual = fullscreen ? 1.35 : 1;
+  // A small tile's chrome shrinks a little with it, so a long bug still fits; full screen grows it.
+  const visual = fullscreen ? 1.35 : Math.min(1, 0.45 + target.scale);
   const counter = useMemo(() => Animated.divide(visual, v.scale), [v.scale, visual]);
   const radius = fullscreen ? 0 : look.radiusTile;
   const s = Math.max(0.05, target.scale);
   const event = useLiveEvent ? useLiveEvent(tile.liveEvent) : null;
-  const bugSize = TV ? 17 : Platform.OS === 'web' ? 13 : 11;
+  const bugSize = TV ? 16 : Platform.OS === 'web' ? 13 : 11;
 
   return (
     <Animated.View pointerEvents="none" style={{
@@ -290,7 +291,7 @@ function Captions({ look, still, view, rects, size, gap, byId, useLiveEvent }: {
   if (band.height < minimum) return null;
   return (
     <Animated.View pointerEvents="none" style={{ position: 'absolute', left: band.x, top: band.y, width: band.width, height: band.height,
-      flexDirection: 'row', gap, alignItems: 'flex-start', opacity }}>
+      flexDirection: 'row', gap, alignItems: 'center', opacity }}>
       {view.tiles.map(tile => (
         <View key={tile.slot} style={{ flex: 1, minWidth: 0 }}>
           <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} useLiveEvent={useLiveEvent} />
@@ -312,7 +313,7 @@ function Caption({ look, tile, channel, focused, useLiveEvent }: {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: TV ? 16 : 10, padding: TV ? 14 : 8, borderRadius: look.radiusCell, overflow: 'hidden' }}>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: look.live, borderRadius: look.radiusCell, borderWidth: 1, borderColor: look.liveEdge, opacity: ring }]} />
-      <LogoTile look={look} logo={channel?.logo ?? ''} name={name} channelId={channel?.id} width={TV ? 84 : 52} height={TV ? 50 : 31} radius={TV ? 8 : 6} size={TV ? 12 : 10} />
+      <LogoTile look={look} logo={channel?.logo ?? ''} name={name} channelId={channel?.id} width={TV ? 112 : 60} height={TV ? 66 : 36} radius={TV ? 10 : 6} size={TV ? 13 : 10} />
       <View style={{ flex: 1, minWidth: 0, gap: TV ? 4 : 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {focused && !tile.muted ? <PlayerIcon name="speaker" size={TV ? 20 : 14} color={look.accent} /> : null}
@@ -320,9 +321,8 @@ function Caption({ look, tile, channel, focused, useLiveEvent }: {
             {channel ? `${channel.number} · ${name}` : ''}
           </Line>
         </View>
-        {event ? <ScoreBug event={event} look={look} size={TV ? 12 : 10} /> : channel?.now ? (
-          <Line look={look} size={TV ? 12 : 11} color={look.inkQuiet}>{channel.now}</Line>
-        ) : null}
+        {channel?.now ? <Line look={look} size={TV ? 12 : 11} color={look.inkQuiet}>{channel.now}</Line> : null}
+        {event ? <View style={{ marginTop: TV ? 4 : 2 }}><ScoreBug event={event} look={look} size={TV ? 12 : 10} /></View> : null}
       </View>
     </View>
   );

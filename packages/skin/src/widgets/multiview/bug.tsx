@@ -24,13 +24,16 @@ export function ScoreBug({ event, look, size }: { event: BugEvent; look: GuideLo
         </View> : null}
         <View style={dark}><Line look={look} size={size} weight={750} color="#ffffff">{sides.right}</Line></View>
       </> : <>
+        {/* A race or round: its name, where it stands (the lap) and the leader on the live colour. */}
         <View style={dark}><Line look={look} size={size} weight={750} color="#ffffff">{bugTitle(event)}</Line></View>
-        {leader ? <View style={{ ...pad, backgroundColor: '#ffffffee' }}>
-          <Line look={look} size={size} weight={800} color="#0b0f1a" tabular>{leader}</Line>
+        {event.status.detail ? <View style={{ ...pad, backgroundColor: '#ffffffee' }}>
+          <Line look={look} size={size} weight={800} color="#0b0f1a" tabular>{event.status.detail}</Line>
         </View> : null}
       </>}
-      {event.status.detail ? <View style={{ ...pad, backgroundColor: live ? look.now : 'rgba(11, 15, 26, 0.84)' }}>
+      {sides ? (event.status.detail ? <View style={{ ...pad, backgroundColor: live ? look.now : 'rgba(11, 15, 26, 0.84)' }}>
         <Line look={look} size={size * 0.82} weight={800} color={live ? look.liveInk : '#ffffff'} tabular>{event.status.detail}</Line>
+      </View> : null) : leader ? <View style={{ ...pad, backgroundColor: live ? look.now : 'rgba(11, 15, 26, 0.84)' }}>
+        <Line look={look} size={size * 0.82} weight={800} color={live ? look.liveInk : '#ffffff'} tabular>{leader}</Line>
       </View> : null}
     </View>
   );

@@ -17,7 +17,9 @@ export function bugSides(event: BugEvent): { left: string; right: string; score:
 
 /** The title an N-competitor event (a race, a round) shows instead of two sides. */
 export function bugTitle(event: BugEvent): string {
-  return event.title || event.league.abbr || event.league.name;
+  const league = event.league.abbr || event.league.name;
+  const title = (event.title ?? '').replace(/\s+Grand Prix$/i, '');
+  return title && league ? `${league} · ${title}` : title || league;
 }
 
 /** The leader's line for a ranking event ("VER P1"), hidden for a spoiler-free viewer. */
