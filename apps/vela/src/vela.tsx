@@ -48,6 +48,7 @@ import { actionHref, webHref } from './action-href';
 import { useSearchAddress } from './use-search-address';
 import { pageTitle } from './page-title';
 import { prefetchLibrary, prefetchLibrariesWhenIdle } from './browse/prefetch';
+import { screenOf, screenPath } from './plugin-screens';
 
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
@@ -368,7 +369,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const readEnvironment = useMemo(createEnvironmentReader, [state.auth.revision]);
   // A pointer over (or focus on) a section's destination reads its first page ahead.
   const prefetch = useCallback<NonNullable<SkinHost['prefetch']>>((action, arg) => {
-    if (action === 'library' && arg) void prefetchLibrary(store, arg).catch(() => {});
+    if (action === 'library' && arg && !screenOf(arg)) void prefetchLibrary(store, arg).catch(() => {});
   }, [store]);
   const hosts = useRef(new Map<string, { inputs: unknown[]; host: SkinHost; libraries: unknown }>());
   const host = useCallback((route: RouteName, entry: string, library?: string): SkinHost | null => {
@@ -398,7 +399,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       // A route's tree redraws whole when its host's functions change; keep them while what they read is the same.
       href: previous && previous.libraries === state.libraries.value ? previous.host.href : Platform.OS === 'web' ? (action, arg) => {
         const liveLibrary = action === 'library' && state.libraries.value?.find(item => item.id === arg)?.kind === 'live';
-        const href = liveLibrary ? '/live' : actionHref({ route, entry, library }, action, arg);
+        const screen = action === 'library' ? screenOf(arg) : '';
+        const href = liveLibrary ? '/live' : screen ? screenPath(screen) : actionHref({ route, entry, library }, action, arg);
         return href && webHref(href);
       } : undefined,
       image,

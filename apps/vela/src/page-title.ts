@@ -2,7 +2,7 @@
 // and screen readers can tell pages apart.
 import { msg, type VelaState } from '@vela/core';
 
-type Titles = Pick<VelaState, 'libraries' | 'titles' | 'collections' | 'rows'> & { search?: { query: string } };
+type Titles = Pick<VelaState, 'libraries' | 'titles' | 'collections' | 'rows'> & { search?: { query: string }; home?: Pick<VelaState['home'], 'value'> };
 
 /** The route's own part of the title, or '' for Home. */
 function pagePart(pathname: string, query: URLSearchParams, state: Titles): string {
@@ -19,6 +19,7 @@ function pagePart(pathname: string, query: URLSearchParams, state: Titles): stri
     case 'person': return query.get('name') ?? '';
     case 'search': return searching ? msg('page.searchFor', { query: searching }) : msg('ui.search');
     case 'live': return msg('ui.live');
+    case 'screen': return state.home?.value?.screens.find(screen => screen.id === id)?.title ?? '';
     case 'playlists': return msg('page.playlists');
     case 'sign-in':
     case 'connect': return msg('ui.signIn');

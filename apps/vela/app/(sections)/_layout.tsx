@@ -14,6 +14,7 @@ import { SectionScene } from '../../src/section-scene';
 import { SECTION_SLIDE_MS, sectionDirection, type SectionDirection } from '../../src/section-motion';
 import { trimSectionCache } from '../../src/section-cache';
 import { sectionRoute, sectionIsActive, type SectionRoute as Section } from '../../src/section-route';
+import { screenDestinationId } from '../../src/plugin-screens';
 
 export default function SectionsLayout() {
   // A skin change or host update must not replace the navigator that owns section history.
@@ -50,7 +51,9 @@ function SectionsContent() {
     ? 0
     : section.current.route === 'live'
       ? libraries.findIndex(library => library.kind === 'live') + 1 || libraries.length + 1
-      : libraries.findIndex(library => library.id === section.current.entry) + 1;
+      : section.current.route === 'screen'
+        ? libraries.findIndex(library => library.id === screenDestinationId(section.current.entry)) + 1 || libraries.length + 2
+        : libraries.findIndex(library => library.id === section.current.entry) + 1;
   const previousOrder = useRef(order);
   const transition = useRef<{ key: string; direction: SectionDirection; animated: boolean }>({ key, direction: 1, animated: false });
   if (transition.current.key !== key) {

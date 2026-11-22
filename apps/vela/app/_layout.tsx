@@ -57,6 +57,14 @@ function Screens() {
       {/* Apple TV's system search screen opens over the section it was asked from (apple-tv-search.tsx). */}
       <Stack.Screen name="search" options={{ presentation: Platform.isTV ? 'containedModal' : 'card' }} />
       <Stack.Screen name="row/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' ? 'fullScreenModal' : 'card' }} />
+      {/* A game's page (Sports) opens over its section like a title page. */}
+      <Stack.Screen
+        name="game/[id]"
+        options={{
+          presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal',
+          contentStyle: { ...bars, backgroundColor: 'transparent' },
+        }}
+      />
       <Stack.Screen name="person" options={{ presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal', contentStyle: { ...bars, backgroundColor: 'transparent' } }} />
     </Stack>
   );

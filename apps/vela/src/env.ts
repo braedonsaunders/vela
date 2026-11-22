@@ -5,6 +5,7 @@ import { detailDateDisplay, type VelaState } from '@vela/core';
 import { searchView, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
+import { screenDestinationId, withScreens } from './plugin-screens';
 import type { ViewState } from './view-state';
 
 export interface EnvInput {
@@ -37,7 +38,7 @@ export function environment({ state, view, live, route, entry, library, width, s
   return {
     viewer: state.auth.viewer,
     viewerAvatar: home.value?.viewerAvatar ?? '',
-    section: route === 'library' ? entry : route === 'live' ? 'live' : 'home',
+    section: route === 'library' ? entry : route === 'live' ? 'live' : route === 'screen' ? screenDestinationId(entry) : 'home',
     query: state.search.query,
     small: width < 640,
     tv: width >= 1600 || Platform.isTV,
@@ -48,7 +49,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     width,
     home: home.value,
     heroIndex: home.value ? view.heroIndex % Math.max(1, home.value.hero.length) : 0,
-    libraries: state.libraries.value ?? [],
+    libraries: withScreens(state.libraries.value ?? [], home.value?.screens),
     skinCount,
     skinName,
     homeLoading: !home.value && home.load === 'loading',

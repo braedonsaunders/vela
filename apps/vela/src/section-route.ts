@@ -1,17 +1,18 @@
-export type SectionRoute = { route: 'home' | 'library' | 'live'; entry: string };
+export type SectionRoute = { route: 'home' | 'library' | 'live' | 'screen'; entry: string };
 
 /** Use the section navigator's active route, rather than a parent's pending pathname. */
 export function sectionRoute(name: string | undefined, id: unknown): SectionRoute | null {
   if (name === 'index') return { route: 'home', entry: 'home' };
   if (name === 'live') return { route: 'live', entry: 'live' };
   if (name === 'library/[id]' && typeof id === 'string' && id) return { route: 'library', entry: id };
+  if (name === 'screen/[id]' && typeof id === 'string' && id) return { route: 'screen', entry: id };
   return null;
 }
 
 /** Retained native navigators may still report focus under a fullscreen modal.
  * Section activity also follows the visible URL, on touch devices as on TV. */
 export function sectionPathVisible(path: string): boolean {
-  return path === '/' || path === '/live' || path.startsWith('/library/');
+  return path === '/' || path === '/live' || path.startsWith('/library/') || path.startsWith('/screen/');
 }
 
 /** Touch sections are rendered directly rather than as navigator descriptors; their

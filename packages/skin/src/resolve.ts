@@ -72,7 +72,9 @@ export type RNode = Common & (
   | { kind: 'widget'; widget: string; params: Record<string, string> }
 );
 
-export type RouteName = 'home' | 'title' | 'person' | 'search' | 'collection' | 'library' | 'live' | 'watch' | 'auth';
+export type RouteName = 'home' | 'title' | 'person' | 'search' | 'collection' | 'library' | 'live' | 'watch' | 'auth'
+  /** A plugin screen (Sports), drawn natively inside the shell. */
+  | 'screen';
 
 export interface ResolvedDocument {
   id: string;

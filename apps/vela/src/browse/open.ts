@@ -4,6 +4,7 @@
 import { startTransition } from 'react';
 import { router } from 'expo-router';
 import type { Vela as Store } from '@vela/core';
+import { screenOf } from '../plugin-screens';
 
 /** Row entries that open as a collection page rather than a title. */
 export const COLLECTION_KINDS = ['collection', 'directory', 'playlist'];
@@ -17,6 +18,13 @@ export function switchSection(go: (options: { inTransition: true }) => void): vo
 
 /** A library from the shell or home. Moving between libraries replaces the page, so Back is home. */
 export function openLibrary(store: Store, id: string, fromRoute: string): void {
+  const screen = screenOf(id);
+  if (screen) {
+    const target = { pathname: '/screen/[id]' as const, params: { id: screen } };
+    if (fromRoute === 'library' || fromRoute === 'screen') switchSection(options => router.replace(target, options));
+    else switchSection(options => router.push(target, options));
+    return;
+  }
   const destination = store.getState().libraries.value?.find(d => d.id === id);
   if (destination?.kind === 'live') {
     switchSection(options => router.push('/live', options));
