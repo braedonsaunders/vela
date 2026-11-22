@@ -39,6 +39,12 @@ function page<T>(items: T[], start = 0, total?: number): V.Page<T> {
   const more = total !== undefined && start + items.length < total;
   return { items, continuation: more ? 'more' : total === undefined ? 'unknown' : 'exhausted', ...(more && items.length ? { nextCursor: String(start + items.length) } : {}) };
 }
+/** A series or season is played once every episode is (viewCount there counts episode plays). */
+function plexPlayed(n: Node): boolean {
+  if ((n.type === 'show' || n.type === 'season') && n.leafCount !== undefined) return Number(n.leafCount) > 0 && Number(n.viewedLeafCount || 0) >= Number(n.leafCount);
+  return Number(n.viewCount || 0) > 0;
+}
+
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
 export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges {
   readonly origin: string;
@@ -176,7 +182,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (n.theme) { try { themeMusic = { url: this.mediaURL(n.theme), expiresAt: '9999-12-31T23:59:59Z' }; } catch {} }
     return { id: String(n.ratingKey), kind: n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
-      artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: Number(n.viewCount || 0) > 0, favorite: false, watchlisted: false },
+      artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: plexPlayed(n), favorite: false, watchlisted: false },
       ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined,
       showName: n.type === 'episode' ? n.grandparentTitle : n.type === 'season' ? n.parentTitle : undefined,
       seasonId: n.type === 'episode' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined, seasonNumber: n.type === 'season' ? n.index : n.parentIndex, episodeNumber: n.type === 'episode' ? n.index : undefined };

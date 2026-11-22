@@ -126,6 +126,20 @@ describe('PlexAdapter requests', () => {
     await expect(adapter.library('1', { cursor: 'abc' })).rejects.toThrow('Invalid Plex continuation');
   });
 
+  test('a series or season is played only once every episode is', async () => {
+    const show = { ratingKey: 30, type: 'show', title: 'Lost', leafCount: 10 };
+    routeFetch({
+      'GET /library/sections': { MediaContainer: { Directory: [{ key: 3, title: 'TV', type: 'show' }] } },
+      'GET /library/sections/3/all': { MediaContainer: { Metadata: [
+        { ...show, viewedLeafCount: 4, viewCount: 9 },
+        { ...show, ratingKey: 31, viewedLeafCount: 10, viewCount: 12 },
+        { ...show, ratingKey: 32, type: 'season', leafCount: 0, viewedLeafCount: 0 },
+      ], totalSize: 3, size: 3 } },
+    });
+    const contents = await plex().library('3', {});
+    expect(contents.items.map(entry => entry.kind === 'title' ? entry.title.watch?.played : undefined)).toEqual([false, true, false]);
+  });
+
   test('detail maps people, chapters, extras and streams', async () => {
     routeFetch({ 'GET /library/metadata/10': { MediaContainer: { Metadata: [{ ...movie,
       Role: [{ id: 42, tag: 'Al Pacino', role: 'Hanna', thumb: '/library/people/1' }], Director: [{ tag: 'Michael Mann' }],
