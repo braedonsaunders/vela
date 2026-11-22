@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { kindLabelKey } from '../src/vocabulary';
+import { card } from '@vela/core';
+import { kindLabel, kindLabelKey } from '../src/vocabulary';
 
 const media = (cls: string, role: string) => ({ class: cls, role } as never);
 
@@ -20,4 +21,18 @@ test('video titles keep their structural kind', () => {
   expect(kindLabelKey({ kind: 'show' })).toBe('ui.series');
   expect(kindLabelKey({ kind: 'season' })).toBe('ui.season');
   expect(kindLabelKey({ kind: 'episode' })).toBe('ui.episode');
+});
+
+test("a plugin's video child is named by its own role, not as a film", () => {
+  const concert = card({ id: 'c', kind: 'movie', name: 'Live at the Boathouse', summary: '', genres: [], artwork: [],
+    media: { class: 'video', role: 'concert', parents: [{ id: 'a', name: 'The Band', role: 'artist' }] } });
+  expect(concert.videoRole).toBe('concert');
+  expect(kindLabel(concert)).toBe('Concert');
+  // A role Vela has no word for reads as the server wrote it.
+  expect(kindLabel({ kind: 'movie', videoRole: 'behind-the-scenes' })).toBe('Behind the scenes');
+  expect(kindLabel({ kind: 'movie', videoRole: 'liveSession' })).toBe('Live session');
+  // Ordinary video and media titles keep their words.
+  expect(card({ id: 'm', kind: 'movie', name: 'M', summary: '', genres: [], artwork: [], media: { class: 'video', role: 'item' } }).videoRole).toBeUndefined();
+  expect(kindLabel({ kind: 'movie' })).toBe('Film');
+  expect(kindLabel({ kind: 'movie', media: media('music', 'album') })).toBe('Album');
 });

@@ -52,6 +52,8 @@ export interface Card {
   media?: CardMedia;
   /** The card's own cover shape ('' or absent: the row's or library's). */
   shape?: CardShape;
+  /** A plugin's video child's own role (a concert; features.pluginLevels); absent for other titles. */
+  videoRole?: string;
 }
 
 /** A row of cards, in the server's order. */

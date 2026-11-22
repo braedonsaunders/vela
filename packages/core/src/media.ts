@@ -73,6 +73,14 @@ export function isAudioRole(cls: V.MediaClass, role: V.MediaRole): boolean {
     || (cls === 'audiobook' && role === 'item') || (cls === 'music' && role === 'item');
 }
 
+/** A plugin video title's own role (a concert), '' for ordinary video and every other title. */
+export function videoRole(title: V.Title): string {
+  const media = title.media;
+  if (!media || mediaClass(media.class) !== 'video' || typeof media.role !== 'string') return '';
+  const role = media.role.trim();
+  return role === 'item' ? '' : role;
+}
+
 /** A video title's container chain (a concert's artist), nearest first; [] for any other title.
  * Video titles have no CardMedia, so this is how their page links back to the container. */
 export function videoParents(title: V.Title): MediaParent[] {

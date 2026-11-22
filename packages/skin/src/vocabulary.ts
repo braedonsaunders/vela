@@ -4,7 +4,7 @@
 // key for key. A template calls only the accessors it names.
 import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
-import { duration, msg } from '@vela/core';
+import { duration, msg, videoRoleLabel } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
@@ -129,6 +129,10 @@ const kindId = (x: Card) => `${x.id}|${x.kind}|${x.receipt}`;
 
 /** A title's kind as the page names it. A media class (music, books, audiobooks) names it by its
  * role: a plugin's book still arrives as kind 'movie', the structural projection, and is no film. */
+/** The kind a title page names: a plugin video child by its own role ("Concert"), else kindLabelKey's word. */
+export function kindLabel(x: Pick<Card, 'kind' | 'media' | 'videoRole'>): string {
+  return (x.videoRole && !x.media ? videoRoleLabel(x.videoRole) : '') || t(kindLabelKey(x));
+}
 export function kindLabelKey(x: Pick<Card, 'kind' | 'media'>): string {
   const media = x.media;
   if (media && media.class !== 'video') {
@@ -370,7 +374,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.genresLine': title(x => x.genres.join(', ')),
   'detail.nameLength': title(x => String(x.name.length)),
   'detail.seed': title(x => String(x.id.length)),
-  'detail.kindLabel': title(x => t(kindLabelKey(x))),
+  'detail.kindLabel': title(kindLabel),
   'detail.kindId': title(kindId),
   'detail.factsLine': title(factsLine),
   'detail.resumePct': detail(d => {

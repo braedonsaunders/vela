@@ -4,7 +4,7 @@ import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, 
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
-import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts, videoParents } from '../media';
+import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts, videoParents, videoRole } from '../media';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
   const ref = artwork.find(item => item.kind === kind);
@@ -54,7 +54,9 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const media = cardMedia(title);
   // A plugin's video title (a concert) names its container (the artist): its byline, and a link back.
   const container = media ? undefined : videoParents(title)[0];
+  const role = media ? '' : videoRole(title);
   return withContainer(withMedia(withDateDisplay({
+    ...(role ? { videoRole: role } : {}),
     id: title.id,
     kind: mediaCardKind(media, title.kind),
     name: title.name,

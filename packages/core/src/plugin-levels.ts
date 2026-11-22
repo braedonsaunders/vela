@@ -75,6 +75,15 @@ export function childSectionLabel(key: string): string {
   return name ? msg(`media.ui.${name}`) : key.charAt(0).toUpperCase() + key.slice(1);
 }
 
+/** What a plugin video child is called on its page: "Concert"; a role Vela has no word for is
+ * shown as the server wrote it ("behind-the-scenes" reads "Behind the scenes"). */
+export function videoRoleLabel(role: string): string {
+  const known = msg(`media.role.${role}`);
+  if (known !== `media.role.${role}`) return known;
+  const words = role.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim().toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : '';
+}
+
 /** "4 albums · 2 concerts": a container's children by level, in childSections() order. */
 export function childCountsLine(counts: Record<string, number>, primary = 'album'): string {
   const keys = Object.keys(counts);
