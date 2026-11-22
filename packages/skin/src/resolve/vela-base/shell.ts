@@ -326,7 +326,10 @@ export const shell: Node = {
                 width: '44px',
                 height: '44px',
                 'box-sizing': 'border-box',
-                padding: '10px',
+                // The icon sits in the middle of the circle: the padding alone left it 2px up and left.
+                display: 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
                 'border-radius': '$ui.radiusControl',
                 border: '1px solid $ui.glassEdge',
                 'background-color': '$ui.control',
