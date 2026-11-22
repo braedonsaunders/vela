@@ -2,20 +2,25 @@
 const { withInfoPlist, withPodfile, withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
 
 // AetherEngine's optional components are SwiftPM package traits, off by default. React Native's
-// spm_dependency cannot name traits, and CocoaPods' project model drops keys it does not know, so the
-// written Pods project gets them after integration: TrueHD Atmos objects and DTS:X heights rendered for
+// spm_dependency cannot name traits, and CocoaPods' project model has no key for them, so the Podfile
+// teaches the model a traits attribute and sets it on the engine's reference after integration: TrueHD Atmos objects and DTS:X heights rendered for
 // tvOS to carry as Dolby MAT, and a Profile 7 FEL enhancement layer folded into its 8.1 RPU.
 const AETHER_TRAITS = ['TrueHDObjectAudio', 'DTSXObjectAudio', 'DolbyVisionFelCurves'];
 const TRAITS_MARKER = '# @vela/apple-player: AetherEngine package traits';
 const traitsHook = String.raw`${TRAITS_MARKER}
+# The Pods project is saved again after integration, so the traits live on the in-memory reference.
+Xcodeproj::Project::Object::XCRemoteSwiftPackageReference.class_eval do
+  attribute :traits, Array unless method_defined?(:traits)
+end
 post_integrate do |installer|
-  path = File.join(installer.pods_project.path, 'project.pbxproj')
-  text = File.read(path)
+  project = installer.pods_project
+  refs = project.root_object.package_references.select do |ref|
+    ref.respond_to?(:repositoryURL) && ref.repositoryURL.to_s.include?('superuser404notfound/AetherEngine')
+  end
+  raise 'AetherEngine package reference not found in the Pods project' if refs.empty?
   traits = %w[${AETHER_TRAITS.join(' ')}]
-  pattern = /(repositoryURL = "https:\/\/github\.com\/superuser404notfound\/AetherEngine";\n(\s*)requirement = \{[^}]*\};\n)(\s*traits = \([^)]*\);\n)?/
-  raise 'AetherEngine package reference not found in the Pods project' unless text.match?(pattern)
-  updated = text.sub(pattern) { "#{$1}#{$2}traits = (\n#{traits.map { |t| "#{$2}\t#{t},\n" }.join}#{$2});\n" }
-  File.write(path, updated) unless updated == text
+  refs.each { |ref| ref.traits = traits unless ref.traits == traits }
+  project.save
 end
 `;
 module.exports = withApplePlayer;
