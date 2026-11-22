@@ -128,7 +128,10 @@ export function airingText(event: LiveEvent): string {
   const untunable = (event.watch ?? []).filter(target => !tunable(target) && target.kind === 'addon').map(target => target.name);
   const rank = { tv: 0, stream: 1, radio: 2 } as const;
   const broadcasts = [...(event.broadcasts ?? [])].sort((a, b) => (rank[a.kind] ?? 3) - (rank[b.kind] ?? 3)).map(b => b.name);
-  const names = [...new Set([...untunable, ...broadcasts].map(name => name.trim()).filter(Boolean))];
+  // A broadcast that is the channel a Watch button already names is not said twice.
+  const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9+]/g, '');
+  const tuned = new Set((event.watch ?? []).filter(tunable).map(target => key(target.name)));
+  const names = [...new Set([...untunable, ...broadcasts].map(name => name.trim()).filter(name => name && !tuned.has(key(name))))];
   return names.slice(0, 2).join(' · ');
 }
 

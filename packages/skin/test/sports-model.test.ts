@@ -148,3 +148,8 @@ test('the situation leaves out what only repeats the clock', () => {
   const m = matchup(event({ status: { state: 'in', detail: "90'+2'", clock: "90'+2'" }, situation: { Clock: "90'+2'", 'Last goal': "M. Talbi 45'" } }));
   expect(m.situation).toBe("M. Talbi 45'");
 });
+
+test('a broadcast already named by a Watch button is not repeated', () => {
+  const e = event({ broadcasts: [{ name: 'FS1', kind: 'tv' }, { name: 'ESPN+', kind: 'stream' }], watch: [{ kind: 'channel', channelId: 'c', name: 'FS1', number: '141', live: true, confidence: 0.6 }] });
+  expect(airingText(e)).toBe('ESPN+');
+});
