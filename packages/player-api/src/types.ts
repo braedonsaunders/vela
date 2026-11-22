@@ -4,6 +4,16 @@
 // (modules/vela-player/web/engine/model.ts).
 import type { Command, Failure, PlaybackSession, Snapshot } from '../../../modules/vela-player/web/engine/model';
 import type {
+  AudioOutputFormat,
+  AudioSourceFormat,
+  ImmersiveFormat,
+  MatchState,
+  PlaybackFormat,
+  RangeFormat,
+  VideoOutputFormat,
+  VideoSourceFormat,
+} from '../../../modules/vela-player/web/engine/format-info';
+import type {
   ClientCapabilities,
   PlaybackPlan,
   PlayerObservation,
@@ -11,6 +21,16 @@ import type {
 } from '../../protocol/types';
 
 export type { Command, Failure, PlaybackSession, Snapshot, PlaybackPlan, PlayerObservation, SessionCommand };
+export type {
+  AudioOutputFormat,
+  AudioSourceFormat,
+  ImmersiveFormat,
+  MatchState,
+  PlaybackFormat,
+  RangeFormat,
+  VideoOutputFormat,
+  VideoSourceFormat,
+};
 
 /** A short muted preview (a card or hero trailer) from the server's preview grant. */
 export interface PreviewSource {

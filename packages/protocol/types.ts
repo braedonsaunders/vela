@@ -9,11 +9,33 @@ export interface Mutation { idempotencyKey: string }
 export interface Ack { accepted: true }
 export interface Device { id: ID; name: string; platform: string; appVersion: string }
 export interface OriginalPlaybackCapabilities { version: 1; range: true; demuxContainers: string[]; videoDecoders: string[]; audioDecoders: string[]; webgpu: boolean }
+/** What reaches the speakers beyond decoding, measured on the output route at negotiation time. A route
+ * change (receiver off, headphones) can change it; the client renegotiates or decodes. */
+export interface AudioOutputCapabilities {
+  /** Codecs delivered to the receiver as their original bitstream: 'ac3', 'eac3', 'eac3-joc', 'truehd',
+   * 'dts', 'dts-hd', 'dts-uhd'. tvOS forwards E-AC-3 JOC itself and is listed as 'eac3', 'eac3-joc'. */
+  passthrough: string[];
+  /** Immersive presentations whose heights or objects reach the output by any route (passthrough, Dolby MAT,
+   * a rendered bed with heights): 'eac3-joc', 'truehd-atmos', 'dtsx'. */
+  immersive: string[];
+  /** Most discrete PCM channels delivered (8 is 7.1, 12 is 7.1.4, 16 is 9.1.6). */
+  maxChannels: number;
+  /** Highest PCM rate delivered without resampling, in Hz. */
+  maxSampleRate?: number;
+  /** Lossless codecs (TrueHD, DTS-HD MA, FLAC, ALAC, PCM) reach the output without loss, bitstream or PCM. */
+  lossless: boolean;
+}
 export interface ClientCapabilities {
   originalPlayback?: OriginalPlaybackCapabilities;
   device: Device; protocolVersions: number[]; containers: string[]; videoCodecs: string[];
   audioCodecs: string[]; subtitleFormats: string[]; /** Native HLS acceptance, independent of MSE. */ hls: boolean; mse: boolean;
-  maxWidth?: number; maxHeight?: number; maxBitrate?: number; hdr?: string[];
+  maxWidth?: number; maxHeight?: number; maxBitrate?: number;
+  /** Ranges the device shows as such: 'hdr10', 'hdr10+', 'hlg', 'dv'. */
+  hdr?: string[];
+  /** Dolby Vision profiles shown as Dolby Vision, natively or after the client's own conversion ('5', '7',
+   * '8.1', '8.4', '10.1'); '7' means the client converts it to 8.1. Other profiles play their base layer at best. */
+  dolbyVisionProfiles?: string[];
+  audioOutput?: AudioOutputCapabilities;
 }
 export interface Feature { available: boolean; reason?: string }
 export type LivePreviewMode = 'auto' | 'on-click' | 'off';

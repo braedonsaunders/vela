@@ -564,6 +564,30 @@ actual source ffmpeg stream index, not a client-generated track ordinal.
 Lazy fallback uses the existing generation-aware `switch` command with `pathId`
 and `atSeconds` on the pinned source; there is no separate select-path command.
 
+Capability names are lower-case FFmpeg-style tokens, and a server ignores names
+it does not know. `demuxContainers` uses `mkv`, `webm`, `mp4`, `mov`, `mpegts`
+(including M2TS), `avi`, `ogg`, `flv`, `asf`, `rm`, `mpegps`, `iso-dvd` and
+`iso-bluray`. Decoder lists use FFmpeg codec names (`hevc`, `av1`, `vc1`,
+`mpeg2video`, `truehd`, `dts`, `pcm_bluray`); a decoder named in
+`originalPlayback.videoDecoders` decodes in real time at the device's
+`maxWidth`/`maxHeight`, whether in hardware or software.
+
+`ClientCapabilities.hdr` lists `hdr10`, `hdr10+`, `hlg` and `dv`.
+`dolbyVisionProfiles` lists the profiles the device shows as Dolby Vision,
+natively or after its own conversion (`7` means the client converts Profile 7 to
+8.1 itself); a server should prefer direct play of those over a transcode. A
+profile not listed plays its HDR10/HLG base layer at best.
+
+`ClientCapabilities.audioOutput` describes what reaches the speakers on the route
+at negotiation time. `passthrough` lists bitstreams delivered unchanged (`ac3`,
+`eac3`, `eac3-joc`, `truehd`, `dts`, `dts-hd`, `dts-uhd`); `immersive` lists
+presentations whose heights or objects survive by any route (`eac3-joc`,
+`truehd-atmos`, `dtsx`), including a client that renders TrueHD Atmos objects into
+a bed with heights and lets the OS carry it as Dolby MAT; `maxChannels` and
+`maxSampleRate` bound decoded PCM; `lossless` says lossless sources reach the
+output without loss. A server should not transcode an immersive or lossless track
+the client lists, and should keep the original track when the client decodes it.
+
 An `on-demand` playback path has no URL and is never fetched or considered ready.
 The generation-aware `switch` command authorizes preparation, then returns the
 actual broker plan. Existing ready/preparing/unavailable paths keep their URL rule.

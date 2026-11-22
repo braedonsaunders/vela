@@ -1,4 +1,5 @@
 import type { VideoInfo, DynamicRange } from './video-info';
+import type { PlaybackFormat } from './format-info';
 import type { SessionCommand, AudioRendition, OriginalVideo, Chapter } from '../../../../packages/protocol/types';
 import type { SubtitleDelivery, SubtitlePreferences } from './universal/subtitles/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
@@ -137,6 +138,8 @@ export interface Snapshot {
   subtitleTracks: Track[];
   renditions: (Omit<Rendition, 'url'> & { bitrateBps: number; requiredBandwidthBps: number })[];
   video: VideoInfo | null;
+  /** Source → output video and audio facts for the info card; absent where the engine does not report them. */
+  format?: PlaybackFormat | null;
   currentBitrateBps: number | null;
   requiredBandwidthBps: number | null;
   bufferAheadSeconds: number | null;
