@@ -15,6 +15,8 @@ export interface UniversalReadout {
   state: 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
   video?: VideoInfo | null;
   readAheadSeconds?: number | null;
+  /** Source → output facts for the info card; absent when the runtime cannot say. */
+  format?: import('../format-info').PlaybackFormat | null;
   bufferAheadSeconds?: number | null;
   throughputBps?: number | null;
   throughputHistory?: number[];

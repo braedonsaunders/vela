@@ -75,6 +75,10 @@ export interface AudioOutput {
   pause(): void;
   setVolume(volume: number, muted: boolean): void;
   setRate(rate: number): void;
+  /** The selected track's actual decode and output route, once configured. */
+  describe?(): import('../format-info').AudioOutputFormat | null;
+  /** Audio objects the decoder reports in the selected track (Atmos), 0 when none or unknown. */
+  sourceObjects?(): number;
   dispose(): Promise<void>;
 }
 

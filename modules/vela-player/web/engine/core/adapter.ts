@@ -10,6 +10,10 @@ import { PlaybackCore, type CoreState } from './runtime';
 import type { AudioTrack } from './types';
 import { canonicalAudioCodec } from '../universal/audio/packages';
 import { VideoDecoderRouter, type VideoPresentation } from './decode/video';
+import type { AudioOutput } from './types';
+import type { PlaybackFormat } from '../format-info';
+import { dolbyVisionRoute, type DolbyVisionRoute } from './dolby-vision';
+import { audioSourceFormat, videoOutputFormat, videoSourceFormat } from './format';
 export { SubtitleSession } from '../universal/subtitles/session';
 export async function warmup(options: Pick<OriginalRuntimeOptions, 'assets' | 'signal'>) {
   configureEngineAssets({ baseURL: options.assets.baseURL, cacheKey: options.assets.assetKey });
@@ -56,6 +60,9 @@ export class UniversalRuntime implements OriginalBackend {
   private pendingAudio: string | null = null;
   private audioSelection = 0;
   private notes: string[] = [];
+  private videoRouter: VideoDecoderRouter | null = null;
+  private audioOutput: AudioOutput | null = null;
+  private dolbyVision: DolbyVisionRoute = { kind: 'none' };
   constructor(private readonly options: OriginalRuntimeOptions) {
     this.volume = options.surface.video.volume;
     this.muted = options.surface.video.muted;
@@ -85,18 +92,19 @@ export class UniversalRuntime implements OriginalBackend {
         dispose: () => resources.release(),
       },
       (audio) =>
-        createCoreAudioOutput({
+        (this.audioOutput = createCoreAudioOutput({
           ...audio,
           libraryBaseURL: options.assets.baseURL,
           assetKey: options.assets.assetKey,
           forceSoftware: options.retry?.audio,
-        }),
+        })),
       (state) => this.publish(state),
       (error, position) => {
         if (!this.disposed)
           options.onFailure(error.message, position / 1e6, { httpStatus: mediaHTTPStatus(error) });
       },
-      (callbacks) => new VideoDecoderRouter(presentation, packages, callbacks, options.retry?.video),
+      (callbacks) =>
+        (this.videoRouter = new VideoDecoderRouter(presentation, packages, callbacks, options.retry?.video)),
       options.mediaRequests,
     );
     this.core.setVolume(this.volume, this.muted);
@@ -194,6 +202,23 @@ export class UniversalRuntime implements OriginalBackend {
       decoderReady: state.tracks.some((track) => track.kind === 'video'),
       audioTrackId,
       metadataDiscrepancies: [...this.notes, ...state.diagnostics].slice(0, 32),
+      format: this.format(state),
+    };
+  }
+  /** Source → output facts from the actual tracks and the routes that took them. */
+  private format(state: CoreState): PlaybackFormat | null {
+    const video = state.tracks.find((track) => track.kind === 'video');
+    const audio = state.tracks.find(
+      (track): track is AudioTrack => track.kind === 'audio' && track.id === state.audioTrackId,
+    );
+    if (!video && !audio) return null;
+    const probed = this.media?.hls ? undefined : this.media?.video;
+    const source = video ? videoSourceFormat(video, probed, this.dolbyVision) : null;
+    return {
+      video: source,
+      videoOut: source ? videoOutputFormat(source, this.dolbyVision, this.videoRouter?.route ?? null, false) : null,
+      audio: audio ? audioSourceFormat(audio, this.audioOutput?.sourceObjects?.() ?? 0) : null,
+      audioOut: audio ? (this.audioOutput?.describe?.() ?? null) : null,
     };
   }
   get presentationTelemetry() {
@@ -207,6 +232,9 @@ export class UniversalRuntime implements OriginalBackend {
   }
   async open(media: OriginalMedia) {
     this.options.signal.throwIfAborted();
+    // A file's Dolby Vision facts come from the server's probe; an HLS rendition is its own stream.
+    this.dolbyVision = media.hls ? { kind: 'none' } : dolbyVisionRoute(media.video);
+    if (this.dolbyVision.kind === 'refuse') throw new Error(this.dolbyVision.reason);
     this.media = media;
     const ordered = [...media.audio].sort((a, b) => a.streamIndex - b.streamIndex);
     const ordinal = ordered.findIndex((track) => track.id === media.selectedAudioId);

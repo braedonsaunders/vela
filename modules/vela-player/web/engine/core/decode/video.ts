@@ -35,6 +35,8 @@ export class VideoDecoderRouter implements VideoBackend {
   private native?: NativeVideoDecoder;
   private gpu?: PackageVideoDecoder;
   private closed = false;
+  /** The decoder that took the stream, for the info card. */
+  route: { decoder: 'hardware' | 'software'; decoderName: string } | null = null;
   constructor(
     private readonly presentation: VideoPresentation,
     private readonly packages: VideoPackages,
@@ -63,6 +65,7 @@ export class VideoDecoderRouter implements VideoBackend {
         );
         signal.throwIfAborted();
         this.backend = native;
+        this.route = { decoder: 'hardware', decoderName: 'WebCodecs' };
         return;
       } catch {
         phase.abort();
@@ -71,7 +74,10 @@ export class VideoDecoderRouter implements VideoBackend {
         signal.throwIfAborted();
       }
     }
-    const decoder = await abortable(this.packages.load(track.codec, signal), signal);
+    // Only HEVC has a package route in the core; other codecs retry on the browser's software decoder.
+    const decoder = PackageVideoDecoder.accepts(track)
+      ? await abortable(this.packages.load(track.codec, signal), signal)
+      : null;
     signal.throwIfAborted();
     if (this.closed) throw new DOMException('Video route superseded', 'AbortError');
     if (decoder) {
@@ -83,6 +89,7 @@ export class VideoDecoderRouter implements VideoBackend {
       await this.presentation.prepare(track, epoch, signal, { kind: 'gpu', format });
       signal.throwIfAborted();
       this.backend = gpu;
+      this.route = { decoder: 'software', decoderName: `WebGPU ${decoder.id} package` };
       return;
     }
     // Chromium can expose a software WebCodecs implementation without a separate
@@ -101,6 +108,7 @@ export class VideoDecoderRouter implements VideoBackend {
     );
     signal.throwIfAborted();
     this.backend = software;
+    this.route = { decoder: 'software', decoderName: 'WebCodecs' };
   }
   decode(packet: EncodedPacket, signal: AbortSignal) {
     if (!this.backend) return Promise.reject(new Error('Video route is not configured'));
@@ -115,5 +123,6 @@ export class VideoDecoderRouter implements VideoBackend {
     this.native?.dispose();
     this.gpu?.dispose();
     this.backend = undefined;
+    this.route = null;
   }
 }

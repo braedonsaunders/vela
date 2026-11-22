@@ -49,6 +49,16 @@ export class PackageVideoDecoder {
     this.feed = new GPUVideoDecodeFeed(options.createSession);
   }
 
+  /** Whether the track carries what configure needs: an HEVC decoder configuration record. */
+  static accepts(track: VideoTrack): boolean {
+    const description = track.config?.description;
+    if (track.codec !== 'hevc' || !description) return false;
+    const bytes = ArrayBuffer.isView(description)
+      ? new Uint8Array(description.buffer, description.byteOffset, description.byteLength)
+      : new Uint8Array(description);
+    return bytes.length >= 23 && bytes[0] === 1;
+  }
+
   async configure(
     track: VideoTrack,
     decoder: VideoDecoderPackage,

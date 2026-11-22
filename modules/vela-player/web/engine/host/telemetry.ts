@@ -118,6 +118,7 @@ export function snapshotHost(context: HostContext): Snapshot {
         requiredBandwidthBps: rendition.bandwidth * QUALITY_HEADROOM,
       })) ?? [],
     video,
+    format: readout?.format ?? null,
     currentBitrateBps,
     requiredBandwidthBps: currentBitrateBps === null ? null : currentBitrateBps * QUALITY_HEADROOM,
     bufferAheadSeconds: ahead,

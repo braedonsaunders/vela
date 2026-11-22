@@ -23,6 +23,8 @@ import { createAudioPackages } from './upstream';
 import { canonicalAudioCodec } from './packages';
 import { outputLayout, downmixPolicy } from './policy';
 import { velaTrackConfiguration } from './ffmpeg/track-configuration';
+import type { AudioOutputFormat } from '../../format-info';
+import { audioOutputFacts } from './output-facts';
 
 export interface CoreAudioFailure {
   epoch: number;
@@ -105,6 +107,10 @@ export class CoreAudioOutput implements AudioOutput {
   private rate = 1;
   private disposed = false;
   private disposal?: Promise<void>;
+  /** What the selected track's decode and output actually are, for the info card. */
+  private facts: AudioOutputFormat | null = null;
+  /** Objects the package reports in the selected track's blocks: E-AC-3 JOC or TrueHD Atmos. */
+  private objects = 0;
   constructor(private options: CoreAudioOptions) {
     const base = new URL(options.libraryBaseURL, location.href);
     if (base.origin !== location.origin || base.username || base.password)
@@ -336,6 +342,16 @@ export class CoreAudioOutput implements AudioOutput {
       });
       state.workletGeneration = attachment.workletGeneration;
       state.mode = native ? 'native' : 'software';
+      this.objects = 0;
+      this.facts = audioOutputFacts({
+        codec,
+        sourceChannels: track.channels,
+        sourceSampleRate: track.sampleRate,
+        outputChannels: channels,
+        layout,
+        outputSampleRate: RATE,
+        decoder: native ? 'webcodecs' : (selection?.source.id ?? 'package'),
+      });
       const downmix = downmixPolicy(this.options.nightMode ?? false);
       const description = track.config?.description;
       const raw =
@@ -398,7 +414,9 @@ export class CoreAudioOutput implements AudioOutput {
               );
             this.wake(state);
           },
-          onObjectCount: () => {},
+          onObjectCount: (response) => {
+            if (this.current(state)) this.objects = response.objectCount;
+          },
           onSourceFormat: () => {},
           onProgress: (progress) => {
             if (!this.current(state)) return;
@@ -659,6 +677,12 @@ export class CoreAudioOutput implements AudioOutput {
       bufferedUntilUs: Math.max(state.floor, state.bufferedUntil),
     });
   };
+  describe(): AudioOutputFormat | null {
+    return this.state && !this.state.failure ? this.facts : null;
+  }
+  sourceObjects(): number {
+    return this.state && !this.state.failure ? this.objects : 0;
+  }
   dispose(): Promise<void> {
     if (this.disposal) return this.disposal;
     this.disposed = true;
