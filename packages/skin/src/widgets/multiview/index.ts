@@ -3,6 +3,4 @@ export { MultiviewController, type LiveEventRef, type MultiviewOptions, type Mul
 export { layoutsFor, neighbour, placement, settleLayout, slotRects, ladderHeight, featureBand, HEIGHT_LADDER, MAX_TILES, type MultiviewLayout, type Rect, type Size } from './layout';
 export { connectionCap, tileRefusal, type ConnectionCap, type TileRefusal } from './refusal';
 export { MultiviewScreen, useMultiviewView, type MultiviewScreenProps } from './screen';
-export { ScoreBug } from './bug';
-export { bugLeader, bugSides, bugTitle, type BugEvent } from './bug-model';
 export { MultiviewProvider, useMultiview } from './context';

@@ -3,8 +3,6 @@ import { VelaError } from '@vela/core';
 import type { Snapshot } from '@vela/player-api';
 import type { PlaybackPlan } from '../../protocol/types';
 import { MultiviewController, type MultiviewSource, type MultiviewTileRequest } from '../src/widgets/multiview/controller';
-import { bugLeader, bugSides, bugTitle, type BugEvent } from '../src/widgets/multiview/bug-model';
-import type { LiveEventState } from '../../protocol/live-events';
 import { connectionCap, refusalTitle, tileRefusal } from '../src/widgets/multiview/refusal';
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -310,21 +308,6 @@ test('the cap details are read only from the typed refusal', () => {
   expect(connectionCap(new Error('x'))).toBeNull();
   const one = new VelaError({ class: 'capacity', code: 'provider_connection_cap', message: '', retry: { allowed: false }, details: { max: 1 } } as never, 409);
   expect(tileRefusal(one, 'ESPN').title).toBe("ESPN's provider allows 1 connection");
-});
-
-test('the bug prints away first and hides a spoiler or a game not yet started', () => {
-  const league = { id: 'nfl', name: 'NFL', abbr: 'NFL' };
-  const event = (state: LiveEventState, spoiler = false): BugEvent => ({ league, status: { state, detail: '' }, spoiler,
-    competitors: [{ id: 'phi', name: 'Eagles', abbr: 'PHI', score: '27', home: true }, { id: 'nyg', name: 'Giants', abbr: 'NYG', score: '24', home: false }] });
-  expect(bugSides(event('in'))).toEqual({ left: 'NYG', right: 'PHI', score: '24–27' });
-  expect(bugSides(event('pre'))?.score).toBe('');
-  expect(bugSides(event('in', true))?.score).toBe('');
-  const race: BugEvent = { league: { id: 'f1', name: 'Formula 1', abbr: 'F1' }, title: 'Las Vegas Grand Prix', status: { state: 'in', detail: 'Lap 31/50' }, competitors: [],
-    ranking: [{ pos: 1, name: 'Verstappen', abbr: 'VER' }] };
-  expect(bugSides(race)).toBeNull();
-  expect(bugTitle(race)).toBe('F1 · Las Vegas');
-  expect(bugLeader(race)).toBe('VER P1');
-  expect(bugLeader({ ...race, spoiler: true })).toBe('');
 });
 
 test('once a tile has shown a picture, waiting for media keeps it shown and says it is loading', async () => {

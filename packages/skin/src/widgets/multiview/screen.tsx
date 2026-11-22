@@ -18,7 +18,7 @@ import type { Focusable } from '../../escape';
 import { useGuideLook, type GuideLook, alpha } from '../guide/look';
 import { Line, LogoTile, Press } from '../guide/parts';
 import { PlayerIcon } from '../player/icons';
-import { ScoreBug, type BugEvent } from './bug';
+import { ScoreBug } from '../live-overlay/score-bug';
 import { refusalTitle } from './refusal';
 import type { LiveEventRef, MultiviewController, MultiviewTile, MultiviewView } from './controller';
 import { featureBand, placement, slotRects, type MultiviewLayout, type Rect, type Size } from './layout';
@@ -39,8 +39,6 @@ export interface MultiviewScreenProps {
   channels: GuideChannel[];
   /** Leave the screen (Back with nothing open). */
   onLeave(): void;
-  /** The live event behind a tile's programme, kept current (the live-events store); absent: no bugs. */
-  useLiveEvent?: (ref: LiveEventRef | null) => BugEvent | null;
 }
 
 type Panel = { slot: number; mode: 'actions' | 'channels' } | { slot: -1; mode: 'add' };
@@ -59,7 +57,7 @@ function useStill(): boolean {
   return still;
 }
 
-export function MultiviewScreen({ controller, Player, channels, onLeave, useLiveEvent }: MultiviewScreenProps) {
+export function MultiviewScreen({ controller, Player, channels, onLeave }: MultiviewScreenProps) {
   const view = useMultiviewView(controller);
   const look = useGuideLook();
   const still = useStill();
@@ -154,7 +152,7 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
         <TilePicture key={tile.slot} tile={tile} look={look} size={size} still={still} Player={Player} controller={controller}
           rect={view.fullscreen === tile.slot ? full : rects[index] ?? full}
           fullscreen={view.fullscreen === tile.slot} hidden={view.fullscreen >= 0 && view.fullscreen !== tile.slot}
-          focused={view.focused === tile.slot} channel={byId.get(tile.channelId)} useLiveEvent={useLiveEvent} />
+          focused={view.focused === tile.slot} channel={byId.get(tile.channelId)} />
       ))}
       {view.tiles.map((tile, index) => {
         const fullscreen = view.fullscreen === tile.slot;
@@ -179,7 +177,7 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
           onOptions={() => setPanel({ slot: tile.slot, mode: 'actions' })} />;
       })}
       {view.fullscreen < 0 && captioned ? (
-        <Captions key={view.layout} look={look} still={still} view={view} rects={rects} size={size} gap={gap} byId={byId} useLiveEvent={useLiveEvent} />
+        <Captions key={view.layout} look={look} still={still} view={view} rects={rects} size={size} gap={gap} byId={byId} />
       ) : null}
       {count === 0 ? <Empty look={look} onAdd={() => setPanel({ slot: -1, mode: 'add' })} onLeave={onLeave} preferred={!panelOpen} /> : null}
       {view.phase === 'failed' ? <Notice look={look} text={view.failure ?? msg('multiview.failed')} /> : null}
@@ -200,10 +198,10 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
 }
 
 /** One tile's picture and the chrome over it, carried into its rect by a native-driven transform. */
-function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focused, channel, Player, controller, useLiveEvent }: {
+function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focused, channel, Player, controller }: {
   tile: MultiviewTile; rect: Rect; size: Size; look: GuideLook; still: boolean; fullscreen: boolean; hidden: boolean;
   focused: boolean; channel: GuideChannel | undefined; Player: ComponentType<VelaPlayerViewProps>;
-  controller: MultiviewController; useLiveEvent?: MultiviewScreenProps['useLiveEvent'];
+  controller: MultiviewController;
 }) {
   const target = placement(rect, size);
   const values = useRef<{ x: Animated.Value; y: Animated.Value; scale: Animated.Value; opacity: Animated.Value; picture: Animated.Value; ring: Animated.Value } | null>(null);
@@ -236,13 +234,12 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
 
   // The chrome keeps its own size on screen whatever the tile's scale: it is drawn inside the moving
   // view at 1/scale, and grows a little at full screen.
-  // A small tile's chrome shrinks a little with it, so a long bug still fits; full screen grows it.
-  const visual = fullscreen ? 1.35 : Math.min(1, 0.45 + target.scale);
+  // A small tile's chrome shrinks a little with it, so a long bug still fits; full screen draws the
+  // player's own full-size bug.
+  const visual = fullscreen ? 1 : Math.min(1, 0.45 + target.scale);
   const counter = useMemo(() => Animated.divide(visual, v.scale), [v.scale, visual]);
   const radius = fullscreen ? 0 : look.radiusTile;
   const s = Math.max(0.05, target.scale);
-  const event = useLiveEvent ? useLiveEvent(tile.liveEvent) : null;
-  const bugSize = TV ? 16 : Platform.OS === 'web' ? 13 : 11;
 
   return (
     <Animated.View pointerEvents="none" style={{
@@ -263,9 +260,9 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
             ) : null)}
           </Animated.View>
         ) : null}
-        {event && playing ? (
+        {tile.liveEvent && playing ? (
           <Animated.View style={{ position: 'absolute', left: 0, top: 0, transformOrigin: 'left top', transform: [{ scale: counter }] } as never}>
-            <View style={{ padding: TV ? 18 : 10 }}><ScoreBug event={event} look={look} size={bugSize} /></View>
+            <View style={{ padding: TV ? 18 : 10 }}><ScoreBug eventId={tile.liveEvent.id} size={fullscreen ? 'full' : 'tile'} /></View>
           </Animated.View>
         ) : null}
         {tile.buffering ? (
@@ -333,9 +330,9 @@ function TuningDots({ look }: { look: GuideLook }) {
 
 /** What is on each tile, where the layout leaves room: under each tile side by side, and in the band
  * under one big + three small. The tile with the audio is marked. */
-function Captions({ look, still, view, rects, size, gap, byId, useLiveEvent }: {
+function Captions({ look, still, view, rects, size, gap, byId }: {
   look: GuideLook; still: boolean; view: MultiviewView; rects: Rect[]; size: Size; gap: number;
-  byId: Map<string, GuideChannel>; useLiveEvent?: MultiviewScreenProps['useLiveEvent'];
+  byId: Map<string, GuideChannel>;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -348,7 +345,7 @@ function Captions({ look, still, view, rects, size, gap, byId, useLiveEvent }: {
       const top = rect.y + rect.height + gap;
       if (size.height - top < CAPTION) return null;
       return <Animated.View key={tile.slot} pointerEvents="none" style={{ position: 'absolute', left: rect.x, top, width: rect.width, opacity }}>
-        <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} useLiveEvent={useLiveEvent} />
+        <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} />
       </Animated.View>;
     })}</>;
   }
@@ -359,17 +356,16 @@ function Captions({ look, still, view, rects, size, gap, byId, useLiveEvent }: {
       flexDirection: 'row', gap, alignItems: 'center', opacity }}>
       {view.tiles.map(tile => (
         <View key={tile.slot} style={{ flex: 1, minWidth: 0 }}>
-          <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} useLiveEvent={useLiveEvent} />
+          <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} />
         </View>
       ))}
     </Animated.View>
   );
 }
 
-function Caption({ look, tile, channel, focused, useLiveEvent }: {
-  look: GuideLook; tile: MultiviewTile; channel: GuideChannel | undefined; focused: boolean; useLiveEvent?: MultiviewScreenProps['useLiveEvent'];
+function Caption({ look, tile, channel, focused }: {
+  look: GuideLook; tile: MultiviewTile; channel: GuideChannel | undefined; focused: boolean;
 }) {
-  const event = useLiveEvent ? useLiveEvent(tile.liveEvent) : null;
   const ring = useRef(new Animated.Value(focused ? 1 : 0)).current;
   useEffect(() => {
     Animated.timing(ring, { toValue: focused ? 1 : 0, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
@@ -387,7 +383,7 @@ function Caption({ look, tile, channel, focused, useLiveEvent }: {
           </Line>
         </View>
         {channel?.now ? <Line look={look} size={TV ? 12 : 11} color={look.inkQuiet}>{channel.now}</Line> : null}
-        {event ? <View style={{ marginTop: TV ? 4 : 2 }}><ScoreBug event={event} look={look} size={TV ? 12 : 10} /></View> : null}
+        {tile.liveEvent ? <View style={{ marginTop: TV ? 4 : 2, alignSelf: 'flex-start' }}><ScoreBug eventId={tile.liveEvent.id} size="compact" /></View> : null}
       </View>
     </View>
   );
