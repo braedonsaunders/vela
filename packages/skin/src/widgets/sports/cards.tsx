@@ -208,15 +208,20 @@ function HeroButton({ look, label, onPress, icon, testID }: { look: SportsLook; 
 
 /** A generic table: a title, a header row and display cells; numbers align right and keep their width. */
 export function TableView({ look, table, highlight, compact, testID }: { look: SportsLook; table: LiveTable; highlight?: (row: readonly string[]) => boolean; compact?: boolean; testID?: string }) {
-  const numeric = table.columns.map((_, n) => numericColumn(table.rows, n));
-  const cell = look.px(compact ? 38 : 46);
+  const numeric = table.columns.map((_, n) => numericColumn(table.rows, n) || n === 0 && numericColumn(table.rows.map(row => ['', ...row]), 1));
+  const cell = look.px(compact ? 42 : 48);
+  // Numbers keep a fixed column, right-aligned; words share the rest (the first, a name, the most).
+  const short = table.columns.map((_, n) => n > 0 && table.rows.every(row => (row[n] ?? '').length <= 4));
+  const column = (n: number) => numeric[n] || short[n]
+    ? { width: cell, textAlign: n === 0 ? 'left' as const : 'right' as const }
+    : { flex: n === 0 ? 1.6 : 1, textAlign: 'left' as const, paddingRight: look.px(8) };
   return (
     <View testID={testID} style={{ gap: look.px(2) }}>
       {table.title ? <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase', marginBottom: look.px(6) }}>{table.title}</Txt> : null}
       <View style={{ flexDirection: 'row', paddingBottom: look.px(6), borderBottomWidth: 1, borderBottomColor: look.hairline }}>
-        {table.columns.map((column, n) => (
-          <Txt key={`${n}-${column}`} look={look} size={11.5} weight={650} color={look.inkQuiet} lines={1}
-            style={n === 0 ? { flex: 1 } : { width: cell, textAlign: numeric[n] ? 'right' : 'center' }}>{column}</Txt>
+        {table.columns.map((name, n) => (
+          <Txt key={`${n}-${name}`} look={look} size={11.5} weight={650} color={look.inkQuiet} lines={1}
+            style={column(n)}>{name}</Txt>
         ))}
       </View>
       {table.rows.map((row, r) => {
@@ -227,7 +232,7 @@ export function TableView({ look, table, highlight, compact, testID }: { look: S
             backgroundColor: on ? alpha(look.accent, 0.1) : 'transparent', borderRadius: on ? look.px(6) : 0 }}>
             {table.columns.map((_, n) => (
               <Txt key={n} look={look} size={13.5} weight={n === 0 || n === row.length - 1 && numeric[n] ? 650 : 520} color={n === 0 ? look.ink : look.inkSecondary} lines={1} digits
-                style={n === 0 ? { flex: 1, paddingLeft: on ? look.px(6) : 0 } : { width: cell, textAlign: numeric[n] ? 'right' : 'center', color: n === row.length - 1 && numeric[n] ? look.ink : look.inkSecondary }}>{row[n] ?? ''}</Txt>
+                style={[column(n), n === 0 && on ? { paddingLeft: look.px(6) } : null, { color: n === 0 || !numeric[n] && n === 1 ? look.ink : n === row.length - 1 && numeric[n] ? look.ink : look.inkSecondary }]}>{row[n] ?? ''}</Txt>
             ))}
           </View>
         );

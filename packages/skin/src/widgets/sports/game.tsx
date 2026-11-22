@@ -65,9 +65,11 @@ export function GamePage({ id, active = true }: { id: string; active?: boolean }
               </Rise>
             ) : null}
           </View>
-          <View style={{ flex: wide ? 1 : undefined, alignSelf: 'stretch' }}>
-            <Rise look={look} index={2}><Plays look={look} plays={detail.plays} m={m} /></Rise>
-          </View>
+          {detail.plays.length || m.phase === 'upcoming' || m.spoiler ? (
+            <View style={{ flex: wide ? 1 : undefined, alignSelf: 'stretch' }}>
+              <Rise look={look} index={2}><Plays look={look} plays={detail.plays} m={m} /></Rise>
+            </View>
+          ) : null}
         </View>
         {detail.links.length && actions?.openLink && !Platform.isTV ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: look.px(10) }}>
@@ -115,7 +117,12 @@ function ScoreBand({ look, event, m, close }: { look: SportsLook; event: LiveEve
                   <Score look={look} value={home.score} size={scoreSize} color={WHITE} dim={home.loser} testID="sports-game-home-score" />
                 </View>
               ) : (
-                <Txt look={look} size={compact ? 22 : 34} weight={800} color={WHITE} digits>{m.spoiler ? '– : –' : m.status}</Txt>
+                m.spoiler ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(10) }}>
+                    <Glyph name="eye-off" size={look.px(compact ? 20 : 28)} color={alpha(WHITE, 0.85)} />
+                    <Txt look={look} size={compact ? 18 : 26} weight={750} color={WHITE}>{msg('sports.spoilersHidden')}</Txt>
+                  </View>
+                ) : <Txt look={look} size={compact ? 22 : 34} weight={800} color={WHITE} digits>{m.status}</Txt>
               )}
               <Txt look={look} size={compact ? 13 : 15} weight={700} color="#ffd7dc" lines={1} style={{ marginTop: look.px(6) }}>{m.phase === 'upcoming' ? msg('sports.startsAt', { time: m.status }) : m.status}</Txt>
             </View>
