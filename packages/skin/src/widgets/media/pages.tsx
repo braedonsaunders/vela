@@ -361,13 +361,15 @@ function ArtistPage({ card }: { card: Card }) {
   );
 }
 
-/** One child level of video titles (an artist's concerts): 16:9 tiles when the titles have landscape
- * art, posters otherwise. Each opens the standard video title page. */
+/** One child level of video titles (an artist's concerts): 16:9 tiles when the titles carry stills of
+ * their own (thumb art), their 2:3 posters otherwise. A backdrop alone is not enough: a plugin may
+ * give every concert its artist's photo as backdrop, and a row of identical tiles names nothing.
+ * Each opens the standard video title page. */
 function VideoGrid({ id, role, load }: { id: string; role: string; load: Loadable<ChildrenModel> | undefined }) {
   const m = useMediaLook();
   const actions = useMediaActions();
   const items = load?.value?.items ?? EMPTY;
-  const wide = items.some(item => !!(item.thumbnail || item.backdrop)) || !items.length;
+  const wide = items.length ? items.every(item => !!item.thumbnail) : true;
   const { size, gap } = tilesPerRow(m, wide ? (m.small ? 240 : 300) : (m.small ? 140 : 190));
   if (!items.length && load?.load === 'failed') return <ChildrenFailed id={id} role={role} />;
   if (!items.length && (!load || load.load === 'loading' || load.load === 'idle')) return (
