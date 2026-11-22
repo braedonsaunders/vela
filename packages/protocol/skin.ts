@@ -55,6 +55,8 @@ export type Action =
   | 'collectionMore' | 'personMore'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide'
+  /** Live TV multiview: add the channel (arg: its id) and show multiview; with no arg, show it as it is. */
+  | 'multiview'
   /** Search (`routes.search`): open a live hit by its `hit.ref`; ask the descriptive lane again. */
   | 'searchLibrary' | 'searchSort' | 'searchDirection' | 'searchKind' | 'searchMore' | 'openHit' | 'retryDescriptive';
 

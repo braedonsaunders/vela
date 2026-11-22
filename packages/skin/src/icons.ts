@@ -27,6 +27,8 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   'bookmark-fill': { paths: ['M7 3h10a1.5 1.5 0 0 1 1.5 1.5V22L12 17.7 5.5 22V4.5A1.5 1.5 0 0 1 7 3z'] },
   restart: { paths: ['M4.2 9A8.5 8.5 0 1 1 4 15M4.2 9V4.5M4.2 9h4.5'], stroke: true },
   remove: { paths: ['M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5'], stroke: true },
+  /** Four tiles: Live TV multiview. */
+  multiview: { paths: ['M3.5 5.5h7.5v6H3.5zM13 5.5h7.5v6H13zM3.5 13.5h7.5v6H3.5zM13 13.5h7.5v6H13z'], stroke: true },
   'playlist-add': { paths: ['M4 6h15M4 11h15M4 16h7M17 14v7M13.5 17.5h7'], stroke: true },
   'star-fill': { paths: ['M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1-4.5-4.2 6.1-.8z'] },
   sort: { paths: ['M7 4v16M3.5 16.5L7 20l3.5-3.5M17 20V4M13.5 7.5L17 4l3.5 3.5'], stroke: true },

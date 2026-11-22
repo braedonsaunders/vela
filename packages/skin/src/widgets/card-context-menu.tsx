@@ -21,6 +21,7 @@ import Reanimated from 'react-native-reanimated';
 import { MOTION, presenceStyle } from '../presence';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
+import { useMultiview } from './multiview/context';
 import { Glyph } from './common/controls';
 import { useLook } from './common/look';
 
@@ -116,7 +117,8 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   }, [leaving, look.still, close]);
 
   const link = web && href ? new URL(href, window.location.href).href : undefined;
-  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link }), [card, primary, management, continueWatching, host.env.canPlaylists, link]);
+  const multiview = useMultiview() !== null;
+  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link, multiview }), [card, primary, management, continueWatching, host.env.canPlaylists, link, multiview]);
   const focusFirst = mode === 'keyboard' || mode === 'tv';
   useEffect(() => {
     if (!focusFirst || menuSize.height <= 1) return;
@@ -284,7 +286,7 @@ const MenuItem = forwardRef<ComponentRef<typeof FocusPressable>, {
     play: 'play-fill', restart: 'restart', info: 'info', checked: 'check-circle', unchecked: 'circle',
     external: 'external', copy: 'copy',
     heart: 'heart', 'heart-filled': 'heart-fill', bookmark: 'bookmark', 'bookmark-filled': 'bookmark-fill',
-    remove: 'remove', show: 'layers', season: 'list', 'playlist-add': 'playlist-add',
+    remove: 'remove', show: 'layers', season: 'list', 'playlist-add': 'playlist-add', multiview: 'multiview',
   };
   const move = (event: NativeSyntheticEvent<unknown> & { key?: string; currentTarget?: unknown }) => {
     if (!web) return;

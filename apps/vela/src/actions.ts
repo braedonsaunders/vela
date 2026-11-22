@@ -40,6 +40,8 @@ interface Context {
   openPicker(): void;
   openAddToPlaylist(titleId: string, titleKind?: string): void;
   setQuery(query: string): void;
+  /** Add a channel to multiview and show it; null where the server has no live TV. */
+  multiview: ((channelId?: string) => void) | null;
 }
 
 /** Music, book and audiobook cards carry their role as kind (docs/media-kinds.md). */
@@ -51,7 +53,7 @@ function notYet(action: string, arg: string): void {
   console.info(`Vela: ${action} ${arg} is not carried out yet`);
 }
 
-export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist, setQuery }: Context): Dispatcher {
+export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist, setQuery, multiview }: Context): Dispatcher {
   const { setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags } = view;
   const actions = useMemo(() => ({ setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags }), [setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags]);
   const loadMore = useCallback<SkinHost['loadMore']>((on, id) => {
@@ -91,6 +93,8 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
   const dispatch = useCallback((place: Place, action: Action, arg: string) => {
     if (liveAction(live, action, arg, () => router.push('/live'))) return;
     switch (action) {
+      case 'multiview':
+        return multiview?.(arg || undefined);
       case 'select':
         return select(place, arg);
       case 'person':
@@ -196,7 +200,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       default:
         notYet(action, arg);
     }
-  }, [store, actions, live, select, retry, loadMore, openPicker, openAddToPlaylist, setQuery]);
+  }, [store, actions, live, select, retry, loadMore, openPicker, openAddToPlaylist, setQuery, multiview]);
 
   return { dispatch, loadMore };
 }

@@ -15,7 +15,7 @@ export type CardContextCommand =
 export interface CardContextAction {
   id: string;
   label: string;
-  icon: 'play' | 'restart' | 'info' | 'external' | 'copy' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add';
+  icon: 'multiview' | 'play' | 'restart' | 'info' | 'external' | 'copy' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add';
   group: 'play' | 'details' | 'link' | 'watch' | 'remove';
   tone?: 'warning';
   command: CardContextCommand;
@@ -60,13 +60,14 @@ function addParentActions(actions: CardContextAction[], card: Card): void {
  * The useful actions for one drawn card. Server mutations are present only when the adapter
  * returned TitleActions; absence is a capability answer, never a disabled menu row.
  */
-export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: { continueWatching?: boolean; playlists?: boolean; href?: string } = {}): CardContextAction[] {
+export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: { continueWatching?: boolean; playlists?: boolean; href?: string; multiview?: boolean } = {}): CardContextAction[] {
   const actions: CardContextAction[] = [];
   const playable = PLAYABLE_KINDS.has(card.kind);
   const resumable = playable && card.progressSeconds > 0 && card.durationSeconds > 0 && !card.played;
 
   if (primary.action === 'watch') {
     actions.push(dispatch('watch-live', msg('cardMenu.watchLive'), primary.action, primary.arg, 'play', 'play'));
+    if (context.multiview && primary.arg) actions.push(dispatch('multiview', msg('multiview.add'), 'multiview', primary.arg, 'multiview', 'play'));
   } else if (primary.action === 'playExtra') {
     actions.push(dispatch('play', msg('cardMenu.play'), primary.action, primary.arg, 'play', 'play'));
   } else if (playable) {

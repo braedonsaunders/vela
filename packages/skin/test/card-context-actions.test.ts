@@ -86,3 +86,11 @@ test('an extra keeps its playable action without title mutations', () => {
   expect(actions.map(action => action.id)).toEqual(['play']);
   expect(actions[0]?.command).toEqual({ kind: 'dispatch', action: 'playExtra', arg: 'extra-1' });
 });
+
+test('a channel offers Add to multiview only where the server has multiview', () => {
+  const channel = card({ id: 'channel-7', kind: 'channel', progressSeconds: 0 });
+  expect(cardContextActions(channel, { action: 'watch', arg: 'channel-7' }).map(action => action.id)).toEqual(['watch-live']);
+  const actions = cardContextActions(channel, { action: 'watch', arg: 'channel-7' }, null, { multiview: true });
+  expect(actions.map(action => action.id)).toEqual(['watch-live', 'multiview']);
+  expect(actions[1]!.command).toEqual({ kind: 'dispatch', action: 'multiview', arg: 'channel-7' });
+});

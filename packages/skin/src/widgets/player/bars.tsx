@@ -10,7 +10,7 @@ import { msg } from '@vela/core';
 import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
-import { LiveDial, LiveMark, LiveStatusLine, LiveZap, type LiveWatch } from './live';
+import { LiveDial, LiveMark, LiveMultiview, LiveStatusLine, LiveZap, type LiveWatch } from './live';
 import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLiveOverlay } from '../live-overlay/player';
 import type { PlayerLook } from './look';
@@ -291,6 +291,7 @@ function Controls({
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
       {timeline ? null : <LiveZap look={look} watch={live} disabled={!live.canZap} />}
+      {timeline ? null : <LiveMultiview look={look} watch={live} />}
       <Volume look={look} view={view} send={send} onActive={onActive} />
       {timeline ? null : <LiveMark look={look} watch={live} send={send} />}
       <View style={cluster}>

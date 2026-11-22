@@ -10,6 +10,7 @@ import { msg } from '@vela/core';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { liveBehind, liveNotices, liveWatchKey, MiniGuide, useLiveContext, useLiveView } from '../guide';
 import { ChromeButton } from './button';
+import { useMultiview } from '../multiview/context';
 import type { ChromeTarget, CommandInput } from './context';
 import { liveWatchOf } from './target';
 import type { PlayerLook } from './look';
@@ -70,6 +71,21 @@ export function LiveZap({ look, watch, disabled }: { look: PlayerLook; watch: Li
         onPress={() => watch.zap(1)}
       />
     </>
+  );
+}
+
+/** Add to multiview: the channel joins the tiles, which replace full watch. */
+export function LiveMultiview({ look, watch }: { look: PlayerLook; watch: LiveWatch }) {
+  const multiview = useMultiview();
+  if (!multiview || !watch.channelId) return null;
+  return (
+    <ChromeButton
+      look={look}
+      icon="tiles"
+      label={msg('multiview.add')}
+      testID="player-multiview"
+      onPress={() => multiview.open(watch.channelId, { replace: true })}
+    />
   );
 }
 

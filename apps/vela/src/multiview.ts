@@ -52,9 +52,10 @@ export function useMultiviewController(store: Store, session: number | null, liv
   }, [store, session, live]);
   return useMemo(() => controller ? {
     controller,
-    open(channelId?: string) {
+    open(channelId?: string, options?: { replace?: boolean }) {
       if (channelId) controller.add(channelId);
-      router.push('/multiview');
+      if (options?.replace) router.replace('/multiview');
+      else router.push('/multiview');
     },
   } : null, [controller]);
 }

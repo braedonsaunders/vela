@@ -5,8 +5,9 @@ import type { MultiviewController } from './controller';
 
 interface MultiviewContextValue {
   controller: MultiviewController;
-  /** Adds a channel and shows the multiview screen. */
-  open(channelId?: string): void;
+  /** Adds a channel and shows the multiview screen; `replace` takes the current screen's place (full
+   * watch, whose session must end rather than play on underneath). */
+  open(channelId?: string, options?: { replace?: boolean }): void;
 }
 
 const MultiviewContext = createContext<MultiviewContextValue | null>(null);

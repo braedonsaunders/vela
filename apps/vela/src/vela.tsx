@@ -40,7 +40,7 @@ import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
 import { useLiveController } from './live';
 import { useMultiviewController } from './multiview';
-import { MultiviewProvider } from '@vela/skin/src/widgets/multiview';
+import { MultiviewProvider, useMultiview } from '@vela/skin/src/widgets/multiview';
 import { LaunchGate } from './launch';
 import { launchReady } from './launch-state';
 import { Previews } from './previews';
@@ -347,7 +347,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   // route change per keystroke remounted home and dropped the field's focus.
   const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
   useSearchAddress(store, state.search.query, pathname, state.auth.phase === 'signed-in');
-  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker, openAddToPlaylist, setQuery });
+  const multiviewContext = useMultiview();
+  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker, openAddToPlaylist, setQuery, multiview: multiviewContext?.open ?? null });
   useEffect(() => {
     if (Platform.OS !== 'web' || state.auth.phase !== 'signed-in') return;
     const find = () => {
