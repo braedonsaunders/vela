@@ -1,5 +1,5 @@
 import type { LiveEventRef, PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../packages/protocol/types';
-import { faults, mediaRoot, fixtureDurationSeconds } from './media';
+import { faults, mediaRoot, fixtureDurationSeconds, originalFixture } from './media';
 import { liveWindow } from './live';
 import { mseFixture } from './mse';
 interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec: string; audioCodec?: string }>; timers: Map<string, ReturnType<typeof setTimeout>> }
@@ -45,6 +45,20 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
       sourceId: 'synthetic-original', timelineId: `synthetic-${fixtureDurationSeconds}`, readiness: 'ready', ...mse,
       boundaries: Array.from({ length: fixtureDurationSeconds / 4 }, (_, n) => ({ atSeconds: n * 4, independent: true,
         timelineId: `synthetic-${fixtureDurationSeconds}`, compatibility: 'same-source', audioTrackIds: ['audio-en', 'audio-es'], subtitleTrackIds: ['sub-en'] })) });
+  }
+  if (!request.channelId && !request.extraId && originalFixture.name) {
+    // A format-matrix fixture leads as the original file; the synthetic paths stay as the fallback.
+    const mimeType = { mkv: 'video/x-matroska', webm: 'video/webm', mp4: 'video/mp4', mov: 'video/quicktime' }[originalFixture.name.slice(originalFixture.name.lastIndexOf('.') + 1)] ?? 'application/octet-stream';
+    plan.paths.unshift({ id: 'original', kind: 'direct', transport: 'file', original: true, range: true, url: `${base}/original/${originalFixture.name}`, mimeType,
+      sourceId: `format-${originalFixture.name}`, timelineId: `format-${originalFixture.name}`, readiness: 'ready', qualities: [], boundaries: [] });
+    plan.selectedPathId = 'original';
+    plan.durationSeconds = originalFixture.durationSeconds;
+    if (originalFixture.video) plan.paths[0].originalVideo = originalFixture.video;
+    if (originalFixture.audio?.length) {
+      // The original's own inventory; the synthetic fallbacks keep their tracks for their boundaries.
+      plan.audioTracks = originalFixture.audio;
+      plan.selectedAudioTrackId = request.audioTrackId && originalFixture.audio.some((track) => track.id === request.audioTrackId) ? request.audioTrackId : originalFixture.audio[0].id;
+    }
   }
   if (request.channelId) {
     plan.durationSeconds = undefined;

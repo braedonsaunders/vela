@@ -5,7 +5,7 @@ import { libraries as fixtureLibraries, libraryEntries as fixtureLibraryEntries 
 import { createHmac } from 'node:crypto';
 import type * as V from '../packages/protocol/types';
 import { allTitles, artwork, channels as defaultChannels, detail, extras, featuredSources, featuredTitles, guide as defaultGuide, rows, titles } from '../packages/protocol/fixtures/catalogue';
-import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
+import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
@@ -938,6 +938,13 @@ async function dispatch(req: Request): Promise<Response> {
   if (url.pathname.startsWith('/__admin/')) {
     if (req.method === 'GET' && url.pathname === '/__admin/live-faults') return json(liveFaults);
     if (req.method === 'POST' && url.pathname === '/__admin/live-faults') { const data = await req.json(); for (const key of Object.keys(liveFaults) as (keyof typeof liveFaults)[]) if (Number.isFinite(data[key]) && data[key] >= 0) liveFaults[key] = Math.min(60000, Math.floor(data[key])); return json(liveFaults); }
+    if (url.pathname === '/__admin/original') {
+      // Format-matrix qualification: {"name":"hevc-hdr10-eac3-5.1.mkv"} or {"name":null}; the file is probed as Ether would.
+      if (req.method === 'POST') { const data = await req.json(); if (data.name !== null && (typeof data.name !== 'string' || !originalFixtureName.test(data.name))) return Response.json({ error: 'invalid_name' }, { status: 400 });
+        if (data.name !== null && !await Bun.file(`${formatsRoot}/${data.name}`).exists()) return Response.json({ error: 'not_found' }, { status: 404 });
+        Object.assign(originalFixture, { name: data.name, video: undefined, audio: undefined }, data.name === null ? {} : await probeOriginalFixture(data.name)); }
+      return json(originalFixture);
+    }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));

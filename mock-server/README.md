@@ -169,6 +169,21 @@ The generator probes those actual encoded fields before exclusive publication
 and preserves any existing file. Existing broker media grants may serve that
 allowlisted filename; normal playback plans/media are unchanged.
 
+### Format matrix
+
+`bun mock-server/scripts/make-format-matrix.ts` writes thirty-second originals to
+`~/.scratch/tmp/vela/formats` (`VELA_MOCK_FORMATS_ROOT` moves it): H.264, HEVC Main10 HDR10 and
+HLG, Dolby Vision 8.1 (MKV and `dvh1` MP4), 8.4 and 5, AV1 8-bit and 10-bit HDR10, VP9 profiles 0
+and 2, MPEG-2, MPEG-4 Part 2 and 4K HEVC, with AAC, AC-3, E-AC-3, TrueHD, DTS, FLAC (7.1 at 96 kHz,
+stereo at 192 kHz), ALAC 24/96, Opus 7.1, Vorbis and 7.1 PCM. Every multichannel track plays a
+different tone per channel (`CHANNEL_TONES`), so a probe can name each output channel. It needs
+ffmpeg with libx265, libsvtav1 and libvpx-vp9, and `dovi_tool` (`DOVI_TOOL=<path>`).
+
+POST `/__admin/original` `{"name":"hevc-dv81-truehd-5.1.mkv"}` makes every later movie or episode
+session lead with that file as an `original` direct path (`{"name":null}` stops). The mock probes
+it with ffprobe, as Ether does, for the path's `originalVideo` and the plan's audio tracks; the
+synthetic remux/transcode paths stay behind it as the fallback.
+
 Dense live-guide fixtures are opt-in. From the repository root, run:
 
 ```sh
