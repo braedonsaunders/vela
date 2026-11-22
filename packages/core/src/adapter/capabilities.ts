@@ -61,7 +61,8 @@ export interface DescriptiveSearch {
 
 /** Server-provided recommendation rows scoped to a single library. */
 export interface LibraryRecommendations {
-  libraryRows(id: string, kind: V.Library['kind'], fresh?: boolean): Promise<V.Row[]>;
+  /** `tab`: a recommended tab's own shelves, sent only with features.pluginLevels.tabRows. */
+  libraryRows(id: string, kind: V.Library['kind'], fresh?: boolean, tab?: string): Promise<V.Row[]>;
   libraryCollections(id: string, cursor?: string, tab?: string, search?: string): Promise<V.Page<V.RowEntry>>;
   libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
 }
@@ -79,7 +80,8 @@ export function hasLibraryLive(adapter: ServerAdapter): adapter is ServerAdapter
 
 /** A title's children (an artist's albums, an album's tracks, a series' books), page by page. */
 export interface TitleChildren {
-  children(id: string, cursor?: string, limit?: number): Promise<V.ChildrenPage>;
+  /** `role`: one child level's children, sent only with features.pluginLevels.childRoles. */
+  children(id: string, cursor?: string, limit?: number, role?: string): Promise<V.ChildrenPage>;
 }
 export function hasTitleChildren(adapter: ServerAdapter): adapter is ServerAdapter & TitleChildren {
   return 'children' in adapter && typeof adapter.children === 'function';

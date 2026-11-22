@@ -62,6 +62,8 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       // Live events and multiview (Sports): operations, so the adapter must offer them too.
       ...(hasLiveEvents(adapter) && description.features.liveEvents ? { liveEvents: description.features.liveEvents } : {}),
       ...(hasMultiview(adapter) && description.features.multiview ? { multiview: description.features.multiview } : {}),
+      // Plugin levels describe answers to existing reads (rows per tab, children per role): stated by the server.
+      ...(description.features.pluginLevels ? { pluginLevels: description.features.pluginLevels } : {}),
     },
   };
 }

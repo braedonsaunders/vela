@@ -49,7 +49,9 @@ describe('media kinds', () => {
   test('a library lists its root level, and a level tab lists that level', async () => {
     const root = titlesOf(await get('/libraries/music/items'));
     expect(root.map(title => title.media?.role)).toEqual(Array(mediaGroups.artists.length).fill('artist'));
-    expect(root.every(title => title.media?.childCount === mediaGroups.albums.filter(album => album.showId === title.id).length)).toBe(true);
+    // Direct children of every level: an artist's albums and its concerts.
+    expect(root.every(title => title.media?.childCount === mediaGroups.albums.filter(album => album.showId === title.id).length
+      + mediaGroups.concerts.filter(concert => concert.media?.parents?.[0]?.id === title.id).length)).toBe(true);
     const albums = titlesOf(await get('/libraries/music/items?tab=albums&sort=year&direction=desc&limit=100'));
     expect(albums).toHaveLength(mediaGroups.albums.length);
     expect(albums.every(title => title.media?.role === 'album' && title.media.parents?.[0]?.role === 'artist')).toBe(true);
@@ -65,7 +67,7 @@ describe('media kinds', () => {
     const tracks = (await get<V.ChildrenPage>('/titles/album-northern-almanac/children?limit=100')).items;
     expect(tracks.map(track => [track.media?.disc, track.media?.index])).toEqual([1, 2].flatMap(disc => [1, 2, 3, 4, 5, 6].map(index => [disc, index])));
     expect(tracks[0]!.media?.parents?.map(parent => parent.role)).toEqual(['album', 'artist']);
-    const albums = (await get<V.ChildrenPage>('/titles/artist-hollow-lanterns/children')).items;
+    const albums = (await get<V.ChildrenPage>('/titles/artist-hollow-lanterns/children?role=album')).items;
     expect(albums.map(album => album.id)).toEqual(['album-paper-boats', 'album-northern-almanac', 'album-small-hours']);
     expect((await get<V.ChildrenPage>('/titles/series-inspector-wren/children')).items.map(book => book.media?.index)).toEqual([1, 2, 3]);
     const parts = (await get<V.ChildrenPage>('/titles/audiobook-long-voyage-of-the-marigold/children')).items;
@@ -151,6 +153,20 @@ describe('media kinds', () => {
     const rows = (await get<V.Page<V.Row>>('/rows?placement=home&limit=10')).items;
     expect(rows.slice(2, 5).map(row => [row.id, row.style])).toEqual([['media-recent-albums', 'square'], ['media-continue-reading', 'poster'], ['media-continue-listening', 'square']]);
     expect((await get<V.Bootstrap>('/bootstrap')).rows.map(row => row.id)).toEqual(rows.slice(0, 2).map(row => row.id));
+  });
+
+  test("a concert's tab, children and playback (plugin levels)", async () => {
+    const music = (await get<V.Page<V.Library>>('/libraries?limit=100')).items.find(library => library.id === 'music')!;
+    expect(music.tabs?.find(tab => tab.id === 'concerts')).toMatchObject({ kind: 'recommended', card: 'landscape' });
+    const shelves = (await get<V.Page<V.Row>>('/libraries/music/rows?tab=concerts')).items;
+    expect(shelves.map(row => row.id)).toContain('plugin:music:tab:concerts:shelf:recent');
+    expect(shelves.find(row => row.purpose === 'continue')?.items).toHaveLength(1);
+    expect((await fetch(`${mock.url}/vela/v0/libraries/music/rows?tab=artists`, { headers: headers() })).status).toBe(400);
+    expect((await get<V.ChildrenPage>('/titles/artist-velvet-comet/children?level=concert')).items).toHaveLength(3);
+    expect((await get<V.ChildrenPage>('/titles/artist-velvet-comet/children')).items).toHaveLength(5);
+    // A concert plays through the video path: never refused as not playable audio.
+    const response = await post('/playback', { idempotencyKey: key(), titleId: 'concert-comet-arcade-nights', client });
+    if (response.status !== 200) expect(((await response.json()) as V.ErrorResponse).error).toMatchObject({ code: "media_not_generated" });
   });
 });
 

@@ -3,6 +3,7 @@
 // without one is video and keeps every existing behaviour.
 import type * as V from './wire';
 import { clock, minute, msg, number, percent, plural } from './i18n';
+import { childCountsLine, childCountsOf } from './plugin-levels';
 
 const CLASSES: V.MediaClass[] = ['video', 'music', 'audiobook', 'book', 'podcast', 'photo'];
 const ROLES: V.MediaRole[] = ['item', 'artist', 'album', 'track', 'series', 'book', 'audiobook', 'part', 'show', 'episode', 'collection'];
@@ -39,6 +40,8 @@ export interface CardMedia {
   parents: MediaParent[];
   credits: MediaCredit[];
   childCount: number;
+  /** Children per child level (features.pluginLevels): an artist's { album: 4, concert: 2 }; {} when unknown. */
+  childCounts: Record<string, number>;
   /** A readable title's format ('' when it cannot be read). */
   readingFormat: '' | V.ReadingFormat;
   pages: number;
@@ -68,6 +71,15 @@ export function shapeOf(cls: V.MediaClass, role: V.MediaRole): CardShape {
 export function isAudioRole(cls: V.MediaClass, role: V.MediaRole): boolean {
   return role === 'track' || role === 'audiobook' || role === 'part' || (cls === 'podcast' && (role === 'episode' || role === 'item'))
     || (cls === 'audiobook' && role === 'item') || (cls === 'music' && role === 'item');
+}
+
+/** A video title's container chain (a concert's artist), nearest first; [] for any other title.
+ * Video titles have no CardMedia, so this is how their page links back to the container. */
+export function videoParents(title: V.Title): MediaParent[] {
+  const media = title.media;
+  if (!media || mediaClass(media.class) !== 'video') return [];
+  return (media.parents ?? []).filter(p => p && typeof p.id === 'string' && p.id && typeof p.name === 'string' && p.name)
+    .map(p => ({ id: p.id, name: p.name, role: mediaRole(p.role) }));
 }
 
 /** The media facts of a title, or undefined for video (and titles from servers without media). */
@@ -100,6 +112,7 @@ export function cardMedia(title: V.Title): CardMedia | undefined {
     parents,
     credits,
     childCount: positive(media.childCount),
+    childCounts: childCountsOf(media.childCounts),
     readingFormat: format === 'epub' || format === 'pdf' || format === 'cbz' ? format : '',
     pages: positive(media.reading?.pages),
     readingFraction: fraction,
@@ -122,7 +135,8 @@ export function mediaFacts(media: CardMedia, title: V.Title): string {
   const count = (key: string) => media.childCount ? msg(`media.count.${key}.${plural(media.childCount)}`, { count: number(media.childCount) }) : '';
   const hours = title.durationSeconds ? durationLabel(title.durationSeconds) : '';
   switch (media.role) {
-    case 'artist': return count('albums');
+    // Albums and concerts apart when the server counts each child level (features.pluginLevels).
+    case 'artist': return Object.keys(media.childCounts).length ? childCountsLine(media.childCounts) : count('albums');
     case 'album': return [year, count('tracks')].filter(Boolean).join(' · ');
     case 'track': return [media.parent?.name, media.clockLabel].filter(Boolean).join(' · ');
     case 'series': return count('books');

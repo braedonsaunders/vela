@@ -32,6 +32,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /bootstrap | — | Bootstrap |
 | GET | /libraries | LibrariesQuery (query) | Page<Library> |
 | GET | /libraries/:id/items | LibraryBrowseQuery (query) | LibraryContents |
+| GET | /libraries/:id/rows | cursor, limit, tab (query; tab with features.pluginLevels.tabRows) | Page<Row> |
 | GET | /libraries/:id/live | LibraryLiveQuery (query) | LibraryLiveContents |
 | POST | /libraries/:id/live/play | LibraryLivePlaybackRequest | PlaybackPlan |
 | GET | /rows | RowsQuery (query) | Page<Row> |
@@ -39,7 +40,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /collections/:id | cursor, limit (query) | CollectionContents |
 | GET | /titles/:id | — | TitleDetail |
 | GET, HEAD | /themes/:grant/theme.m4a | opaque URL grant; optional Range header | theme audio bytes |
-| GET | /titles/:id/children | cursor, limit (query) | ChildrenPage |
+| GET | /titles/:id/children | cursor, limit, role or level (query; role/level with features.pluginLevels.childRoles) | ChildrenPage |
 | GET | /titles/:id/extras | — | ExtrasResponse |
 | POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
 | GET | /titles/:id/trailer-preview | — | TrailerPreviewResponse |
@@ -76,6 +77,14 @@ A live-channel session's snapshot carries `liveEvent` (`{id, feed}` or null) and
 stream sends `event: liveEvent` with `{liveEvent}` when the programme on air changes. A
 multiview tile past an IPTV provider's connection cap is refused with HTTP 409
 `provider_connection_cap` (class `capacity`, `details: {provider, max, inUse}`).
+
+Plugin levels (`features.pluginLevels`): with `tabRows`, `GET /libraries/:id/rows?tab=<id>`
+answers any `recommended` tab's own shelves (no tab, or the first recommended tab, is the
+library's rows as before), and a tab's `card` shapes its rows and items over the library's.
+With `childRoles`, a container title carries `media.childCounts` (`{album: 42, concert: 7}`)
+and `GET /titles/:id/children?role=<key>` pages within one key. A video child (a concert
+under an artist) is `kind: 'movie'`, `media: {class: 'video', role}`, with `parents` back to
+its container, and plays as any video title.
 
 Guide `channelIds` is a comma-separated list; window is half-open `[from,until)`;
 return programmes overlapping the window, with original untrimmed times. Maximum

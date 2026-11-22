@@ -4,13 +4,13 @@
 // audiobook. The app draws one of these in place of the document's title page; each takes the
 // document's `ui` look.
 import { Image } from 'expo-image';
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
-import { clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
+import { childrenKey, childSectionLabel, childSections, clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
 import { useMediaActions, type MediaActions } from './context';
-import { alpha, Cover, CoverTile, ListRow, PillButton, Progress, RoundButton, SectionHeading, TextLink, TileGrid, useMediaLook, type MediaLook } from './parts';
+import { alpha, Cover, CoverTile, ListRow, PillButton, Progress, RoundButton, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
 import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from './series';
 
 /** The roles this page draws; anything else stays with the document's title page. */
@@ -46,10 +46,11 @@ function useDetail(id: string): Loadable<DetailModel> {
   return detail ?? { load: 'loading', error: '' };
 }
 
-function useChildren(id: string | undefined): Loadable<ChildrenModel> | undefined {
+/** `role`: one child level's children (features.pluginLevels.childRoles), an artist's concerts. */
+function useChildren(id: string | undefined, role?: string): Loadable<ChildrenModel> | undefined {
   const store = useVela();
-  const children = useVelaState(state => id ? state.children[id] : undefined);
-  useEffect(() => { if (id) void store.media.children(id); }, [store, id]);
+  const children = useVelaState(state => id ? state.children[childrenKey(id, role)] : undefined);
+  useEffect(() => { if (id) void store.media.children(id, false, role); }, [store, id, role]);
   return children;
 }
 
@@ -222,13 +223,13 @@ function AlbumPage({ card, detail: _detail }: { card: Card; detail: DetailModel 
   );
 }
 
-function ChildrenFailed({ id }: { id: string }) {
+function ChildrenFailed({ id, role }: { id: string; role?: string }) {
   const m = useMediaLook();
   const store = useVela();
   return (
     <View style={{ paddingVertical: 24, gap: 14, alignItems: 'flex-start' }} accessibilityRole="alert">
       <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>{msg('media.ui.loadFailed')}</Text>
-      <PillButton compact label={msg('media.ui.retry')} onPress={() => void store.media.children(id, true)} testID="media-children-retry" />
+      <PillButton compact label={msg('media.ui.retry')} onPress={() => void store.media.children(id, true, role)} testID="media-children-retry" />
     </View>
   );
 }
@@ -257,7 +258,8 @@ function FactList({ card }: { card: Card }) {
 function MoreBy({ artistId, name, exclude }: { artistId: string; name: string; exclude: string }) {
   const m = useMediaLook();
   const actions = useMediaActions();
-  const albums = (useChildren(artistId)?.value?.items ?? []).filter(album => album.id !== exclude);
+  // Albums only: an artist's video children (concerts) carry no media facts and are not "more by".
+  const albums = (useChildren(artistId)?.value?.items ?? []).filter(album => album.id !== exclude && !!album.media);
   if (!albums.length) return null;
   const { size, gap } = tilesPerRow(m, m.small ? 140 : 190);
   return (
@@ -276,11 +278,24 @@ function ArtistPage({ card }: { card: Card }) {
   const m = useMediaLook();
   const store = useVela();
   const actions = useMediaActions();
-  const albumItems = useChildrenItems(card.id);
-  const albums = useMemo(() => [...albumItems].sort((a, b) => b.year - a.year), [albumItems]);
+  // A server that counts each child level (features.pluginLevels) splits an artist's albums from
+  // its concerts; with albums alone (or no counts) the page reads its children whole, as before.
+  const childRoles = store.media.features().childRoles;
+  const counts = card.media?.childCounts;
+  const sections = useMemo(() => childSections(counts ?? {}, childRoles), [counts, childRoles]);
+  const split = sections.length > 0;
+  const hasAlbums = !split || sections.includes('album');
+  const [chosen, setChosen] = useState('');
+  const section = sections.includes(chosen) ? chosen : sections[0] ?? 'album';
+  const albumsLoad = useChildren(hasAlbums ? card.id : undefined, split ? 'album' : undefined);
+  const albumItems = albumsLoad?.value?.items ?? EMPTY;
+  const albums = useMemo(() => albumItems.filter(album => !!album.media).sort((a, b) => b.year - a.year), [albumItems]);
+  const videoSection = split && section !== 'album' ? section : undefined;
+  const videosLoad = useChildren(videoSection ? card.id : undefined, videoSection);
   const newest = albums[0];
   const songs = useChildren(newest?.id)?.value?.items ?? [];
   const top = playable(songs).slice(0, 5);
+  // Play and Shuffle are the artist's music: its albums' tracks, never its concerts.
   const playAll = async (shuffle: boolean) => {
     const tracks: Card[] = [];
     for (const album of albums) {
@@ -291,16 +306,23 @@ function ArtistPage({ card }: { card: Card }) {
   };
   const portrait = m.small ? 200 : m.wide ? 260 : 220;
   const { size, gap } = tilesPerRow(m, m.small ? 140 : 200);
+  const albumGrid = albums.length ? (
+    <TileGrid gap={gap}>
+      {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={[album.yearLabel, album.media?.childCount ? msg(`media.count.tracks.${album.media.childCount === 1 ? 'one' : 'other'}`, { count: number(album.media.childCount) }) : ''].filter(Boolean).join(' · ')}
+        onPress={() => actions.openTitle(album)} testID={`media-album-${album.id}`} />)}
+    </TileGrid>
+  ) : split && section === 'album' && albumsLoad?.load === 'failed' ? <ChildrenFailed id={card.id} role="album" /> : null;
+  const sectionGrid = videoSection ? <VideoGrid id={card.id} role={videoSection} load={videosLoad} /> : albumGrid;
   return (
     <View>
       <Hero cover={<Cover uri={card.poster} shape="round" size={portrait} title={card.name} accent={card.accent} lift={1.4} />}>
         <Eyebrow>{msg('media.ui.artist')}</Eyebrow>
         <Title>{card.name}</Title>
         <Facts items={[card.facts, card.genres.slice(0, 2).join(', ')]} />
-        <Buttons>
+        {hasAlbums ? <Buttons>
           <PillButton primary icon="play" label={msg('media.ui.play')} onPress={() => void playAll(false)} disabled={!albums.length} testID="media-play" nativeID="media-primary" />
           <PillButton icon="shuffle" label={msg('media.ui.shuffle')} onPress={() => void playAll(true)} disabled={!albums.length} testID="media-shuffle" />
-        </Buttons>
+        </Buttons> : null}
       </Hero>
       {top.length ? (
         <View style={{ marginBottom: 44 }}>
@@ -315,17 +337,42 @@ function ArtistPage({ card }: { card: Card }) {
           </View>
         </View>
       ) : null}
-      {albums.length ? (
+      {sections.length > 1 ? (
+        <View style={{ marginBottom: 40, gap: m.small ? 16 : 22 }}>
+          <Segmented label={msg('media.ui.sections')} value={section} onChange={setChosen} testID="media-sections"
+            options={sections.map(key => ({ id: key, label: childSectionLabel(key) }))} />
+          {sectionGrid}
+        </View>
+      ) : albums.length || videoSection ? (
         <View style={{ marginBottom: 40 }}>
-          <SectionHeading title={msg('media.ui.albums')} />
-          <TileGrid gap={gap}>
-            {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={[album.yearLabel, album.media?.childCount ? msg(`media.count.tracks.${album.media.childCount === 1 ? 'one' : 'other'}`, { count: number(album.media.childCount) }) : ''].filter(Boolean).join(' · ')}
-              onPress={() => actions.openTitle(album)} testID={`media-album-${album.id}`} />)}
-          </TileGrid>
+          <SectionHeading title={childSectionLabel(videoSection ?? 'album')} />
+          {sectionGrid}
         </View>
       ) : null}
       {card.summary ? <View style={{ marginBottom: 40 }}><SectionHeading title={msg('media.ui.details')} /><Summary text={card.summary} /></View> : null}
     </View>
+  );
+}
+
+/** One child level of video titles (an artist's concerts): 16:9 tiles when the titles have landscape
+ * art, posters otherwise. Each opens the standard video title page. */
+function VideoGrid({ id, role, load }: { id: string; role: string; load: Loadable<ChildrenModel> | undefined }) {
+  const m = useMediaLook();
+  const actions = useMediaActions();
+  const items = load?.value?.items ?? EMPTY;
+  const wide = items.some(item => !!(item.thumbnail || item.backdrop)) || !items.length;
+  const { size, gap } = tilesPerRow(m, wide ? (m.small ? 240 : 300) : (m.small ? 140 : 190));
+  if (!items.length && load?.load === 'failed') return <ChildrenFailed id={id} role={role} />;
+  if (!items.length && (!load || load.load === 'loading' || load.load === 'idle')) return (
+    <TileGrid gap={gap}>
+      {[0, 1, 2].map(i => <View key={i} style={{ width: size, height: Math.round(size * 9 / 16), borderRadius: 10, backgroundColor: i % 2 ? m.ui.skeleton : m.ui.skeletonLight }} />)}
+    </TileGrid>
+  );
+  return (
+    <TileGrid gap={gap}>
+      {items.map(item => <VideoTile key={item.id} card={item} size={size} wide={wide} subtitle={[item.yearLabel, item.durationLabel].filter(Boolean).join(' · ')}
+        onPress={() => actions.openTitle(item)} testID={`media-video-${item.id}`} />)}
+    </TileGrid>
   );
 }
 

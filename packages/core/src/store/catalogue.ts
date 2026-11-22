@@ -4,6 +4,7 @@
 import type * as V from '../wire';
 import { mediaClass } from '../media';
 import { libraryCardArtwork } from '../library-presentation';
+import { pluginLevelsOf } from '../plugin-levels';
 import { VelaError } from '../adapter/errors';
 import { hasTitleManagement } from '../adapter/capabilities';
 import { capabilitiesOf } from '../adapter/advertise';
@@ -138,9 +139,22 @@ export class Catalogue {
    * their own, so they never hold every connection to the server (lane.ts). */
   private readonly sideLane = new Lane(SIDE_READS);
 
-  /** The session's last recommendations for a library, with the progress revision they were read at. */
-  cachedLibraryRecommendations(id: string): { progressRevision: number; value: Row[] } | undefined {
-    return this.heldPart<Row[]>(partKey('rows', id));
+  /** The server answers a recommended tab's own rows (features.pluginLevels.tabRows). */
+  get libraryTabRowsAvailable(): boolean {
+    return pluginLevelsOf(this.session.features).tabRows;
+  }
+  /** A tab's own card shapes its rows and items (features.pluginLevels). */
+  get libraryTabCardsAvailable(): boolean {
+    return pluginLevelsOf(this.session.features).tabCards;
+  }
+  /** The session's last recommendations for a library (or one recommended tab, recommendationTab()),
+   * with the progress revision they were read at. */
+  cachedLibraryRecommendations(id: string, tab?: string): { progressRevision: number; value: Row[] } | undefined {
+    return this.heldPart<Row[]>(partKey('rows', id, this.rowsTab(tab)));
+  }
+  /** A tab is sent, and keys the rows, only when the server answers tab rows. */
+  private rowsTab(tab: string | undefined): string | undefined {
+    return tab && this.libraryTabRowsAvailable ? tab : undefined;
   }
   /** The session's first page of a library's collections (or people) for a tab and search. */
   cachedLibraryCollections(id: string, tab?: string, search?: string): CollectionPage | undefined {
@@ -301,12 +315,13 @@ export class Catalogue {
    * read serves a prefetch and the page that opens; the answer is held for the session at the
    * progress revision it was read at.
    */
-  async libraryRecommendations(id: string, kind: V.Library['kind'], freshRows = false): Promise<Row[] | undefined> {
+  async libraryRecommendations(id: string, kind: V.Library['kind'], freshRows = false, tab?: string): Promise<Row[] | undefined> {
     const progressRevision = this.box.get().home?.progressRevision ?? 0;
-    return this.part('rows', partKey('rows', id), progressRevision, false, async connection => {
+    const rowsTab = this.rowsTab(tab);
+    return this.part('rows', partKey('rows', id, rowsTab), progressRevision, false, async connection => {
       const adapter = connection.adapter;
       if (!hasLibraryRecommendations(adapter)) return undefined;
-      const [value, images] = await Promise.all([adapter.libraryRows(id, kind, freshRows), connection.images()]);
+      const [value, images] = await Promise.all([rowsTab ? adapter.libraryRows(id, kind, freshRows, rowsTab) : adapter.libraryRows(id, kind, freshRows), connection.images()]);
       const display = this.dateDisplay(id);
       return value.map(row => { const model = feedRow(row, images, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; });
     });
@@ -560,5 +575,7 @@ const PARTS_HELD = 48;
 /** Collections reads running at once; more wait in the side lane. */
 const SIDE_READS = 2;
 function partKey(part: 'rows' | 'collections' | 'genres', id: string, tab?: string, search?: string): string {
-  return part === 'collections' ? `${part}\u0000${id}\u0000${tab ?? ''}\u0000${search ?? ''}` : `${part}\u0000${id}`;
+  if (part === 'collections') return `${part}\u0000${id}\u0000${tab ?? ''}\u0000${search ?? ''}`;
+  // Rows: one key per recommended tab that has its own (recommendationTab()); the library's own otherwise.
+  return part === 'rows' && tab ? `${part}\u0000${id}\u0000${tab}` : `${part}\u0000${id}`;
 }

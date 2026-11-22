@@ -69,6 +69,8 @@ const roleLabel: Record<string, string> = { artist: 'Artist', albumArtist: 'Albu
 // Music: artist → album → track. Title.kind keeps the show/season/episode projection.
 interface AlbumSpec { slug: string; name: string; year: number; month: number; type: 'Album' | 'EP'; summary: string; discs: string[] }
 interface ArtistSpec { slug: string; name: string; genres: string[]; label: string; bio: string; composer?: string; albums: AlbumSpec[] }
+/** A filmed concert: a plugin's video level under the artist (features.pluginLevels), role 'concert'. */
+interface ConcertSpec { slug: string; name: string; venue: string; year: number; month: number; minutes: number; summary: string; positionSeconds?: number }
 const artistSpecs: ArtistSpec[] = [
   { slug: 'hollow-lanterns', name: 'The Hollow Lanterns', genres: ['Indie Folk', 'Folk'], label: 'Driftwood Records',
     bio: 'A four-piece from a fictional fishing town who write warm, harmony-heavy songs about weather, kitchens and the long way home.',
@@ -116,9 +118,38 @@ const artistSpecs: ArtistSpec[] = [
       { slug: 'winter-garden', name: 'Winter Garden', year: 2023, month: 12, type: 'Album', summary: 'Seven miniatures for a frozen garden, written for the shortest days of the year.',
         discs: ['Hoarfrost|Snowdrops|Bare Branches|Robin at the Window|Frozen Pond|Candlemas|Thaw'] },
     ] },
+  // Concerts only: a live band with no studio albums in the library.
+  { slug: 'harbour-brass-collective', name: 'Harbour Brass Collective', genres: ['Brass', 'Jazz'], label: 'Quayside Live',
+    bio: 'An imaginary twelve-piece street brass band who only ever play live, from harbour walls to festival tents.', albums: [] },
 ];
+/** Artists with albums only, concerts only (Harbour Brass Collective) and both (The Hollow Lanterns, Velvet Comet). */
+const concertSpecs: Record<string, ConcertSpec[]> = {
+  'hollow-lanterns': [
+    { slug: 'lanterns-live-at-the-boathouse', name: 'Live at the Boathouse', venue: 'The Old Boathouse', year: 2023, month: 6, minutes: 94, positionSeconds: 75,
+      summary: 'The band return to the boathouse where they made their first record, for a candlelit midsummer set filmed on four cameras.' },
+    { slug: 'lanterns-almanac-tour', name: 'Northern Almanac: The Tour Film', venue: 'Ashby Corn Exchange', year: 2023, month: 1, minutes: 118,
+      summary: 'Every song from the double album, played in order across one long winter night, with the year turning on screen behind them.' },
+  ],
+  'velvet-comet': [
+    { slug: 'comet-arcade-nights', name: 'Arcade Nights', venue: 'Pier Pavilion', year: 2022, month: 8, minutes: 86,
+      summary: 'A neon-soaked show on the end of the pier, with a light rig built from salvaged arcade cabinets.' },
+    { slug: 'comet-orchard-in-concert', name: 'Neon Orchard in Concert', venue: 'Glass Dome Theatre', year: 2018, month: 3, minutes: 72,
+      summary: 'The debut album live under a glass dome, every arpeggio bouncing off the panes.' },
+    { slug: 'comet-new-year-countdown', name: 'New Year Countdown', venue: 'Harbour Square', year: 2024, month: 12, minutes: 131,
+      summary: 'Three hours of synth-pop in the open air, filmed through to the midnight countdown and the fireworks after it.' },
+  ],
+  'harbour-brass-collective': [
+    { slug: 'brass-on-the-harbour-wall', name: 'On the Harbour Wall', venue: 'North Quay', year: 2024, month: 7, minutes: 64,
+      summary: 'A summer evening set played to the boats coming in, with gulls, foghorns and a crowd on every bollard.' },
+    { slug: 'brass-festival-tent', name: 'Midnight in the Festival Tent', venue: 'Saltmarsh Festival', year: 2025, month: 8, minutes: 101,
+      summary: 'The band close the festival with a sweaty, joyful midnight set that runs an hour past curfew.' },
+    { slug: 'brass-winter-procession', name: 'The Winter Procession', venue: 'Old Town Streets', year: 2023, month: 12, minutes: 58,
+      summary: 'Filmed as the band march the lantern procession through the old town, from the church steps to the harbour lights.' },
+  ],
+};
 
-const artists: Title[] = [], albums: Title[] = [], tracks: Title[] = [];
+const fixtureNow = Date.now();
+const artists: Title[] = [], albums: Title[] = [], tracks: Title[] = [], concerts: Title[] = [];
 const audioSources = new Map<string, AudioSource>();
 const childrenOf = new Map<string, Title[]>();
 let trackOrdinal = 0;
@@ -127,9 +158,13 @@ for (const spec of artistSpecs) {
   const personId = person(spec.slug, spec.name, 'Artist', 'Music', spec.bio);
   const composerId = spec.composer ? person(spec.composer.toLowerCase().replace(/[^a-z0-9]+/g, '-'), spec.composer, 'Composer', 'Music', `${spec.composer} is a fictional composer who writes for the ${spec.name}.`) : undefined;
   const artistAlbums: Title[] = [];
-  const artist: Title = { id: artistId, kind: 'show', name: spec.name, summary: spec.bio, year: spec.albums[0]!.year, genres: spec.genres,
+  const concertList = concertSpecs[spec.slug] ?? [];
+  const artist: Title = { id: artistId, kind: 'show', name: spec.name, summary: spec.bio, year: spec.albums[0]?.year ?? concertList[0]!.year, genres: spec.genres,
     artwork: [mediaArtwork(artistId, 'square'), mediaArtwork(artistId, 'wide')],
-    media: { class: 'music', role: 'artist', childCount: spec.albums.length, credits: [{ name: spec.name, role: 'artist', personId }] } };
+    media: { class: 'music', role: 'artist', childCount: spec.albums.length + concertList.length,
+      // Per child level, as a server with plugin levels counts them; a level with none is left out.
+      childCounts: { ...(spec.albums.length ? { album: spec.albums.length } : {}), ...(concertList.length ? { concert: concertList.length } : {}) },
+      credits: [{ name: spec.name, role: 'artist', personId }] } };
   artists.push(artist);
   spec.albums.forEach((album, albumIndex) => {
     const albumId = variant(`album-${album.slug}`, albums.length, 5), airDate = `${album.year}-${String(album.month).padStart(2, '0')}-${String(3 + albumIndex * 7).padStart(2, '0')}`;
@@ -155,7 +190,18 @@ for (const spec of artistSpecs) {
     albums.push(albumTitle); artistAlbums.push(albumTitle); tracks.push(...albumTracks);
     childrenOf.set(albumId, albumTracks);
   });
-  childrenOf.set(artistId, artistAlbums);
+  // A concert is a video title: kind 'movie', media class video with the level's role, its artist as parent.
+  const artistConcerts = concertList.map((concert, index): Title => {
+    const id = variant(`concert-${concert.slug}`, concerts.length + index, 3);
+    return { id, kind: 'movie', name: concert.name, summary: concert.summary, year: concert.year, airDate: `${concert.year}-${String(concert.month).padStart(2, '0')}-14`,
+      genres: spec.genres, durationSeconds: concert.minutes * 60,
+      ...(concert.positionSeconds ? { watch: { positionSeconds: concert.positionSeconds, played: false, favorite: false, watchlisted: false, lastViewedAt: new Date(fixtureNow - 3_600_000).toISOString() } } : {}),
+      artwork: [mediaArtwork(id, 'wide', 'thumb'), mediaArtwork(id, 'wide', 'backdrop'), mediaArtwork(id, 'book', 'poster')],
+      media: { class: 'video', role: 'concert', parents: [{ id: artistId, name: spec.name, role: 'artist' }],
+        facts: [{ label: 'Venue', value: concert.venue }, { label: 'Filmed', value: `${concert.year}` }] } };
+  });
+  concerts.push(...artistConcerts);
+  childrenOf.set(artistId, [...artistAlbums, ...artistConcerts]);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -209,7 +255,6 @@ const bookSpecs: BookSpec[] = [
 ];
 const series: Title[] = [], books: Title[] = [];
 const readingSources = new Map<string, ReadingSource>();
-const fixtureNow = Date.now();
 for (const spec of seriesSpecs) {
   const members = bookSpecs.filter(book => book.series?.[0] === spec.slug);
   const [authorSlug, authorName] = members[0]!.author;
@@ -348,12 +393,15 @@ for (const spec of audiobookSpecs) {
 }
 
 // ---------------------------------------------------------------------------------------------
-export const mediaGroups = { artists, albums, tracks, series, books, audiobooks, parts };
+export const mediaGroups = { artists, albums, tracks, concerts, series, books, audiobooks, parts };
 /** Shared, mutable fixture titles; the mock updates their watch state in place, like the video catalogue. */
-export const mediaTitles: Title[] = [...artists, ...albums, ...tracks, ...series, ...books, ...audiobooks, ...parts];
+export const mediaTitles: Title[] = [...artists, ...albums, ...tracks, ...concerts, ...series, ...books, ...audiobooks, ...parts];
 const byId = new Map(mediaTitles.map(title => [title.id, title]));
 export const mediaTitle = (id: string): Title | undefined => byId.get(id);
-export const mediaChildren = (id: string): Title[] => childrenOf.get(id) ?? [];
+/** A title's children; `level` (a role, or the level key for a role-less level) keeps one child level. */
+export const mediaChildren = (id: string, level?: string): Title[] => (childrenOf.get(id) ?? []).filter(child => !level || child.media?.role === level);
+/** A video child level (concerts): plays as video, whatever its library's class. */
+export const isVideoChild = (title: Title): boolean => title.media?.class === 'video';
 export const audioSourceFor = (id: string): AudioSource | undefined => audioSources.get(id);
 export const readingSourceFor = (id: string): ReadingSource | undefined => readingSources.get(id);
 export const mediaChapters = (id: string): Chapter[] => chaptersOf.get(id) ?? [];
@@ -374,9 +422,9 @@ export function mediaDetail(id: string): TitleDetail | undefined {
   const title = byId.get(id);
   if (!title?.media) return undefined;
   const children = mediaChildren(id);
-  const playable = !!audioSources.get(id);
+  const playable = !!audioSources.get(id) || isVideoChild(title);
   return { title, canPlay: playable,
-    ...(title.media.role === 'artist' ? { seasons: children } : children.length ? { episodes: children } : {}),
+    ...(title.media.role === 'artist' ? { seasons: children.filter(child => !isVideoChild(child)) } : children.length ? { episodes: children } : {}),
     extras: [], chapters: mediaChapters(id), cast: [],
     crew: (title.media.credits ?? []).map(credit => ({ ...(credit.personId ? { id: credit.personId } : {}), name: credit.name, role: creditLabel(credit.role) })) };
 }
@@ -389,6 +437,8 @@ export const mediaLibraries: Library[] = [
   { id: 'music', name: 'Music', kind: 'shows', media: 'music', presentation: { card: 'square' }, artwork: [mediaArtwork(artists[0]!.id, 'wide')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
+      // A second recommended tab with its own shelves and card (features.pluginLevels).
+      { id: 'concerts', label: 'Concerts', kind: 'recommended', card: 'landscape' },
       { id: 'artists', label: 'Artists', kind: 'library' },
       { id: 'albums', label: 'Albums', kind: 'library', level: 'album' },
       { id: 'tracks', label: 'Tracks', kind: 'library', level: 'track', layout: 'list' },
@@ -417,7 +467,7 @@ export const mediaLibraries: Library[] = [
 ];
 export const isMediaLibrary = (id: string): boolean => mediaLibraries.some(library => library.id === id);
 const levels: Record<string, Record<string, Title[]>> = {
-  music: { '': artists, artist: artists, album: albums, track: tracks },
+  music: { '': artists, artist: artists, album: albums, track: tracks, concert: concerts },
   books: { '': [...series, ...books.filter(book => !book.media?.parents?.length)], series, book: books },
   audiobooks: { '': audiobooks, audiobook: audiobooks, part: parts },
 };

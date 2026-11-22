@@ -219,3 +219,68 @@ export function Progress({ fraction, height = 4 }: { fraction: number; height?: 
 export function TileGrid({ children, gap }: { children: ReactNode; gap: number }) {
   return <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>{children}</View>;
 }
+
+/** A segmented switch between a page's sections (an artist's Albums | Concerts): one focus stop
+ * per segment, so a remote moves across it and selects with a press. */
+export function Segmented({ options, value, onChange, label, testID }: {
+  options: { id: string; label: string }[]; value: string; onChange(id: string): void; label: string; testID?: string;
+}) {
+  const { ui, box } = useMediaLook();
+  return (
+    <View accessibilityRole="tablist" accessibilityLabel={label} testID={testID}
+      style={[{ flexDirection: 'row', alignSelf: 'flex-start', gap: 4, padding: 4, borderRadius: 999, backgroundColor: ui.control }, box({ border: `1px solid ${ui.glassEdge}` })]}>
+      {options.map(option => <Segment key={option.id} label={option.label} selected={option.id === value} onPress={() => onChange(option.id)} testID={testID ? `${testID}-${option.id}` : undefined} />)}
+    </View>
+  );
+}
+
+function Segment({ label, selected, onPress, testID }: { label: string; selected: boolean; onPress(): void; testID?: string }) {
+  const { ui, text, box, tv } = useMediaLook();
+  const { state, handlers } = useInteraction();
+  const lit = state.hover || state.focus;
+  return (
+    <Pressable {...handlers} onPress={onPress} testID={testID} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }}
+      style={[NO_RING, { height: tv ? 44 : 38, paddingHorizontal: tv ? 26 : 20, borderRadius: 999, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: selected ? ui.ink : lit ? ui.controlHover : 'transparent', transform: [{ scale: state.pressed ? 0.97 : 1 }] },
+        state.focus ? box({ 'box-shadow': `0px 0px 0px 3px ${ui.focusHalo}, 0px 0px 0px 1.5px ${selected ? ui.accent : ui.ink}` }) : {},
+        web ? ({ transitionProperty: 'background-color, transform', transitionDuration: '160ms' } as ViewStyle) : {}]}>
+      <Text numberOfLines={1} style={text({ 'font-size': tv ? '16px' : '14px', 'font-weight': '650', color: selected ? '$ui.inkInverse' : '$ui.ink' })}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** A video title's tile (a concert on an artist's page): 16:9 art, or a 2:3 poster when the
+ * title has no landscape art, with its name and resume progress under it. */
+export function VideoTile({ card, size, wide, subtitle, onPress, testID }: {
+  card: Card; size: number; wide: boolean; subtitle?: string; onPress(): void; testID?: string;
+}) {
+  const host = useHost();
+  const { ui, text, box } = useMediaLook();
+  const { state, handlers } = useInteraction();
+  const [failed, setFailed] = useState(false);
+  const lit = state.hover || state.focus;
+  const uri = wide ? card.thumbnail || card.backdrop || card.poster : card.poster || card.thumbnail || card.backdrop;
+  const height = Math.round(wide ? size * 9 / 16 : size * 1.5);
+  const radius = Math.min(Number(ui.radiusCard) || 8, 12);
+  const progress = card.durationSeconds > 0 && card.progressSeconds > 0 && !card.played ? card.progressSeconds / card.durationSeconds : 0;
+  return (
+    <Pressable {...handlers} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={[card.name, subtitle].filter(Boolean).join(', ')}
+      style={[NO_RING, { width: size, gap: 10, transform: [{ translateY: lit ? -4 : 0 }] },
+        web ? ({ transitionProperty: 'transform', transitionDuration: '220ms' } as ViewStyle) : {}]}>
+      <View style={[{ width: size, height, borderRadius: radius, overflow: 'hidden', backgroundColor: card.accent || ui.raised },
+        box({ 'box-shadow': `0px ${lit ? 18 : 12}px ${lit ? 40 : 30}px -12px rgba(0, 0, 0, 0.55)` }),
+        state.focus ? { outlineColor: ui.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 3 } as ViewStyle : {}]}>
+        {uri && !failed
+          ? <Image source={host.image(uri)} contentFit="cover" transition={160} onError={() => setFailed(true)} style={{ width: '100%', height: '100%' }} accessibilityIgnoresInvertColors />
+          : <View style={{ flex: 1, padding: 12, justifyContent: 'flex-end' }}>
+              <Text numberOfLines={3} style={text({ 'font-family': '$ui.fontDisplay', 'font-size': '16px', color: '#f7f2e8' })}>{card.name}</Text>
+            </View>}
+        {progress > 0 ? <View style={{ position: 'absolute', left: 10, right: 10, bottom: 8 }}><Progress fraction={progress} /></View> : null}
+      </View>
+      <View style={{ gap: 2 }}>
+        <Text numberOfLines={2} style={text({ 'font-size': '14px', 'font-weight': '600', color: '$ui.ink' })}>{card.name}</Text>
+        {subtitle ? <Text numberOfLines={1} style={text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{subtitle}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}

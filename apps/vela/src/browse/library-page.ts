@@ -2,7 +2,7 @@
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { libraryCardArtwork, libraryTabs, libraryKey, reconcileProgressRows, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
+import { libraryCardArtwork, libraryTabs, libraryKey, recommendationTab, reconcileProgressRows, tabCard, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
 import type { LibraryPage } from '@vela/skin/src/widgets/library/model';
@@ -64,7 +64,10 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   // people tab its collections, Genres its genres. A slow or failed part never holds back a view
   // that does not show it, and nothing is read for a view that is not on show.
   const shows = facetTitle ? 'library' : view;
-  const rowsKey = `${id}|${revision}`;
+  // A recommended tab past the first has its own rows when the server answers tab rows; each is
+  // read and held under its own key (core's recommendationTab), the first sharing the library's.
+  const rowsTab = shows === 'recommended' ? recommendationTab(tabs, selectedTab?.id, store.catalogue.libraryTabRowsAvailable) : undefined;
+  const rowsKey = `${id}|${rowsTab ?? ''}|${revision}`;
   const collectionsKey = `${id}|${revision}|${collectionTab ?? ''}|${tabQuery}`;
   const genresKey = `${id}|${revision}`;
   const needRows = canRecommend && shows === 'recommended';
@@ -85,7 +88,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   // A section drawn again (Android releases hidden ones) or prefetched starts from the session's
   // last answer for each part, and refreshes its recommendations quietly if progress moved since.
   const [rows, setRows] = useState<Part<Row[]>>(() => {
-    const cached = store.catalogue.cachedLibraryRecommendations(id);
+    const cached = store.catalogue.cachedLibraryRecommendations(id, rowsTab);
     return cached ? { key: rowsKey, load: 'ready', attempt: 0, value: cached.value, progressRevision: cached.progressRevision } : noPart;
   });
   const [collections, setCollections] = useState<Part<CollectionPage>>(() => {
@@ -116,7 +119,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     let held = rows.key === rowsKey && rows.load === 'ready' ? rows.value : undefined;
     let heldRevision = rows.progressRevision;
     if (!held) {
-      const cached = store.catalogue.cachedLibraryRecommendations(id);
+      const cached = store.catalogue.cachedLibraryRecommendations(id, rowsTab);
       if (cached) {
         held = cached.value;
         heldRevision = cached.progressRevision;
@@ -132,7 +135,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       // takes the new places into the rows on show (reconcileProgressRows): unchanged rows and
       // cards keep their objects, so only what moved draws again.
       const shown = held;
-      void store.catalogue.libraryRecommendations(id, kind, progressRevision > 0).then(value => {
+      void store.catalogue.libraryRecommendations(id, kind, progressRevision > 0, rowsTab).then(value => {
         if (!active) return;
         checked.current = check;
         if (!value) return;
@@ -143,13 +146,13 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       return () => { active = false; };
     }
     setRows({ key: rowsKey, load: 'loading', attempt: rowsAttempt, progressRevision });
-    void store.catalogue.libraryRecommendations(id, kind, progressRevision > 0).then(value => {
+    void store.catalogue.libraryRecommendations(id, kind, progressRevision > 0, rowsTab).then(value => {
       if (active) setRows({ key: rowsKey, load: 'ready', attempt: rowsAttempt, value: value ?? [], progressRevision });
     }).catch(() => {
       if (active) setRows({ key: rowsKey, load: 'failed', attempt: rowsAttempt, progressRevision });
     });
     return () => { active = false; };
-  }, [store, id, kind, rowsKey, needRows, progressRevision, focused, rowsAttempt]);
+  }, [store, id, kind, rowsKey, rowsTab, needRows, progressRevision, focused, rowsAttempt]);
 
   // Collections (or a people tab): read only while that view is on show, held for the session,
   // and read again only when the viewer asks (Try again). Progress never changes them.
@@ -200,7 +203,10 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const rawExtras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
-  const landscape = (current?.value ?? earlier)?.presentation?.card === 'landscape';
+  // The tab's own card (a Concerts tab's 16:9 video cards in a square Music library) over the library's.
+  const libraryCard = (current?.value ?? earlier)?.presentation?.card;
+  const card = selectedTab?.kind === 'live' ? undefined : tabCard(selectedTab, libraryCard, store.catalogue.libraryTabCardsAvailable);
+  const landscape = (card ?? libraryCard) === 'landscape';
   const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => libraryCardArtwork(card, 'landscape')) })) } : rawExtras, [rawExtras, landscape]);
   const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !canRecommend || view === 'genres' && !extras?.genres.length ? 'library' : view;
 
@@ -218,6 +224,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       model: (() => {
         const model = held ?? (earlier ? asQueried(earlier, browseQuery) : undefined);
         return model ? { ...model, name: facetTitle || model.name, genres: extras?.genres ?? model.genres,
+          ...(card && card !== model.presentation?.card ? { presentation: { card }, ...(card === 'landscape' ? { items: model.items.map(item => libraryCardArtwork(item, card)) } : {}) } : {}),
           ...(usableView === 'live' ? { presentation: { card: selectedTab?.card ?? 'landscape' }, items: liveState.items, more: !!liveState.cursor, pages: 1 } : {}) } : model;
       })(),
       loading: !held && current?.load !== 'failed',
@@ -240,7 +247,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       extrasLoading: extrasView && (!part || part.load === 'idle' || part.load === 'loading'),
       extrasFailed: extrasView && (part?.load === 'failed' || !!part?.moreFailed),
     };
-  }, [current, earlier, browseQuery, facetTitle, selectedTab?.id, selectedTab?.card, viewTab?.layout, usableView, requestedView, extras, rowsPart, collectionsPart, genresPart, canRecommend, liveAvailable, tabQuery, liveFilter, liveState]);
+  }, [current, earlier, browseQuery, facetTitle, card, selectedTab?.id, selectedTab?.card, viewTab?.layout, usableView, requestedView, extras, rowsPart, collectionsPart, genresPart, canRecommend, liveAvailable, tabQuery, liveFilter, liveState]);
 
   const failed = current?.load === 'failed';
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';

@@ -48,7 +48,10 @@ export interface ServerCapabilities {
     /** Live events: /live/events, /live/stream, screens and entity favourites (live-events.ts). */
     liveEvents?: Feature;
     /** Live TV multiview groups: POST /multiview, PlaybackRequest.multiview. */
-    multiview?: Feature & { maxTiles: number } };
+    multiview?: Feature & { maxTiles: number };
+    /** Plugin branching levels: GET /libraries/:id/rows?tab= for any recommended tab, and
+     * GET /titles/:id/children?role= (or ?level=) with TitleMedia.childCounts. */
+    pluginLevels?: Feature & { tabRows?: boolean; childRoles?: boolean } };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -92,11 +95,15 @@ export type ReadingFormat = 'epub' | 'pdf' | 'cbz';
 export type MediaCreditRole = 'artist' | 'albumArtist' | 'author' | 'narrator' | 'composer' | 'illustrator' | 'translator' | 'host';
 /** A title's media class, role and structure. Title.kind keeps the movie/show/season/episode projection. */
 export interface TitleMedia {
-  class: MediaClass; role: MediaRole;
+  /** A plugin level's own role is free text (a video child's 'concert'); clients read an unknown one as 'item'. */
+  class: MediaClass; role: MediaRole | (string & {});
   /** Position inside the parent: track number, book number in a series, part number. */ index?: number;
   /** Disc or volume, for multi-disc albums. */ disc?: number;
   /** Ancestors, nearest first: a track's [album, artist]; a book's [series]. */ parents?: { id: ID; name: string; role: MediaRole }[];
   /** Direct children: tracks on an album, albums by an artist, books in a series. */ childCount?: number;
+  /** Direct children per child level (features.pluginLevels): keyed by the level's role, or its key
+   * when it has none, e.g. an artist's { album: 42, concert: 7 }. Children of one key are read with
+   * GET /titles/:id/children?role=<key>. */ childCounts?: Record<string, number>;
   /** personId is the plugin's people-facet person, so /people/:id opens. */
   credits?: { name: string; role: MediaCreditRole | string; personId?: ID }[];
   /** Readable documents only. */ reading?: { format: ReadingFormat; pages?: number };
@@ -310,7 +317,8 @@ export interface TitlePlaylists { items: TitlePlaylistMembership[] }
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated' | 'lastViewed';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { /** A library or view tab listing one level (a level key) instead of the root. */ level?: string; search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; layout?: 'grid' | 'list' | 'timeline'; card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
+export interface LibraryTab { /** A library or view tab listing one level (a level key) instead of the root. */ level?: string; search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; layout?: 'grid' | 'list' | 'timeline';
+  /** The tab's own card shape for its rows and items, over the library's presentation.card (a recommended tab too, with features.pluginLevels). */ card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }

@@ -4,7 +4,7 @@ import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, 
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
-import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts } from '../media';
+import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts, videoParents } from '../media';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
   const ref = artwork.find(item => item.kind === kind);
@@ -52,7 +52,9 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const yearLabel = title.year ? year(title.year) : '';
   const rating = displayRating(title.rating, title.ratingCountry);
   const media = cardMedia(title);
-  return withMedia(withDateDisplay({
+  // A plugin's video title (a concert) names its container (the artist): its byline, and a link back.
+  const container = media ? undefined : videoParents(title)[0];
+  return withContainer(withMedia(withDateDisplay({
     id: title.id,
     kind: mediaCardKind(media, title.kind),
     name: title.name,
@@ -91,7 +93,13 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     facts: factsLine([title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, rating, durationLabel]),
     ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode' && !media),
     receipt,
-  }, title.dateDisplay), media, title);
+  }, title.dateDisplay), media, title), container);
+}
+
+/** A video child's card under its container: the container's name where a show's would stand. */
+function withContainer(value: Card, parent: ReturnType<typeof videoParents>[number] | undefined): Card {
+  if (!parent || value.showName) return value;
+  return { ...value, episodeContext: parent.name, contextParts: [{ label: parent.name, select: `${parent.id}|${parent.role === 'item' ? '' : parent.role}` }] };
 }
 
 /** A media title's card: its role as kind, its cover shape and the facts a shelf of it shows. */

@@ -190,6 +190,29 @@ function backdrop(name: string, seed: number, p: CoverPalette): string {
   return `<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="${darken(p.bg, 0.35)}"/><stop offset="1" stop-color="${darken(p.bg, 0.7)}"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="90"/></filter></defs><rect width="1600" height="900" fill="url(#bg)"/><g filter="url(#soft)">${blobs}</g>${Array.from({ length: 14 }, (_, i) => `<path d="M0 ${520 + i * 26}Q800 ${380 + i * 34 + r() * 40} 1600 ${560 + i * 22}" stroke="${p.ink}" stroke-width="1.5" fill="none" opacity=".12"/>`).join('')}<text x="80" y="820" font-size="${Math.min(210, Math.floor(1440 / (name.length * 0.66)))}" font-family="${SANS}" font-weight="900" fill="${p.ink}" opacity=".08" letter-spacing="-6">${esc(name.toUpperCase())}</text>${grain('g', 0.07, 1600, 900)}`;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Concert stills (1600 × 900) and posters (600 × 900): a lit stage, beams and a crowd
+function concertStage(title: Title, seed: number, p: CoverPalette, w: number, h: number): string {
+  const r = random(seed), [a0, a1, a2] = p.accents;
+  const artist = title.media?.parents?.[0]?.name ?? '';
+  const venue = title.media?.facts?.find(fact => fact.label === 'Venue')?.value ?? '';
+  const stage = h * 0.68;
+  const beams = Array.from({ length: 7 }, (_, i) => {
+    const x = w * (0.12 + i * 0.125) + (r() - 0.5) * w * 0.04, spread = w * (0.08 + r() * 0.08), c = [a0, a1, a2][i % 3];
+    return `<path d="M${x.toFixed(0)} 0L${(x - spread).toFixed(0)} ${stage.toFixed(0)}L${(x + spread).toFixed(0)} ${stage.toFixed(0)}Z" fill="${c}" opacity="${(0.16 + r() * 0.14).toFixed(2)}"/>`;
+  }).join('');
+  const crowd = Array.from({ length: Math.round(w / 34) }, (_, i) => {
+    const x = i * 34 + r() * 14, y = h - 40 - r() * h * 0.08, s = 26 + r() * 12;
+    return `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${(s * 0.5).toFixed(0)}" fill="#07080b"/><rect x="${(x - s * 0.7).toFixed(0)}" y="${(y + s * 0.4).toFixed(0)}" width="${(s * 1.4).toFixed(0)}" height="${h}" rx="${(s * 0.6).toFixed(0)}" fill="#07080b"/>${r() > 0.82 ? `<rect x="${(x + s * 0.2).toFixed(0)}" y="${(y - s * 2.2).toFixed(0)}" width="${(s * 0.32).toFixed(0)}" height="${(s * 2.4).toFixed(0)}" rx="${(s * 0.16).toFixed(0)}" fill="#07080b"/>` : ''}`;
+  }).join('');
+  const lines = wrap(title.name, w > h ? 26 : 14), size = fit(lines, w * 0.8, w > h ? 92 : 64, 0.55);
+  return `<defs><linearGradient id="sky" y2="1"><stop stop-color="${darken(p.bg, 0.75)}"/><stop offset="1" stop-color="${darken(a0, 0.55)}"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="${(w / 60).toFixed(0)}"/></filter></defs>
+<rect width="${w}" height="${h}" fill="url(#sky)"/><g filter="url(#soft)">${beams}</g><rect x="0" y="${stage.toFixed(0)}" width="${w}" height="${(h - stage).toFixed(0)}" fill="${darken(p.bg, 0.8)}"/>
+<ellipse cx="${w / 2}" cy="${stage.toFixed(0)}" rx="${w * 0.36}" ry="${h * 0.05}" fill="${lighten(a1, 0.3)}" opacity=".35"/>${crowd}
+<text x="${w * 0.06}" y="${h * 0.12}" font-size="${(w > h ? 26 : 22)}" font-family="${SANS}" letter-spacing="6" fill="${p.ink}" opacity=".85">${esc(artist.toUpperCase())}</text>
+${textLines(lines, w * 0.06, h * 0.12 + size * 1.3, size, 1.05, `font-family="${DISPLAY}" fill="#ffffff"`)}<text x="${w * 0.06}" y="${h * 0.12 + size * (1.4 + lines.length * 1.05)}" font-size="${w > h ? 24 : 20}" font-family="${SERIF}" font-style="italic" fill="${lighten(a1, 0.2)}">${esc(venue)}</text>${grain('g', 0.07, w, h)}`;
+}
+
 /** SVG for a media fixture artwork id, or undefined so the caller falls back to the video art. */
 export function renderCover(id: string, kind: string, width: number): string | undefined {
   const person = mediaPerson(id);
@@ -197,6 +220,7 @@ export function renderCover(id: string, kind: string, width: number): string | u
   const title = mediaTitle(id);
   if (!title?.media) return undefined;
   const role = title.media.role;
+  if (role === 'concert') return kind === 'poster' ? svg(width, 600, 900, concertStage(title, mediaSeed(id), paletteFor(id), 600, 900)) : svg(width, 1600, 900, concertStage(title, mediaSeed(id), paletteFor(id), 1600, 900));
   if (role === 'artist') return kind === 'backdrop' ? svg(width, 1600, 900, backdrop(title.name, mediaSeed(id), paletteFor(id))) : svg(width, 1000, 1000, portrait(title.name, mediaSeed(id), paletteFor(id)));
   if (role === 'track') return renderCover(title.media.parents?.[0]?.id ?? '', kind, width);
   if (role === 'album') return svg(width, 1000, 1000, albumCover(title.name, title.showName ?? '', mediaSeed(id), coverVariant(id) / 5, paletteFor(id)));

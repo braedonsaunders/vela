@@ -5,6 +5,7 @@ import type * as V from '../wire';
 import type { Card, DetailModel } from '../models';
 import { entry } from '../discovery/models';
 import { hasReading, hasTitleChildren } from '../adapter/capabilities';
+import { childrenKey, pluginLevelsOf } from '../plugin-levels';
 import type { Session } from './session';
 import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
@@ -14,6 +15,8 @@ export interface MediaFeatures {
   classes: V.MediaClass[];
   /** Readable formats: reading needs its own endpoint, so only what the server advertises. */
   reading: V.ReadingFormat[];
+  /** Children are read one child level at a time (features.pluginLevels.childRoles). */
+  childRoles: boolean;
   /** Audio plays through the ordinary playback path: off only when the server says so. */
   audio: boolean;
 }
@@ -41,18 +44,24 @@ export class Media {
     return {
       classes: features?.mediaClasses?.available ? features.mediaClasses.classes ?? [] : [],
       reading: features?.reading?.available ? features.reading.formats ?? [] : [],
+      childRoles: pluginLevelsOf(features).childRoles,
       // A server that predates the flag already plays audio-only titles through POST /playback;
       // only an explicit `audioPlayback: { available: false }` turns listening off.
       audio: features?.audioPlayback?.available !== false,
     };
   }
 
-  /** A title's children in the server's order, every page, read once unless `refresh`. */
-  async children(id: string, refresh = false): Promise<void> {
-    const previous = this.box.get().children[id];
+  /** A title's children in the server's order, every page, read once unless `refresh`. `role`
+   * reads one child level (an artist's concerts), held under childrenKey(id, role); a server
+   * without child roles is never sent one. */
+  async children(id: string, refresh = false, role?: string): Promise<void> {
+    const filter = role && pluginLevelsOf(this.session.features).childRoles ? role : undefined;
+    if (role && !filter) return;
+    const key = childrenKey(id, filter);
+    const previous = this.box.get().children[key];
     if (previous && previous.load !== 'failed' && !refresh) return;
     const epoch = this.session.epoch;
-    const set = (value: Loadable<ChildrenModel>) => this.box.update('children', map => ({ ...map, [id]: value }));
+    const set = (value: Loadable<ChildrenModel>) => this.box.update('children', map => ({ ...map, [key]: value }));
     if (!previous?.value) set(loading(previous));
     try {
       const connection = await this.session.ready();
@@ -62,7 +71,7 @@ export class Media {
       const items: Card[] = [];
       let cursor: string | undefined, complete = false;
       while (items.length < MAX_CHILDREN) {
-        const page: V.ChildrenPage = await adapter.children(id, cursor, 100);
+        const page: V.ChildrenPage = await adapter.children(id, cursor, 100, filter);
         items.push(...page.items.map(title => entry({ id: title.id, kind: 'title', title, receiptToken: '' }, images, this.artWidth())));
         if (page.continuation !== 'more' || !page.nextCursor) { complete = page.continuation === 'exhausted'; break; }
         cursor = page.nextCursor;

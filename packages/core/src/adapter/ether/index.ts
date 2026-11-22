@@ -94,14 +94,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
   /** Every shelf of a library, page by page. A cursor the server has expired mid-read restarts
    * the read once from the first page, uncached, so no shelf is skipped or repeated. */
-  async libraryRows(id: string, kind: V.Library['kind'], fresh = false): Promise<V.Row[]> {
-    try { return await this.readLibraryRows(id, kind, fresh); }
+  async libraryRows(id: string, kind: V.Library['kind'], fresh = false, tab?: string): Promise<V.Row[]> {
+    try { return await this.readLibraryRows(id, kind, fresh, tab); }
     catch (error) {
       if (!(error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired')) throw error;
-      return this.readLibraryRows(id, kind, true);
+      return this.readLibraryRows(id, kind, true, tab);
     }
   }
-  private async readLibraryRows(id: string, _kind: V.Library['kind'], fresh: boolean): Promise<V.Row[]> {
+  /** `tab` names a recommended tab's own shelves (features.pluginLevels.tabRows); the caller sends it only then. */
+  private async readLibraryRows(id: string, _kind: V.Library['kind'], fresh: boolean, tab?: string): Promise<V.Row[]> {
     const tabs = this.declaredLibraries.get(id)?.tabs;
     if (tabs && !tabs.some(tab => tab.kind === 'recommended')) return [];
     const result: V.Row[] = [];
@@ -109,7 +110,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     let cursor: string | undefined;
     for (let n = 0; n < 100; n++) {
       const page = this.declaredLibraries.get(id)?.tabs
-        ? await this.http.request<V.Page<V.Row>>('GET', `/libraries/${segment(id)}/rows${query({ cursor, limit: 100 })}`, undefined, fresh ? undefined : CACHED)
+        ? await this.http.request<V.Page<V.Row>>('GET', `/libraries/${segment(id)}/rows${query({ tab, cursor, limit: 100 })}`, undefined, fresh ? undefined : CACHED)
         : await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 }, fresh);
       result.push(...page.items);
       if (page.continuation !== 'more') return result;
@@ -364,8 +365,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.TitlePlaylists>('GET', `/titles/${segment(titleId)}/playlists`, undefined, CACHED);
   }
 
-  children(id: string, cursor?: string, limit?: number) {
-    return this.http.request<V.ChildrenPage>('GET', `/titles/${segment(id)}/children${query({ cursor, limit: limit === undefined ? undefined : String(limit) })}`, undefined, CACHED);
+  /** `role` reads one child level (features.pluginLevels.childRoles); the caller sends it only then. */
+  children(id: string, cursor?: string, limit?: number, role?: string) {
+    return this.http.request<V.ChildrenPage>('GET', `/titles/${segment(id)}/children${query({ role: role || undefined, cursor, limit: limit === undefined ? undefined : String(limit) })}`, undefined, CACHED);
   }
 
   openReading(id: string, request: V.ReadingRequest) {

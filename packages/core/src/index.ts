@@ -49,7 +49,8 @@ export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libra
 
 export { canSeeAll } from './store/rows';
 export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFlowEvent, type AuthStep } from './store/auth-flow';
-export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, opensMediaPage, shapeOf, MEDIA_PAGE_ROLES, type CardMedia, type CardShape, type MediaCredit, type MediaParent } from './media';
+export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, opensMediaPage, shapeOf, videoParents, MEDIA_PAGE_ROLES, type CardMedia, type CardShape, type MediaCredit, type MediaParent } from './media';
 export type { ChildrenModel, MediaFeatures } from './store/media';
 export { AUDIO_RATES, chapterEnd, type AudioEngine, type AudioEngineEvent, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
 export { current as currentInQueue, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
+export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';
