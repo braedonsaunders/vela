@@ -557,6 +557,14 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<unknown>(favorite ? 'PUT' : 'DELETE', `/favorites/entities/${segment(key)}`, request);
   }
 
+  livePreferences() {
+    return this.http.request<V.LivePreferences>('GET', '/live/preferences');
+  }
+
+  setLivePreferences(preferences: V.LivePreferences, request: V.Mutation) {
+    return this.http.request<unknown>('PUT', '/live/preferences', { ...preferences, idempotencyKey: request.idempotencyKey });
+  }
+
   async liveTicker(screen?: string): Promise<V.LiveEventsResponse> {
     const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
     return { ...response, events: normaliseEvents(response?.events) };

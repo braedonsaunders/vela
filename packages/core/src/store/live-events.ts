@@ -28,11 +28,16 @@ export interface LiveEventsState {
   /** Alerts not yet dismissed, oldest first. */
   alerts: V.LiveAlert[];
   stream: LiveStreamPhase;
+  /** The viewer's spoiler-free preference as read or changed here; undefined until known (see `spoilerFreeOf`). */
+  spoilerFree?: boolean;
 }
 
 export const initialLiveEvents: LiveEventsState = { events: {}, screens: {}, details: {}, entities: {}, favorites: {}, ticker: {}, alerts: [], stream: 'idle' };
 
 export interface ScreenParams { league?: string; date?: string }
+
+/** Whether the viewer hides scores: a change or read here first, else what bootstrap said. */
+export const spoilerFreeOf = (state: Pick<VelaState, 'liveEvents' | 'home'>): boolean | undefined => state.liveEvents.spoilerFree ?? state.home.value?.spoilerFree;
 export const screenKey = (id: string, params: ScreenParams = {}) => `${id}|${params.league ?? ''}|${params.date ?? ''}`;
 export const entitiesKey = (query: { feed?: string; league?: string; q?: string } = {}) => `${query.feed ?? ''}|${query.league ?? ''}|${query.q ?? ''}`;
 
@@ -197,6 +202,10 @@ export class LiveEvents {
       throw error;
     }
     if (epoch !== this.session.epoch) return;
+    this.refreshScreens();
+  }
+
+  private refreshScreens(): void {
     for (const key of Object.keys(this.box.get().liveEvents.screens)) {
       const [id, league, date] = key.split('|');
       void this.loadScreen(id!, { ...(league ? { league } : {}), ...(date ? { date } : {}) });
@@ -215,6 +224,51 @@ export class LiveEvents {
     } catch (error) {
       if (epoch === this.session.epoch) this.set('ticker', ticker => ({ ...ticker, [screen]: failed(error, previous) }));
     }
+  }
+
+  /** The spoiler-free preference, read once when bootstrap did not carry it. */
+  async loadPreferences(): Promise<void> {
+    if (spoilerFreeOf(this.box.get()) !== undefined) return;
+    const epoch = this.session.epoch;
+    try {
+      const api = await this.api();
+      if (!api.livePreferences) return;
+      const { spoilerFree } = await api.livePreferences();
+      if (epoch === this.session.epoch && typeof spoilerFree === 'boolean') this.set('spoilerFree', () => spoilerFree);
+    } catch {
+      // Unknown stays unknown: the switch waits, scores show as the server sends them.
+    }
+  }
+
+  /** Whether this server can change the preference. */
+  canSetPreferences(): boolean {
+    if (!this.available()) return false;
+    const adapter = this.session.selected().adapter as Partial<LiveEventsApi>;
+    return typeof adapter.setLivePreferences === 'function';
+  }
+
+  /** Hide or show scores everywhere at once; the screens and open games are read again, since the
+   * server withholds (or restores) their scores, plays and probability. */
+  async setSpoilerFree(on: boolean): Promise<void> {
+    const epoch = this.session.epoch;
+    const before = this.box.get().liveEvents.spoilerFree;
+    this.set('spoilerFree', () => on);
+    try {
+      const api = await this.api();
+      if (!api.setLivePreferences) throw new Error('This server cannot hide scores');
+      await api.setLivePreferences({ spoilerFree: on }, { idempotencyKey: this.session.key() });
+    } catch (error) {
+      if (epoch === this.session.epoch) this.set('spoilerFree', () => before);
+      throw error;
+    }
+    if (epoch !== this.session.epoch) return;
+    this.refreshAll();
+  }
+
+  /** Every screen and every open game read again (after a change that alters what the server sends). */
+  private refreshAll(): void {
+    this.refreshScreens();
+    for (const id of Object.keys(this.box.get().liveEvents.details)) void this.loadDetail(id);
   }
 
   dismissAlert(id: string): void {

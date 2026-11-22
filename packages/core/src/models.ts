@@ -110,6 +110,8 @@ export interface HomeModel {
   playlistsAvailable: boolean;
   /** Plugin screens from bootstrap navigation (Sports), as top-level sections after Live TV. */
   screens: ScreenNav[];
+  /** The viewer's spoiler-free preference when bootstrap carries it (else read from /live/preferences). */
+  spoilerFree?: boolean;
 }
 
 /** A plugin screen the viewer may open (bootstrap `navigation`). */

@@ -771,7 +771,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!Array.isArray(body.interactions) || body.interactions.length > 100 || body.interactions.some((i: V.Interaction) => !validReceipt(g, i.receiptToken) || !['visible', 'selected', 'played'].includes(i.kind))) fail('request', 'invalid_receipt', 'Invalid interaction receipt');
     return json({ accepted: true });
   }
-  const sports = sportsApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail);
+  const sports = sportsApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail, body);
   if (sports) return sports;
   if (sportsEnabled && method === 'POST' && path === '/multiview') {
     if (!body.device?.id) fail('request', 'device_required', 'Device required');

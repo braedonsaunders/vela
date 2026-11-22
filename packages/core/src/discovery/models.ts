@@ -315,6 +315,7 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     trailerPreviewAvailable: features.trailerPreview?.available ?? false,
     playlistsAvailable: features.playlists?.available ?? false,
     screens: screenNavigation(data.navigation),
+    ...(typeof data.viewer.spoilerFree === 'boolean' ? { spoilerFree: data.viewer.spoilerFree } : {}),
   };
 }
 

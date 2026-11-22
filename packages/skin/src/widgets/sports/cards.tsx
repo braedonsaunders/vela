@@ -104,7 +104,7 @@ export const MiniCard = memo(function MiniCard({ look, event: given, testID }: {
       {m.sides ? m.sides.map(side => (
         <View key={side.id} style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(8), paddingVertical: look.px(1) }}>
           <Txt look={look} size={13.5} weight={600} lines={1} style={{ flex: 1, opacity: side.loser ? 0.6 : 1 }}>{side.short}</Txt>
-          {m.scored ? <Score look={look} value={side.score} size={14} /> : <Txt look={look} size={12.5} weight={650} color={look.inkSecondary} digits>{side.record}</Txt>}
+          {m.scored ? <Score look={look} value={side.score} size={14} /> : m.phase === 'upcoming' && side.record ? <Txt look={look} size={12.5} weight={650} color={look.inkSecondary} digits>{side.record}</Txt> : null}
         </View>
       )) : <Ranking look={look} event={event} rows={2} />}
     </Surface>

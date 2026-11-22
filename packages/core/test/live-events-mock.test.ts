@@ -80,3 +80,18 @@ test('a favourite applies at once and survives the server answer', async () => {
   expect(again.favorite).toBe(true);
   await store.liveEvents.setFavorite(celtics.key!, false);
 });
+
+test('hiding scores applies at once, withholds every started event, and showing them restores the scores', async () => {
+  await store.liveEvents.loadPreferences();
+  expect(store.getState().liveEvents.spoilerFree).toBe(false);
+  expect(store.liveEvents.canSetPreferences()).toBe(true);
+  await store.liveEvents.loadScreen('sports');
+  const change = store.liveEvents.setSpoilerFree(true);
+  expect(store.getState().liveEvents.spoilerFree).toBe(true);
+  await change;
+  await until(() => store.getState().liveEvents.events[NFL]!.spoiler === true);
+  expect(store.getState().liveEvents.events[NFL]!.competitors.every((c: V.LiveCompetitor) => c.score === undefined)).toBe(true);
+  await store.liveEvents.setSpoilerFree(false);
+  await until(() => store.getState().liveEvents.events[NFL]!.spoiler !== true);
+  expect(store.getState().liveEvents.events[NFL]!.competitors.every((c: V.LiveCompetitor) => typeof c.score === 'string')).toBe(true);
+});

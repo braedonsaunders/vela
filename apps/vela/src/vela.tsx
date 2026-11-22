@@ -145,6 +145,9 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   // first visit draws at once.
   const homeReady = signedIn && state.home.load === 'ready';
   useStartRoutes(homeReady);
+  // The spoiler-free switch (profile menu, Sports) needs the preference; bootstrap may carry it.
+  const hasScreens = !!state.home.value?.screens.length;
+  useEffect(() => { if (homeReady && hasScreens) void store.liveEvents.loadPreferences(); }, [store, homeReady, hasScreens, auth.revision]);
   const libraryIds = (state.libraries.value ?? []).filter(library => library.kind !== 'live').map(library => library.id).join(',');
   useEffect(() => {
     if (!homeReady || !libraryIds) return;

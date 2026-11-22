@@ -260,9 +260,13 @@ const favourites = new Map<string, Set<string>>();
 const revealed = new Map<string, Set<string>>();
 const favouritesOf = (viewerId: string) => { let set = favourites.get(viewerId); if (!set) favourites.set(viewerId, set = new Set(DEFAULT_FAVOURITES.map(entityKey))); return set; };
 const DEFAULT_SPOILERS = new Set([ns('epl-che-mci')]);
+/** A viewer's own spoiler-free choice (PUT /live/preferences); the admin knob otherwise. */
+const spoilerPreference = new Map<string, boolean>();
+const spoilerFreeFor = (viewerId: string) => spoilerPreference.get(viewerId) ?? sportsKnobs.spoilerFree;
 function spoilered(sim: Sim, viewerId: string): boolean {
   if (revealed.get(viewerId)?.has(sim.id)) return false;
-  return sim.state !== 'pre' && (sportsKnobs.spoilerFree || DEFAULT_SPOILERS.has(sim.id));
+  if (spoilerPreference.get(viewerId) === false) return false;
+  return sim.state !== 'pre' && (spoilerFreeFor(viewerId) || DEFAULT_SPOILERS.has(sim.id));
 }
 const isFavourite = (sim: Sim, viewerId: string) => [sim.home, sim.away].some(id => favouritesOf(viewerId).has(entityKey(id)));
 
@@ -505,7 +509,7 @@ export function initSports(channels: V.Channel[]): void {
 }
 
 /** The Sports routes under /vela/v0; undefined for any other path. */
-export function sportsApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail): Response | undefined {
+export function sportsApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail, body?: unknown): Response | undefined {
   if (!sportsEnabled) return undefined;
   logoOrigin ||= url.origin;
   const screenMatch = /^\/screens\/([^/]+)$/.exec(path);
@@ -529,6 +533,15 @@ export function sportsApi(req: Request, url: URL, method: string, path: string, 
       if (!set) revealed.set(viewerId, set = new Set());
       set.add(sim.id);
       return json(presentDetail(sim, viewerId));
+    }
+  }
+  if (path === '/live/preferences') {
+    if (method === 'GET') return json({ spoilerFree: spoilerFreeFor(viewerId) } satisfies V.LivePreferences);
+    if (method === 'PUT') {
+      const value = (body as { spoilerFree?: unknown } | undefined)?.spoilerFree;
+      if (typeof value !== 'boolean') fail('request', 'invalid_preferences', 'spoilerFree must be true or false');
+      spoilerPreference.set(viewerId, value as boolean);
+      return json({ spoilerFree: value } satisfies V.LivePreferences);
     }
   }
   if (method === 'GET' && path === '/live/stream') return liveStream(req, url, viewerId, authorized);
@@ -566,7 +579,7 @@ export function liveEventOnChannel(channelId: string | undefined): V.LiveEventRe
 /** Admin: change the knobs, or push an alert for an event to every alert listener. */
 export function sportsAdmin(body: { providerCap?: number; spoilerFree?: boolean; alert?: { kind: V.LiveAlertKind; eventId: string } }): typeof sportsKnobs {
   if (Number.isFinite(body.providerCap) && body.providerCap! >= 0) sportsKnobs.providerCap = Math.floor(body.providerCap!);
-  if (typeof body.spoilerFree === 'boolean') sportsKnobs.spoilerFree = body.spoilerFree;
+  if (typeof body.spoilerFree === 'boolean') { sportsKnobs.spoilerFree = body.spoilerFree; spoilerPreference.clear(); }
   const sim = body.alert && sims.get(body.alert.eventId);
   if (sim && body.alert) alert(body.alert.kind, sim, true);
   return sportsKnobs;

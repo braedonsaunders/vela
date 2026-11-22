@@ -301,6 +301,9 @@ export interface LiveEvents {
   liveTicker(screen?: string): Promise<V.LiveEventsResponse>;
   /** One connection to `/live/stream`; resolves when the server closes it. */
   streamLive(query: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
+  /** The viewer's live-event preferences (spoiler-free). Optional: a server without them has none. */
+  livePreferences?(): Promise<V.LivePreferences>;
+  setLivePreferences?(preferences: V.LivePreferences, request: V.Mutation): Promise<unknown>;
 }
 export function hasLiveEvents(adapter: ServerAdapter): adapter is ServerAdapter & LiveEvents {
   return ['screen', 'liveEvents', 'liveEvent', 'revealLiveEvent', 'liveEntities', 'setEntityFavorite', 'liveTicker', 'streamLive'].every(name =>

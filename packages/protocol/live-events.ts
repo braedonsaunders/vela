@@ -79,6 +79,9 @@ export interface LiveEntity {
   key?: string; favorite?: boolean;
 }
 export interface LiveEntitiesResponse { entities: LiveEntity[] }
+/** The viewer's live-event preferences (GET, PUT /live/preferences). Spoiler-free withholds scores,
+ * probability and plays until an event is revealed. */
+export interface LivePreferences { spoilerFree: boolean }
 
 /** `/live/stream` server events. `update` carries only changed events; `heartbeat` every 25 s. */
 export interface LiveStreamUpdate { events: LiveEvent[] }

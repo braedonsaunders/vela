@@ -53,7 +53,8 @@ export interface ServerCapabilities {
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
 export interface NegotiateResponse { capabilities: ServerCapabilities; client: ClientCapabilities }
-export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef }
+export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef;
+  /** Live events: scores are withheld until revealed (bootstrap only; GET /live/preferences otherwise). */ spoilerFree?: boolean }
 export interface Tokens { accessToken: string; refreshToken: string; expiresAt: Timestamp; viewer: Viewer }
 export interface PlexHomeProfile {
   id: ID; name: string; protected: boolean;

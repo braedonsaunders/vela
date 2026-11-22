@@ -40,6 +40,8 @@ export function GamePage({ id, active = true }: { id: string; active?: boolean }
   }
   const m = matchup(event);
   const wide = !look.small;
+  const showGraph = detail.probabilitySeries.length > 1 && !!m.sides && !m.spoiler;
+  const showRanking = !m.sides && !!event.ranking?.length && !detail.tables.length;
   return (
     <ScrollView testID="sports-game" style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: look.px(48) }} showsVerticalScrollIndicator={!Platform.isTV}>
       <Rise look={look} index={0}>
@@ -49,8 +51,8 @@ export function GamePage({ id, active = true }: { id: string; active?: boolean }
         {m.spoiler ? <Rise look={look} index={1}><Reveal look={look} id={id} /></Rise> : null}
         <Rise look={look} index={1}><WatchRow look={look} event={event} /></Rise>
         <View style={{ flexDirection: wide ? 'row' : 'column', gap: look.px(22), alignItems: 'flex-start' }}>
-          <View style={{ flex: wide ? 1.25 : undefined, alignSelf: 'stretch', gap: look.px(22) }}>
-            {detail.probabilitySeries.length > 1 && m.sides && !m.spoiler ? (
+          {showGraph || detail.tables.length || showRanking ? <View style={{ flex: wide ? 1.25 : undefined, alignSelf: 'stretch', gap: look.px(22) }}>
+            {showGraph ? (
               <Rise look={look} index={2}><ProbabilityPanel look={look} event={event} detail={detail} m={m} /></Rise>
             ) : null}
             {detail.tables.map((table, n) => (
@@ -60,15 +62,15 @@ export function GamePage({ id, active = true }: { id: string; active?: boolean }
                 </Panel>
               </Rise>
             ))}
-            {!m.sides && event.ranking?.length && !detail.tables.length ? (
+            {showRanking ? (
               <Rise look={look} index={3}>
-                <Panel look={look} focusable={event.ranking.length <= TV_PANEL_ROWS}>
+                <Panel look={look} focusable={(event.ranking?.length ?? 0) <= TV_PANEL_ROWS}>
                   <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase', marginBottom: look.px(10) }}>{msg('sports.standingsTitle')}</Txt>
-                  <Ranking look={look} event={event} rows={event.ranking.length} size={14.5} focusRows={Platform.isTV && event.ranking.length > TV_PANEL_ROWS} />
+                  <Ranking look={look} event={event} rows={event.ranking?.length ?? 0} size={14.5} focusRows={Platform.isTV && (event.ranking?.length ?? 0) > TV_PANEL_ROWS} />
                 </Panel>
               </Rise>
             ) : null}
-          </View>
+          </View> : null}
           {detail.plays.length || m.phase === 'upcoming' || m.spoiler ? (
             <View style={{ flex: wide ? 1 : undefined, alignSelf: 'stretch' }}>
               <Rise look={look} index={2}><Plays look={look} plays={detail.plays} m={m} /></Rise>

@@ -28,7 +28,7 @@ export { commandOrigin, type CommandOrigin } from './store/command-failure';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
 export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse } from './wire';
 export type { LiveState, LiveTvAccess } from './store/live';
-export { entitiesKey, screenKey, type LiveEventsState, type LiveStreamPhase, type ScreenParams } from './store/live-events';
+export { entitiesKey, screenKey, spoilerFreeOf, type LiveEventsState, type LiveStreamPhase, type ScreenParams } from './store/live-events';
 export { backoffMs, isFavoriteCompetitor, isNewer, mergeEvents, probabilityFor, readLiveMessage, screenEvents, seriesPoints, sides, streamQuery, teamColor, venueText, withEvent, type LiveInterest } from './live/events';
 export { liveEventRef } from './protocol/events';
 export { hasLiveEvents, hasMultiview, type LiveEvents as LiveEventsApi, type LiveStreamQuery, type Multiview, type ScreenQuery } from './adapter/capabilities';

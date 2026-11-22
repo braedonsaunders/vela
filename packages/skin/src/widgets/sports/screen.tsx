@@ -9,11 +9,12 @@
 import { Component, memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Platform, ScrollView, Text, View, type TextStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { entitiesKey, isFavoriteCompetitor, msg, screenKey, type EntitiesSection, type EventsSection, type HeroSection, type LeaguesSection, type LiveEntity, type LiveEvent, type LiveLeague, type Screen, type ScheduleSection, type ScreenParams, type TableSection } from '@vela/core';
+import { entitiesKey, isFavoriteCompetitor, msg, screenKey, spoilerFreeOf, type EntitiesSection, type EventsSection, type HeroSection, type LeaguesSection, type LiveEntity, type LiveEvent, type LiveLeague, type Screen, type ScheduleSection, type ScreenParams, type TableSection } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useSportsLook, type SportsLook } from './look';
 import { EntityChip, EventCard, HeroCard, MiniCard, TableView, tableWidth } from './cards';
-import { Chip, Heading, Pill, Placeholder, Rise, Txt } from './parts';
+import { Chip, Glyph, Heading, Pill, Placeholder, Rise, Surface, Txt } from './parts';
+import { alpha } from './colour';
 import { leagueLabel } from './model';
 import { entityKey, leagueTeams, openingLeague, pickerLeagues } from './teams';
 
@@ -83,6 +84,9 @@ export function SportsScreen({ id, active }: SportsScreenProps) {
     <ScrollView testID={`sports-screen-${id}`} style={{ flex: 1 }} contentContainerStyle={{ paddingTop: look.barTop + look.px(look.tv ? 8 : 12), paddingBottom: look.px(64) }}
       showsVerticalScrollIndicator={!Platform.isTV}>
       {Platform.OS === 'web' ? <Text accessibilityRole="header" {...{ 'aria-level': 1 }} style={HIDDEN}>{screen.title}</Text> : null}
+      {!screen.sections.some(section => section.type === 'leagues') ? (
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: look.gutter, paddingBottom: look.px(14) }}><ScoresSwitch look={look} /></View>
+      ) : null}
       {screen.sections.slice(0, mounted).map((section, index) => (
         <SectionBoundary key={section.id} id={section.id}>
           <Rise look={look} index={Math.min(index, FIRST_SECTIONS)} style={{ marginBottom: look.px(section.type === 'leagues' ? 20 : 30) }}>
@@ -178,7 +182,42 @@ function Leagues({ look, section, selected, choose }: { look: SportsLook; sectio
       {section.leagues.map(league => (
         <Chip key={league.id} look={look} label={leagueLabel(league)} on={selected === league.id} onPress={() => choose(league.id)} testID={`sports-league-${league.id}`} />
       ))}
+      <ScoresSwitch look={look} />
     </ScrollView>
+  );
+}
+
+/** "Hide scores": the viewer's spoiler-free switch, beside the league chips. Shown once the
+ * preference is known and the server can change it; a change re-reads the screen. */
+function ScoresSwitch({ look }: { look: SportsLook }) {
+  const vela = useVela();
+  const on = useVelaState(spoilerFreeOf);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { void vela.liveEvents.loadPreferences(); }, [vela]);
+  if (on === undefined || !vela.liveEvents.canSetPreferences()) return null;
+  const height = look.px(36);
+  const track = look.px(30), knob = look.px(14);
+  return (
+    <Surface look={look} radius={height / 2} lift={1.06} testID="sports-hide-scores" label={msg('ui.hideScores')}
+      fill={on ? alpha(look.accent, 0.18) : alpha(look.ink, 0.08)} focusFill={on ? alpha(look.accent, 0.3) : alpha(look.ink, 0.18)}
+      onPress={() => { setFailed(false); vela.liveEvents.setSpoilerFree(!on).catch(() => setFailed(true)); }}
+      style={{ height, paddingLeft: look.px(14), paddingRight: look.px(10), flexDirection: 'row', alignItems: 'center', gap: look.px(9), marginLeft: look.px(10) }}>
+      <Glyph name="eye-off" size={look.px(16)} color={on ? look.accent : look.inkSecondary} />
+      <Txt look={look} size={14} weight={on ? 700 : 560} color={failed ? look.live : look.ink} lines={1}>{msg(failed ? 'sports.hideScoresFailed' : 'ui.hideScores')}</Txt>
+      <SwitchMark look={look} on={on} track={track} knob={knob} />
+    </Surface>
+  );
+}
+
+function SwitchMark({ look, on, track, knob }: { look: SportsLook; on: boolean; track: number; knob: number }) {
+  const t = useSharedValue(on ? 1 : 0);
+  useEffect(() => { t.value = look.still ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 220 }); }, [on, look.still, t]);
+  const pad = (look.px(18) - knob) / 2;
+  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: t.value * (track - knob - pad * 2) }] }));
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: track, height: look.px(18), borderRadius: look.px(9), padding: pad, backgroundColor: on ? look.accent : alpha(look.ink, 0.22) }}>
+      <Animated.View style={[{ width: knob, height: knob, borderRadius: knob / 2, backgroundColor: on ? look.onAccent : look.ink }, knobStyle]} />
+    </View>
   );
 }
 
