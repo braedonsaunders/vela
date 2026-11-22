@@ -386,7 +386,6 @@ export class SubtitleSession {
     let packets: SubtitlePacket[] = [],
       end = Infinity,
       fromStart = true,
-      history = true,
       content: string | undefined;
     if (track.delivery.kind === 'external') {
       if (track.delivery.format === 'webvtt-window') return this.progressive(track, time, signal);
@@ -403,7 +402,8 @@ export class SubtitleSession {
       const window = await this.container.packets(track.id, Math.max(0, time), end, signal);
       packets = window.packets;
       fromStart = window.fromStart;
-      history = window.completeHistory;
+      // Text windows need not be complete from 0:00: a mid-file window carries
+      // the container's bounded lookback, which covers any plausible text cue.
       if (
         packets.length > 8192 ||
         packets.reduce((n, packet) => n + packet.data.length, 0) > 16 * 1024 * 1024
@@ -412,7 +412,6 @@ export class SubtitleSession {
     }
     signal.throwIfAborted();
     if (track.codec === 'ass' || track.codec === 'ssa') {
-      if (!history) throw new Error('Exact ASS seek history is unavailable');
       const header =
         content ?? decodeSubtitleText(this.container!.configuration(track.id) ?? new Uint8Array());
       const events = content === undefined ? packets.map(assEvent) : undefined,
@@ -472,7 +471,6 @@ export class SubtitleSession {
         if (display) paintPGS(context, display, surface.viewport());
       };
     } else {
-      if (!history) throw new Error('Exact subtitle seek history is unavailable');
       let cues: SubtitleTextCue[];
       if (content !== undefined)
         cues = parseTextSubtitles(content, track.codec === 'webvtt' ? 'webvtt' : 'srt');

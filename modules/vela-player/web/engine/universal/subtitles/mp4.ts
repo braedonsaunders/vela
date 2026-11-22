@@ -317,7 +317,7 @@ export class MP4Subtitles implements SubtitleContainer {
           data: await scope.read(sample.offset, sample.size),
         });
       }
-    return { packets, fromStart: true, completeHistory: true };
+    return { packets, fromStart: true, completeHistory: true, historyFrom: 0 };
   }
   dispose() {
     this.disposed = true;

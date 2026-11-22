@@ -48,6 +48,37 @@ const codecs: Record<string, SubtitleCodec> = {
   'S_HDMV/PGS': 'pgs',
 };
 const MAX_PACKET_BYTES = 16 * 1024 * 1024;
+/** A text event shown at T began at most this long before T, in practice. */
+export const TEXT_LOOKBACK_SECONDS = 30;
+/** The lookback stays well inside the source reader's 64-MiB back buffer. */
+export const TEXT_LOOKBACK_BYTES = 16 * 1024 * 1024;
+const TEXT_LOOKBACK_CLUSTERS = 64;
+/** Where a mid-file text window starts reading backward, from the file's
+ * (usually video-only) Cues: the latest indexed cluster at or before
+ * start - TEXT_LOOKBACK_SECONDS, or the furthest one back within the byte
+ * bound when the bitrate is too high for the whole span. `initial` is the
+ * cluster the forward window scan starts from; null means no earlier cluster. */
+export function textLookbackPlan(
+  cues: readonly { time: number; cluster: number }[],
+  firstCluster: number,
+  start: number,
+  initial: number,
+): { cluster: number; time: number } | null {
+  const target = start - TEXT_LOOKBACK_SECONDS,
+    floor = initial - TEXT_LOOKBACK_BYTES;
+  if (initial <= firstCluster) return null;
+  if (target <= 0 && firstCluster >= floor) return { cluster: firstCluster, time: 0 };
+  let latest: { cluster: number; time: number } | null = null,
+    earliest: { cluster: number; time: number } | null = null;
+  for (const cue of cues) {
+    if (cue.time > start) break;
+    if (cue.cluster < floor || cue.cluster >= initial) continue;
+    if (cue.time <= target) latest = cue;
+    else earliest ??= cue;
+  }
+  const chosen = latest ?? earliest;
+  return chosen && { cluster: chosen.cluster, time: chosen.time };
+}
 /** A bounded EBML document in already-acquired bytes, without per-field reads. */
 function* memoryElements(
   bytes: Uint8Array,
@@ -133,7 +164,14 @@ export class MatroskaSubtitles implements SubtitleContainer {
   private segment!: Element;
   private firstCluster = 0;
   private scale = 0.001;
-  private history: { id: string; start: number; end: number; packets: SubtitlePacket[] } | null = null;
+  private history: {
+    id: string;
+    start: number;
+    end: number;
+    from: number;
+    complete: boolean;
+    packets: SubtitlePacket[];
+  } | null = null;
   private size = 0;
   private disposed = false;
   private seeks = new Map<number, number>();
@@ -611,6 +649,48 @@ export class MatroskaSubtitles implements SubtitleContainer {
     }
     return { next: cluster.unknown ? at : cluster.end, time: time * this.scale, packets };
   }
+  /** Text events active at `start` that began before the indexed cluster the
+   * window scan starts from. Release files usually index only video, so a
+   * mid-file window is extended backward by a bounded span of clusters found
+   * through those video Cues instead of requiring history from 0:00. Text
+   * events are short; anything longer than this span is the accepted gap.
+   * Failure here never fails the window: it only narrows the reported history. */
+  private async lookback(
+    signal: AbortSignal,
+    track: Track,
+    start: number,
+    initial: number,
+    initialTime: number,
+    visited: ReadonlySet<number>,
+  ): Promise<{ packets: SubtitlePacket[]; from: number }> {
+    const narrow = { packets: [], from: initialTime };
+    const plan = textLookbackPlan(this.cues!, this.firstCluster, start, initial);
+    if (!plan) return narrow;
+    // Its own operation scope: the window scan's budget and timeout stay unchanged.
+    const scope = this.scope(signal),
+      packets: SubtitlePacket[] = [];
+    try {
+      let clusters = 0;
+      for (let at = plan.cluster; at < initial; ) {
+        if (++clusters > TEXT_LOOKBACK_CLUSTERS) throw new Error('Subtitle lookback exceeds cluster bound');
+        const element = await scope.ebml(at, this.segment.end);
+        if (element.id !== ID.cluster) {
+          if (element.unknown) throw new Error('Invalid subtitle lookback element');
+          at = element.end;
+          continue;
+        }
+        const result = await this.cluster(scope, at, track, start, start);
+        // An undated event cannot be placed, so it is not carried from the past.
+        if (!visited.has(at)) packets.push(...result.packets.filter((packet) => packet.duration !== null));
+        if (result.next <= at) throw new Error('Invalid subtitle cluster boundary');
+        at = result.next;
+      }
+    } catch (error) {
+      signal.throwIfAborted();
+      return narrow;
+    }
+    return { packets, from: plan.time };
+  }
   async packets(id: string, start: number, end: number, signal: AbortSignal): Promise<SubtitlePacketWindow> {
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || end - start > 60)
       throw new Error('Invalid subtitle packet window');
@@ -640,7 +720,12 @@ export class MatroskaSubtitles implements SubtitleContainer {
     }
     let clusters = 0;
     for (let at = initial; at < this.segment.end; ) {
-      if (++clusters > 128) throw new Error('Subtitle seek acquisition index is unavailable');
+      if (++clusters > 128)
+        throw new Error(
+          this.cues!.length
+            ? 'Subtitles cannot be read at this position: the subtitle window is too large'
+            : 'Subtitles cannot be read at this position: the file has no seek index',
+        );
       const element = await scope.ebml(at, this.segment.end);
       if (element.id !== ID.cluster) {
         if (element.unknown) break;
@@ -656,35 +741,51 @@ export class MatroskaSubtitles implements SubtitleContainer {
     if (packets.length > 8192) throw new Error('Subtitle packet window exceeds bound');
     scope.signal.throwIfAborted();
     const fromStart = initial === this.firstCluster,
-      previous = this.history;
+      previous = this.history,
+      continuing = !!previous && previous.id === id && start >= previous.start && start <= previous.end;
+    if (track.public.codec === 'pgs')
+      return {
+        packets: packets.sort((a, b) => a.time - b.time),
+        fromStart,
+        completeHistory: fromStart || continuing,
+        historyFrom: fromStart ? 0 : (nearest?.time ?? 0),
+      };
     // Cues need not index every text event. Only a scan from the beginning, or
     // overlapping continuation of such a scan, proves long-cue history complete.
-    const completeHistory =
-      fromStart || (!!previous && previous.id === id && start >= previous.start && start <= previous.end);
-    if (completeHistory && track.public.codec !== 'pgs') {
-      const prior =
-        previous?.id === id && start >= previous.start && start <= previous.end
-          ? previous.packets.filter(
-              (packet) => packet.duration === null || packet.time + packet.duration > start,
-            )
-          : [];
-      const unique = new Map<string, SubtitlePacket[]>();
-      for (const packet of [...prior, ...packets]) {
-        const key = [packet.time, packet.duration, packet.data.length].join(':'),
-          bucket = unique.get(key) ?? [];
-        if (!bucket.some((other) => other.data.every((byte, index) => byte === packet.data[index])))
-          bucket.push(packet);
-        unique.set(key, bucket);
-      }
-      packets.splice(0, packets.length, ...[...unique.values()].flat());
-      if (
-        packets.length > 8192 ||
-        packets.reduce((sum, packet) => sum + packet.data.length, 0) > 16 * 1024 * 1024
-      )
-        throw new Error('Subtitle history exceeds bound');
-      this.history = { id, start, end, packets: [...packets] };
+    // Any other text window carries a bounded lookback instead (see lookback()).
+    let completeHistory: boolean, historyFrom: number;
+    if (fromStart) {
+      completeHistory = true;
+      historyFrom = 0;
+    } else if (continuing) {
+      completeHistory = previous!.complete;
+      historyFrom = previous!.from;
+    } else {
+      const back = await this.lookback(signal, track, start, initial, nearest?.time ?? 0, visited);
+      packets.push(...back.packets);
+      historyFrom = back.from;
+      completeHistory = historyFrom === 0;
     }
-    return { packets: packets.sort((a, b) => a.time - b.time), fromStart, completeHistory };
+    const prior = continuing
+      ? previous!.packets.filter((packet) => packet.duration === null || packet.time + packet.duration > start)
+      : [];
+    const unique = new Map<string, SubtitlePacket[]>();
+    for (const packet of [...prior, ...packets]) {
+      const key = [packet.time, packet.duration, packet.data.length].join(':'),
+        bucket = unique.get(key) ?? [];
+      if (!bucket.some((other) => other.data.every((byte, index) => byte === packet.data[index])))
+        bucket.push(packet);
+      unique.set(key, bucket);
+    }
+    packets.splice(0, packets.length, ...[...unique.values()].flat());
+    if (
+      packets.length > 8192 ||
+      packets.reduce((sum, packet) => sum + packet.data.length, 0) > 16 * 1024 * 1024
+    )
+      throw new Error('Subtitle history exceeds bound');
+    signal.throwIfAborted();
+    this.history = { id, start, end, from: historyFrom, complete: completeHistory, packets: [...packets] };
+    return { packets: packets.sort((a, b) => a.time - b.time), fromStart, completeHistory, historyFrom };
   }
   dispose() {
     this.disposed = true;

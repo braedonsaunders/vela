@@ -87,6 +87,8 @@ export interface SubtitleFont {
 export interface SubtitlePacketWindow {
   packets: SubtitlePacket[];
   completeHistory: boolean;
+  /** Every event starting at or after this time was read (0 with complete history). */
+  historyFrom: number;
   fromStart: boolean;
 }
 export interface SubtitleContainer {
