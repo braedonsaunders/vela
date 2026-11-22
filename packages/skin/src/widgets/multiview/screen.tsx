@@ -9,7 +9,7 @@
 // (layout.ts), so layout changes and full screen animate without resizing a playing surface. The
 // focusable press targets are plain views at the slots' rects, so TV focus sees real geometry.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
-import { AccessibilityInfo, Animated, Easing, FlatList, PixelRatio, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, FlatList, PixelRatio, Platform, StyleSheet, View, useTVEventHandler, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import type { VelaPlayerViewProps } from '@vela/player-api';
 import { msg, type GuideChannel } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
@@ -26,6 +26,7 @@ const TOUCH = !TV && Platform.OS !== 'web';
 /** Tile motion: a long, soft ease-out, the same for layout, full screen and entry. */
 const MOVE = { duration: 460, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
 const FADE = { duration: 320, easing: Easing.out(Easing.cubic) };
+const useTVEvents = typeof useTVEventHandler === 'function' ? useTVEventHandler : (_handler: (event: { eventType?: string }) => void) => undefined;
 
 export interface MultiviewScreenProps {
   controller: MultiviewController;
@@ -58,8 +59,8 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
   const view = useMultiviewView(controller);
   const look = useGuideLook();
   const still = useStill();
-  const window = useWindowDimensions();
-  const [size, setSize] = useState<Size>({ width: window.width, height: window.height });
+  const screen = useWindowDimensions();
+  const [size, setSize] = useState<Size>({ width: screen.width, height: screen.height });
   const [panel, setPanel] = useState<Panel | null>(null);
   const byId = useMemo(() => new Map(channels.map(channel => [channel.id, channel])), [channels]);
   const gap = TV ? 14 : Platform.OS === 'web' ? 10 : 6;
@@ -87,9 +88,26 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
   };
   const holding = panelOpen || view.fullscreen >= 0;
   useEffect(() => (holding ? holdBack(() => back.current()) : undefined), [holding]);
+  // Full screen, left and right move it to the neighbouring tile (and the audio with it).
+  const flip = useRef<(step: 1 | -1) => boolean>(() => false);
+  flip.current = step => {
+    if (panelOpen || view.fullscreen < 0 || view.tiles.length < 2) return false;
+    const index = view.tiles.findIndex(tile => tile.slot === view.fullscreen);
+    const next = view.tiles[(index + step + view.tiles.length) % view.tiles.length]!;
+    controller.toggleFullscreen(next.slot);
+    return true;
+  };
+  useTVEvents(event => {
+    if (event.eventType === 'right') flip.current(1);
+    else if (event.eventType === 'left') flip.current(-1);
+  });
   useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (Platform.OS !== 'web') return;
     const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        if (flip.current(event.key === 'ArrowRight' ? 1 : -1)) event.preventDefault();
+        return;
+      }
       if (event.key !== 'Escape') return;
       if (!back.current()) onLeave();
     };
@@ -135,6 +153,15 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
       {count === 0 ? <Empty look={look} onAdd={() => setPanel({ slot: -1, mode: 'add' })} onLeave={onLeave} preferred={!panelOpen} /> : null}
       {view.phase === 'failed' ? <Notice look={look} text={view.failure ?? msg('multiview.failed')} /> : null}
       {hint}
+      {!TV && count > 0 ? (
+        <View style={{ position: 'absolute', left: gap + 8, bottom: gap + 8, zIndex: 6 }}>
+          <Press label={msg('multiview.close')} onPress={() => { if (!back.current()) onLeave(); }} style={({ hovered }) => ({
+            height: 36, paddingHorizontal: 14, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 6,
+            backgroundColor: hovered ? 'rgba(11, 15, 26, 0.92)' : 'rgba(11, 15, 26, 0.72)', borderWidth: 1, borderColor: look.edge })}>
+            <Line look={look} size={13} weight={650}>{view.fullscreen >= 0 ? msg('multiview.backToGrid') : msg('multiview.close')}</Line>
+          </Press>
+        </View>
+      ) : null}
       <TilePanel look={look} still={still} open={panelOpen} panel={panel} view={view} channels={channels} byId={byId}
         controller={controller} onClose={() => setPanel(null)} onAdd={() => setPanel({ slot: -1, mode: 'add' })} onMode={mode => setPanel(current => current && current.slot >= 0 ? { slot: current.slot, mode } : current)} />
     </View>
