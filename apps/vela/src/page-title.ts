@@ -13,6 +13,7 @@ function pagePart(pathname: string, query: URLSearchParams, state: Titles): stri
     case '': return searching ? msg('page.searchFor', { query: searching }) : '';
     case 'library': return state.libraries.value?.find(library => library.id === id)?.name ?? '';
     case 'title':
+    case 'read':
     case 'watch': return state.titles[id]?.value?.title[0]?.name ?? '';
     case 'collection': return state.collections[id]?.value?.name ?? '';
     case 'row': return state.rows[id]?.value?.name ?? '';
@@ -21,6 +22,9 @@ function pagePart(pathname: string, query: URLSearchParams, state: Titles): stri
     case 'live': return msg('ui.live');
     case 'screen': return state.home?.value?.screens.find(screen => screen.id === id)?.title ?? '';
     case 'playlists': return msg('page.playlists');
+    case 'multiview': return msg('multiview.title');
+    // A game's names live in the live event store; the server's name stands until then.
+    case 'game': return '';
     case 'sign-in':
     case 'connect': return msg('ui.signIn');
     case 'player': return '';

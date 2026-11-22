@@ -17,6 +17,9 @@ test('each route names what is on show, then the server', () => {
   expect(pageTitle('/search', '?q=orbit', state, 'Vela Studio')).toBe('Search: orbit – Vela Studio');
   expect(pageTitle('/live', '', state, 'Vela Studio')).toBe('Live TV – Vela Studio');
   expect(pageTitle('/', '', { ...(state as object), search: { query: 'comet' } } as never, 'Vela Studio')).toBe('Search: comet – Vela Studio');
+  expect(pageTitle('/multiview', '', state, 'Vela Studio')).toBe('Multiview – Vela Studio');
+  expect(pageTitle('/read/film-1', '', state, 'Vela Studio')).toBe('The Last Observatory – Vela Studio');
+  expect(pageTitle('/game/nhl-1', '', state, 'Vela Studio')).toBe('Vela Studio');
   expect(pageTitle('/nowhere', '', state, 'Vela Studio')).toBe('Page not found – Vela Studio');
 });
 
