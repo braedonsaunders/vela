@@ -3,7 +3,7 @@ import type { Credentials } from '../index';
 import { VelaError } from '../errors';
 import { readEvents, type EventHandler } from '../../protocol/sse';
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 type Token = V.Tokens | null;
 
 export interface RequestOptions {
@@ -79,6 +79,8 @@ export class EtherTransport {
     }
     if (response.status === 304 && cached) return cached.body as T;
     if (!response.ok) throw await this.failure(response, signal);
+    // A mutation may answer with no body (favourites, multiview ends).
+    if (response.status === 204) return undefined as T;
     const value = await response.json() as T;
     signal?.throwIfAborted();
     const etag = response.headers.get('etag');

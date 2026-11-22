@@ -108,7 +108,12 @@ export interface HomeModel {
   descriptiveAvailable: boolean;
   trailerPreviewAvailable: boolean;
   playlistsAvailable: boolean;
+  /** Plugin screens from bootstrap navigation (Sports), as top-level sections after Live TV. */
+  screens: ScreenNav[];
 }
+
+/** A plugin screen the viewer may open (bootstrap `navigation`). */
+export interface ScreenNav { id: string; title: string; icon: string }
 
 export interface Rating {
   /** `rt-critics`, `rt-audience`, or the wire source (`imdb`, `tmdb`, …). */

@@ -46,6 +46,8 @@ export interface PlaybackState {
    * engines receive `plan`, which a refresh never touches. Null until a read describes one.
    */
   versions: SessionVersions | null;
+  /** The live event on air on this live channel (a game the server matched), for the score bug; else null. */
+  liveEvent?: V.LiveEventRef | null;
 }
 
 export const initialPlayback: PlaybackState = {
@@ -60,6 +62,7 @@ export const initialPlayback: PlaybackState = {
   retryAttempt: 0,
   live: null,
   versions: null,
+  liveEvent: null,
 };
 
 /** The media authorization the trusted host passes to `VelaPlayer.setMediaAccess`. */
@@ -301,7 +304,11 @@ export class Playback {
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
         try {
           if (hasEventStream(adapter)) {
-            await followSession(adapter, present, sessionId, show, controller.signal);
+            await followSession(adapter, present, sessionId, show, controller.signal, liveEvent => {
+              if (this.run !== run || controller.signal.aborted) return;
+              const current = this.box.get().playback.liveEvent;
+              if (current?.id !== liveEvent?.id || current?.feed !== liveEvent?.feed) this.patch({ liveEvent });
+            });
             if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
             break;
           }

@@ -282,3 +282,37 @@ export function hasLibraryFacets(adapter: ServerAdapter): adapter is ServerAdapt
 export function supportsLibraryBrowse(adapter: ServerAdapter, library: V.Library): boolean {
   return hasLibraryFacets(adapter) && (library.tabs !== undefined || library.browse.filters.facets !== undefined);
 }
+
+/** What a live stream connection follows: events by id, whole screens, and the viewer's alerts. */
+export interface LiveStreamQuery { events: string[]; screens: string[]; alerts: boolean }
+export interface ScreenQuery { league?: string; date?: string }
+export interface LiveEntitiesQuery { feed?: string; league?: string; q?: string }
+
+/** Live events (Ether Sports): plugin screens, event snapshots and details, the pushed update
+ * stream, spoiler reveals and entity favourites. Offered when `features.liveEvents` is. */
+export interface LiveEvents {
+  screen(id: string, query?: ScreenQuery, signal?: AbortSignal): Promise<V.Screen>;
+  liveEvents(ids: string[]): Promise<V.LiveEventsResponse>;
+  liveEvent(id: string): Promise<V.LiveEventDetail>;
+  /** The viewer reveals a spoiler-free event's result; the answer is not relied on. */
+  revealLiveEvent(id: string, request: V.Mutation): Promise<unknown>;
+  liveEntities(query: LiveEntitiesQuery): Promise<V.LiveEntitiesResponse>;
+  setEntityFavorite(key: string, favorite: boolean, request: V.Mutation): Promise<unknown>;
+  liveTicker(screen?: string): Promise<V.LiveEventsResponse>;
+  /** One connection to `/live/stream`; resolves when the server closes it. */
+  streamLive(query: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
+}
+export function hasLiveEvents(adapter: ServerAdapter): adapter is ServerAdapter & LiveEvents {
+  return ['screen', 'liveEvents', 'liveEvent', 'revealLiveEvent', 'liveEntities', 'setEntityFavorite', 'liveTicker', 'streamLive'].every(name =>
+    name in adapter && typeof (adapter as unknown as Record<string, unknown>)[name] === 'function');
+}
+
+/** Live TV multiview groups: tiles join with PlaybackRequest.multiview and count as one stream. */
+export interface Multiview {
+  createMultiview(request: V.MultiviewRequest): Promise<V.MultiviewGroup>;
+  endMultiview(groupId: string, request: V.Mutation): Promise<unknown>;
+}
+export function hasMultiview(adapter: ServerAdapter): adapter is ServerAdapter & Multiview {
+  return 'createMultiview' in adapter && typeof adapter.createMultiview === 'function'
+    && 'endMultiview' in adapter && typeof adapter.endMultiview === 'function';
+}

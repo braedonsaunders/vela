@@ -13,11 +13,16 @@ import type {
   FallbackCommand,
   Interactions,
   LibraryLive,
+  LiveEntitiesQuery,
+  LiveEvents,
+  LiveStreamQuery,
   LiveTv,
+  Multiview,
   PasswordSignIn,
   PathSwitching,
   ProactiveFallback,
   QuickConnectSignIn,
+  ScreenQuery,
   SwitchCommand,
   TrackChanges,
   TrackCommand,
@@ -43,7 +48,8 @@ const DESCRIBE_REUSE_MS = 5000;
 
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
-  AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions {
+  AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
+  LiveEvents, Multiview {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -518,6 +524,50 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     if (!limits || request.channelIds.length > limits.maxChannels || Date.parse(request.until) - Date.parse(request.from) > limits.maxWindowMinutes * 60000) return null;
     // Conditional POST answers are keyed by the complete body as well as viewer/policy.
     return this.http.request<V.GuideWindowResponse>('POST', '/live/guide/window', request, CACHED);
+  }
+
+  // Live events and plugin screens (features.liveEvents). Live data is never cached here: the
+  // stream keeps it current and a stale answer would show an old score.
+
+  screen(id: string, screenQuery: ScreenQuery = {}, signal?: AbortSignal) {
+    return this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal });
+  }
+
+  liveEvents(ids: string[]) {
+    return this.http.request<V.LiveEventsResponse>('GET', `/live/events${query({ ids: ids.length ? ids.join(',') : undefined })}`);
+  }
+
+  liveEvent(id: string) {
+    return this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`);
+  }
+
+  revealLiveEvent(id: string, request: V.Mutation) {
+    return this.http.request<unknown>('POST', `/live/events/${segment(id)}/reveal`, request);
+  }
+
+  liveEntities(entities: LiveEntitiesQuery) {
+    return this.http.request<V.LiveEntitiesResponse>('GET', `/live/entities${query(entities)}`);
+  }
+
+  setEntityFavorite(key: string, favorite: boolean, request: V.Mutation) {
+    return this.http.request<unknown>(favorite ? 'PUT' : 'DELETE', `/favorites/entities/${segment(key)}`, request);
+  }
+
+  liveTicker(screen?: string) {
+    return this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
+  }
+
+  streamLive(live: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+    const path = `/live/stream${query({ events: live.events.join(',') || undefined, screens: live.screens.join(',') || undefined, alerts: live.alerts ? '1' : undefined })}`;
+    return this.http.stream(path, {}, onEvent, signal);
+  }
+
+  createMultiview(request: V.MultiviewRequest) {
+    return this.http.request<V.MultiviewGroup>('POST', '/multiview', request);
+  }
+
+  endMultiview(groupId: string, request: V.Mutation) {
+    return this.http.request<unknown>('DELETE', `/multiview/${segment(groupId)}`, request);
   }
 
   private sessionCommand(sessionId: string, command: V.SessionCommand) {

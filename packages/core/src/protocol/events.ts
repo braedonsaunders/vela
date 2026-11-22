@@ -1,4 +1,4 @@
-import type { PlaybackPlan, SessionEvent, SessionSnapshot } from '../wire';
+import type { LiveEventRef, PlaybackPlan, SessionEvent, SessionSnapshot } from '../wire';
 import type { ServerAdapter } from '../adapter';
 import type { EventStream } from '../adapter/capabilities';
 
@@ -10,6 +10,8 @@ const cursors = new Map<string, string>();
  * then follows the stream from the last cursor seen (or the snapshot's). Every plan goes to
  * `onPlan` after `present` validates it for the server it came from. Resolves when the server
  * closes the stream; an unknown or malformed event rejects, so a retry starts with a new snapshot.
+ * The live event on air (a live channel showing a game) goes to `onLiveEvent`, from the snapshot
+ * and from the stream's `liveEvent` events.
  */
 export async function followSession(
   api: ServerAdapter & EventStream,
@@ -17,13 +19,19 @@ export async function followSession(
   sessionId: string,
   onPlan: (plan: PlaybackPlan) => void,
   signal?: AbortSignal,
+  onLiveEvent?: (liveEvent: LiveEventRef | null) => void,
 ): Promise<void> {
   let snapshot: SessionSnapshot = await api.sessionSnapshot(sessionId);
   let revision = snapshot.revision;
   signal?.throwIfAborted();
   onPlan(present(snapshot.plan));
+  if (snapshot.liveEvent !== undefined) onLiveEvent?.(liveEventRef(snapshot.liveEvent));
   const cursor = cursors.get(sessionId) ?? snapshot.cursor;
   await api.streamSession(sessionId, cursor, async event => {
+    if (event.event === 'liveEvent') {
+      onLiveEvent?.(liveEventRef((JSON.parse(event.data) as { liveEvent?: unknown }).liveEvent));
+      return;
+    }
     const value = JSON.parse(event.data) as SessionEvent;
     if (value.sessionId !== sessionId || !value.cursor || typeof value.revision !== 'number') {
       throw new Error('Invalid session event');
@@ -56,4 +64,10 @@ export async function followSession(
 /** A session that has ended needs no resumption cursor. */
 export function forgetSession(sessionId: string): void {
   cursors.delete(sessionId);
+}
+
+/** A wire `liveEvent` value: an `{id, feed}` reference, or null for none (malformed reads as none). */
+export function liveEventRef(value: unknown): LiveEventRef | null {
+  const ref = value as LiveEventRef | null | undefined;
+  return ref && typeof ref.id === 'string' && ref.id && typeof ref.feed === 'string' ? { id: ref.id, feed: ref.feed } : null;
 }

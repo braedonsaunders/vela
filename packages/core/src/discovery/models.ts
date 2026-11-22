@@ -314,7 +314,18 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     descriptiveAvailable: features.descriptiveSearch.available,
     trailerPreviewAvailable: features.trailerPreview?.available ?? false,
     playlistsAvailable: features.playlists?.available ?? false,
+    screens: screenNavigation(data.navigation),
   };
+}
+
+/** Bootstrap navigation's plugin screens, once each, in the server's order. Unknown kinds are skipped. */
+export function screenNavigation(navigation: Bootstrap['navigation']): HomeModel['screens'] {
+  const seen = new Set<string>();
+  return (Array.isArray(navigation) ? navigation : []).flatMap(entry => {
+    if (entry?.kind !== 'screen' || typeof entry.id !== 'string' || !entry.id || seen.has(entry.id)) return [];
+    seen.add(entry.id);
+    return [{ id: entry.id, title: typeof entry.title === 'string' && entry.title ? entry.title : entry.id, icon: typeof entry.icon === 'string' ? entry.icon : '' }];
+  });
 }
 
 /** A title's technical summary stays compact; individual tracks belong in the player menus. */

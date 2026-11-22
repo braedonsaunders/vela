@@ -7,6 +7,8 @@ import {
   hasDeviceGrantSignIn,
   hasLiveTv,
   hasLibraryLive,
+  hasLiveEvents,
+  hasMultiview,
   hasPasswordSignIn,
   hasReading,
   hasProactiveFallback,
@@ -57,6 +59,9 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(description.features.mediaClasses ? { mediaClasses: description.features.mediaClasses } : {}),
       ...(description.features.audioPlayback ? { audioPlayback: description.features.audioPlayback } : {}),
       ...(hasReading(adapter) && description.features.reading ? { reading: description.features.reading } : {}),
+      // Live events and multiview (Sports): operations, so the adapter must offer them too.
+      ...(hasLiveEvents(adapter) && description.features.liveEvents ? { liveEvents: description.features.liveEvents } : {}),
+      ...(hasMultiview(adapter) && description.features.multiview ? { multiview: description.features.multiview } : {}),
     },
   };
 }

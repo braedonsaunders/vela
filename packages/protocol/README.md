@@ -59,6 +59,23 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /sessions/:id/trickplay/:width/:sheet.jpg | bearer + device; optional If-None-Match | private JPEG sprite sheet or 304 |
 | GET | /live/channels | cursor, limit (query) | Page<Channel> |
 | GET | /live/guide | GuideQuery (query) | GuideResponse |
+| GET | /screens/:id | league, date (query) | Screen (features.liveEvents) |
+| GET | /live/events | ids (query, comma-separated) | LiveEventsResponse |
+| GET | /live/events/:id | — | LiveEventDetail |
+| POST | /live/events/:id/reveal | Mutation | LiveEventDetail (spoiler-free viewers) |
+| GET | /live/stream | events, screens (comma-separated), alerts=1 (query) | SSE `update` LiveStreamUpdate, `alert` LiveAlert, `heartbeat` (25 s) |
+| GET | /live/ticker | screen (query) | LiveEventsResponse |
+| GET | /live/entities | feed, league, q (query) | LiveEntitiesResponse |
+| PUT, DELETE | /favorites/entities/:key | Mutation | Ack or 204 |
+| POST | /multiview | MultiviewRequest | MultiviewGroup (features.multiview) |
+| DELETE | /multiview/:groupId | Mutation | Ack or 204 |
+
+Live events, plugin screens and multiview are in [live-events.ts](live-events.ts). Bootstrap
+`navigation` lists plugin screens (`{kind: 'screen', id, title, icon}`) as top-level sections.
+A live-channel session's snapshot carries `liveEvent` (`{id, feed}` or null) and its event
+stream sends `event: liveEvent` with `{liveEvent}` when the programme on air changes. A
+multiview tile past an IPTV provider's connection cap is refused with HTTP 409
+`provider_connection_cap` (class `capacity`, `details: {provider, max, inUse}`).
 
 Guide `channelIds` is a comma-separated list; window is half-open `[from,until)`;
 return programmes overlapping the window, with original untrimmed times. Maximum

@@ -1,4 +1,6 @@
 /** Vela v0. All durations/positions are seconds, rates bits/second, timestamps RFC3339 UTC. */
+import type { LiveEventRef, MultiviewTile, NavigationEntry, ProviderCapDetails } from './live-events';
+export type * from './live-events';
 export type ID = string;
 export type Timestamp = string;
 export type Cursor = string;
@@ -42,7 +44,11 @@ export interface ServerCapabilities {
     /** POST /titles/:id/read and reading progress, for these formats. */
     reading?: Feature & { formats: ReadingFormat[] };
     /** Audio-only plans (PlaybackPlan.media = 'audio'). */
-    audioPlayback?: Feature };
+    audioPlayback?: Feature;
+    /** Live events: /live/events, /live/stream, screens and entity favourites (live-events.ts). */
+    liveEvents?: Feature;
+    /** Live TV multiview groups: POST /multiview, PlaybackRequest.multiview. */
+    multiview?: Feature & { maxTiles: number } };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -141,7 +147,8 @@ export interface HeroAction { kind: 'resume' | 'play' | 'details'; titleId: ID; 
 export interface Hero { title: Title; receiptToken: string; reason: HeroReason; action: HeroAction;
   /** Short supporting/reason text, not the primary action button label. */
   label?: string; previewOnFocus?: boolean; trailer?: Extra }
-export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor }
+export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor;
+  /** Plugin screens the viewer may open, as top-level sections after Live TV. */ navigation?: NavigationEntry[] }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }
 export interface SearchRequest extends Mutation, SearchOptions { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
 export interface LiveSearchResults { channels: Channel[]; programmes: Programme[]; programmeChannels?: Channel[] }
@@ -236,7 +243,8 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
 export type PlaybackTarget = { titleId: ID; channelId?: never; extraId?: never } |
   { channelId: ID; titleId?: never; extraId?: never } | { extraId: ID; titleId?: never; channelId?: never };
 export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabilities; positionSeconds?: number; mediaSourceId?: ID;
-  versionId?: ID; audioTrackId?: ID; subtitleTrackId?: ID | null; allowTranscode?: boolean; liveMode?: 'adaptive' | 'low-delay' };
+  versionId?: ID; audioTrackId?: ID; subtitleTrackId?: ID | null; allowTranscode?: boolean; liveMode?: 'adaptive' | 'low-delay';
+  /** A live-channel tile of a multiview group (features.multiview). */ multiview?: MultiviewTile };
 export type SessionCommand = Mutation & Generations & (
   { kind: 'seek'; positionSeconds: number } | { kind: 'pause' | 'resume' | 'stop' } |
   { kind: 'tracks'; audioTrackId?: ID; subtitleTrackId?: ID | null } |
@@ -249,7 +257,9 @@ export interface PlayerObservation extends Mutation, Generations { sequence: num
   error?: { class: 'source' | 'decoder' | 'transient'; message: string } }
 export interface SessionSnapshot { cursor: Cursor; revision: number; plan: PlaybackPlan;
   /** Server publication does not prove transfer, accepted buffer, or playback progress. */
-  publishedRanges: TimeRange[]; lastObservationSequence?: number }
+  publishedRanges: TimeRange[]; lastObservationSequence?: number;
+  /** The live event on air on a live channel; null when none matches. Also streamed as `event: liveEvent`. */
+  liveEvent?: LiveEventRef | null }
 export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } & (
   { type: 'snapshot'; snapshot: SessionSnapshot } | { type: 'plan'; plan: PlaybackPlan } |
   { type: 'error'; error: ProtocolError } | { type: 'ended'; reason: string });
@@ -258,7 +268,9 @@ export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'sourc
   requestId?: ID; currentGenerations?: Generations;
   suggest?: { maxChannels: number; maxWindowMinutes: number };
   /** Attempted delivery labels (not path IDs) and human-readable diagnostics. */
-  rejectedPaths?: { path: string; reasons: string[] }[] }
+  rejectedPaths?: { path: string; reasons: string[] }[];
+  /** Typed facts for some codes: `provider_connection_cap` carries ProviderCapDetails. */
+  details?: ProviderCapDetails | Record<string, unknown> }
 export interface ErrorResponse { error: ProtocolError }
 export interface LiveGuide { id: ID; name: string }
 export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string; guides?: LiveGuide[] }

@@ -1,12 +1,13 @@
-import type { PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../packages/protocol/types';
+import type { LiveEventRef, PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../packages/protocol/types';
 import { faults, mediaRoot, fixtureDurationSeconds } from './media';
 import { liveWindow } from './live';
 import { mseFixture } from './mse';
 interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec: string; audioCodec?: string }>; timers: Map<string, ReturnType<typeof setTimeout>> }
-export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs }
+export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs;
+  /** The live event on air on a live channel session (Sports A6); undefined for other sessions. */ liveEvent?: LiveEventRef | null }
 export const sessions = new Map<string, Session>();
 export function snapshot(s: Session): SessionSnapshot {
-  return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: s.plan.durationSeconds ?? fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
+  return { ...(s.liveEvent !== undefined ? { liveEvent: s.liveEvent } : {}), cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: s.plan.durationSeconds ?? fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
 }
 const encode = (event: SessionEvent) => new TextEncoder().encode(`id: ${event.cursor}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
 export function publish(s: Session) {
@@ -121,6 +122,8 @@ export function events(s: Session, req: Request, authorized: () => boolean): Res
       for (const event of s.history) if (Number(event.cursor) > number) c.enqueue(encode(event));
     } else c.enqueue(encode({ type: 'snapshot', cursor: String(s.plan.revision), revision: s.plan.revision, sessionId: s.plan.sessionId, snapshot: snapshot(s) }));
     if (s.plan.state === 'ended') { c.close(); return; }
+    // The programme on air's event (Sports A6), as Ether sends it whenever that programme changes.
+    if (s.liveEvent !== undefined) c.enqueue(new TextEncoder().encode(`event: liveEvent\ndata: ${JSON.stringify({ liveEvent: s.liveEvent })}\n\n`));
     s.listeners.set(c, abort); heartbeat = setInterval(() => { if (!authorized()) { abort(); return; } c.enqueue(new TextEncoder().encode(': keepalive\n\n')); }, 15000);
     req.signal.addEventListener('abort', abort, { once: true }); if (req.signal.aborted) abort();
   }, cancel: cleanup });

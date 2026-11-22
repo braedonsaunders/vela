@@ -12,6 +12,7 @@ import { Rows } from './rows';
 import { Catalogue } from './catalogue';
 import { Home, initialHome, type HomeState } from './home';
 import { initialLive, Live, type LiveState } from './live';
+import { initialLiveEvents, LiveEvents, type LiveEventsState } from './live-events';
 import { initialPlayback, Playback, type PlaybackState } from './playback';
 import type { MediaCapabilities, VelaPlatform } from './platform';
 import { initialPreviews, Previews, type PreviewState } from './previews';
@@ -46,6 +47,8 @@ export interface VelaState {
   /** The audio queue and its engine's state (music, audiobooks). */
   audio: AudioState;
   live: LiveState;
+  /** Live events (Sports): screens, details, favourites, the ticker and alerts, kept current by one stream. */
+  liveEvents: LiveEventsState;
   appearance: Loadable<AppearanceModel>;
   /** The trailer preview playing now. */
   previews: PreviewState;
@@ -78,6 +81,7 @@ export interface Vela {
   search: Search;
   playback: Playback;
   live: Live;
+  liveEvents: LiveEvents;
   appearance: Appearance;
   receipts: Receipts;
   previews: Previews;
@@ -102,6 +106,7 @@ const initialState: VelaState = {
   playback: initialPlayback,
   audio: initialAudio,
   live: initialLive,
+  liveEvents: initialLiveEvents,
   appearance: idle(),
   previews: initialPreviews,
 };
@@ -166,6 +171,7 @@ export function createVela(options: VelaOptions): Vela {
     search: new Search(box, session, width),
     playback,
     live: new Live(box, session, playback),
+    liveEvents: new LiveEvents(box, session),
     appearance,
     receipts: new Receipts(session),
     previews,

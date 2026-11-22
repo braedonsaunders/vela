@@ -14,9 +14,11 @@ import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, read
 import { renderCover } from './covers';
 
 import { scaleGuide } from './guide-fixture';
+import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
+initSports(channels);
 const fixtureGuide = scaleFixture?.guide ?? defaultGuide;
 const mockSeasonCount = Math.max(0, Math.floor(Number(process.env.VELA_MOCK_SEASONS) || 0));
 const gapChannels = new Set((process.env.VELA_MOCK_GUIDE_GAPS ?? '').split(','));
@@ -41,6 +43,9 @@ const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds:
 // Music, books and audiobooks (docs/media-kinds.md). VELA_MOCK_OLD=1 is a server from before them,
 // and the VELA_MOCK_LAB=1 preset mirrors a lab server's video-only libraries.
 const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
+// Sports (0.3.19): live events, the plugin screen it lists in navigation, and multiview.
+if (sportsEnabled) Object.assign(capabilities.features, { liveEvents: { available: true }, multiview: { available: true, maxTiles: 4 } });
+const navigation: V.NavigationEntry[] = sportsEnabled ? [{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }] : [];
 if (mediaEnabled) Object.assign(capabilities.features, {
   mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook'] },
   reading: { available: true, formats: ['epub', 'pdf', 'cbz'] },
@@ -589,7 +594,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, ...(longHeroes ? { title: { ...hero.title, name: `${hero.title.name}: The Long Way Round to the Edge of Everything` } } : {}), receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
     const home = homeRows(g, firstPage);
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}) } satisfies V.Bootstrap, g.id);
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation.length ? { navigation } : {}) } satisfies V.Bootstrap, g.id);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
@@ -766,6 +771,17 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!Array.isArray(body.interactions) || body.interactions.length > 100 || body.interactions.some((i: V.Interaction) => !validReceipt(g, i.receiptToken) || !['visible', 'selected', 'played'].includes(i.kind))) fail('request', 'invalid_receipt', 'Invalid interaction receipt');
     return json({ accepted: true });
   }
+  const sports = sportsApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail);
+  if (sports) return sports;
+  if (sportsEnabled && method === 'POST' && path === '/multiview') {
+    if (!body.device?.id) fail('request', 'device_required', 'Device required');
+    return json(createGroup(g.id));
+  }
+  const multiviewMatch = /^\/multiview\/([^/]+)$/.exec(path);
+  if (sportsEnabled && method === 'DELETE' && multiviewMatch) {
+    endGroup(g.id, decodeURIComponent(multiviewMatch[1]!), fail, id => { const s = sessions.get(id); if (s && s.plan.state !== 'ended') applyCommand(s, { kind: 'stop', idempotencyKey: 'multiview-end', sourceGeneration: s.plan.sourceGeneration, seekGeneration: s.plan.seekGeneration }); });
+    return json({ accepted: true });
+  }
   if (method === 'GET' && path === '/live/channels') return cached(req, page(channels, url, g, 'channels'), g.id);
   if (method === 'GET' && path === '/live/guide') {
     const from = Date.parse(url.searchParams.get('from') ?? ''), until = Date.parse(url.searchParams.get('until') ?? '');
@@ -813,6 +829,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const requestedVersion = body.versionId ? versionData?.versions.find(version => version.id === body.versionId) : undefined;
     if (body.versionId && !requestedVersion) fail('request', 'invalid_version', 'Unknown version');
     if (requestedVersion?.availability === 'unavailable') fail('source', 'version_unavailable', requestedVersion.note || 'Version unavailable', {}, 409);
+    if (body.multiview !== undefined) admitTile(g.id, body.multiview, channel?.id, id => { const s = sessions.get(id); return !!s && s.plan.state !== 'ended'; }, fail);
     if (faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted');
     if (!await Bun.file(`${mediaRoot}/master.m3u8`).exists()) fail('source', 'media_not_generated', 'Run mock-server/scripts/make-media.ts first');
     if (body.positionSeconds === undefined) body = { ...body, positionSeconds: title?.watch?.positionSeconds ?? 0 };
@@ -829,6 +846,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const selectedVersionId = body.versionId ?? versionData?.selectedVersionId;
     const s = await createSession(g.id, body, pending, versionData ? { ...versionData, selectedVersionId } : undefined);
     if (pending && !s.plan.paths.some(p => p.id === pending.pathId)) { sessions.delete(s.plan.sessionId); fail('source', 'media_not_generated', 'Requested MSE fixture is unavailable'); }
+    if (body.multiview && channel) placeTile(body.multiview, channel.id, s.plan.sessionId);
+    if (channel) s.liveEvent = liveEventOnChannel(channel.id);
     return json(s.plan);
   }
   const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
@@ -878,6 +897,7 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'POST' && url.pathname === '/__admin/live-faults') { const data = await req.json(); for (const key of Object.keys(liveFaults) as (keyof typeof liveFaults)[]) if (Number.isFinite(data[key]) && data[key] >= 0) liveFaults[key] = Math.min(60000, Math.floor(data[key])); return json(liveFaults); }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } return json(faults); }
+    if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/appearance') return json(setAppearance(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'); const expires = Date.now() + (url.searchParams.has('expired') ? -1 : 60000); webCodes.set(code, expires); return json({ code, expiresAt: new Date(expires).toISOString() }); }
     fail('not-found', 'endpoint_not_found', 'Admin endpoint not found');
@@ -915,10 +935,12 @@ async function dispatch(req: Request): Promise<Response> {
     const kind = url.searchParams.get('kind') ?? 'poster';
     return new Response((mediaEnabled ? renderCover(art[1]!, kind, width) : undefined) ?? renderArtwork(art[1]!, kind, width), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': url.searchParams.has('grant') ? 'private, no-store' : 'public, max-age=86400' } });
   }
+  const logo = req.method === 'GET' ? sportsLogo(url.pathname) : undefined;
+  if (logo) return logo;
   const packFile = req.method === 'GET' ? await packAsset(url.pathname) : undefined;
   if (packFile) return packFile;
   if (!url.pathname.startsWith('/vela/v0/')) fail('not-found', 'endpoint_not_found', 'Endpoint not found');
-  if (req.method !== 'POST' && req.method !== 'DELETE' && req.method !== 'PATCH') return api(req, url, undefined);
+  if (req.method !== 'POST' && req.method !== 'DELETE' && req.method !== 'PATCH' && req.method !== 'PUT') return api(req, url, undefined);
   let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }
   if (url.pathname === '/vela/v0/live/guide/window') {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('request', 'invalid_json', 'JSON object required');
@@ -939,7 +961,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 
