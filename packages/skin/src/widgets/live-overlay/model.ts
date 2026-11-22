@@ -1,6 +1,7 @@
 // Live overlays (Sports), the pure parts: what a score bug says about an event, which side just
 // scored, the ticker's items and its endless scroll, which alerts stand as toasts, and where an
 // alert's Watch goes. Nothing here draws; score-bug.tsx, ticker.tsx and alerts.tsx do.
+import { leagueLabel } from '../sports/model';
 import { sides, teamColor, type LiveAlert, type LiveCompetitor, type LiveEvent, type WatchTarget } from '@vela/core';
 
 /** How an event's status reads: on now, finished, still to come, or held up. */
@@ -115,7 +116,7 @@ export function bugModel(event: LiveEvent | undefined | null, maxSituation = 2):
   if (!event || typeof event.id !== 'string' || !event.status) return null;
   const spoiler = event.spoiler === true;
   const tone = bugTone(event);
-  const base = { eventId: event.id, tone, status: statusText(event), league: event.league?.abbr || event.league?.name || '', spoiler };
+  const base = { eventId: event.id, tone, status: statusText(event), league: event.league ? leagueLabel(event.league) : '', spoiler };
   const pair = sides(event);
   if (pair) {
     const finished = event.status.state === 'post';
