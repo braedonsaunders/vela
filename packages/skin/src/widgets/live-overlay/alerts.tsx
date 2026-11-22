@@ -147,11 +147,12 @@ function Toast({ alert, look, watch, keyed, onWatch, onDismiss }: {
       onPointerEnter={() => setHeld(true)}
       onPointerLeave={() => setHeld(false)}
       style={{
-        borderRadius: radius, overflow: 'hidden', backgroundColor: '#0b0f1af0',
-        borderWidth: 1, borderColor: '#ffffff1f',
+        borderRadius: radius, backgroundColor: '#0b0f1a',
         shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: look.size(22), shadowOffset: { width: 0, height: look.size(8) },
       }}
     >
+      {/* Clipped inside, so the shadow outside stays drawn. */}
+      <View style={{ borderRadius: radius, overflow: 'hidden', backgroundColor: '#0b0f1af0', borderWidth: 1, borderColor: '#ffffff1f' }}>
       <View style={{ flexDirection: 'row' }}>
         <View style={{ width: look.size(4), backgroundColor: colour }} />
         <View style={{ flex: 1, paddingVertical: look.size(12), paddingLeft: look.size(14), paddingRight: look.size(12), gap: look.size(4) }}>
@@ -182,6 +183,7 @@ function Toast({ alert, look, watch, keyed, onWatch, onDismiss }: {
         </View>
       </View>
       <Countdown look={look} colour={colour} held={held} />
+      </View>
     </View>
   );
 }

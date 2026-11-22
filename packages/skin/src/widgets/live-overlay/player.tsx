@@ -87,7 +87,7 @@ function Bug({ look, eventId, chrome, shift, edge }: { look: PlayerLook; eventId
     <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', top: edge, left: look.gutter }, glide]}>
       <Presence shown={shown} still={look.still} offstage={{ x: -look.size(18), scale: 0.96 }} exitMs={MOTION.exit}>
         {/* The remote reaches Reveal only while the chrome stands; a pointer or touch always can. */}
-        {last ? <ScoreBug event={last} look={look} size="full" revealable={chrome} testID="player-score-bug" /> : null}
+        {last ? <ScoreBug event={last} look={look} size={look.small ? 'tile' : 'full'} situation revealable={chrome} testID="player-score-bug" /> : null}
       </Presence>
     </Animated.View>
   );

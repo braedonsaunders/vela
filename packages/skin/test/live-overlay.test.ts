@@ -114,3 +114,16 @@ test('Watch opens the likeliest live channel, and nothing when the event is on t
   expect(watchLabel(targets[2]!)).toBe('FOX · 107');
   expect(watchLabel(targets[0]!)).toBe('Peacock');
 });
+
+test('play/pause reaches a standing toast\'s Watch only while one claims it, and a stale release frees nothing', async () => {
+  const { claimAlertKey, takeAlertKey } = await import('../src/widgets/live-overlay/context');
+  expect(takeAlertKey()).toBe(false);
+  let watched = 0;
+  const releaseFirst = claimAlertKey(() => { watched++; return true; });
+  const releaseSecond = claimAlertKey(() => { watched += 10; return true; });
+  releaseFirst();
+  expect(takeAlertKey()).toBe(true);
+  expect(watched).toBe(10);
+  releaseSecond();
+  expect(takeAlertKey()).toBe(false);
+});

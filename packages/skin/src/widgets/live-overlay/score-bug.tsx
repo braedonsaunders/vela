@@ -29,7 +29,7 @@ export interface ScoreBugProps {
   size?: ScoreBugSize;
   /** The player's look; read from the host when absent. */
   look?: PlayerLook;
-  /** A spoiler-free event offers Reveal (`full` only; on TV only while this is true, so a hidden
+  /** A spoiler-free event offers Reveal (not `compact`; on TV only while this is true, so a hidden
    * player chrome never leaves a focus target over the picture). */
   revealable?: boolean;
   /** Draw the situation line under the strip (`full`, by default). */
@@ -57,7 +57,7 @@ export function ScoreBug(props: ScoreBugProps) {
   const look = props.look ?? hostLook;
   const followed = useFollowedEvent(props.event === undefined ? props.eventId : undefined);
   const event = props.event === undefined ? followed : props.event;
-  const model = bugModel(event, props.size === 'full' || props.size === undefined ? 2 : 0);
+  const model = bugModel(event, props.situation ?? (props.size ?? 'full') === 'full' ? 2 : 0);
   if (!model) return null;
   return <Bug {...props} look={look} model={model} />;
 }
@@ -91,16 +91,18 @@ function Bug({ model, look, size = 'full', revealable, situation = size === 'ful
   };
   const label = accessibleLabel(model);
   return (
-    <View testID={testID ?? 'score-bug'} style={{ alignItems: 'flex-start', gap: look.size(5) }} accessible accessibilityRole="text" accessibilityLabel={label}>
-      <Animated.View style={[{
-        flexDirection: 'row', alignItems: 'stretch', height, borderRadius: radius, overflow: 'hidden',
+    <View testID={testID ?? 'score-bug'} style={{ alignItems: 'flex-start', gap: look.size(5) }}>
+      {/* The shadow sits outside the clipped strip: a view that clips also clips its own shadow. */}
+      <Animated.View accessible accessibilityRole="text" accessibilityLabel={label} style={[{
+        borderRadius: radius, backgroundColor: '#0b0f1a',
         shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: look.size(14), shadowOffset: { width: 0, height: look.size(4) },
-        borderWidth: Platform.isTV ? 0 : 1, borderColor: '#ffffff14',
       } as ViewStyle, pulse]}>
-        {model.kind === 'versus' ? <Versus model={model} look={look} size={size} flash={flash} height={height} /> : <Field model={model} look={look} size={size} />}
+        <View style={{ flexDirection: 'row', alignItems: 'stretch', height, borderRadius: radius, overflow: 'hidden', borderWidth: Platform.isTV ? 0 : 1, borderColor: '#ffffff14' }}>
+          {model.kind === 'versus' ? <Versus model={model} look={look} size={size} flash={flash} height={height} /> : <Field model={model} look={look} size={size} />}
+        </View>
       </Animated.View>
       {situation && model.kind === 'versus' && model.situation.length ? <Situation model={model} look={look} radius={radius} /> : null}
-      {model.spoiler && revealable !== undefined && size === 'full' ? <Reveal eventId={model.eventId} look={look} focusable={revealable} radius={radius} /> : null}
+      {model.spoiler && revealable !== undefined && size !== 'compact' ? <Reveal eventId={model.eventId} look={look} focusable={revealable} radius={radius} /> : null}
     </View>
   );
 }
