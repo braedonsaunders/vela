@@ -155,7 +155,10 @@ export class MultiviewController {
   /** Puts another channel on a tile (the tile's channel picker). */
   swap(slot: number, channelId: string): void {
     const tile = this.tile(slot);
-    if (!tile || tile.channelId === channelId) return;
+    if (!tile) return;
+    // A failed tile's own channel picked again (on a TV the picker is what Select opens on a failed
+    // tile) is the way to try it again.
+    if (tile.channelId === channelId) { if (tile.refusal) this.retry(slot); return; }
     const other = this.tiles.find(candidate => candidate.channelId === channelId);
     if (other) {
       // The channel is already on another tile: the two trade places instead of playing twice.

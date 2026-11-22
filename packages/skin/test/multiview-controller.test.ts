@@ -303,6 +303,21 @@ test('a player failure on a tile shows on that tile, and Try again tunes it afre
   expect(calls.tunes).toHaveLength(2);
 });
 
+test('picking a failed tile\'s own channel again tunes it afresh; on a playing tile it does nothing', async () => {
+  const { source, calls } = fakeSource();
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.open();
+  await settle();
+  mv.swap(0, 'a');
+  expect(calls.tunes).toHaveLength(1);
+  mv.failed(0, mv.view().tiles[0]!.plan!.sessionId, 'decoder gave up');
+  mv.swap(0, 'a');
+  await settle();
+  expect(calls.tunes).toHaveLength(2);
+  expect(mv.view().tiles[0]!.state).not.toBe('failed');
+});
+
 test('the cap details are read only from the typed refusal', () => {
   expect(connectionCap(capError())).toEqual({ provider: 'Acme IPTV', max: 2, inUse: 2 });
   expect(connectionCap(new Error('x'))).toBeNull();
