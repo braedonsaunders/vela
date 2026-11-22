@@ -138,7 +138,7 @@ function Item({ item, look, height }: { item: TickerItem; look: PlayerLook; heig
           {bug.leader ? <Text style={look.text(13, 800, look.ink)}>{bug.leader}</Text> : null}
         </>
       )}
-      {bug.status && !(bug.tone === 'final' && tag) ? (
+      {bug.status && bug.status.toLowerCase() !== tag.toLowerCase() ? (
         <Text style={[look.text(12, 500, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>{bug.status}</Text>
       ) : null}
       <View style={{ width: 1, height: height * 0.42, marginLeft: look.size(16), backgroundColor: '#ffffff26' }} />
