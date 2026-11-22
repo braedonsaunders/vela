@@ -1,6 +1,27 @@
 import type { Node, Style } from '../../../skin';
 import { ease, gutter, gutterSmall, lift, rest, ring, glint } from './look';
 
+// Watched: a check on a dark disc in the art's top corner, on posters and 16:9 stills alike.
+const playedBadge: Node = {
+  type: 'box',
+  when: [{ test: 'card.played' }],
+  a11y: { hidden: true },
+  style: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    width: 'clamp(26px, 1.8vw, 36px)',
+    height: 'clamp(26px, 1.8vw, 36px)',
+    'border-radius': '999px',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    // A solid badge, no blur: a filter per card is costly on a TV's GPU.
+    'background-color': 'rgba(10, 12, 16, 0.82)',
+  },
+  children: [{ type: 'icon', symbol: 'checkmark', style: { width: '50%', height: '50%', color: '$ink' } }],
+};
+
 // A poster: the focused one lifts, grows and catches the light; the art inside moves
 // against the frame, which reads as depth (the remote's parallax).
 export const poster: Node = {
@@ -114,24 +135,7 @@ export const poster: Node = {
           },
           groupHover: { opacity: '1', translate: '330% 0px' },
         },
-        {
-          type: 'box',
-          when: [{ test: 'card.played' }],
-          style: {
-            position: 'absolute',
-            top: '10px',
-            right: '10px',
-            width: 'clamp(26px, 1.8vw, 36px)',
-            height: 'clamp(26px, 1.8vw, 36px)',
-            'border-radius': '999px',
-            display: 'flex',
-            'align-items': 'center',
-            'justify-content': 'center',
-            // A solid badge, no blur: a filter per card is costly on a TV's GPU.
-            'background-color': 'rgba(10, 12, 16, 0.82)',
-          },
-          children: [{ type: 'icon', symbol: 'checkmark', style: { width: '50%', height: '50%', color: '$ink' } }],
-        },
+        playedBadge,
         {
           type: 'box',
           when: [{ test: 'card.hasProgress' }],
@@ -307,6 +311,7 @@ export const wide: Node = {
           },
           groupHover: { opacity: '1', translate: '420% 0px' },
         },
+        playedBadge,
         {
           type: 'text',
           when: [{ test: 'card.progressLabel' }, { test: 'card.played', not: true }],

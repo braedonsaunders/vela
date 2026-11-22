@@ -1,7 +1,7 @@
 // Library pages: the sticky toolbar of filters, then the titles as a grid or a list.
 import type { Condition, Node, Style } from '../../../skin';
 import { sans, gutter, gutterSmall, is, set, unset, glyph, round, secondary, label, oneLine } from './look';
-import { block, progress, tri, card, spinner, posterArt } from './cards';
+import { block, progress, tri, card, spinner, posterArt, watched } from './cards';
 import { empty } from './home';
 
 // Browsing a library: a sticky toolbar (name, poster size, grid or list; type, sort,
@@ -145,6 +145,7 @@ const listRow: Node = {
       children: [
         ...posterArt,
         { type: 'box', when: [set('card.unwatched')], style: tri(12) },
+        watched(18),
         progress(3, '{card.progressPct}', [set('card.hasProgress')]),
       ],
     },

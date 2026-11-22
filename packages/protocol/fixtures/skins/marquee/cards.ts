@@ -98,6 +98,31 @@ export const corner = (size: number, sizeSmall = size): Node => ({
   style: tri(size),
   small: tri(sizeSmall),
 });
+// A watched film, episode, season or series carries an amber check on a dark disc where the
+// unwatched corner would be (the two never show together).
+const disc = (size: number): Style => ({
+  position: 'absolute',
+  top: px(Math.round(size / 4)),
+  right: px(Math.round(size / 4)),
+  width: px(size),
+  height: px(size),
+  'border-radius': '999px',
+  display: 'flex',
+  'align-items': 'center',
+  'justify-content': 'center',
+  'background-color': '$scrim',
+  'box-shadow': '0px 0px 0px 1px $amber-soft',
+  color: '$amber',
+});
+const tick = (size: number): Style => ({ width: px(Math.round(size * 0.55)), height: px(Math.round(size * 0.55)) });
+export const watched = (size: number, sizeSmall = size): Node => ({
+  type: 'box',
+  when: [set('card.played')],
+  a11y: { hidden: true },
+  style: disc(size),
+  small: disc(sizeSmall),
+  children: [glyph('check', Math.round(size * 0.55), { small: tick(sizeSmall) })],
+});
 // Artwork is absent: the kind's icon and the title on a quiet panel.
 const placeholder: Node = {
   type: 'box',
@@ -253,6 +278,7 @@ export const card = cardShell(152, 112, '2 / 3', [
   ...posterArt,
   placeholder,
   corner(22, 18),
+  watched(28, 22),
 ]);
 // A landscape still, for hubs of part-watched titles.
 export const wideCard = cardShell(300, 224, '16 / 9', [
@@ -289,6 +315,7 @@ export const wideCard = cardShell(300, 224, '16 / 9', [
     },
   },
   { ...placeholder, when: [unset('card.backdrop'), unset('card.poster')] },
+  watched(30, 24),
 ]);
 // A ranked hub: the server's position as a large numeral the poster overlaps.
 export const rankedCard: Node = {

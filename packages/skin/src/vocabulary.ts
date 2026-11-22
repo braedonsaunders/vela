@@ -149,7 +149,13 @@ function seasonEpisodes(d: DetailModel | undefined, season: string): Card[] {
   return (d?.episodes ?? []).filter(card => !selected || card.seasonId === selected);
 }
 const reading = (x: Card) => x.media?.readingFraction ?? 0;
-const hasProgress = (x: Card) => !x.played && (x.progressSeconds > 0 && x.durationSeconds > 0 || reading(x) > 0 && reading(x) < 0.98);
+/** A resume point: a rewatch keeps its bar, so the watched check gives way to it. */
+const resuming = (x: Pick<Card, 'progressSeconds' | 'durationSeconds'>) => x.progressSeconds > 0 && x.durationSeconds > 0;
+const hasProgress = (x: Card) => resuming(x) || !x.played && reading(x) > 0 && reading(x) < 0.98;
+/** The watched check on a card: a played film, episode, season or series. Never beside a resume
+ * bar, and never on music, books or audiobooks (their pages show their own read and heard state). */
+export const watchedMark = (x: Pick<Card, 'played' | 'progressSeconds' | 'durationSeconds' | 'media'>): boolean =>
+  x.played && !resuming(x) && (!x.media || x.media.class === 'video');
 
 export function seasonDisplayName(card: Card): string {
   const name = card.name.trim();
@@ -205,7 +211,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'card.contextLine': from('card', x => x.contextParts.map(part => part.label).join(' · ')),
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
   'card.name': c => c.seasonLabel ?? c.card?.name ?? '',
-  'card.played': from('card', x => yes(x.played)),
+  'card.played': from('card', x => yes(watchedMark(x))),
   'card.episodeNumberLabel': from('card', x => x.episodeNumberLabel),
   'card.durationLabel': from('card', x => x.durationLabel),
   'card.progressPct': from('card', x => reading(x) > 0 ? pct(reading(x), 1) : pct(x.progressSeconds, x.durationSeconds)),

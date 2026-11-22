@@ -18,7 +18,7 @@ import {
   label,
   oneLine,
 } from './look';
-import { block, art, progress, corner, subLine, posterArt } from './cards';
+import { block, art, progress, corner, subLine, posterArt, watched } from './cards';
 import { failure } from './home';
 
 const heading2: Style = { 'font-size': '19px', 'font-weight': '700', ...gutter };
@@ -394,6 +394,7 @@ const seasonCard: Node = {
           },
           children: [glyph('tv', 28)],
         },
+        watched(26, 22),
         {
           type: 'box',
           when: [set('season.on')],
@@ -471,6 +472,7 @@ const still = (resumed: boolean): Node =>
         children: [glyph('tv', 28)],
       },
       corner(20),
+      watched(28, 22),
       progress(4, '{card.progressPct}', [set('card.hasProgress')]),
       {
         type: 'box',

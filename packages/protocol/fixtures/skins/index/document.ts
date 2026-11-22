@@ -11,7 +11,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.12';
+const version = '1.0.13';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -205,8 +205,15 @@ const card: Node = {
       press: { action: 'select', arg: '{card.kindId}' },
       label: '{card.label}',
       testId: 'title-{card.id}',
-      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-width': '0px', padding: '4px', 'text-align': 'left' },
-      children: [{ type: 'text', text: '{card.name}', style: { 'font-size': '16px', 'font-weight': '600' } }],
+      style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '6px', flex: '1', 'min-width': '0px', padding: '4px', 'text-align': 'left' },
+      children: [
+        // Watched: a ticked entry, as a reader marks a printed catalogue, in a fixed margin so the
+        // names stay aligned. The entry's name already says "watched" to assistive technology.
+        { type: 'box', a11y: { hidden: true }, style: { width: '16px', 'flex-shrink': '0' }, children: [
+          { type: 'text', when: [{ test: 'card.played' }], text: '✓', style: { 'font-size': '16px', 'font-weight': '700', color: '$accent' } },
+        ] },
+        { type: 'text', text: '{card.name}', style: { 'font-size': '16px', 'font-weight': '600', flex: '1', 'min-width': '0px' } },
+      ],
     },
     ...kinds.map(([k, s]) => column(`{s:${s}}`, '80px', [wide, { test: 'card.kind', is: 'eq', value: k }])),
     column('{s:collection}', '80px', [

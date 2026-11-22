@@ -98,6 +98,39 @@ const posterArt: Style = {
   transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
 };
 
+// Watched: a check on a dark plate in the art's top-right corner, legible on any artwork
+// (posters and 16:9 stills alike) and big enough to read across a room. A solid plate, no blur:
+// a filter per card is costly on a TV's GPU. card.played never holds beside a resume bar.
+const plate = (size: number, inset: number): Style => ({
+  position: 'absolute',
+  top: `${inset}px`,
+  right: `${inset}px`,
+  width: `${size}px`,
+  height: `${size}px`,
+  'border-radius': '999px',
+  display: 'flex',
+  'align-items': 'center',
+  'justify-content': 'center',
+  // Fixed, not themed: the plate sits on artwork, which no theme colours.
+  'background-color': 'rgba(10, 12, 16, 0.8)',
+  'box-shadow': '0px 2px 8px rgba(0, 0, 0, 0.4), 0px 0px 0px 1px rgba(255, 255, 255, 0.22)',
+});
+export const playedBadge: Node = {
+  type: 'box',
+  when: [{ test: 'card.played' }],
+  a11y: { hidden: true },
+  style: plate(28, 8),
+  small: plate(22, 6),
+  children: [
+    {
+      type: 'icon',
+      symbol: 'checkmark',
+      style: { width: '14px', height: '14px', color: '#ffffff' },
+      small: { width: '11px', height: '11px' },
+    },
+  ],
+};
+
 // A scrim over the art behind the progress bar: dark in every document, unlike a fade to the page.
 const progressFoot = 'linear-gradient(0deg, $ui.scrim 0%, color-mix(in srgb, $ui.scrim 0%, transparent) 100%)';
 
@@ -209,26 +242,7 @@ export const card: Node = {
           groupHover: { opacity: '1' },
           groupFocus: { opacity: '1' },
         },
-        {
-          type: 'box',
-          when: [{ test: 'card.played' }],
-          style: {
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            width: '24px',
-            height: '24px',
-            'border-radius': '12px',
-            display: 'flex',
-            'align-items': 'center',
-            'justify-content': 'center',
-            'background-color': '$ui.glass',
-            'backdrop-filter': 'blur(12px)',
-          },
-          children: [
-            { type: 'icon', symbol: 'checkmark', style: { width: '12px', height: '12px', color: '$ui.ink' } },
-          ],
-        },
+        playedBadge,
         {
           type: 'box',
           when: [{ test: 'card.hasProgress' }, { test: 'card.played', not: true }],

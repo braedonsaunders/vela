@@ -1,5 +1,5 @@
 import type { BoxNode, Node, Style } from '../../../../protocol/skin';
-import { card } from './cards';
+import { card, playedBadge } from './cards';
 import {
   bone,
   cardRadius,
@@ -527,6 +527,7 @@ export const episodeRow: Node = {
             },
           ],
         },
+        playedBadge,
         {
           type: 'box',
           when: [{ test: 'card.hasProgress' }],
