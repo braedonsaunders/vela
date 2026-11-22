@@ -61,7 +61,8 @@ export function environment({ state, view, live, route, entry, library, width, s
     entry,
     flags: view.flags,
     rowLoading: home.rowsLoading,
-    search: route === 'home' ? searchView(state.search) : undefined,
+    // Search draws in home's view, and on Apple TV's own search route.
+    search: route === 'home' || route === 'search' ? searchView(state.search) : undefined,
     live,
     // Only home draws heroes: its hero preview starting or stopping need not redraw other routes.
     preview: { cardId: state.previews.cardId, heroId: route === 'home' ? state.previews.heroId : '' },
@@ -83,7 +84,7 @@ export function createEnvironmentReader() {
     const season = waitingForResume ? '' : selectedDetailSeason(title?.value, selection, resume);
     if (season && !defaults.has(entry)) defaults.set(entry, season);
     const inputs = [state.auth.viewer, state.auth.plexHomeAvailable, state.home, state.libraries.value, state.search.query,
-      route === 'home' ? state.search : undefined, title, state.titles[season],
+      route === 'home' || route === 'search' ? state.search : undefined, title, state.titles[season],
       view.season, view.flags, view.heroIndex, view.still,
       input.live, input.width, input.skinCount, input.skinName, library, state.previews.cardId, route === 'home' ? state.previews.heroId : ''];
     const key = `${route}:${entry}:${library ?? ''}`, previous = routes.get(key);

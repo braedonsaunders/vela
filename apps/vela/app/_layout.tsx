@@ -54,6 +54,8 @@ function Screens() {
           drawn beneath it (media/reader.tsx). Like playback it presents above the title modal, and
           it keeps clear of the system bars itself, so its paper runs beneath them. */}
       <Stack.Screen name="read/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : 'transparentModal', contentStyle: { ...sides0, backgroundColor: 'transparent' } }} />
+      {/* Apple TV's system search screen opens over the section it was asked from (apple-tv-search.tsx). */}
+      <Stack.Screen name="search" options={{ presentation: Platform.isTV ? 'containedModal' : 'card' }} />
       <Stack.Screen name="row/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' ? 'fullScreenModal' : 'card' }} />
       <Stack.Screen name="person" options={{ presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal', contentStyle: { ...bars, backgroundColor: 'transparent' } }} />
     </Stack>

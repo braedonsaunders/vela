@@ -42,6 +42,7 @@ import { ViewerAvatar } from './widgets/common/viewer-avatar';
 import { VersionsControl } from './widgets/title-actions';
 import { SeasonSelector } from './widgets/season-selector';
 import { SearchField } from './widgets/search/search-field';
+import { systemSearch } from './widgets/search/system-search';
 import { animation } from './motion';
 import { Arrive, EASE_IN, MOTION } from './presence';
 import { needsAnimatedFrame } from './animated-frame';
@@ -136,6 +137,7 @@ const AText = Animated.Text;
 const frameFor = (node: RNode) => web || needsAnimatedFrame(node) ? AView : View;
 const AScroll = Animated.ScrollView;
 const web = Platform.OS === 'web';
+const SYSTEM_SEARCH = systemSearch(Platform.OS, Platform.isTV);
 /** A box that is also a TV focus guide (react-native-web has no focus guide, so only on TV). */
 const AGuide = Platform.isTV ? Animated.createAnimatedComponent(TVFocusGuideView) : AView;
 const HOME_SLOW_NODE: Extract<RNode, { kind: 'widget' }> = {
@@ -227,9 +229,14 @@ function FitCell({ id, fit, measure, children }: { id: string; fit: string | nul
 
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
-function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: SkinHost; node: RNode; after?: RNode; hideLibraryViews?: boolean }) {
+function SkinRouteView({ host, node, after, hideLibraryViews = false, openingFocus = true }: {
+  host: SkinHost; node: RNode; after?: RNode; hideLibraryViews?: boolean;
+  /** Off where focus belongs elsewhere as the route opens (Apple TV's search keyboard above results). */
+  openingFocus?: boolean;
+}) {
   useFocusStyles();
-  const focus = useRouteFocus();
+  const opening = useRouteFocus();
+  const focus = openingFocus ? opening : null;
   const episodeNav = useMemo(episodeNavigation, []);
   const loading = useRef<SkinHost | null>(null);
   const gridWaiting = useRef(false);
@@ -307,7 +314,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
 }
 
 export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after
-  && a.hideLibraryViews === b.hideLibraryViews
+  && a.hideLibraryViews === b.hideLibraryViews && a.openingFocus === b.openingFocus
   && sameRouteHost(a.host, b.host, [b.node, b.after, b.host.doc.libraryViews]));
 
 /** The shared switch outside an animated library scene. */
@@ -1141,7 +1148,7 @@ function focusableWithin(node: RNode): boolean {
   switch (node.kind) {
     case 'box': found = (!!node.press && selectable(node)) || node.children.some(focusableWithin); break;
     case 'repeat': found = focusableWithin(node.item); break;
-    case 'slot': found = node.slot === 'searchField'; break;
+    case 'slot': found = node.slot === 'searchField' && !SYSTEM_SEARCH; break;
     case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget); break;
     default: found = false;
   }
@@ -1581,7 +1588,8 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   const Frame = frameFor(node);
-  if (fx.hidden) return null;
+  // Apple TV searches on the system's search screen (the shell's Search opens it): no field here.
+  if (fx.hidden || (node.slot === 'searchField' && SYSTEM_SEARCH)) return null;
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
   const box = <View style={inner as ViewStyle}>{content}</View>;
   // The search field is centred and narrower than the page; the TV focus engine only moves to

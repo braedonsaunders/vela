@@ -3,6 +3,7 @@
 // logged, never silently swallowed.
 import { router } from 'expo-router';
 import { useCallback, useMemo } from 'react';
+import { Platform } from 'react-native';
 import type { Vela as Store } from '@vela/core';
 import { focusElement, page, type SkinHost } from '@vela/skin';
 import { liveAction, requestGuideTop, type LiveController } from '@vela/skin/src/widgets/guide';
@@ -14,8 +15,10 @@ import { playParams } from './play-action';
 import { openMediaTitle } from './media/actions';
 import { isTitleNavigation, noteTitleNavigation } from './title-origin';
 import { closeModal } from './modal-motion';
+import { systemSearch } from '@vela/skin/src/widgets/search/system-search';
 
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
+const SYSTEM_SEARCH = systemSearch(Platform.OS, Platform.isTV);
 
 /** Where a press came from: the route and its entry (a title's ID). */
 export interface Place {
@@ -128,6 +131,11 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
         return setQuery('');
       case 'search':
       case 'focusSearch':
+        // Apple TV searches on the system's search screen, from wherever Search was pressed.
+        if (SYSTEM_SEARCH) {
+          if (place.route !== 'search') router.push('/search');
+          return;
+        }
         // The search field belongs to home; a library or guide has no field to focus.
         if (place.route !== 'home') {
           actions.setFlag('focus-search-on-home', true);

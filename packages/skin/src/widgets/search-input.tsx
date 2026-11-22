@@ -10,6 +10,7 @@ import { ownKeyboard, TvKeyboard } from './common/tv-keyboard';
 import { withClientStrings } from '../resolve/client-strings';
 import { useQueryText } from './search/query-text';
 import { useSearchFocus } from './search/use-search-focus';
+import { systemSearch } from './search/system-search';
 import { placeholderRows } from './search/placeholder-text';
 import { fontSizeOf, textStyle } from '../translate';
 import { InheritedContext, measure, useHost, useInheritedText, useWidgetInteraction, type WidgetProps } from '../host';
@@ -39,6 +40,23 @@ export function SearchInput({ params, ctx }: WidgetProps) {
     event.preventDefault?.();
     query.change('');
   } } : {};
+  // Apple TV types on the system search screen: the field is its entry, as the shell's Search is.
+  if (SYSTEM_SEARCH) {
+    return (
+      <Pressable
+        focusable
+        accessibilityRole="search"
+        accessibilityLabel={label ?? msg('ui.searchYourLibrary')}
+        testID={`search-${ctx.index}`}
+        onPress={() => host.dispatch('search', '')}
+        onFocus={() => interaction.report('focus', true)}
+        onBlur={() => interaction.report('focus', false)}
+        style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, alignSelf: 'stretch', justifyContent: 'center' }}
+      >
+        <Text numberOfLines={1} style={quiet}>{placeholder || ''}</Text>
+      </Pressable>
+    );
+  }
   if (OWN_KEYBOARD) {
     return (
       <>
@@ -84,3 +102,4 @@ export function SearchInput({ params, ctx }: WidgetProps) {
 }
 
 const OWN_KEYBOARD = ownKeyboard(Platform.OS, Platform.isTV);
+const SYSTEM_SEARCH = systemSearch(Platform.OS, Platform.isTV);
