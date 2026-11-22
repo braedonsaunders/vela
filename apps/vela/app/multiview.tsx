@@ -2,9 +2,9 @@
 // `?add=<channelId>` adds a channel on arrival; `?channels=a,b,c&layout=grid&focus=1` sets the
 // whole screen (a deep link, and how a device check opens a known screen); `&full=1` shows that
 // tile full screen and `&full=-1` returns to the grid.
-import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
-import { useCallback, useEffect, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { router, useIsFocused, useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, StyleSheet, View } from 'react-native';
 import { VelaPlayerView } from '@vela/player';
 import { HostContext } from '@vela/skin/src/host';
 import { useLiveSurface, useLiveView } from '@vela/skin/src/widgets/guide';
@@ -21,6 +21,7 @@ export default function Multiview() {
   const live = useLiveView();
   useLiveSurface('multiview', focused);
   usePreventRemove(useBackHeld(), backFromNavigation);
+  const present = usePresent(`${add ?? ''}|${listed ?? ''}|${layout ?? ''}|${focus ?? ''}|${full ?? ''}`);
 
   const applied = useRef('');
   useEffect(() => {
@@ -50,7 +51,8 @@ export default function Multiview() {
   }, []);
 
   const skin = host('watch', 'multiview');
-  if (!multiview || !skin) return <View style={styles.stage} />;
+  // Off screen the tiles and their group end: the screen unmounting is not the only way to leave.
+  if (!multiview || !skin || !present) return <View style={styles.stage} />;
   return (
     <HostContext.Provider value={skin}>
       <View style={styles.stage}>
@@ -58,6 +60,33 @@ export default function Multiview() {
       </View>
     </HostContext.Provider>
   );
+}
+
+/** Whether the screen is on show. tvOS dismisses the modal natively on a keyboard Escape (and the
+ * simulator's Menu) without React Navigation removing the route, so the screen stays mounted; the
+ * closing transition says it went. A background app is off screen too. Arriving again (focus, new
+ * params, the app active again) shows it. */
+function usePresent(params: string): boolean {
+  const navigation = useNavigation();
+  const [present, setPresent] = useState(true);
+  useEffect(() => { setPresent(true); }, [params]);
+  useEffect(() => {
+    const listen = navigation.addListener as (event: string, listener: (event: { data?: { closing?: boolean } }) => void) => () => void;
+    const subscriptions = [
+      listen('transitionStart', event => { if (event.data?.closing) setPresent(false); }),
+      listen('transitionEnd', event => {
+        // Dismissed natively while the route is still the focused one: let the navigator catch up.
+        if (event.data?.closing && navigation.isFocused() && navigation.canGoBack()) navigation.goBack();
+      }),
+      listen('focus', () => setPresent(true)),
+    ];
+    const app = AppState.addEventListener('change', state => {
+      if (state === 'background') setPresent(false);
+      else if (state === 'active' && navigation.isFocused()) setPresent(true);
+    });
+    return () => { for (const unsubscribe of subscriptions) unsubscribe(); app.remove(); };
+  }, [navigation]);
+  return present;
 }
 
 const styles = StyleSheet.create({
