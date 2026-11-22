@@ -793,7 +793,7 @@
   "sports.tied": "Tied",
   "sports.onBroadcast": "On {name}",
   "sports.noFavouriteGames": "No games for your teams on this day.",
-  "sports.broadcasts": "Broadcast on",
+  "sports.broadcastLine": "Broadcast on {names}",
   "sports.noTeams": "No teams to show for this league yet.",
   "sports.teamsFailed": "Teams could not be loaded.",
   "multiview.title": "Multiview",

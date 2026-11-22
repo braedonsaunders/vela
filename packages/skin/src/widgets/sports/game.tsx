@@ -16,6 +16,9 @@ import { ProbabilityGraph, readableTeam } from './graph';
 import { alpha } from './colour';
 
 const WHITE = '#ffffff';
+/** A table longer than this is stepped through a row at a time on a TV rather than focused whole
+ * (a panel taller than the screen would scroll the score off the top). */
+const TV_PANEL_ROWS = 10;
 
 export function GamePage({ id, active = true }: { id: string; active?: boolean }) {
   const vela = useVela();
@@ -52,16 +55,16 @@ export function GamePage({ id, active = true }: { id: string; active?: boolean }
             ) : null}
             {detail.tables.map((table, n) => (
               <Rise key={`${n}-${table.title}`} look={look} index={3 + n}>
-                <Panel look={look} focusable>
-                  <TableView look={look} table={table} testID={`sports-table-${n}`} />
+                <Panel look={look} focusable={table.rows.length <= TV_PANEL_ROWS}>
+                  <TableView look={look} table={table} testID={`sports-table-${n}`} focusRows={Platform.isTV && table.rows.length > TV_PANEL_ROWS} />
                 </Panel>
               </Rise>
             ))}
             {!m.sides && event.ranking?.length && !detail.tables.length ? (
               <Rise look={look} index={3}>
-                <Panel look={look} focusable>
+                <Panel look={look} focusable={event.ranking.length <= TV_PANEL_ROWS}>
                   <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase', marginBottom: look.px(10) }}>{msg('sports.standingsTitle')}</Txt>
-                  <Ranking look={look} event={event} rows={event.ranking.length} size={14.5} />
+                  <Ranking look={look} event={event} rows={event.ranking.length} size={14.5} focusRows={Platform.isTV && event.ranking.length > TV_PANEL_ROWS} />
                 </Panel>
               </Rise>
             ) : null}
@@ -164,10 +167,17 @@ function WatchRow({ look, event }: { look: SportsLook; event: LiveEvent }) {
   const targets = (event.watch ?? []).filter(tunable);
   const airing = airingText(event);
   if (!targets.length && !airing) return null;
+  // Nothing to tune here: where it airs is one quiet line, not a section of buttons.
+  if (!targets.length) return (
+    <View testID="sports-airing" style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(8) }}>
+      <Glyph name="tv" size={look.px(16)} color={look.inkQuiet} />
+      <Txt look={look} size={14} weight={560} color={look.inkSecondary} lines={1} style={{ flexShrink: 1 }}>{msg('sports.broadcastLine', { names: airing })}</Txt>
+    </View>
+  );
   const first = targets[0];
   return (
     <View style={{ gap: look.px(10) }}>
-      <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase' }}>{msg(targets.length ? 'sports.whereToWatch' : 'sports.broadcasts')}</Txt>
+      <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase' }}>{msg('sports.whereToWatch')}</Txt>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: look.px(10), paddingVertical: look.px(6), paddingHorizontal: look.px(4), alignItems: 'center' }} style={{ marginHorizontal: -look.px(4) }}>
         {targets.map((target, n) => {
           const label = targetLabel(target);
@@ -181,9 +191,9 @@ function WatchRow({ look, event }: { look: SportsLook; event: LiveEvent }) {
           </Surface>
         ) : null}
         {airing ? (
-          <View testID="sports-airing" style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(8), height: look.px(42), paddingHorizontal: look.px(targets.length ? 8 : 0) }}>
+          <View testID="sports-airing" style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(8), height: look.px(42), paddingHorizontal: look.px(8) }}>
             <Glyph name="tv" size={look.px(16)} color={look.inkQuiet} />
-            <Txt look={look} size={14} weight={560} color={look.inkSecondary}>{targets.length ? msg('sports.onBroadcast', { name: airing }) : airing}</Txt>
+            <Txt look={look} size={14} weight={560} color={look.inkSecondary}>{msg('sports.onBroadcast', { name: airing })}</Txt>
           </View>
         ) : null}
       </ScrollView>

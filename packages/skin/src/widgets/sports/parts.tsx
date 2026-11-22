@@ -27,6 +27,7 @@ export function Txt({ look, size, weight = 500, color, lines, style, children, d
     <Text
       testID={testID}
       accessibilityRole={header ? 'header' : undefined}
+      {...(header && web ? { 'aria-level': 2 } : null)}
       numberOfLines={lines}
       ellipsizeMode={lines ? 'tail' : undefined}
       style={[display ? look.display() : look.font(weight), { fontSize: look.px(size), lineHeight: look.px(size * 1.25), color: color ?? look.ink }, digits ? look.digits : null, style]}
@@ -107,6 +108,13 @@ export function Surface({ look, onPress, onFocus, style, children, radius, fill,
   );
 }
 
+/** A row the remote can stop on (a TV), so a long table or leaderboard scrolls a row at a time
+ * under a soft highlight; elsewhere just the row. */
+export function FocusRow({ look, on, style, children }: { look: SportsLook; on: boolean; style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  if (!on) return <View style={style}>{children}</View>;
+  return <Surface look={look} ring={false} lift={1.012} fill="transparent" focusFill={alpha(look.ink, 0.08)} radius={look.px(7)} style={style}>{children}</Surface>;
+}
+
 /** A pill button: filled (primary) or quiet, with a glyph. */
 export function Pill({ look, label, glyph, primary, onPress, testID, small, hasTVPreferredFocus }: {
   look: SportsLook; label: string; glyph?: string; primary?: boolean; onPress(): void; testID?: string; small?: boolean; hasTVPreferredFocus?: boolean;
@@ -152,17 +160,22 @@ export function LiveBadge({ look, small }: { look: SportsLook; small?: boolean }
   );
 }
 
+const CREST_PAPER = '#f4f5f7';
+
 /** A team's crest: its logo on its colour, its abbreviation until (or unless) the logo loads. */
 export function Crest({ look, side, size, ring }: { look: SportsLook; side: Pick<Side, 'abbr' | 'logo' | 'color' | 'altColor' | 'name'>; size: number; ring?: boolean }) {
   const [loaded, setLoaded] = useState(false);
   const fill = crestColor(side);
+  // A logo sits on a light disc (provider logos are drawn for white, so a dark or team-coloured
+  // mark is never lost on its own colour), ringed in the team's colour; the colour fills the disc
+  // with the abbreviation until then.
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: fill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-      borderWidth: ring ? Math.max(1, size * 0.04) : 0, borderColor: alpha('#ffffff', 0.35) }}>
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: loaded ? CREST_PAPER : fill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      borderWidth: loaded ? Math.max(1.5, size * 0.05) : ring ? Math.max(1, size * 0.04) : 0, borderColor: loaded ? fill : alpha('#ffffff', 0.35) }}>
       {!loaded ? <Text style={[look.font(800), { color: '#ffffff', fontSize: size * (side.abbr.length > 3 ? 0.26 : 0.32), letterSpacing: 0.3 }]} numberOfLines={1}>{side.abbr}</Text> : null}
       {side.logo ? (
         <Image source={{ uri: side.logo }} onLoad={() => setLoaded(true)} onError={() => setLoaded(false)} contentFit="contain" transition={look.still ? 0 : 220}
-          style={{ position: 'absolute', width: size * 0.78, height: size * 0.78, opacity: loaded ? 1 : 0 }} accessibilityIgnoresInvertColors />
+          style={{ position: 'absolute', width: size * 0.7, height: size * 0.7, opacity: loaded ? 1 : 0 }} accessibilityIgnoresInvertColors />
       ) : null}
     </View>
   );

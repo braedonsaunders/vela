@@ -10,7 +10,7 @@ import { useLiveEvent, useSportsActions } from './context';
 import type { SportsLook } from './look';
 import { airingText, cardLine, heroTint, matchup, probabilityLead, rankRows, targetLabel, watchLabel, watchTarget, type Matchup, type Side } from './model';
 import { fitTable } from './table';
-import { Crest, FavouriteMark, Glyph, GridMark, LiveBadge, Pill, ProbabilityBar, Score, Surface, Txt } from './parts';
+import { Crest, FavouriteMark, FocusRow, Glyph, GridMark, LiveBadge, Pill, ProbabilityBar, Score, Surface, Txt } from './parts';
 import { alpha } from './colour';
 
 const WHITE = '#ffffff';
@@ -43,19 +43,19 @@ function SideLine({ look, side, m, size = 14, ink }: { look: SportsLook; side: S
 
 /** A race or tournament: its leaders. The place, the name (one line, never crowded out), the
  * headline value bold and its context quieter beside it. */
-export function Ranking({ look, event, rows = 3, ink, quiet, size = 13.5 }: { look: SportsLook; event: LiveEvent; rows?: number; ink?: string; quiet?: string; size?: number }) {
+export function Ranking({ look, event, rows = 3, ink, quiet, size = 13.5, focusRows }: { look: SportsLook; event: LiveEvent; rows?: number; ink?: string; quiet?: string; size?: number; focusRows?: boolean }) {
   if (event.spoiler) return <Txt look={look} size={13} color={quiet ?? look.inkQuiet}>{msg('sports.spoilerHidden')}</Txt>;
   const list = rankRows(event.ranking).slice(0, rows);
   const placeWidth = look.px(size * (list.some(row => row.place.length > 2) ? 2.2 : 1.7));
   return (
     <View style={{ gap: look.px(3) }}>
       {list.map((row, n) => (
-        <View key={`${row.place}-${row.name}-${n}`} style={{ flexDirection: 'row', alignItems: 'baseline', gap: look.px(8) }}>
+        <FocusRow key={`${row.place}-${row.name}-${n}`} look={look} on={!!focusRows} style={{ flexDirection: 'row', alignItems: 'baseline', gap: look.px(8), ...(focusRows ? { paddingVertical: look.px(6), paddingHorizontal: look.px(6), marginHorizontal: -look.px(6) } : null) }}>
           <Txt look={look} size={size - 1.5} weight={800} color={row.pos === 1 ? look.gold : quiet ?? look.inkQuiet} digits lines={1} style={{ width: placeWidth }}>{row.place}</Txt>
           <Txt look={look} size={size} weight={row.pos === 1 ? 700 : 560} color={ink} lines={1} style={{ flex: 1, minWidth: '40%' }}>{row.name}</Txt>
           {row.secondary ? <Txt look={look} size={size - 2} weight={500} color={quiet ?? look.inkQuiet} digits lines={1} style={{ flexShrink: 1 }}>{row.secondary}</Txt> : null}
           {row.detail ? <Txt look={look} size={size - 0.5} weight={750} color={ink ?? look.ink} digits lines={1} style={{ flexShrink: 0, maxWidth: '38%', textAlign: 'right' }}>{row.detail}</Txt> : null}
-        </View>
+        </FocusRow>
       ))}
     </View>
   );
@@ -223,7 +223,7 @@ export function tableWidth(look: SportsLook, table: LiveTable, compact?: boolean
  * the names read whole, numbers are tight and right-aligned, and when the room runs out the least
  * useful columns go before a name is cut.
  */
-export function TableView({ look, table, highlight, compact, testID }: { look: SportsLook; table: LiveTable; highlight?: (row: readonly string[]) => boolean; compact?: boolean; testID?: string }) {
+export function TableView({ look, table, highlight, compact, testID, focusRows }: { look: SportsLook; table: LiveTable; highlight?: (row: readonly string[]) => boolean; compact?: boolean; testID?: string; focusRows?: boolean }) {
   const [width, setWidth] = useState(0);
   const text = tableText(look, compact);
   const fit = useMemo(() => fitTable(table, width || Infinity, text), [table, width, text.size, text.headerSize, text.gap]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -245,17 +245,17 @@ export function TableView({ look, table, highlight, compact, testID }: { look: S
         const on = highlight?.(row) ?? false;
         const last = r === table.rows.length - 1;
         return (
-          <View key={r} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: look.px(compact ? 5 : 7), borderBottomWidth: last ? 0 : 1, borderBottomColor: on ? 'transparent' : look.hairline,
+          <FocusRow key={r} look={look} on={!!focusRows} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: look.px(compact ? 5 : 7), borderBottomWidth: last ? 0 : 1, borderBottomColor: on ? 'transparent' : look.hairline,
             marginHorizontal: -look.px(6), paddingHorizontal: look.px(6), backgroundColor: on ? alpha(look.accent, 0.14) : 'transparent', borderRadius: on ? look.px(7) : 0 }}>
             {fit.columns.map((c, n) => {
               const lead = c.name || n === 0;
-              const total = n === fit.columns.length - 1 && !c.name;
+              const total = c.index === table.columns.length - 1 && !c.name;
               return (
                 <Txt key={c.index} look={look} size={compact ? 13 : 13.5} weight={c.name ? 650 : total ? 700 : 520} color={c.name || total ? look.ink : lead ? look.inkSecondary : look.inkSecondary} lines={1} digits
                   style={cellStyle(c, n)}>{row[c.index] ?? ''}</Txt>
               );
             })}
-          </View>
+          </FocusRow>
         );
       })}
     </View>

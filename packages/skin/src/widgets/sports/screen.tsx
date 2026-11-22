@@ -293,7 +293,19 @@ function Entities({ look, section, leagues: screenLeagues, chosen }: { look: Spo
   useEffect(() => { if (chosen) setPicked(chosen); }, [chosen]);
   const query = { feed: section.feed, league };
   const read = useVelaState(state => state.liveEvents.entities[entitiesKey(query)]);
-  const { teams, needsRead } = leagueTeams(league, section.entities, read?.value, followed);
+  const listed = leagueTeams(league, section.entities, read?.value, followed);
+  const { needsRead } = listed;
+  // The order is set when a league's teams first show: following one does not reshuffle the row
+  // under the remote (it moves to the front the next time the league is opened).
+  const order = useRef(new Map<string, string[]>());
+  const teams = useMemo(() => {
+    const known = order.current.get(league) ?? [];
+    const rank = new Map(known.map((key, n) => [key, n]));
+    const fresh = listed.teams.filter(team => !rank.has(entityKey(team)));
+    if (fresh.length) order.current.set(league, [...known, ...fresh.map(entityKey)]);
+    const at = (team: LiveEntity) => rank.get(entityKey(team)) ?? known.length + fresh.indexOf(team);
+    return [...listed.teams].sort((a, b) => at(a) - at(b));
+  }, [league, listed.teams.map(entityKey).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (needsRead && !read) void vela.liveEvents.loadEntities(query);
   }, [needsRead, read, league]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -41,13 +41,14 @@ test('a narrow table drops the least useful columns from the right before cuttin
   expect(fit.dropped).toContain(9); // STRK goes first
   expect(names(fit, nfl).slice(0, 4)).toEqual(['#', 'Team', 'W', 'L']);
   const team = fit.columns.find(c => c.name)!;
-  expect(team.width).toBeGreaterThanOrEqual(Math.floor(textWidth('Mmmmmmmm', 13.5)));
+  expect(team.width).toBeGreaterThanOrEqual(Math.floor(textWidth('Jacksonville Jaguars', 13.5, true)));
 });
 
 test('a phone keeps position, names, wins and losses; points stay over goals', () => {
   const nflFit = fitTable(nfl, 300, text);
   expect(names(nflFit, nfl)).toEqual(expect.arrayContaining(['#', 'Team', 'W', 'L', 'PCT']));
   expect(names(nflFit, nfl)).not.toContain('STRK');
+  expect(nflFit.columns.find(c => c.name)!.width).toBeGreaterThanOrEqual(Math.floor(textWidth('Jacksonville Jaguars', 13.5, true)));
   const soccerFit = fitTable(soccer, 300, text);
   expect(names(soccerFit, soccer)).toEqual(expect.arrayContaining(['#', 'Team', 'W', 'D', 'L', 'GD', 'P']));
   expect(names(soccerFit, soccer)).not.toContain('GA');
@@ -79,4 +80,11 @@ test('short words align left like words, and a wide table keeps its numbers near
   // The numbers took some of the room, not just the names.
   expect(wide.columns[2]!.width).toBeGreaterThan(fitTable(nfl, Infinity, text).columns[2]!.width);
   expect(team.width).toBeLessThan(1200 - 9 * 20);
+});
+
+test('with room, number columns share one width', () => {
+  const golf: LiveTable = { title: 'Leaderboard', columns: ['Pos', 'Player', 'Score', 'R1', 'R2', 'R3', 'R4'], rows: [['1', 'Michael Thorbjornsen', '-10', '-6', '-3', '-1', '-'], ['2', 'Max Greyserman', '-9', '-7', 'E', '-2', '-']] };
+  const fit = fitTable(golf, 1500, text);
+  const widths = fit.columns.filter(c => ['R1', 'R2', 'R3', 'R4'].includes(golf.columns[c.index]!)).map(c => c.width);
+  expect(new Set(widths).size).toBe(1);
 });

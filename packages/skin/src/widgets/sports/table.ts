@@ -29,8 +29,11 @@ const dash = (cell: string) => cell === '' || cell === '–' || cell === '-' || 
 
 /** A table's numeric columns align right; its first (names) left. */
 export function numericColumn(rows: readonly (readonly string[])[], column: number): boolean {
-  const cells = rows.map(row => row[column] ?? '').filter(cell => !dash(cell));
-  return cells.length > 0 && cells.every(cell => /^[+\-−]?[\d.:%/–-]+[a-zA-Z]{0,3}$/.test(cell) || /^[WLTD]\d{1,2}$/.test(cell));
+  // A lone capital among numbers ("E" for even par) reads as a value, not a word.
+  const cells = rows.map(row => row[column] ?? '').filter(cell => !dash(cell) && !/^[A-Z]$/.test(cell));
+  // A column of only dashes (a round not played yet) sits with the numbers.
+  if (!cells.length) return rows.some(row => dash(row[column] ?? '') && (row[column] ?? '') !== '');
+  return cells.every(cell => /^[+\-−]?[\d.:%/–-]+[a-zA-Z]{0,3}$/.test(cell) || /^[WLTD]\d{1,2}$/.test(cell));
 }
 
 export interface ColumnFit {
@@ -61,7 +64,7 @@ export interface FitText {
  * Fits `table` into `width` (Infinity for its natural size). The names column is the first text
  * column with the longest content; a leading short numeric column (the position) and the key
  * columns are kept longest; others are dropped from the right until the names read whole, but a
- * names column never shrinks below about eight characters before a column is dropped.
+ * names column never shrinks below its full width (to about twenty letters) to keep a column.
  */
 export function fitTable(table: LiveTable, width: number, text: FitText): TableFit {
   const count = table.columns.length;
@@ -76,7 +79,8 @@ export function fitTable(table: LiveTable, width: number, text: FitText): TableF
     return Math.ceil(Math.max(textWidth(header, text.headerSize, true), cells) * 1.08 + 2 + text.gap);
   });
   const total = natural.reduce((sum, w) => sum + w, 0);
-  const floor = name >= 0 ? Math.min(natural[name]!, Math.ceil(textWidth('Mmmmmmmm', text.size) + text.gap)) : 0;
+  // The names keep their full width (up to about twenty letters) before any column is kept.
+  const floor = name >= 0 ? Math.min(natural[name]!, Math.ceil(20 * 0.55 * text.size * 1.06 + text.gap)) : 0;
   // Drop order: the least useful first, from the right; never the names, the position or a key column.
   const priority = (n: number) => {
     if (n === name) return 1000;
@@ -90,7 +94,7 @@ export function fitTable(table: LiveTable, width: number, text: FitText): TableF
   const sum = () => [...kept].reduce((s, n) => s + natural[n]!, 0);
   for (const n of order) {
     if (sum() <= width) break;
-    // Keep this column if the names can give up the difference and still read (eight characters).
+    // Keep this column if the names can give up the difference and still read whole.
     if (name >= 0 && sum() - (natural[name]! - floor) <= width) break;
     kept.delete(n);
     dropped.push(n);
@@ -102,6 +106,11 @@ export function fitTable(table: LiveTable, width: number, text: FitText): TableF
     // leave its numbers far from the names; the names take the rest, or give up what is short.
     let extra = width - columns.reduce((s, c) => s + c.width, 0);
     const others = columns.filter(c => !c.name);
+    // Numbers first share one width (an even grid of columns), when the room allows it.
+    const numbers = others.filter(c => numeric[c.index] && !(c.index === 0 && c.align === 'left'));
+    const even = Math.max(0, ...numbers.map(c => c.width));
+    const evenCost = numbers.reduce((s, c) => s + (even - c.width), 0);
+    if (numbers.length > 1 && evenCost <= extra) { for (const c of numbers) c.width = even; extra -= evenCost; }
     if (extra > 0 && others.length) {
       const room = others.reduce((s, c) => s + c.width * 0.5, 0);
       const share = Math.min(1, extra / 2 / room);
