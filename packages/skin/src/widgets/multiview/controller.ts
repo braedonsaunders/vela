@@ -1,20 +1,18 @@
 // Live TV multiview: up to four live channels on one screen. One controller per signed-in server
 // remembers the chosen channels; the multiview screen opens it while on screen. Opening creates a
 // server group (POST /multiview), each tile starts a live playback in that group with its tile index
-// and a height cap, and leaving deletes the group, which ends every tile. Audio follows focus: only
-// the focused tile is unmuted. A tile the server refuses (a provider connection cap) shows why on
+// and the height it is drawn at, and leaving deletes the group, which ends every tile. Audio follows
+// focus: only the focused tile is unmuted. A tile that grows (full screen, the big tile) asks for its
+// larger height with a new session in its place, shown once it plays; one that shrinks does so later. A tile the server refuses (a provider connection cap) shows why on
 // that tile; the others keep playing.
 import type { Command, Snapshot } from '@vela/player-api';
 import { VelaError } from '@vela/core';
+import type { LiveEventRef, MultiviewTile as MultiviewTileRequest } from '../../../../protocol/live-events';
 import type { PlaybackPlan } from '../../../../protocol/types';
-import { layoutsFor, MAX_TILES, settleLayout, tileMaxHeight, type MultiviewLayout } from './layout';
+import { ladderHeight, layoutsFor, MAX_TILES, settleLayout, type MultiviewLayout } from './layout';
 import { tileRefusal, type TileRefusal } from './refusal';
 
-/** What a tile asks the server for: its group, its index in it and the stream's height cap. */
-export interface MultiviewTileRequest { groupId: string; tile: number; maxHeight?: number }
-
-/** A live event the programme on a tile's channel matches (playback snapshot / session SSE). */
-export interface LiveEventRef { id: string; feed: string }
+export type { LiveEventRef, MultiviewTile as MultiviewTileRequest } from '../../../../protocol/live-events';
 
 /** The server operations multiview needs; the app builds one from its adapter. */
 export interface MultiviewSource {
@@ -23,9 +21,16 @@ export interface MultiviewSource {
   close(groupId: string): Promise<void>;
   tune(channelId: string, multiview: MultiviewTileRequest): Promise<PlaybackPlan>;
   stop(plan: PlaybackPlan): Promise<void>;
-  /** Re-plans a tile's session under another height cap (undefined: the full stream). */
-  requestHeight?(plan: PlaybackPlan, maxHeight: number | undefined): Promise<PlaybackPlan>;
+  /** Follows a tile's session until `signal` aborts: its newer plans and the live event on air. */
+  follow?(sessionId: string, on: { plan(plan: PlaybackPlan): void; liveEvent(liveEvent: LiveEventRef | null): void }, signal: AbortSignal): Promise<void>;
 }
+
+/** How long a tile's new height must hold before it is asked for: growing soon, shrinking later, so a
+ * look at full screen and back does not replace the stream twice. */
+const GROW_AFTER_MS = 500;
+const SHRINK_AFTER_MS = 6000;
+/** A tile's session stream that drops is followed again after this. */
+const FOLLOW_RETRY_MS = 5000;
 
 export type TileState = 'waiting' | 'tuning' | 'playing' | 'failed';
 
@@ -35,6 +40,8 @@ export interface MultiviewTile {
   channelId: string;
   state: TileState;
   plan: PlaybackPlan | null;
+  /** A session at the tile's new height, playing hidden until it shows its first picture. */
+  next: PlaybackPlan | null;
   refusal: TileRefusal | null;
   muted: boolean;
   /** The latest mute command for the tile's player view. */
@@ -62,6 +69,12 @@ interface TileRecord {
   channelId: string;
   generation: number;
   plan: PlaybackPlan | null;
+  next: PlaybackPlan | null;
+  /** The height the tile is drawn at (device pixels on the ladder), and the one its plan was asked at. */
+  height: number | undefined;
+  askedHeight: number | undefined;
+  heightTimer: ReturnType<typeof setTimeout> | undefined;
+  following: AbortController | null;
   playing: boolean;
   refusal: TileRefusal | null;
   muted: boolean;
@@ -126,7 +139,7 @@ export class MultiviewController {
     }
     const used = new Set(this.tiles.map(tile => tile.slot));
     const slot = [0, 1, 2, 3].find(candidate => !used.has(candidate))!;
-    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, playing: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false };
+    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false };
     this.tiles.push(tile);
     if (this.focusedSlot < 0) this.focusedSlot = slot;
     this.applyAudio();
@@ -192,6 +205,19 @@ export class MultiviewController {
     this.emit();
   }
 
+  /** The height a tile is drawn at now, in device pixels (the screen reports it on every layout). */
+  setHeight(slot: number, pixels: number): void {
+    const tile = this.tile(slot);
+    const height = ladderHeight(pixels);
+    if (!tile || tile.height === height) return;
+    tile.height = height;
+    clearTimeout(tile.heightTimer);
+    tile.heightTimer = undefined;
+    if (!tile.plan || this.phase !== 'open' || tile.askedHeight === height) return;
+    const grow = tile.askedHeight === undefined || height > tile.askedHeight;
+    tile.heightTimer = setTimeout(() => { tile.heightTimer = undefined; this.regrade(tile); }, grow ? GROW_AFTER_MS : SHRINK_AFTER_MS);
+  }
+
   /** Full screen and back (long-press). Full screen also takes the focus, and so the audio. */
   toggleFullscreen(slot: number): void {
     const tile = this.tile(slot);
@@ -199,8 +225,6 @@ export class MultiviewController {
     const entering = this.fullscreenSlot !== slot;
     this.fullscreenSlot = entering ? slot : -1;
     if (entering) { this.focusedSlot = slot; this.applyAudio(); }
-    // The full-screen tile asks for its full stream; back in the grid it returns to the tile cap.
-    this.requestHeight(tile, entering ? undefined : tileMaxHeight(this.tiles.length));
     this.emit();
   }
 
@@ -272,6 +296,11 @@ export class MultiviewController {
 
   snapshot(slot: number, snapshot: Snapshot): void {
     const tile = this.tile(slot);
+    if (tile?.next && snapshot.sessionId === tile.next.sessionId) {
+      if (snapshot.state === 'failed') { this.dropNext(tile); this.emit(); return; }
+      if (snapshot.state === 'playing' && !snapshot.waiting && snapshot.totalFrames !== 0) this.takeNext(tile);
+      return;
+    }
     if (!tile?.plan || snapshot.sessionId !== tile.plan.sessionId) return;
     if (snapshot.state === 'failed') {
       this.fail(tile, new Error(snapshot.failure?.message || ''));
@@ -285,15 +314,17 @@ export class MultiviewController {
 
   failed(slot: number, sessionId: string, message: string): void {
     const tile = this.tile(slot);
+    if (tile?.next?.sessionId === sessionId) { this.dropNext(tile); this.emit(); return; }
     if (tile?.plan?.sessionId === sessionId) this.fail(tile, new Error(message));
   }
 
   /** The tile's session has a newer plan (a recovery or a height change). */
   updatePlan(slot: number, plan: PlaybackPlan): void {
     const tile = this.tile(slot);
-    if (!tile?.plan || tile.plan.sessionId !== plan.sessionId) return;
+    if (tile?.next?.sessionId === plan.sessionId) { tile.next = plan; this.emit(); return; }
+    if (!tile?.plan || tile.plan.sessionId !== plan.sessionId || plan.revision < tile.plan.revision) return;
+    if (plan.state === 'ended') { this.fail(tile, new Error('')); return; }
     tile.plan = plan;
-    tile.liveEvent = liveEventOf(plan) ?? tile.liveEvent;
     this.emit();
   }
 
@@ -325,8 +356,8 @@ export class MultiviewController {
     const generation = ++tile.generation;
     const channelId = tile.channelId;
     const request: MultiviewTileRequest = { groupId: this.groupId, tile: tile.slot };
-    const maxHeight = this.fullscreenSlot === tile.slot ? undefined : tileMaxHeight(this.tiles.length);
-    if (maxHeight !== undefined) request.maxHeight = maxHeight;
+    if (tile.height !== undefined) request.maxHeight = tile.height;
+    tile.askedHeight = tile.height;
     tile.playing = false;
     this.options.source.tune(channelId, request).then(
       plan => {
@@ -336,7 +367,8 @@ export class MultiviewController {
         }
         tile.plan = plan;
         tile.askedAgain = false;
-        tile.liveEvent = liveEventOf(plan);
+        tile.liveEvent = null;
+        this.follow(tile, plan);
         this.emit();
       },
       error => {
@@ -364,29 +396,98 @@ export class MultiviewController {
     tile.generation += 1;
     tile.playing = false;
     tile.liveEvent = null;
+    this.unfollow(tile);
+    this.dropNext(tile);
     const plan = tile.plan;
     tile.plan = null;
-    if (plan) void this.options.source.stop(plan).catch(error => this.options.report?.('stop', error));
+    if (plan) this.stopPlan(plan);
+  }
+
+  private stopPlan(plan: PlaybackPlan): void {
+    void this.options.source.stop(plan).catch(error => this.options.report?.('stop', error));
+  }
+
+  private dropNext(tile: TileRecord): void {
+    clearTimeout(tile.heightTimer);
+    tile.heightTimer = undefined;
+    const next = tile.next;
+    tile.next = null;
+    if (next) this.stopPlan(next);
+  }
+
+  /** Asks for a session at the tile's new height; the current one plays until it shows a picture. */
+  private regrade(tile: TileRecord): void {
+    if (!tile.plan || this.phase !== 'open' || tile.height === tile.askedHeight) return;
+    const generation = tile.generation;
+    const height = tile.height;
+    const request: MultiviewTileRequest = { groupId: this.groupId, tile: tile.slot, ...(height !== undefined ? { maxHeight: height } : {}) };
+    tile.askedHeight = height;
+    this.options.source.tune(tile.channelId, request).then(
+      plan => {
+        if (generation !== tile.generation || !tile.plan || !this.tiles.includes(tile) || this.phase !== 'open') { this.stopPlan(plan); return; }
+        if (tile.next) this.stopPlan(tile.next);
+        tile.next = plan;
+        this.emit();
+      },
+      error => {
+        // The tile keeps playing at its old height; the next change asks again.
+        this.options.report?.('height', error);
+        if (generation === tile.generation) tile.askedHeight = tile.plan ? undefined : tile.askedHeight;
+      },
+    );
+  }
+
+  /** The new-height session shows its first picture: it takes the tile's place and the old one stops. */
+  private takeNext(tile: TileRecord): void {
+    const next = tile.next;
+    if (!next) return;
+    const old = tile.plan;
+    tile.next = null;
+    tile.plan = next;
+    tile.playing = true;
+    // The new view consumed a muting command with the current id: its own state comes with a new one.
+    tile.commandId += 1;
+    tile.command = { id: tile.commandId, type: 'mute', muted: tile.muted };
+    this.unfollow(tile);
+    this.follow(tile, next);
+    if (old) this.stopPlan(old);
+    this.emit();
+  }
+
+  private follow(tile: TileRecord, plan: PlaybackPlan): void {
+    const follow = this.options.source.follow;
+    if (!follow) return;
+    const abort = new AbortController();
+    tile.following = abort;
+    const sessionId = plan.sessionId;
+    const run = () => {
+      follow.call(this.options.source, sessionId, {
+        plan: next => { if (!abort.signal.aborted) this.updatePlan(tile.slot, next); },
+        liveEvent: ref => { if (!abort.signal.aborted) this.setLiveEvent(sessionId, ref); },
+      }, abort.signal).catch(error => { if (!abort.signal.aborted) this.options.report?.('follow', error); })
+        .finally(() => { if (!abort.signal.aborted && tile.plan?.sessionId === sessionId) setTimeout(() => { if (!abort.signal.aborted && tile.plan?.sessionId === sessionId) run(); }, FOLLOW_RETRY_MS); });
+    };
+    run();
+  }
+
+  private unfollow(tile: TileRecord): void {
+    tile.following?.abort();
+    tile.following = null;
   }
 
   /** Forget the session without stopping it (the group's delete ends it). */
   private reset(tile: TileRecord): void {
     tile.generation += 1;
+    this.unfollow(tile);
+    clearTimeout(tile.heightTimer);
+    tile.heightTimer = undefined;
+    tile.next = null;
+    tile.askedHeight = undefined;
     tile.plan = null;
     tile.playing = false;
     tile.liveEvent = null;
     tile.refusal = null;
     tile.askedAgain = false;
-  }
-
-  private requestHeight(tile: TileRecord, maxHeight: number | undefined): void {
-    const plan = tile.plan;
-    const request = this.options.source.requestHeight;
-    if (!plan || !request) return;
-    request.call(this.options.source, plan, maxHeight).then(
-      next => this.updatePlan(tile.slot, next),
-      error => this.options.report?.('height', error),
-    );
   }
 
   private applyAudio(): void {
@@ -408,6 +509,7 @@ export class MultiviewController {
         channelId: tile.channelId,
         state: tile.refusal ? 'failed' : this.phase !== 'open' ? 'waiting' : !tile.plan ? 'tuning' : tile.playing ? 'playing' : 'tuning',
         plan: tile.plan,
+        next: tile.next,
         refusal: tile.refusal,
         muted: tile.muted,
         command: tile.command,
@@ -425,11 +527,6 @@ export class MultiviewController {
     this.current = this.compose();
     for (const listener of [...this.listeners]) listener();
   }
-}
-
-function liveEventOf(plan: PlaybackPlan): LiveEventRef | null {
-  const value = (plan as PlaybackPlan & { liveEvent?: LiveEventRef | null }).liveEvent;
-  return value && typeof value.id === 'string' && typeof value.feed === 'string' ? { id: value.id, feed: value.feed } : null;
 }
 
 function sameEvent(a: LiveEventRef | null, b: LiveEventRef | null): boolean {

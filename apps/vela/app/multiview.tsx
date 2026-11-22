@@ -10,6 +10,16 @@ import { useLiveSurface, useLiveView } from '@vela/skin/src/widgets/guide';
 import { MultiviewScreen, useMultiview, type MultiviewLayout } from '@vela/skin/src/widgets/multiview';
 import { backFromNavigation, useBackHeld } from '@vela/skin/src/widgets/player';
 import { useVela } from '../src/vela';
+import { useVelaState } from '@vela/core/react';
+import type { LiveEventRef } from '../../../packages/protocol/live-events';
+
+/** A tile's live event, kept current by the shared live stream while the tile shows it. */
+function useTileEvent(ref: LiveEventRef | null) {
+  const { store } = useVela();
+  const id = ref?.id;
+  useEffect(() => (id ? store.liveEvents.follow({ events: [id] }) : undefined), [store, id]);
+  return useVelaState(state => (id ? state.liveEvents.events[id] ?? null : null));
+}
 
 const LAYOUTS: MultiviewLayout[] = ['split', 'grid', 'feature'];
 
@@ -49,7 +59,7 @@ export default function Multiview() {
   return (
     <HostContext.Provider value={skin}>
       <View style={styles.stage}>
-        <MultiviewScreen controller={multiview.controller} Player={VelaPlayerView} channels={live.guide?.channels ?? []} onLeave={leave} />
+        <MultiviewScreen controller={multiview.controller} Player={VelaPlayerView} channels={live.guide?.channels ?? []} onLeave={leave} useLiveEvent={useTileEvent} />
       </View>
     </HostContext.Provider>
   );

@@ -4,7 +4,7 @@
 import { View } from 'react-native';
 import type { GuideLook } from '../guide/look';
 import { Line } from '../guide/parts';
-import { bugSides, type BugEvent } from './bug-model';
+import { bugLeader, bugSides, bugTitle, type BugEvent } from './bug-model';
 
 export type { BugEvent };
 
@@ -13,7 +13,7 @@ export function ScoreBug({ event, look, size }: { event: BugEvent; look: GuideLo
   const pad = { paddingHorizontal: size * 0.62, paddingVertical: size * 0.32, justifyContent: 'center' as const };
   const dark = { ...pad, backgroundColor: 'rgba(11, 15, 26, 0.84)' };
   const live = event.status.state === 'in';
-  const leader = event.ranking?.[0];
+  const leader = bugLeader(event);
   return (
     <View style={{ flexDirection: 'row', alignSelf: 'flex-start', borderRadius: size * 0.5, overflow: 'hidden',
       shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: size, shadowOffset: { width: 0, height: size * 0.3 } }}>
@@ -24,9 +24,9 @@ export function ScoreBug({ event, look, size }: { event: BugEvent; look: GuideLo
         </View> : null}
         <View style={dark}><Line look={look} size={size} weight={750} color="#ffffff">{sides.right}</Line></View>
       </> : <>
-        <View style={dark}><Line look={look} size={size} weight={750} color="#ffffff">{event.title ?? ''}</Line></View>
+        <View style={dark}><Line look={look} size={size} weight={750} color="#ffffff">{bugTitle(event)}</Line></View>
         {leader ? <View style={{ ...pad, backgroundColor: '#ffffffee' }}>
-          <Line look={look} size={size} weight={800} color="#0b0f1a" tabular>{`P${leader.pos} ${leader.abbr}`}</Line>
+          <Line look={look} size={size} weight={800} color="#0b0f1a" tabular>{leader}</Line>
         </View> : null}
       </>}
       {event.status.detail ? <View style={{ ...pad, backgroundColor: live ? look.now : 'rgba(11, 15, 26, 0.84)' }}>

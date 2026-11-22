@@ -10,20 +10,22 @@ import type * as V from '../../../packages/protocol/types';
 
 const key = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
-/** The live access's operations as a multiview source. Until the server's group endpoints are in the
- * shared client, tiles play as ordinary live sessions of an unnamed group. */
+/** The live access's operations as a multiview source. A server without multiview groups (or with
+ * none offered) plays tiles as ordinary live sessions. */
 function multiviewSource(access: NonNullable<Awaited<ReturnType<Store['live']['access']>>>): MultiviewSource {
   const live = liveSource(access.api, access.client);
+  const groups = access.multiview;
   return {
-    open: async () => ({ groupId: '', maxTiles: 4 }),
-    close: async () => undefined,
+    open: async () => (groups ? await groups.create() : { groupId: '', maxTiles: 4 }),
+    close: async groupId => { if (groups && groupId) await groups.end(groupId); },
     async tune(channelId, multiview) {
-      const request = { channelId, client: access.client, idempotencyKey: key('tile'), ...(multiview.groupId ? { multiview } : {}) } as V.PlaybackRequest;
+      const request: V.PlaybackRequest = { channelId, client: access.client, idempotencyKey: key('tile'), ...(multiview.groupId ? { multiview } : {}) };
       const answer = await access.api.startPlayback(request);
       if ('state' in answer && answer.state === 'preparing') throw new Error(`Channel ${channelId} is not ready to play`);
       return answer as V.PlaybackPlan;
     },
     stop: plan => live.stop(plan),
+    ...(access.follow ? { follow: access.follow } : {}),
   };
 }
 

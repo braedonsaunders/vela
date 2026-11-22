@@ -3,7 +3,8 @@ import { VelaError } from '@vela/core';
 import type { Snapshot } from '@vela/player-api';
 import type { PlaybackPlan } from '../../protocol/types';
 import { MultiviewController, type MultiviewSource, type MultiviewTileRequest } from '../src/widgets/multiview/controller';
-import { bugSides } from '../src/widgets/multiview/bug-model';
+import { bugLeader, bugSides, bugTitle, type BugEvent } from '../src/widgets/multiview/bug-model';
+import type { LiveEventState } from '../../protocol/live-events';
 import { connectionCap, tileRefusal } from '../src/widgets/multiview/refusal';
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -30,10 +31,11 @@ function fakeSource(refuse: (channelId: string) => unknown = () => null) {
   return { source, calls };
 }
 
-test('opening asks for a group, then every tile plays in it with its index and the height cap', async () => {
+test('opening asks for a group, then every tile plays in it with its index and drawn height', async () => {
   const { source, calls } = fakeSource();
   const mv = new MultiviewController({ source });
   for (const id of ['a', 'b', 'c', 'd']) mv.add(id);
+  for (const slot of [0, 1, 2, 3]) mv.setHeight(slot, 700);
   expect(calls.tunes).toHaveLength(0);
   mv.open();
   await settle();
@@ -47,13 +49,71 @@ test('opening asks for a group, then every tile plays in it with its index and t
   expect(mv.view().tiles[0]!.state).toBe('playing');
 });
 
-test('two tiles ask for 1080p', async () => {
+test('a tile whose height is not known yet leaves the cap to the server', async () => {
   const { source, calls } = fakeSource();
   const mv = new MultiviewController({ source });
   mv.add('a'); mv.add('b');
   mv.open();
   await settle();
-  expect(calls.tunes.map(t => t.request.maxHeight)).toEqual([1080, 1080]);
+  expect(calls.tunes.map(t => t.request)).toEqual([{ groupId: 'g1', tile: 0 }, { groupId: 'g1', tile: 1 }]);
+});
+
+test('a tile that grows asks for its new height and switches once the new session plays', async () => {
+  const { source, calls } = fakeSource();
+  const mv = new MultiviewController({ source });
+  mv.add('a'); mv.add('b');
+  mv.setHeight(0, 1000); mv.setHeight(1, 1000);
+  mv.open();
+  await settle();
+  const first = mv.view().tiles[0]!.plan!.sessionId;
+  mv.toggleFullscreen(0);
+  mv.setHeight(0, 2160);
+  await new Promise(resolve => setTimeout(resolve, 560));
+  expect(calls.tunes.at(-1)).toEqual({ channelId: 'a', request: { groupId: 'g1', tile: 0, maxHeight: 2160 } });
+  const next = mv.view().tiles[0]!.next!;
+  expect(next.sessionId).not.toBe(first);
+  // The current session keeps the picture until the new one shows a frame.
+  expect(mv.view().tiles[0]!.plan!.sessionId).toBe(first);
+  const command = mv.view().tiles[0]!.command!.id;
+  mv.snapshot(0, playing(next.sessionId));
+  const tile = mv.view().tiles[0]!;
+  expect(tile.plan!.sessionId).toBe(next.sessionId);
+  expect(tile.next).toBeNull();
+  expect(calls.stopped).toEqual([first]);
+  // The view that played muted underneath gets the tile's own audio state as a new command.
+  expect(tile.command!.id).toBeGreaterThan(command);
+  expect(tile.command).toMatchObject({ type: 'mute', muted: false });
+});
+
+test('a tile that shrinks only asks again after a while, and growing back first cancels it', async () => {
+  const { source, calls } = fakeSource();
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.setHeight(0, 2160);
+  mv.open();
+  await settle();
+  mv.setHeight(0, 700);
+  await new Promise(resolve => setTimeout(resolve, 600));
+  mv.setHeight(0, 2160);
+  await new Promise(resolve => setTimeout(resolve, 600));
+  expect(calls.tunes).toHaveLength(1);
+});
+
+test('a new-height session that fails is dropped and the tile plays on', async () => {
+  const { source, calls } = fakeSource();
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.setHeight(0, 700);
+  mv.open();
+  await settle();
+  const first = mv.view().tiles[0]!.plan!.sessionId;
+  mv.setHeight(0, 2000);
+  await new Promise(resolve => setTimeout(resolve, 560));
+  const next = mv.view().tiles[0]!.next!.sessionId;
+  mv.failed(0, next, 'no');
+  expect(mv.view().tiles[0]!.next).toBeNull();
+  expect(mv.view().tiles[0]!.plan!.sessionId).toBe(first);
+  expect(calls.stopped).toEqual([next]);
 });
 
 test('audio follows focus: only the focused tile is unmuted, by commands with rising ids', async () => {
@@ -112,7 +172,7 @@ test('swapping a tile stops its session and tunes the new channel in the same ti
   mv.swap(1, 'z');
   await settle();
   expect(calls.stopped).toEqual([old]);
-  expect(calls.tunes.at(-1)).toEqual({ channelId: 'z', request: { groupId: 'g1', tile: 1, maxHeight: 1080 } });
+  expect(calls.tunes.at(-1)).toEqual({ channelId: 'z', request: { groupId: 'g1', tile: 1 } });
   expect(mv.view().tiles[1]!.channelId).toBe('z');
 });
 
@@ -212,16 +272,21 @@ test('a superseded tune is asked once more before the tile gives up', async () =
   expect(mv.view().tiles[0]!.plan).not.toBeNull();
 });
 
-test('a tile follows the live event its plan and the session stream name', async () => {
+test('a tile follows its session stream for the live event on air, and stops when it leaves', async () => {
   const { source } = fakeSource();
-  source.tune = async (channelId) => ({ sessionId: `s-${channelId}`, liveEvent: { id: 'sports:nfl:1', feed: 'sports' } }) as unknown as PlaybackPlan;
+  const followed: { sessionId: string; signal: AbortSignal; on: Parameters<NonNullable<MultiviewSource['follow']>>[1] }[] = [];
+  source.follow = (sessionId, on, signal) => { followed.push({ sessionId, on, signal }); return new Promise(() => {}); };
   const mv = new MultiviewController({ source });
   mv.add('a');
-  mv.open();
+  const close = mv.open();
   await settle();
+  expect(followed).toHaveLength(1);
+  followed[0]!.on.liveEvent({ id: 'sports:nfl:1', feed: 'sports' });
   expect(mv.view().tiles[0]!.liveEvent).toEqual({ id: 'sports:nfl:1', feed: 'sports' });
-  mv.setLiveEvent('s-a', null);
+  followed[0]!.on.liveEvent(null);
   expect(mv.view().tiles[0]!.liveEvent).toBeNull();
+  close();
+  expect(followed[0]!.signal.aborted).toBe(true);
 });
 
 test('a player failure on a tile shows on that tile, and Try again tunes it afresh', async () => {
@@ -248,10 +313,16 @@ test('the cap details are read only from the typed refusal', () => {
 });
 
 test('the bug prints away first and hides a spoiler or a game not yet started', () => {
-  const event = (state: string, spoiler = false) => ({ status: { state, detail: '' }, spoiler,
-    competitors: [{ abbr: 'PHI', score: '27', home: true }, { abbr: 'NYG', score: '24', home: false }] });
+  const league = { id: 'nfl', name: 'NFL', abbr: 'NFL' };
+  const event = (state: LiveEventState, spoiler = false): BugEvent => ({ league, status: { state, detail: '' }, spoiler,
+    competitors: [{ id: 'phi', name: 'Eagles', abbr: 'PHI', score: '27', home: true }, { id: 'nyg', name: 'Giants', abbr: 'NYG', score: '24', home: false }] });
   expect(bugSides(event('in'))).toEqual({ left: 'NYG', right: 'PHI', score: '24–27' });
   expect(bugSides(event('pre'))?.score).toBe('');
   expect(bugSides(event('in', true))?.score).toBe('');
-  expect(bugSides({ status: { state: 'in', detail: '' }, competitors: [] })).toBeNull();
+  const race: BugEvent = { league: { id: 'f1', name: 'Formula 1', abbr: 'F1' }, title: 'Las Vegas', status: { state: 'in', detail: 'Lap 31/50' }, competitors: [],
+    ranking: [{ pos: 1, name: 'Verstappen', abbr: 'VER' }] };
+  expect(bugSides(race)).toBeNull();
+  expect(bugTitle(race)).toBe('Las Vegas');
+  expect(bugLeader(race)).toBe('VER P1');
+  expect(bugLeader({ ...race, spoiler: true })).toBe('');
 });

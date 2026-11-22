@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { layoutsFor, neighbour, placement, settleLayout, slotRects, tileMaxHeight, type Rect } from '../src/widgets/multiview/layout';
+import { featureBand, ladderHeight, layoutsFor, neighbour, placement, settleLayout, slotRects, type Rect } from '../src/widgets/multiview/layout';
 
 const TV = { width: 1920, height: 1080 };
 const inside = (rect: Rect, size = TV) => rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= size.width + 1e-6 && rect.y + rect.height <= size.height + 1e-6;
@@ -32,18 +32,31 @@ test('every layout keeps its tiles 16:9, on screen and apart', () => {
   }
 });
 
-test('2×2 is four equal quarters; one big + three small gives the big tile most of the screen', () => {
+test('2×2 is four equal quarters', () => {
   const grid = slotRects('grid', 4, TV, 14);
   expect(new Set(grid.map(rect => Math.round(rect.width))).size).toBe(1);
   expect(grid[0]!.width).toBeGreaterThan(900);
-  const feature = slotRects('feature', 4, TV, 14);
-  const [big, ...small] = feature;
-  for (const rect of small) expect(big!.width).toBeGreaterThan(rect.width * 2);
-  // The side column is centred and its tiles stacked in order.
-  expect(small[0]!.y).toBeLessThan(small[1]!.y);
-  expect(small[1]!.y).toBeLessThan(small[2]!.y);
-  // With fewer beside it, the big tile keeps its size.
+});
+
+test('one big + three small: the big tile is as tall as the column, both top-aligned, filling the width', () => {
+  const [big, ...small] = slotRects('feature', 4, TV, 14);
+  expect(big!.width).toBeGreaterThan(1400);
+  expect(small[0]!.y).toBeCloseTo(big!.y);
+  expect(small[2]!.y + small[2]!.height).toBeCloseTo(big!.y + big!.height);
+  expect(small[0]!.x + small[0]!.width).toBeCloseTo(1920 - 14);
+  expect(big!.x).toBeCloseTo(14);
+  // The band under them is what is left of the screen, the full width of the tiles.
+  const band = featureBand(TV, 14);
+  expect(band.y).toBeCloseTo(big!.y + big!.height + 14);
+  expect(band.y + band.height).toBeCloseTo(1080 - 14);
+  expect(band.width).toBeCloseTo(1920 - 28);
+  // With fewer beside it, the big tile keeps its place and size.
   expect(slotRects('feature', 2, TV, 14)[0]).toEqual(big!);
+});
+
+test('a screen too short for the column keeps every tile on it', () => {
+  const square = { width: 1000, height: 600 };
+  for (const rect of slotRects('feature', 4, square, 10)) expect(inside(rect, square)).toBe(true);
 });
 
 test('a lone tile fills the screen', () => {
@@ -59,11 +72,14 @@ test('placement maps a full-screen view onto its rect about the centre', () => {
   expect(TV.width / 2 + quarter.translateX).toBe(960 + 480);
 });
 
-test('tiles cap their stream height by how many share the screen', () => {
-  expect(tileMaxHeight(1)).toBeUndefined();
-  expect(tileMaxHeight(2)).toBe(1080);
-  expect(tileMaxHeight(3)).toBe(720);
-  expect(tileMaxHeight(4)).toBe(720);
+test('a tile asks for the smallest ladder height covering its device pixels', () => {
+  expect(ladderHeight(300)).toBe(480);
+  expect(ladderHeight(480)).toBe(480);
+  expect(ladderHeight(519)).toBe(720);
+  expect(ladderHeight(1038)).toBe(1080);
+  expect(ladderHeight(1080)).toBe(1080);
+  expect(ladderHeight(2160)).toBe(2160);
+  expect(ladderHeight(4000)).toBe(2160);
 });
 
 test('directional neighbours follow the grid and stop at its edges', () => {
@@ -76,4 +92,5 @@ test('directional neighbours follow the grid and stop at its edges', () => {
   const feature = slotRects('feature', 4, TV, 14);
   expect(neighbour(feature, 0, 'right')).toBe(2);
   expect(neighbour(feature, 3, 'left')).toBe(0);
+  expect(neighbour(feature, 1, 'down')).toBe(2);
 });

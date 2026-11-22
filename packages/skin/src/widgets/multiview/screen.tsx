@@ -9,7 +9,7 @@
 // (layout.ts), so layout changes and full screen animate without resizing a playing surface. The
 // focusable press targets are plain views at the slots' rects, so TV focus sees real geometry.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
-import { AccessibilityInfo, Animated, Easing, FlatList, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, FlatList, PixelRatio, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import type { VelaPlayerViewProps } from '@vela/player-api';
 import { msg, type GuideChannel } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
@@ -19,7 +19,7 @@ import { Line, LogoTile, Press } from '../guide/parts';
 import { PlayerIcon } from '../player/icons';
 import { ScoreBug, type BugEvent } from './bug';
 import type { LiveEventRef, MultiviewController, MultiviewTile, MultiviewView } from './controller';
-import { placement, slotRects, type MultiviewLayout, type Rect, type Size } from './layout';
+import { featureBand, placement, slotRects, type MultiviewLayout, type Rect, type Size } from './layout';
 
 const TV = Platform.isTV;
 const TOUCH = !TV && Platform.OS !== 'web';
@@ -66,6 +66,14 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
   const count = view.tiles.length;
   const rects = useMemo(() => slotRects(view.layout, count, size, gap), [view.layout, count, size, gap]);
   const full: Rect = { x: 0, y: 0, width: size.width, height: size.height };
+  // Each tile asks for the stream height it is drawn at, in device pixels.
+  const heights = view.tiles.map((tile, index) => `${tile.slot}:${Math.round((view.fullscreen === tile.slot ? size.height : rects[index]?.height ?? 0) * PixelRatio.get())}`).join(',');
+  useEffect(() => {
+    for (const entry of heights.split(',')) {
+      const [slot, pixels] = entry.split(':').map(Number);
+      if (pixels! > 0) controller.setHeight(slot!, pixels!);
+    }
+  }, [controller, heights]);
   // A tile's panel stays tied to its slot; a removed tile closes it.
   const panelOpen = panel !== null && (panel.slot === -1 || view.tiles.some(tile => tile.slot === panel.slot));
 
@@ -121,6 +129,9 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
           onLongPress={() => controller.toggleFullscreen(tile.slot)}
           onOptions={() => setPanel({ slot: tile.slot, mode: 'actions' })} />;
       })}
+      {view.fullscreen < 0 && count > 1 && (view.layout === 'feature' || view.layout === 'split') ? (
+        <Captions key={view.layout} look={look} still={still} view={view} rects={rects} size={size} gap={gap} byId={byId} useLiveEvent={useLiveEvent} />
+      ) : null}
       {count === 0 ? <Empty look={look} onAdd={() => setPanel({ slot: -1, mode: 'add' })} onLeave={onLeave} preferred={!panelOpen} /> : null}
       {view.phase === 'failed' ? <Notice look={look} text={view.failure ?? msg('multiview.failed')} /> : null}
       {hint}
@@ -183,9 +194,14 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
         <Placeholder look={look} channel={channel} tile={tile} counter={counter} />
         {tile.plan ? (
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: v.picture }]}>
-            <Player tile={tile.slot} plan={tile.plan} command={tile.command ?? undefined} style={StyleSheet.absoluteFill}
-              onSnapshot={snapshot => controller.snapshot(tile.slot, snapshot)}
-              onError={failure => controller.failed(tile.slot, tile.plan!.sessionId, failure.message)} />
+            {/* The session at a new height plays muted under the current one until its first picture,
+                then takes its place under the same key, so the view is never remounted. */}
+            {[tile.next, tile.plan].map(plan => plan ? (
+              <Player key={plan.sessionId} tile={tile.slot} plan={plan} style={StyleSheet.absoluteFill}
+                command={plan === tile.next ? { id: tile.command?.id ?? 0, type: 'mute', muted: true } : tile.command ?? undefined}
+                onSnapshot={snapshot => controller.snapshot(tile.slot, snapshot)}
+                onError={failure => controller.failed(tile.slot, plan.sessionId, failure.message)} />
+            ) : null)}
           </Animated.View>
         ) : null}
         {event && playing ? (
@@ -244,6 +260,70 @@ function TuningDots({ look }: { look: GuideLook }) {
         <Animated.View key={i} style={{ width: size, height: size, borderRadius: size, backgroundColor: look.accent,
           opacity: phase.interpolate({ inputRange: [0, (i + 0.5) / 4, (i + 1.5) / 4, 1], outputRange: [0.25, 1, 0.25, 0.25], extrapolate: 'clamp' }) }} />
       ))}
+    </View>
+  );
+}
+
+/** What is on each tile, where the layout leaves room: under each tile side by side, and in the band
+ * under one big + three small. The tile with the audio is marked. */
+function Captions({ look, still, view, rects, size, gap, byId, useLiveEvent }: {
+  look: GuideLook; still: boolean; view: MultiviewView; rects: Rect[]; size: Size; gap: number;
+  byId: Map<string, GuideChannel>; useLiveEvent?: MultiviewScreenProps['useLiveEvent'];
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(opacity, { toValue: 1, duration: still ? 0 : 420, delay: still ? 0 : 160, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [opacity, still]);
+  const minimum = TV ? 96 : 56;
+  if (view.layout === 'split') {
+    return <>{view.tiles.map((tile, index) => {
+      const rect = rects[index];
+      if (!rect) return null;
+      const top = rect.y + rect.height + gap;
+      if (size.height - top - gap < minimum) return null;
+      return <Animated.View key={tile.slot} pointerEvents="none" style={{ position: 'absolute', left: rect.x, top, width: rect.width, opacity }}>
+        <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} useLiveEvent={useLiveEvent} />
+      </Animated.View>;
+    })}</>;
+  }
+  const band = featureBand(size, gap);
+  if (band.height < minimum) return null;
+  return (
+    <Animated.View pointerEvents="none" style={{ position: 'absolute', left: band.x, top: band.y, width: band.width, height: band.height,
+      flexDirection: 'row', gap, alignItems: 'flex-start', opacity }}>
+      {view.tiles.map(tile => (
+        <View key={tile.slot} style={{ flex: 1, minWidth: 0 }}>
+          <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} useLiveEvent={useLiveEvent} />
+        </View>
+      ))}
+    </Animated.View>
+  );
+}
+
+function Caption({ look, tile, channel, focused, useLiveEvent }: {
+  look: GuideLook; tile: MultiviewTile; channel: GuideChannel | undefined; focused: boolean; useLiveEvent?: MultiviewScreenProps['useLiveEvent'];
+}) {
+  const event = useLiveEvent ? useLiveEvent(tile.liveEvent) : null;
+  const ring = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(ring, { toValue: focused ? 1 : 0, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  }, [focused, ring]);
+  const name = channel?.name ?? '';
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: TV ? 16 : 10, padding: TV ? 14 : 8, borderRadius: look.radiusCell, overflow: 'hidden' }}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: look.live, borderRadius: look.radiusCell, borderWidth: 1, borderColor: look.liveEdge, opacity: ring }]} />
+      <LogoTile look={look} logo={channel?.logo ?? ''} name={name} channelId={channel?.id} width={TV ? 84 : 52} height={TV ? 50 : 31} radius={TV ? 8 : 6} size={TV ? 12 : 10} />
+      <View style={{ flex: 1, minWidth: 0, gap: TV ? 4 : 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {focused && !tile.muted ? <PlayerIcon name="speaker" size={TV ? 20 : 14} color={look.accent} /> : null}
+          <Line look={look} size={TV ? 13 : 12} weight={700} color={focused ? look.ink : look.inkSecondary} style={{ flexShrink: 1 }}>
+            {channel ? `${channel.number} · ${name}` : ''}
+          </Line>
+        </View>
+        {event ? <ScoreBug event={event} look={look} size={TV ? 12 : 10} /> : channel?.now ? (
+          <Line look={look} size={TV ? 12 : 11} color={look.inkQuiet}>{channel.now}</Line>
+        ) : null}
+      </View>
     </View>
   );
 }

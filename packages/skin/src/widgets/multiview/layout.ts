@@ -53,17 +53,35 @@ export function slotRects(layout: MultiviewLayout, count: number, size: Size, ga
       return fit(x, gap + row * (h + gap), w, h);
     });
   }
-  // feature: the side column always holds three slots' worth of height, so the big tile keeps its
-  // size whether one, two or three tiles stand beside it.
-  const sideH = (H - gap * 4) / 3;
-  const sideW = sideH * ASPECT;
-  const bigW = W - sideW - gap * 3;
-  const big = fit(gap, gap, bigW, H - gap * 2);
-  const side = Array.from({ length: n - 1 }, (_, i) => {
-    const top = (H - (n - 1) * sideH - (n - 2) * gap) / 2;
-    return { x: W - gap - sideW, y: top + i * (sideH + gap), width: sideW, height: sideH };
-  });
-  return [big, ...side];
+  const { big, side } = featureFrame(size, gap);
+  const sides = Array.from({ length: n - 1 }, (_, i) => side[i]!);
+  return [big, ...sides];
+}
+
+/** One big tile and a column of three beside it, the same height, at the top; the band below holds
+ * what is on each tile. The big tile keeps its size whether one, two or three stand beside it. */
+function featureFrame(size: Size, gap: number): { big: Rect; side: Rect[]; band: Rect } {
+  const { width: W, height: H } = size;
+  // Heights match when the big tile is three small ones and their two gaps tall.
+  let small = (W - 3 * gap - (2 * gap) * ASPECT) / 4;
+  let bigW = 3 * small + 2 * gap * ASPECT;
+  const tallest = H - 2 * gap;
+  if (bigW / ASPECT > tallest) {
+    const scale = tallest / (bigW / ASPECT);
+    small *= scale;
+    bigW *= scale;
+  }
+  const bigH = bigW / ASPECT, smallH = small / ASPECT;
+  const left = (W - (bigW + gap + small)) / 2;
+  const big = { x: left, y: gap, width: bigW, height: bigH };
+  const side = [0, 1, 2].map(i => ({ x: left + bigW + gap, y: gap + i * (smallH + gap), width: small, height: smallH }));
+  const top = gap + bigH + gap;
+  return { big, side, band: { x: left, y: top, width: bigW + gap + small, height: Math.max(0, H - top - gap) } };
+}
+
+/** The band under the feature layout's tiles. */
+export function featureBand(size: Size, gap: number): Rect {
+  return featureFrame(size, gap).band;
 }
 
 /** The transform that puts a full-screen view of `size` onto `rect`. */
@@ -76,11 +94,10 @@ export function placement(rect: Rect, size: Size): Placement {
   };
 }
 
-/** The height the server is asked to cap a tile's stream at: two tiles 1080p, three or four 720p; a lone
- * (or full-screen) tile has no cap. */
-export function tileMaxHeight(count: number): number | undefined {
-  if (count <= 1) return undefined;
-  return count === 2 ? 1080 : 720;
+/** Stream heights a tile asks for: the smallest that covers its on-screen height in device pixels. */
+export const HEIGHT_LADDER = [480, 720, 1080, 2160] as const;
+export function ladderHeight(pixels: number): number {
+  return HEIGHT_LADDER.find(step => step >= Math.ceil(pixels - 0.5)) ?? HEIGHT_LADDER[HEIGHT_LADDER.length - 1];
 }
 
 export type Direction = 'left' | 'right' | 'up' | 'down';
