@@ -576,7 +576,10 @@ it does not know. `demuxContainers` uses `mkv`, `webm`, `mp4`, `mov`, `mpegts`
 `dolbyVisionProfiles` lists the profiles the device shows as Dolby Vision,
 natively or after its own conversion (`7` means the client converts Profile 7 to
 8.1 itself); a server should prefer direct play of those over a transcode. A
-profile not listed plays its HDR10/HLG base layer at best.
+profile not listed plays its HDR10/HLG base layer at best. `dolbyVisionReshape`
+lists profiles whose RPU the client applies itself and shows as HDR10 or SDR
+where the display link carries no Dolby Vision (libplacebo on desktops): their
+colour is correct, so a server should direct-play them rather than transcode.
 
 `ClientCapabilities.audioOutput` describes what reaches the speakers on the route
 at negotiation time. `passthrough` lists bitstreams delivered unchanged (`ac3`,

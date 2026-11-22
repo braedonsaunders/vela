@@ -35,6 +35,9 @@ export interface ClientCapabilities {
   /** Dolby Vision profiles shown as Dolby Vision, natively or after the client's own conversion ('5', '7',
    * '8.1', '8.4', '10.1'); '7' means the client converts it to 8.1. Other profiles play their base layer at best. */
   dolbyVisionProfiles?: string[];
+  /** Dolby Vision profiles whose RPU the client applies itself and shows as HDR10 or SDR (libplacebo
+   * reshaping where the display link has no Dolby Vision): correct colour, so direct play, not base layer. */
+  dolbyVisionReshape?: string[];
   audioOutput?: AudioOutputCapabilities;
 }
 export interface Feature { available: boolean; reason?: string }

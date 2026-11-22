@@ -38,9 +38,10 @@ export interface VideoOutputFormat {
   /**
    * What the client did to Dolby Vision on the way: a Profile 7 RPU converted to 8.1 ('p7-to-8.1'),
    * the same with the FEL enhancement layer folded into the 8.1 curves ('p7-fel-folded'), or the
-   * HDR10/HLG base layer shown without Dolby Vision ('base-layer').
+   * HDR10/HLG base layer shown without Dolby Vision ('base-layer'), or the RPU applied by the client
+   * itself, its output range in `range` ('reshaped').
    */
-  dvConversion?: 'p7-to-8.1' | 'p7-fel-folded' | 'base-layer';
+  dvConversion?: 'p7-to-8.1' | 'p7-fel-folded' | 'base-layer' | 'reshaped';
   decoder?: 'hardware' | 'software';
   /** Decoder or route name for experts ('VideoToolbox', 'dav1d', 'd3d11va'). */
   decoderName?: string;
