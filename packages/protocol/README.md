@@ -566,7 +566,8 @@ and `atSeconds` on the pinned source; there is no separate select-path command.
 
 Capability names are lower-case FFmpeg-style tokens, and a server ignores names
 it does not know. `demuxContainers` uses `mkv`, `webm`, `mp4`, `mov`, `mpegts`
-(including M2TS), `avi`, `ogg`, `flv`, `asf`, `rm`, `mpegps`, `iso-dvd` and
+(188-byte transport streams), `m2ts` (Blu-ray BDAV with HDMV stream types:
+LPCM, TrueHD, DTS-HD, PGS, VC-1), `avi`, `ogg`, `flv`, `asf`, `rm`, `mpegps`, `iso-dvd` and
 `iso-bluray`. Decoder lists use FFmpeg codec names (`hevc`, `av1`, `vc1`,
 `mpeg2video`, `truehd`, `dts`, `pcm_bluray`); a decoder named in
 `originalPlayback.videoDecoders` decodes in real time at the device's
