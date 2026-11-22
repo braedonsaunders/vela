@@ -1,7 +1,7 @@
 // What the Sports screen and game page say about an event, worked out once and drawn by every
 // skin: the two sides in reading order, the score as shown (or withheld), the status line, where to
 // watch, and the smooth path of a win-probability series. Pure, so it is tested without a renderer.
-import { msg, probabilityFor, seriesPoints, sides, teamColor, time, type LiveCompetitor, type LiveEvent, type LiveProbabilityPoint, type WatchTarget } from '@vela/core';
+import { msg, probabilityFor, seriesPoints, sides, teamColor, time, type LiveCompetitor, type LiveEvent, type LivePlay, type LiveProbabilityPoint, type LiveRankingRow, type WatchTarget } from '@vela/core';
 
 export type Phase = 'live' | 'upcoming' | 'final' | 'off';
 
@@ -56,7 +56,7 @@ export function matchup(event: LiveEvent, now = Date.now()): Matchup {
   return {
     phase, sides: both, scored, spoiler,
     title: event.title || (both ? `${both[0].short} ${msg('sports.at')} ${both[1].short}` : event.league.name),
-    league: event.league.abbr || event.league.name,
+    league: leagueLabel(event.league),
     status: statusText(event, phase, now),
     situation: spoiler ? '' : Object.values(event.situation ?? {}).slice(0, 2).join(' · '),
     close: !spoiler && event.status.close === true,
@@ -99,14 +99,87 @@ export function bestWatch(event: LiveEvent): WatchTarget | undefined {
   return targets.sort((a, b) => score(b) - score(a))[0];
 }
 
-/** Whether a target can be tuned here (a Live TV channel). */
+/** Whether a target can be tuned here (a Live TV channel). Only these are actions: a broadcast or
+ * a target with nothing to tune is information and never opens anything. */
 export const tunable = (target: WatchTarget | undefined): target is WatchTarget & { channelId: string } => !!target?.channelId;
 
-/** "FOX · 205" for a channel, the add-on's name otherwise; else the first broadcast. */
+/** The best target that can be tuned, if any. */
+export function watchTarget(event: LiveEvent): (WatchTarget & { channelId: string }) | undefined {
+  const target = bestWatch({ ...event, watch: (event.watch ?? []).filter(tunable) });
+  return tunable(target) ? target : undefined;
+}
+
+/** A target's name as a button says it: "FOX · 205", or the name alone. */
+export function targetLabel(target: WatchTarget): string {
+  return target.number ? msg('sports.onChannel', { name: target.name, number: target.number }) : target.name;
+}
+
+/** Where the event is on, as information: a target that cannot be tuned here, else the broadcasts
+ * (TV before streaming before radio), at most two names. Empty when nothing is known. */
+export function airingText(event: LiveEvent): string {
+  // An add-on that carries it names a place; a plugin's target is a web link (the page lists those).
+  const untunable = (event.watch ?? []).filter(target => !tunable(target) && target.kind === 'addon').map(target => target.name);
+  const rank = { tv: 0, stream: 1, radio: 2 } as const;
+  const broadcasts = [...(event.broadcasts ?? [])].sort((a, b) => (rank[a.kind] ?? 3) - (rank[b.kind] ?? 3)).map(b => b.name);
+  const names = [...new Set([...untunable, ...broadcasts].map(name => name.trim()).filter(Boolean))];
+  return names.slice(0, 2).join(' · ');
+}
+
+/** Where to watch, briefly, for a card's corner: the channel to tune ("FOX · 205"), else where it airs. */
 export function watchLabel(event: LiveEvent): string {
-  const target = bestWatch(event);
-  if (target) return target.number ? msg('sports.onChannel', { name: target.name, number: target.number }) : target.name;
-  return event.broadcasts?.[0]?.name ?? '';
+  const target = watchTarget(event);
+  return target ? targetLabel(target) : airingText(event);
+}
+
+/** Plays newest first. Ether sends them oldest first; a list whose periods already fall is left as it is. */
+export function newestFirst(plays: readonly LivePlay[]): LivePlay[] {
+  if (plays.length < 2) return [...plays];
+  const first = plays[0]!.period, last = plays.at(-1)!.period;
+  if (first !== undefined && last !== undefined && first > last) return [...plays];
+  return [...plays].reverse();
+}
+
+/** A card's last line: what pressing leads to (accent) or where it airs (quiet, not an action). */
+export interface CardLine { glyph: string; text: string; action: boolean }
+export function cardLine(event: LiveEvent, m: Pick<Matchup, 'spoiler' | 'phase'>): CardLine | null {
+  if (m.spoiler) return { glyph: 'eye-off', text: msg('sports.spoilersHidden'), action: false };
+  const target = watchTarget(event);
+  if (target && (m.phase === 'live' || m.phase === 'upcoming')) {
+    return m.phase === 'live' ? { glyph: 'play-fill', text: msg('sports.watchOn', { name: targetLabel(target) }), action: true } : { glyph: 'calendar', text: targetLabel(target), action: true };
+  }
+  if (m.phase === 'final') return { glyph: 'forward-chevron', text: msg('sports.recap'), action: true };
+  const airing = airingText(event);
+  if (airing && (m.phase === 'live' || m.phase === 'upcoming')) return { glyph: 'tv', text: msg('sports.onBroadcast', { name: airing }), action: false };
+  return null;
+}
+
+/**
+ * A league as a chip names it: the abbreviation when it is the name's own start ("PGA" of "PGA
+ * Tour") or an initialism that saves real room ("NFL", "MLS", "F1" of "Formula 1"), the name when
+ * it is short enough to read whole ("La Liga", "Ligue 1", "Serie A", "Bundesliga"), else the
+ * abbreviation ("EPL" for "Premier League").
+ */
+export function leagueLabel(league: { name: string; abbr?: string }): string {
+  const name = league.name.trim(), abbr = (league.abbr ?? '').trim();
+  if (!abbr || !name || abbr.toLowerCase() === name.toLowerCase()) return name || abbr;
+  const words = name.split(/\s+/);
+  if (words[0]!.toLowerCase() === abbr.toLowerCase()) return abbr;
+  const initials = words.map(word => /^\d+$/.test(word) ? word : word[0]!).join('');
+  if (initials.toLowerCase() === abbr.toLowerCase() && (abbr.length >= 3 || name.length > 8)) return abbr;
+  if (name.length <= 12) return name;
+  return abbr;
+}
+
+/** A ranking row as drawn: its place ("T3" when shared), name, headline value and quieter context. */
+export interface RankRow { place: string; pos: number; name: string; detail: string; secondary: string; entityId: string }
+export function rankRows(rows: readonly LiveRankingRow[] | undefined): RankRow[] {
+  const list = (rows ?? []).filter(row => row && typeof row.name === 'string');
+  const counts = new Map<number, number>();
+  for (const row of list) counts.set(row.pos, (counts.get(row.pos) ?? 0) + 1);
+  return list.map(row => ({
+    place: Number.isFinite(row.pos) ? `${(counts.get(row.pos) ?? 0) > 1 ? 'T' : ''}${row.pos}` : '',
+    pos: row.pos, name: row.name, detail: (row.detail ?? '').trim(), secondary: (row.secondary ?? '').trim(), entityId: row.entityId ?? '',
+  }));
 }
 
 /** The home side's chance (or the event's subject's) as a whole percentage, with whose it is. */
@@ -170,11 +243,4 @@ export function luminance(hex: string): number {
   const n = parseInt(m[1]!, 16);
   const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
   return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
-}
-
-/** A table's numeric columns align right; its first (names) left. */
-export function numericColumn(rows: readonly (readonly string[])[], column: number): boolean {
-  if (column === 0) return false;
-  const cells = rows.map(row => row[column] ?? '').filter(cell => cell !== '' && cell !== '–' && cell !== '-');
-  return cells.length > 0 && cells.every(cell => /^[+\-−]?[\d.:%/–-]+[a-zA-Z]{0,3}$/.test(cell));
 }

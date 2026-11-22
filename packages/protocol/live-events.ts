@@ -21,8 +21,10 @@ export interface LiveCompetitor {
   score?: string; record?: string; rank?: number; home?: boolean; winner?: boolean;
   /** The entity this competitor is, for favourites (LiveEntity.id). */ entityId?: ID;
 }
-/** A row of an N-competitor event (motorsport, golf). */
-export interface LiveRankingRow { pos: number; name: string; abbr?: string; detail?: string; entityId?: ID }
+/** A row of an N-competitor event (motorsport, golf). `pos` repeats for a tie. `detail` is the
+ * row's headline value (a score to par, a gap, points); `secondary` its quieter context ("Thru 14",
+ * "R3 -2", "+1 lap"). */
+export interface LiveRankingRow { pos: number; name: string; abbr?: string; detail?: string; secondary?: string; entityId?: ID }
 /** value 0..1: the chance `competitorId` (or the event's first competitor) wins. */
 export interface LiveProbability { label: string; value: number; competitorId?: ID }
 export interface LiveBroadcast { name: string; kind: 'tv' | 'stream' | 'radio'; region?: string }

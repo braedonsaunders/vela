@@ -232,7 +232,8 @@ function presentDetail(sim: Sim, viewerId: string): V.LiveEventDetail {
   const event = presentEvent(sim, viewerId);
   const links = [{ label: 'Game centre', url: `https://example.invalid/sports/${encodeURIComponent(sim.id)}` }];
   if (event.spoiler) return { ...event, tables: [], plays: [], probabilitySeries: [], links };
-  return { ...event, tables: tablesFor(sim), plays: sim.plays.slice(0, 40), probabilitySeries: sim.series, links };
+  // Oldest first, as Ether sends them (the sim keeps its newest first).
+  return { ...event, tables: tablesFor(sim), plays: sim.plays.slice(0, 40).reverse(), probabilitySeries: sim.series, links };
 }
 function tablesFor(sim: Sim): V.LiveTable[] {
   const category = LEAGUES[sim.league]!.category;

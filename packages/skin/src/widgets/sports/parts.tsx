@@ -42,6 +42,7 @@ const EXTRA: Record<string, { paths: string[]; stroke?: boolean }> = {
   'eye-off': { paths: ['M3 3l18 18', 'M10.6 5.1A10.4 10.4 0 0 1 12 5c6 0 9.5 7 9.5 7a17.6 17.6 0 0 1-3 3.9', 'M6.6 6.6C3.9 8.4 2.5 12 2.5 12S6 19 12 19a9.7 9.7 0 0 0 4.4-1', 'M9.9 9.9a3 3 0 0 0 4.2 4.2'], stroke: true },
   bell: { paths: ['M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z', 'M10 21h4'], stroke: true },
   star: { paths: ['M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z'], stroke: true },
+  tv: { paths: ['M3.5 6.5h17v11h-17z', 'M8.5 21h7', 'M9 2.5l3 4 3-4'], stroke: true },
   trophy: { paths: ['M8 4h8v5a4 4 0 0 1-8 0z', 'M8 6H5a3 3 0 0 0 3 4', 'M16 6h3a3 3 0 0 1-3 4', 'M12 13v4', 'M8.5 20h7'], stroke: true },
 };
 
@@ -202,14 +203,14 @@ export function ProbabilityBar({ look, home, awayColor, homeColor, height }: { l
 }
 
 /** A filter chip: on, it fills with the ink. */
-export function Chip({ look, label, on, onPress, testID, leading }: { look: SportsLook; label: string; on: boolean; onPress(): void; testID?: string; leading?: ReactNode }) {
-  const height = look.px(36);
+export function Chip({ look, label, on, onPress, testID, leading, small }: { look: SportsLook; label: string; on: boolean; onPress(): void; testID?: string; leading?: ReactNode; small?: boolean }) {
+  const height = look.px(small ? 30 : 36);
   return (
     <Surface look={look} onPress={onPress} label={label} testID={testID} radius={height / 2} lift={1.06}
-      fill={on ? look.ink : alpha(look.ink, 0.08)} focusFill={on ? look.ink : alpha(look.ink, 0.18)}
-      style={{ height, paddingHorizontal: look.px(16), flexDirection: 'row', alignItems: 'center', gap: look.px(8) }}>
+      fill={on ? look.ink : alpha(look.ink, small ? 0.06 : 0.08)} focusFill={on ? look.ink : alpha(look.ink, 0.18)}
+      style={{ height, paddingHorizontal: look.px(small ? 13 : 16), flexDirection: 'row', alignItems: 'center', gap: look.px(8) }}>
       {leading}
-      <Txt look={look} size={14} weight={on ? 700 : 560} color={on ? look.inkInverse : look.ink} lines={1}>{label}</Txt>
+      <Txt look={look} size={small ? 12.5 : 14} weight={on ? 700 : 560} color={on ? look.inkInverse : small ? look.inkSecondary : look.ink} lines={1}>{label}</Txt>
     </Surface>
   );
 }

@@ -9,9 +9,9 @@ import { msg, venueText, type LiveEvent, type LiveEventDetail, type LivePlay } f
 import { useVela, useVelaState } from '@vela/core/react';
 import { useLiveEvent, useSportsActions } from './context';
 import { useSportsLook, type SportsLook } from './look';
-import { heroTint, matchup, probabilityLead, tunable, type Matchup, type Side } from './model';
+import { airingText, heroTint, newestFirst, matchup, probabilityLead, targetLabel, tunable, type Matchup, type Side } from './model';
 import { Crest, Glyph, GridMark, LiveBadge, Pill, Placeholder, ProbabilityBar, Rise, Score, Surface, Txt } from './parts';
-import { TableView } from './cards';
+import { Ranking, TableView } from './cards';
 import { ProbabilityGraph, readableTeam } from './graph';
 import { alpha } from './colour';
 
@@ -60,7 +60,8 @@ export function GamePage({ id, active = true }: { id: string; active?: boolean }
             {!m.sides && event.ranking?.length && !detail.tables.length ? (
               <Rise look={look} index={3}>
                 <Panel look={look} focusable>
-                  <TableView look={look} table={{ title: msg('sports.standingsTitle'), columns: ['Pos', '', ''], rows: event.ranking.map(r => [String(r.pos), r.name, r.detail ?? '']) }} />
+                  <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase', marginBottom: look.px(10) }}>{msg('sports.standingsTitle')}</Txt>
+                  <Ranking look={look} event={event} rows={event.ranking.length} size={14.5} />
                 </Panel>
               </Rise>
             ) : null}
@@ -156,37 +157,34 @@ function TeamBlock({ look, side, crest }: { look: SportsLook; side: Side; crest:
   );
 }
 
-/** Where to watch: each place as a button; a channel tunes, and can join the multiview. */
+/** Where to watch: each channel that can be tuned is a button (and can join the multiview); where
+ * else it airs is said quietly beside them, never as something to press. */
 function WatchRow({ look, event }: { look: SportsLook; event: LiveEvent }) {
   const actions = useSportsActions();
-  const targets = event.watch ?? [];
-  if (!targets.length && !event.broadcasts?.length) return null;
-  const first = targets.find(tunable);
+  const targets = (event.watch ?? []).filter(tunable);
+  const airing = airingText(event);
+  if (!targets.length && !airing) return null;
+  const first = targets[0];
   return (
     <View style={{ gap: look.px(10) }}>
-      <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase' }}>{msg('sports.whereToWatch')}</Txt>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: look.px(10), paddingVertical: look.px(6), paddingHorizontal: look.px(4) }} style={{ marginHorizontal: -look.px(4) }}>
+      <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase' }}>{msg(targets.length ? 'sports.whereToWatch' : 'sports.broadcasts')}</Txt>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: look.px(10), paddingVertical: look.px(6), paddingHorizontal: look.px(4), alignItems: 'center' }} style={{ marginHorizontal: -look.px(4) }}>
         {targets.map((target, n) => {
-          const label = [target.name, target.number].filter(Boolean).join(' · ');
-          return tunable(target)
-            ? <Pill key={`${n}-${label}`} look={look} primary={n === 0} glyph="play-fill" label={target.live ? msg('sports.watchOn', { name: label }) : label} onPress={() => actions?.watch(target, event)} testID={`sports-watch-${n}`} hasTVPreferredFocus={n === 0} />
-            : <Surface key={`${n}-${label}`} look={look} radius={look.px(21)} fill={alpha(look.ink, 0.06)} lift={1.04} label={label}
-              style={{ height: look.px(42), paddingHorizontal: look.px(16), flexDirection: 'row', alignItems: 'center', gap: look.px(8), borderWidth: 1, borderColor: look.hairline }}>
-              <Glyph name="radio" size={look.px(15)} color={look.inkSecondary} />
-              <Txt look={look} size={14} weight={600} color={look.inkSecondary}>{label}</Txt>
-            </Surface>;
+          const label = targetLabel(target);
+          return <Pill key={`${n}-${target.channelId}`} look={look} primary={n === 0} glyph="play-fill" label={msg('sports.watchOn', { name: label })} onPress={() => actions?.watch(target, event)} testID={`sports-watch-${n}`} hasTVPreferredFocus={n === 0} />;
         })}
-        {!targets.length ? event.broadcasts?.map(b => (
-          <View key={b.name} style={{ height: look.px(42), paddingHorizontal: look.px(16), justifyContent: 'center', borderRadius: look.px(21), borderWidth: 1, borderColor: look.hairline }}>
-            <Txt look={look} size={14} weight={600} color={look.inkSecondary}>{b.name}</Txt>
-          </View>
-        )) : null}
         {first && actions?.addToMultiview ? (
           <Surface look={look} onPress={() => actions.addToMultiview?.(first, event)} label={msg('sports.addToMultiview')} testID="sports-game-multiview" radius={look.px(21)} fill={alpha(look.ink, 0.12)} focusFill={alpha(look.ink, 0.22)} lift={1.06}
             style={{ height: look.px(42), paddingHorizontal: look.px(18), flexDirection: 'row', alignItems: 'center', gap: look.px(8) }}>
             <GridMark size={look.px(15)} color={look.ink} />
             <Txt look={look} size={14.5} weight={650}>{msg('sports.addToMultiview')}</Txt>
           </Surface>
+        ) : null}
+        {airing ? (
+          <View testID="sports-airing" style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(8), height: look.px(42), paddingHorizontal: look.px(targets.length ? 8 : 0) }}>
+            <Glyph name="tv" size={look.px(16)} color={look.inkQuiet} />
+            <Txt look={look} size={14} weight={560} color={look.inkSecondary}>{targets.length ? msg('sports.onBroadcast', { name: airing }) : airing}</Txt>
+          </View>
         ) : null}
       </ScrollView>
     </View>
@@ -232,7 +230,7 @@ function Plays({ look, plays, m }: { look: SportsLook; plays: LivePlay[]; m: Mat
     <Panel look={look}>
       <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase', marginBottom: look.px(8) }}>{msg('sports.plays')}</Txt>
       {!plays.length ? <Txt look={look} size={14} color={look.inkQuiet}>{m.spoiler ? msg('sports.spoilersHidden') : msg('sports.noPlays')}</Txt> : null}
-      {plays.slice(0, 30).map((play, n) => <PlayRow key={`${play.period ?? ''}-${play.clock ?? ''}-${play.text}`} look={look} play={play} index={n} />)}
+      {newestFirst(plays).slice(0, 30).map((play, n) => <PlayRow key={`${play.period ?? ''}-${play.clock ?? ''}-${play.text}`} look={look} play={play} index={n} />)}
     </Panel>
   );
 }

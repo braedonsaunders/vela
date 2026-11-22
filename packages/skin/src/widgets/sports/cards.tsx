@@ -3,12 +3,13 @@
 // box scores) and the favourite-team chip. Each reads its event live (useLiveEvent), so a pushed
 // update changes only the card it belongs to.
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, type ReactNode } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { msg, type LiveEntity, type LiveEvent, type LiveTable } from '@vela/core';
 import { useLiveEvent, useSportsActions } from './context';
 import type { SportsLook } from './look';
-import { bestWatch, heroTint, matchup, numericColumn, probabilityLead, tunable, watchLabel, type Matchup, type Side } from './model';
+import { airingText, cardLine, heroTint, matchup, probabilityLead, rankRows, targetLabel, watchLabel, watchTarget, type Matchup, type Side } from './model';
+import { fitTable } from './table';
 import { Crest, FavouriteMark, Glyph, GridMark, LiveBadge, Pill, ProbabilityBar, Score, Surface, Txt } from './parts';
 import { alpha } from './colour';
 
@@ -40,30 +41,24 @@ function SideLine({ look, side, m, size = 14, ink }: { look: SportsLook; side: S
   );
 }
 
-/** A race or tournament: its leaders. */
-function Ranking({ look, event, rows = 3, ink }: { look: SportsLook; event: LiveEvent; rows?: number; ink?: string }) {
-  if (event.spoiler) return <Txt look={look} size={13} color={look.inkQuiet}>{msg('sports.spoilerHidden')}</Txt>;
+/** A race or tournament: its leaders. The place, the name (one line, never crowded out), the
+ * headline value bold and its context quieter beside it. */
+export function Ranking({ look, event, rows = 3, ink, quiet, size = 13.5 }: { look: SportsLook; event: LiveEvent; rows?: number; ink?: string; quiet?: string; size?: number }) {
+  if (event.spoiler) return <Txt look={look} size={13} color={quiet ?? look.inkQuiet}>{msg('sports.spoilerHidden')}</Txt>;
+  const list = rankRows(event.ranking).slice(0, rows);
+  const placeWidth = look.px(size * (list.some(row => row.place.length > 2) ? 2.2 : 1.7));
   return (
     <View style={{ gap: look.px(3) }}>
-      {(event.ranking ?? []).slice(0, rows).map(row => (
-        <View key={`${row.pos}-${row.name}`} style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(8) }}>
-          <Txt look={look} size={12} weight={800} color={row.pos === 1 ? look.gold : look.inkQuiet} digits style={{ width: look.px(22) }}>P{row.pos}</Txt>
-          <Txt look={look} size={13.5} weight={row.pos === 1 ? 700 : 560} color={ink} lines={1} style={{ flex: 1 }}>{row.name}</Txt>
-          {row.detail ? <Txt look={look} size={12} color={look.inkQuiet} digits lines={1}>{row.detail}</Txt> : null}
+      {list.map((row, n) => (
+        <View key={`${row.place}-${row.name}-${n}`} style={{ flexDirection: 'row', alignItems: 'baseline', gap: look.px(8) }}>
+          <Txt look={look} size={size - 1.5} weight={800} color={row.pos === 1 ? look.gold : quiet ?? look.inkQuiet} digits lines={1} style={{ width: placeWidth }}>{row.place}</Txt>
+          <Txt look={look} size={size} weight={row.pos === 1 ? 700 : 560} color={ink} lines={1} style={{ flex: 1, minWidth: '40%' }}>{row.name}</Txt>
+          {row.secondary ? <Txt look={look} size={size - 2} weight={500} color={quiet ?? look.inkQuiet} digits lines={1} style={{ flexShrink: 1 }}>{row.secondary}</Txt> : null}
+          {row.detail ? <Txt look={look} size={size - 0.5} weight={750} color={ink ?? look.ink} digits lines={1} style={{ flexShrink: 0, maxWidth: '38%', textAlign: 'right' }}>{row.detail}</Txt> : null}
         </View>
       ))}
     </View>
   );
-}
-
-/** What pressing the card leads to, in the accent: watch, spoilers, the start. */
-function cardAction(event: LiveEvent, m: Matchup): { glyph: string; text: string } | null {
-  if (m.spoiler) return { glyph: 'eye-off', text: msg('sports.spoilersHidden') };
-  const label = watchLabel(event);
-  if (m.phase === 'live' && label) return { glyph: 'play-fill', text: msg('sports.watchOn', { name: label }) };
-  if (m.phase === 'upcoming' && label) return { glyph: 'calendar', text: label };
-  if (m.phase === 'final') return { glyph: 'forward-chevron', text: msg('sports.recap') };
-  return null;
 }
 
 /** A game in a row or schedule. Pressing it opens the game page. */
@@ -71,7 +66,7 @@ export const EventCard = memo(function EventCard({ look, event: given, width, te
   const event = useLiveEvent(given);
   const actions = useSportsActions();
   const m = matchup(event);
-  const action = cardAction(event, m);
+  const line = cardLine(event, m);
   return (
     <Surface look={look} onPress={() => actions?.openEvent(event)} testID={testID} label={`${m.title}, ${m.status}`}
       style={{ width, padding: look.px(13), borderWidth: 1, borderColor: m.close ? alpha(look.gold, 0.55) : look.hairline, minHeight: look.px(128) }}>
@@ -87,10 +82,10 @@ export const EventCard = memo(function EventCard({ look, event: given, width, te
           <Ranking look={look} event={event} rows={2} />
         </View>
       )}
-      {action ? (
+      {line ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(6), marginTop: 'auto', paddingTop: look.px(9) }}>
-          <Glyph name={action.glyph} size={look.px(12)} color={look.accent} />
-          <Txt look={look} size={12} weight={600} color={look.accent} lines={1} style={{ flex: 1 }}>{action.text}</Txt>
+          <Glyph name={line.glyph} size={look.px(12)} color={line.action ? look.accent : look.inkQuiet} />
+          <Txt look={look} size={12} weight={line.action ? 650 : 520} color={line.action ? look.accent : look.inkQuiet} lines={1} style={{ flex: 1 }}>{line.text}</Txt>
         </View>
       ) : null}
     </Surface>
@@ -122,7 +117,8 @@ export function HeroCard({ look, event: given, favourite, testID }: { look: Spor
   const event = useLiveEvent(given);
   const actions = useSportsActions();
   const m = matchup(event);
-  const watch = bestWatch(event);
+  const watch = watchTarget(event);
+  const airing = watch ? '' : airingText(event);
   const lead = probabilityLead(event, m.sides);
   const away = m.sides?.[0], home = m.sides?.[1];
   const tintA = away ? heroTint(away) : '#18264a', tintB = home ? heroTint(home) : '#3a1020';
@@ -172,7 +168,7 @@ export function HeroCard({ look, event: given, favourite, testID }: { look: Spor
         ) : (
           <View style={{ gap: look.px(8) }}>
             <Txt look={look} size={24} weight={800} color={WHITE} lines={1}>{m.title}</Txt>
-            <Ranking look={look} event={event} rows={3} ink={WHITE} />
+            <Ranking look={look} event={event} rows={3} ink={WHITE} quiet={alpha(WHITE, 0.62)} size={15} />
           </View>
         )}
         <View style={{ gap: look.px(10) }}>
@@ -183,11 +179,17 @@ export function HeroCard({ look, event: given, favourite, testID }: { look: Spor
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: look.px(10) }}>
-            {tunable(watch) ? <Pill look={look} primary glyph="play-fill" label={msg('sports.watchOn', { name: watchLabel(event) })} onPress={() => actions?.watch(watch, event)} testID="sports-hero-watch" /> : null}
-            {tunable(watch) && actions?.addToMultiview ? (
+            {watch ? <Pill look={look} primary glyph="play-fill" label={msg('sports.watchOn', { name: targetLabel(watch) })} onPress={() => actions?.watch(watch, event)} testID="sports-hero-watch" /> : null}
+            {watch && actions?.addToMultiview ? (
               <HeroButton look={look} label={msg('sports.addToMultiview')} onPress={() => actions.addToMultiview?.(watch, event)} icon={<GridMark size={look.px(15)} color={WHITE} />} testID="sports-hero-multiview" />
             ) : null}
             <HeroButton look={look} label={msg('sports.gameDetails')} onPress={() => actions?.openEvent(event)} icon={<Glyph name="list" size={look.px(15)} color={WHITE} />} testID="sports-hero-details" />
+            {airing ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(7), height: look.px(42), paddingHorizontal: look.px(4), flexShrink: 1 }}>
+                <Glyph name="tv" size={look.px(15)} color={alpha(WHITE, 0.7)} />
+                <Txt look={look} size={13.5} weight={600} color={alpha(WHITE, 0.78)} lines={1} style={{ flexShrink: 1 }}>{msg('sports.onBroadcast', { name: airing })}</Txt>
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
@@ -206,34 +208,53 @@ function HeroButton({ look, label, onPress, icon, testID }: { look: SportsLook; 
   );
 }
 
-/** A generic table: a title, a header row and display cells; numbers align right and keep their width. */
+/** The type a table is set in, as the fit measures it. */
+export function tableText(look: SportsLook, compact?: boolean) {
+  return { size: look.px(compact ? 13 : 13.5), headerSize: look.px(11.5), gap: look.px(compact ? 9 : 12) };
+}
+
+/** A table's natural width (every column at its content), for sizing a card around it. */
+export function tableWidth(look: SportsLook, table: LiveTable, compact?: boolean): number {
+  return fitTable(table, Infinity, tableText(look, compact)).natural;
+}
+
+/**
+ * A generic table: a title, a header row and display cells. Columns are as wide as their content:
+ * the names read whole, numbers are tight and right-aligned, and when the room runs out the least
+ * useful columns go before a name is cut.
+ */
 export function TableView({ look, table, highlight, compact, testID }: { look: SportsLook; table: LiveTable; highlight?: (row: readonly string[]) => boolean; compact?: boolean; testID?: string }) {
-  const numeric = table.columns.map((_, n) => numericColumn(table.rows, n) || n === 0 && numericColumn(table.rows.map(row => ['', ...row]), 1));
-  const cell = look.px(compact ? 42 : 48);
-  // Numbers keep a fixed column, right-aligned; words share the rest (the first, a name, the most).
-  const short = table.columns.map((_, n) => n > 0 && table.rows.every(row => (row[n] ?? '').length <= 4));
-  const column = (n: number) => numeric[n] || short[n]
-    ? { width: cell, textAlign: n === 0 ? 'left' as const : 'right' as const }
-    : { flex: n === 0 ? 1.6 : 1, textAlign: 'left' as const, paddingRight: look.px(8) };
+  const [width, setWidth] = useState(0);
+  const text = tableText(look, compact);
+  const fit = useMemo(() => fitTable(table, width || Infinity, text), [table, width, text.size, text.headerSize, text.gap]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Each column's gap is on its leading side (the first column's on its trailing side), so a
+  // right-aligned number never runs into the words after it.
+  const cellStyle = (c: (typeof fit.columns)[number], n: number) => {
+    const pad = n === 0 ? { paddingRight: text.gap } : c.align === 'left' ? { paddingLeft: text.gap } : null;
+    return c.name ? { flex: 1, minWidth: 0, textAlign: 'left' as const, ...pad } : { width: c.width, textAlign: c.align, ...pad };
+  };
   return (
-    <View testID={testID} style={{ gap: look.px(2) }}>
-      {table.title ? <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase', marginBottom: look.px(6) }}>{table.title}</Txt> : null}
+    <View testID={testID} style={{ gap: look.px(2), opacity: width ? 1 : 0 }} onLayout={event => setWidth(Math.floor(event.nativeEvent.layout.width))}>
+      {table.title ? <Txt look={look} size={12} weight={700} color={look.inkQuiet} lines={2} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase', marginBottom: look.px(6) }}>{table.title}</Txt> : null}
       <View style={{ flexDirection: 'row', paddingBottom: look.px(6), borderBottomWidth: 1, borderBottomColor: look.hairline }}>
-        {table.columns.map((name, n) => (
-          <Txt key={`${n}-${name}`} look={look} size={11.5} weight={650} color={look.inkQuiet} lines={1}
-            style={column(n)}>{name}</Txt>
+        {fit.columns.map((c, n) => (
+          <Txt key={`${c.index}-${table.columns[c.index]}`} look={look} size={11.5} weight={650} color={look.inkQuiet} lines={1} style={cellStyle(c, n)}>{table.columns[c.index] ?? ''}</Txt>
         ))}
       </View>
       {table.rows.map((row, r) => {
         const on = highlight?.(row) ?? false;
         const last = r === table.rows.length - 1;
         return (
-          <View key={r} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: look.px(compact ? 5 : 7), borderBottomWidth: last ? 0 : 1, borderBottomColor: look.hairline,
-            backgroundColor: on ? alpha(look.accent, 0.1) : 'transparent', borderRadius: on ? look.px(6) : 0 }}>
-            {table.columns.map((_, n) => (
-              <Txt key={n} look={look} size={13.5} weight={n === 0 || n === row.length - 1 && numeric[n] ? 650 : 520} color={n === 0 ? look.ink : look.inkSecondary} lines={1} digits
-                style={[column(n), n === 0 && on ? { paddingLeft: look.px(6) } : null, { color: n === 0 || !numeric[n] && n === 1 ? look.ink : n === row.length - 1 && numeric[n] ? look.ink : look.inkSecondary }]}>{row[n] ?? ''}</Txt>
-            ))}
+          <View key={r} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: look.px(compact ? 5 : 7), borderBottomWidth: last ? 0 : 1, borderBottomColor: on ? 'transparent' : look.hairline,
+            marginHorizontal: -look.px(6), paddingHorizontal: look.px(6), backgroundColor: on ? alpha(look.accent, 0.14) : 'transparent', borderRadius: on ? look.px(7) : 0 }}>
+            {fit.columns.map((c, n) => {
+              const lead = c.name || n === 0;
+              const total = n === fit.columns.length - 1 && !c.name;
+              return (
+                <Txt key={c.index} look={look} size={compact ? 13 : 13.5} weight={c.name ? 650 : total ? 700 : 520} color={c.name || total ? look.ink : lead ? look.inkSecondary : look.inkSecondary} lines={1} digits
+                  style={cellStyle(c, n)}>{row[c.index] ?? ''}</Txt>
+              );
+            })}
           </View>
         );
       })}

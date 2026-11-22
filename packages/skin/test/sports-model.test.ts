@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { LiveEvent } from '@vela/core';
 import { barOffset } from '../src/widgets/sports/bar';
-import { bestWatch, crestColor, dayOffset, heroTint, initials, matchup, numericColumn, pathLength, probabilityLead, probabilityPath, watchLabel } from '../src/widgets/sports/model';
+import { airingText, bestWatch, newestFirst, cardLine, crestColor, leagueLabel, rankRows, watchTarget, dayOffset, heroTint, initials, matchup, pathLength, probabilityLead, probabilityPath, watchLabel } from '../src/widgets/sports/model';
 import { resolveDocument } from '../src/resolve';
 import { cinematicDoc } from '../../protocol/fixtures/skins/cinematic';
 
@@ -75,11 +75,6 @@ test('crests and tints stay readable', () => {
   expect(heroTint({ color: '#0b2265', altColor: '#a71930' })).toBe('#0b2265');
 });
 
-test('tables align numeric columns', () => {
-  const rows = [['Eagles', '9', '.818', 'W4'], ['Giants', '4', '.364', 'L2']];
-  expect([0, 1, 2, 3].map(n => numericColumn(rows, n))).toEqual([false, true, true, false]);
-});
-
 test('days are counted locally', () => {
   const now = new Date(2026, 10, 22, 23, 0).getTime();
   expect(dayOffset(new Date(2026, 10, 23, 1, 0).getTime(), now)).toBe(1);
@@ -90,4 +85,61 @@ test('a page starts below a floating shell bar, and at the top under a bar in fl
   const doc = resolveDocument(cinematicDoc as never, 1600).document;
   expect(barOffset(doc.slots?.shell, false, 20)).toBe(76);
   expect(barOffset(undefined, false, 20)).toBe(0);
+});
+
+test('only a channel to tune is an action; broadcasts are information', () => {
+  const broadcastOnly = event({ broadcasts: [{ name: 'ESPN+', kind: 'stream' }, { name: 'ESPN Deportes', kind: 'tv' }], watch: [] });
+  expect(watchTarget(broadcastOnly)).toBeUndefined();
+  expect(airingText(broadcastOnly)).toBe('ESPN Deportes · ESPN+');
+  const line = cardLine(broadcastOnly, matchup(broadcastOnly))!;
+  expect(line.action).toBe(false);
+  expect(line.text).not.toMatch(/Watch/);
+  const addon = event({ watch: [{ kind: 'addon', name: 'Peacock', live: true, confidence: 0.9 }] });
+  expect(watchTarget(addon)).toBeUndefined();
+  expect(cardLine(addon, matchup(addon))!.action).toBe(false);
+  const tunableEvent = event({ watch: [{ kind: 'channel', channelId: 'c7', name: 'FOX', number: '205', live: true, confidence: 0.7 }] });
+  expect(cardLine(tunableEvent, matchup(tunableEvent))).toEqual({ glyph: 'play-fill', text: 'Watch on FOX · 205', action: true });
+  expect(cardLine(event({ spoiler: true }), { spoiler: true, phase: 'live' })!.action).toBe(false);
+  expect(cardLine(event({ status: { state: 'in', detail: '' } }), { spoiler: false, phase: 'live' })).toBeNull();
+});
+
+test('league chips use a name when the abbreviation is not self-explanatory', () => {
+  const label = (name: string, abbr?: string) => leagueLabel({ name, abbr });
+  expect(label('La Liga', 'LAL')).toBe('La Liga');
+  expect(label('Ligue 1', 'L1')).toBe('Ligue 1');
+  expect(label('Bundesliga', 'BUN')).toBe('Bundesliga');
+  expect(label('Serie A', 'SA')).toBe('Serie A');
+  expect(label('NFL', 'NFL')).toBe('NFL');
+  expect(label('National Hockey League', 'NHL')).toBe('NHL');
+  expect(label('Major League Soccer', 'MLS')).toBe('MLS');
+  expect(label('Formula 1', 'F1')).toBe('F1');
+  expect(label('PGA Tour', 'PGA')).toBe('PGA');
+  expect(label('Premier League', 'EPL')).toBe('EPL');
+  expect(label('UEFA Champions League', 'UCL')).toBe('UCL');
+  expect(label('NCAAM')).toBe('NCAAM');
+  expect(matchup(event({ league: { id: 'laliga', name: 'La Liga', abbr: 'LAL' } })).league).toBe('La Liga');
+});
+
+test('ranking rows share a place on a tie and keep their headline apart from the context', () => {
+  const rows = rankRows([
+    { pos: 1, name: 'Max Greyserman', detail: '-9', secondary: 'Thru 14' },
+    { pos: 1, name: 'Max McGreevy', detail: '-9' },
+    { pos: 3, name: 'Marco Penge', detail: ' -8 ' },
+  ]);
+  expect(rows.map(r => r.place)).toEqual(['T1', 'T1', '3']);
+  expect(rows[0]!.secondary).toBe('Thru 14');
+  expect(rows[2]!.detail).toBe('-8');
+  expect(rankRows(undefined)).toEqual([]);
+});
+
+test('plays read newest first whichever way they arrive', () => {
+  const oldest = [{ clock: "6'", period: 1, text: 'a', emphasis: 'normal' as const }, { clock: "81'", period: 2, text: 'b', emphasis: 'normal' as const }];
+  expect(newestFirst(oldest).map(p => p.text)).toEqual(['b', 'a']);
+  expect(newestFirst([...oldest].reverse()).map(p => p.text)).toEqual(['b', 'a']);
+  expect(newestFirst([{ text: 'x', emphasis: 'normal' }, { text: 'y', emphasis: 'normal' }]).map(p => p.text)).toEqual(['y', 'x']);
+});
+
+test('a plugin link is not where a game airs', () => {
+  const e = event({ broadcasts: [{ name: 'ESPN+', kind: 'stream' }], watch: [{ kind: 'plugin', name: 'Commentary', live: true, confidence: 0.5 }] });
+  expect(airingText(e)).toBe('ESPN+');
 });
