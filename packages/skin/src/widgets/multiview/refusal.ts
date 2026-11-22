@@ -52,6 +52,9 @@ export function tileRefusal(error: unknown, channel: string): TileRefusal {
       : msg('multiview.capDetail');
     return { title, detail, retry: false, code: 'provider_connection_cap', cap };
   }
+  // A player's own failure (a manifest that went away, a decoder that gave up) is no words for a
+  // viewer, and usually passes: the tile offers to try again.
+  if (!(error instanceof VelaError)) return { title: msg('multiview.unavailable'), detail: msg('multiview.retryDetail'), retry: true, code: '' };
   const refusal = startRefusal(error, msg('multiview.unavailable'));
   const retry = error instanceof VelaError && error.detail.retry?.allowed === true;
   return { title: refusal.message || msg('multiview.unavailable'), detail: msg(retry ? 'multiview.retryDetail' : 'multiview.swapDetail'), retry, code: refusal.code };

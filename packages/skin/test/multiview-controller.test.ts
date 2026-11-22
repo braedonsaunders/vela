@@ -486,8 +486,10 @@ test('a player failure on a tile shows on that tile, and Try again tunes it afre
   mv.open();
   await settle();
   const sessionId = mv.view().tiles[0]!.plan!.sessionId;
-  mv.failed(0, sessionId, 'decoder gave up');
+  mv.failed(0, sessionId, 'HLS manifest HTTP 404');
   expect(mv.view().tiles[0]!.state).toBe('failed');
+  // The player's own words are not the viewer's.
+  expect(mv.view().tiles[0]!.refusal).toMatchObject({ title: "This channel can't play here right now", retry: true });
   expect(calls.stopped).toEqual([sessionId]);
   mv.retry(0);
   await settle();
