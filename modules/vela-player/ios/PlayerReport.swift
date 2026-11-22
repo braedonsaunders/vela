@@ -123,6 +123,8 @@ final class PlayerReport {
             "subtitleStyleAvailable": false,
             "subtitleClientOnly": subtitleClientOnly,
             "audioClientOnly": audioClientOnly,
+            "outputPreferences": PlaybackPreferences.current.values,
+            "outputPreferencesAvailable": PlaybackPreferences.available,
             "diagnostics": [
                 "implementation": "vela-aether",
                 "metadataDiscrepancies": [String](),
@@ -141,6 +143,7 @@ final class PlayerReport {
             "renditionId": nil,
             "lockedQuality": nil,
             "video": video(state),
+            "format": state.format,
             "currentBitrateBps": nil,
             "requiredBandwidthBps": nil,
             "bufferAheadSeconds": state.cacheAhead,

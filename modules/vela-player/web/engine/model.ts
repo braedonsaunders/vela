@@ -91,6 +91,8 @@ export type Command = { id: number } & (
   | { type: 'subtitle'; trackId: string | null }
   | { type: 'speed'; value: number }
   | { type: 'subtitleStyle'; value: string }
+  /** A delivery choice, 'name=value' (surround=lossless, immersive=off, speakerLayout=7.1.4, dolbyVision=base-layer). */
+  | { type: 'outputPreference'; value: string }
   | { type: 'quality'; renditionId: string | null }
   | { type: 'lowDelay'; enabled: boolean }
 );
@@ -154,6 +156,9 @@ export interface Snapshot {
   subtitleReportingId?: string | null;
   subtitleClientOnly?: boolean;
   audioClientOnly?: boolean;
+  /** The viewer's audio and picture delivery choices by name, and the names this engine honours, in menu order. */
+  outputPreferences?: Record<string, string>;
+  outputPreferencesAvailable?: string[];
   diagnostics?: {
     implementation?: 'vela-core' | 'upstream-controller' | 'vela-aether';
     metadataDiscrepancies: string[];

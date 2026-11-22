@@ -44,6 +44,11 @@ final class PlaybackClient {
     private var displayObservers: [NSObjectProtocol] = []
     private var lastLiveDiagnostic = Date.distantPast
     private var lastCacheDiagnostic = Date.distantPast
+    private var lastFormatDiagnostic = Date.distantPast
+    private var formatDescription: NSDictionary?
+    private var preferences = PlaybackPreferences.current
+    /// A full-screen watch: not a preview or a multiview tile. Only it takes the viewer's delivery choices.
+    private var fullScreen: Bool { !preview && tile == nil }
     private var loadTask: Task<Void, Never>?
     private var headers: [String] = []
     private var properties: [String: Any] = [:]
@@ -140,6 +145,7 @@ final class PlaybackClient {
             self.liveItemObservation = nil
             self.subscriptions.removeAll()
             self.rendering.removeSurface()
+            self.formatDescription = nil
             do {
                 // Upstream messages may contain media URLs. Keep grant URLs out of logs.
                 EngineLog.handler = { _ in }
@@ -188,6 +194,7 @@ final class PlaybackClient {
                         self?.emit("video-pts", time)
                     }
                     self?.drawCaptions()
+                    self?.publishFormat()
                     if let self, self.isLive, !self.preview,
                        Date().timeIntervalSince(self.lastLiveDiagnostic) >= 2,
                        let player = self.engine?.currentAVPlayer {
@@ -201,11 +208,13 @@ final class PlaybackClient {
                     if delivery == .droppedNoPipeline {
                         Task { @MainActor [weak self] in self?.failPath() }
                     }
+                    Task { @MainActor [weak self] in self?.publishFormat(force: true) }
                 }.store(in: &self.subscriptions)
                 engine.$activeAudioTrackIndex.sink { [weak self] in self?.emit("aid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)
                 engine.$activeSubtitleTrackIndex.sink { [weak self] in self?.emit("sid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)
                 engine.$videoFormat.sink { [weak self, weak engine] format in
                     if let engine { self?.publishVideoParams(engine, format: format) }
+                    Task { @MainActor [weak self] in self?.publishFormat(force: true) }
                 }.store(in: &self.subscriptions)
                 engine.$duration.sink { [weak self] in self?.emit("duration", $0) }.store(in: &self.subscriptions)
                 engine.$isBuffering.sink { [weak self] in self?.emit("paused-for-cache", $0) }.store(in: &self.subscriptions)
@@ -244,6 +253,7 @@ final class PlaybackClient {
                     opts.displayCriteriaOwner = .host
                     opts.matchContentEnabled = false
                 }
+                self.preferences.configure(&opts, fullScreen: self.fullScreen)
                 self.rendering.configureLoad(options: &opts, preview: preview)
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
@@ -270,6 +280,40 @@ final class PlaybackClient {
             }
         }
     }
+    /// Source → output facts for the info card, at most once a second unless a route or format changed.
+    private func publishFormat(force: Bool = false) {
+        guard !dead, !failed, !preview, let engine else { return }
+        guard force || Date().timeIntervalSince(lastFormatDiagnostic) >= 1 else { return }
+        lastFormatDiagnostic = Date()
+        let next = PlaybackFormat.describe(engine, preferences: preferences, display: rendering.displayMatch()) as NSDictionary
+        guard next != formatDescription else { return }
+        let first = formatDescription == nil
+        formatDescription = next
+        emit("format", next as? [String: Any])
+        if first || force, let data = try? JSONSerialization.data(withJSONObject: next, options: [.sortedKeys]),
+           let text = String(data: data, encoding: .utf8) {
+            print("[vela-format] \(text)")
+        }
+    }
+
+    /// The viewer changed a delivery choice: the playing title takes it at the current position.
+    func apply(preferences next: PlaybackPreferences) {
+        guard next != preferences else { return }
+        preferences = next
+        guard fullScreen, let engine, let url, !dead else { return }
+        let fullScreen = self.fullScreen
+        Task { @MainActor [weak self] in
+            do {
+                _ = try await engine.reloadAtCurrentPosition { next.configure(&$0, fullScreen: fullScreen) }
+                self?.publishFormat(force: true)
+            } catch {
+                guard let self, !self.dead else { return }
+                self.start = (self.properties["time-pos"] as? Double) ?? self.start
+                self.load(url)
+            }
+        }
+    }
+
     private func publishVideoParams(_ engine: AetherEngine, format: VideoFormat) {
         guard !dead, !failed, engine.sourceVideoWidth > 0, engine.sourceVideoHeight > 0 else { return }
         let gamma: String

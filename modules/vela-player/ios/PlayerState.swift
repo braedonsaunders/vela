@@ -26,6 +26,8 @@ struct PlayerState {
     var frameRate: Double?
     var videoCodec: String?
     var audioCodec: String?
+    /// Source → output facts (Snapshot.format).
+    var format: [String: Any]?
     var failure: String?
     var failureKind = "source"
 
@@ -74,6 +76,7 @@ struct PlayerState {
         case "container-fps": frameRate = value as? Double
         case "video-codec-name": videoCodec = value as? String
         case "audio-codec-name": audioCodec = value as? String
+        case "format": format = value as? [String: Any]
         default: break
         }
     }

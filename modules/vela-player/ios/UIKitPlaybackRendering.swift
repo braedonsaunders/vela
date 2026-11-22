@@ -68,6 +68,15 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         print("[vela-display] load preview=\(preview) match=\(opts.matchContentEnabled) owner=\(preview ? "host" : "engine") matching=\(manager?.isDisplayCriteriaMatchingEnabled ?? false) criteria=\(manager?.preferredDisplayCriteria != nil) switching=\(manager?.isDisplayModeSwitchInProgress ?? false)")
         #endif
     }
+    func displayMatch() -> DisplayMatch? {
+        #if os(tvOS)
+        guard let manager = host?.window?.avDisplayManager else { return nil }
+        return DisplayMatch(enabled: manager.isDisplayCriteriaMatchingEnabled, requested: manager.preferredDisplayCriteria != nil,
+                            switching: manager.isDisplayModeSwitchInProgress)
+        #else
+        return nil
+        #endif
+    }
     func drawCaptions(engine: AetherEngine) {
         guard let surface else { return }
         let time = engine.clock.sourceTime

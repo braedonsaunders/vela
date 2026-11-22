@@ -12,4 +12,10 @@ protocol PlaybackRendering: AnyObject {
     func freezePicture(frame: CGImage?, aspectFill: Bool)
     func clearFrozenPicture()
     func removeSurface()
+    /// The display's content-matching state, where the platform switches display modes (tvOS).
+    func displayMatch() -> DisplayMatch?
+}
+
+extension PlaybackRendering {
+    func displayMatch() -> DisplayMatch? { nil }
 }

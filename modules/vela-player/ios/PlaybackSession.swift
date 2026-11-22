@@ -638,6 +638,13 @@ final class PlaybackSession {
             return selectAudio(command["trackId"] as? String)
         case "subtitle":
             return selectSubtitle(command["trackId"] as? String)
+        case "outputPreference":
+            var next = PlaybackPreferences.current
+            guard let value = command["value"] as? String, next.apply(value) else {
+                return "Unknown output preference"
+            }
+            PlaybackPreferences.current = next
+            player?.apply(preferences: next)
         case "retry":
             activeSource = ""
             if let plan {
