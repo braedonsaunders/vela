@@ -20,6 +20,7 @@ import { abortable } from '../async';
 import type { CoreVideoFrame, VideoPresentation, VideoRoute } from '../decode/video';
 import type { CorePresenter } from '../runtime';
 import type { VideoTrack } from '../types';
+import { av1BitDepth } from '../decode/av1';
 
 /** Upstream colour/frame presentation as a component; Vela owns its scheduling. */
 export class CoreVideoPresenter implements CorePresenter, VideoPresentation {
@@ -195,7 +196,9 @@ export class CoreVideoPresenter implements CorePresenter, VideoPresentation {
     const bitDepth =
       track.codec === 'hevc' && privateBytes && privateBytes.length >= 23 && privateBytes[0] === 1
         ? 8 + (privateBytes[17] & 7)
-        : 8;
+        : track.codec === 'av1'
+          ? (av1BitDepth(privateBytes) ?? 8)
+          : 8;
     const facts = {
       primaries: primaries as ColorPrimaries,
       matrix: matrix as YUVMatrix,
@@ -211,11 +214,13 @@ export class CoreVideoPresenter implements CorePresenter, VideoPresentation {
     const settings = hdr
       ? createHDRToSDRRenderSettings({ toneMapping: { inputPeakNits: metadata.nominalPeakNits } })
       : createDefaultRenderSettings();
+    // The validated external HDR routes exist for neutralized HEVC and AV1 hardware frames only.
+    const externalCodec = track.codec === 'hevc' || track.codec === 'av1' ? track.codec : null;
     if (route.kind === 'native' && hdr) {
-      if (track.codec !== 'hevc') throw new Error('Native HDR codec needs package presentation');
-      const key = getExternalHDRAuthorizationRouteKey('hevc', metadata);
+      if (!externalCodec) throw new Error('Native HDR codec needs package presentation');
+      const key = getExternalHDRAuthorizationRouteKey(externalCodec, metadata);
       if (!key) throw new Error('Native HDR colour route needs package presentation');
-      await abortable(this.presenter.waitForExternalHDRRouteAuthorization('hevc', metadata), signal);
+      await abortable(this.presenter.waitForExternalHDRRouteAuthorization(externalCodec, metadata), signal);
       if (!this.presenter.getAuthorizedExternalHDRRouteKeys().includes(key))
         throw new Error('Native HDR route is not validated on this device');
     }
@@ -232,7 +237,7 @@ export class CoreVideoPresenter implements CorePresenter, VideoPresentation {
           : hdr
             ? {
                 inputMode: 'external-hdr',
-                codec: 'hevc',
+                codec: externalCodec!,
                 metadata,
                 settings: createHDRToSDRRenderSettings({
                   toneMapping: { inputPeakNits: metadata.nominalPeakNits },

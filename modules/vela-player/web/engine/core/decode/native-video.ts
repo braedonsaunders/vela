@@ -1,5 +1,6 @@
 import { abortable } from '../async';
 import { prepareNativeHEVC } from './hevc';
+import { prepareNativeAV1 } from './av1';
 import type { DecodedVideoFrame, EncodedPacket, VideoTrack } from '../types';
 import { avcDecodedPictureBufferFrames } from './avc-buffer';
 
@@ -34,7 +35,8 @@ export class NativeVideoDecoder {
   private waiters = new Set<() => void>();
   private generation = 0;
   private durations = new Map<number, number>();
-  private hevc: ReturnType<typeof prepareNativeHEVC>;
+  /** Codec-specific bitstream preparation (HEVC always, AV1 for HDR); absent for other codecs. */
+  private prepared: ReturnType<typeof prepareNativeHEVC> | ReturnType<typeof prepareNativeAV1>;
   constructor(
     private readonly output: (frame: NativeVideoFrame) => void,
     private readonly onFailure: (error: Error) => void,
@@ -46,8 +48,9 @@ export class NativeVideoDecoder {
     if (!track.config || typeof VideoDecoder !== 'function')
       throw new Error('Native video decoder is unavailable for this actual configuration');
     const generation = this.generation;
-    this.hevc = prepareNativeHEVC(track, { ...track.config, hardwareAcceleration: this.acceleration });
-    const config: VideoDecoderConfig = this.hevc?.configuration ?? {
+    const requested = { ...track.config, hardwareAcceleration: this.acceleration };
+    this.prepared = prepareNativeHEVC(track, requested) ?? prepareNativeAV1(track, requested);
+    const config: VideoDecoderConfig = this.prepared?.configuration ?? {
       ...track.config,
       hardwareAcceleration: this.acceleration,
     };
@@ -61,7 +64,7 @@ export class NativeVideoDecoder {
     if (!support.supported) throw new Error('Actual video configuration needs a package decoder');
     this.epoch = epoch;
     this.failure = null;
-    this.frameBound = nativeFrameBound(this.hevc ? null : avcDecodedPictureBufferFrames(track.config));
+    this.frameBound = nativeFrameBound(this.prepared ? null : avcDecodedPictureBufferFrames(track.config));
     this.decoder = new VideoDecoder({
       output: (frame) => {
         if (generation !== this.generation) {
@@ -69,7 +72,7 @@ export class NativeVideoDecoder {
           return;
         }
         try {
-          this.hevc?.validateFrame(frame);
+          this.prepared?.validateFrame(frame);
         } catch (error) {
           frame.close();
           this.held = Math.max(0, this.held - 1);
@@ -119,7 +122,7 @@ export class NativeVideoDecoder {
     if (!this.decoder || this.decoder.state !== 'configured')
       throw new Error('Video decoder is not configured');
     if (packet.data.length > 16 * 1024 * 1024) throw new Error('Video packet exceeds decoder input bound');
-    const data = this.hevc ? this.hevc.packet(packet.data) : packet.data;
+    const data = this.prepared ? this.prepared.packet(packet.data) : packet.data;
     if (!data) return;
     this.held++;
     this.durations.set(packet.timestampUs, packet.durationUs);
@@ -179,7 +182,7 @@ export class NativeVideoDecoder {
     this.decoder = undefined;
     this.held = 0;
     this.failure = null;
-    this.hevc = undefined;
+    this.prepared = undefined;
     this.durations.clear();
     this.wake();
   }
