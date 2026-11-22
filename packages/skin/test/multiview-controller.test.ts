@@ -326,3 +326,17 @@ test('the bug prints away first and hides a spoiler or a game not yet started', 
   expect(bugLeader(race)).toBe('VER P1');
   expect(bugLeader({ ...race, spoiler: true })).toBe('');
 });
+
+test('once a tile has shown a picture, waiting for media keeps it shown and says it is loading', async () => {
+  const { source } = fakeSource();
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.open();
+  await settle();
+  const sessionId = mv.view().tiles[0]!.plan!.sessionId;
+  mv.snapshot(0, playing(sessionId));
+  mv.snapshot(0, { ...playing(sessionId), waiting: true } as Snapshot);
+  expect(mv.view().tiles[0]).toMatchObject({ state: 'playing', buffering: true });
+  mv.snapshot(0, playing(sessionId));
+  expect(mv.view().tiles[0]).toMatchObject({ state: 'playing', buffering: false });
+});

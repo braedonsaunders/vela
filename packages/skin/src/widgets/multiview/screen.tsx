@@ -14,6 +14,7 @@ import type { VelaPlayerViewProps } from '@vela/player-api';
 import { msg, type GuideChannel } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { holdBack } from '../../menu-key';
+import type { Focusable } from '../../escape';
 import { useGuideLook, type GuideLook, alpha } from '../guide/look';
 import { Line, LogoTile, Press } from '../guide/parts';
 import { PlayerIcon } from '../player/icons';
@@ -84,6 +85,24 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
   const panelOpen = panel !== null && (panel.slot === -1 || view.tiles.some(tile => tile.slot === panel.slot));
 
   useEffect(() => controller.open(), [controller]);
+  // On the web and touch a press focuses its tile first (pointer down); that same press must not also
+  // take the tile full screen.
+  const focusedBy = useRef({ slot: -1, at: 0 });
+
+  // Closing the panel gives the focus back to the tile it was for (TV and keyboard), not to whichever
+  // tile the focus engine would find first.
+  const targets = useRef(new Map<number, Focusable>());
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !panelOpen) {
+      const target = targets.current.get(controller.view().focused);
+      requestAnimationFrame(() => {
+        if (target?.requestTVFocus) target.requestTVFocus();
+        else target?.focus?.();
+      });
+    }
+    wasOpen.current = panelOpen;
+  }, [panelOpen, controller]);
 
   // Back closes the panel, then full screen, then leaves.
   const back = useRef<() => boolean>(() => false);
@@ -142,11 +161,17 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
         const rect = fullscreen ? full : rects[index];
         if (!rect) return null;
         return <TileTarget key={tile.slot} tile={tile} rect={rect} look={look} focusable={!panelOpen}
+          target={value => { if (value) targets.current.set(tile.slot, value); else targets.current.delete(tile.slot); }}
           preferred={!panelOpen && view.focused === tile.slot} channelName={name(tile.channelId)}
-          onFocus={() => controller.focus(tile.slot)}
+          onFocus={() => {
+            if (controller.view().focused !== tile.slot) focusedBy.current = { slot: tile.slot, at: Date.now() };
+            controller.focus(tile.slot);
+          }}
           onPress={() => {
-            if (TV) setPanel({ slot: tile.slot, mode: tile.refusal ? 'channels' : 'actions' });
-            else if (view.focused === tile.slot || fullscreen) controller.toggleFullscreen(tile.slot);
+            if (TV) { setPanel({ slot: tile.slot, mode: tile.refusal ? 'channels' : 'actions' }); return; }
+            const justFocused = focusedBy.current.slot === tile.slot && Date.now() - focusedBy.current.at < 600;
+            focusedBy.current = { slot: -1, at: 0 };
+            if (!justFocused && (controller.view().focused === tile.slot || fullscreen)) controller.toggleFullscreen(tile.slot);
             else controller.focus(tile.slot);
           }}
           onLongPress={() => controller.toggleFullscreen(tile.slot)}
@@ -241,6 +266,13 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
           <Animated.View style={{ position: 'absolute', left: 0, top: 0, transformOrigin: 'left top', transform: [{ scale: counter }] } as never}>
             <View style={{ padding: TV ? 18 : 10 }}><ScoreBug event={event} look={look} size={bugSize} /></View>
           </Animated.View>
+        ) : null}
+        {tile.buffering ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+            <Animated.View style={{ padding: TV ? 14 : 9, borderRadius: 999, backgroundColor: 'rgba(11, 15, 26, 0.6)', transform: [{ scale: counter }] }}>
+              <TuningDots look={look} />
+            </Animated.View>
+          </View>
         ) : null}
         {focused && !tile.muted && playing && !fullscreen ? (
           <Animated.View style={{ position: 'absolute', right: 0, bottom: 0, transformOrigin: 'right bottom', transform: [{ scale: counter }] } as never}>
@@ -360,14 +392,16 @@ function Caption({ look, tile, channel, focused, useLiveEvent }: {
 }
 
 /** The focusable press target over a tile, at its rect. */
-function TileTarget({ tile, rect, look, focusable, preferred, channelName, onFocus, onPress, onLongPress, onOptions }: {
+function TileTarget({ tile, rect, look, focusable, preferred, channelName, target, onFocus, onPress, onLongPress, onOptions }: {
   tile: MultiviewTile; rect: Rect; look: GuideLook; focusable: boolean; preferred: boolean; channelName: string;
+  target(value: Focusable | null): void;
   onFocus(): void; onPress(): void; onLongPress(): void; onOptions(): void;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
     <View style={{ position: 'absolute', left: rect.x, top: rect.y, width: rect.width, height: rect.height, zIndex: 3 }}>
       <Pressable
+        ref={value => target(value as Focusable | null)}
         focusable={focusable}
         hasTVPreferredFocus={preferred}
         accessibilityRole="button"

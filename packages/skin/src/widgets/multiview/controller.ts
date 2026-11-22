@@ -43,6 +43,8 @@ export interface MultiviewTile {
   /** A session at the tile's new height, playing hidden until it shows its first picture. */
   next: PlaybackPlan | null;
   refusal: TileRefusal | null;
+  /** Playing, but waiting for media: the picture stays (its last frame) and the tile says it is loading. */
+  buffering: boolean;
   muted: boolean;
   /** The latest mute command for the tile's player view. */
   command: Command | null;
@@ -75,7 +77,9 @@ interface TileRecord {
   askedHeight: number | undefined;
   heightTimer: ReturnType<typeof setTimeout> | undefined;
   following: AbortController | null;
+  /** The session has shown a picture; `buffering` while it waits for more. */
   playing: boolean;
+  buffering: boolean;
   refusal: TileRefusal | null;
   muted: boolean;
   commandId: number;
@@ -139,7 +143,7 @@ export class MultiviewController {
     }
     const used = new Set(this.tiles.map(tile => tile.slot));
     const slot = [0, 1, 2, 3].find(candidate => !used.has(candidate))!;
-    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false };
+    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false };
     this.tiles.push(tile);
     if (this.focusedSlot < 0) this.focusedSlot = slot;
     this.applyAudio();
@@ -307,8 +311,17 @@ export class MultiviewController {
       return;
     }
     const playing = snapshot.state === 'playing' && !snapshot.waiting && snapshot.totalFrames !== 0;
-    if (playing === tile.playing) return;
-    tile.playing = playing;
+    // Once a picture showed, waiting for media keeps it on screen: the tile only says it is loading.
+    if (tile.playing) {
+      const buffering = !playing && snapshot.state !== 'paused';
+      if (buffering === tile.buffering) return;
+      tile.buffering = buffering;
+      this.emit();
+      return;
+    }
+    if (!playing) return;
+    tile.playing = true;
+    tile.buffering = false;
     this.emit();
   }
 
@@ -359,6 +372,7 @@ export class MultiviewController {
     if (tile.height !== undefined) request.maxHeight = tile.height;
     tile.askedHeight = tile.height;
     tile.playing = false;
+    tile.buffering = false;
     this.options.source.tune(channelId, request).then(
       plan => {
         if (generation !== tile.generation || !this.tiles.includes(tile) || this.phase !== 'open') {
@@ -395,6 +409,7 @@ export class MultiviewController {
   private drop(tile: TileRecord): void {
     tile.generation += 1;
     tile.playing = false;
+    tile.buffering = false;
     tile.liveEvent = null;
     this.unfollow(tile);
     this.dropNext(tile);
@@ -445,6 +460,7 @@ export class MultiviewController {
     tile.next = null;
     tile.plan = next;
     tile.playing = true;
+    tile.buffering = false;
     // The new view consumed a muting command with the current id: its own state comes with a new one.
     tile.commandId += 1;
     tile.command = { id: tile.commandId, type: 'mute', muted: tile.muted };
@@ -485,6 +501,7 @@ export class MultiviewController {
     tile.askedHeight = undefined;
     tile.plan = null;
     tile.playing = false;
+    tile.buffering = false;
     tile.liveEvent = null;
     tile.refusal = null;
     tile.askedAgain = false;
@@ -511,6 +528,7 @@ export class MultiviewController {
         plan: tile.plan,
         next: tile.next,
         refusal: tile.refusal,
+        buffering: tile.playing && tile.buffering,
         muted: tile.muted,
         command: tile.command,
         liveEvent: tile.liveEvent,
