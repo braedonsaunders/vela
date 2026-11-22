@@ -6,13 +6,17 @@ import { useSideInsets, useVela, VelaProvider } from '../src/vela';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { systemBarStyle } from '../src/system-bar-style';
 import { AudioDock } from '../src/media/audio';
+import { LiveAlerts, LiveOverlayProvider } from '../src/live-alerts';
 
 export default function Layout() {
   return (
     <VelaProvider>
-      <SystemBar />
-      <Screens />
-      <AudioDock />
+      <LiveOverlayProvider>
+        <SystemBar />
+        <Screens />
+        <AudioDock />
+        <LiveAlerts />
+      </LiveOverlayProvider>
     </VelaProvider>
   );
 }

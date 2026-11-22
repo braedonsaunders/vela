@@ -20,6 +20,8 @@ import { usePlayerLook } from './look';
 import { present, type PlayerView } from './present';
 import { PICTURE_TEST_ID } from './remote-actions';
 import { Status, type Failed } from './status';
+import { PlayerLiveOverlays, usePlayerLiveOverlay } from '../live-overlay/player';
+import { takeAlertKey } from '../live-overlay/context';
 
 /** Rapid steps add up from the last target, not from a position the engine has yet to report. */
 const STEP_MEMORY_MS = 1500;
@@ -64,6 +66,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
   const live = useLiveWatchChrome(state.plan, state.snapshot, state.target);
+  const overlay = usePlayerLiveOverlay(look, live.live);
   // The session that has played, so a later wait in it reads as a stall rather than a start.
   const playedSession = useRef('');
   const sessionId = state.plan?.sessionId ?? '';
@@ -129,6 +132,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     },
     closeMenu: () => setOpened(null),
     liveKey: live.live ? live.key : undefined,
+    alertKey: takeAlertKey,
   });
 
   const tv = look.tv && Platform.isTV;
@@ -161,7 +165,9 @@ function Chrome({ state }: { state: PlayerChromeState }) {
       <View style={styles.top} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
       </View>
-      <View style={[styles.bottom, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
+      {/* Sports: the score bug, the ticker and alert toasts, under the bars so a menu always covers them. */}
+      <PlayerLiveOverlays look={look} overlay={overlay} chrome={idle.visible || !!failed} top={top} info={info && !failed} channelId={live.channelId} />
+      <View style={[styles.bottom, { bottom: overlay.lift }, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
         pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <BottomBar
           look={look}
@@ -182,6 +188,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           toggleInfo={toggleInfo}
           onActive={setActive}
           live={live}
+          overlay={overlay}
         />
       </View>
       <View
@@ -200,7 +207,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           dial={failed && live.canZap ? <LiveDial channelId={live.channelId} small={look.small} still={look.still} /> : null}
         />
       </View>
-      {!idle.visible && !failed ? <LiveNotice look={look} watch={live} /> : null}
+      {!idle.visible && !failed ? <LiveNotice look={look} watch={live} lift={overlay.lift} /> : null}
       {state.versionMessage && !failed ? (
         // A version switch reports here, not only inside the quality menu, which has closed by
         // the time the server answers: a refused switch must never look like a click that did nothing.

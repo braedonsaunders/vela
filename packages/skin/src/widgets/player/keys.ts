@@ -28,6 +28,8 @@ export interface Shortcuts {
   closeMenu(): void;
   /** Live watch takes its own keys first (up and down dial channels); answers whether it took one. */
   liveKey?(key: string): boolean;
+  /** A standing alert toast takes play/pause for its Watch; answers whether it took the press. */
+  alertKey?(): boolean;
 }
 
 function typing(target: EventTarget | null): boolean {

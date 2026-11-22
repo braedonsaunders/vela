@@ -116,7 +116,7 @@ export function LiveStatusLine({ look, watch }: { look: PlayerLook; watch: LiveW
  * While the chrome rests, a channel in trouble keeps one small line in the corner (never the
  * whole overlay): out of the focus tree and the pointer's way, gone once delivery recovers.
  */
-export function LiveNotice({ look, watch }: { look: PlayerLook; watch: LiveWatch }) {
+export function LiveNotice({ look, watch, lift = 0 }: { look: PlayerLook; watch: LiveWatch; lift?: number }) {
   // It rises in and sinks away with the shared motion, still showing its last words as it goes.
   const shown = watch.live && watch.notices.length > 0;
   const notice = useLast(shown ? watch.notices[0] : undefined);
@@ -131,7 +131,7 @@ export function LiveNotice({ look, watch }: { look: PlayerLook; watch: LiveWatch
       style={{
         position: 'absolute',
         left: look.gutter,
-        bottom: look.small ? 18 : look.size(30),
+        bottom: (look.small ? 18 : look.size(30)) + lift,
         maxWidth: '70%',
         flexDirection: 'row',
         alignItems: 'center',

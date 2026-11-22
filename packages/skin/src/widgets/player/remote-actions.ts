@@ -20,7 +20,7 @@ export function remotePress(type: string, actions: Shortcuts, focus?: string): v
   switch (type) {
     case 'channelUp': actions.liveKey?.('ChannelUp'); actions.wake(); return;
     case 'channelDown': actions.liveKey?.('ChannelDown'); actions.wake(); return;
-    case 'playPause': actions.togglePlay(); return;
+    case 'playPause': if (!actions.alertKey?.()) actions.togglePlay(); return;
     case 'play': actions.play(); return;
     case 'pause': actions.pause(); return;
     case 'rewind': actions.seekBy(-10); return;

@@ -12,6 +12,7 @@ import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
 import { LiveDial, LiveMark, LiveStatusLine, LiveZap, type LiveWatch } from './live';
 import type { CommandInput, PlayerChromeState } from './context';
+import type { PlayerLiveOverlay } from '../live-overlay/player';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
 import { AudioMenu, qualityMenuRows, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
@@ -126,6 +127,8 @@ interface BottomProps {
   toggleInfo(): void;
   onActive(active: boolean): void;
   live: LiveWatch;
+  /** Sports over a live channel: the ticker's toggle. */
+  overlay?: PlayerLiveOverlay;
 }
 
 export function BottomBar(props: BottomProps) {
@@ -211,6 +214,7 @@ function Controls({
   live,
   visible,
   reveal,
+  overlay,
 }: BottomProps) {
   // A channel plays at the live edge: channel up and down and the LIVE mark take the place of
   // the ten-second steps; no speed, no chapters.
@@ -312,6 +316,17 @@ function Controls({
             {view.quality || view.path}
           </Text>
         )}
+        {!timeline && overlay?.available ? (
+          <ChromeButton
+            look={look}
+            icon={overlay.ticker ? 'tickerOn' : 'ticker'}
+            compact
+            label={overlay.ticker ? msg('liveOverlay.hideTicker') : msg('liveOverlay.showTicker')}
+            selected={overlay.ticker}
+            testID="player-ticker-button"
+            onPress={overlay.toggleTicker}
+          />
+        ) : null}
         <ChromeButton
           look={look}
           icon={view.subtitleId ? 'captionsOn' : 'captions'}

@@ -23,7 +23,9 @@ export type PlayerIconName =
   | 'channelDown'
   | 'live'
   | 'alert'
-  | 'check';
+  | 'check'
+  | 'ticker'
+  | 'tickerOn';
 
 interface Props {
   name: PlayerIconName;
@@ -139,6 +141,16 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
       return <Path d="M12 3.5l9.5 16.5h-19zM12 10v4.5M12 17.4v.1" stroke={color} {...STROKE} />;
     case 'check':
       return <Path d="M4.5 12.5l5 5L19.5 7" stroke={color} {...STROKE} strokeWidth={2} />;
+    case 'ticker':
+    case 'tickerOn':
+      // A screen with a band along its foot, the band lit while the ticker runs.
+      return (
+        <>
+          <Rect x={2.5} y={4.5} width={19} height={15} rx={3} stroke={color} {...STROKE} />
+          {name === 'tickerOn' ? <Rect x={2.5} y={14} width={19} height={5.5} rx={1.5} fill={color} opacity={0.35} /> : null}
+          <Path d="M2.5 14h19M6 16.9h3M11 16.9h3M16 16.9h2" stroke={color} {...STROKE} />
+        </>
+      );
   }
 }
 
