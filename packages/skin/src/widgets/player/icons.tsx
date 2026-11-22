@@ -25,7 +25,8 @@ export type PlayerIconName =
   | 'alert'
   | 'check'
   | 'ticker'
-  | 'tickerOn';
+  | 'tickerOn'
+  | 'tiles';
 
 interface Props {
   name: PlayerIconName;
@@ -141,6 +142,15 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
       return <Path d="M12 3.5l9.5 16.5h-19zM12 10v4.5M12 17.4v.1" stroke={color} {...STROKE} />;
     case 'check':
       return <Path d="M4.5 12.5l5 5L19.5 7" stroke={color} {...STROKE} strokeWidth={2} />;
+    case 'tiles':
+      return (
+        <>
+          <Rect x={3} y={4.5} width={8} height={6.5} rx={1.5} stroke={color} {...STROKE} />
+          <Rect x={13} y={4.5} width={8} height={6.5} rx={1.5} stroke={color} {...STROKE} />
+          <Rect x={3} y={13} width={8} height={6.5} rx={1.5} stroke={color} {...STROKE} />
+          <Rect x={13} y={13} width={8} height={6.5} rx={1.5} stroke={color} {...STROKE} />
+        </>
+      );
     case 'ticker':
     case 'tickerOn':
       // A screen with a band along its foot, the band lit while the ticker runs.

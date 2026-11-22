@@ -1,16 +1,20 @@
-// What the live overlays need from the app: a way to open a channel full screen (an alert's
-// Watch) and a small preference store (the ticker stays on across launches). The app provides
-// both at its root; without them Watch is not offered and the ticker forgets on relaunch.
+// What the live overlays need from the app: the Sports surfaces' own actions (Watch tunes where a
+// game is on; Add to multiview once the multiview registers) and a small preference store (the
+// ticker stays on across launches). The app provides them at its root; without them a toast
+// offers no buttons and the ticker forgets on relaunch.
 //
 // Toasts are drawn by one host at a time: the player draws its own (above the picture and its
 // chrome, which a native full-screen presentation would otherwise cover), and the app's host
 // steps aside while a player is open. The standing toaster may claim the remote's play/pause key
 // for its Watch: the player asks `takeAlertKey` before it toggles playback.
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
+import type { LiveEvent, WatchTarget } from '@vela/core';
 
 export interface LiveOverlayActions {
-  /** Open a channel full screen, in place of a channel already playing. */
-  openChannel?(channelId: string): void;
+  /** Watch an event where a target says (a channel tunes, in place of one already playing). */
+  watch?(target: WatchTarget, event: LiveEvent): void;
+  /** Add the target's channel to the multiview beside what is playing. */
+  addToMultiview?(target: WatchTarget, event: LiveEvent): void;
   preferences?: { get(key: string): string | null; set(key: string, value: string): void };
 }
 

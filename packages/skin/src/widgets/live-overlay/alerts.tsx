@@ -8,12 +8,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform, Text, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInRight, FadeOutRight, LinearTransition } from 'react-native-reanimated';
-import { msg, type LiveAlert } from '@vela/core';
+import { msg, type LiveAlert, type LiveEvent } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { isFocusVisible } from '../../focus-visible';
 import { useHost } from '../../host';
-import { PlayerIcon } from '../player/icons';
+import { PlayerIcon, type PlayerIconName } from '../player/icons';
 import { pressed, useRemote } from '../player/remote';
 import type { PlayerLook } from '../player/look';
 import { claimAlertKey, takeAlertKey, useAppToasterStands, useLiveOverlayActions, usePlayerToaster } from './context';
@@ -41,10 +41,12 @@ interface Placement {
   playingChannelId?: string;
 }
 
-/** The toasts over the player: they stand in for the app's while it is open. */
+/** The toasts over the player: they stand in for the app's while it is open. Over a channel, a
+ * toast also offers to add its game to the multiview (when the app has one), and the remote's
+ * play/pause key does that rather than leave what is playing. */
 export function PlayerAlertToasts(props: Placement) {
   usePlayerToaster();
-  return <Toasts {...props} />;
+  return <Toasts {...props} inPlayer />;
 }
 
 /** The app's toasts, over every screen except an open player (which draws its own). The remote's
@@ -57,10 +59,17 @@ export function AppAlertToasts(props: Placement) {
   return stands ? <Toasts {...props} /> : null;
 }
 
-function Toasts({ look, top, right, playingChannelId }: Placement) {
+/** What one toast can do: where Watch goes, with the event it is about. */
+interface ToastActions extends AlertWatch {
+  event?: LiveEvent;
+  /** Add the game to the multiview beside what is playing. */
+  multiview: boolean;
+}
+
+function Toasts({ look, top, right, playingChannelId, inPlayer = false }: Placement & { inPlayer?: boolean }) {
   const vela = useVela();
   const { viewport } = useHost();
-  const { openChannel } = useLiveOverlayActions();
+  const actions = useLiveOverlayActions();
   const alerts = useVelaState(state => state.liveEvents.alerts);
   const { shown, superseded } = useMemo(() => toastQueue(alerts), [alerts]);
   useEffect(() => {
@@ -68,8 +77,12 @@ function Toasts({ look, top, right, playingChannelId }: Placement) {
   }, [vela, superseded]);
   const events = useVelaState(state => state.liveEvents.events);
   const details = useVelaState(state => state.liveEvents.details);
-  const watches = useMemo(() => new Map(shown.map(alert => [alert.id,
-    openChannel ? alertWatch(details[alert.eventId]?.value?.watch ?? events[alert.eventId]?.watch, playingChannelId) : { onNow: false }])), [shown, events, details, playingChannelId, openChannel]);
+  const offers = useMemo(() => new Map<string, ToastActions>(shown.map(alert => {
+    const detail = details[alert.eventId]?.value;
+    const event = detail ?? events[alert.eventId];
+    const where = actions.watch && event ? alertWatch(detail?.watch ?? events[alert.eventId]?.watch, playingChannelId) : { onNow: false };
+    return [alert.id, { ...where, ...(event ? { event } : {}), multiview: inPlayer && !!playingChannelId && !!actions.addToMultiview && !!where.target }];
+  })), [shown, events, details, playingChannelId, actions, inPlayer]);
   // Where to watch is resolved per viewer with the event's detail: read once for an alert whose
   // event came without it.
   const asked = useRef(new Set<string>());
@@ -82,27 +95,31 @@ function Toasts({ look, top, right, playingChannelId }: Placement) {
     }
   }, [vela, shown, details, events]);
 
-  const watch = (alert: LiveAlert, channelId: string) => {
+  const act = (alert: LiveAlert, kind: 'watch' | 'multiview') => {
+    const offer = offers.get(alert.id);
+    if (!offer?.target || !offer.event) return;
     vela.liveEvents.dismissAlert(alert.id);
-    openChannel?.(channelId);
+    if (kind === 'multiview') actions.addToMultiview?.(offer.target, offer.event);
+    else actions.watch?.(offer.target, offer.event);
   };
-  // The remote's play/pause key opens the newest toast's Watch while one offers it.
-  const keyed = [...shown].reverse().find(alert => watches.get(alert.id)?.target);
-  const keyedChannel = keyed ? watches.get(keyed.id)!.target!.channelId : '';
-  const latest = useRef({ keyed, keyedChannel });
-  latest.current = { keyed, keyedChannel };
+  // The remote's play/pause key takes the newest toast's action while one offers it: over a
+  // channel, into the multiview when there is one; anywhere else, Watch.
+  const keyed = [...shown].reverse().find(alert => offers.get(alert.id)?.target);
+  const keyedKind: 'watch' | 'multiview' = keyed && offers.get(keyed.id)?.multiview ? 'multiview' : 'watch';
+  const latest = useRef({ keyed, keyedKind, act });
+  latest.current = { keyed, keyedKind, act };
   useEffect(() => {
     if (!keyed) return;
     return claimAlertKey(() => {
-      const { keyed: alert, keyedChannel: channelId } = latest.current;
-      if (!alert || !channelId) return false;
-      watch(alert, channelId);
+      const { keyed: alert, keyedKind: kind, act: run } = latest.current;
+      if (!alert) return false;
+      run(alert, kind);
       return true;
     });
-  }, [keyed?.id, keyedChannel]);
+  }, [keyed?.id, keyedKind]);
 
   if (!shown.length) return null;
-  const width = look.small ? viewport.width - look.gutter * 2 : look.size(340);
+  const width = look.small ? viewport.width - look.gutter * 2 : look.size(360);
   return (
     <View pointerEvents="box-none" testID="live-alerts" style={{ position: 'absolute', top, right: right ?? look.gutter, width, gap: look.size(10) }}>
       {shown.map(alert => (
@@ -110,8 +127,9 @@ function Toasts({ look, top, right, playingChannelId }: Placement) {
           entering={look.still ? undefined : FadeInRight.duration(420)}
           exiting={look.still ? undefined : FadeOutRight.duration(240)}
           layout={look.still ? undefined : LinearTransition.duration(320)}>
-          <Toast alert={alert} look={look} watch={watches.get(alert.id) ?? { onNow: false }} keyed={alert === keyed}
-            onWatch={channelId => watch(alert, channelId)} onDismiss={() => vela.liveEvents.dismissAlert(alert.id)} />
+          <Toast alert={alert} look={look} offer={offers.get(alert.id) ?? { onNow: false, multiview: false }}
+            keyed={alert === keyed ? keyedKind : null}
+            onAct={kind => act(alert, kind)} onDismiss={() => vela.liveEvents.dismissAlert(alert.id)} />
         </Animated.View>
       ))}
     </View>
@@ -122,8 +140,11 @@ function kindColour(alert: LiveAlert, look: PlayerLook): string {
   return alert.kind === 'started' ? look.live : alert.kind === 'close' ? '#f5c451' : look.inkSecondary;
 }
 
-function Toast({ alert, look, watch, keyed, onWatch, onDismiss }: {
-  alert: LiveAlert; look: PlayerLook; watch: AlertWatch; keyed: boolean; onWatch(channelId: string): void; onDismiss(): void;
+function Toast({ alert, look, offer, keyed, onAct, onDismiss }: {
+  alert: LiveAlert; look: PlayerLook; offer: ToastActions;
+  /** The remote's play/pause key does this toast's action. */
+  keyed: 'watch' | 'multiview' | null;
+  onAct(kind: 'watch' | 'multiview'): void; onDismiss(): void;
 }) {
   const [held, setHeld] = useState(false);
   // The toast's time: it runs while nobody is on it and resumes where it stopped.
@@ -136,14 +157,14 @@ function Toast({ alert, look, watch, keyed, onWatch, onDismiss }: {
   }, [held]);
   const colour = kindColour(alert, look);
   const tv = Platform.isTV;
-  const target = watch.target;
+  const target = offer.target;
   const radius = Math.min(look.radiusPanel, look.size(16));
   return (
     <View
       testID="live-alert"
       accessibilityLiveRegion="polite"
       accessibilityRole="alert"
-      // A pointer over the toast holds it; so does focus on its Watch.
+      // A pointer over the toast holds it; so does focus on its buttons.
       onPointerEnter={() => setHeld(true)}
       onPointerLeave={() => setHeld(false)}
       style={{
@@ -167,18 +188,25 @@ function Toast({ alert, look, watch, keyed, onWatch, onDismiss }: {
           </View>
           {alert.body ? <Text numberOfLines={2} style={[look.text(14, 500, look.ink), { fontVariant: ['tabular-nums'] }]}>{alert.body}</Text> : null}
           {target ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.size(10), marginTop: look.size(6) }}>
-              <WatchButton look={look} label={watchLabel(target)} onPress={() => onWatch(target.channelId)} onFocus={setHeld} />
-              {tv && keyed ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.size(5) }}>
-                  <PlayerIcon name="play" size={look.size(11)} color={look.inkQuiet} />
-                  <PlayerIcon name="pause" size={look.size(11)} color={look.inkQuiet} />
-                  <Text style={look.text(11, 500, look.inkQuiet)}>{msg('liveOverlay.toWatch')}</Text>
-                </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: look.size(8), marginTop: look.size(6) }}>
+              <ToastButton look={look} primary icon="play" label={`${msg('liveOverlay.watch')} · ${watchLabel(target)}`}
+                accessibilityLabel={msg('liveOverlay.watchOn', { channel: watchLabel(target) })} testID="live-alert-watch"
+                onPress={() => onAct('watch')} onFocus={setHeld} />
+              {offer.multiview ? (
+                <ToastButton look={look} icon="tiles" label={msg('liveOverlay.multiview')} accessibilityLabel={msg('liveOverlay.addToMultiview')}
+                  testID="live-alert-multiview" onPress={() => onAct('multiview')} onFocus={setHeld} />
               ) : null}
             </View>
-          ) : watch.onNow ? (
+          ) : offer.onNow ? (
             <Text style={[look.text(12, 600, look.inkSecondary), { marginTop: look.size(2) }]}>{msg('liveOverlay.onNow')}</Text>
+          ) : null}
+          {target && tv && keyed ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.size(5), marginTop: look.size(2) }}>
+              <Text style={look.text(11, 500, look.inkQuiet)}>{msg('liveOverlay.press')}</Text>
+              <PlayerIcon name="play" size={look.size(11)} color={look.inkSecondary} />
+              <PlayerIcon name="pause" size={look.size(11)} color={look.inkSecondary} />
+              <Text style={look.text(11, 500, look.inkQuiet)}>{msg(keyed === 'multiview' ? 'liveOverlay.toAddToMultiview' : 'liveOverlay.toWatch')}</Text>
+            </View>
           ) : null}
         </View>
       </View>
@@ -203,16 +231,19 @@ function Countdown({ look, colour, held }: { look: PlayerLook; colour: string; h
   );
 }
 
-function WatchButton({ look, label, onPress, onFocus }: { look: PlayerLook; label: string; onPress(): void; onFocus(focused: boolean): void }) {
+function ToastButton({ look, icon, label, accessibilityLabel, primary, testID, onPress, onFocus }: {
+  look: PlayerLook; icon: PlayerIconName; label: string; accessibilityLabel: string; primary?: boolean; testID: string; onPress(): void; onFocus(focused: boolean): void;
+}) {
   const [focus, setFocus] = useState(false);
   const [hover, setHover] = useState(false);
   const tv = Platform.isTV;
   const lit = focus || hover;
+  const ink = lit ? look.inkInverse : primary ? look.onAccent : look.ink;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={msg('liveOverlay.watchOn', { channel: label })}
-      testID="live-alert-watch"
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
       onPress={onPress}
       onHoverIn={() => setHover(true)}
       onHoverOut={() => setHover(false)}
@@ -222,13 +253,13 @@ function WatchButton({ look, label, onPress, onFocus }: { look: PlayerLook; labe
         flexDirection: 'row', alignItems: 'center', gap: look.size(7),
         paddingVertical: look.size(7), paddingHorizontal: look.size(13),
         borderRadius: Math.min(look.radiusControl, look.size(18)),
-        backgroundColor: lit ? look.ink : look.accent,
+        backgroundColor: lit ? look.ink : primary ? look.accent : look.control,
         outlineColor: look.accent, outlineStyle: 'solid', outlineWidth: focus ? (tv ? look.size(3) : 2) : 0, outlineOffset: look.size(2),
         transform: [{ scale: focus && tv && !look.still ? 1.08 : 1 }],
       } as ViewStyle}
     >
-      <PlayerIcon name="play" size={look.size(13)} color={lit ? look.inkInverse : look.onAccent} />
-      <Text numberOfLines={1} style={look.text(13, 700, lit ? look.inkInverse : look.onAccent)}>{msg('liveOverlay.watch')} · {label}</Text>
+      <PlayerIcon name={icon} size={look.size(13)} color={ink} />
+      <Text numberOfLines={1} style={look.text(13, 700, ink)}>{label}</Text>
     </Pressable>
   );
 }
