@@ -309,9 +309,17 @@ function Tables({ look, section, followedNames }: { look: SportsLook; section: T
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: look.gutter, gap: look.px(16), alignItems: 'flex-start' }}>
         {section.tables.map((table, n) => (
           <SectionBoundary key={`${n}-${table.title}`} id={`table ${table.title}`}>
-            <View style={{ width: widths[n], padding: pad, borderRadius: look.radiusCard, backgroundColor: look.card, borderWidth: 1, borderColor: look.hairline }}>
-              <TableView look={look} table={table} compact highlight={highlight} />
-            </View>
+            {Platform.isTV ? (
+              // On a TV the remote stops on each table, so standings scroll into view on the way down.
+              <Surface look={look} lift={1.015} testID={`sports-standings-${n}`} label={table.title}
+                style={{ width: widths[n], padding: pad, borderWidth: 1, borderColor: look.hairline }}>
+                <TableView look={look} table={table} compact highlight={highlight} />
+              </Surface>
+            ) : (
+              <View style={{ width: widths[n], padding: pad, borderRadius: look.radiusCard, backgroundColor: look.card, borderWidth: 1, borderColor: look.hairline }}>
+                <TableView look={look} table={table} compact highlight={highlight} />
+              </View>
+            )}
           </SectionBoundary>
         ))}
       </ScrollView>
