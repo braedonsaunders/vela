@@ -17,8 +17,16 @@ export function readSubtitlePreferences(): SubtitlePreferences {
   } catch {}
   return result;
 }
-/** Accepts the CC menu's name=value command; only enumerated device preferences are stored. */
+/** Accepts the CC menu's name=value command; only enumerated device preferences are stored.
+ * `subtitleOffset=<seconds>` (±600, positive shows subtitles later) applies to every format and
+ * lasts for the player view: a timing fix belongs to one file, not the device. */
 export function updateSubtitlePreference(current: SubtitlePreferences, command: string): SubtitlePreferences {
+  const offset = /^subtitleOffset=(-?\d{1,3}(?:\.\d{1,3})?)$/.exec(command);
+  if (offset) {
+    const seconds = Number(offset[1]);
+    if (Math.abs(seconds) > 600) throw new Error('Invalid subtitle time offset');
+    return { ...current, offsetSeconds: seconds === 0 ? 0 : seconds };
+  }
   const match = /^(subtitleSize|subtitleBackground|subtitleColor|subtitlePosition)=([a-z]+)$/.exec(command);
   if (!match || !(choices[match[1] as SubtitlePreferenceName] as readonly string[]).includes(match[2]))
     throw new Error('Invalid subtitle appearance preference');
