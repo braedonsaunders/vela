@@ -13,7 +13,7 @@ import { EASE_OUT, MOTION, Presence, useLast } from '../../presence';
 import type { PlayerLook } from '../player/look';
 import { PlayerAlertToasts } from './alerts';
 import { useTickerPreference } from './context';
-import { bugModel } from './model';
+import { bugModel, overlayShown } from './model';
 import { ScoreBug, useFollowedEvent } from './score-bug';
 import { LiveTicker, tickerHeight } from './ticker';
 
@@ -36,14 +36,8 @@ export function usePlayerLiveOverlay(look: PlayerLook, live: boolean): PlayerLiv
   const available = useMemo(() => !!home && vela.liveEvents.available(), [vela, home]);
   const ref = useVelaState(state => state.playback.liveEvent);
   const [on, setOn] = useTickerPreference();
-  const ticker = available && live && on;
-  return {
-    available,
-    eventId: available && live && ref?.id ? ref.id : '',
-    ticker,
-    toggleTicker: () => setOn(!on),
-    lift: ticker ? tickerHeight(look) : 0,
-  };
+  const shown = overlayShown(available, live, ref?.id, on);
+  return { ...shown, toggleTicker: () => setOn(!on), lift: shown.ticker ? tickerHeight(look) : 0 };
 }
 
 interface Props {

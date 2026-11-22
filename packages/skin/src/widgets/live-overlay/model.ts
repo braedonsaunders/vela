@@ -148,6 +148,15 @@ export function scoreChange(previous: BugModel | null | undefined, next: BugMode
   return { away: moved(previous.away.score, next.away.score), home: moved(previous.home.score, next.home.score) };
 }
 
+// The player
+
+/** What the live player overlays: nothing at all unless the server offers live events and a
+ * channel is playing; then the bug for the event on air and the ticker when the viewer wants it. */
+export function overlayShown(available: boolean, live: boolean, eventId: string | undefined, tickerOn: boolean): { available: boolean; eventId: string; ticker: boolean } {
+  const on = available && live;
+  return { available, eventId: on && eventId ? eventId : '', ticker: on && tickerOn };
+}
+
 // The ticker
 
 export interface TickerItem {

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { LiveAlert, LiveEvent, WatchTarget } from '@vela/core';
-import { alertWatch, bugModel, marqueeScrolls, marqueeStep, scoreChange, tickerItems, toastQueue, watchLabel, type VersusBug } from '../src/widgets/live-overlay/model';
+import { alertWatch, bugModel, marqueeScrolls, overlayShown, marqueeStep, scoreChange, tickerItems, toastQueue, watchLabel, type VersusBug } from '../src/widgets/live-overlay/model';
 
 const game = (more: Partial<LiveEvent> = {}): LiveEvent => ({
   id: 'sports:sports:nfl-nyg-phi', feed: 'sports', category: 'football', league: { id: 'nfl', name: 'NFL', abbr: 'NFL' },
@@ -126,4 +126,11 @@ test('play/pause reaches a standing toast\'s Watch only while one claims it, and
   expect(watched).toBe(10);
   releaseSecond();
   expect(takeAlertKey()).toBe(false);
+});
+
+test('a server without live events changes nothing in the player; a film never shows the bug or the ticker', () => {
+  expect(overlayShown(false, true, 'e1', true)).toEqual({ available: false, eventId: '', ticker: false });
+  expect(overlayShown(true, false, 'e1', true)).toEqual({ available: true, eventId: '', ticker: false });
+  expect(overlayShown(true, true, undefined, false)).toEqual({ available: true, eventId: '', ticker: false });
+  expect(overlayShown(true, true, 'e1', true)).toEqual({ available: true, eventId: 'e1', ticker: true });
 });
