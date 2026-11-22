@@ -28,6 +28,9 @@ const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?
 // VELA_MOCK_LONG_HEROES=1: featured titles with names long enough to take two lines in the hero.
 const longHeroes = process.env.VELA_MOCK_LONG_HEROES === '1';
 const bootstrapDelayMs = Math.min(120_000, Math.max(0, Number(process.env.VELA_MOCK_BOOTSTRAP_DELAY_MS) || 0));
+// VELA_MOCK_COLLECTIONS_DELAY_MS=35000: every /libraries/:id/collections read answers that late (up
+// to two minutes), as a production library's collections route did (26-40 s), while the rest stays fast.
+const collectionsDelayMs = Math.min(120_000, Math.max(0, Number(process.env.VELA_MOCK_COLLECTIONS_DELAY_MS) || 0));
 const secret = crypto.randomUUID();
 // The demo viewer is Plex-linked: bootstrap carries its avatar as a session-length image address.
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1',
@@ -449,6 +452,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const collectionsMatch = /^\/libraries\/([^/]+)\/collections$/.exec(path);
   if (method === 'GET' && collectionsMatch && process.env.VELA_MOCK_OLD !== '1') {
+    if (collectionsDelayMs) await Bun.sleep(collectionsDelayMs);
     const library = libraries.find(l => l.id === collectionsMatch[1]);
     if (!library) fail('not-found', 'not_found', 'Library not found');
     const tab = library.tabs?.find(tab => tab.id === url.searchParams.get('tab'));

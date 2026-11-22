@@ -341,6 +341,32 @@ describe('mock server: catalogue and live', () => {
     }
   });
 
+  test('collections-only delay holds back collections while Home, items and rows answer at once', async () => {
+    const delayed = await launchMock({ VELA_MOCK_COLLECTIONS_DELAY_MS: '400' });
+    try {
+      const signed = await fetch(`${delayed.url}/vela/v0/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        idempotencyKey: 'slow-collections', username: 'demo', password: 'vela', device: { id: 'slow-collections', name: 'Test', platform: 'web', appVersion: '0.1' },
+      }) }).then(response => response.json()) as { accessToken: string };
+      const headers = { Authorization: `Bearer ${signed.accessToken}`, 'X-Vela-Device-Id': 'slow-collections' };
+      const read = (path: string) => fetch(`${delayed.url}/vela/v0${path}`, { headers });
+      const started = performance.now();
+      const collections = read('/libraries/movies/collections?limit=100').then(response => ({ response, ms: performance.now() - started }));
+      const others = await Promise.all(['/bootstrap', '/libraries/movies/items?limit=100', '/libraries/movies/rows?limit=100'].map(async path => {
+        const response = await read(path);
+        return { path, ok: response.ok, ms: performance.now() - started };
+      }));
+      for (const other of others) {
+        expect(other.ok).toBe(true);
+        expect(other.ms).toBeLessThan(400);
+      }
+      const slow = await collections;
+      expect(slow.response.ok).toBe(true);
+      expect(slow.ms).toBeGreaterThanOrEqual(390);
+    } finally {
+      await delayed.stop();
+    }
+  });
+
   test('fast search matches titles by name and live channels and programmes', async () => {
     const response = await post('/search', { query: 'world news', generation: 9, mode: 'fast', idempotencyKey: key() }, authed(tokens));
     const result = await response.json() as V.SearchResponse;
