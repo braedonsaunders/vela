@@ -132,7 +132,7 @@ export function flipped(query: LibraryQuery, model: LibraryModel | undefined): L
   return { ...query, sort: model.sort, direction: model.direction === 'asc' ? 'desc' : 'asc' };
 }
 
-/** `libraryFilter name|value`: kind, genre, year, played or favorite; an empty value clears it. */
+/** `libraryFilter name|value`: kind, genre, year, played or favorite; an empty value clears it; `clear|facets` clears them all. */
 export function filteredBy(query: LibraryQuery, arg: string): LibraryQuery {
   const [name = '', ...rest] = arg.split('|');
   const value = rest.join('|');
@@ -149,6 +149,10 @@ export function filteredBy(query: LibraryQuery, arg: string): LibraryQuery {
       return { ...query, played: played(value) };
     case 'favorite':
       return { ...query, favorite: value === 'true' ? true : undefined };
+    // Every filter at once (the Filters panel's Clear all); the facets given are kept (an opened
+    // facet collection's own). Search and sort stay.
+    case 'clear':
+      return { ...query, facets: parseFacets(value), kind: undefined, genre: undefined, year: undefined, played: undefined, favorite: undefined };
     default:
       return query;
   }

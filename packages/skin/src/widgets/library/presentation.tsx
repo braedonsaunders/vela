@@ -1,59 +1,22 @@
-import { ContentLoader } from '../common/loading';
+// The library toolbar (widget `libraryToolbar`, placed by every built-in skin through the
+// velaLibraryViews template): the library's tabs, or an opened collection's way back and title,
+// then on the same row its search, one Filters button (every facet, kind, watched, genre and year
+// control in a panel, with a count of those in force), one Sort button and the count. Filters in
+// force show as removable chips under it, only while there are any. A failed view's Try again is
+// the view's own (velaLibraryAlternative), never the toolbar's.
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { msg, number, plural } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import { shellHasLibraryTabs } from './navigation';
-import { toolbarTabs, tabSearchEnabled } from './toolbar-model';
-import type { FacetValue, LibraryFacet } from '../../../../protocol/types';
-import { FocusPressable } from '../../focus';
-import { InheritedContext, useHost, type WidgetProps } from '../../host';
-import { holdBack } from '../../menu-key';
-import { useFocusClaim } from '../common/focus-claim';
+import { activeFilters, clearFiltersArg, hasFilterControls, lockedFacet, tabSearchEnabled, toolbarLayout, toolbarTabs } from './toolbar-model';
+import { useHost, type WidgetProps } from '../../host';
 import { useLook } from '../common/look';
-import { Select } from '../common/select';
-import { YearInput } from './year-input';
-import type { ReactNode, ComponentRef } from 'react';
+import type { ComponentRef } from 'react';
 import { TextField } from '../common/text-field';
-import { singleLibraryStrip, tabOverflow } from './toolbar-layout';
-import { SheetModal } from '../common/sheet-modal';
-
-// All toolbar surfaces share these rows; skins own their dimensions, shape, font and colours.
-const control = { height: '$ui.controlHeight', padding: '0px 12px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', 'justify-content': 'center', 'flex-shrink': '0' };
-const controlText = { color: '$ui.ink', 'font-size': '$ui.controlFontSize', 'font-weight': '500' };
-
-/** A control label centred on its line: Android otherwise pads the line for accents above it. */
-const CENTRED = { textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' } as const;
-
-/** The toolbar's pill: a library tab (role "tab"), a filter or a toggle. Other sections that offer
- * tabs (Sports' leagues) draw this same pill so every tab strip in the app reads alike. */
-export function Button({ label, onPress, selected = false, role = 'button', id, quiet = false, preferred = false, onLayout, onFocus }: {
-  onLayout?(event: LayoutChangeEvent): void; onFocus?(): void; id?: string; label: string; onPress(): void; selected?: boolean; quiet?: boolean; preferred?: boolean; role?: 'button' | 'tab' | 'checkbox';
-}) {
-  const look = useLook();
-  const [focused, focus] = useState(false);
-  const claim = useFocusClaim(preferred);
-  const tab = role === 'tab';
-  const text = look.text({ ...controlText, color: tab && selected ? '$ui.onAccent' : quiet ? '$ui.inkSecondary' : '$ui.ink', 'font-weight': tab && selected ? '700' : '500' });
-  return <FocusPressable onLayout={onLayout} nativeID={id} accessibilityRole={role} accessibilityLabel={label} accessibilityState={{ selected, checked: role === 'checkbox' ? selected : undefined }}
-    {...(Platform.OS === 'web' ? { 'aria-selected': tab ? selected : undefined, 'aria-checked': role === 'checkbox' ? selected : undefined } : {})}
-    hasTVPreferredFocus={claim} onFocus={event => { focus(true); onFocus?.(); if (Platform.OS === 'web') (event.target as unknown as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }} onBlur={() => focus(false)} onPress={onPress}
-    style={look.box({ ...control, position: 'relative',
-      'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
-      'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : '$ui.glassEdge' })}>
-    {/* A tab's bold selected label must not resize the strip while its scenes are moving. */}
-    {tab && <Text accessible={false} numberOfLines={1} style={[look.text({ ...controlText, 'font-weight': '700' }), CENTRED,
-      Platform.OS === 'web' ? { visibility: 'hidden' } as never : { opacity: 0 }]}>{label}</Text>}
-    {tab
-      // The label lies over the sizing copy, centred in the pill's inner box by layout rather than
-      // a line height: a TV draws the control's px larger, and fonts place a line's glyphs differently.
-      ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, look.box({ padding: control.padding, 'justify-content': 'center' })]}>
-        <Text accessible={false} numberOfLines={1} style={[text, CENTRED]}>{label}</Text>
-      </View>
-      : <Text accessible={false} numberOfLines={1} style={[text, CENTRED]}>{role === 'checkbox' && selected ? '✓ ' : ''}{label}</Text>}
-
-  </FocusPressable>;
-}
+import { tabOverflow } from './toolbar-layout';
+import { Button, control, controlText } from './toolbar-controls';
+import { FiltersPanel, SortPanel, type Anchor } from './filters';
 
 /** A horizontal strip that scrolls on its own and shows real buttons at a clipped edge, so
  * hidden tabs or filters are both hinted at and reachable with a pointer. Keyboard and remote
@@ -101,8 +64,16 @@ function useOverflowStrip(names: { before: string; after: string }, resized?: ()
   return { strip, metrics, scrollProps, edges };
 }
 
-/** The tab strip is its own scroll owner so large server-declared sets cannot squeeze the page. */
+/** The tab strip is its own scroll owner so large server-declared sets cannot squeeze the page.
+ * Inside an opened collection it gives way to the collection's way back and title. */
 export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
+  const host = useHost();
+  const page = host.env.library;
+  if (page?.facetTitle) return <CollectionHeading />;
+  return <TabStrip />;
+}
+
+function TabStrip() {
   const host = useHost();
   const page = host.env.library;
   const tabs = toolbarTabs(page);
@@ -120,89 +91,158 @@ export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
     if (Platform.OS !== 'web') return;
     document.getElementById(`vela-library-view-${page?.tabId ?? page?.view}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [page?.tabId, page?.view]);
-  // An opened collection keeps its way back outside the scrolling tabs, where it is always seen.
-  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: '100%' }}>
-    {page?.facetTitle && <Button label={msg('library.backToCollections')} onPress={() => host.dispatch('libraryView', page.tabId ?? 'collections')} />}
-    <View style={[{ position: 'relative', minWidth: 0, flexShrink: 1 }, Platform.OS === 'web' && { width: 'max-content', maxWidth: '100%' } as never]}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityRole="tablist" accessibilityLabel={msg('library.views')}
-        {...scrollProps} style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3 }}>
-        {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
-          onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout; if (activeId === tab.id) reveal(tab.id, false); }}
-          onFocus={() => reveal(tab.id, true)} selected={activeId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
-      </ScrollView>
-      {edges}
-    </View>
-  </View>;
-}
-
-/** Filters and sorting scroll sideways together when they outgrow the width; the edge buttons
- * say there is more. */
-function FilterStrip({ children }: { children: ReactNode }) {
-  const { scrollProps, edges } = useOverflowStrip({ before: msg('library.previousFilters'), after: msg('library.moreFilters') });
-  return <View style={{ position: 'relative', width: '100%', minWidth: 0 }}>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" {...scrollProps}
-      style={{ width: '100%', minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>{children}</ScrollView>
+  return <View style={[{ position: 'relative', minWidth: 0, flexShrink: 1 }, Platform.OS === 'web' && { width: 'max-content', maxWidth: '100%' } as never]}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityRole="tablist" accessibilityLabel={msg('library.views')}
+      {...scrollProps} style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3 }}>
+      {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
+        onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout; if (activeId === tab.id) reveal(tab.id, false); }}
+        onFocus={() => reveal(tab.id, true)} selected={activeId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
+    </ScrollView>
     {edges}
   </View>;
 }
 
-function ToolbarField({ children, width }: { children: ReactNode; width?: number }) {
+/** An opened collection: back to the tab it was opened from, and its title, on one row. */
+function CollectionHeading() {
+  const host = useHost();
   const look = useLook();
-  return <InheritedContext.Provider value={{ rows: { color: look.ui.ink, 'font-family': look.ui.font, 'font-size': `${look.ui.controlFontSize}px`, 'font-weight': '500' }, fontSize: look.ui.controlFontSize }}>
-    {/* On the web the edge is drawn inside, so the select or field itself fills the whole 44px target. */}
-    <View style={[look.box(control), width ? { width } : {}, Platform.OS === 'web' && { borderWidth: 0, boxShadow: `inset 0px 0px 0px 1px ${look.ui.glassEdge}` } as never]}>{children}</View>
-  </InheritedContext.Provider>;
+  const page = host.env.library;
+  const tab = toolbarTabs(page).find(candidate => candidate.id === page?.tabId);
+  const back = tab?.label ?? msg('library.view.collections');
+  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 0, flexShrink: 1, padding: 3 }}>
+    <Button icon="back" label={back} accessibilityLabel={msg('library.backTo', { tab: back })} onPress={() => host.dispatch('libraryView', page?.tabId ?? 'collections')} />
+    <Text accessibilityRole="header" aria-level={2} numberOfLines={1} style={[look.text({ 'font-size': '20px', 'font-weight': '650' }), { flexShrink: 1, minWidth: 0 }]}>{page?.facetTitle}</Text>
+  </View>;
 }
 
-export function LibraryToolbar(props: WidgetProps) {
+/** Names for the facet values in force (chips read them), from the server's facet pages. */
+function useFacetLabels() {
+  const host = useHost();
+  const store = useVela();
+  const model = host.env.library?.model;
+  const [labels, setLabels] = useState<Record<string, Record<string, string>>>({});
+  const selectedKey = JSON.stringify(model?.facetFilters ?? {});
+  useEffect(() => {
+    if (!model?.canSearch) return;
+    let active = true;
+    for (const [field, ids] of Object.entries(model.facetFilters ?? {})) {
+      if (ids.every(id => labels[field]?.[id])) continue;
+      void store.catalogue.libraryFacets(model.id, field).then(page => {
+        if (active) setLabels(previous => ({ ...previous, [field]: { ...previous[field], ...Object.fromEntries(page.items.map(value => [value.id, value.label])) } }));
+      }).catch(() => {}); // The Filters panel offers its own retry; chips still clear by ID.
+    }
+    return () => { active = false; };
+  }, [store, model?.id, model?.canSearch, selectedKey]);
+  const add = (field: string, values: Record<string, string>) => setLabels(previous => ({ ...previous, [field]: { ...previous[field], ...values } }));
+  return [labels, add] as const;
+}
+
+/** The library's own search, sent once typing pauses. */
+function LibrarySearch({ grow = false }: { grow?: boolean }) {
+  const host = useHost();
+  const look = useLook();
+  const model = host.env.library?.model;
+  const [search, setSearch] = useState(model?.query ?? '');
+  useEffect(() => setSearch(model?.query ?? ''), [model?.query]);
+  useEffect(() => {
+    const timer = setTimeout(() => { if (search !== (model?.query ?? '')) host.dispatch('libraryFilter', `query|${search}`); }, 350);
+    return () => clearTimeout(timer);
+  }, [search, model?.query, host.dispatch]);
+  if (!model?.canSearch) return null;
+  return <TextField accessibilityLabel={msg('library.search')} placeholder={msg('library.search')} placeholderTextColor={look.ui.inkSecondary} value={search} onChangeText={setSearch}
+    style={[look.text(controlText), look.box({ ...control, width: grow ? 'auto' : host.viewport.width >= 1200 || Platform.isTV ? '220px' : '180px' }), grow ? { flexGrow: 1, flexShrink: 1, minWidth: 0 } : { flexShrink: 1, minWidth: 140 }, Platform.OS === 'web' && { fontSize: 16 }]} />;
+}
+
+type Open = { panel: 'filters' | 'sort'; anchor?: Anchor } | undefined;
+
+/** Measures a button in the window, so its panel can open under it. */
+function anchorOf(view: { measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void } | null, open: (anchor?: Anchor) => void) {
+  if (!view?.measureInWindow || Platform.OS !== 'web') return open();
+  view.measureInWindow((x, y, width, height) => open({ x, y, width, height }));
+}
+
+/** Search, Filters and Sort for browsing, and the quiet count. */
+function BrowseControls({ ctx, compact, grow, labels, onLabels }: {
+  ctx: WidgetProps['ctx']; compact: boolean; grow: boolean; labels: Record<string, Record<string, string>>; onLabels(field: string, values: Record<string, string>): void;
+}) {
   const host = useHost();
   const look = useLook();
   const page = host.env.library;
   const model = page?.model;
-  const tabsInShell = host.env.small && shellHasLibraryTabs(host.doc.document.slots?.shell);
-  const singleStrip = singleLibraryStrip(host.viewport.width, Platform.isTV);
-  const browse = (page?.view ?? 'library') === 'library';
-  const select = (params: Record<string, string>, width?: number) => <ToolbarField width={width ?? (Platform.OS === 'web' ? undefined : 180)}><Select ctx={props.ctx} params={params} /></ToolbarField>;
-  const filters = <>
-    {browse ? <LibraryFacets key={`${model?.id}:${page?.tabId}:${browse}`} /> : <><TabSearch key={`${model?.id}:${page?.tabId}`} />{page?.view === 'live' && <LiveFilters />}</>}
-    {browse && model && <>
-      {model.kinds.length > 1 && select({ options: 'library.kinds', action: 'libraryFilter', arg: 'kind|{value}', none: 'All kinds', label: 'Kind' })}
-      {model.canPlayed && select({ options: 'library.played', choices: '|All;false|Unwatched;true|Watched', action: 'libraryFilter', arg: 'played|{value}', label: 'Watched filter' })}
-      {model.canFavorite && <Button label="Favourites" selected={model.favoriteFilter} onPress={() => host.dispatch('libraryFilter', model.favoriteFilter ? 'favorite|' : 'favorite|true')} />}
-      {!!model.genres.length && select({ options: 'library.genres', action: 'libraryFilter', arg: 'genre|{value}', none: 'Any genre', label: 'Genre' })}
-      {model.canYear && <ToolbarField width={100}><YearInput ctx={props.ctx} params={{ placeholder: 'Year', label: 'Year' }} /></ToolbarField>}
-    </>}
-  </>;
-  const sort = browse && model && <View style={{ flexDirection: 'row', gap: 8, flexShrink: 0, alignItems: 'center' }}>
-    {model.sorts.length > 1 && select({ options: 'library.sorts', action: 'librarySort', label: 'Sort by' })}
-    {model.sorts.find(sort => sort.id === model.sort)?.directions.length === 2 && <Button label={model.direction === 'asc' ? 'Ascending' : 'Descending'} onPress={() => host.dispatch('librarySortFlip', '')} />}
+  const [open, setOpen] = useState<Open>();
+  const filtersButton = useRef<ComponentRef<typeof Button>>(null);
+  const sortButton = useRef<ComponentRef<typeof Button>>(null);
+  if (!model) return null;
+  const locked = lockedFacet(page);
+  const active = activeFilters(model, labels, locked).length;
+  const sort = model.sorts.find(candidate => candidate.id === model.sort);
+  const direction = model.direction === 'asc' ? msg('library.ascending') : msg('library.descending');
+  const sortLabel = sort ? `${sort.label} ${sort.directions.length === 2 ? model.direction === 'asc' ? '↑' : '↓' : ''}`.trim() : msg('library.sort');
+  const total = !page?.facetTitle && model.total !== undefined && !page?.loading ? msg(`library.count.${plural(model.total)}`, { count: number(model.total) }) : '';
+  const filtersLabel = active ? msg('library.filtersActive', { count: active }) : msg('library.filters');
+  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0, flexShrink: grow ? 1 : 0, flexGrow: grow ? 1 : 0 }}>
+    <LibrarySearch grow={grow} />
+    {hasFilterControls(model, locked) && <Button ref={filtersButton} testID="library-filters" icon="filter" iconOnly={compact} label={msg('library.filters')} accessibilityLabel={filtersLabel}
+      badge={active || undefined} selected={active > 0} expanded={open?.panel === 'filters'} onPress={() => anchorOf(filtersButton.current as never, anchor => setOpen({ panel: 'filters', anchor }))} />}
+    {model.sorts.length > 1 && <Button ref={sortButton} testID="library-sort" icon="sort" iconOnly={compact} label={sortLabel} accessibilityLabel={msg('library.sortSummary', { sort: sort?.label ?? '', direction })}
+      expanded={open?.panel === 'sort'} onPress={() => anchorOf(sortButton.current as never, anchor => setOpen({ panel: 'sort', anchor }))} />}
+    {!!total && <Text accessibilityLiveRegion="polite" numberOfLines={1} style={[look.text({ color: '$ui.inkSecondary', 'font-size': compact ? '13px' : '$ui.controlFontSize', 'font-weight': '500' }), { flexShrink: 0, marginLeft: 4 }]}>{total}</Text>}
+    {open?.panel === 'filters' && <FiltersPanel ctx={ctx} anchor={open.anchor} labels={labels} onLabels={onLabels} onClose={() => setOpen(undefined)} />}
+    {open?.panel === 'sort' && <SortPanel anchor={open.anchor} onClose={() => setOpen(undefined)} />}
   </View>;
-  const tab = page?.model?.tabs?.find(tab => tab.id === page?.tabId);
+}
+
+/** The filters in force, each removable, and Clear all; nothing while none are. */
+function ActiveChips({ labels }: { labels: Record<string, Record<string, string>> }) {
+  const host = useHost();
+  const page = host.env.library;
+  const active = activeFilters(page?.model, labels, lockedFacet(page));
+  if (!active.length) return null;
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityLabel={msg('library.activeFilters')}
+    style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 3 }}>
+    {active.map(filter => <Button key={filter.key} label={filter.label} trailing="close" selected accessibilityLabel={msg('library.removeFilter', { label: filter.label })}
+      onPress={() => host.dispatch('libraryFilter', filter.arg)} />)}
+    {active.length > 1 && <Button label={msg('library.clearFilters')} quiet onPress={() => host.dispatch('libraryFilter', clearFiltersArg(page?.model, lockedFacet(page)))} />}
+  </ScrollView>;
+}
+
+export function LibraryToolbar(props: WidgetProps) {
+  const host = useHost();
+  const page = host.env.library;
+  const [labels, addLabels] = useFacetLabels();
+  const tabsInShell = host.env.small && shellHasLibraryTabs(host.doc.document.slots?.shell);
+  const layout = toolbarLayout(host.viewport.width, Platform.isTV);
+  const browse = (page?.view ?? 'library') === 'library';
+  const tab = page?.model?.tabs?.find(candidate => candidate.id === page?.tabId);
   const hasFilters = browse || tabSearchEnabled(tab) || page?.view === 'live';
-  const total = browse && !page?.facetTitle && model?.total !== undefined && !page?.loading ? msg(`library.count.${plural(model.total)}`, { count: number(model.total) }) : '';
-  if (tabsInShell && !hasFilters) return null;
+  // The shell already lists the tabs on a phone; an opened collection still needs its way back.
+  const lead = tabsInShell && !page?.facetTitle ? null : <LibraryTabs />;
+  if (!lead && !hasFilters) return null;
+  const frame = { paddingVertical: 8, gap: 6, minWidth: 0 } as const;
   // A collections, people or live tab carries only its search (and live's filters): it shares the
-  // tabs' row, the tabs scrolling inside their own strip when space runs short, so the search never
-  // drops onto a row of its own under them.
-  if (!browse && !tabsInShell) {
-    return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={{ paddingVertical: 8, gap: 6, minWidth: 0 }}>
+  // tabs' row, the tabs scrolling inside their own strip when space runs short.
+  if (!browse) {
+    return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={frame}>
       <View style={{ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 12, minWidth: 0 }}>
-        <View style={{ flexShrink: 1, minWidth: 0 }}><LibraryTabs /></View>
-        {hasFilters && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>{filters}</View>}
+        {lead && <View style={{ flexShrink: 1, minWidth: 0 }}>{lead}</View>}
+        {hasFilters && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}><TabSearch key={`${page?.model?.id}:${page?.tabId}`} />{page?.view === 'live' && <LiveFilters />}</View>}
       </View>
-      {page?.extrasFailed && <View style={{ flexDirection: 'row' }}><Button label="Try again" onPress={() => host.dispatch('retry', '')} /></View>}
     </View>;
   }
-  // Browsing keeps the tabs on a row of their own: filters arriving later (a genre list) never
-  // squeeze them, and the filters and sort share one scrollable row below.
-  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={{ paddingVertical: 8, flexDirection: 'column', alignItems: 'stretch', gap: 6, minWidth: 0 }}>
-    {!tabsInShell && <LibraryTabs />}
-    {hasFilters && <View style={{ minHeight: look.ui.controlHeight + 6, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 0 }}>
-      <View style={{ flex: 1, minWidth: 0 }}><FilterStrip>{filters}{sort}</FilterStrip></View>
-      {!!total && !singleStrip && <Text accessibilityLiveRegion="polite" style={[look.text({ color: '$ui.inkSecondary', 'font-size': '$ui.controlFontSize', 'font-weight': '500' }), { flexShrink: 0 }]}>{total}</Text>}
-    </View>}
-    {!!total && singleStrip && <Text accessibilityLiveRegion="polite" style={look.text({ color: '$ui.inkSecondary', 'font-size': '13px', 'font-weight': '500' })}>{total}</Text>}
-    {page?.extrasFailed && <View style={{ flexDirection: 'row' }}><Button label="Try again" onPress={() => host.dispatch('retry', '')} /></View>}
+  const controls = (grow: boolean) => <BrowseControls key={`${page?.model?.id}:${page?.tabId}`} ctx={props.ctx} compact={layout === 'phone'} grow={grow} labels={labels} onLabels={addLabels} />;
+  // Browsing: one row where the width allows, the tabs taking what the controls leave and
+  // scrolling inside it; otherwise the tabs over the controls. Chips only while filters are in force.
+  return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={frame}>
+    {layout === 'row' || !lead
+      ? <View style={{ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        {lead && <View style={{ flexShrink: 1, flexGrow: 1, minWidth: 0, flexDirection: 'row' }}>{lead}</View>}
+        {controls(!lead)}
+      </View>
+      : <>
+        <View style={{ flexDirection: 'row', minWidth: 0 }}>{lead}</View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', minWidth: 0 }}>{controls(true)}</View>
+      </>}
+    <ActiveChips labels={labels} />
   </View>;
 }
 
@@ -233,116 +273,14 @@ function TabSearch() {
     style={[look.text(controlText), look.box({ ...control, width: '220px' }), Platform.OS === 'web' && { fontSize: 16 }]} />;
 }
 
-export function LibraryFacets() {
+/** Widget `libraryFacets`, for documents placing browse controls themselves: search, Filters
+ * and Sort, and the filters in force. */
+export function LibraryFacets(props: Partial<WidgetProps> = {}) {
   const host = useHost();
-  const store = useVela();
-  const model = host.env.library?.model;
-  const look = useLook();
-  const [search, setSearch] = useState(model?.query ?? '');
-  const [open, setOpen] = useState<LibraryFacet>();
-  const [labels, setLabels] = useState<Record<string, Record<string, string>>>({});
-  const selectedKey = JSON.stringify(model?.facetFilters ?? {});
-  useEffect(() => {
-    if (!model?.canSearch) return;
-    let active = true;
-    for (const [field, ids] of Object.entries(model.facetFilters ?? {})) {
-      if (ids.every(id => labels[field]?.[id])) continue;
-      void store.catalogue.libraryFacets(model.id, field).then(page => {
-        if (active) setLabels(previous => ({ ...previous, [field]: { ...previous[field], ...Object.fromEntries(page.items.map(value => [value.id, value.label])) } }));
-      }).catch(() => {}); // The picker provides an explicit retry; chips can still clear by ID.
-    }
-    return () => { active = false; };
-  }, [store, model?.id, model?.canSearch, selectedKey]);
-  useEffect(() => setSearch(model?.query ?? ''), [model?.query]);
-  useEffect(() => {
-    const timer = setTimeout(() => { if (search !== (model?.query ?? '')) host.dispatch('libraryFilter', `query|${search}`); }, 350);
-    return () => clearTimeout(timer);
-  }, [search, model?.query, host.dispatch]);
-  if (!model?.canSearch) return null;
-  const searchField = <TextField accessibilityLabel="Search this library" placeholder="Search this library" placeholderTextColor={look.ui.inkSecondary} value={search} onChangeText={setSearch}
-    style={[look.text(controlText), look.box({ ...control, width: '220px' }), Platform.OS === 'web' && { fontSize: 16 }]} />;
-  function choose(facet: LibraryFacet, id: string) {
-    const next = { ...model!.facetFilters };
-    const selected = next[facet.id] ?? [];
-    next[facet.id] = selected.includes(id) ? selected.filter(value => value !== id) : facet.multi ? [...selected, id] : [id];
-    if (!next[facet.id].length) delete next[facet.id];
-    host.dispatch('libraryFilter', `facets|${JSON.stringify(next)}`);
-  }
-  const active = model.facets?.flatMap(facet => (model.facetFilters?.[facet.id] ?? []).map(id => ({ facet, id }))) ?? [];
-  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-      {searchField}
-      {model.facets?.map(facet => <Button key={facet.id} label={facet.label} selected={open?.id === facet.id} onPress={() => setOpen(facet)} />)}
-      {active.map(({ facet, id }) => <Button key={`${facet.id}:${id}`} label={`${labels[facet.id]?.[id] ?? id} ×`} selected onPress={() => choose(facet, id)} />)}
-      {!!active.length && <Button label="Clear filters" quiet onPress={() => host.dispatch('libraryFilter', 'facets|{}')} />}
-    {open && <FacetPicker key={`${model.id}:${open.id}`} facet={open} selected={model.facetFilters?.[open.id] ?? []} onChoose={id => choose(open, id)} onClose={() => setOpen(undefined)}
-      onLabels={values => setLabels(previous => ({ ...previous, [open.id]: { ...previous[open.id], ...values } }))} />}
+  const [labels, addLabels] = useFacetLabels();
+  if (!host.env.library?.model?.canSearch) return null;
+  return <View style={{ gap: 6, minWidth: 0 }}>
+    <BrowseControls ctx={props.ctx ?? ({} as WidgetProps['ctx'])} compact={toolbarLayout(host.viewport.width, Platform.isTV) === 'phone'} grow={false} labels={labels} onLabels={addLabels} />
+    <ActiveChips labels={labels} />
   </View>;
-}
-
-/** A bounded picker leaves the browse toolbar compact and gives native remotes a focus scope. */
-function FacetPicker({ facet, selected, onChoose, onClose, onLabels }: {
-  facet: LibraryFacet; selected: string[]; onChoose(id: string): void; onClose(): void; onLabels(values: Record<string, string>): void;
-}) {
-  const host = useHost();
-  const store = useVela();
-  const look = useLook();
-  const libraryId = host.env.library!.model!.id;
-  const [query, setQuery] = useState('');
-  const [values, setValues] = useState<FacetValue[]>([]);
-  const [cursor, setCursor] = useState<string>();
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-  const [attempt, retry] = useState(0);
-  const generation = useRef(0);
-  const labels = useRef(onLabels); labels.current = onLabels;
-  const close = useRef(onClose); close.current = onClose;
-  useEffect(() => holdBack(() => { close.current(); return true; }), []);
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); close.current(); } };
-    document.addEventListener('keydown', escape, true);
-    return () => document.removeEventListener('keydown', escape, true);
-  }, []);
-  useEffect(() => {
-    let active = true;
-    generation.current++;
-    setLoading(true); setFailed(false);
-    const timer = setTimeout(() => {
-      void store.catalogue.libraryFacets(libraryId, facet.id, query).then(page => {
-        if (!active) return;
-        setValues(page.items); setCursor(page.nextCursor);
-        labels.current(Object.fromEntries(page.items.map(v => [v.id, v.label])));
-      }).catch(() => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
-    }, 250);
-    return () => { active = false; generation.current++; clearTimeout(timer); };
-  }, [store, libraryId, facet.id, query, attempt]);
-  return <SheetModal open scrim={look.ui.scrim} still={look.still} onRequestClose={onClose}>
-    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 20 }]}>
-      <FocusPressable style={StyleSheet.absoluteFill} focusable={false} accessibilityLabel={`Close ${facet.label}`} onPress={onClose} />
-      <View accessibilityViewIsModal accessibilityRole={Platform.OS === 'web' ? 'dialog' as never : undefined} accessibilityLabel={facet.label}
-        style={look.box({ width: '100%', 'max-width': '420px', 'max-height': '80vh', padding: '16px', gap: '12px', 'border-radius': '$ui.radiusPanel', 'background-color': '$ui.popover', border: '1px solid $ui.glassEdgeStrong', 'box-shadow': '0px 24px 80px $ui.shadow' })}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={look.text({ 'font-size': '18px', 'font-weight': '650' })}>{facet.label}</Text>
-          <Button label="Done" quiet preferred onPress={onClose} />
-        </View>
-        <TextField accessibilityLabel={`Search ${facet.label}`} placeholder={`Search ${facet.label}`} placeholderTextColor={look.ui.inkSecondary} value={query} onChangeText={setQuery}
-          style={[look.text({}), look.box({ height: '40px', padding: '0px 12px', border: '1px solid $ui.glassEdge', 'border-radius': '$ui.radiusControl' })]} />
-        {loading ? <ContentLoader inline={values.length > 0} /> : failed ? <Button label="Try again" onPress={() => retry(v => v + 1)} /> : <>
-          {!values.length && <Text style={look.text({})}>No values</Text>}
-          <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 6 }}>
-            {values.map(value => <Button key={value.id} role="checkbox" label={`${value.label} (${value.count})`} selected={selected.includes(value.id)} onPress={() => onChoose(value.id)} />)}
-          </ScrollView>
-          {cursor && <Button label="More values" onPress={() => {
-            const request = generation.current;
-            setLoading(true);
-            void store.catalogue.libraryFacets(libraryId, facet.id, query, cursor).then(page => {
-              if (request !== generation.current) return;
-              setValues(previous => [...new Map([...previous, ...page.items].map(value => [value.id, value])).values()]); setCursor(page.nextCursor);
-              labels.current(Object.fromEntries(page.items.map(v => [v.id, v.label])));
-            }).catch(() => { if (request === generation.current) setFailed(true); }).finally(() => { if (request === generation.current) setLoading(false); });
-          }} />}
-        </>}
-      </View>
-    </View>
-  </SheetModal>;
 }

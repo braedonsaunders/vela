@@ -228,7 +228,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     return {
       model: (() => {
         const model = held ?? (earlier ? asQueried(earlier, browseQuery) : undefined);
-        return model ? { ...model, name: facetTitle || model.name, genres: extras?.genres ?? model.genres,
+        return model ? { ...model, genres: extras?.genres ?? model.genres,
           ...(card && card !== model.presentation?.card ? { presentation: { card }, ...(card === 'landscape' ? { items: model.items.map(item => libraryCardArtwork(item, card)) } : {}) } : {}),
           ...(usableView === 'live' ? { presentation: { card: selectedTab?.card ?? 'landscape' }, items: liveState.items, more: !!liveState.cursor, pages: 1 } : {}) } : model;
       })(),

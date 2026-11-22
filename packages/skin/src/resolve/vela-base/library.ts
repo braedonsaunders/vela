@@ -86,7 +86,19 @@ function peopleTile(node: Node): Node {
   return { ...node, ...(node.press ? { press: { action: 'select', arg: '{person.id}|person' } } : {}), children: node.children?.map(peopleTile) };
 }
 
-export const libraryAlternative: Node = {
+/** A further page of collections or people that failed: the view keeps what it shows and offers
+ * its one Try again where Show more was (the toolbar never carries one). */
+const moreFailed = (view: string): Node => ({
+  type: 'box', when: [is('library.view', view), is('library.viewLoad', 'ready'), { test: 'env.libraryExtrasFailed' }],
+  style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '12px', ...gutter }, small: { ...gutterSmall },
+  children: [
+    { type: 'text', text: '{t:library.couldNotLoadMore}', style: { color: '$ui.inkSecondary' } },
+    { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{t:ui.tryAgain}', style: { ...pill(false, 48) }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:ui.tryAgain}' }] },
+  ],
+});
+const loadMore = (view: string): Node => ({ type: 'box', when: [is('library.view', view), { test: 'library.collectionsMore' }, { test: 'env.libraryExtrasFailed', not: true }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] });
+
+const libraryViewsContent: Node = {
   type: 'box', id: 'vela-library-alternative', when: [ready, { test: 'library.catalogView', is: 'ne', value: 'library' }],
   style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
   children: [
@@ -99,13 +111,24 @@ export const libraryAlternative: Node = {
     { ...titleGrid, when: [is('library.view', 'collections')], children: [{ type: 'repeat', over: 'library.collections', item: gridCard }] } as Node,
     { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0'), is('library.viewLoad', 'ready')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { type: 'widget', widget: 'sentinel', params: { on: 'library' }, when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }, { test: 'env.libraryMoreLoading', not: true }, { test: 'env.libraryExtrasFailed', not: true }] },
-    { type: 'box', when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },
+    loadMore('collections'),
+    moreFailed('collections'),
     { ...titleGrid, style: { ...titleGrid.style, 'grid-template-columns': 'repeat(auto-fill, minmax(124px, 1fr))' }, small: { ...titleGrid.small, 'grid-template-columns': 'repeat(auto-fill, minmax(96px, 1fr))' }, when: [is('library.view', 'people')], children: [{ type: 'repeat', over: 'library.people', item: peopleTile(castPerson) }] } as Node,
     { type: 'text', when: [is('library.view', 'people'), is('library.collectionCount', '0'), is('library.viewLoad', 'ready')], text: '{t:library.view.emptyPeople}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { type: 'widget', widget: 'sentinel', params: { on: 'library' }, when: [is('library.view', 'people'), { test: 'library.collectionsMore' }, { test: 'env.libraryMoreLoading', not: true }, { test: 'env.libraryExtrasFailed', not: true }] },
-    { type: 'box', when: [is('library.view', 'people'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },
+    loadMore('people'),
+    moreFailed('people'),
     { type: 'box', when: [is('library.view', 'genres')], style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter }, small: { ...gutterSmall }, children: [{ type: 'repeat', over: 'library.genreViews', item: libChip([{ test: 'opt.on' }], 'genre|{opt.id}', '{opt.label}') }] },
     { type: 'text', when: [is('library.view', 'genres'), is('library.genresCount', '0'), is('library.viewLoad', 'ready')], text: '{t:library.view.emptyGenres}', style: { ...gutter, color: '$ui.inkSecondary' } },
+  ],
+};
+/** The views beside browsing (recommended, collections, people, genres), and a live tab that
+ * could not be read: each failing view shows one Try again, its own. */
+export const libraryAlternative: Node = {
+  type: 'box', when: [ready], style: { display: 'flex', 'flex-direction': 'column' },
+  children: [
+    libraryViewsContent,
+    { ...failure('{t:library.couldNotOpen}'), when: [is('library.view', 'live'), is('library.viewLoad', 'failed')], style: { display: 'flex', 'flex-direction': 'column', gap: '4px', 'padding-top': '24px', 'padding-bottom': '60px' } },
   ],
 };
 export const toolbar: Node = {
@@ -131,7 +154,7 @@ export const toolbar: Node = {
       text: '{library.name}',
       role: 'heading',
       level: 1,
-      states: [{ when: [{ test: 'library.facetTitle' }], style: { position: 'relative', width: '100%', height: 'auto', opacity: '1', 'font-size': '24px', 'font-weight': '650', ...gutter, 'padding-top': '12px', 'padding-bottom': '12px' } }],
+      // Visually hidden: an opened collection's title shows in the toolbar, beside its way back.
       style: {
         position: 'absolute',
         width: '1px',
