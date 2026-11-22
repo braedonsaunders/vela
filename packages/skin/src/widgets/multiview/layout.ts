@@ -41,6 +41,7 @@ export function slotRects(layout: MultiviewLayout, count: number, size: Size, ga
   const n = Math.max(0, Math.min(MAX_TILES, count));
   if (n === 0) return [];
   if (layout === 'single' || n === 1) return [{ x: 0, y: 0, width: W, height: H }];
+  if (H > W) return portraitRects(layout, n, size, gap);
   if (layout === 'split') {
     const w = (W - gap * 3) / 2;
     const below = caption > 0 ? caption + gap : 0;
@@ -61,6 +62,26 @@ export function slotRects(layout: MultiviewLayout, count: number, size: Size, ga
   const { big, side } = featureFrame(size, gap, caption);
   const sides = Array.from({ length: n - 1 }, (_, i) => side[i]!);
   return [big, ...sides];
+}
+
+/** A phone held upright: tiles stack down the screen (side by side and the grid alike); one big
+ * keeps the big tile on top across the width with the others in a row under it. */
+function portraitRects(layout: MultiviewLayout, n: number, size: Size, gap: number): Rect[] {
+  const { width: W, height: H } = size;
+  if (layout === 'feature') {
+    const bigW = W - 2 * gap;
+    const smallW = (W - 4 * gap) / 3;
+    const total = bigW / ASPECT + gap + smallW / ASPECT;
+    const top = Math.max(gap, (H - total) / 2);
+    const big = { x: gap, y: top, width: bigW, height: bigW / ASPECT };
+    const rowTop = top + big.height + gap;
+    const left = (W - ((n - 1) * smallW + (n - 2) * gap)) / 2;
+    return [big, ...Array.from({ length: n - 1 }, (_, i) => ({ x: left + i * (smallW + gap), y: rowTop, width: smallW, height: smallW / ASPECT }))];
+  }
+  const h = Math.min((W - 2 * gap) / ASPECT, (H - (n + 1) * gap) / n);
+  const w = h * ASPECT;
+  const top = (H - (n * h + (n - 1) * gap)) / 2;
+  return Array.from({ length: n }, (_, i) => ({ x: (W - w) / 2, y: top + i * (h + gap), width: w, height: h }));
 }
 
 /** One big tile and a column of three beside it, the same height, at the top; the band below holds

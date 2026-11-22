@@ -69,7 +69,7 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
   const gap = TV ? 14 : Platform.OS === 'web' ? 10 : 6;
   const count = view.tiles.length;
   // Side by side and one big + three small say what is on each tile under the tiles.
-  const captioned = count > 1 && (view.layout === 'feature' || view.layout === 'split');
+  const captioned = count > 1 && size.width >= size.height && (view.layout === 'feature' || view.layout === 'split');
   const caption = captioned ? CAPTION : 0;
   const rects = useMemo(() => slotRects(view.layout, count, size, gap, caption), [view.layout, count, size, gap, caption]);
   const full: Rect = { x: 0, y: 0, width: size.width, height: size.height };

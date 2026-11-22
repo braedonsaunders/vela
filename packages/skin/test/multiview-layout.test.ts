@@ -101,3 +101,14 @@ test('directional neighbours follow the grid and stop at its edges', () => {
   expect(neighbour(feature, 3, 'left')).toBe(0);
   expect(neighbour(feature, 1, 'down')).toBe(2);
 });
+
+test('a phone held upright stacks the tiles, and one big keeps the big tile on top', () => {
+  const phone = { width: 390, height: 844 };
+  const grid = slotRects('grid', 4, phone, 6);
+  for (const rect of grid) { expect(inside(rect, phone)).toBe(true); expect(sixteenNine(rect)).toBe(true); }
+  expect(grid.map(rect => Math.round(rect.x))).toEqual(Array(4).fill(Math.round(grid[0]!.x)));
+  for (let i = 1; i < 4; i++) expect(grid[i]!.y).toBeGreaterThan(grid[i - 1]!.y + grid[i - 1]!.height);
+  const [big, ...small] = slotRects('feature', 4, phone, 6);
+  expect(big!.width).toBeCloseTo(390 - 12);
+  for (const rect of small) { expect(rect.y).toBeGreaterThan(big!.y + big!.height); expect(inside(rect, phone)).toBe(true); }
+});
