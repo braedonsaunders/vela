@@ -9,7 +9,7 @@
 // (layout.ts), so layout changes and full screen animate without resizing a playing surface. The
 // focusable press targets are plain views at the slots' rects, so TV focus sees real geometry.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
-import { AccessibilityInfo, Animated, Easing, FlatList, PixelRatio, Platform, StyleSheet, View, useTVEventHandler, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, PixelRatio, Platform, ScrollView, StyleSheet, View, useTVEventHandler, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import type { VelaPlayerViewProps } from '@vela/player-api';
 import { msg, type GuideChannel } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
@@ -548,12 +548,10 @@ function TilePanel({ look, still, open, panel, view, channels, byId, controller,
         opacity: progress, transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [width * 0.4, 0] }) }],
       }}>
         <Line look={look} size={TV ? 13 : 11} weight={750} color={look.inkQuiet} style={{ letterSpacing: 1.6 }}>{msg('multiview.title').toUpperCase()}</Line>
-        <Line look={look} size={TV ? 24 : 18} weight={700} lines={2}>
+        <Line look={look} size={TV ? 24 : 18} weight={700} lines={picking ? 1 : 2}>
           {shown.mode === 'add' ? msg('multiview.addChannel') : channel ? `${channel.number} · ${channel.name}` : ''}
         </Line>
-        {picking ? (
-          <ChannelList look={look} channels={channels} current={tile?.channelId ?? ''} taken={new Set(view.tiles.map(t => t.channelId))} onChoose={choose} />
-        ) : tile ? (
+        {picking ? null : tile ? (
           <View style={{ gap: TV ? 14 : 8, marginTop: TV ? 12 : 6 }}>
             {tile.refusal ? <PanelButton look={look} label={msg('multiview.tryAgain')} onPress={() => { controller.retry(tile.slot); onClose(); }} preferred /> : null}
             <PanelButton look={look} label={msg('multiview.changeChannel')} onPress={() => onMode('channels')} preferred={!tile.refusal} />
@@ -581,6 +579,13 @@ function TilePanel({ look, still, open, panel, view, channels, byId, controller,
           </View>
         ) : null}
       </Animated.View>
+      {picking ? (
+        // A sibling of the sliding panel, placed by its edges: inside the natively moved panel the
+        // list collapsed to nothing on tvOS. It fades with the panel.
+        <Animated.View style={{ position: 'absolute', right: TV ? 40 : 20, width: width - (TV ? 80 : 40), top: TV ? 168 : 96, bottom: 0, opacity: progress }}>
+          <ChannelList look={look} channels={channels} current={tile?.channelId ?? ''} taken={new Set(view.tiles.map(t => t.channelId))} onChoose={choose} />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -590,40 +595,45 @@ function ChannelList({ look, channels, current, taken, onChoose }: {
 }) {
   const row = TV ? 104 : 64;
   const start = Math.max(0, channels.findIndex(channel => channel.id === current));
-  const list = useRef<FlatList<GuideChannel>>(null);
-  // The tile's own channel is brought into view once the list has its size.
+  // Rows are drawn a page at a time as the list scrolls toward its end, so a long lineup costs
+  // nothing up front; the tile's own channel is in the first page.
+  const [count, setCount] = useState(Math.min(channels.length, Math.max(40, start + 20)));
+  const scroll = useRef<{ scrollTo(options: { y: number; animated: boolean }): void } | null>(null);
   const placed = useRef(false);
   return (
-    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', marginHorizontal: TV ? -14 : -6 }}>
-      <FlatList
-        ref={list}
-        style={{ flex: 1, minHeight: 0 }}
-        contentContainerStyle={{ paddingVertical: TV ? 14 : 6, paddingHorizontal: TV ? 14 : 6 }}
-        data={channels}
-        keyExtractor={channel => channel.id}
-        getItemLayout={(_, index) => ({ length: row, offset: row * index, index })}
-        onLayout={() => {
-          if (placed.current || start < 3) return;
-          placed.current = true;
-          list.current?.scrollToIndex({ index: start, viewPosition: 0.3, animated: false });
-        }}
-        renderItem={({ item, index }) => (
-          <View style={{ height: row, paddingVertical: TV ? 6 : 3 }}>
-            <Press label={item.name} onPress={() => onChoose(item.id)} hasTVPreferredFocus={index === start} lift={TV}
-              style={({ focused, hovered }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: TV ? 18 : 12, paddingHorizontal: TV ? 14 : 10,
-                borderRadius: look.radiusCell, backgroundColor: focused ? look.ink : hovered ? look.cellHover : item.id === current ? look.live : 'transparent' })}>
-              {({ focused }) => <>
-                <LogoTile look={look} logo={item.logo} name={item.name} channelId={item.id} width={TV ? 104 : 64} height={TV ? 62 : 38} radius={TV ? 10 : 6} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Line look={look} size={TV ? 15 : 13} weight={700} color={focused ? look.inkInverse : look.ink}>{`${item.number} · ${item.name}`}</Line>
-                  {item.now ? <Line look={look} size={TV ? 13 : 11} color={focused ? alpha(look.inkInverse, 0.7) : look.inkSecondary}>{item.now}</Line> : null}
-                </View>
-                {taken.has(item.id) ? <PlayerIcon name="check" size={TV ? 26 : 16} color={focused ? look.inkInverse : look.accent} /> : null}
-              </>}
-            </Press>
-          </View>
-        )}
-      />
-    </View>
+    <ScrollView
+      ref={scroll as never}
+      style={{ flex: 1, marginHorizontal: TV ? -14 : -6 }}
+      contentContainerStyle={{ paddingVertical: TV ? 14 : 6, paddingHorizontal: TV ? 14 : 6 }}
+      scrollEventThrottle={200}
+      onLayout={() => {
+        if (placed.current || start < 3 || TV) return;
+        placed.current = true;
+        scroll.current?.scrollTo({ y: Math.max(0, (start - 2) * row), animated: false });
+      }}
+      onScroll={event => {
+        const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+        if (count < channels.length && contentOffset.y + layoutMeasurement.height > contentSize.height - row * 10) {
+          setCount(value => Math.min(channels.length, value + 40));
+        }
+      }}
+    >
+      {channels.slice(0, count).map((item, index) => (
+        <View key={item.id} style={{ height: row, paddingVertical: TV ? 6 : 3 }}>
+          <Press label={item.name} onPress={() => onChoose(item.id)} hasTVPreferredFocus={index === start} lift={TV}
+            style={({ focused, hovered }) => ({ height: row - (TV ? 12 : 6), flexDirection: 'row', alignItems: 'center', gap: TV ? 18 : 12, paddingHorizontal: TV ? 14 : 10,
+              borderRadius: look.radiusCell, backgroundColor: focused ? look.ink : hovered ? look.cellHover : item.id === current ? look.live : 'transparent' })}>
+            {({ focused }) => <>
+              <LogoTile look={look} logo={item.logo} name={item.name} channelId={item.id} width={TV ? 104 : 64} height={TV ? 62 : 38} radius={TV ? 10 : 6} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Line look={look} size={TV ? 15 : 13} weight={700} color={focused ? look.inkInverse : look.ink}>{`${item.number} · ${item.name}`}</Line>
+                {item.now ? <Line look={look} size={TV ? 13 : 11} color={focused ? alpha(look.inkInverse, 0.7) : look.inkSecondary}>{item.now}</Line> : null}
+              </View>
+              {taken.has(item.id) ? <PlayerIcon name="check" size={TV ? 26 : 16} color={focused ? look.inkInverse : look.accent} /> : null}
+            </>}
+          </Press>
+        </View>
+      ))}
+    </ScrollView>
   );
 }
