@@ -16,6 +16,9 @@ export interface LiveOverlayActions {
   /** Add the target's channel to the multiview beside what is playing. */
   addToMultiview?(target: WatchTarget, event: LiveEvent): void;
   preferences?: { get(key: string): string | null; set(key: string, value: string): void };
+  /** Take the remote's play/pause from a playing player (Apple TV hands that button to the Now
+   * Playing app as a command, never as a press the app sees) until the returned function runs. */
+  claimPlayPause?(onPress: () => void): () => void;
 }
 
 export const LiveOverlayContext = createContext<LiveOverlayActions>({});

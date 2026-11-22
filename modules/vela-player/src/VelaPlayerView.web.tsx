@@ -122,4 +122,7 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
 
 export type { VelaPlayerViewProps, MediaAccess };
 
+/** The web player owns no system media key; the page hears its keys itself. */
+export const claimPlayPause = (_onPress: () => void): (() => void) => () => {};
+
 export const sampleUIFrames = async (_enabled: boolean): Promise<Record<string, number> | undefined> => undefined;

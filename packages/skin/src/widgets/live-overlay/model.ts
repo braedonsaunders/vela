@@ -201,6 +201,7 @@ export function marqueeScrolls(contentWidth: number, viewportWidth: number): boo
 export const MAX_TOASTS = 2;
 /** How long a toast stands untouched. */
 export const TOAST_MS = 9000;
+export const TV_TOAST_MS = 12000;
 
 /** The alerts to show, oldest first: a newer alert about the same event replaces an older one
  * (a close game that went final says only "Final"). `superseded` are the ones it replaced. */

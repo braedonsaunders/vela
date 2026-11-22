@@ -19,6 +19,10 @@ final class SystemMediaControls {
     private var publishedAt = Date.distantPast
     private var artworkFor: URL?
     private let skipInterval = 10.0
+    /// While set, the remote's play/pause belongs to the app (an alert toast's action), not to the player:
+    /// its play, pause and toggle commands call this instead. tvOS delivers that button as a remote command to
+    /// the Now Playing app, so JavaScript never sees it as a press while a player owns the controls.
+    var playPauseClaim: (() -> Void)?
 
     /// Makes `owner` the player the system's controls reach.
     func claim(_ owner: SystemMediaOwner) {
@@ -117,6 +121,14 @@ final class SystemMediaControls {
         }.resume()
     }
 
+    /// The remote's play/pause button arrives as toggle, or as play or pause by the state Now Playing shows.
+    private static func playPauseButton(_ action: SystemMediaCommand) -> Bool {
+        switch action {
+        case .toggle, .play, .pause: return true
+        default: return false
+        }
+    }
+
     private func register(
         _ command: MPRemoteCommand, _ translate: @escaping (MPRemoteCommandEvent) -> SystemMediaCommand?
     ) {
@@ -124,6 +136,10 @@ final class SystemMediaControls {
         let target = command.addTarget { [weak self] event in
             guard let owner = self?.owner, let action = translate(event) else {
                 return .noActionableNowPlayingItem
+            }
+            if let claim = self?.playPauseClaim, Self.playPauseButton(action) {
+                claim()
+                return .success
             }
             owner.systemMediaCommand(action)
             return .success

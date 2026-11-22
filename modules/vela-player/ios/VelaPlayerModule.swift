@@ -55,6 +55,14 @@ public final class VelaPlayerModule: Module {
             TVTextFields.install()
         }
 
+        // The app takes the remote's play/pause for itself (an alert toast's action) until released.
+        Events("onClaimedPlayPause")
+        AsyncFunction("claimPlayPause") { [weak self] (claimed: Bool) in
+            MainActor.assumeIsolated {
+                SystemMediaControls.shared.playPauseClaim = claimed ? { self?.sendEvent("onClaimedPlayPause", [:]) } : nil
+            }
+        }.runOnQueue(.main)
+
         // What this device plays (VideoToolbox's hardware decoders, AetherEngine's audio and subtitles).
         Function("capabilities") { () -> [String: Any] in
             PlayerCapabilities.probe()

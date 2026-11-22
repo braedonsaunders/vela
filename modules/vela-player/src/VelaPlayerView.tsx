@@ -35,6 +35,8 @@ interface NativeModule {
   attachPlaybackURL(plan: string, source: string, authorized: string, generation: number): boolean;
   detachPlaybackURL(plan: string, generation: number): void;
   setMediaAccess(access: NativeMediaAccess | null): void;
+  claimPlayPause?(claimed: boolean): void;
+  addListener?(event: 'onClaimedPlayPause', listener: () => void): { remove(): void };
 }
 
 interface NativeViewProps {
@@ -63,6 +65,18 @@ const apple = Platform.OS === 'ios';
 /** UI display-link intervals for opt-in benchmarks; missed opportunities are not GPU measurements. */
 export const sampleUIFrames = (enabled: boolean): Promise<Record<string, number> | undefined> =>
   nativeModule.sampleUIFrames?.(enabled) ?? Promise.resolve(undefined);
+
+/** The app takes the remote's play/pause (Apple: the system's toggle command, which a playing player
+ * otherwise receives) and hears it through `onPress`, until the returned function releases it. */
+export function claimPlayPause(onPress: () => void): () => void {
+  if (!apple || !nativeModule.claimPlayPause || !nativeModule.addListener) return () => {};
+  const subscription = nativeModule.addListener('onClaimedPlayPause', onPress);
+  nativeModule.claimPlayPause(true);
+  return () => {
+    subscription.remove();
+    nativeModule.claimPlayPause?.(false);
+  };
+}
 
 let accessGeneration = 0;
 let preparationSequence = 0;

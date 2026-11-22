@@ -17,7 +17,10 @@ import { PlayerIcon, type PlayerIconName } from '../player/icons';
 import { pressed, useRemote } from '../player/remote';
 import type { PlayerLook } from '../player/look';
 import { claimAlertKey, takeAlertKey, useAppToasterStands, useLiveOverlayActions, usePlayerToaster } from './context';
-import { alertWatch, toastQueue, TOAST_MS, watchLabel, type AlertWatch } from './model';
+import { alertWatch, toastQueue, TOAST_MS, TV_TOAST_MS, watchLabel, type AlertWatch } from './model';
+
+/** A television is read from across the room and answered with a remote: its toasts stand longer. */
+const STAND_MS = Platform.isTV ? TV_TOAST_MS : TOAST_MS;
 
 /** The app follows the viewer's alerts while it is in the foreground (one shared live stream). */
 export function useAlertFollow(enabled = true): void {
@@ -110,13 +113,16 @@ function Toasts({ look, top, right, playingChannelId, inPlayer = false }: Placem
   latest.current = { keyed, keyedKind, act };
   useEffect(() => {
     if (!keyed) return;
-    return claimAlertKey(() => {
+    const release = claimAlertKey(() => {
       const { keyed: alert, keyedKind: kind, act: run } = latest.current;
       if (!alert) return false;
       run(alert, kind);
       return true;
     });
-  }, [keyed?.id, keyedKind]);
+    // A player holding the system's media controls hears the button there: it comes back here.
+    const native = actions.claimPlayPause?.(() => { takeAlertKey(); });
+    return () => { native?.(); release(); };
+  }, [keyed?.id, keyedKind, actions]);
 
   if (!shown.length) return null;
   const width = look.small ? viewport.width - look.gutter * 2 : look.size(360);
@@ -148,7 +154,7 @@ function Toast({ alert, look, offer, keyed, onAct, onDismiss }: {
 }) {
   const [held, setHeld] = useState(false);
   // The toast's time: it runs while nobody is on it and resumes where it stopped.
-  const left = useRef(TOAST_MS);
+  const left = useRef(STAND_MS);
   useEffect(() => {
     if (held) return;
     const started = Date.now();
@@ -224,7 +230,7 @@ function Countdown({ look, colour, held }: { look: PlayerLook; colour: string; h
       <Animated.View style={{
         height: '100%', width: '100%', backgroundColor: colour, opacity: 0.7, transformOrigin: 'left',
         animationName: { from: { transform: [{ scaleX: 1 }] }, to: { transform: [{ scaleX: 0 }] } },
-        animationDuration: TOAST_MS, animationTimingFunction: 'linear', animationFillMode: 'both',
+        animationDuration: STAND_MS, animationTimingFunction: 'linear', animationFillMode: 'both',
         animationPlayState: held ? 'paused' : 'running',
       } as ViewStyle} />
     </View>

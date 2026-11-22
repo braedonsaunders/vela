@@ -8,6 +8,7 @@ import { useMemo, type ReactNode } from 'react';
 import { HostContext } from '@vela/skin/src/host';
 import { usePlayerLook } from '@vela/skin/src/widgets/player/look';
 import { AppAlertToasts, LiveOverlayContext, useAlertFollow, type LiveOverlayActions } from '@vela/skin/src/widgets/live-overlay';
+import { claimPlayPause } from '@vela/player';
 import { preferences } from './data/preferences';
 import { useAppSportsActions } from './sports/actions';
 import { useVela } from './vela';
@@ -18,6 +19,7 @@ export function LiveOverlayProvider({ children }: { children: ReactNode }) {
     watch: sports.watch,
     ...(sports.addToMultiview ? { addToMultiview: sports.addToMultiview } : {}),
     preferences,
+    claimPlayPause,
   }), [sports]);
   return <LiveOverlayContext.Provider value={actions}>{children}</LiveOverlayContext.Provider>;
 }
