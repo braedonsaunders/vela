@@ -825,6 +825,7 @@
   "multiview.unavailable": "This channel can't play here right now",
   "multiview.retryDetail": "Try again in a moment, or pick another channel.",
   "multiview.swapDetail": "Pick another channel for this tile.",
+  "multiview.switchFailed": "{channel} can't play right now",
   "multiview.failed": "Multiview isn't available right now",
   "multiview.close": "Close",
   "multiview.capProviderOne": "{provider} allows 1 connection",

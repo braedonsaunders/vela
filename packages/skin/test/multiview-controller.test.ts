@@ -264,18 +264,106 @@ test('a provider cap fails only its own tile, in words naming the channel, and t
   expect(espn!.refusal?.retry).toBe(false);
 });
 
-test('swapping a tile stops its session and tunes the new channel in the same tile index', async () => {
+test('another channel on a playing tile is a handover: the old one plays until the new one shows', async () => {
   const { source, calls } = fakeSource();
   const mv = new MultiviewController({ source });
   mv.add('a'); mv.add('b');
+  mv.setHeight(1, 700);
   mv.open();
   await settle();
   const old = mv.view().tiles[1]!.plan!.sessionId;
   mv.swap(1, 'z');
-  await settle();
-  expect(calls.stopped).toEqual([old]);
-  expect(calls.tunes.at(-1)).toEqual({ channelId: 'z', request: { groupId: 'g1', tile: 1 } });
+  // The same tile index, so Ether ends the old session only once the new one is ready.
+  expect(calls.tunes.at(-1)).toEqual({ channelId: 'z', request: { groupId: 'g1', tile: 1, maxHeight: 720 } });
   expect(mv.view().tiles[1]!.channelId).toBe('z');
+  expect(mv.view().tiles[1]!.plan!.sessionId).toBe(old);
+  expect(calls.stopped).toEqual([]);
+  await settle();
+  const next = mv.view().tiles[1]!.next!.sessionId;
+  expect(mv.view().tiles[1]!.plan!.sessionId).toBe(old);
+  mv.snapshot(1, playing(next));
+  expect(mv.view().tiles[1]!.plan!.sessionId).toBe(next);
+  expect(mv.view().tiles[1]!.next).toBeNull();
+  expect(calls.stopped).toEqual([old]);
+});
+
+test('Ether ending the old session before the new channel answers hands the tile over, not fails it', async () => {
+  const { source, calls } = fakeSource();
+  let answer!: (plan: PlaybackPlan) => void;
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.open();
+  await settle();
+  const old = mv.view().tiles[0]!.plan!.sessionId;
+  source.tune = (channelId, request) => { calls.tunes.push({ channelId, request }); return new Promise(resolve => { answer = resolve; }); };
+  mv.swap(0, 'z');
+  mv.updatePlan(0, { sessionId: old, state: 'ended', revision: 99 } as unknown as PlaybackPlan);
+  mv.failed(0, old, 'Session ended');
+  expect(mv.view().tiles[0]!.state).toBe('tuning');
+  expect(mv.view().tiles[0]!.refusal).toBeNull();
+  answer({ sessionId: 's9-z', channelId: 'z' } as unknown as PlaybackPlan);
+  await settle();
+  expect(mv.view().tiles[0]!.plan!.sessionId).toBe('s9-z');
+  expect(mv.view().tiles[0]!.channelId).toBe('z');
+});
+
+test('a refused channel change leaves the old channel playing and says why on the tile for a moment', async () => {
+  const { source, calls } = fakeSource(channelId => channelId === 'z' ? capError() : null);
+  const mv = new MultiviewController({ source, channelName: id => id.toUpperCase() });
+  mv.add('a');
+  mv.open();
+  await settle();
+  const old = mv.view().tiles[0]!.plan!.sessionId;
+  mv.snapshot(0, playing(old));
+  mv.swap(0, 'z');
+  await settle();
+  const tile = mv.view().tiles[0]!;
+  expect(tile.channelId).toBe('a');
+  expect(tile.plan!.sessionId).toBe(old);
+  expect(tile.state).toBe('playing');
+  expect(tile.refusal).toBeNull();
+  expect(tile.notice).toBe("Z's provider allows 2 connections");
+  expect(calls.stopped).toEqual([]);
+  // Another change clears it.
+  mv.swap(0, 'y');
+  expect(mv.view().tiles[0]!.notice).toBeNull();
+});
+
+test('a tile still tuning or failed changes channel with a fresh tune', async () => {
+  const { source, calls } = fakeSource(channelId => channelId === 'a' ? new Error('gone') : null);
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.open();
+  await settle();
+  expect(mv.view().tiles[0]!.state).toBe('failed');
+  mv.swap(0, 'z');
+  await settle();
+  expect(mv.view().tiles[0]!.channelId).toBe('z');
+  expect(mv.view().tiles[0]!.plan!.sessionId).toContain('-z');
+  expect(calls.tunes.map(t => t.channelId)).toEqual(['a', 'z']);
+});
+
+test('a tile measured while its plan was on its way asks for its drawn height once the plan arrives', async () => {
+  const { source, calls } = fakeSource();
+  const replans: number[] = [];
+  const answers: ((given: number) => void)[] = [];
+  source.tune = (channelId, request) => {
+    calls.tunes.push({ channelId, request });
+    return new Promise(resolve => answers.push(given => resolve({ sessionId: `s-${channelId}`, channelId, multiview: { ...request, maxHeight: given } } as unknown as PlaybackPlan)));
+  };
+  source.replan = async (plan, maxHeight) => { replans.push(maxHeight); return plan; };
+  const mv = new MultiviewController({ source });
+  mv.add('a'); mv.add('b');
+  mv.open();
+  await settle();
+  expect(calls.tunes.map(t => t.request.maxHeight)).toEqual([undefined, undefined]);
+  mv.setHeight(0, 1000); mv.setHeight(1, 1000);
+  // The server chose 480 for tile 0, drawn at 1080: it grows soon after the plan arrives. Tile 1's
+  // plan is already at its drawn height and asks for nothing.
+  answers[0]!(480); answers[1]!(1080);
+  await settle();
+  await new Promise(resolve => setTimeout(resolve, 560));
+  expect(replans).toEqual([1080]);
 });
 
 test('swapping to a channel already on another tile trades the two places', async () => {
@@ -405,6 +493,24 @@ test('a player failure on a tile shows on that tile, and Try again tunes it afre
   await settle();
   expect(mv.view().tiles[0]!.state).toBe('tuning');
   expect(calls.tunes).toHaveLength(2);
+});
+
+test('a player that reports failed on its way into its own recovery keeps its tile; one that stays failed ends it', async () => {
+  const { source, calls } = fakeSource();
+  const mv = new MultiviewController({ source, failedGraceMs: 40 });
+  mv.add('a'); mv.add('b');
+  mv.open();
+  await settle();
+  const [a, b] = mv.view().tiles.map(tile => tile.plan!.sessionId);
+  mv.snapshot(0, { sessionId: a, state: 'failed', waiting: false, totalFrames: 0 } as unknown as Snapshot);
+  mv.snapshot(0, { sessionId: a, state: 'recovering', waiting: true, totalFrames: 0 } as unknown as Snapshot);
+  mv.snapshot(1, { sessionId: b, state: 'failed', waiting: false, totalFrames: 0 } as unknown as Snapshot);
+  expect(mv.view().tiles[1]!.state).toBe('tuning');
+  await new Promise(resolve => setTimeout(resolve, 60));
+  expect(mv.view().tiles[0]!.state).toBe('tuning');
+  expect(mv.view().tiles[0]!.plan!.sessionId).toBe(a);
+  expect(mv.view().tiles[1]!.state).toBe('failed');
+  expect(calls.stopped).toEqual([b]);
 });
 
 test('picking a failed tile\'s own channel again tunes it afresh; on a playing tile it does nothing', async () => {

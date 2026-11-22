@@ -272,6 +272,7 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
             </Animated.View>
           </View>
         ) : null}
+        <TileNotice look={look} text={tile.notice} counter={counter} still={still} />
         {focused && !tile.muted && playing && !fullscreen ? (
           <Animated.View style={{ position: 'absolute', right: 0, bottom: 0, transformOrigin: 'right bottom', transform: [{ scale: counter }] } as never}>
             <View style={{ margin: TV ? 16 : 9, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: TV ? 6 : 4, paddingHorizontal: TV ? 12 : 8,
@@ -285,6 +286,28 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
         opacity: v.ring, borderRadius: radius / s, borderWidth: (TV ? 5 : 3) / s, borderColor: look.accent,
       }]} />
+    </Animated.View>
+  );
+}
+
+/** A refused channel change: the tile kept its channel and says why for a moment, fading in and out. */
+function TileNotice({ look, text, counter, still }: { look: GuideLook; text: string | null; counter: Animated.AnimatedNode; still: boolean }) {
+  const [shown, setShown] = useState(text);
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (text) setShown(text);
+    const animation = Animated.timing(opacity, { toValue: text ? 1 : 0, duration: still ? 0 : text ? 220 : 320, easing: Easing.out(Easing.quad), useNativeDriver: true });
+    animation.start(({ finished }) => { if (finished && !text) setShown(null); });
+    return () => animation.stop();
+  }, [text, still, opacity]);
+  if (!shown) return null;
+  return (
+    <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', opacity, transformOrigin: 'center bottom', transform: [{ scale: counter }] } as never}>
+      <View style={{ margin: TV ? 18 : 10, flexDirection: 'row', alignItems: 'center', gap: TV ? 10 : 6, maxWidth: TV ? 720 : 420,
+        paddingVertical: TV ? 8 : 5, paddingHorizontal: TV ? 16 : 10, borderRadius: 999, backgroundColor: 'rgba(11, 15, 26, 0.84)' }}>
+        <PlayerIcon name="alert" size={TV ? 22 : 14} color={look.now} />
+        <Line look={look} size={TV ? 15 : 12} weight={650} lines={1}>{shown}</Line>
+      </View>
     </Animated.View>
   );
 }

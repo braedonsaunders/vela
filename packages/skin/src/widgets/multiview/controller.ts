@@ -4,13 +4,14 @@
 // and the height it is drawn at, and leaving deletes the group, which ends every tile. Audio follows
 // focus: only the focused tile is unmuted. A tile that grows (full screen, the big tile) asks for its
 // larger height with a new session in its place, shown once it plays; one that shrinks does so later. A tile the server refuses (a provider connection cap) shows why on
-// that tile; the others keep playing.
+// that tile; the others keep playing. Another channel on a playing tile is a handover (spec B): the
+// old channel plays on until the new one is ready, and stays when the new one is refused.
 import type { Command, Snapshot } from '@vela/player-api';
-import { VelaError } from '@vela/core';
+import { msg, VelaError } from '@vela/core';
 import type { LiveEventRef, MultiviewTile as MultiviewTileRequest } from '../../../../protocol/live-events';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import { ladderHeight, layoutsFor, MAX_TILES, settleLayout, type MultiviewLayout } from './layout';
-import { tileRefusal, type TileRefusal } from './refusal';
+import { capTitle, connectionCap, tileRefusal, type TileRefusal } from './refusal';
 
 export type { LiveEventRef, MultiviewTile as MultiviewTileRequest } from '../../../../protocol/live-events';
 
@@ -34,6 +35,11 @@ const GROW_AFTER_MS = 500;
 const SHRINK_AFTER_MS = 6000;
 /** A tile's session stream that drops is followed again after this. */
 const FOLLOW_RETRY_MS = 5000;
+/** How long a refused channel change says so on the tile that kept its channel. */
+const NOTICE_MS = 6000;
+/** A player reports `failed` on its way into its own recovery (the web engine falls back to another
+ * decoder route); only a failure that stands this long, or its error, ends the tile. */
+const FAILED_GRACE_MS = 4000;
 
 export type TileState = 'waiting' | 'tuning' | 'playing' | 'failed';
 
@@ -52,6 +58,8 @@ export interface MultiviewTile {
   /** The latest mute command for the tile's player view. */
   command: Command | null;
   liveEvent: LiveEventRef | null;
+  /** Why the last channel change on this tile was refused; the tile kept its channel. */
+  notice: string | null;
 }
 
 export interface MultiviewView {
@@ -94,6 +102,12 @@ interface TileRecord {
   /** The current session ended while the new-height one was being asked for (Ether ends a tile's
    * old session when it starts the new one): the tile waits for that answer instead of failing. */
   handover: boolean;
+  /** The channel playing while another is being tuned on the tile (a channel change). */
+  previousChannelId: string | null;
+  notice: string | null;
+  noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  /** A `failed` report waiting out FAILED_GRACE_MS, by session. */
+  failing: Map<string, ReturnType<typeof setTimeout>>;
 }
 
 /** Ether supersedes overlapping tunes from one device; that refusal says nothing about the channel. */
@@ -108,6 +122,8 @@ export interface MultiviewOptions {
   /** Start with every tile muted, the focused one too, until the viewer moves the focus (a lab or
    * development build opening multiview on launch). */
   startSilent?: boolean;
+  /** How long a player's `failed` report must stand before it ends the tile (FAILED_GRACE_MS). */
+  failedGraceMs?: number;
 }
 
 export class MultiviewController {
@@ -157,7 +173,7 @@ export class MultiviewController {
     }
     const used = new Set(this.tiles.map(tile => tile.slot));
     const slot = [0, 1, 2, 3].find(candidate => !used.has(candidate))!;
-    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false, regrading: false, handover: false };
+    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false, regrading: false, handover: false, previousChannelId: null, notice: null, noticeTimer: undefined, failing: new Map() };
     this.tiles.push(tile);
     if (this.focusedSlot < 0) this.focusedSlot = slot;
     this.applyAudio();
@@ -182,6 +198,11 @@ export class MultiviewController {
       this.emit();
       return;
     }
+    this.clearNotice(tile);
+    if (this.phase === 'open' && this.groupId && tile.plan && !tile.refusal) {
+      this.handOver(tile, channelId);
+      return;
+    }
     this.drop(tile);
     tile.channelId = channelId;
     tile.refusal = null;
@@ -194,6 +215,7 @@ export class MultiviewController {
     if (!tile) return;
     const index = this.tiles.indexOf(tile);
     this.drop(tile);
+    this.clearNotice(tile);
     this.tiles.splice(index, 1);
     if (this.fullscreenSlot === slot) this.fullscreenSlot = -1;
     if (this.focusedSlot === slot) this.focusedSlot = this.tiles[Math.min(index, this.tiles.length - 1)]?.slot ?? -1;
@@ -236,7 +258,8 @@ export class MultiviewController {
     tile.height = height;
     clearTimeout(tile.heightTimer);
     tile.heightTimer = undefined;
-    if (!tile.plan || this.phase !== 'open' || tile.askedHeight === height) return;
+    // A channel being changed asks for the drawn height with its own tune.
+    if (!tile.plan || this.phase !== 'open' || tile.askedHeight === height || tile.previousChannelId !== null) return;
     const grow = tile.askedHeight === undefined || height > tile.askedHeight;
     tile.heightTimer = setTimeout(() => { tile.heightTimer = undefined; this.regrade(tile); }, grow ? GROW_AFTER_MS : SHRINK_AFTER_MS);
   }
@@ -320,15 +343,22 @@ export class MultiviewController {
   snapshot(slot: number, snapshot: Snapshot): void {
     const tile = this.tile(slot);
     if (tile?.next && snapshot.sessionId === tile.next.sessionId) {
-      if (snapshot.state === 'failed') { this.dropNext(tile); this.emit(); return; }
+      if (snapshot.state === 'failed') {
+        const next = tile.next;
+        this.failLater(tile, next.sessionId, () => { if (tile.next === next) { this.dropNext(tile); this.emit(); } });
+        return;
+      }
+      this.recovered(tile, snapshot.sessionId);
       if (snapshot.state === 'playing' && !snapshot.waiting && snapshot.totalFrames !== 0) this.takeNext(tile);
       return;
     }
     if (!tile?.plan || snapshot.sessionId !== tile.plan.sessionId) return;
     if (snapshot.state === 'failed') {
-      this.oldEnded(tile, new Error(snapshot.failure?.message || ''));
+      const plan = tile.plan, message = snapshot.failure?.message || '';
+      this.failLater(tile, plan.sessionId, () => { if (tile.plan === plan) this.oldEnded(tile, new Error(message)); });
       return;
     }
+    this.recovered(tile, snapshot.sessionId);
     const playing = snapshot.state === 'playing' && !snapshot.waiting && snapshot.totalFrames !== 0;
     // Once a picture showed, waiting for media keeps it on screen: the tile only says it is loading.
     if (tile.playing) {
@@ -347,7 +377,8 @@ export class MultiviewController {
   failed(slot: number, sessionId: string, message: string): void {
     const tile = this.tile(slot);
     if (tile?.next?.sessionId === sessionId) { this.dropNext(tile); this.emit(); return; }
-    if (tile?.plan?.sessionId === sessionId) this.fail(tile, new Error(message));
+    // During a channel change Ether ends the old session itself; oldEnded tells that from a failure.
+    if (tile?.plan?.sessionId === sessionId) this.oldEnded(tile, new Error(message));
   }
 
   /** The tile's session has a newer plan (a recovery or a height change). */
@@ -380,6 +411,24 @@ export class MultiviewController {
 
   // Internals
 
+  private failLater(tile: TileRecord, sessionId: string, fail: () => void): void {
+    if (tile.failing.has(sessionId)) return;
+    tile.failing.set(sessionId, setTimeout(() => { tile.failing.delete(sessionId); fail(); }, this.options.failedGraceMs ?? FAILED_GRACE_MS));
+  }
+
+  /** The session reported something other than `failed`: its player is recovering or playing. */
+  private recovered(tile: TileRecord, sessionId: string): void {
+    const timer = tile.failing.get(sessionId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    tile.failing.delete(sessionId);
+  }
+
+  private clearFailing(tile: TileRecord): void {
+    for (const timer of tile.failing.values()) clearTimeout(timer);
+    tile.failing.clear();
+  }
+
   private tile(slot: number): TileRecord | undefined {
     return this.tiles.find(tile => tile.slot === slot);
   }
@@ -402,6 +451,7 @@ export class MultiviewController {
         tile.askedAgain = false;
         tile.liveEvent = null;
         this.follow(tile, plan);
+        this.followHeight(tile, plan);
         this.emit();
       },
       error => {
@@ -448,6 +498,8 @@ export class MultiviewController {
     tile.liveEvent = null;
     tile.regrading = false;
     tile.handover = false;
+    tile.previousChannelId = null;
+    this.clearFailing(tile);
     this.unfollow(tile);
     this.dropNext(tile);
     const plan = tile.plan;
@@ -522,6 +574,84 @@ export class MultiviewController {
     );
   }
 
+  /** Another channel on a playing tile, in the same tile index: Ether starts it and ends the old
+   * session only once the new one is ready (spec B), so the old picture plays until the new one
+   * shows. A refused channel leaves the old one playing, and the tile says why for a moment. */
+  private handOver(tile: TileRecord, channelId: string): void {
+    tile.generation += 1;
+    const generation = tile.generation;
+    clearTimeout(tile.heightTimer);
+    tile.heightTimer = undefined;
+    this.dropNext(tile);
+    tile.previousChannelId ??= tile.channelId;
+    tile.channelId = channelId;
+    tile.regrading = true;
+    tile.handover = false;
+    const request: MultiviewTileRequest = { groupId: this.groupId, tile: tile.slot };
+    if (tile.height !== undefined) request.maxHeight = tile.height;
+    this.options.source.tune(channelId, request).then(
+      plan => {
+        if (generation !== tile.generation || !this.tiles.includes(tile) || this.phase !== 'open') { this.stopPlan(plan); return; }
+        tile.regrading = false;
+        tile.askedHeight = tile.height;
+        tile.askedAgain = false;
+        tile.next = plan;
+        this.followHeight(tile, plan);
+        if (tile.handover || !tile.plan) this.takeNext(tile, false);
+        else this.emit();
+      },
+      error => {
+        if (generation !== tile.generation || !this.tiles.includes(tile)) return;
+        this.options.report?.('swap', error);
+        tile.regrading = false;
+        if (cancelled(error) && !tile.askedAgain) {
+          tile.askedAgain = true;
+          const previous = tile.previousChannelId;
+          tile.channelId = previous ?? tile.channelId;
+          this.handOver(tile, channelId);
+          return;
+        }
+        tile.askedAgain = false;
+        if (tile.handover || !tile.plan) {
+          // The old session ended meanwhile: nothing is left playing, so the refusal is the tile's.
+          tile.previousChannelId = null;
+          tile.handover = false;
+          this.fail(tile, error);
+          return;
+        }
+        tile.channelId = tile.previousChannelId ?? tile.channelId;
+        tile.previousChannelId = null;
+        this.showNotice(tile, switchNotice(error, this.options.channelName?.(channelId) ?? ''));
+      },
+    );
+    this.emit();
+  }
+
+  /** A plan asked for without a height carries the server's; a tile drawn at another height asks
+   * for it in turn (its height may have been measured while the plan was on its way). */
+  private followHeight(tile: TileRecord, plan: PlaybackPlan): void {
+    if (tile.askedHeight === undefined) {
+      const given = (plan as { multiview?: { maxHeight?: number } }).multiview?.maxHeight;
+      if (typeof given === 'number' && given > 0) tile.askedHeight = given;
+    }
+    if (tile.height === undefined || tile.askedHeight === tile.height || tile.heightTimer) return;
+    const grow = tile.askedHeight === undefined || tile.height > tile.askedHeight;
+    tile.heightTimer = setTimeout(() => { tile.heightTimer = undefined; this.regrade(tile); }, grow ? GROW_AFTER_MS : SHRINK_AFTER_MS);
+  }
+
+  private showNotice(tile: TileRecord, notice: string): void {
+    this.clearNotice(tile);
+    tile.notice = notice;
+    tile.noticeTimer = setTimeout(() => { tile.noticeTimer = undefined; tile.notice = null; this.emit(); }, NOTICE_MS);
+    this.emit();
+  }
+
+  private clearNotice(tile: TileRecord): void {
+    clearTimeout(tile.noticeTimer);
+    tile.noticeTimer = undefined;
+    tile.notice = null;
+  }
+
   /** The new-height session shows its first picture: it takes the tile's place and the old one stops. */
   private takeNext(tile: TileRecord, playing = true): void {
     const next = tile.next;
@@ -529,6 +659,8 @@ export class MultiviewController {
     const old = tile.plan;
     tile.next = null;
     tile.handover = false;
+    tile.previousChannelId = null;
+    if (old && next.channelId !== old.channelId) tile.liveEvent = null;
     tile.plan = next;
     tile.playing = playing;
     tile.buffering = false;
@@ -578,6 +710,9 @@ export class MultiviewController {
     tile.askedAgain = false;
     tile.regrading = false;
     tile.handover = false;
+    tile.previousChannelId = null;
+    this.clearNotice(tile);
+    this.clearFailing(tile);
   }
 
   private applyAudio(): void {
@@ -605,6 +740,7 @@ export class MultiviewController {
         muted: tile.muted,
         command: tile.command,
         liveEvent: tile.liveEvent,
+        notice: tile.notice,
       })),
       layout: settleLayout(this.chosenLayout, this.tiles.length),
       layouts: layoutsFor(this.tiles.length),
@@ -618,6 +754,13 @@ export class MultiviewController {
     this.current = this.compose();
     for (const listener of [...this.listeners]) listener();
   }
+}
+
+/** The words for a refused channel change: the cap names the channel's provider. */
+function switchNotice(error: unknown, channel: string): string {
+  const cap = connectionCap(error);
+  if (cap) return capTitle(cap, channel);
+  return channel ? msg('multiview.switchFailed', { channel }) : msg('multiview.unavailable');
 }
 
 function sameEvent(a: LiveEventRef | null, b: LiveEventRef | null): boolean {
