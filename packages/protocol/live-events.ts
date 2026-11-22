@@ -119,7 +119,9 @@ export interface Screen { id: ID; title: string; icon?: string; league?: ID; dat
 
 export interface MultiviewRequest extends Mutation { device: Device }
 export interface MultiviewGroup { groupId: ID; maxTiles: number }
-/** On a live-channel PlaybackRequest. */
-export interface MultiviewTile { groupId: ID; tile: number }
+/** On a live-channel PlaybackRequest. `maxHeight`: the tile's on-screen height in device pixels,
+ * rounded up to 480/720/1080/2160; Ether caps the tile's stream at it (absent: the group-size rule).
+ * A tile that grows (full screen, the big tile) asks again with the larger height. */
+export interface MultiviewTile { groupId: ID; tile: number; maxHeight?: number }
 /** ProtocolError.details of `provider_connection_cap` (HTTP 409, class capacity). */
 export interface ProviderCapDetails { provider: string; max: number; inUse: number }

@@ -602,6 +602,7 @@ export function admitTile(owner: string, tile: V.MultiviewTile, channelId: strin
   if (!group || group.owner !== owner) fail('not-found', 'multiview_not_found', 'Multiview group not found');
   if (!channelId) fail('request', 'multiview_live_only', 'Multiview tiles play live channels');
   if (!Number.isInteger(tile.tile) || tile.tile < 0 || tile.tile > 3) fail('request', 'invalid_tile', 'Tile must be 0 to 3');
+  if (tile.maxHeight !== undefined && (!Number.isInteger(tile.maxHeight) || tile.maxHeight <= 0)) fail('request', 'invalid_max_height', 'maxHeight must be a positive whole number of pixels');
   const cap = sportsKnobs.providerCap;
   if (!cap) return;
   // Tiles on the same channel share one upstream connection.
@@ -613,4 +614,14 @@ export function admitTile(owner: string, tile: V.MultiviewTile, channelId: strin
 }
 export function placeTile(tile: V.MultiviewTile, channelId: string, sessionId: string): void {
   groups.get(tile.groupId)?.tiles.set(tile.tile, { channelId, sessionId });
+}
+/** A tile's stream is capped at its declared height, as Ether does: renditions above it leave the plan
+ * (the lowest always stays), so a 480 tile plays 360p and a full-screen 2160 one the whole ladder. */
+export function capTileHeight(plan: V.PlaybackPlan, tile: V.MultiviewTile): void {
+  if (tile.maxHeight === undefined) return;
+  for (const path of plan.paths) {
+    const kept = path.qualities.filter(quality => (quality.height ?? 0) <= tile.maxHeight!);
+    const lowest = [...path.qualities].sort((a, b) => (a.height ?? 0) - (b.height ?? 0))[0];
+    path.qualities = kept.length ? kept : lowest ? [lowest] : [];
+  }
 }

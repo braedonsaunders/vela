@@ -14,7 +14,7 @@ import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, read
 import { renderCover } from './covers';
 
 import { scaleGuide } from './guide-fixture';
-import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
+import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
@@ -846,7 +846,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const selectedVersionId = body.versionId ?? versionData?.selectedVersionId;
     const s = await createSession(g.id, body, pending, versionData ? { ...versionData, selectedVersionId } : undefined);
     if (pending && !s.plan.paths.some(p => p.id === pending.pathId)) { sessions.delete(s.plan.sessionId); fail('source', 'media_not_generated', 'Requested MSE fixture is unavailable'); }
-    if (body.multiview && channel) placeTile(body.multiview, channel.id, s.plan.sessionId);
+    if (body.multiview && channel) { placeTile(body.multiview, channel.id, s.plan.sessionId); capTileHeight(s.plan, body.multiview); }
     if (channel) s.liveEvent = liveEventOnChannel(channel.id);
     return json(s.plan);
   }

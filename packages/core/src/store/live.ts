@@ -1,7 +1,9 @@
 // Live TV: a day of the channel guide, and what a channel is airing now (the player's title).
 // Offered only by a server with the LiveTv capability; elsewhere every read fails honestly.
 import type * as V from '../wire';
-import { hasLiveTv } from '../adapter/capabilities';
+import { hasEventStream, hasLiveTv, hasMultiview } from '../adapter/capabilities';
+import { followSession, forgetSession } from '../protocol/events';
+import { randomId } from '../protocol/id';
 import type { Connection } from '../adapter/connection';
 import type { TransportCommand } from '../adapter';
 import type { Images } from '../discovery/artwork';
@@ -30,6 +32,17 @@ export interface LiveTvAccess {
   images: Images;
   /** Server-owner policy. Older servers omit it and retain the original automatic preview. */
   previewMode: V.LivePreviewMode;
+  /** Multiview groups (features.multiview); absent where the server has none. Tiles join with
+   * PlaybackRequest.multiview through `api.startPlayback`. */
+  multiview?: {
+    maxTiles: number;
+    create(): Promise<V.MultiviewGroup>;
+    /** Ends every tile of the group. */
+    end(groupId: string): Promise<void>;
+  };
+  /** Follows one live session's stream until it closes or `signal` aborts: its validated plans and the
+   * live event on air. Absent where the server streams no session events. */
+  follow?(sessionId: string, on: { plan(plan: V.PlaybackPlan): void; liveEvent(liveEvent: V.LiveEventRef | null): void }, signal: AbortSignal): Promise<void>;
 }
 
 export class Live {
@@ -69,6 +82,22 @@ export class Live {
       scope: `${connection.record.id}|${tokens?.viewer.id ?? ''}`,
       images: await connection.images(),
       previewMode: features.livePreview?.available === false ? 'off' : features.livePreview?.mode ?? 'auto',
+      ...(hasMultiview(adapter) && features.multiview?.available ? {
+        multiview: {
+          maxTiles: features.multiview.maxTiles,
+          create: () => adapter.createMultiview({ device: this.session.device, idempotencyKey: randomId() }),
+          end: async (groupId: string) => { await adapter.endMultiview(groupId, { idempotencyKey: randomId() }); },
+        },
+      } : {}),
+      ...(hasEventStream(adapter) ? {
+        follow: async (sessionId: string, on: { plan(plan: V.PlaybackPlan): void; liveEvent(liveEvent: V.LiveEventRef | null): void }, signal: AbortSignal) => {
+          try {
+            await followSession(adapter, plan => connection.plan(plan), sessionId, on.plan, signal, on.liveEvent);
+          } finally {
+            forgetSession(sessionId);
+          }
+        },
+      } : {}),
     };
   }
 

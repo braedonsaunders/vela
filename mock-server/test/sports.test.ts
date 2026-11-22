@@ -147,4 +147,16 @@ describe('mock server: sports', () => {
     expect(snapshot.liveEvent).toEqual({ id: NFL, feed: 'sports' });
     expect((await send('DELETE', `/multiview/${group.groupId}`)).status).toBe(200);
   });
+
+  test.skipIf(!mediaGenerated)('a tile declares its drawn height and its plan is capped at it', async () => {
+    const group = await (await send('POST', '/multiview', { device })).json() as V.MultiviewGroup;
+    const client = { device, protocolVersions: [0], containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: ['webvtt'], hls: true, mse: false };
+    const play = (maxHeight: number, tile: number) => send('POST', '/playback', { channelId: 'channel-7', client, multiview: { groupId: group.groupId, tile, maxHeight } });
+    const small = await (await play(480, 0)).json() as V.PlaybackPlan;
+    expect(small.paths[0]!.qualities.map(quality => quality.height)).toEqual([360]);
+    const full = await (await play(2160, 1)).json() as V.PlaybackPlan;
+    expect(full.paths[0]!.qualities.map(quality => quality.height)).toEqual([360, 540, 720]);
+    expect((await play(0, 2)).status).toBe(400);
+    expect((await send('DELETE', `/multiview/${group.groupId}`)).status).toBe(200);
+  });
 });
