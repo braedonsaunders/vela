@@ -113,7 +113,6 @@ function seedFixtures(): void {
       { clock: '8:15', period: 4, text: 'Hurts sacked at PHI 30 for -8 yards (Burns)', emphasis: 'key', competitorId: 'nfl-nyg' },
       { clock: '11:02', period: 4, text: 'Hurts 2 yd run, TOUCHDOWN · PHI 24–17', emphasis: 'score', competitorId: 'nfl-phi' },
     ],
-    series: [0.5, 0.42, 0.38, 0.47, 0.58, 0.52, 0.41, 0.48, 0.62, 0.55, 0.49, 0.66, 0.64].map((value, n, all) => ({ t: n / (all.length - 1) * (3540 / 3600), value })),
   });
   makeSim('nhl-tor-mtl', 'nhl', 'MTL', 'TOR', now0 - 1.5 * H, 'in', { period: 2, clock: 520, lines: [[1, 0], [1, 1]], probability: 0.61,
     broadcasts: [{ name: 'Sportsnet', kind: 'tv', region: 'CA' }], channels: [28], situation: { Shots: 'MTL 17 · TOR 24', 'Power play': 'TOR 1:12' },
@@ -149,6 +148,7 @@ function seedFixtures(): void {
   makeSim('nba-tor-bos', 'nba', 'TOR', 'BOS', dayStart(-2) + 19.5 * H, 'post', { period: 4, lines: [[25, 22, 30, 24], [29, 31, 24, 28]] });
   for (const sim of sims.values()) {
     if (sim.state === 'post') { sim.probability = sim.scores[1] > sim.scores[0] ? 1 : 0; sim.series = []; }
+    if (sim.state === 'in') seedSeries(sim);
     sim.initial = JSON.stringify(sim);
   }
 }
@@ -381,15 +381,44 @@ function step(sim: Sim): boolean {
     const downs = ['1st & 10', '2nd & 6', '3rd & 2', '1st & 10', '2nd & 11', '3rd & 4'];
     sim.situation = { ...sim.situation, Down: downs[Math.floor(random() * downs.length)]! };
   }
-  // Win probability follows the margin, more decisively as time runs out.
+  // Win probability follows the score and the clock: the same lead counts for more as time runs out.
   const elapsed = progress(sim, rules);
   const margin = sim.scores[1] - sim.scores[0];
-  const scale = { football: 7, basketball: 6, hockey: 1, soccer: 1 }[league.category] ?? 5;
-  const target = sim.state === 'post' ? (margin > 0 ? 1 : 0) : 1 / (1 + Math.exp(-(margin / scale) * (0.6 + elapsed * 3)));
-  sim.probability = Math.round(Math.min(0.99, Math.max(0.01, sim.probability * 0.6 + target * 0.4)) * 1000) / 1000;
+  sim.probability = sim.state === 'post' ? (margin > 0 ? 1 : margin < 0 ? 0 : 0.5) : winChance(league.category, margin, elapsed, jitter());
   const last = sim.series.at(-1);
-  if (!last || Number(last.t) < elapsed - 0.004) sim.series.push({ t: Math.round(elapsed * 10000) / 10000, value: sim.probability });
+  if (!last || Number(last.t) < elapsed - 0.004 || Math.abs(last.value - sim.probability) > 0.05) sim.series.push({ t: Math.round(elapsed * 10000) / 10000, value: sim.probability });
   return changed;
+}
+/** The home side's chance from the margin and the time left (a normal model, a little home edge). */
+function winChance(category: string, margin: number, elapsed: number, noise = 0): number {
+  const sigma = { football: 13, basketball: 12, hockey: 1.7, soccer: 1.4 }[category] ?? 10;
+  const remaining = Math.max(0, 1 - elapsed);
+  const z = (margin + sigma * 0.06 * remaining) / (sigma * Math.sqrt(remaining) + sigma * 0.05);
+  return Math.round(Math.min(0.99, Math.max(0.01, normal(z) + noise)) * 1000) / 1000;
+}
+function normal(z: number): number {
+  // Abramowitz–Stegun erf.
+  const x = Math.abs(z) / Math.SQRT2, t = 1 / (1 + 0.3275911 * x);
+  const erf = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return z >= 0 ? (1 + erf) / 2 : (1 - erf) / 2;
+}
+const jitter = () => (random() - 0.5) * 0.03;
+/** A live game's probability so far, replayed from its period scores. */
+function seedSeries(sim: Sim): void {
+  const category = LEAGUES[sim.league]!.category;
+  const rules = RULES[category];
+  if (!rules) return;
+  const now = progress(sim, rules);
+  const series: V.LiveProbabilityPoint[] = [];
+  const steps = 36;
+  for (let n = 0; n <= steps; n++) {
+    const t = now * n / steps;
+    const at = t * rules.periods;
+    const score = (side: 0 | 1) => sim.lines[side].reduce((total, points, period) => total + (period + 1 <= at ? points : period < at ? Math.round(points * (at - period)) : 0), 0);
+    series.push({ t: Math.round(t * 10000) / 10000, value: winChance(category, score(1) - score(0), t, n && n < steps ? jitter() : 0) });
+  }
+  sim.series = series;
+  sim.probability = series.at(-1)!.value;
 }
 const progress = (sim: Sim, rules: Rules) => {
   const total = rules.periods * rules.periodSeconds;

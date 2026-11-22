@@ -12,7 +12,7 @@ import { useSportsLook, type SportsLook } from './look';
 import { heroTint, matchup, probabilityLead, tunable, type Matchup, type Side } from './model';
 import { Crest, Glyph, GridMark, LiveBadge, Pill, Placeholder, ProbabilityBar, Rise, Score, Surface, Txt } from './parts';
 import { TableView } from './cards';
-import { ProbabilityGraph } from './graph';
+import { ProbabilityGraph, readableTeam } from './graph';
 import { alpha } from './colour';
 
 const WHITE = '#ffffff';
@@ -191,14 +191,28 @@ function ProbabilityPanel({ look, event, detail, m }: { look: SportsLook; event:
   const [away, home] = m.sides!;
   const subject = event.probability?.competitorId ?? event.competitors[0]?.id;
   const top = subject === away.id ? away : home, bottom = top === away ? home : away;
+  // Each side's colour as the graph draws it, so the legend, line and bar agree.
+  const colors: Record<string, string> = { [away.id]: readableTeam(away.color, look.page), [home.id]: readableTeam(home.color, look.page) };
   return (
     <Panel look={look} focusable>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: look.px(12) }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: look.px(12) }}>
         <Txt look={look} size={12} weight={700} color={look.inkQuiet} style={{ letterSpacing: look.px(1.1), textTransform: 'uppercase' }}>{msg('sports.probability')}</Txt>
-        {lead ? <Txt look={look} size={14} weight={750} digits>{lead.abbr} {lead.share}%</Txt> : null}
+        {lead ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(14) }}>
+            {[away, home].map(side => {
+              const share = side === home ? lead.home : 1 - lead.home;
+              return (
+                <View key={side.id} style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(6), opacity: share >= 0.5 ? 1 : 0.7 }}>
+                  <View style={{ width: look.px(9), height: look.px(9), borderRadius: look.px(5), backgroundColor: colors[side.id] }} />
+                  <Txt look={look} size={13.5} weight={share >= 0.5 ? 800 : 600} digits>{side.abbr} {Math.round(share * 100)}%</Txt>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
-      <ProbabilityGraph look={look} series={detail.probabilitySeries} top={top.abbr} bottom={bottom.abbr} live={m.phase === 'live'} height={look.px(look.small ? 96 : 132)} />
-      {lead ? <View style={{ marginTop: look.px(12) }}><ProbabilityBar look={look} home={lead.home} awayColor={alpha(look.ink, 0.25)} homeColor={look.accent} height={look.px(4)} /></View> : null}
+      <ProbabilityGraph look={look} series={detail.probabilitySeries} top={{ abbr: top.abbr, color: top.color }} bottom={{ abbr: bottom.abbr, color: bottom.color }} live={m.phase === 'live'} height={look.px(look.small ? 96 : 132)} />
+      {lead ? <View style={{ marginTop: look.px(12) }}><ProbabilityBar look={look} home={lead.home} awayColor={colors[away.id]!} homeColor={colors[home.id]!} height={look.px(5)} /></View> : null}
     </Panel>
   );
 }
