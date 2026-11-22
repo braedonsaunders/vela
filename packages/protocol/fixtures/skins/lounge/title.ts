@@ -1,5 +1,6 @@
 import type { Node, Style } from '../../../skin';
 import { capsule, capsuleFocus, ease, gutter, gutterSmall, lift, rest, ring, sans, side } from './look';
+import { playedBadge } from './cards';
 
 export const section = (heading: string, when: Node['when'], children: Node[]): Node => ({
   type: 'box',
@@ -134,24 +135,7 @@ export const episode: Node = {
             },
           ],
         },
-        {
-          type: 'box',
-          when: [{ test: 'card.played' }],
-          style: {
-            position: 'absolute',
-            top: '10px',
-            right: '10px',
-            width: 'clamp(26px, 1.8vw, 36px)',
-            height: 'clamp(26px, 1.8vw, 36px)',
-            'border-radius': '999px',
-            display: 'flex',
-            'align-items': 'center',
-            'justify-content': 'center',
-            // A solid badge, no blur: a filter per card is costly on a TV's GPU.
-            'background-color': 'rgba(10, 12, 16, 0.82)',
-          },
-          children: [{ type: 'icon', symbol: 'checkmark', style: { width: '50%', height: '50%' } }],
-        },
+        playedBadge,
         {
           type: 'text',
           when: [{ test: 'card.durationLabel' }],

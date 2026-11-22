@@ -9,7 +9,7 @@ type Press = NonNullable<BoxNode['press']>;
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/,
 // and only that version's files are published and bundled.
-const id = 'broadcast', version = '1.0.5';
+const id = 'broadcast', version = '1.0.6';
 const ASSETS = `/vela/v0/appearance/skins/${id}/${version}`;
 const display = '"Barlow Condensed", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif';
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
@@ -351,8 +351,9 @@ const titleCard: Node = { type: 'box', group: true, press: { action: 'select', a
         { type: 'box', when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }], style: { position: 'absolute', inset: '0px', padding: '12px', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'background-image': 'linear-gradient(160deg, #1a2230 0%, #0c1016 100%)' }, children: [
           { type: 'text', text: '{card.name}', style: { ...caps('20px', { 'letter-spacing': '0.02em' }), 'line-clamp': '4', 'line-height': '1.02' } },
         ] },
-        { type: 'box', when: [{ test: 'card.played' }], style: { position: 'absolute', top: '6px', right: '6px', width: '22px', height: '22px', 'border-radius': '2px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': 'rgba(7, 9, 13, 0.75)' }, children: [
-          { type: 'icon', symbol: 'checkmark', style: { width: '11px', height: '11px', color: '$ink' } },
+        // Watched: a check on a square plate; the pale edge keeps it legible on dark art.
+        { type: 'box', when: [{ test: 'card.played' }], a11y: { hidden: true }, style: { position: 'absolute', top: '6px', right: '6px', width: '26px', height: '26px', 'border-radius': '2px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': 'rgba(7, 9, 13, 0.86)', 'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.4)' }, small: { width: '22px', height: '22px' }, children: [
+          { type: 'icon', paths: ['M9.6 18.4 3.7 12.5l2.2-2.2 3.7 3.7 8.5-8.5 2.2 2.2z'], viewBox: '0 0 24 24', style: { width: '16px', height: '16px', color: '$ink' }, small: { width: '13px', height: '13px' } },
         ] },
         { type: 'box', when: [{ test: 'card.hasProgress' }, { test: 'card.played', not: true }], style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: '3px', 'background-color': 'rgba(255, 255, 255, 0.18)' }, children: [
           { type: 'box', style: { height: '3px', width: '{card.progressPct}%', 'background-color': '$cue' } },

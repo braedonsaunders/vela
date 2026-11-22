@@ -98,9 +98,10 @@ const posterArt: Style = {
   transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
 };
 
-// Watched: a check on a dark plate in the art's top-right corner, legible on any artwork
-// (posters and 16:9 stills alike) and big enough to read across a room. A solid plate, no blur:
-// a filter per card is costly on a TV's GPU. card.played never holds beside a resume bar.
+// Watched: a bold check on an accent disc in the art's top-right corner, legible on any artwork
+// (posters and 16:9 stills alike) and big enough to read across a room; a dark ring parts it
+// from bright art. Solid, no blur: a filter per card is costly on a TV's GPU. card.played never
+// holds beside a resume bar.
 const plate = (size: number, inset: number): Style => ({
   position: 'absolute',
   top: `${inset}px`,
@@ -111,22 +112,25 @@ const plate = (size: number, inset: number): Style => ({
   display: 'flex',
   'align-items': 'center',
   'justify-content': 'center',
-  // Fixed, not themed: the plate sits on artwork, which no theme colours.
-  'background-color': 'rgba(10, 12, 16, 0.8)',
-  'box-shadow': '0px 2px 8px rgba(0, 0, 0, 0.4), 0px 0px 0px 1px rgba(255, 255, 255, 0.22)',
+  'background-color': '$ui.accent',
+  color: '$ui.onAccent',
+  'box-shadow': '0px 2px 10px rgba(0, 0, 0, 0.45), 0px 0px 0px 1px rgba(0, 0, 0, 0.35)',
 });
+/** A filled check, heavier than the line symbol, so it reads small. */
+export const boldCheck = ['M9.6 18.4 3.7 12.5l2.2-2.2 3.7 3.7 8.5-8.5 2.2 2.2z'];
 export const playedBadge: Node = {
   type: 'box',
   when: [{ test: 'card.played' }],
   a11y: { hidden: true },
-  style: plate(28, 8),
+  style: plate(30, 8),
   small: plate(22, 6),
   children: [
     {
       type: 'icon',
-      symbol: 'checkmark',
-      style: { width: '14px', height: '14px', color: '#ffffff' },
-      small: { width: '11px', height: '11px' },
+      paths: boldCheck,
+      viewBox: '0 0 24 24',
+      style: { width: '18px', height: '18px' },
+      small: { width: '14px', height: '14px' },
     },
   ],
 };

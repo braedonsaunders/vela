@@ -1,8 +1,9 @@
 import type { Node, Style } from '../../../skin';
 import { ease, gutter, gutterSmall, lift, rest, ring, glint } from './look';
 
-// Watched: a check on a dark disc in the art's top corner, on posters and 16:9 stills alike.
-const playedBadge: Node = {
+// Watched: a bold check on a dark disc in the art's top corner, on posters and 16:9 stills alike.
+// A pale ring keeps the disc legible on dark art too.
+export const playedBadge: Node = {
   type: 'box',
   when: [{ test: 'card.played' }],
   a11y: { hidden: true },
@@ -17,10 +18,13 @@ const playedBadge: Node = {
     'align-items': 'center',
     'justify-content': 'center',
     // A solid badge, no blur: a filter per card is costly on a TV's GPU.
-    'background-color': 'rgba(10, 12, 16, 0.82)',
+    'background-color': 'rgba(10, 12, 16, 0.86)',
+    'box-shadow': '0px 0px 0px 1px rgba(245, 241, 233, 0.5), 0px 2px 10px rgba(0, 0, 0, 0.5)',
+    color: '$ink',
   },
-  children: [{ type: 'icon', symbol: 'checkmark', style: { width: '50%', height: '50%', color: '$ink' } }],
+  children: [{ type: 'icon', paths: ['M9.6 18.4 3.7 12.5l2.2-2.2 3.7 3.7 8.5-8.5 2.2 2.2z'], viewBox: '0 0 24 24', style: { width: '58%', height: '58%' } }],
 };
+
 
 // A poster: the focused one lifts, grows and catches the light; the art inside moves
 // against the frame, which reads as depth (the remote's parallax).

@@ -98,8 +98,8 @@ export const corner = (size: number, sizeSmall = size): Node => ({
   style: tri(size),
   small: tri(sizeSmall),
 });
-// A watched film, episode, season or series carries an amber check on a dark disc where the
-// unwatched corner would be (the two never show together).
+// A watched film, episode, season or series carries a bold dark check on an amber disc where
+// the unwatched corner would be (the two never show together); a dark ring parts it from bright art.
 const disc = (size: number): Style => ({
   position: 'absolute',
   top: px(Math.round(size / 4)),
@@ -110,18 +110,19 @@ const disc = (size: number): Style => ({
   display: 'flex',
   'align-items': 'center',
   'justify-content': 'center',
-  'background-color': '$scrim',
-  'box-shadow': '0px 0px 0px 1px $amber-soft',
-  color: '$amber',
+  'background-color': '$amber',
+  'box-shadow': '0px 0px 0px 1px $scrim-soft, 0px 2px 8px $scrim-soft',
+  color: '$on-amber',
 });
-const tick = (size: number): Style => ({ width: px(Math.round(size * 0.55)), height: px(Math.round(size * 0.55)) });
+const tick = (size: number): Style => ({ width: px(Math.round(size * 0.62)), height: px(Math.round(size * 0.62)), 'flex-shrink': '0' });
+const boldCheck = 'M9.6 18.4 3.7 12.5l2.2-2.2 3.7 3.7 8.5-8.5 2.2 2.2z';
 export const watched = (size: number, sizeSmall = size): Node => ({
   type: 'box',
   when: [set('card.played')],
   a11y: { hidden: true },
   style: disc(size),
   small: disc(sizeSmall),
-  children: [glyph('check', Math.round(size * 0.55), { small: tick(sizeSmall) })],
+  children: [{ type: 'icon', paths: [boldCheck], viewBox: '0 0 24 24', style: tick(size), small: tick(sizeSmall) }],
 });
 // Artwork is absent: the kind's icon and the title on a quiet panel.
 const placeholder: Node = {

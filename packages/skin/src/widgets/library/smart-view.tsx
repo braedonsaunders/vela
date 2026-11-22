@@ -6,11 +6,12 @@ import { FocusPressable } from '../../focus';
 import { useHost, type WidgetProps } from '../../host';
 import { useLook } from '../common/look';
 import { timelineGroups, watchedTime } from './timeline';
+import { watchedMark } from '../../vocabulary';
 
 function WatchState({ card }: { card: Card }) {
   const look = useLook();
   const progress = card.durationSeconds > 0 ? Math.min(1, Math.max(0, card.progressSeconds / card.durationSeconds)) : 0;
-  if (card.played) return <Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '12px', 'font-weight': '600' })}>✓ Watched</Text>;
+  if (watchedMark(card)) return <Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '12px', 'font-weight': '600' })}>✓ Watched</Text>;
   if (!progress) return null;
   return <View accessibilityLabel={`${Math.round(progress * 100)}% watched`} style={{ width: 92, gap: 4 }}>
     <View style={look.box({ height: '3px', 'border-radius': '2px', 'background-color': '$ui.trackStrong', 'overflow-x': 'hidden', 'overflow-y': 'hidden' })}>
@@ -42,8 +43,8 @@ function SmartRow({ card, timeline = false }: { card: Card; timeline?: boolean }
     <View style={[look.box({ 'border-radius': '$ui.radiusCard', 'background-color': '$ui.control', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'flex-shrink': '0' }), { width, height }]}>
       {art ? <Image source={host.image(art)} contentFit="cover" style={{ width, height }} accessibilityElementsHidden />
         : <View style={[look.box({ 'background-color': '$ui.control' }), { width, height }]} />}
-      {card.played && <View style={[look.box({ position: 'absolute', top: '6px', right: '6px', width: '22px', height: '22px', 'border-radius': '11px', 'background-color': '$ui.glass', 'align-items': 'center', 'justify-content': 'center' }), { position: 'absolute' }]}>
-        <Text style={look.text({ color: '$ui.ink', 'font-size': '12px', 'font-weight': '800' })}>✓</Text>
+      {watchedMark(card) && <View style={[look.box({ position: 'absolute', top: '6px', right: '6px', width: '22px', height: '22px', 'border-radius': '11px', 'background-color': '$ui.accent', 'box-shadow': '0px 2px 8px rgba(0, 0, 0, 0.45)', 'align-items': 'center', 'justify-content': 'center' }), { position: 'absolute' }]}>
+        <Text style={look.text({ color: '$ui.onAccent', 'font-size': '13px', 'font-weight': '800' })}>✓</Text>
       </View>}
     </View>
     <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
