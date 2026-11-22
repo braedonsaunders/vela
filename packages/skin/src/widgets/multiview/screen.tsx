@@ -1,0 +1,458 @@
+// The multiview screen: up to four live tiles side by side (2-up, 2×2, 1 big + 3 small). Focus
+// carries the audio; a long press (Select held on the Siri Remote, a held touch, a click on the
+// focused tile on the web) takes a tile full screen and back. Select on TV, or a tile's options
+// button on touch and the web, opens the tile's panel: change its channel, make it the big one,
+// the layout, remove it. Each tile draws its own state: tuning, playing (with the score bug when its
+// programme is a live event) or why it was refused.
+//
+// Every tile's picture is a full-screen view moved into its slot by a native-driven transform
+// (layout.ts), so layout changes and full screen animate without resizing a playing surface. The
+// focusable press targets are plain views at the slots' rects, so TV focus sees real geometry.
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { AccessibilityInfo, Animated, Easing, FlatList, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import type { VelaPlayerViewProps } from '@vela/player-api';
+import { msg, type GuideChannel } from '@vela/core';
+import { FocusPressable as Pressable } from '../../focus';
+import { holdBack } from '../../menu-key';
+import { useGuideLook, type GuideLook, alpha } from '../guide/look';
+import { Line, LogoTile, Press } from '../guide/parts';
+import { PlayerIcon } from '../player/icons';
+import { ScoreBug, type BugEvent } from './bug';
+import type { LiveEventRef, MultiviewController, MultiviewTile, MultiviewView } from './controller';
+import { placement, slotRects, type MultiviewLayout, type Rect, type Size } from './layout';
+
+const TV = Platform.isTV;
+const TOUCH = !TV && Platform.OS !== 'web';
+/** Tile motion: a long, soft ease-out, the same for layout, full screen and entry. */
+const MOVE = { duration: 460, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
+const FADE = { duration: 320, easing: Easing.out(Easing.cubic) };
+
+export interface MultiviewScreenProps {
+  controller: MultiviewController;
+  Player: ComponentType<VelaPlayerViewProps>;
+  /** The lineup: names and logos for the tiles, and the channel picker's list. */
+  channels: GuideChannel[];
+  /** Leave the screen (Back with nothing open). */
+  onLeave(): void;
+  /** The live event behind a tile's programme, kept current (the live-events store); absent: no bugs. */
+  useLiveEvent?: (ref: LiveEventRef | null) => BugEvent | null;
+}
+
+type Panel = { slot: number; mode: 'actions' | 'channels' } | { slot: -1; mode: 'add' };
+
+export function useMultiviewView(controller: MultiviewController): MultiviewView {
+  return useSyncExternalStore(controller.subscribe, controller.view, controller.view);
+}
+
+function useStill(): boolean {
+  const [still, setStill] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setStill);
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setStill);
+    return () => sub.remove();
+  }, []);
+  return still;
+}
+
+export function MultiviewScreen({ controller, Player, channels, onLeave, useLiveEvent }: MultiviewScreenProps) {
+  const view = useMultiviewView(controller);
+  const look = useGuideLook();
+  const still = useStill();
+  const window = useWindowDimensions();
+  const [size, setSize] = useState<Size>({ width: window.width, height: window.height });
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const byId = useMemo(() => new Map(channels.map(channel => [channel.id, channel])), [channels]);
+  const gap = TV ? 14 : Platform.OS === 'web' ? 10 : 6;
+  const count = view.tiles.length;
+  const rects = useMemo(() => slotRects(view.layout, count, size, gap), [view.layout, count, size, gap]);
+  const full: Rect = { x: 0, y: 0, width: size.width, height: size.height };
+  // A tile's panel stays tied to its slot; a removed tile closes it.
+  const panelOpen = panel !== null && (panel.slot === -1 || view.tiles.some(tile => tile.slot === panel.slot));
+
+  useEffect(() => controller.open(), [controller]);
+
+  // Back closes the panel, then full screen, then leaves.
+  const back = useRef<() => boolean>(() => false);
+  back.current = () => {
+    if (panelOpen) { setPanel(null); return true; }
+    return controller.exitFullscreen();
+  };
+  const holding = panelOpen || view.fullscreen >= 0;
+  useEffect(() => (holding ? holdBack(() => back.current()) : undefined), [holding]);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (!back.current()) onLeave();
+    };
+    globalThis.addEventListener?.('keydown', onKey);
+    return () => globalThis.removeEventListener?.('keydown', onKey);
+  }, [onLeave]);
+
+  const layout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0 && (width !== size.width || height !== size.height)) setSize({ width, height });
+  };
+
+  const hint = useHint(look, still, count > 0 && view.phase === 'open' && view.fullscreen < 0);
+  const name = (id: string) => byId.get(id)?.name ?? '';
+
+  return (
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: look.page }]} onLayout={layout}>
+      {view.tiles.map((tile, index) => (
+        <TilePicture key={tile.slot} tile={tile} look={look} size={size} still={still} Player={Player} controller={controller}
+          rect={view.fullscreen === tile.slot ? full : rects[index] ?? full}
+          fullscreen={view.fullscreen === tile.slot} hidden={view.fullscreen >= 0 && view.fullscreen !== tile.slot}
+          focused={view.focused === tile.slot} channel={byId.get(tile.channelId)} useLiveEvent={useLiveEvent} />
+      ))}
+      {view.tiles.map((tile, index) => {
+        const fullscreen = view.fullscreen === tile.slot;
+        if (view.fullscreen >= 0 && !fullscreen) return null;
+        const rect = fullscreen ? full : rects[index];
+        if (!rect) return null;
+        return <TileTarget key={tile.slot} tile={tile} rect={rect} look={look} focusable={!panelOpen}
+          preferred={!panelOpen && view.focused === tile.slot} channelName={name(tile.channelId)}
+          onFocus={() => controller.focus(tile.slot)}
+          onPress={() => {
+            if (TV) setPanel({ slot: tile.slot, mode: tile.refusal ? 'channels' : 'actions' });
+            else if (view.focused === tile.slot || fullscreen) controller.toggleFullscreen(tile.slot);
+            else controller.focus(tile.slot);
+          }}
+          onLongPress={() => controller.toggleFullscreen(tile.slot)}
+          onOptions={() => setPanel({ slot: tile.slot, mode: 'actions' })} />;
+      })}
+      {count === 0 ? <Empty look={look} onAdd={() => setPanel({ slot: -1, mode: 'add' })} onLeave={onLeave} preferred={!panelOpen} /> : null}
+      {view.phase === 'failed' ? <Notice look={look} text={view.failure ?? msg('multiview.failed')} /> : null}
+      {hint}
+      <TilePanel look={look} still={still} open={panelOpen} panel={panel} view={view} channels={channels} byId={byId}
+        controller={controller} onClose={() => setPanel(null)} onAdd={() => setPanel({ slot: -1, mode: 'add' })} onMode={mode => setPanel(current => current && current.slot >= 0 ? { slot: current.slot, mode } : current)} />
+    </View>
+  );
+}
+
+/** One tile's picture and the chrome over it, carried into its rect by a native-driven transform. */
+function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focused, channel, Player, controller, useLiveEvent }: {
+  tile: MultiviewTile; rect: Rect; size: Size; look: GuideLook; still: boolean; fullscreen: boolean; hidden: boolean;
+  focused: boolean; channel: GuideChannel | undefined; Player: ComponentType<VelaPlayerViewProps>;
+  controller: MultiviewController; useLiveEvent?: MultiviewScreenProps['useLiveEvent'];
+}) {
+  const target = placement(rect, size);
+  const values = useRef<{ x: Animated.Value; y: Animated.Value; scale: Animated.Value; opacity: Animated.Value; picture: Animated.Value; ring: Animated.Value } | null>(null);
+  if (!values.current) {
+    values.current = {
+      x: new Animated.Value(target.translateX), y: new Animated.Value(target.translateY),
+      scale: new Animated.Value(target.scale * (still ? 1 : 0.92)), opacity: new Animated.Value(0),
+      picture: new Animated.Value(0), ring: new Animated.Value(0),
+    };
+  }
+  const v = values.current;
+  const [raised, setRaised] = useState(fullscreen);
+  useEffect(() => {
+    if (fullscreen) setRaised(true);
+    const move = (value: Animated.Value, to: number) => Animated.timing(value, { toValue: to, ...MOVE, duration: still ? 0 : MOVE.duration, useNativeDriver: true });
+    const animation = Animated.parallel([
+      move(v.x, target.translateX), move(v.y, target.translateY), move(v.scale, target.scale),
+      Animated.timing(v.opacity, { toValue: hidden ? 0 : 1, ...FADE, duration: still ? 0 : FADE.duration, useNativeDriver: true }),
+    ]);
+    animation.start(({ finished }) => { if (finished && !fullscreen) setRaised(false); });
+    return () => animation.stop();
+  }, [target.translateX, target.translateY, target.scale, hidden, fullscreen, still, v]);
+  const playing = tile.state === 'playing';
+  useEffect(() => {
+    Animated.timing(v.picture, { toValue: playing ? 1 : 0, ...FADE, duration: still ? 0 : playing ? 420 : 160, useNativeDriver: true }).start();
+  }, [playing, still, v]);
+  useEffect(() => {
+    Animated.timing(v.ring, { toValue: focused && !fullscreen ? 1 : 0, duration: still ? 0 : 180, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  }, [focused, fullscreen, still, v]);
+
+  // The chrome keeps its own size on screen whatever the tile's scale: it is drawn inside the moving
+  // view at 1/scale, and grows a little at full screen.
+  const visual = fullscreen ? 1.35 : 1;
+  const counter = useMemo(() => Animated.divide(visual, v.scale), [v.scale, visual]);
+  const radius = fullscreen ? 0 : look.radiusTile;
+  const s = Math.max(0.05, target.scale);
+  const event = useLiveEvent ? useLiveEvent(tile.liveEvent) : null;
+  const bugSize = TV ? 17 : Platform.OS === 'web' ? 13 : 11;
+
+  return (
+    <Animated.View pointerEvents="none" style={{
+      position: 'absolute', left: 0, top: 0, width: size.width, height: size.height, zIndex: raised ? 2 : 1,
+      opacity: v.opacity, transform: [{ translateX: v.x }, { translateY: v.y }, { scale: v.scale }],
+    }}>
+      <View style={{ flex: 1, borderRadius: radius / s, overflow: 'hidden', backgroundColor: look.media }}>
+        <Placeholder look={look} channel={channel} tile={tile} counter={counter} />
+        {tile.plan ? (
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: v.picture }]}>
+            <Player tile={tile.slot} plan={tile.plan} command={tile.command ?? undefined} style={StyleSheet.absoluteFill}
+              onSnapshot={snapshot => controller.snapshot(tile.slot, snapshot)}
+              onError={failure => controller.failed(tile.slot, tile.plan!.sessionId, failure.message)} />
+          </Animated.View>
+        ) : null}
+        {event && playing ? (
+          <Animated.View style={{ position: 'absolute', left: 0, top: 0, transformOrigin: 'left top', transform: [{ scale: counter }] } as never}>
+            <View style={{ padding: TV ? 18 : 10 }}><ScoreBug event={event} look={look} size={bugSize} /></View>
+          </Animated.View>
+        ) : null}
+        {focused && !tile.muted && playing && !fullscreen ? (
+          <Animated.View style={{ position: 'absolute', right: 0, bottom: 0, transformOrigin: 'right bottom', transform: [{ scale: counter }] } as never}>
+            <View style={{ margin: TV ? 16 : 9, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: TV ? 6 : 4, paddingHorizontal: TV ? 12 : 8,
+              borderRadius: 999, backgroundColor: 'rgba(11, 15, 26, 0.78)' }}>
+              <PlayerIcon name="speaker" size={TV ? 22 : 14} color={look.ink} />
+              <Line look={look} size={TV ? 13 : 11} weight={650}>{msg('multiview.audio')}</Line>
+            </View>
+          </Animated.View>
+        ) : null}
+      </View>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
+        opacity: v.ring, borderRadius: radius / s, borderWidth: (TV ? 5 : 3) / s, borderColor: look.accent,
+      }]} />
+    </Animated.View>
+  );
+}
+
+/** What a tile shows under (or instead of) its picture: the channel while tuning, or why it failed. */
+function Placeholder({ look, channel, tile, counter }: { look: GuideLook; channel: GuideChannel | undefined; tile: MultiviewTile; counter: Animated.AnimatedNode }) {
+  const name = channel?.name ?? '';
+  return (
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: alpha(look.ink, 0.04), alignItems: 'center', justifyContent: 'center' }]}>
+      <Animated.View style={{ alignItems: 'center', gap: TV ? 18 : 10, maxWidth: TV ? 760 : 420, paddingHorizontal: 24, transform: [{ scale: counter }] }}>
+        {tile.refusal ? <>
+          <PlayerIcon name="alert" size={TV ? 44 : 26} color={look.now} />
+          <Line look={look} size={TV ? 22 : 15} weight={700} lines={2} style={{ textAlign: 'center' }}>{tile.refusal.title}</Line>
+          <Line look={look} size={TV ? 15 : 12} color={look.inkSecondary} lines={3} style={{ textAlign: 'center' }}>{tile.refusal.detail}</Line>
+        </> : <>
+          <LogoTile look={look} logo={channel?.logo ?? ''} name={name} channelId={channel?.id} width={TV ? 150 : 84} height={TV ? 90 : 50} radius={TV ? 14 : 8} />
+          <Line look={look} size={TV ? 17 : 13} weight={650} color={look.inkSecondary}>{channel ? `${channel.number} · ${name}` : msg('multiview.tuning')}</Line>
+          {tile.state !== 'waiting' ? <TuningDots look={look} /> : null}
+        </>}
+      </Animated.View>
+    </View>
+  );
+}
+
+function TuningDots({ look }: { look: GuideLook }) {
+  const phase = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(phase, { toValue: 1, duration: 1200, easing: Easing.linear, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [phase]);
+  const size = TV ? 10 : 6;
+  return (
+    <View style={{ flexDirection: 'row', gap: size }}>
+      {[0, 1, 2].map(i => (
+        <Animated.View key={i} style={{ width: size, height: size, borderRadius: size, backgroundColor: look.accent,
+          opacity: phase.interpolate({ inputRange: [0, (i + 0.5) / 4, (i + 1.5) / 4, 1], outputRange: [0.25, 1, 0.25, 0.25], extrapolate: 'clamp' }) }} />
+      ))}
+    </View>
+  );
+}
+
+/** The focusable press target over a tile, at its rect. */
+function TileTarget({ tile, rect, look, focusable, preferred, channelName, onFocus, onPress, onLongPress, onOptions }: {
+  tile: MultiviewTile; rect: Rect; look: GuideLook; focusable: boolean; preferred: boolean; channelName: string;
+  onFocus(): void; onPress(): void; onLongPress(): void; onOptions(): void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <View style={{ position: 'absolute', left: rect.x, top: rect.y, width: rect.width, height: rect.height, zIndex: 3 }}>
+      <Pressable
+        focusable={focusable}
+        hasTVPreferredFocus={preferred}
+        accessibilityRole="button"
+        accessibilityLabel={channelName}
+        accessibilityHint={msg(TOUCH ? 'multiview.hintTouch' : 'multiview.hint')}
+        onFocus={onFocus}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={TV ? 450 : 420}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        tvParallaxProperties={{ enabled: false }}
+        style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? ({ outlineStyle: 'none', cursor: 'pointer' } as never) : null]}
+      />
+      {!TV && (hovered || TOUCH) && tile.state !== 'waiting' ? (
+        <View style={{ position: 'absolute', right: 8, top: 8 }}>
+          <Press label={msg('multiview.title')} onPress={onOptions} style={({ hovered: over }) => ({
+            width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: over ? 'rgba(11, 15, 26, 0.92)' : 'rgba(11, 15, 26, 0.7)' })}>
+            <Line look={look} size={16} weight={800}>⋯</Line>
+          </Press>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function Empty({ look, onAdd, onLeave, preferred }: { look: GuideLook; onAdd(): void; onLeave(): void; preferred: boolean }) {
+  return (
+    <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', gap: TV ? 28 : 16 }]}>
+      <Line look={look} size={TV ? 30 : 22} weight={700}>{msg('multiview.title')}</Line>
+      <Line look={look} size={TV ? 17 : 14} color={look.inkSecondary}>{msg('multiview.empty')}</Line>
+      <View style={{ flexDirection: 'row', gap: 14 }}>
+        <PanelButton look={look} label={msg('multiview.addChannel')} onPress={onAdd} preferred={preferred} primary />
+        <PanelButton look={look} label={msg('multiview.close')} onPress={onLeave} />
+      </View>
+    </View>
+  );
+}
+
+function Notice({ look, text }: { look: GuideLook; text: string }) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: TV ? 60 : 24, alignItems: 'center', zIndex: 5 }}>
+      <View style={{ paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, backgroundColor: look.glass, borderWidth: 1, borderColor: look.edge }}>
+        <Line look={look} size={TV ? 16 : 13} weight={600}>{text}</Line>
+      </View>
+    </View>
+  );
+}
+
+/** How to use the screen, shown for a moment when the tiles first play. */
+function useHint(look: GuideLook, still: boolean, ready: boolean) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const shown = useRef(false);
+  useEffect(() => {
+    if (!ready || shown.current) return;
+    shown.current = true;
+    Animated.sequence([
+      Animated.delay(700),
+      Animated.timing(opacity, { toValue: 1, duration: still ? 0 : 360, useNativeDriver: true }),
+      Animated.delay(4200),
+      Animated.timing(opacity, { toValue: 0, duration: still ? 0 : 600, useNativeDriver: true }),
+    ]).start();
+  }, [ready, still, opacity]);
+  return (
+    <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: TV ? 44 : 18, alignItems: 'center', opacity, zIndex: 4 }}>
+      <View style={{ paddingVertical: TV ? 10 : 7, paddingHorizontal: TV ? 22 : 14, borderRadius: 999, backgroundColor: 'rgba(11, 15, 26, 0.82)' }}>
+        <Line look={look} size={TV ? 14 : 12} weight={600} color={look.ink}>{msg(TOUCH ? 'multiview.hintTouch' : 'multiview.hint')}</Line>
+      </View>
+    </Animated.View>
+  );
+}
+
+function PanelButton({ look, label, onPress, preferred, primary, selected }: {
+  look: GuideLook; label: string; onPress(): void; preferred?: boolean; primary?: boolean; selected?: boolean;
+}) {
+  return (
+    <Press label={label} onPress={onPress} hasTVPreferredFocus={preferred} lift={TV}
+      style={({ focused, hovered }) => ({
+        minHeight: TV ? 66 : 42, paddingHorizontal: TV ? 26 : 16, borderRadius: look.radiusControl, justifyContent: 'center',
+        backgroundColor: focused ? look.ink : hovered ? look.controlHover : primary ? alpha(look.accent, 0.9) : look.control,
+      })}>
+      {({ focused }) => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {selected ? <PlayerIcon name="check" size={TV ? 24 : 16} color={focused ? look.inkInverse : look.accent} /> : null}
+          <Line look={look} size={TV ? 16 : 14} weight={650} color={focused ? look.inkInverse : primary ? look.onAccent : look.ink}>{label}</Line>
+        </View>
+      )}
+    </Press>
+  );
+}
+
+const LAYOUT_LABEL: Record<MultiviewLayout, string> = {
+  single: 'multiview.fullScreen', split: 'multiview.layoutSplit', grid: 'multiview.layoutGrid', feature: 'multiview.layoutFeature',
+};
+
+/** The tile's panel, sliding in from the right: its actions, or the channel picker. */
+function TilePanel({ look, still, open, panel, view, channels, byId, controller, onClose, onAdd, onMode }: {
+  look: GuideLook; still: boolean; open: boolean; panel: Panel | null; view: MultiviewView; channels: GuideChannel[];
+  byId: Map<string, GuideChannel>; controller: MultiviewController; onClose(): void; onAdd(): void; onMode(mode: 'actions' | 'channels'): void;
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const [shown, setShown] = useState<Panel | null>(null);
+  useEffect(() => {
+    if (open && panel) setShown(panel);
+    Animated.timing(progress, { toValue: open ? 1 : 0, duration: still ? 0 : open ? 340 : 220, easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: true })
+      .start(({ finished }) => { if (finished && !open) setShown(null); });
+  }, [open, panel, still, progress]);
+  const width = TV ? 640 : Platform.OS === 'web' ? 420 : 340;
+  if (!shown) return null;
+  const tile = view.tiles.find(candidate => candidate.slot === shown.slot);
+  const channel = tile ? byId.get(tile.channelId) : undefined;
+  const picking = shown.mode === 'channels' || shown.mode === 'add';
+  const choose = (id: string) => {
+    if (shown.mode === 'add') controller.add(id);
+    else if (tile) controller.swap(tile.slot, id);
+    onClose();
+  };
+  return (
+    <View style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="box-none">
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.45)', opacity: progress }]}>
+        {!TV ? <View style={StyleSheet.absoluteFill} onTouchEnd={onClose} {...({ onClick: onClose } as object)} /> : null}
+      </Animated.View>
+      <Animated.View style={{
+        position: 'absolute', top: 0, bottom: 0, right: 0, width: Math.min(width, 9999), backgroundColor: look.glass,
+        borderLeftWidth: 1, borderColor: look.edge, paddingTop: TV ? 64 : 28, paddingHorizontal: TV ? 40 : 20, gap: TV ? 16 : 10,
+        opacity: progress, transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [width * 0.4, 0] }) }],
+      }}>
+        <Line look={look} size={TV ? 13 : 11} weight={750} color={look.inkQuiet} style={{ letterSpacing: 1.6 }}>{msg('multiview.title').toUpperCase()}</Line>
+        <Line look={look} size={TV ? 24 : 18} weight={700} lines={2}>
+          {shown.mode === 'add' ? msg('multiview.addChannel') : channel ? `${channel.number} · ${channel.name}` : ''}
+        </Line>
+        {picking ? (
+          <ChannelList look={look} channels={channels} current={tile?.channelId ?? ''} taken={new Set(view.tiles.map(t => t.channelId))} onChoose={choose} />
+        ) : tile ? (
+          <View style={{ gap: TV ? 14 : 8, marginTop: TV ? 12 : 6 }}>
+            {tile.refusal ? <PanelButton look={look} label={msg('multiview.tryAgain')} onPress={() => { controller.retry(tile.slot); onClose(); }} preferred /> : null}
+            <PanelButton look={look} label={msg('multiview.changeChannel')} onPress={() => onMode('channels')} preferred={!tile.refusal} />
+            <PanelButton look={look} label={view.fullscreen === tile.slot ? msg('multiview.backToGrid') : msg('multiview.fullScreen')}
+              onPress={() => { controller.toggleFullscreen(tile.slot); onClose(); }} />
+            {view.layout === 'feature' && view.tiles[0]?.slot !== tile.slot ? (
+              <PanelButton look={look} label={msg('multiview.makeBig')} onPress={() => { controller.promote(tile.slot); onClose(); }} />
+            ) : null}
+            {view.tiles.length < view.maxTiles ? (
+              <PanelButton look={look} label={msg('multiview.addChannel')} onPress={onAdd} />
+            ) : null}
+            {view.layouts.length > 1 ? <>
+              <Line look={look} size={TV ? 13 : 11} weight={750} color={look.inkQuiet} style={{ letterSpacing: 1.6, marginTop: TV ? 14 : 8 }}>
+                {msg('multiview.layout').toUpperCase()}
+              </Line>
+              <View style={{ flexDirection: 'row', gap: TV ? 12 : 8, flexWrap: 'wrap' }}>
+                {view.layouts.map(layout => (
+                  <PanelButton key={layout} look={look} label={msg(LAYOUT_LABEL[layout])} selected={layout === view.layout}
+                    onPress={() => { controller.setLayout(layout); onClose(); }} />
+                ))}
+              </View>
+            </> : null}
+            <View style={{ height: TV ? 10 : 4 }} />
+            <PanelButton look={look} label={msg('multiview.remove')} onPress={() => { controller.remove(tile.slot); onClose(); }} />
+          </View>
+        ) : null}
+      </Animated.View>
+    </View>
+  );
+}
+
+function ChannelList({ look, channels, current, taken, onChoose }: {
+  look: GuideLook; channels: GuideChannel[]; current: string; taken: Set<string>; onChoose(id: string): void;
+}) {
+  const row = TV ? 104 : 64;
+  const start = Math.max(0, channels.findIndex(channel => channel.id === current));
+  return (
+    <FlatList
+      style={{ flex: 1, marginHorizontal: TV ? -14 : -6 }}
+      contentContainerStyle={{ paddingVertical: TV ? 14 : 6, paddingHorizontal: TV ? 14 : 6 }}
+      data={channels}
+      keyExtractor={channel => channel.id}
+      initialScrollIndex={start > 3 ? start - 2 : 0}
+      getItemLayout={(_, index) => ({ length: row, offset: row * index, index })}
+      windowSize={7}
+      renderItem={({ item, index }) => (
+        <View style={{ height: row, paddingVertical: TV ? 6 : 3 }}>
+          <Press label={item.name} onPress={() => onChoose(item.id)} hasTVPreferredFocus={index === start} lift={TV}
+            style={({ focused, hovered }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: TV ? 18 : 12, paddingHorizontal: TV ? 14 : 10,
+              borderRadius: look.radiusCell, backgroundColor: focused ? look.ink : hovered ? look.cellHover : item.id === current ? look.live : 'transparent' })}>
+            {({ focused }) => <>
+              <LogoTile look={look} logo={item.logo} name={item.name} channelId={item.id} width={TV ? 104 : 64} height={TV ? 62 : 38} radius={TV ? 10 : 6} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Line look={look} size={TV ? 15 : 13} weight={700} color={focused ? look.inkInverse : look.ink}>{`${item.number} · ${item.name}`}</Line>
+                {item.now ? <Line look={look} size={TV ? 13 : 11} color={focused ? alpha(look.inkInverse, 0.7) : look.inkSecondary}>{item.now}</Line> : null}
+              </View>
+              {taken.has(item.id) ? <PlayerIcon name="check" size={TV ? 26 : 16} color={focused ? look.inkInverse : look.accent} /> : null}
+            </>}
+          </Press>
+        </View>
+      )}
+    />
+  );
+}

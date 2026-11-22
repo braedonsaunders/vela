@@ -39,6 +39,8 @@ const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
 import { useLiveController } from './live';
+import { useMultiviewController } from './multiview';
+import { MultiviewProvider } from '@vela/skin/src/widgets/multiview';
 import { LaunchGate } from './launch';
 import { launchReady } from './launch-state';
 import { Previews } from './previews';
@@ -131,6 +133,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   const { auth, servers } = state;
   const signedIn = auth.phase === 'signed-in';
   const live = useLiveController(store, signedIn ? auth.revision : null);
+  const multiview = useMultiviewController(store, signedIn ? auth.revision : null, live);
   useSignedOutGate(auth.phase);
 
   useEffect(() => {
@@ -157,11 +160,13 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   // every route under them (a watch route would start its session again).
   return (
     <LiveProvider controller={live} Player={VelaPlayerView} GuideRow={GuideRowDrawing} GuideSurface={GuideSurface}>
-      <ServersProvider value={signedIn ? serverSwitch : null}>
-        <AppHost store={store} state={state} live={live}>
-          {children}
-        </AppHost>
-      </ServersProvider>
+      <MultiviewProvider value={multiview}>
+        <ServersProvider value={signedIn ? serverSwitch : null}>
+          <AppHost store={store} state={state} live={live}>
+            {children}
+          </AppHost>
+        </ServersProvider>
+      </MultiviewProvider>
     </LiveProvider>
   );
 }

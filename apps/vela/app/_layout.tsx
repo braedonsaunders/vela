@@ -57,6 +57,7 @@ function Screens() {
       {/* The reader grows out of the book's cover over the page it opened from, so that page stays
           drawn beneath it (media/reader.tsx). Like playback it presents above the title modal, and
           it keeps clear of the system bars itself, so its paper runs beneath them. */}
+      <Stack.Screen name="multiview" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' || Platform.OS === 'android' ? 'fullScreenModal' : 'card', ...(Platform.OS === 'android' ? { statusBarHidden: true, navigationBarHidden: true } : {}), contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: '#000' } }} />
       <Stack.Screen name="read/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : 'transparentModal', contentStyle: { ...sides0, backgroundColor: 'transparent' } }} />
       {/* Apple TV's system search screen opens over the section it was asked from (apple-tv-search.tsx). */}
       <Stack.Screen name="search" options={{ presentation: Platform.isTV ? 'containedModal' : 'card' }} />

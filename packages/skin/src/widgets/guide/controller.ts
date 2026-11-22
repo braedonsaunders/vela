@@ -11,7 +11,8 @@ import { guideFailure } from './diagnostics';
 import { coversRange, timeWindow } from './navigation';
 import { requestedDays, timeline } from './timeline';
 
-export type Surface = 'guide' | 'home' | 'watch';
+/** Where Live TV is on screen. Multiview reads the lineup and listings but never tunes the preview tile. */
+export type Surface = 'guide' | 'home' | 'watch' | 'multiview';
 
 export interface LiveView {
   /** The shown day's listings: loading the first time or after a day change, then ready. */
