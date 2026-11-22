@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 import { holdBack } from '../../menu-key';
 import { pressed, useRemote } from './remote';
 import { remotePress } from './remote-actions';
+import { keyboardControl } from './key-target';
 
 export interface Shortcuts {
   /** The chrome stands (a hidden chrome's first press only wakes it). */
@@ -59,10 +60,10 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       if (event.key === 'Escape') return;
       const arrows = event.key.startsWith('Arrow');
       if (arrows && s.menuOpen) return;
-      // A focused button takes Space and Enter as its own press.
-      const onControl =
-        (event.target as { tagName?: string } | null)?.tagName === 'BUTTON' ||
-        (event.target as { getAttribute?(name: string): string | null } | null)?.getAttribute?.('role') === 'button';
+      // A button reached with the keyboard takes Space and Enter as its own press. One that only
+      // holds focus because it was clicked (full screen, say) does not: Space then plays and pauses,
+      // as in every web player, instead of pressing that button again.
+      const onControl = keyboardControl(event.target);
       const act = (run: () => void) => {
         event.preventDefault();
         run();
@@ -131,3 +132,4 @@ export function useShortcuts(shortcuts: Shortcuts): void {
     if (pressed(event)) remotePress(event.eventType, latest.current, event.focus);
   });
 }
+

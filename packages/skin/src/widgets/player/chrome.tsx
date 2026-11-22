@@ -26,6 +26,11 @@ import { takeAlertKey } from '../live-overlay/context';
 /** Rapid steps add up from the last target, not from a position the engine has yet to report. */
 const STEP_MEMORY_MS = 1500;
 const ANDROID_TV = Platform.OS === 'android' && Platform.isTV;
+/** A mouse or trackpad drives the web page: clicks on the picture play and pause. Touch screens
+ * keep tap-to-show-the-controls. */
+const POINTER_CLICKS = Platform.OS === 'web' && typeof window !== 'undefined'
+  && typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+const DOUBLE_CLICK_MS = 300;
 
 /** Draws nothing outside a watch route (the route provides the chrome's state). */
 export function PlayerChrome() {
@@ -61,6 +66,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
    * step from the remote, so that the next side presses keep stepping. */
   const [reveal, setReveal] = useState<Reveal>('toggle');
   const lastStep = useRef<{ seconds: number; at: number } | null>(null);
+  const lastClick = useRef(0);
 
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
@@ -140,6 +146,20 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   // Touch: a tap on the picture shows a hidden chrome, or hides a standing one (closing a menu first).
   const tapStage = () => {
     if (opened) setOpened(null);
+    // A mouse click on the picture plays or pauses (and shows the chrome), as in every desktop
+    // web player; a second click within the double-click window takes the picture full screen.
+    else if (POINTER_CLICKS) {
+      const now = Date.now();
+      if (now - lastClick.current < DOUBLE_CLICK_MS) {
+        lastClick.current = 0;
+        togglePlay(); // the first click's toggle is undone: a double click only changes full screen
+        if (view.fullscreen) send({ type: 'fullscreen' });
+      } else {
+        lastClick.current = now;
+        togglePlay();
+      }
+      idle.wake();
+    }
     else if (idle.visible && view.playing) idle.hide();
     else idle.wake();
   };
