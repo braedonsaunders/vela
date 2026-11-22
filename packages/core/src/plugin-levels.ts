@@ -93,3 +93,22 @@ export function childCountsLine(counts: Record<string, number>, primary = 'album
     return msg(`media.count.${name}.${plural(count)}`, { count: number(count) });
   }).join(' · ');
 }
+
+/** The plugin levels a page follows: bootstrap's once it is read, the session's when bootstrap
+ * failed, and undefined while bootstrap is still being read (a page opened straight from an
+ * address can draw before the server has said what it answers). */
+export function settledPluginLevels(fromHome: PluginLevels | undefined, homeFailed: boolean, session: () => PluginLevels): PluginLevels | undefined {
+  return fromHome ?? (homeFailed ? session() : undefined);
+}
+
+/** A recommended tab past the first waits for the server's levels before reading rows: read too
+ * early it would be sent without its tab and show the library's own shelves under its name. */
+export function recommendationTabWaits(tabs: readonly V.LibraryTab[] | undefined, tabId: string | undefined, levels: PluginLevels | undefined): boolean {
+  return !levels && recommendationTab(tabs, tabId, true) !== undefined;
+}
+
+/** An artist whose counts would split it waits for the server's levels before reading children,
+ * rather than reading them whole and splitting a moment later. */
+export function childSectionsWait(counts: Record<string, number>, levels: PluginLevels | undefined): boolean {
+  return !levels && childSections(counts, true).length > 0;
+}

@@ -2,7 +2,7 @@
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { libraryCardArtwork, libraryTabs, libraryKey, recommendationTab, reconcileProgressRows, tabCard, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
+import { libraryCardArtwork, libraryTabs, libraryKey, recommendationTab, recommendationTabWaits, reconcileProgressRows, settledPluginLevels, tabCard, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
 import type { LibraryPage } from '@vela/skin/src/widgets/library/model';
@@ -66,11 +66,18 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const shows = facetTitle ? 'library' : view;
   // A recommended tab past the first has its own rows when the server answers tab rows; each is
   // read and held under its own key (core's recommendationTab), the first sharing the library's.
-  const rowsTab = shows === 'recommended' ? recommendationTab(tabs, selectedTab?.id, store.catalogue.libraryTabRowsAvailable) : undefined;
-  const rowsKey = `${id}|${rowsTab ?? ''}|${revision}`;
+  // Followed from bootstrap, so a page opened straight from its address draws again once the
+  // server has said what it answers; a later recommended tab waits for it rather than read untabbed.
+  const homeLevels = useVelaState(state => state.home.value?.pluginLevels);
+  const homeFailed = useVelaState(state => state.home.load === 'failed' && !state.home.value);
+  const levels = settledPluginLevels(homeLevels, homeFailed, () => store.catalogue.pluginLevels());
+  const rowsWait = shows === 'recommended' && recommendationTabWaits(tabs, selectedTab?.id, levels);
+  const rowsTab = shows === 'recommended' ? recommendationTab(tabs, selectedTab?.id, levels?.tabRows ?? false) : undefined;
+  // A waiting tab has a key of its own, so it never shows the library's held rows under its name.
+  const rowsKey = `${id}|${rowsWait ? '\u0000wait' : rowsTab ?? ''}|${revision}`;
   const collectionsKey = `${id}|${revision}|${collectionTab ?? ''}|${tabQuery}`;
   const genresKey = `${id}|${revision}`;
-  const needRows = canRecommend && shows === 'recommended';
+  const needRows = canRecommend && shows === 'recommended' && !rowsWait;
   const needCollections = canRecommend && (shows === 'collections' || shows === 'people');
   const needGenres = canRecommend && shows === 'genres';
   const [rowsAttempt, setRowsAttempt] = useState(0);
@@ -88,7 +95,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   // A section drawn again (Android releases hidden ones) or prefetched starts from the session's
   // last answer for each part, and refreshes its recommendations quietly if progress moved since.
   const [rows, setRows] = useState<Part<Row[]>>(() => {
-    const cached = store.catalogue.cachedLibraryRecommendations(id, rowsTab);
+    const cached = rowsWait ? undefined : store.catalogue.cachedLibraryRecommendations(id, rowsTab);
     return cached ? { key: rowsKey, load: 'ready', attempt: 0, value: cached.value, progressRevision: cached.progressRevision } : noPart;
   });
   const [collections, setCollections] = useState<Part<CollectionPage>>(() => {
@@ -210,7 +217,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   } : undefined), [nativeExtras, current?.value]);
   // The tab's own card (a Concerts tab's 16:9 video cards in a square Music library) over the library's.
   const libraryCard = (current?.value ?? earlier)?.presentation?.card;
-  const card = selectedTab?.kind === 'live' ? undefined : tabCard(selectedTab, libraryCard, store.catalogue.libraryTabCardsAvailable);
+  const card = selectedTab?.kind === 'live' ? undefined : tabCard(selectedTab, libraryCard, levels?.tabCards ?? false);
   const landscape = (card ?? libraryCard) === 'landscape';
   const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => libraryCardArtwork(card, 'landscape')) })) } : rawExtras, [rawExtras, landscape]);
   const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !canRecommend || view === 'genres' && !extras?.genres.length ? 'library' : view;

@@ -4,7 +4,7 @@
 import type * as V from '../wire';
 import { mediaClass } from '../media';
 import { libraryCardArtwork } from '../library-presentation';
-import { pluginLevelsOf } from '../plugin-levels';
+import { pluginLevelsOf, type PluginLevels } from '../plugin-levels';
 import { VelaError } from '../adapter/errors';
 import { hasTitleManagement } from '../adapter/capabilities';
 import { capabilitiesOf } from '../adapter/advertise';
@@ -169,6 +169,10 @@ export class Catalogue {
   /** A tab's own card shapes its rows and items (features.pluginLevels). */
   get libraryTabCardsAvailable(): boolean {
     return pluginLevelsOf(this.session.features).tabCards;
+  }
+  /** Every plugin-level flag as the session knows it now (pages follow bootstrap's: settledPluginLevels). */
+  pluginLevels(): PluginLevels {
+    return pluginLevelsOf(this.session.features);
   }
   /** The session's last recommendations for a library (or one recommended tab, recommendationTab()),
    * with the progress revision they were read at. */

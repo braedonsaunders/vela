@@ -4,6 +4,7 @@ import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, 
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
+import { pluginLevelsOf } from '../plugin-levels';
 import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts, videoParents, videoRole } from '../media';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
@@ -325,6 +326,7 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     trailerPreviewAvailable: features.trailerPreview?.available ?? false,
     playlistsAvailable: features.playlists?.available ?? false,
     screens: screenNavigation(data.navigation),
+    pluginLevels: pluginLevelsOf(features),
     ...(typeof data.viewer.spoilerFree === 'boolean' ? { spoilerFree: data.viewer.spoilerFree } : {}),
   };
 }

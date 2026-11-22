@@ -53,4 +53,4 @@ export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, opensMedi
 export type { ChildrenModel, MediaFeatures } from './store/media';
 export { AUDIO_RATES, chapterEnd, type AudioEngine, type AudioEngineEvent, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
 export { current as currentInQueue, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
-export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, videoRoleLabel, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';
+export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, childSectionsWait, recommendationTabWaits, settledPluginLevels, videoRoleLabel, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';

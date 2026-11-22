@@ -6,7 +6,7 @@
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
-import { childrenKey, childSectionLabel, childSections, clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
+import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
 import { useMediaActions, type MediaActions } from './context';
@@ -280,11 +280,17 @@ function ArtistPage({ card }: { card: Card }) {
   const actions = useMediaActions();
   // A server that counts each child level (features.pluginLevels) splits an artist's albums from
   // its concerts; with albums alone (or no counts) the page reads its children whole, as before.
-  const childRoles = store.media.features().childRoles;
+  // Followed from bootstrap: an artist opened straight from its address may draw before the server
+  // has said it answers child roles, and one whose counts would split waits for it.
+  const homeLevels = useVelaState(state => state.home.value?.pluginLevels);
+  const homeFailed = useVelaState(state => state.home.load === 'failed' && !state.home.value);
+  const levels = settledPluginLevels(homeLevels, homeFailed, () => store.catalogue.pluginLevels());
+  const childRoles = levels?.childRoles ?? false;
   const counts = card.media?.childCounts;
+  const waiting = childSectionsWait(counts ?? {}, levels);
   const sections = useMemo(() => childSections(counts ?? {}, childRoles), [counts, childRoles]);
   const split = sections.length > 0;
-  const hasAlbums = !split || sections.includes('album');
+  const hasAlbums = !waiting && (!split || sections.includes('album'));
   const [chosen, setChosen] = useState('');
   const section = sections.includes(chosen) ? chosen : sections[0] ?? 'album';
   const albumsLoad = useChildren(hasAlbums ? card.id : undefined, split ? 'album' : undefined);
@@ -319,7 +325,8 @@ function ArtistPage({ card }: { card: Card }) {
         <Eyebrow>{msg('media.ui.artist')}</Eyebrow>
         <Title>{card.name}</Title>
         <Facts items={[card.facts, card.genres.slice(0, 2).join(', ')]} />
-        {hasAlbums ? <Buttons>
+        {/* While waiting the counts already say whether there is music to play: no button comes and goes. */}
+        {(waiting ? !!counts?.album : hasAlbums) ? <Buttons>
           <PillButton primary icon="play" label={msg('media.ui.play')} onPress={() => void playAll(false)} disabled={!albums.length} testID="media-play" nativeID="media-primary" />
           <PillButton icon="shuffle" label={msg('media.ui.shuffle')} onPress={() => void playAll(true)} disabled={!albums.length} testID="media-shuffle" />
         </Buttons> : null}

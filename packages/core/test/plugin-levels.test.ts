@@ -2,7 +2,8 @@
 // held under, a tab's own card, and an artist's sections from its per-level child counts. A
 // server without the feature reads exactly what it read before.
 import { expect, test } from 'bun:test';
-import { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, pluginLevelsOf, recommendationTab, tabCard } from '../src/plugin-levels';
+import { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, childSectionsWait, pluginLevelsOf, recommendationTab, recommendationTabWaits, settledPluginLevels, tabCard } from '../src/plugin-levels';
+import { homeModel } from '../src/discovery/models';
 import { card } from '../src/discovery/models';
 import { cardMedia, mediaFacts } from '../src/media';
 import { Catalogue } from '../src/store/catalogue';
@@ -160,4 +161,29 @@ test('a server without child roles is never sent a role', async () => {
   expect(f.calls).toEqual([]);
   await f.media.children('artist-1');
   expect(f.calls).toEqual([['artist-1', undefined, 100, undefined]]);
+});
+
+test('pages follow the levels bootstrap states, and wait for them only where reading early would be wrong', () => {
+  const all = pluginLevelsOf(LEVELS), none = pluginLevelsOf(undefined);
+  // Bootstrap read: its levels. Bootstrap failed: the session's. Still reading: unknown.
+  expect(settledPluginLevels(all, false, () => none)).toBe(all);
+  expect(settledPluginLevels(undefined, true, () => none)).toBe(none);
+  expect(settledPluginLevels(undefined, false, () => all)).toBeUndefined();
+  // A later recommended tab waits; the first tab and other tabs read at once.
+  expect(recommendationTabWaits(tabs, 'concerts', undefined)).toBe(true);
+  expect(recommendationTabWaits(tabs, 'recommended', undefined)).toBe(false);
+  expect(recommendationTabWaits(tabs, 'artists', undefined)).toBe(false);
+  expect(recommendationTabWaits(tabs, 'concerts', none)).toBe(false);
+  // An artist that would split waits; albums alone reads at once.
+  expect(childSectionsWait({ album: 4, concert: 2 }, undefined)).toBe(true);
+  expect(childSectionsWait({ concert: 2 }, undefined)).toBe(true);
+  expect(childSectionsWait({ album: 4 }, undefined)).toBe(false);
+  expect(childSectionsWait({ album: 4, concert: 2 }, none)).toBe(false);
+});
+
+test("the home model carries the server's plugin levels, all off for a server without them", () => {
+  const bootstrap = (features: object) => ({ viewer: { id: 'v', name: 'V', policyRevision: '1' }, defaultSkinId: 's', rows: [],
+    capabilities: { skins: [], features: { liveTV: { available: false }, aiSearch: { available: false }, descriptiveSearch: { available: false }, ...features } } }) as never;
+  expect(homeModel(bootstrap(LEVELS)).pluginLevels).toEqual({ tabCards: true, tabRows: true, childRoles: true });
+  expect(homeModel(bootstrap({})).pluginLevels).toEqual({ tabCards: false, tabRows: false, childRoles: false });
 });
