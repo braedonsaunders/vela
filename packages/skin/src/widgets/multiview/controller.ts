@@ -40,6 +40,11 @@ const NOTICE_MS = 6000;
 /** A player reports `failed` on its way into its own recovery (the web engine falls back to another
  * decoder route); only a failure that stands this long, or its error, ends the tile. */
 const FAILED_GRACE_MS = 4000;
+/** A tile whose player gives up before its first picture is tuned again by itself this many times,
+ * this long apart: a live stream that is still starting answers its first requests with 503, which
+ * the Apple player does not wait out. */
+const START_RETRIES = 2;
+const START_RETRY_MS = 2000;
 
 export type TileState = 'waiting' | 'tuning' | 'playing' | 'failed';
 
@@ -108,6 +113,9 @@ interface TileRecord {
   noticeTimer: ReturnType<typeof setTimeout> | undefined;
   /** A `failed` report waiting out FAILED_GRACE_MS, by session. */
   failing: Map<string, ReturnType<typeof setTimeout>>;
+  /** Tunes asked again by the tile itself since it last showed a picture (START_RETRIES). */
+  startRetries: number;
+  startRetryTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
 /** Ether supersedes overlapping tunes from one device; that refusal says nothing about the channel. */
@@ -124,6 +132,8 @@ export interface MultiviewOptions {
   startSilent?: boolean;
   /** How long a player's `failed` report must stand before it ends the tile (FAILED_GRACE_MS). */
   failedGraceMs?: number;
+  /** The wait before a tile's own first re-tune (START_RETRY_MS; the second waits twice as long). */
+  startRetryMs?: number;
 }
 
 export class MultiviewController {
@@ -173,7 +183,7 @@ export class MultiviewController {
     }
     const used = new Set(this.tiles.map(tile => tile.slot));
     const slot = [0, 1, 2, 3].find(candidate => !used.has(candidate))!;
-    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false, regrading: false, handover: false, previousChannelId: null, notice: null, noticeTimer: undefined, failing: new Map() };
+    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false, regrading: false, handover: false, previousChannelId: null, notice: null, noticeTimer: undefined, failing: new Map(), startRetries: 0, startRetryTimer: undefined };
     this.tiles.push(tile);
     if (this.focusedSlot < 0) this.focusedSlot = slot;
     this.applyAudio();
@@ -199,6 +209,7 @@ export class MultiviewController {
       return;
     }
     this.clearNotice(tile);
+    tile.startRetries = 0;
     if (this.phase === 'open' && this.groupId && tile.plan && !tile.refusal) {
       this.handOver(tile, channelId);
       return;
@@ -371,6 +382,7 @@ export class MultiviewController {
     if (!playing) return;
     tile.playing = true;
     tile.buffering = false;
+    tile.startRetries = 0;
     this.emit();
   }
 
@@ -405,6 +417,7 @@ export class MultiviewController {
     if (!tile || this.phase !== 'open') return;
     this.drop(tile);
     tile.refusal = null;
+    tile.startRetries = 0;
     this.tune(tile);
     this.emit();
   }
@@ -480,6 +493,19 @@ export class MultiviewController {
       this.emit();
       return;
     }
+    if (!tile.playing && tile.startRetries < START_RETRIES && this.phase === 'open' && !(error instanceof VelaError)) {
+      // The player gave up before a picture: the stream may still be starting. The tile stays
+      // tuning and asks again by itself before it says the channel can't play.
+      tile.startRetries += 1;
+      this.drop(tile);
+      const generation = tile.generation;
+      tile.startRetryTimer = setTimeout(() => {
+        tile.startRetryTimer = undefined;
+        if (generation === tile.generation && this.tiles.includes(tile) && this.phase === 'open' && !tile.refusal) this.tune(tile);
+      }, (this.options.startRetryMs ?? START_RETRY_MS) * tile.startRetries);
+      this.emit();
+      return;
+    }
     this.fail(tile, error);
   }
 
@@ -500,6 +526,8 @@ export class MultiviewController {
     tile.handover = false;
     tile.previousChannelId = null;
     this.clearFailing(tile);
+    clearTimeout(tile.startRetryTimer);
+    tile.startRetryTimer = undefined;
     this.unfollow(tile);
     this.dropNext(tile);
     const plan = tile.plan;
@@ -714,6 +742,9 @@ export class MultiviewController {
     tile.previousChannelId = null;
     this.clearNotice(tile);
     this.clearFailing(tile);
+    clearTimeout(tile.startRetryTimer);
+    tile.startRetryTimer = undefined;
+    tile.startRetries = 0;
   }
 
   private applyAudio(): void {

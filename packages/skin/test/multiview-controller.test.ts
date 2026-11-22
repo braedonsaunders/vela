@@ -164,6 +164,7 @@ test('the old session ending while the new height is still being asked for waits
   release({ sessionId: 'big', channelId: 'a' } as unknown as PlaybackPlan);
   await settle();
   expect(mv.view().tiles[0]!.plan!.sessionId).toBe('big');
+  mv.snapshot(0, playing('big'));
   expect(mv.view().tiles[0]!.state).not.toBe('failed');
 
   // And when that answer is a refusal, the tile has nothing left to play: it fails.
@@ -487,6 +488,7 @@ test('a player failure on a tile shows on that tile, and Try again tunes it afre
   mv.open();
   await settle();
   const sessionId = mv.view().tiles[0]!.plan!.sessionId;
+  mv.snapshot(0, playing(sessionId));
   mv.failed(0, sessionId, 'HLS manifest HTTP 404');
   expect(mv.view().tiles[0]!.state).toBe('failed');
   // The player's own words are not the viewer's.
@@ -505,15 +507,41 @@ test('a player that reports failed on its way into its own recovery keeps its ti
   mv.open();
   await settle();
   const [a, b] = mv.view().tiles.map(tile => tile.plan!.sessionId);
+  mv.snapshot(0, playing(a!)); mv.snapshot(1, playing(b!));
   mv.snapshot(0, { sessionId: a, state: 'failed', waiting: false, totalFrames: 0 } as unknown as Snapshot);
   mv.snapshot(0, { sessionId: a, state: 'recovering', waiting: true, totalFrames: 0 } as unknown as Snapshot);
   mv.snapshot(1, { sessionId: b, state: 'failed', waiting: false, totalFrames: 0 } as unknown as Snapshot);
-  expect(mv.view().tiles[1]!.state).toBe('tuning');
+  expect(mv.view().tiles[1]!.refusal).toBeNull();
   await new Promise(resolve => setTimeout(resolve, 60));
-  expect(mv.view().tiles[0]!.state).toBe('tuning');
   expect(mv.view().tiles[0]!.plan!.sessionId).toBe(a);
+  expect(mv.view().tiles[0]!.refusal).toBeNull();
   expect(mv.view().tiles[1]!.state).toBe('failed');
   expect(calls.stopped).toEqual([b]);
+});
+
+test('a player that gives up before its first picture is tuned again by itself, twice, before the tile fails', async () => {
+  const { source, calls } = fakeSource();
+  const mv = new MultiviewController({ source, startRetryMs: 10 });
+  mv.add('a');
+  mv.open();
+  await settle();
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const sessionId = mv.view().tiles[0]!.plan!.sessionId;
+    mv.failed(0, sessionId, 'HLS manifest HTTP 503');
+    expect(mv.view().tiles[0]!.state).toBe('tuning');
+    expect(mv.view().tiles[0]!.refusal).toBeNull();
+    expect(calls.stopped.at(-1)).toBe(sessionId);
+    await new Promise(resolve => setTimeout(resolve, 10 * attempt + 15));
+    expect(calls.tunes).toHaveLength(1 + attempt);
+  }
+  mv.failed(0, mv.view().tiles[0]!.plan!.sessionId, 'HLS manifest HTTP 503');
+  expect(mv.view().tiles[0]!.state).toBe('failed');
+  // A picture resets the count.
+  mv.retry(0);
+  await settle();
+  mv.snapshot(0, playing(mv.view().tiles[0]!.plan!.sessionId));
+  mv.failed(0, mv.view().tiles[0]!.plan!.sessionId, 'gone');
+  expect(mv.view().tiles[0]!.state).toBe('failed');
 });
 
 test('picking a failed tile\'s own channel again tunes it afresh; on a playing tile it does nothing', async () => {
@@ -524,6 +552,7 @@ test('picking a failed tile\'s own channel again tunes it afresh; on a playing t
   await settle();
   mv.swap(0, 'a');
   expect(calls.tunes).toHaveLength(1);
+  mv.snapshot(0, playing(mv.view().tiles[0]!.plan!.sessionId));
   mv.failed(0, mv.view().tiles[0]!.plan!.sessionId, 'decoder gave up');
   mv.swap(0, 'a');
   await settle();
