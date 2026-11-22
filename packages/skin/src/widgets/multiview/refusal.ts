@@ -11,6 +11,8 @@ export interface TileRefusal {
   /** The server allows asking again (a transient refusal); a cap does not lift by itself. */
   retry: boolean;
   code: string;
+  /** The provider cap behind it, so the words can name the channel when its name arrives later. */
+  cap?: ConnectionCap;
 }
 
 export interface ConnectionCap { provider: string; max: number; inUse: number }
@@ -27,17 +29,28 @@ export function connectionCap(error: unknown): ConnectionCap | null {
   };
 }
 
+/** The cap's headline: the channel's provider when the channel's name is known, else the provider's. */
+export function capTitle(cap: ConnectionCap, channel: string): string {
+  if (channel && cap.max > 0) return msg(cap.max === 1 ? 'multiview.capOne' : 'multiview.capMany', { channel, max: cap.max });
+  if (channel) return msg('multiview.capUnknown', { channel });
+  if (cap.provider && cap.max > 0) return msg(cap.max === 1 ? 'multiview.capProviderOne' : 'multiview.capProviderMany', { provider: cap.provider, max: cap.max });
+  return msg('multiview.capAnonymous');
+}
+
+/** A refusal's headline with the channel's name as it is known now (the lineup may arrive after it). */
+export function refusalTitle(refusal: TileRefusal, channel: string): string {
+  return refusal.cap ? capTitle(refusal.cap, channel) : refusal.title;
+}
+
 /** The tile's words for a refusal; `channel` is the channel's name. */
 export function tileRefusal(error: unknown, channel: string): TileRefusal {
   const cap = connectionCap(error);
   if (cap) {
-    const title = cap.max > 0
-      ? msg(cap.max === 1 ? 'multiview.capOne' : 'multiview.capMany', { channel, max: cap.max })
-      : msg('multiview.capUnknown', { channel });
+    const title = capTitle(cap, channel);
     const detail = cap.provider && cap.max > 0
       ? msg('multiview.capDetailProvider', { provider: cap.provider, inUse: cap.inUse, max: cap.max })
       : msg('multiview.capDetail');
-    return { title, detail, retry: false, code: 'provider_connection_cap' };
+    return { title, detail, retry: false, code: 'provider_connection_cap', cap };
   }
   const refusal = startRefusal(error, msg('multiview.unavailable'));
   const retry = error instanceof VelaError && error.detail.retry?.allowed === true;

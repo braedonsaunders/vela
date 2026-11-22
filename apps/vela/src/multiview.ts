@@ -6,6 +6,7 @@ import type { Vela as Store } from '@vela/core';
 import type { LiveController } from '@vela/skin/src/widgets/guide';
 import { MultiviewController, type MultiviewSource } from '@vela/skin/src/widgets/multiview';
 import { liveSource } from '@vela/skin/src/widgets/guide';
+import { registerMultiview } from './sports/actions';
 import type * as V from '../../../packages/protocol/types';
 
 const key = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -50,7 +51,7 @@ export function useMultiviewController(store: Store, session: number | null, liv
       setController(null);
     };
   }, [store, session, live]);
-  return useMemo(() => controller ? {
+  const value = useMemo(() => controller ? {
     controller,
     open(channelId?: string, options?: { replace?: boolean }) {
       if (channelId) controller.add(channelId);
@@ -58,4 +59,7 @@ export function useMultiviewController(store: Store, session: number | null, liv
       else router.push('/multiview');
     },
   } : null, [controller]);
+  // Sports (the hero and a game page) offers "Add to multiview" for a game on a Live TV channel.
+  useEffect(() => value ? registerMultiview(target => { if (target.channelId) value.open(target.channelId); }) : undefined, [value]);
+  return value;
 }

@@ -5,7 +5,7 @@ import type { PlaybackPlan } from '../../protocol/types';
 import { MultiviewController, type MultiviewSource, type MultiviewTileRequest } from '../src/widgets/multiview/controller';
 import { bugLeader, bugSides, bugTitle, type BugEvent } from '../src/widgets/multiview/bug-model';
 import type { LiveEventState } from '../../protocol/live-events';
-import { connectionCap, tileRefusal } from '../src/widgets/multiview/refusal';
+import { connectionCap, refusalTitle, tileRefusal } from '../src/widgets/multiview/refusal';
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 const playing = (sessionId: string) => ({ sessionId, state: 'playing', waiting: false, totalFrames: 10 }) as unknown as Snapshot;
@@ -339,4 +339,15 @@ test('once a tile has shown a picture, waiting for media keeps it shown and says
   expect(mv.view().tiles[0]).toMatchObject({ state: 'playing', buffering: true });
   mv.snapshot(0, playing(sessionId));
   expect(mv.view().tiles[0]).toMatchObject({ state: 'playing', buffering: false });
+});
+
+test('a cap refused before the lineup arrived names the channel once it is known', async () => {
+  const { source } = fakeSource(() => capError());
+  const mv = new MultiviewController({ source });
+  mv.add('espn');
+  mv.open();
+  await settle();
+  const refusal = mv.view().tiles[0]!.refusal!;
+  expect(refusalTitle(refusal, '')).toBe('Acme IPTV allows 2 connections');
+  expect(refusalTitle(refusal, 'ESPN')).toBe("ESPN's provider allows 2 connections");
 });

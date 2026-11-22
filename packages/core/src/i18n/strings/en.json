@@ -818,5 +818,8 @@
   "multiview.retryDetail": "Try again in a moment, or pick another channel.",
   "multiview.swapDetail": "Pick another channel for this tile.",
   "multiview.failed": "Multiview isn't available right now",
-  "multiview.close": "Close"
+  "multiview.close": "Close",
+  "multiview.capProviderOne": "{provider} allows 1 connection",
+  "multiview.capProviderMany": "{provider} allows {max} connections",
+  "multiview.capAnonymous": "The provider has no free connection"
 }

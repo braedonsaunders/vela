@@ -19,6 +19,7 @@ import { useGuideLook, type GuideLook, alpha } from '../guide/look';
 import { Line, LogoTile, Press } from '../guide/parts';
 import { PlayerIcon } from '../player/icons';
 import { ScoreBug, type BugEvent } from './bug';
+import { refusalTitle } from './refusal';
 import type { LiveEventRef, MultiviewController, MultiviewTile, MultiviewView } from './controller';
 import { featureBand, placement, slotRects, type MultiviewLayout, type Rect, type Size } from './layout';
 
@@ -299,7 +300,8 @@ function Placeholder({ look, channel, tile, counter }: { look: GuideLook; channe
       <Animated.View style={{ alignItems: 'center', gap: TV ? 18 : 10, maxWidth: TV ? 760 : 420, paddingHorizontal: 24, transform: [{ scale: counter }] }}>
         {tile.refusal ? <>
           <PlayerIcon name="alert" size={TV ? 44 : 26} color={look.now} />
-          <Line look={look} size={TV ? 22 : 15} weight={700} lines={2} style={{ textAlign: 'center' }}>{tile.refusal.title}</Line>
+          {channel ? <Line look={look} size={TV ? 14 : 12} weight={650} color={look.inkQuiet}>{`${channel.number} · ${name}`}</Line> : null}
+          <Line look={look} size={TV ? 22 : 15} weight={700} lines={2} style={{ textAlign: 'center' }}>{refusalTitle(tile.refusal, name)}</Line>
           <Line look={look} size={TV ? 15 : 12} color={look.inkSecondary} lines={3} style={{ textAlign: 'center' }}>{tile.refusal.detail}</Line>
         </> : <>
           <LogoTile look={look} logo={channel?.logo ?? ''} name={name} channelId={channel?.id} width={TV ? 150 : 84} height={TV ? 90 : 50} radius={TV ? 14 : 8} />
@@ -397,7 +399,17 @@ function TileTarget({ tile, rect, look, focusable, preferred, channelName, targe
   target(value: Focusable | null): void;
   onFocus(): void; onPress(): void; onLongPress(): void; onOptions(): void;
 }) {
+  // The pointer moving from the tile onto its options button leaves the tile's press target: the
+  // button stays while the pointer is over either.
   const [hovered, setHovered] = useState(false);
+  const leave = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hover = (on: boolean) => {
+    clearTimeout(leave.current);
+    if (on) setHovered(true);
+    else leave.current = setTimeout(() => setHovered(false), 250);
+  };
+  useEffect(() => () => clearTimeout(leave.current), []);
+  const keep = Platform.OS === 'web' ? { onPointerEnter: () => hover(true), onPointerLeave: () => hover(false) } : {};
   return (
     <View style={{ position: 'absolute', left: rect.x, top: rect.y, width: rect.width, height: rect.height, zIndex: 3 }}>
       <Pressable
@@ -411,13 +423,13 @@ function TileTarget({ tile, rect, look, focusable, preferred, channelName, targe
         onPress={onPress}
         onLongPress={onLongPress}
         delayLongPress={TV ? 450 : 420}
-        onHoverIn={() => setHovered(true)}
-        onHoverOut={() => setHovered(false)}
+        onHoverIn={() => hover(true)}
+        onHoverOut={() => hover(false)}
         tvParallaxProperties={{ enabled: false }}
         style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? ({ outlineStyle: 'none', cursor: 'pointer' } as never) : null]}
       />
       {!TV && (hovered || TOUCH) && tile.state !== 'waiting' ? (
-        <View style={{ position: 'absolute', right: 8, top: 8 }}>
+        <View style={{ position: 'absolute', right: 8, top: 8 }} {...keep}>
           <Press label={msg('multiview.title')} onPress={onOptions} style={({ hovered: over }) => ({
             width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
             backgroundColor: over ? 'rgba(11, 15, 26, 0.92)' : 'rgba(11, 15, 26, 0.7)' })}>
@@ -505,7 +517,12 @@ function TilePanel({ look, still, open, panel, view, channels, byId, controller,
 }) {
   const progress = useRef(new Animated.Value(0)).current;
   const [shown, setShown] = useState<Panel | null>(null);
+  // The press that opened the panel ends over its backdrop (a click follows pointer up on the web):
+  // the backdrop closes only for a later press.
+  const openedAt = useRef(0);
+  const dismiss = () => { if (Date.now() - openedAt.current > 400) onClose(); };
   useEffect(() => {
+    if (open && !shown) openedAt.current = Date.now();
     if (open && panel) setShown(panel);
     Animated.timing(progress, { toValue: open ? 1 : 0, duration: still ? 0 : open ? 340 : 220, easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: true })
       .start(({ finished }) => { if (finished && !open) setShown(null); });
@@ -523,7 +540,7 @@ function TilePanel({ look, still, open, panel, view, channels, byId, controller,
   return (
     <View style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="box-none">
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.45)', opacity: progress }]}>
-        {!TV ? <View style={StyleSheet.absoluteFill} onTouchEnd={onClose} {...({ onClick: onClose } as object)} /> : null}
+        {!TV ? <View style={StyleSheet.absoluteFill} onTouchEnd={dismiss} {...({ onClick: dismiss } as object)} /> : null}
       </Animated.View>
       <Animated.View style={{
         position: 'absolute', top: 0, bottom: 0, right: 0, width: Math.min(width, 9999), backgroundColor: look.glass,
@@ -573,31 +590,40 @@ function ChannelList({ look, channels, current, taken, onChoose }: {
 }) {
   const row = TV ? 104 : 64;
   const start = Math.max(0, channels.findIndex(channel => channel.id === current));
+  const list = useRef<FlatList<GuideChannel>>(null);
+  // The tile's own channel is brought into view once the list has its size.
+  const placed = useRef(false);
   return (
-    <FlatList
-      style={{ flex: 1, marginHorizontal: TV ? -14 : -6 }}
-      contentContainerStyle={{ paddingVertical: TV ? 14 : 6, paddingHorizontal: TV ? 14 : 6 }}
-      data={channels}
-      keyExtractor={channel => channel.id}
-      initialScrollIndex={start > 3 ? start - 2 : 0}
-      getItemLayout={(_, index) => ({ length: row, offset: row * index, index })}
-      windowSize={7}
-      renderItem={({ item, index }) => (
-        <View style={{ height: row, paddingVertical: TV ? 6 : 3 }}>
-          <Press label={item.name} onPress={() => onChoose(item.id)} hasTVPreferredFocus={index === start} lift={TV}
-            style={({ focused, hovered }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: TV ? 18 : 12, paddingHorizontal: TV ? 14 : 10,
-              borderRadius: look.radiusCell, backgroundColor: focused ? look.ink : hovered ? look.cellHover : item.id === current ? look.live : 'transparent' })}>
-            {({ focused }) => <>
-              <LogoTile look={look} logo={item.logo} name={item.name} channelId={item.id} width={TV ? 104 : 64} height={TV ? 62 : 38} radius={TV ? 10 : 6} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Line look={look} size={TV ? 15 : 13} weight={700} color={focused ? look.inkInverse : look.ink}>{`${item.number} · ${item.name}`}</Line>
-                {item.now ? <Line look={look} size={TV ? 13 : 11} color={focused ? alpha(look.inkInverse, 0.7) : look.inkSecondary}>{item.now}</Line> : null}
-              </View>
-              {taken.has(item.id) ? <PlayerIcon name="check" size={TV ? 26 : 16} color={focused ? look.inkInverse : look.accent} /> : null}
-            </>}
-          </Press>
-        </View>
-      )}
-    />
+    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', marginHorizontal: TV ? -14 : -6 }}>
+      <FlatList
+        ref={list}
+        style={{ flex: 1, minHeight: 0 }}
+        contentContainerStyle={{ paddingVertical: TV ? 14 : 6, paddingHorizontal: TV ? 14 : 6 }}
+        data={channels}
+        keyExtractor={channel => channel.id}
+        getItemLayout={(_, index) => ({ length: row, offset: row * index, index })}
+        onLayout={() => {
+          if (placed.current || start < 3) return;
+          placed.current = true;
+          list.current?.scrollToIndex({ index: start, viewPosition: 0.3, animated: false });
+        }}
+        renderItem={({ item, index }) => (
+          <View style={{ height: row, paddingVertical: TV ? 6 : 3 }}>
+            <Press label={item.name} onPress={() => onChoose(item.id)} hasTVPreferredFocus={index === start} lift={TV}
+              style={({ focused, hovered }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: TV ? 18 : 12, paddingHorizontal: TV ? 14 : 10,
+                borderRadius: look.radiusCell, backgroundColor: focused ? look.ink : hovered ? look.cellHover : item.id === current ? look.live : 'transparent' })}>
+              {({ focused }) => <>
+                <LogoTile look={look} logo={item.logo} name={item.name} channelId={item.id} width={TV ? 104 : 64} height={TV ? 62 : 38} radius={TV ? 10 : 6} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Line look={look} size={TV ? 15 : 13} weight={700} color={focused ? look.inkInverse : look.ink}>{`${item.number} · ${item.name}`}</Line>
+                  {item.now ? <Line look={look} size={TV ? 13 : 11} color={focused ? alpha(look.inkInverse, 0.7) : look.inkSecondary}>{item.now}</Line> : null}
+                </View>
+                {taken.has(item.id) ? <PlayerIcon name="check" size={TV ? 26 : 16} color={focused ? look.inkInverse : look.accent} /> : null}
+              </>}
+            </Press>
+          </View>
+        )}
+      />
+    </View>
   );
 }
