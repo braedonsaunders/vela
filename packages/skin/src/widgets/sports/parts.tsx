@@ -215,15 +215,17 @@ export function ProbabilityBar({ look, home, awayColor, homeColor, height }: { l
   );
 }
 
-/** A filter chip: on, it fills with the ink. */
+/** A choice pill (schedule days, the team picker's leagues): drawn like the app's tab pills, the
+ * chosen one filled with the accent, the others on the control fill with the glass edge. */
 export function Chip({ look, label, on, onPress, testID, leading, small }: { look: SportsLook; label: string; on: boolean; onPress(): void; testID?: string; leading?: ReactNode; small?: boolean }) {
-  const height = look.px(small ? 30 : 36);
+  const height = look.px(small ? 32 : 40);
   return (
-    <Surface look={look} onPress={onPress} label={label} testID={testID} radius={height / 2} lift={1.06}
-      fill={on ? look.ink : alpha(look.ink, small ? 0.06 : 0.08)} focusFill={on ? look.ink : alpha(look.ink, 0.18)}
-      style={{ height, paddingHorizontal: look.px(small ? 13 : 16), flexDirection: 'row', alignItems: 'center', gap: look.px(8) }}>
+    <Surface look={look} onPress={onPress} label={label} testID={testID} radius={height / 2} lift={1.04}
+      fill={on ? look.accent : look.ui.control} focusFill={on ? look.accent : look.ui.controlHover}
+      style={{ height, paddingHorizontal: look.px(small ? 13 : 16), flexDirection: 'row', alignItems: 'center', gap: look.px(8),
+        borderWidth: on ? 0 : 1, borderColor: look.ui.glassEdge }}>
       {leading}
-      <Txt look={look} size={small ? 12.5 : 14} weight={on ? 700 : 560} color={on ? look.inkInverse : small ? look.inkSecondary : look.ink} lines={1}>{label}</Txt>
+      <Txt look={look} size={small ? 12.5 : 14} weight={on ? 700 : 500} color={on ? look.onAccent : small ? look.inkSecondary : look.ink} lines={1}>{label}</Txt>
     </Surface>
   );
 }

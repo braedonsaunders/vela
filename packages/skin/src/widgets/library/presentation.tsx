@@ -25,7 +25,9 @@ const controlText = { color: '$ui.ink', 'font-size': '$ui.controlFontSize', 'fon
 /** A control label centred on its line: Android otherwise pads the line for accents above it. */
 const CENTRED = { textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' } as const;
 
-function Button({ label, onPress, selected = false, role = 'button', id, quiet = false, preferred = false, onLayout, onFocus }: {
+/** The toolbar's pill: a library tab (role "tab"), a filter or a toggle. Other sections that offer
+ * tabs (Sports' leagues) draw this same pill so every tab strip in the app reads alike. */
+export function Button({ label, onPress, selected = false, role = 'button', id, quiet = false, preferred = false, onLayout, onFocus }: {
   onLayout?(event: LayoutChangeEvent): void; onFocus?(): void; id?: string; label: string; onPress(): void; selected?: boolean; quiet?: boolean; preferred?: boolean; role?: 'button' | 'tab' | 'checkbox';
 }) {
   const look = useLook();

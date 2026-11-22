@@ -15,6 +15,7 @@ import { useSportsLook, type SportsLook } from './look';
 import { EntityChip, EventCard, HeroCard, MiniCard, TableView, tableWidth } from './cards';
 import { Chip, Glyph, Heading, Pill, Placeholder, Rise, Surface, Txt } from './parts';
 import { alpha } from './colour';
+import { Button as ToolbarButton } from '../library/presentation';
 import { leagueLabel } from './model';
 import { entityKey, leagueTeams, openingLeague, pickerLeagues } from './teams';
 
@@ -177,10 +178,13 @@ function Hero({ look, section, favourites }: { look: SportsLook; section: HeroSe
 
 function Leagues({ look, section, selected, choose }: { look: SportsLook; section: LeaguesSection; selected: string; choose(league: string): void }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: look.gutter, paddingVertical: look.px(6), gap: look.px(10) }}>
-      <Chip look={look} label={msg('sports.allLeagues')} on={!selected} onPress={() => choose('')} testID="sports-league-all" />
+    // The leagues are this section's tabs: the same pills as a library's tabs, so Sports reads like
+    // every other section.
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityRole={Platform.OS === 'web' ? 'tablist' as never : undefined}
+      contentContainerStyle={{ paddingHorizontal: look.gutter, paddingVertical: 3, gap: 8, alignItems: 'center' }}>
+      <ToolbarButton role="tab" id="sports-league-all" label={msg('sports.allLeagues')} selected={!selected} onPress={() => choose('')} />
       {section.leagues.map(league => (
-        <Chip key={league.id} look={look} label={leagueLabel(league)} on={selected === league.id} onPress={() => choose(league.id)} testID={`sports-league-${league.id}`} />
+        <ToolbarButton key={league.id} role="tab" id={`sports-league-${league.id}`} label={leagueLabel(league)} selected={selected === league.id} onPress={() => choose(league.id)} />
       ))}
       <ScoresSwitch look={look} />
     </ScrollView>
