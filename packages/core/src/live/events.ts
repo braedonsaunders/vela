@@ -64,6 +64,57 @@ export function backoffMs(failures: number, jitter = Math.random()): number {
   return Math.round(base * (1 + 0.2 * Math.min(1, Math.max(0, jitter))));
 }
 
+/** A server's event as Vela reads it: the lists a view walks are always lists. Ether omits
+ * `competitors` for N-competitor events (golf, F1 carry `ranking` rows instead) and may omit other
+ * optional lists; one missing array must never take a screen down. Anything without an id and a
+ * status is not an event. */
+export function normaliseEvent(value: unknown): V.LiveEvent | null {
+  if (!value || typeof value !== 'object') return null;
+  const event = value as Partial<V.LiveEvent>;
+  if (typeof event.id !== 'string' || !event.status || typeof event.status.state !== 'string') return null;
+  const list = <T>(items: T[] | undefined | null): T[] => Array.isArray(items) ? items : [];
+  return {
+    ...event,
+    league: event.league ?? { id: '', name: '' },
+    competitors: list(event.competitors),
+    ...(event.ranking !== undefined ? { ranking: list(event.ranking) } : {}),
+    ...(event.broadcasts !== undefined ? { broadcasts: list(event.broadcasts) } : {}),
+    ...(event.watch !== undefined ? { watch: list(event.watch) } : {}),
+  } as V.LiveEvent;
+}
+
+export function normaliseEvents(values: unknown): V.LiveEvent[] {
+  return Array.isArray(values) ? values.map(normaliseEvent).filter((event): event is V.LiveEvent => !!event) : [];
+}
+
+/** A detail with every list a list (tables, plays, the probability series, links). */
+export function normaliseDetail(value: unknown): V.LiveEventDetail | null {
+  const event = normaliseEvent(value);
+  if (!event) return null;
+  const detail = value as Partial<V.LiveEventDetail>;
+  const list = <T>(items: T[] | undefined | null): T[] => Array.isArray(items) ? items : [];
+  return { ...event, tables: list(detail.tables), plays: list(detail.plays), probabilitySeries: list(detail.probabilitySeries), links: list(detail.links) };
+}
+
+/** A screen whose sections all carry their lists, events normalised and unreadable ones dropped. */
+export function normaliseScreen(screen: V.Screen): V.Screen {
+  const list = <T>(items: T[] | undefined | null): T[] => Array.isArray(items) ? items : [];
+  return {
+    ...screen,
+    sections: list(screen.sections).map(section => {
+      const raw = section as unknown as Record<string, unknown>;
+      switch (section.type) {
+        case 'hero': return { ...section, event: normaliseEvent(raw.event) ?? undefined, also: normaliseEvents(raw.also) } as V.ScreenSection;
+        case 'events': case 'schedule': return { ...section, events: normaliseEvents(raw.events) } as V.ScreenSection;
+        case 'table': return { ...section, tables: list(raw.tables as V.LiveTable[]) } as V.ScreenSection;
+        case 'leagues': return { ...section, leagues: list(raw.leagues as never[]) } as V.ScreenSection;
+        case 'entities': return { ...section, entities: list(raw.entities as never[]) } as V.ScreenSection;
+        default: return section;
+      }
+    }),
+  };
+}
+
 /** A pushed stream event, validated: updates, alerts and heartbeats; anything else is ignored. */
 export type LiveStreamMessage = { kind: 'update'; events: V.LiveEvent[] } | { kind: 'alert'; alert: V.LiveAlert } | { kind: 'heartbeat' } | { kind: 'ignored' };
 export function readLiveMessage(name: string, data: string): LiveStreamMessage {
@@ -73,14 +124,12 @@ export function readLiveMessage(name: string, data: string): LiveStreamMessage {
   try { value = JSON.parse(data); } catch { return { kind: 'ignored' }; }
   if (name === 'update') {
     const events = (value as { events?: unknown })?.events;
-    return Array.isArray(events) ? { kind: 'update', events: events.filter(isEvent) } : { kind: 'ignored' };
+    return Array.isArray(events) ? { kind: 'update', events: normaliseEvents(events) } : { kind: 'ignored' };
   }
   const alert = value as V.LiveAlert;
   return alert && typeof alert.id === 'string' && typeof alert.eventId === 'string' && ['started', 'close', 'final'].includes(alert.kind)
     ? { kind: 'alert', alert } : { kind: 'ignored' };
 }
-const isEvent = (value: unknown): value is V.LiveEvent => !!value && typeof (value as V.LiveEvent).id === 'string'
-  && typeof (value as V.LiveEvent).status?.state === 'string' && Array.isArray((value as V.LiveEvent).competitors);
 
 /** Every event a screen shows. */
 export function screenEvents(screen: V.Screen): V.LiveEvent[] {

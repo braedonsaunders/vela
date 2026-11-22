@@ -32,6 +32,7 @@ import type {
 } from '../capabilities';
 import type { TitleActions } from '../capabilities';
 import { VelaError } from '../errors';
+import { normaliseDetail, normaliseEvents, normaliseScreen } from '../../live/events';
 import { EtherTransport } from './transport';
 import { plexHomeSelection, plexTokens } from './plex';
 
@@ -529,16 +530,19 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   // Live events and plugin screens (features.liveEvents). Live data is never cached here: the
   // stream keeps it current and a stale answer would show an old score.
 
-  screen(id: string, screenQuery: ScreenQuery = {}, signal?: AbortSignal) {
-    return this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal });
+  async screen(id: string, screenQuery: ScreenQuery = {}, signal?: AbortSignal) {
+    return normaliseScreen(await this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal }));
   }
 
-  liveEvents(ids: string[]) {
-    return this.http.request<V.LiveEventsResponse>('GET', `/live/events${query({ ids: ids.length ? ids.join(',') : undefined })}`);
+  async liveEvents(ids: string[]): Promise<V.LiveEventsResponse> {
+    const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/events${query({ ids: ids.length ? ids.join(',') : undefined })}`);
+    return { ...response, events: normaliseEvents(response?.events) };
   }
 
-  liveEvent(id: string) {
-    return this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`);
+  async liveEvent(id: string): Promise<V.LiveEventDetail> {
+    const detail = normaliseDetail(await this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`));
+    if (!detail) throw new VelaError({ class: 'source', code: 'invalid_live_event', message: 'The server sent an unreadable live event.', retry: { allowed: true } }, 502);
+    return detail;
   }
 
   revealLiveEvent(id: string, request: V.Mutation) {
@@ -553,8 +557,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<unknown>(favorite ? 'PUT' : 'DELETE', `/favorites/entities/${segment(key)}`, request);
   }
 
-  liveTicker(screen?: string) {
-    return this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
+  async liveTicker(screen?: string): Promise<V.LiveEventsResponse> {
+    const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
+    return { ...response, events: normaliseEvents(response?.events) };
   }
 
   streamLive(live: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
