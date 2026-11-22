@@ -83,6 +83,56 @@ test('a tile that grows asks for its new height and switches once the new sessio
   expect(tile.command).toMatchObject({ type: 'mute', muted: false });
 });
 
+test('Ether ending the old session as it starts the new-height one is a handover, not a failure', async () => {
+  const { source, calls } = fakeSource();
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.setHeight(0, 700);
+  mv.open();
+  await settle();
+  const first = mv.view().tiles[0]!.plan!.sessionId;
+  mv.setHeight(0, 2160);
+  await new Promise(resolve => setTimeout(resolve, 560));
+  const next = mv.view().tiles[0]!.next!.sessionId;
+  mv.updatePlan(0, { sessionId: first, state: 'ended', revision: 99 } as unknown as PlaybackPlan);
+  const tile = mv.view().tiles[0]!;
+  expect(tile.state).not.toBe('failed');
+  expect(tile.plan!.sessionId).toBe(next);
+  expect(tile.next).toBeNull();
+  expect(calls.stopped).toEqual([first]);
+});
+
+test('the old session ending while the new height is still being asked for waits for that answer', async () => {
+  const { source } = fakeSource();
+  let release: (plan: PlaybackPlan) => void = () => {};
+  let reject: (error: unknown) => void = () => {};
+  const tune = source.tune;
+  let tunes = 0;
+  source.tune = (channelId, request) => ++tunes === 1 ? tune(channelId, request) : new Promise((resolve, fail) => { release = resolve; reject = fail; });
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.setHeight(0, 700);
+  mv.open();
+  await settle();
+  const first = mv.view().tiles[0]!.plan!.sessionId;
+  mv.setHeight(0, 2160);
+  await new Promise(resolve => setTimeout(resolve, 560));
+  mv.updatePlan(0, { sessionId: first, state: 'ended', revision: 99 } as unknown as PlaybackPlan);
+  expect(mv.view().tiles[0]!.state).toBe('tuning');
+  release({ sessionId: 'big', channelId: 'a' } as unknown as PlaybackPlan);
+  await settle();
+  expect(mv.view().tiles[0]!.plan!.sessionId).toBe('big');
+  expect(mv.view().tiles[0]!.state).not.toBe('failed');
+
+  // And when that answer is a refusal, the tile has nothing left to play: it fails.
+  mv.setHeight(0, 700);
+  await new Promise(resolve => setTimeout(resolve, 1600));
+  mv.updatePlan(0, { sessionId: 'big', state: 'ended', revision: 99 } as unknown as PlaybackPlan);
+  reject(new Error('cancelled'));
+  await settle();
+  expect(mv.view().tiles[0]!.state).toBe('failed');
+});
+
 test('a tile that shrinks only asks again after a while, and growing back first cancels it', async () => {
   const { source, calls } = fakeSource();
   const mv = new MultiviewController({ source });
@@ -130,6 +180,19 @@ test('audio follows focus: only the focused tile is unmuted, by commands with ri
   // An unchanged tile keeps its last command, so its player sees nothing new.
   expect(after[1]!.id).toBe(before[1]!);
   expect(after[2]).toMatchObject({ type: 'mute', muted: false });
+});
+
+test('a silent start mutes every tile, the focused one too, until the viewer moves the focus', async () => {
+  const { source } = fakeSource();
+  const mv = new MultiviewController({ source, startSilent: true });
+  for (const id of ['a', 'b']) mv.add(id);
+  mv.open();
+  await settle();
+  const muted = () => mv.view().tiles.map(tile => tile.muted);
+  expect(muted()).toEqual([true, true]);
+  expect(mv.view().tiles.every(tile => tile.command?.type === 'mute' && tile.command.muted)).toBe(true);
+  mv.focus(1);
+  expect(muted()).toEqual([true, false]);
 });
 
 test('full screen takes the focus and the audio, and back returns to the grid', () => {

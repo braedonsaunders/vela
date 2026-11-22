@@ -28,6 +28,11 @@ import { GuideRowDrawing, GuideSurface } from '@vela/guide-native';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
+import { setQuietPlayback } from '@vela/skin/src/quiet-playback';
+
+// A lab or development build (a pinned server on a device, start routes, or __DEV__) never starts
+// playback with sound: it may open a channel or multiview on launch on a shared TV.
+setQuietPlayback(__DEV__ || !!config.startRoutes || (Platform.OS !== 'web' && !!config.server));
 import { listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';

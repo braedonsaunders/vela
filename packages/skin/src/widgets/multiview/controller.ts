@@ -86,6 +86,11 @@ interface TileRecord {
   command: Command | null;
   liveEvent: LiveEventRef | null;
   askedAgain: boolean;
+  /** A new-height session is being asked for. */
+  regrading: boolean;
+  /** The current session ended while the new-height one was being asked for (Ether ends a tile's
+   * old session when it starts the new one): the tile waits for that answer instead of failing. */
+  handover: boolean;
 }
 
 /** Ether supersedes overlapping tunes from one device; that refusal says nothing about the channel. */
@@ -97,6 +102,9 @@ export interface MultiviewOptions {
   channelName?(channelId: string): string;
   /** Diagnostics for a failed server call; never shown. */
   report?(operation: string, error: unknown): void;
+  /** Start with every tile muted, the focused one too, until the viewer moves the focus (a lab or
+   * development build opening multiview on launch). */
+  startSilent?: boolean;
 }
 
 export class MultiviewController {
@@ -104,6 +112,8 @@ export class MultiviewController {
   private tiles: TileRecord[] = [];
   private chosenLayout: MultiviewLayout | null = null;
   private focusedSlot = -1;
+  /** Every tile muted until the viewer moves the focus (options.startSilent). */
+  private silent: boolean;
   private fullscreenSlot = -1;
   private phase: MultiviewView['phase'] = 'closed';
   private failure: string | null = null;
@@ -114,6 +124,7 @@ export class MultiviewController {
   private disposed = false;
 
   constructor(private readonly options: MultiviewOptions) {
+    this.silent = options.startSilent === true;
     this.current = this.compose();
   }
 
@@ -143,7 +154,7 @@ export class MultiviewController {
     }
     const used = new Set(this.tiles.map(tile => tile.slot));
     const slot = [0, 1, 2, 3].find(candidate => !used.has(candidate))!;
-    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false };
+    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false, regrading: false, handover: false };
     this.tiles.push(tile);
     if (this.focusedSlot < 0) this.focusedSlot = slot;
     this.applyAudio();
@@ -202,6 +213,8 @@ export class MultiviewController {
   focus(slot: number): void {
     if (slot === this.focusedSlot || !this.tile(slot)) return;
     this.focusedSlot = slot;
+    // The viewer moving the focus is the choice to hear it.
+    if (this.phase === 'open') this.silent = false;
     this.applyAudio();
     this.emit();
   }
@@ -310,7 +323,7 @@ export class MultiviewController {
     }
     if (!tile?.plan || snapshot.sessionId !== tile.plan.sessionId) return;
     if (snapshot.state === 'failed') {
-      this.fail(tile, new Error(snapshot.failure?.message || ''));
+      this.oldEnded(tile, new Error(snapshot.failure?.message || ''));
       return;
     }
     const playing = snapshot.state === 'playing' && !snapshot.waiting && snapshot.totalFrames !== 0;
@@ -339,7 +352,7 @@ export class MultiviewController {
     const tile = this.tile(slot);
     if (tile?.next?.sessionId === plan.sessionId) { tile.next = plan; this.emit(); return; }
     if (!tile?.plan || tile.plan.sessionId !== plan.sessionId || plan.revision < tile.plan.revision) return;
-    if (plan.state === 'ended') { this.fail(tile, new Error('')); return; }
+    if (plan.state === 'ended') { this.oldEnded(tile, new Error('')); return; }
     tile.plan = plan;
     this.emit();
   }
@@ -401,6 +414,22 @@ export class MultiviewController {
     );
   }
 
+  /** The tile's current session ended or its player gave up. During a height change that is the
+   * handover (Ether ends the old session as it starts the new one): the new session takes over, or
+   * the tile waits for it. Otherwise the tile has failed. */
+  private oldEnded(tile: TileRecord, error: unknown): void {
+    if (tile.next) { this.takeNext(tile, false); return; }
+    if (tile.regrading) {
+      if (tile.handover) return;
+      tile.handover = true;
+      this.unfollow(tile);
+      tile.playing = false;
+      this.emit();
+      return;
+    }
+    this.fail(tile, error);
+  }
+
   private fail(tile: TileRecord, error: unknown): void {
     const name = this.options.channelName?.(tile.channelId) ?? tile.channelId;
     this.drop(tile);
@@ -414,6 +443,8 @@ export class MultiviewController {
     tile.playing = false;
     tile.buffering = false;
     tile.liveEvent = null;
+    tile.regrading = false;
+    tile.handover = false;
     this.unfollow(tile);
     this.dropNext(tile);
     const plan = tile.plan;
@@ -440,29 +471,37 @@ export class MultiviewController {
     const height = tile.height;
     const request: MultiviewTileRequest = { groupId: this.groupId, tile: tile.slot, ...(height !== undefined ? { maxHeight: height } : {}) };
     tile.askedHeight = height;
+    tile.regrading = true;
     this.options.source.tune(tile.channelId, request).then(
       plan => {
         if (generation !== tile.generation || !tile.plan || !this.tiles.includes(tile) || this.phase !== 'open') { this.stopPlan(plan); return; }
+        tile.regrading = false;
         if (tile.next) this.stopPlan(tile.next);
         tile.next = plan;
-        this.emit();
+        // The old session already ended: the new one takes the tile now, picture to follow.
+        if (tile.handover) this.takeNext(tile, false);
+        else this.emit();
       },
       error => {
         // The tile keeps playing at its old height; the next change asks again.
         this.options.report?.('height', error);
-        if (generation === tile.generation) tile.askedHeight = tile.plan ? undefined : tile.askedHeight;
+        if (generation !== tile.generation) return;
+        tile.regrading = false;
+        if (tile.handover) { tile.handover = false; this.fail(tile, error); return; }
+        tile.askedHeight = tile.plan ? undefined : tile.askedHeight;
       },
     );
   }
 
   /** The new-height session shows its first picture: it takes the tile's place and the old one stops. */
-  private takeNext(tile: TileRecord): void {
+  private takeNext(tile: TileRecord, playing = true): void {
     const next = tile.next;
     if (!next) return;
     const old = tile.plan;
     tile.next = null;
+    tile.handover = false;
     tile.plan = next;
-    tile.playing = true;
+    tile.playing = playing;
     tile.buffering = false;
     // The new view consumed a muting command with the current id: its own state comes with a new one.
     tile.commandId += 1;
@@ -508,11 +547,13 @@ export class MultiviewController {
     tile.liveEvent = null;
     tile.refusal = null;
     tile.askedAgain = false;
+    tile.regrading = false;
+    tile.handover = false;
   }
 
   private applyAudio(): void {
     for (const tile of this.tiles) {
-      const muted = tile.slot !== this.focusedSlot;
+      const muted = tile.slot !== this.focusedSlot || this.silent;
       if (muted === tile.muted && tile.command) continue;
       tile.muted = muted;
       tile.commandId += 1;
