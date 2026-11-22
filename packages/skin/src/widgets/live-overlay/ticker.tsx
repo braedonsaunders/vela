@@ -122,7 +122,7 @@ function Item({ item, look, height }: { item: TickerItem; look: PlayerLook; heig
     : <Rolling value={value} look={look} height={height} style={{ ...look.text(13, 800, look.ink), fontVariant: ['tabular-nums'], opacity: quiet ? 0.6 : 1 }} />;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.size(7), paddingHorizontal: look.size(16), height }}>
-      {tag ? <Text style={[look.text(11, 800, item.tone === 'live' ? look.live : look.inkQuiet), { letterSpacing: look.size(0.8) }]}>{tag}</Text> : null}
+      {tag ? <Text style={[look.text(11, 800, item.tone === 'live' ? look.live : look.inkQuiet), { letterSpacing: look.size(1), textTransform: 'uppercase' }]}>{tag}</Text> : null}
       {item.league ? <Text style={[look.text(11, 700, look.inkQuiet), { letterSpacing: look.size(0.6) }]}>{item.league}</Text> : null}
       {bug.kind === 'versus' ? (
         <>

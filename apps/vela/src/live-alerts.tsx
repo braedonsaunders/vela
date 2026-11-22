@@ -44,7 +44,8 @@ function Toasts() {
   const look = usePlayerLook();
   const vela = useVela();
   const viewport = vela.host('home', '')?.viewport;
-  const top = (viewport?.insets.top ?? 0) + (look.small ? 10 : look.size(30));
+  // Below the sections' top bar, so a toast never covers navigation, search or the profile.
+  const top = (viewport?.insets.top ?? 0) + (look.small ? 64 : look.size(100));
   const right = (viewport?.sides?.right ?? viewport?.insets.right ?? 0) + look.gutter;
   return <AppAlertToasts look={look} top={top} right={right} />;
 }
