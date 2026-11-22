@@ -200,7 +200,9 @@ function ProbabilityPanel({ look, event, detail, m }: { look: SportsLook; event:
         {lead ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(14) }}>
             {[away, home].map(side => {
-              const share = side === home ? lead.home : 1 - lead.home;
+              // Whole percentages that add up to 100.
+              const homeShare = Math.round(lead.home * 100);
+              const share = (side === home ? homeShare : 100 - homeShare) / 100;
               return (
                 <View key={side.id} style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(6), opacity: share >= 0.5 ? 1 : 0.7 }}>
                   <View style={{ width: look.px(9), height: look.px(9), borderRadius: look.px(5), backgroundColor: colors[side.id] }} />
