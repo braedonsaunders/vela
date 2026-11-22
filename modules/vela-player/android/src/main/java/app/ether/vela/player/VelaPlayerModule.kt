@@ -53,6 +53,9 @@ class VelaPlayerModule : Module() {
       Prop("ambient") { view: VelaPlayerView, ambient: Boolean? ->
         view.setAmbient(ambient ?: false)
       }
+      Prop("tile") { view: VelaPlayerView, tile: Int? ->
+        view.setTile(tile)
+      }
       Prop("plan") { view: VelaPlayerView, plan: Map<String, Any?>? ->
         view.setPlan(plan)
       }

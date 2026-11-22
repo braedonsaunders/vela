@@ -36,6 +36,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private var previewMode = false
   private var videoRatio = 0f
   private var pendingAmbient = false
+  private var pendingTile: Int? = null
   private var pendingCommand: Map<String, Any?>? = null
   private var pendingPreview: Map<String, Any?>? = null
   private var previewDirty = false
@@ -143,6 +144,10 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     pendingAmbient = value
   }
 
+  fun setTile(value: Int?) {
+    pendingTile = value
+  }
+
   fun setPlan(plan: Map<String, Any?>?) {
     pendingPlan = plan
 
@@ -155,6 +160,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
 
   fun applyProps() {
     controller.ambient = pendingAmbient
+    controller.tile = pendingTile
     if (previewDirty) {
       previewDirty = false
       if (pendingPreview != null) {

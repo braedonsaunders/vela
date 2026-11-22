@@ -56,6 +56,16 @@ internal class PlayerController(
       engine?.volume(if (value || report.muted) 0f else report.volume.toFloat())
     }
 
+  /** One tile of a multiview grid: muted until a mute command, never the display's mode. */
+  var tile: Int? = null
+    set(value) {
+      if (value != null && field == null && !muteCommanded) report.muted = true
+      field = value
+    }
+  private var muteCommanded = false
+  /** Whether this view may set the display's mode: full watch only, never a preview or a tile. */
+  private val ownsDisplay: Boolean get() = !ambient && tile == null
+
   /** Direct play: the playing source is an original file, so seeks and its tracks are the view's own. */
   private val playsOriginal: Boolean
     get() = plan?.selectedPath?.isOriginalFile == true
@@ -141,7 +151,7 @@ internal class PlayerController(
 
   fun surfaceCreated(surface: Surface) {
     engine?.attach(surface)
-    if (!ambient) {
+    if (ownsDisplay) {
       host.preferDisplay(displayFacts)
     }
   }
@@ -186,7 +196,7 @@ internal class PlayerController(
     loggedOutput = false
     report.pathId = path.id
     report.backend = if (path.isOriginalFile) "media3-original" else "media3-${path.transport}"
-    val client = Media3Engine(context, ambient, plan.live)
+    val client = Media3Engine(context, ambient, plan.live, tile != null)
     engine = client
     state = client.state
     recovering = false
@@ -229,7 +239,7 @@ internal class PlayerController(
     }
     host.surface?.let { client.attach(it) }
     displayFacts = if (path.isOriginalFile) DisplayMatching.facts(path.originalFrameRate) else null
-    if (!ambient) host.preferDisplay(displayFacts)
+    if (ownsDisplay) host.preferDisplay(displayFacts)
     client.volume(if (ambient || report.muted) 0f else report.volume.toFloat())
     client.load(url, plan, position)
     client.play(wantsPlay)
@@ -272,7 +282,7 @@ internal class PlayerController(
     client.release()
     host.keepScreenOn(false)
     host.subtitles(androidx.media3.common.text.CueGroup.EMPTY_TIME_ZERO)
-    if (!ambient) {
+    if (ownsDisplay) {
       host.preferDisplay(null)
     }
   }
@@ -281,7 +291,7 @@ internal class PlayerController(
     val width = (state.videoParams["w"] as? Long)?.toInt() ?: 0
     val height = (state.videoParams["h"] as? Long)?.toInt() ?: 0
     if (width > 0 && height > 0) host.videoSize(width, height)
-    if (displayFacts == null && !ambient) {
+    if (displayFacts == null && ownsDisplay) {
       // A path without verified facts (the server's HLS) matches once the video is decoded.
       displayFacts = DisplayMatching.facts(state.frameRate)
       host.preferDisplay(displayFacts)
@@ -399,6 +409,7 @@ internal class PlayerController(
         engine?.volume(if (ambient || report.muted) 0f else report.volume.toFloat())
       }
       "mute" -> {
+        muteCommanded = true
         report.muted = command["muted"] as? Boolean ?: !report.muted
         engine?.volume(if (ambient || report.muted) 0f else report.volume.toFloat())
       }

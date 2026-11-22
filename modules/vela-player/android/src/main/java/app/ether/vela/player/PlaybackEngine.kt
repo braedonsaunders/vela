@@ -32,7 +32,9 @@ internal interface PlaybackEngine {
   fun release()
 }
 
-internal class Media3Engine(context: Context, private val preview: Boolean, live: Boolean = false) : PlaybackEngine {
+/** `shared`: a multiview tile playing beside others. It never takes audio focus or a tunneled decoder
+ * (most TVs have one), and buffers like a live preview so four fit in memory. */
+internal class Media3Engine(context: Context, private val preview: Boolean, live: Boolean = false, shared: Boolean = false) : PlaybackEngine {
   override val state = PlayerState()
   override var onChange: () -> Unit = {}
   override var onFailure: (Int, Boolean) -> Unit = { _, _ -> }
@@ -40,7 +42,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   private val main = Handler(Looper.getMainLooper())
   private val selector = DefaultTrackSelector(context)
   private val grant = MediaAccessStore.current
-  private val buffering = playbackBuffering(preview, live)
+  private val buffering = playbackBuffering(preview || shared, live)
   private val player = ExoPlayer.Builder(context,
     DefaultRenderersFactory(context).setEnableDecoderFallback(true)
       .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
@@ -52,7 +54,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(
       buffering.minimumMs, buffering.maximumMs, buffering.startMs, buffering.resumeMs)
       .setPrioritizeTimeOverSizeThresholds(buffering.prioritizeTime)
-      .setTargetBufferBytes(if (preview) 8 * 1024 * 1024 else 64 * 1024 * 1024).build())
+      .setTargetBufferBytes(if (preview) 8 * 1024 * 1024 else if (shared) 16 * 1024 * 1024 else 64 * 1024 * 1024).build())
     .build()
   override val liveWindowSeconds: Double get() = player.duration.takeIf { it > 0 }?.div(1000.0) ?: Double.NaN
   private var plan: PlaybackPlan? = null
@@ -65,14 +67,14 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   }
 
   init {
-    player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), !preview)
-    player.setHandleAudioBecomingNoisy(!preview)
+    player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), !preview && !shared)
+    player.setHandleAudioBecomingNoisy(!preview && !shared)
     // Media3's renderer handles Surface frame-rate hints. Never let previews write them.
     player.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
     selector.parameters = selector.buildUponParameters()
       .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, preview)
       .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, preview)
-      .setTunnelingEnabled(!preview && context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION)
+      .setTunnelingEnabled(!preview && !shared && context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION)
       .build()
     player.addAnalyticsListener(object : AnalyticsListener {
       override fun onAudioDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
