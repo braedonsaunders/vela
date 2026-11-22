@@ -1,7 +1,7 @@
 // Live TV: a day of the channel guide, and what a channel is airing now (the player's title).
 // Offered only by a server with the LiveTv capability; elsewhere every read fails honestly.
 import type * as V from '../wire';
-import { hasEventStream, hasLiveTv, hasMultiview } from '../adapter/capabilities';
+import { hasEventStream, hasLiveTv, hasMultiview, hasTileReplan } from '../adapter/capabilities';
 import { followSession, forgetSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
 import type { Connection } from '../adapter/connection';
@@ -39,6 +39,8 @@ export interface LiveTvAccess {
     create(): Promise<V.MultiviewGroup>;
     /** Ends every tile of the group. */
     end(groupId: string): Promise<void>;
+    /** A tile's session replanned at a new height (spec B); absent on servers without it. */
+    replan?(plan: V.PlaybackPlan, maxHeight: number): Promise<V.PlaybackPlan>;
   };
   /** Follows one live session's stream until it closes or `signal` aborts: its validated plans and the
    * live event on air. Absent where the server streams no session events. */
@@ -87,6 +89,11 @@ export class Live {
           maxTiles: features.multiview.maxTiles,
           create: () => adapter.createMultiview({ device: this.session.device, idempotencyKey: randomId() }),
           end: async (groupId: string) => { await adapter.endMultiview(groupId, { idempotencyKey: randomId() }); },
+          ...(hasTileReplan(adapter) ? {
+            replan: (plan: V.PlaybackPlan, maxHeight: number) => adapter.replanTile(plan.sessionId, {
+              kind: 'replan', maxHeight, sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration, idempotencyKey: randomId(),
+            }),
+          } : {}),
         },
       } : {}),
       ...(hasEventStream(adapter) ? {

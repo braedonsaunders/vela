@@ -18,6 +18,7 @@ import type {
   LiveStreamQuery,
   LiveTv,
   Multiview,
+  TileReplan,
   PasswordSignIn,
   PathSwitching,
   ProactiveFallback,
@@ -50,7 +51,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  LiveEvents, Multiview {
+  LiveEvents, Multiview, TileReplan {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -464,6 +465,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   switchVersion(sessionId: string, command: Extract<V.SessionCommand, { kind: 'version' }>) {
+    return this.sessionCommand(sessionId, command);
+  }
+
+  replanTile(sessionId: string, command: Extract<V.SessionCommand, { kind: 'replan' }>) {
     return this.sessionCommand(sessionId, command);
   }
 

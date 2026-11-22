@@ -21,6 +21,9 @@ export interface MultiviewSource {
   close(groupId: string): Promise<void>;
   tune(channelId: string, multiview: MultiviewTileRequest): Promise<PlaybackPlan>;
   stop(plan: PlaybackPlan): Promise<void>;
+  /** Replans a tile's session at a new height, keeping the session (spec B). Without it a new
+   * session is asked for and handed over. */
+  replan?(plan: PlaybackPlan, maxHeight: number): Promise<PlaybackPlan>;
   /** Follows a tile's session until `signal` aborts: its newer plans and the live event on air. */
   follow?(sessionId: string, on: { plan(plan: PlaybackPlan): void; liveEvent(liveEvent: LiveEventRef | null): void }, signal: AbortSignal): Promise<void>;
 }
@@ -471,6 +474,32 @@ export class MultiviewController {
     const height = tile.height;
     const request: MultiviewTileRequest = { groupId: this.groupId, tile: tile.slot, ...(height !== undefined ? { maxHeight: height } : {}) };
     tile.askedHeight = height;
+    const replan = this.options.source.replan;
+    if (replan && height !== undefined) {
+      // The tile's own session is replanned (spec B): its picture plays on until the new plan is
+      // ready, and an unchanged answer means the source cannot go higher.
+      const current = tile.plan;
+      replan.call(this.options.source, current, height).then(
+        plan => {
+          if (generation !== tile.generation || !this.tiles.includes(tile) || this.phase !== 'open' || !tile.plan) return;
+          if (plan.sessionId !== tile.plan.sessionId) {
+            // A server that answered with a new session: hand over as for a new tune.
+            if (tile.next) this.stopPlan(tile.next);
+            tile.next = plan;
+            this.emit();
+            return;
+          }
+          // Unchanged (already as high as the source goes) keeps the plan the player has.
+          const newer = plan.revision !== undefined && tile.plan.revision !== undefined ? plan.revision > tile.plan.revision : JSON.stringify(plan) !== JSON.stringify(tile.plan);
+          if (newer) { tile.plan = plan; this.emit(); }
+        },
+        error => {
+          this.options.report?.('height', error);
+          if (generation === tile.generation) tile.askedHeight = undefined;
+        },
+      );
+      return;
+    }
     tile.regrading = true;
     this.options.source.tune(tile.channelId, request).then(
       plan => {

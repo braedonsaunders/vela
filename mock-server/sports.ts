@@ -631,11 +631,28 @@ export function placeTile(tile: V.MultiviewTile, channelId: string, sessionId: s
 }
 /** A tile's stream is capped at its declared height, as Ether does: renditions above it leave the plan
  * (the lowest always stays), so a 480 tile plays 360p and a full-screen 2160 one the whole ladder. */
+const ladders = new Map<string, Map<string, V.PlaybackPlan['paths'][number]['qualities']>>();
 export function capTileHeight(plan: V.PlaybackPlan, tile: V.MultiviewTile): void {
+  if (!ladders.has(plan.sessionId)) ladders.set(plan.sessionId, new Map(plan.paths.map(path => [path.id, [...path.qualities]])));
   if (tile.maxHeight === undefined) return;
+  capPlan(plan, tile.maxHeight);
+}
+
+function capPlan(plan: V.PlaybackPlan, maxHeight: number): void {
+  const ladder = ladders.get(plan.sessionId);
   for (const path of plan.paths) {
-    const kept = path.qualities.filter(quality => (quality.height ?? 0) <= tile.maxHeight!);
+    path.qualities = [...(ladder?.get(path.id) ?? path.qualities)];
+    const kept = path.qualities.filter(quality => (quality.height ?? 0) <= maxHeight);
     const lowest = [...path.qualities].sort((a, b) => (a.height ?? 0) - (b.height ?? 0))[0];
     path.qualities = kept.length ? kept : lowest ? [lowest] : [];
   }
+}
+
+/** A tile's session replanned at a new height (spec B): the same session with a new revision, or the
+ * plan unchanged when its renditions would not change (already as high as the source goes). */
+export function replanTile(plan: V.PlaybackPlan, maxHeight: number): V.PlaybackPlan {
+  const before = JSON.stringify(plan.paths.map(path => path.qualities.map(quality => quality.id)));
+  capPlan(plan, maxHeight);
+  if (JSON.stringify(plan.paths.map(path => path.qualities.map(quality => quality.id))) !== before) plan.revision += 1;
+  return plan;
 }

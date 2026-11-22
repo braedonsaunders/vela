@@ -1,6 +1,6 @@
 import type * as V from '../wire';
 import type { ServerAdapter } from './index';
-import { hasPathSwitching, hasProactiveFallback, hasTrackChanges, hasVersions } from './capabilities';
+import { hasPathSwitching, hasProactiveFallback, hasTileReplan, hasTrackChanges, hasVersions } from './capabilities';
 import { notOffered } from './errors';
 
 /**
@@ -22,6 +22,9 @@ export async function sendCommand(
     case 'prepare-fallback':
       if (!hasProactiveFallback(adapter)) throw notOffered('Proactive fallback');
       return adapter.prepareFallback(sessionId, command);
+    case 'replan':
+      if (!hasTileReplan(adapter)) throw notOffered('Replanning a multiview tile');
+      return adapter.replanTile(sessionId, command);
     case 'version':
       if (!hasVersions(adapter)) throw notOffered('Switching versions');
       return adapter.switchVersion(sessionId, command);

@@ -154,6 +154,14 @@ export function hasVersions(adapter: ServerAdapter): adapter is ServerAdapter & 
   return 'titleVersions' in adapter && 'clearVersionChoice' in adapter && 'switchVersion' in adapter;
 }
 
+/** Multiview tile upgrade: a tile's session replanned at a new height (spec B). */
+export interface TileReplan {
+  replanTile(sessionId: string, command: Extract<V.SessionCommand, { kind: 'replan' }>): Promise<V.PlaybackPlan>;
+}
+export function hasTileReplan(adapter: ServerAdapter): adapter is ServerAdapter & TileReplan {
+  return 'replanTile' in adapter && typeof (adapter as unknown as TileReplan).replanTile === 'function';
+}
+
 /** Ranking receipts: what the viewer saw, selected and played. */
 export interface Interactions {
   sendInteractions(request: V.InteractionsRequest): Promise<V.Ack>;

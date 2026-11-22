@@ -14,7 +14,7 @@ import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, read
 import { renderCover } from './covers';
 
 import { scaleGuide } from './guide-fixture';
-import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
+import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
@@ -876,6 +876,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
           preparedVersions.add(prepareKey);
           fail('source', 'version_preparing', 'Version is preparing', { retry: { allowed: true, afterSeconds: 1, maxAttempts: 3 } }, 503);
         }
+      }
+      if (body.kind === 'replan') {
+        if (!Number.isFinite(body.maxHeight) || body.maxHeight <= 0) fail('request', 'invalid_command', 'maxHeight must be a positive number');
+        return json(replanTile(s.plan, body.maxHeight));
       }
       if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch', 'version'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
       const duration = s.plan.durationSeconds ?? fixtureDurationSeconds;

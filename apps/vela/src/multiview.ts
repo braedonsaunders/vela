@@ -27,6 +27,7 @@ function multiviewSource(access: NonNullable<Awaited<ReturnType<Store['live']['a
       return answer as V.PlaybackPlan;
     },
     stop: plan => live.stop(plan),
+    ...(groups?.replan ? { replan: groups.replan } : {}),
     ...(access.follow ? { follow: access.follow } : {}),
   };
 }

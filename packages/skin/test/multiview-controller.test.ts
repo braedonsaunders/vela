@@ -83,6 +83,47 @@ test('a tile that grows asks for its new height and switches once the new sessio
   expect(tile.command).toMatchObject({ type: 'mute', muted: false });
 });
 
+test('a server that replans tiles keeps the session: the new plan replaces the old in place', async () => {
+  const { source, calls } = fakeSource();
+  const replans: { sessionId: string; maxHeight: number }[] = [];
+  source.replan = async (plan, maxHeight) => {
+    replans.push({ sessionId: plan.sessionId, maxHeight });
+    return maxHeight > 1080 ? { ...plan, revision: (plan.revision ?? 1) + 1, maxHeight } as unknown as PlaybackPlan : plan;
+  };
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.setHeight(0, 700);
+  mv.open();
+  await settle();
+  const first = { ...mv.view().tiles[0]!.plan!, revision: 1 } as PlaybackPlan;
+  mv.updatePlan(0, first);
+  mv.toggleFullscreen(0);
+  mv.setHeight(0, 2160);
+  await new Promise(resolve => setTimeout(resolve, 560));
+  expect(replans).toEqual([{ sessionId: first.sessionId, maxHeight: 2160 }]);
+  expect(calls.tunes).toHaveLength(1);
+  const tile = mv.view().tiles[0]!;
+  expect(tile.plan!.sessionId).toBe(first.sessionId);
+  expect(tile.plan!.revision).toBe(2);
+  expect(tile.next).toBeNull();
+  expect(calls.stopped).toEqual([]);
+});
+
+test('an unchanged replan answer (the source cannot go higher) leaves the playing plan alone', async () => {
+  const { source } = fakeSource();
+  source.replan = async plan => ({ ...plan }) as PlaybackPlan;
+  const mv = new MultiviewController({ source });
+  mv.add('a');
+  mv.setHeight(0, 700);
+  mv.open();
+  await settle();
+  mv.updatePlan(0, { ...mv.view().tiles[0]!.plan!, revision: 3 } as PlaybackPlan);
+  const before = mv.view().tiles[0]!.plan;
+  mv.setHeight(0, 1080);
+  await new Promise(resolve => setTimeout(resolve, 560));
+  expect(mv.view().tiles[0]!.plan).toBe(before);
+});
+
 test('Ether ending the old session as it starts the new-height one is a handover, not a failure', async () => {
   const { source, calls } = fakeSource();
   const mv = new MultiviewController({ source });

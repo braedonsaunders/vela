@@ -249,7 +249,10 @@ export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabi
 export type SessionCommand = Mutation & Generations & (
   { kind: 'seek'; positionSeconds: number } | { kind: 'pause' | 'resume' | 'stop' } |
   { kind: 'tracks'; audioTrackId?: ID; subtitleTrackId?: ID | null } |
-  { kind: 'switch'; pathId: ID; atSeconds: number } | { kind: 'version'; versionId: ID; positionSeconds?: number } | { kind: 'prepare-fallback'; maxBitrate: number });
+  { kind: 'switch'; pathId: ID; atSeconds: number } | { kind: 'version'; versionId: ID; positionSeconds?: number } | { kind: 'prepare-fallback'; maxBitrate: number } |
+  /** A multiview tile's new height (spec B): the same session is replanned; its old output plays until the
+   * new plan is ready, and the answer is the unchanged plan when the source cannot go higher. */
+  { kind: 'replan'; maxHeight: number });
 export interface TimeRange { startSeconds: number; endSeconds: number }
 export interface PlayerObservation extends Mutation, Generations { sequence: number; observedAt: Timestamp;
   positionSeconds: number; state: 'playing' | 'paused' | 'buffering' | 'ended'; playableRanges: TimeRange[];
