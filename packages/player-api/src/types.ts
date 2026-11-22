@@ -42,6 +42,11 @@ export interface VelaPlayerProps {
   command?: Command;
   /** A muted preview (hero or live tile): no observations, no fullscreen or picture-in-picture. */
   ambient?: boolean;
+  /** One tile (0-based) of a multiview grid: up to four live views playing side by side, each with its
+   * own decoder and session. A tile starts muted and becomes the audible one only by a `mute` command;
+   * it never claims the system's media controls or the display's mode, and the screen stays awake while
+   * any tile plays. Fixed for the view's life: a different role mounts a new view. */
+  tile?: number;
   /** A trailer preview instead of a session or plan. Implies ambient; commands are limited to play and
    * pause; onSnapshot reports only its state (loading, playing, ended, failed); no observations. */
   preview?: PreviewSource;

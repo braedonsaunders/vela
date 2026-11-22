@@ -59,8 +59,9 @@ const mountBrowserPlayback: Mount = (node, initial) => {
   };
 };
 
+// The Windows host draws one native player; multiview tiles play side by side in the browser engine.
 const mountPlayback: Mount = (node, props) =>
-  !props.ambient && isWindowsHost()
+  !props.ambient && props.tile === undefined && isWindowsHost()
     ? createWindowsPlayerHost(node, props, next => mountBrowserPlayback(node, next))
     : mountBrowserPlayback(node, props);
 
@@ -117,7 +118,7 @@ function WebSurface({ mount, ...props }: VelaPlayerViewProps & { mount: Mount })
  * mounts a new engine. */
 export function VelaPlayerView(props: VelaPlayerViewProps) {
   if (props.preview) return <WebSurface key="preview" mount={mountPreview} {...props} />;
-  return <WebSurface key={props.ambient ? 'ambient' : 'playback'} mount={mountPlayback} {...props} />;
+  return <WebSurface key={props.ambient ? 'ambient' : props.tile !== undefined ? `tile-${props.tile}` : 'playback'} mount={mountPlayback} {...props} />;
 }
 
 export type { VelaPlayerViewProps, MediaAccess };

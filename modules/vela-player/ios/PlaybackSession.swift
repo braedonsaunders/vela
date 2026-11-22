@@ -43,6 +43,8 @@ final class PlaybackSession {
     private var pendingSeek: Double?
     private var wantsPlay = true
     private var ambient = false
+    /// One tile of a multiview grid (`tile`): audible only by a mute command, never the system's media owner.
+    private var tile: Int?
     private var hasMuteCommand = false
     private var loggedOutput = false
     private var refreshAsked = ""
@@ -132,6 +134,11 @@ final class PlaybackSession {
     func setAmbient(_ value: Bool) {
         ambient = value
         report.waitForFrame = value
+    }
+
+    func setTile(_ value: Int?) {
+        tile = value
+        if value != nil, !hasMuteCommand { report.muted = true }
     }
 
     func setMetadata(_ map: [String: Any]?) {
@@ -270,7 +277,7 @@ final class PlaybackSession {
     // MARK: System media controls
 
     private func updateNowPlaying() {
-        guard !ambient, previewSource == nil, player != nil, state.loaded else {
+        guard !ambient, tile == nil, previewSource == nil, player != nil, state.loaded else {
             return
         }
         let artwork = nowPlayingArtwork.flatMap(resolve)
@@ -321,8 +328,9 @@ final class PlaybackSession {
         if !ambient {
             host.activateAudio()
         }
-        let client = PlaybackClient(rendering: host.makeRendering(retainPausedPicture: ambient), preview: ambient, paused: !wantsPlay, muted: hasMuteCommand ? report.muted : ambient,
-                                    isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient)
+        let client = PlaybackClient(rendering: host.makeRendering(retainPausedPicture: ambient), preview: ambient, paused: !wantsPlay,
+                                    muted: hasMuteCommand || tile != nil ? report.muted : ambient,
+                                    isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient, tile: tile)
         player = client
         client.set("volume", double: report.volume * 100)
         client.onBackend = { [weak self] backend in
@@ -330,7 +338,7 @@ final class PlaybackSession {
             self.report.backend = backend + (path.isOriginalFile ? "-original" : "-hls")
             print("[vela-player] backend \(backend), session \(plan.sessionId), path \(path.id)")
         }
-        if !ambient {
+        if !ambient, tile == nil {
             host.claim(self)
         }
         let heartbeat = Timer(timeInterval: PlayerReport.heartbeatInterval / 4, repeats: true) { [weak self] _ in

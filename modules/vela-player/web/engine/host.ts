@@ -27,7 +27,8 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
     () => engine,
   );
   // Fullscreen takes the whole page, so the player chrome drawn over the video stays visible.
-  const engine = new PlaybackEngine(surface.video, events, pageFullscreenContainer(element), ambient, media, runtimes);
+  // A multiview tile plays beside others: muted until a command, never the viewer's saved volume.
+  const engine = new PlaybackEngine(surface.video, events, pageFullscreenContainer(element), ambient, media, runtimes, props.tile !== undefined);
 
   async function applyCommand(command: NonNullable<VelaPlayerProps['command']>) {
     if (!Number.isSafeInteger(command.id)) {

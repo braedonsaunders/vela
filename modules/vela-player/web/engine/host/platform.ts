@@ -1,6 +1,6 @@
 import type { HostContext, NativeAudioTrack } from './state';
 export function saveVolume(context: HostContext) {
-  if (context.surface.ambient) return;
+  if (context.surface.ambient || context.surface.shared) return;
   try {
     localStorage.setItem('vela.player.volume', String(context.surface.video.volume));
     localStorage.setItem('vela.player.muted', String(context.surface.video.muted));

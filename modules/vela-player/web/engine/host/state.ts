@@ -129,6 +129,8 @@ export interface HostSurfaceState {
   video: ExtendedVideo;
   fullscreenContainer: HTMLElement;
   ambient: boolean;
+  /** One tile of a multiview grid: starts muted and never reads or writes the viewer's volume. */
+  shared: boolean;
   mediaAccess?: BrowserMediaAccess;
 }
 export interface HostEventsState {

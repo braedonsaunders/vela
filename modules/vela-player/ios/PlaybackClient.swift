@@ -26,6 +26,8 @@ final class PlaybackClient {
     private let loops: Bool
     private let aspectFill: Bool
     private let retainPausedPicture: Bool
+    /// A multiview tile's index: its own engine beside the others, a `.secondary` shared output.
+    private let tile: Int?
     private var frameOutput: AVPlayerItemVideoOutput?
     private weak var outputItem: AVPlayerItem?
     private var reportedFirstFrame = false
@@ -59,8 +61,10 @@ final class PlaybackClient {
     private static var previewEngine: AetherEngine?
 
     init(rendering: PlaybackRendering, preview: Bool = false, paused: Bool = false, muted: Bool = false,
-         loops: Bool = false, aspectFill: Bool = false, isLive: Bool = false, remoteHLS: Bool = false, retainPausedPicture: Bool = false) {
+         loops: Bool = false, aspectFill: Bool = false, isLive: Bool = false, remoteHLS: Bool = false, retainPausedPicture: Bool = false,
+         tile: Int? = nil) {
         self.retainPausedPicture = retainPausedPicture
+        self.tile = tile
         self.rendering = rendering
         self.preview = preview
         self.paused = paused
@@ -140,10 +144,12 @@ final class PlaybackClient {
                 // Upstream messages may contain media URLs. Keep grant URLs out of logs.
                 EngineLog.handler = { _ in }
                 let preview = self.preview
-                let cached = self.engine ?? (preview ? Self.previewEngine : Self.primaryEngine)
+                // A tile never borrows the reusable engines: up to four play at once, each its own.
+                let cached = self.engine ?? (self.tile != nil ? nil : preview ? Self.previewEngine : Self.primaryEngine)
                 let engine = try cached ?? AetherEngine()
-                if preview { Self.previewEngine = nil } else { Self.primaryEngine = nil }
+                if self.tile == nil { if preview { Self.previewEngine = nil } else { Self.primaryEngine = nil } }
                 self.engine = engine
+                engine.logTag = self.tile.map { "tile\($0)" }
                 engine.maximumSubtitleOffsetSeconds = 0
                 engine.videoGravity = self.aspectFill ? .resizeAspectFill : .resizeAspect
                 try self.rendering.bind(engine: engine)
@@ -231,6 +237,13 @@ final class PlaybackClient {
                 // A guide/hero picture never owns the HDMI mode. Disabling matching alone
                 // still permits criteria writes in Aether; host ownership suppresses all writes.
                 if preview { opts.displayCriteriaOwner = .host }
+                // Tiles share the device's outputs: none writes display criteria or owns Now Playing,
+                // and the audio session stays up until the last engine stops.
+                if self.tile != nil {
+                    opts.sharedOutputRole = .secondary
+                    opts.displayCriteriaOwner = .host
+                    opts.matchContentEnabled = false
+                }
                 self.rendering.configureLoad(options: &opts, preview: preview)
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
@@ -348,7 +361,7 @@ final class PlaybackClient {
         subscriptions.removeAll()
 
         engine?.stop()
-        if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
+        retire(engine)
         engine = nil
         rendering.removeSurface()
         print("[vela-player] AetherEngine refused path; requesting server recovery")
@@ -391,11 +404,19 @@ final class PlaybackClient {
         subscriptions.removeAll()
 
         engine?.stop()
-        if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
+        retire(engine)
         engine = nil
         rendering.removeSurface()
         onProperty = nil
         onEvent = nil
+    }
+}
+
+extension PlaybackClient {
+    /// A stopped engine goes back to its pool; a tile's is released (Aether counts it out on `stop()`).
+    fileprivate func retire(_ engine: AetherEngine?) {
+        guard tile == nil, let engine else { return }
+        if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
     }
 }
 

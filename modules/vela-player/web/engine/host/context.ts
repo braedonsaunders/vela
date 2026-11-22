@@ -18,6 +18,7 @@ export function createHostContext(
   ambient = false,
   mediaAccess: BrowserMediaAccess | undefined,
   runtimes: BrowserRuntimeServices,
+  shared = false,
 ): HostContext {
   const controller = new SessionController();
   const coreQuality = new CoreQuality();
@@ -112,6 +113,7 @@ export function createHostContext(
       video: video,
       fullscreenContainer: fullscreenContainer,
       ambient: ambient,
+      shared: shared,
       mediaAccess: mediaAccess,
     },
     events: {
@@ -122,7 +124,7 @@ export function createHostContext(
   video.playsInline = true;
   video.controls = false;
   video.preload = 'auto';
-  if (ambient) {
+  if (ambient || shared) {
     video.defaultMuted = true;
     video.muted = true;
   } else

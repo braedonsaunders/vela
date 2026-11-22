@@ -18,8 +18,9 @@ export class PlaybackEngine {
     ambient = false,
     mediaAccess: BrowserMediaAccess | undefined,
     runtimes: BrowserRuntimeServices,
+    shared = false,
   ) {
-    this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess, runtimes);
+    this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess, runtimes, shared);
   }
   get video() {
     return this.context.surface.video;

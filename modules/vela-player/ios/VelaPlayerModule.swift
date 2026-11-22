@@ -93,6 +93,9 @@ public final class VelaPlayerModule: Module {
             Prop("ambient") { (view: VelaPlayerView, ambient: Bool?) in
                 view.setAmbient(ambient ?? false)
             }
+            Prop("tile") { (view: VelaPlayerView, tile: Int?) in
+                view.setTile(tile)
+            }
             Prop("metadata") { (view: VelaPlayerView, metadata: [String: Any]?) in
                 view.setMetadata(metadata)
             }

@@ -30,6 +30,7 @@ final class VelaPlayerView: ExpoView {
     override func layoutSubviews() { super.layoutSubviews(); session.layout() }
     func commitProps() { session.commitProps() }
     func setAmbient(_ value: Bool) { session.setAmbient(value) }
+    func setTile(_ value: Int?) { session.setTile(value) }
     func setMetadata(_ map: [String: Any]?) { session.setMetadata(map) }
     func setPreview(_ map: [String: Any]?) { session.setPreview(map) }
     func setActive(_ value: Bool?) { session.setActive(value) }
@@ -48,7 +49,15 @@ private final class UIKitPlaybackHost: PlaybackHost {
         UIKitPlaybackRendering(host: view!, retainPausedPicture: retainPausedPicture)
     }
     func setBackground(clear: Bool) { view?.backgroundColor = clear ? .clear : .black }
-    func keepAwake(_ on: Bool) { UIApplication.shared.isIdleTimerDisabled = on }
+    /// Views playing at once (multiview tiles) hold the screen awake together: the last to stop lets it sleep.
+    private static var awake = 0
+    private var holdsAwake = false
+    func keepAwake(_ on: Bool) {
+        guard on != holdsAwake else { return }
+        holdsAwake = on
+        Self.awake += on ? 1 : -1
+        UIApplication.shared.isIdleTimerDisabled = Self.awake > 0
+    }
     func activateAudio() { PlaybackAudioSession.activate() }
     func claim(_ owner: SystemMediaOwner) { SystemMediaControls.shared.claim(owner) }
     func release(_ owner: SystemMediaOwner) { SystemMediaControls.shared.release(owner) }
