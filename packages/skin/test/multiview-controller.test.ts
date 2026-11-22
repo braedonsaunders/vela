@@ -151,7 +151,7 @@ test('the old session ending while the new height is still being asked for waits
   const tune = source.tune;
   let tunes = 0;
   source.tune = (channelId, request) => ++tunes === 1 ? tune(channelId, request) : new Promise((resolve, fail) => { release = resolve; reject = fail; });
-  const mv = new MultiviewController({ source });
+  const mv = new MultiviewController({ source, startSettleMs: 0 });
   mv.add('a');
   mv.setHeight(0, 700);
   mv.open();
@@ -483,7 +483,7 @@ test('a tile follows its session stream for the live event on air, and stops whe
 
 test('a player failure on a tile shows on that tile, and Try again tunes it afresh', async () => {
   const { source, calls } = fakeSource();
-  const mv = new MultiviewController({ source });
+  const mv = new MultiviewController({ source, startSettleMs: 0 });
   mv.add('a');
   mv.open();
   await settle();
@@ -502,7 +502,7 @@ test('a player failure on a tile shows on that tile, and Try again tunes it afre
 
 test('a player that reports failed on its way into its own recovery keeps its tile; one that stays failed ends it', async () => {
   const { source, calls } = fakeSource();
-  const mv = new MultiviewController({ source, failedGraceMs: 40 });
+  const mv = new MultiviewController({ source, failedGraceMs: 40, startSettleMs: 0 });
   mv.add('a'); mv.add('b');
   mv.open();
   await settle();
@@ -521,7 +521,7 @@ test('a player that reports failed on its way into its own recovery keeps its ti
 
 test('a player that gives up before its first picture is tuned again by itself, twice, before the tile fails', async () => {
   const { source, calls } = fakeSource();
-  const mv = new MultiviewController({ source, startRetryMs: 10 });
+  const mv = new MultiviewController({ source, startRetryMs: 10, startSettleMs: 50 });
   mv.add('a');
   mv.open();
   await settle();
@@ -536,17 +536,23 @@ test('a player that gives up before its first picture is tuned again by itself, 
   }
   mv.failed(0, mv.view().tiles[0]!.plan!.sessionId, 'HLS manifest HTTP 503');
   expect(mv.view().tiles[0]!.state).toBe('failed');
-  // A picture resets the count.
+  // Saying playing is not yet a start (the Apple player says so before its first segment)...
   mv.retry(0);
   await settle();
   mv.snapshot(0, playing(mv.view().tiles[0]!.plan!.sessionId));
+  mv.failed(0, mv.view().tiles[0]!.plan!.sessionId, 'HLS manifest HTTP 503');
+  expect(mv.view().tiles[0]!.state).toBe('tuning');
+  await new Promise(resolve => setTimeout(resolve, 25));
+  // ...playing a while is: a failure after that is the tile's.
+  mv.snapshot(0, playing(mv.view().tiles[0]!.plan!.sessionId));
+  await new Promise(resolve => setTimeout(resolve, 60));
   mv.failed(0, mv.view().tiles[0]!.plan!.sessionId, 'gone');
   expect(mv.view().tiles[0]!.state).toBe('failed');
 });
 
 test('picking a failed tile\'s own channel again tunes it afresh; on a playing tile it does nothing', async () => {
   const { source, calls } = fakeSource();
-  const mv = new MultiviewController({ source });
+  const mv = new MultiviewController({ source, startSettleMs: 0 });
   mv.add('a');
   mv.open();
   await settle();

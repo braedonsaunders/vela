@@ -45,6 +45,9 @@ const FAILED_GRACE_MS = 4000;
  * the Apple player does not wait out. */
 const START_RETRIES = 2;
 const START_RETRY_MS = 2000;
+/** A tile has started once it has played this long: the Apple player says playing before its first
+ * segment arrives, and reports no frames to tell. */
+const START_SETTLE_MS = 5000;
 
 export type TileState = 'waiting' | 'tuning' | 'playing' | 'failed';
 
@@ -116,6 +119,8 @@ interface TileRecord {
   /** Tunes asked again by the tile itself since it last showed a picture (START_RETRIES). */
   startRetries: number;
   startRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When the tile last began playing (Date.now()), or 0. */
+  playingSince: number;
 }
 
 /** Ether supersedes overlapping tunes from one device; that refusal says nothing about the channel. */
@@ -134,6 +139,8 @@ export interface MultiviewOptions {
   failedGraceMs?: number;
   /** The wait before a tile's own first re-tune (START_RETRY_MS; the second waits twice as long). */
   startRetryMs?: number;
+  /** How long a tile plays before a failure is no longer a start that may be asked again (START_SETTLE_MS). */
+  startSettleMs?: number;
 }
 
 export class MultiviewController {
@@ -183,7 +190,7 @@ export class MultiviewController {
     }
     const used = new Set(this.tiles.map(tile => tile.slot));
     const slot = [0, 1, 2, 3].find(candidate => !used.has(candidate))!;
-    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false, regrading: false, handover: false, previousChannelId: null, notice: null, noticeTimer: undefined, failing: new Map(), startRetries: 0, startRetryTimer: undefined };
+    const tile: TileRecord = { slot, channelId, generation: 0, plan: null, next: null, height: undefined, askedHeight: undefined, heightTimer: undefined, following: null, playing: false, buffering: false, refusal: null, muted: true, commandId: 0, command: null, liveEvent: null, askedAgain: false, regrading: false, handover: false, previousChannelId: null, notice: null, noticeTimer: undefined, failing: new Map(), startRetries: 0, startRetryTimer: undefined, playingSince: 0 };
     this.tiles.push(tile);
     if (this.focusedSlot < 0) this.focusedSlot = slot;
     this.applyAudio();
@@ -381,8 +388,8 @@ export class MultiviewController {
     }
     if (!playing) return;
     tile.playing = true;
+    tile.playingSince = Date.now();
     tile.buffering = false;
-    tile.startRetries = 0;
     this.emit();
   }
 
@@ -493,7 +500,8 @@ export class MultiviewController {
       this.emit();
       return;
     }
-    if (!tile.playing && tile.startRetries < START_RETRIES && this.phase === 'open' && !(error instanceof VelaError)) {
+    const started = tile.playing && Date.now() - tile.playingSince >= (this.options.startSettleMs ?? START_SETTLE_MS);
+    if (!started && tile.startRetries < START_RETRIES && this.phase === 'open' && !(error instanceof VelaError)) {
       // The player gave up before a picture: the stream may still be starting. The tile stays
       // tuning and asks again by itself before it says the channel can't play.
       tile.startRetries += 1;
@@ -692,6 +700,7 @@ export class MultiviewController {
     if (old && next.channelId !== old.channelId) tile.liveEvent = null;
     tile.plan = next;
     tile.playing = playing;
+    tile.playingSince = playing ? Date.now() : 0;
     tile.buffering = false;
     // The new view consumed a muting command with the current id: its own state comes with a new one.
     tile.commandId += 1;
