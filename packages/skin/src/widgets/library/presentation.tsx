@@ -179,8 +179,20 @@ export function LibraryToolbar(props: WidgetProps) {
   const hasFilters = browse || tabSearchEnabled(tab) || page?.view === 'live';
   const total = browse && !page?.facetTitle && model?.total !== undefined && !page?.loading ? msg(`library.count.${plural(model.total)}`, { count: number(model.total) }) : '';
   if (tabsInShell && !hasFilters) return null;
-  // Tabs keep a row of their own: filters arriving later (a genre list) never squeeze them, and
-  // the filters and sort share one scrollable row below.
+  // A collections, people or live tab carries only its search (and live's filters): it shares the
+  // tabs' row, the tabs scrolling inside their own strip when space runs short, so the search never
+  // drops onto a row of its own under them.
+  if (!browse && !tabsInShell) {
+    return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={{ paddingVertical: 8, gap: 6, minWidth: 0 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <View style={{ flexShrink: 1, minWidth: 0 }}><LibraryTabs /></View>
+        {hasFilters && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>{filters}</View>}
+      </View>
+      {page?.extrasFailed && <View style={{ flexDirection: 'row' }}><Button label="Try again" onPress={() => host.dispatch('retry', '')} /></View>}
+    </View>;
+  }
+  // Browsing keeps the tabs on a row of their own: filters arriving later (a genre list) never
+  // squeeze them, and the filters and sort share one scrollable row below.
   return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={{ paddingVertical: 8, flexDirection: 'column', alignItems: 'stretch', gap: 6, minWidth: 0 }}>
     {!tabsInShell && <LibraryTabs />}
     {hasFilters && <View style={{ minHeight: look.ui.controlHeight + 6, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 0 }}>
