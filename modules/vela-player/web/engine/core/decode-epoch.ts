@@ -162,6 +162,8 @@ export async function startDecodeEpoch(
     );
     if (!isCurrentDecodeEpoch(context, run)) return;
     playbackMark('decode:ready');
+    // Room for every packet the decoder may hold before its first output (VideoBackend.frameBound).
+    context.scheduler.buffer.resize(run.decoder.frameBound ?? 8);
     run.deliveryMark = (source.kind === 'file' ? source.reader : source.segments).delivery.mark();
     source.audio.setVolume(context.intent.volume, context.intent.muted);
     source.audio.setRate(context.intent.rate);

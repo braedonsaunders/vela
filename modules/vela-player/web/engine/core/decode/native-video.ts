@@ -1,6 +1,21 @@
 import { abortable } from '../async';
 import { prepareNativeHEVC } from './hevc';
 import type { DecodedVideoFrame, EncodedPacket, VideoTrack } from '../types';
+import { avcDecodedPictureBufferFrames } from './avc-buffer';
+
+/** Decoded frames the presentation queue may hold beyond what the decoder keeps for reordering. */
+const PRESENTATION_FRAMES = 8;
+
+/** How many packets may be in the decoder or in presentation at once. A decoder can hold its
+ * whole decoded picture buffer before its first output: H.264 without a bitstream restriction is
+ * sized by its level, so a small Level 3.1 picture (852x480: eleven frames) needs more than eight
+ * packets in before one comes out, and a bound of eight never sees a picture. Such a stream gets
+ * room for its buffer plus the presentation frames; every other stream keeps eight. The
+ * presentation queue is sized to the same bound, so a burst of outputs always fits. */
+export function nativeFrameBound(decodedPictureBuffer: number | null): number {
+  if (decodedPictureBuffer === null || decodedPictureBuffer + 2 <= PRESENTATION_FRAMES) return PRESENTATION_FRAMES;
+  return Math.min(16, decodedPictureBuffer) + PRESENTATION_FRAMES;
+}
 
 export interface NativeVideoFrame extends DecodedVideoFrame {
   kind: 'native';
@@ -10,6 +25,8 @@ export interface NativeVideoFrame extends DecodedVideoFrame {
 /** Exact-config WebCodecs component. Vela owns input credits and output lifetime. */
 export class NativeVideoDecoder {
   readonly metrics = { decoded: 0 };
+  /** Packets in the decoder plus decoded frames not yet released (nativeFrameBound). */
+  frameBound = PRESENTATION_FRAMES;
   private decoder?: VideoDecoder;
   private epoch = 0;
   private held = 0;
@@ -44,6 +61,7 @@ export class NativeVideoDecoder {
     if (!support.supported) throw new Error('Actual video configuration needs a package decoder');
     this.epoch = epoch;
     this.failure = null;
+    this.frameBound = nativeFrameBound(this.hevc ? null : avcDecodedPictureBufferFrames(track.config));
     this.decoder = new VideoDecoder({
       output: (frame) => {
         if (generation !== this.generation) {
@@ -94,7 +112,7 @@ export class NativeVideoDecoder {
   async decode(packet: EncodedPacket, signal: AbortSignal): Promise<void> {
     if (packet.epoch !== this.epoch) return;
     const generation = this.generation;
-    while (this.held >= 8 && !this.failure && generation === this.generation) await this.available(signal);
+    while (this.held >= this.frameBound && !this.failure && generation === this.generation) await this.available(signal);
     signal.throwIfAborted();
     if (generation !== this.generation) throw new DOMException('Video decode superseded', 'AbortError');
     if (this.failure) throw this.failure;

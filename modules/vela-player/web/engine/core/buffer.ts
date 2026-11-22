@@ -3,8 +3,20 @@ import type { DecodedVideoFrame } from './types';
 /** Bounded presentation queue. The scheduler, not a decoder callback, owns frames. */
 export class VideoBuffer<T extends DecodedVideoFrame> {
   private frames: T[] = [];
-  constructor(readonly capacity = 8) {
+  private size: number;
+  constructor(capacity = 8) {
+    this.size = VideoBuffer.checked(capacity);
+  }
+  get capacity(): number {
+    return this.size;
+  }
+  /** Sized to the decoder's frame bound for each decode epoch, before its first output. */
+  resize(capacity: number): void {
+    this.size = VideoBuffer.checked(capacity);
+  }
+  private static checked(capacity: number): number {
     if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error('Invalid video buffer capacity');
+    return capacity;
   }
   get length(): number {
     return this.frames.length;

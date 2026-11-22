@@ -14,6 +14,9 @@ export interface VideoPresentation {
 }
 export interface VideoBackend {
   readonly metrics: { decoded: number };
+  /** Packets in the decoder plus decoded frames not yet released; the presentation queue holds as
+   * many (8 when absent). */
+  readonly frameBound?: number;
   configure(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void>;
   decode(packet: EncodedPacket, signal: AbortSignal): Promise<void>;
   drain(signal: AbortSignal): Promise<void>;
@@ -28,7 +31,7 @@ export interface VideoCallbacks {
 
 /** Route selection is Vela-owned and based on the actual decoder configuration. */
 export class VideoDecoderRouter implements VideoBackend {
-  private backend?: Pick<VideoBackend, 'metrics' | 'decode' | 'drain' | 'dispose'>;
+  private backend?: Pick<VideoBackend, 'metrics' | 'frameBound' | 'decode' | 'drain' | 'dispose'>;
   private native?: NativeVideoDecoder;
   private gpu?: PackageVideoDecoder;
   private closed = false;
@@ -40,6 +43,9 @@ export class VideoDecoderRouter implements VideoBackend {
   ) {}
   get metrics() {
     return this.backend?.metrics ?? { decoded: 0 };
+  }
+  get frameBound() {
+    return this.backend?.frameBound;
   }
   async configure(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void> {
     if (this.closed) throw new Error('Video route is disposed');
