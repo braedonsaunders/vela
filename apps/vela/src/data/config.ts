@@ -13,6 +13,9 @@ export const config = {
   appVersion: process.env.EXPO_PUBLIC_VELA_APP_VERSION ?? '0.2.45',
   /** The skin document to start with, by id (`?skin=` on the web). */
   skin: process.env.EXPO_PUBLIC_VELA_SKIN ?? '',
+  /** A lab build's routes to open once home is ready, `|`-separated, a few seconds apart (a TV
+   * simulator has no remote to get there). Unset in a release build. */
+  startRoutes: process.env.EXPO_PUBLIC_VELA_START_ROUTES ?? '',
 };
 
 /** The development server when none is configured: mock-server on this machine. */

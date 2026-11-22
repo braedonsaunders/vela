@@ -91,7 +91,7 @@ function ScoreBand({ look, event, m, close }: { look: SportsLook; event: LiveEve
     <View style={{ overflow: 'hidden' }}>
       <LinearGradient colors={[away ? heroTint(away) : '#18264a', home ? heroTint(home) : '#3a1020']} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-      <LinearGradient colors={['rgba(5,7,13,0.2)', alpha(look.page, 0.92)]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+      <LinearGradient colors={['rgba(5,7,13,0.2)', alpha(look.page, 0.8), look.page]} locations={[0, 0.78, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
       <View style={{ paddingHorizontal: look.gutter, paddingTop: look.px(compact ? 16 : 26), paddingBottom: look.px(compact ? 18 : 30), gap: look.px(compact ? 14 : 20) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: look.px(10) }}>
           {m.phase === 'live' && !m.spoiler ? <LiveBadge look={look} /> : null}

@@ -141,6 +141,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   // Once home has drawn, read the first libraries' first pages while the app is idle, so their
   // first visit draws at once.
   const homeReady = signedIn && state.home.load === 'ready';
+  useStartRoutes(homeReady);
   const libraryIds = (state.libraries.value ?? []).filter(library => library.kind !== 'live').map(library => library.id).join(',');
   useEffect(() => {
     if (!homeReady || !libraryIds) return;
@@ -163,6 +164,18 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
       </ServersProvider>
     </LiveProvider>
   );
+}
+
+/** A lab build's configured routes, opened once home is ready (config.startRoutes). */
+let startRoutesOpened = false;
+function useStartRoutes(homeReady: boolean): void {
+  useEffect(() => {
+    if (!homeReady || !config.startRoutes || startRoutesOpened) return;
+    startRoutesOpened = true;
+    String(config.startRoutes).split("|").filter(Boolean).forEach((route: string, n: number) => {
+      setTimeout(() => router.push(route as never), 1500 + n * 7000);
+    });
+  }, [homeReady]);
 }
 
 /** A signed-out server's viewer goes to its sign-in page; nothing else draws for them. */
