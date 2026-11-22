@@ -1,6 +1,33 @@
-// Exact engine and LGPL FFmpeg pins survive every Expo prebuild.
-const { withInfoPlist, withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
-module.exports = function withApplePlayer(config) {
+// Exact engine, LGPL FFmpeg and LibTrueHD pins, and the engine's package traits, survive every Expo prebuild.
+const { withInfoPlist, withPodfile, withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
+
+// AetherEngine's optional components are SwiftPM package traits, off by default. React Native's
+// spm_dependency cannot name traits, and CocoaPods' project model drops keys it does not know, so the
+// written Pods project gets them after integration: TrueHD Atmos objects and DTS:X heights rendered for
+// tvOS to carry as Dolby MAT, and a Profile 7 FEL enhancement layer folded into its 8.1 RPU.
+const AETHER_TRAITS = ['TrueHDObjectAudio', 'DTSXObjectAudio', 'DolbyVisionFelCurves'];
+const TRAITS_MARKER = '# @vela/apple-player: AetherEngine package traits';
+const traitsHook = String.raw`${TRAITS_MARKER}
+post_integrate do |installer|
+  path = File.join(installer.pods_project.path, 'project.pbxproj')
+  text = File.read(path)
+  traits = %w[${AETHER_TRAITS.join(' ')}]
+  pattern = /(repositoryURL = "https:\/\/github\.com\/superuser404notfound\/AetherEngine";\n(\s*)requirement = \{[^}]*\};\n)(\s*traits = \([^)]*\);\n)?/
+  raise 'AetherEngine package reference not found in the Pods project' unless text.match?(pattern)
+  updated = text.sub(pattern) { "#{$1}#{$2}traits = (\n#{traits.map { |t| "#{$2}\t#{t},\n" }.join}#{$2});\n" }
+  File.write(path, updated) unless updated == text
+end
+`;
+module.exports = withApplePlayer;
+module.exports.AETHER_TRAITS = AETHER_TRAITS;
+function withApplePlayer(config) {
+  config = withPodfile(config, mod => {
+    const podfile = mod.modResults;
+    const start = podfile.contents.indexOf(TRAITS_MARKER);
+    const kept = start < 0 ? podfile.contents : podfile.contents.slice(0, start).trimEnd() + '\n';
+    podfile.contents = `${kept.trimEnd()}\n\n${traitsHook}`;
+    return mod;
+  });
   config = withPodfileProperties(config, mod => {
     mod.modResults['ios.deploymentTarget'] = '18.0';
     return mod;
@@ -36,19 +63,25 @@ module.exports = function withApplePlayer(config) {
     // prevents its upToNextMinor requirement from silently updating FFmpeg.
     const objects = project.hash.project.objects;
     objects.XCRemoteSwiftPackageReference ||= {};
-    let id = Object.keys(objects.XCRemoteSwiftPackageReference).find(key =>
-      String(objects.XCRemoteSwiftPackageReference[key]?.repositoryURL || '').includes('superuser404notfound/FFmpegBuild'));
-    if (!id) {
-      id = project.generateUuid();
-      objects.XCRemoteSwiftPackageReference[id] = {
-        isa: 'XCRemoteSwiftPackageReference',
-        repositoryURL: '"https://github.com/superuser404notfound/FFmpegBuild"',
-      };
-      const root = project.getFirstProject().firstProject;
-      root.packageReferences ||= [];
-      root.packageReferences.push({ value: id, comment: 'FFmpegBuild' });
-    }
-    objects.XCRemoteSwiftPackageReference[id].requirement = { kind: 'exactVersion', version: '3.15.0' };
+    const pin = (name, version) => {
+      let ref = Object.keys(objects.XCRemoteSwiftPackageReference).find(key =>
+        String(objects.XCRemoteSwiftPackageReference[key]?.repositoryURL || '').includes(`superuser404notfound/${name}`));
+      if (!ref) {
+        ref = project.generateUuid();
+        objects.XCRemoteSwiftPackageReference[ref] = {
+          isa: 'XCRemoteSwiftPackageReference',
+          repositoryURL: `"https://github.com/superuser404notfound/${name}"`,
+        };
+        const root = project.getFirstProject().firstProject;
+        root.packageReferences ||= [];
+        root.packageReferences.push({ value: ref, comment: name });
+      }
+      objects.XCRemoteSwiftPackageReference[ref].requirement = { kind: 'exactVersion', version };
+      return ref;
+    };
+    const id = pin('FFmpegBuild', '3.15.0');
+    // The TrueHDObjectAudio trait's decoder floats on its minor inside AetherEngine; the app pins it.
+    pin('LibTrueHD', '3.2.0');
     // CocoaPods compiles the static engine, but Xcode needs app product references
     // to copy and sign its dynamic FFmpeg dependencies into the application.
     objects.XCSwiftPackageProductDependency ||= {};
@@ -77,4 +110,4 @@ module.exports = function withApplePlayer(config) {
     }
     return mod;
   });
-};
+}

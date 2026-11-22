@@ -61,3 +61,25 @@ test('Apple transport permits explicitly selected public HTTP servers after preb
     modRequest: { projectRoot: '/fixture', platform: 'ios', modName: 'infoPlist' } });
   expect(result.modResults.NSAppTransportSecurity).toEqual({ NSAllowsArbitraryLoads: true });
 });
+
+test('the object-audio decoder is pinned exactly beside FFmpeg', async () => {
+  const p = project();
+  await apply(p);
+  const refs = Object.values(p.objects.XCRemoteSwiftPackageReference) as { repositoryURL: string; requirement: unknown }[];
+  expect(refs.find(ref => ref.repositoryURL.includes('LibTrueHD'))?.requirement).toEqual({ kind: 'exactVersion', version: '3.2.0' });
+  await apply(p);
+  expect(refs.length).toBe(Object.values(p.objects.XCRemoteSwiftPackageReference).length);
+});
+
+test('every prebuild gives the Pods project AetherEngine traits exactly once', async () => {
+  const config: any = withApplePlayer({ name: 'Vela', slug: 'vela' });
+  const podfile = async (contents: string) => (await config.mods.ios.podfile({ ...config,
+    modResults: { path: '/fixture/Podfile', contents, language: 'rb' },
+    modRequest: { projectRoot: '/fixture', platform: 'ios', modName: 'podfile' } })).modResults.contents as string;
+  const once = await podfile("target 'Vela' do\n  post_install do |installer|\n  end\nend\n");
+  const twice = await podfile(once);
+  expect(twice).toBe(once);
+  expect(once.match(/post_integrate/g)?.length).toBe(1);
+  for (const trait of withApplePlayer.AETHER_TRAITS) expect(once).toContain(trait);
+  expect(withApplePlayer.AETHER_TRAITS).toEqual(['TrueHDObjectAudio', 'DTSXObjectAudio', 'DolbyVisionFelCurves']);
+});

@@ -89,10 +89,13 @@ and source URLs are in modules/vela-player/web/engine/universal/subtitles/assets
 
 Native playback (libmpv)
 ------------------------
-Apple platforms link libmpv, FFmpeg, libass and their dependencies from MPVKit 1.0.0's
-LGPL product (https://github.com/mpvkit/MPVKit), never MPVKit-GPL. The xcframeworks are
-fetched and verified by SHA-256 (modules/vela-player/ios/mpvkit-1.0.0.txt); they are not
-in this repository.
+Apple platforms (tvOS, iOS and the macOS desktop host) play through AetherEngine 7.70.0
+(LGPL-3.0 with an App Store exception, unmodified), its dynamic LGPL FFmpeg frameworks from
+FFmpegBuild 3.15.0 (no GPL or nonfree components), LibDovi (MIT) and, for TrueHD Atmos object
+rendering, LibTrueHD 3.2.0 (MIT) with the truehdd `truehd` and `oamd` crates (Apache-2.0).
+DTS:X heights are decoded by FFmpeg itself. The texts and notices ship in the app's
+VelaPlayerLicenses bundle (modules/vela-player/ios/Licenses); see
+modules/vela-player/ios/AETHER.md for the optional components and their licensing.
 Android builds libmpv with -Dgpl=false and FFmpeg without --enable-gpl (LGPLv3 because
 of --enable-version3) from libmpv-android, pinned in modules/vela-player/android/libmpv/pin.sh.
 The Windows host loads libmpv-2.dll at runtime. It is the LGPL build of mpv-winbuild-cmake

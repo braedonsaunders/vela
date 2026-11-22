@@ -3,6 +3,8 @@ import { cpSync, mkdirSync, readdirSync, existsSync, writeFileSync, realpathSync
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = name => process.argv.find(a => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const arch = arg('arch') || process.arch;
@@ -16,12 +18,14 @@ const run = (cmd, args, cwd = stage) => {
 mkdirSync(join(stage, 'Sources/VelaNative'), { recursive: true });
 mkdirSync(output, { recursive: true });
 const ios = resolve(here, '../../../modules/vela-player/ios');
-for (const name of ['PlaybackClient', 'PlaybackSession', 'PlaybackHost', 'PlaybackRendering', 'PreviewPlayback', 'PlayerState', 'PlayerReport', 'PlayerCapabilities', 'PlaybackPlan', 'PathRecovery', 'MediaAccess', 'MediaRedirects', 'ScopedMediaHTTP', 'ScopedAetherReader'])
+for (const name of ['PlaybackClient', 'PlaybackSession', 'PlaybackHost', 'PlaybackRendering', 'PreviewPlayback', 'PlayerState', 'PlayerReport', 'PlayerCapabilities', 'PlaybackPreferences', 'PlaybackFormat', 'PlaybackPlan', 'PathRecovery', 'MediaAccess', 'MediaRedirects', 'ScopedMediaHTTP', 'ScopedAetherReader'])
   cpSync(join(ios, name + '.swift'), join(stage, 'Sources/VelaNative', name + '.swift'));
 for (const name of ['AppKitPlaybackRendering.swift', 'NativeHost.swift']) cpSync(join(here, name), join(stage, 'Sources/VelaNative', name));
-writeFileSync(join(stage, 'Package.swift'), `// swift-tools-version: 5.9
+// AetherEngine's optional components, the same traits as the tvOS and iOS apps (apps/vela/plugins/apple-player.js).
+const traits = require('../../vela/plugins/apple-player.js').AETHER_TRAITS.map(trait => `"${trait}"`).join(', ');
+writeFileSync(join(stage, 'Package.swift'), `// swift-tools-version: 6.1
 import PackageDescription
-let package = Package(name: "VelaNative", platforms: [.macOS("15.0")], products: [.library(name: "VelaNative", type: .dynamic, targets: ["VelaNative"])], dependencies: [.package(url: "https://github.com/superuser404notfound/AetherEngine", exact: "7.70.0")], targets: [.target(name: "VelaNative", dependencies: [.product(name: "AetherEngine", package: "AetherEngine")], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("IOKit")])])
+let package = Package(name: "VelaNative", platforms: [.macOS("15.0")], products: [.library(name: "VelaNative", type: .dynamic, targets: ["VelaNative"])], dependencies: [.package(url: "https://github.com/superuser404notfound/AetherEngine", exact: "7.70.0", traits: [${traits}]), .package(url: "https://github.com/superuser404notfound/LibTrueHD", exact: "3.2.0")], targets: [.target(name: "VelaNative", dependencies: [.product(name: "AetherEngine", package: "AetherEngine")], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("IOKit")])], swiftLanguageModes: [.v5])
 `);
 if (process.argv.includes('--prepare-only')) process.exit(0);
 cpSync(join(here, 'Package.resolved'), join(stage, 'Package.resolved'));
