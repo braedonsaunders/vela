@@ -51,6 +51,19 @@ must not combine `NSAllowsArbitraryLoads` with `NSAllowsLocalNetworking`: the
 latter overrides the former on current Apple OS versions. Local and public HTTP
 connections were checked on the Basement Apple TV.
 
+## Multiview tiles
+
+A view with the `tile` prop (0-3) is one of up to four live tiles on one screen.
+Each tile leases its own AetherEngine, never the reusable primary or preview
+engine, and loads with `sharedOutputRole = .secondary`, `logTag = "tileN"` and
+host-owned display criteria with matching off: no tile writes the panel's mode or
+claims Now Playing, and Aether's shared-output coordinator keeps the audio
+session up until the last engine stops. A tile is activated like full watch (its
+audio session) but starts muted; the screen's mute commands make one tile
+audible. A stopped tile engine is released, not pooled. Views playing at once
+hold the idle timer together (a count), so one tile stopping never lets the
+screen sleep under the others.
+
 ## Single-engine device verification, 2026-11-18
 
 Release builds installed on the Basement Apple TV and owner's iPhone played
