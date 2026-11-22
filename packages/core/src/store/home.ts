@@ -359,9 +359,9 @@ export class Home {
       let cursor: string | undefined;
       for (let n = 0; n < LIBRARY_PAGES; n++) {
         const page = await connection.adapter.libraries({ cursor, limit: 100 });
-        for (const { id, name, kind, artwork, dateDisplay = 'year', media } of page.items) {
+        for (const { id, name, kind, artwork, dateDisplay = 'year', media, presentation } of page.items) {
           const image = artwork.find(a => a.kind === 'backdrop');
-          items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
+          items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), ...(presentation ? { presentation } : {}), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
         }
         if (page.continuation === 'exhausted') {
           this.session.check(epoch, 'libraries');

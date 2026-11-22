@@ -340,6 +340,7 @@
   "person.died": "Died {date}",
   "person.movies": "Movies",
   "person.tvShows": "TV Shows",
+  "person.titles": "Titles",
   "person.empty": "No titles with {name} in this library",
   "person.failed": "Could not load filmography. Try again.",
   "library.empty": "Nothing matches these filters",

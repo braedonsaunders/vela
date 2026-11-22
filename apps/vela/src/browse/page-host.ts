@@ -29,7 +29,8 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
       case 'select': {
         const [target, kind] = arg.split('|');
         if (kind === 'library-live' && target) return router.push({ pathname: '/watch/[id]', params: { id: target, kind, libraryId: id, tab: library.page.tabId } });
-        if (kind === 'person' && target) return router.push({ pathname: '/person', params: { id: target } });
+        // A person opened from a library's people tab keeps the library's scope and card shape.
+        if (kind === 'person' && target) return router.push({ pathname: '/person', params: { id: target, name: library.page.extras?.collections.find(card => card.id === target)?.name ?? '', library: id } });
         const collection = collectionDestination(arg);
         if (collection) return router.push(collectionRoute(id, collection.query, collection.target, collection.tab?.id ?? library.page.tabId ?? 'collections', collection.card));
         if (kind === 'directory' && target?.startsWith('vela-library-genre:')) {

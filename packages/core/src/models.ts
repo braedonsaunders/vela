@@ -176,6 +176,8 @@ export interface Destination {
   kind: string;
   /** What the library holds; 'video' for servers without media classes. */
   media?: V.MediaClass;
+  /** The library's declared card shape (a landscape library's thumbnails). */
+  presentation?: V.Library['presentation'];
   dateDisplay: 'year' | 'date';
   backdrop: string;
 }

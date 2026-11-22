@@ -104,12 +104,13 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     if (!id || !liveTab || !focused || !kind) return;
     const key = `${id}:${liveTab}:${tabQuery}:${liveFilter}:${revision}:${liveAttempt}`;
     let active = true;
+    const leave = new AbortController();
     liveGeneration.current++;
     setLiveState({ key, loading: true, failed: false, items: [], filters: [], cursor: '' });
-    void store.catalogue.libraryLive(id, liveTab, tabQuery, liveFilter).then(value => {
+    void store.catalogue.libraryLive(id, liveTab, tabQuery, liveFilter, undefined, leave.signal).then(value => {
       if (active) setLiveState({ key, loading: false, failed: false, items: value.items, filters: value.filters, cursor: value.cursor });
     }).catch(() => { if (active) setLiveState({ key, loading: false, failed: true, items: [], filters: [], cursor: '' }); });
-    return () => { active = false; liveGeneration.current++; };
+    return () => { active = false; leave.abort(); liveGeneration.current++; };
   }, [store, id, liveTab, tabQuery, liveFilter, revision, liveAttempt, focused, kind]);
 
   // Recommendations: read while Recommended is on show, and again quietly when progress moves.
@@ -145,13 +146,14 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       }).catch(() => { if (active) checked.current = check; });
       return () => { active = false; };
     }
+    const leave = new AbortController();
     setRows({ key: rowsKey, load: 'loading', attempt: rowsAttempt, progressRevision });
-    void store.catalogue.libraryRecommendations(id, kind, progressRevision > 0, rowsTab).then(value => {
+    void store.catalogue.libraryRecommendations(id, kind, progressRevision > 0, rowsTab, leave.signal).then(value => {
       if (active) setRows({ key: rowsKey, load: 'ready', attempt: rowsAttempt, value: value ?? [], progressRevision });
     }).catch(() => {
       if (active) setRows({ key: rowsKey, load: 'failed', attempt: rowsAttempt, progressRevision });
     });
-    return () => { active = false; };
+    return () => { active = false; leave.abort(); };
   }, [store, id, kind, rowsKey, rowsTab, needRows, progressRevision, focused, rowsAttempt]);
 
   // Collections (or a people tab): read only while that view is on show, held for the session,
@@ -166,13 +168,15 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       return;
     }
     let active = true;
+    // Leaving the view stops a read the server asked to retry later (read-retry.ts).
+    const leave = new AbortController();
     setCollections({ key: collectionsKey, load: 'loading', attempt: collectionsAttempt });
-    void store.catalogue.libraryCollectionPage(id, collectionTab, tabQuery, refresh).then(value => {
+    void store.catalogue.libraryCollectionPage(id, collectionTab, tabQuery, refresh, leave.signal).then(value => {
       if (active) setCollections({ key: collectionsKey, load: 'ready', attempt: collectionsAttempt, value: value ?? { items: [], cursor: '' } });
     }).catch(() => {
       if (active) setCollections({ key: collectionsKey, load: 'failed', attempt: collectionsAttempt });
     });
-    return () => { active = false; };
+    return () => { active = false; leave.abort(); };
   }, [store, id, kind, collectionsKey, needCollections, collectionTab, tabQuery, focused, collectionsAttempt]);
 
   // Genres: read while the Genres view is on show, held for the session.
@@ -186,13 +190,14 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       return;
     }
     let active = true;
+    const leave = new AbortController();
     setGenres({ key: genresKey, load: 'loading', attempt: genresAttempt });
-    void store.catalogue.libraryGenreChoices(id, refresh).then(value => {
+    void store.catalogue.libraryGenreChoices(id, refresh, leave.signal).then(value => {
       if (active) setGenres({ key: genresKey, load: 'ready', attempt: genresAttempt, value: value ?? [] });
     }).catch(() => {
       if (active) setGenres({ key: genresKey, load: 'failed', attempt: genresAttempt });
     });
-    return () => { active = false; };
+    return () => { active = false; leave.abort(); };
   }, [store, id, kind, genresKey, needGenres, focused, genresAttempt]);
 
   const rowsPart = rows.key === rowsKey ? rows : undefined;

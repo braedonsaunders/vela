@@ -20,7 +20,7 @@ export type { Load, Loadable } from './store/state';
 export type { AuthPhase, AuthState, QuickCode } from './store/auth';
 export type { PlexChoiceOption, PlexLinkView, ProbeResult, ServerOption, ServerResult, ServersState } from './store/servers';
 export type { HomeRetry, HomeState } from './store/home';
-export { libraryKey, type CollectionPage, type LibraryQuery } from './store/catalogue';
+export { personSectionLabels, libraryKey, type CollectionPage, type LibraryQuery, type LibraryScope } from './store/catalogue';
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';

@@ -16,6 +16,8 @@ export interface LibraryEnv {
   library?: LibraryPage;
   collection?: CollectionPage;
   libraries: { kind: string }[];
+  /** A person page opened from a library keeps that library's card shape. */
+  personPage?: { card?: 'poster' | 'landscape' | 'square' };
 }
 
 type LibraryAccessor = (c: LibraryCtx, e: LibraryEnv) => string;
@@ -54,8 +56,8 @@ export const LIBRARY_VOCABULARY: Record<string, LibraryAccessor> = {
   'library.viewLoad': (_, e) => e.library?.viewLoad ?? (e.library?.extrasLoading ? 'loading' : e.library?.extrasFailed ? 'failed' : 'idle'),
   'library.facetTitle': (_, e) => e.library?.facetTitle ?? '',
   'library.declaredTabs': (_, e) => yes(e.library?.model?.tabs !== undefined),
-  'library.card': (_, e) => libraryCard(e.collection?.card ?? e.library?.model?.presentation?.card),
-  'library.cardRatio': (_, e) => libraryCardRatio(e.collection?.card ?? e.library?.model?.presentation?.card),
+  'library.card': (_, e) => libraryCard(e.collection?.card ?? e.library?.model?.presentation?.card ?? e.personPage?.card),
+  'library.cardRatio': (_, e) => libraryCardRatio(e.collection?.card ?? e.library?.model?.presentation?.card ?? e.personPage?.card),
   'library.view': (_, e) => e.library?.view ?? 'library',
   'library.layout': (_, e) => e.library?.layout ?? 'grid',
   'library.catalogView': (_, e) => e.library?.view === 'live' || e.library?.view === 'view' ? 'library' : e.library?.view ?? 'library',

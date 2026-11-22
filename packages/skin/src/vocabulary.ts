@@ -77,7 +77,15 @@ export interface Env {
   library?: LibraryPage;
   /** The collection page on show (routes.collection); none on other routes. */
   collection?: CollectionPage;
-  personPage?: { name: string; portrait: string; role: string; biography?: string; birthday?: string; items: Card[]; more: boolean; loading: boolean };
+  personPage?: {
+    name: string; portrait: string; role: string; biography?: string; birthday?: string; items: Card[]; more: boolean; loading: boolean;
+    /** The card shape of the library the person was opened from (library.card); poster without one. */
+    card?: 'poster' | 'landscape' | 'square';
+    /** The headings over the person's movie-kind and other titles: "Movies" and "TV Shows", or
+     * "Titles" in a library that holds neither (core's personSectionLabels). */
+    moviesLabel?: string;
+    tvLabel?: string;
+  };
 }
 
 /** The binding context: the item a node is repeated over, and its position. */
@@ -200,6 +208,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'personPage.paging': (_, e) => yes(!!e.personPage?.items.length),
   'personPage.empty': (_, e) => yes(e.load === 'ready' && !!e.personPage && !e.personPage.items.length && !e.personPage.loading),
   'personPage.emptyText': (_, e) => t('person.empty', { name: e.personPage?.name ?? '' }),
+  'personPage.moviesLabel': (_, e) => e.personPage?.moviesLabel || t('person.movies'),
+  'personPage.tvLabel': (_, e) => e.personPage?.tvLabel || t('person.tvShows'),
   'personPage.moviesCount': (_, e) => String(e.personPage?.items.filter(c => c.kind === 'movie').length ?? 0),
   'personPage.tvCount': (_, e) => String(e.personPage?.items.filter(c => c.kind !== 'movie').length ?? 0),
   'personPage.more': (_, e) => yes(!!e.personPage?.more),

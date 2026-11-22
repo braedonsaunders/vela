@@ -8,7 +8,7 @@ export function withLibraryPresentation(node: Exclude<Node, { type: 'use' }>, wi
   if (cover) styles['aspect-ratio'] = '{library.cardRatio}';
   const isCard = node.press?.action === 'select' && /card\./.test(node.press.arg ?? '');
   if (isCard && node.style?.width && node.style.width !== '100%') styles.width = width < 600 ? '240px' : '320px';
-  const grid = node.style?.display === 'grid' && node.children?.some(child => child.type === 'repeat' && /^(library\.(items|collections)|collection.items)$/.test(child.over));
+  const grid = node.style?.display === 'grid' && node.children?.some(child => child.type === 'repeat' && /^(library\.(items|collections)|collection\.items|personPage\.(movies|tv))$/.test(child.over));
   if (grid) styles['grid-template-columns'] = width < 600 ? 'repeat(auto-fill, minmax(240px, 1fr))' : 'repeat(auto-fill, minmax(280px, 1fr))';
   if (!Object.keys(styles).length) return node;
   // A media card's own cover (docs/media-kinds.md) wins over the library's: a square album, a

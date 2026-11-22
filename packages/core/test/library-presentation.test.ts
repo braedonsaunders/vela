@@ -111,3 +111,15 @@ test('person cards use the person ID, round portrait source and localized title 
   expect(entry(item)).toMatchObject({ id: 'opaque:id', kind: 'person', name: 'A Person', poster: '', facts: '1 title' });
   expect(entry({ ...item, itemCount: 0 }).facts).toBe('0 titles');
 });
+
+test('a person page names its sections for the library it was opened from', async () => {
+  const { personSectionLabels } = await import('../src/store/catalogue');
+  const labels = (scope?: Parameters<typeof personSectionLabels>[0]) => Object.values(personSectionLabels(scope));
+  expect(labels(undefined)).toEqual(['person.movies', 'person.tvShows']);
+  expect(labels({ kind: 'mixed' })).toEqual(['person.movies', 'person.tvShows']);
+  expect(labels({ kind: 'movies', presentation: { card: 'poster' } })).toEqual(['person.movies', 'person.titles']);
+  expect(labels({ kind: 'shows' })).toEqual(['person.titles', 'person.tvShows']);
+  // A landscape library of movie-kind items (scenes, clips) and a book library hold "Titles".
+  expect(labels({ kind: 'movies', presentation: { card: 'landscape' } })).toEqual(['person.titles', 'person.titles']);
+  expect(labels({ kind: 'movies', media: 'audiobook', presentation: { card: 'square' } })).toEqual(['person.titles', 'person.titles']);
+});

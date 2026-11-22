@@ -22,6 +22,7 @@ import type { Session } from './session';
 import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
 import { optimisticWatchState } from './watch-state';
+import { readRetryDelay, withReadRetry, type ReadRetryOptions } from './read-retry';
 
 /** A library view: sort, direction and filters; absent fields are the server's defaults. */
 export interface LibraryQuery {
@@ -83,10 +84,10 @@ export class Catalogue {
     }
   }
 
-  async libraryFacets(id: string, field: string, query = '', cursor?: string): Promise<V.Page<V.FacetValue>> {
+  async libraryFacets(id: string, field: string, query = '', cursor?: string, signal?: AbortSignal): Promise<V.Page<V.FacetValue>> {
     const adapter = (await this.session.ready()).adapter;
     if (!hasLibraryFacets(adapter)) throw new Error('Library facets are unavailable');
-    return adapter.libraryFacets(id, field, query, cursor);
+    return this.retrying(() => adapter.libraryFacets(id, field, query, cursor), signal);
   }
   async personDetails(id: string): Promise<{ name: string; portrait: string; knownFor: string; biography: string; birthday: string } | undefined> {
     const connection = await this.session.ready();
@@ -96,14 +97,17 @@ export class Catalogue {
     const images = await connection.images();
     return { name: person.name, portrait: person.photo ? artworkURL(person.photo, 480, 480, images) ?? '' : '', knownFor: person.knownFor || person.roles?.[0] || '', biography: person.biography ?? '', birthday: personDates(person.birthday, person.deathday ?? person.deathDate) };
   }
-  async personTitles(id: string | undefined, libraryId?: string, cursor?: string): Promise<{ items: Card[]; cursor?: string }> {
+  /** A person's titles, in a library's scope when `libraryId` names one: that library's dates and
+   * card shape (a landscape library's thumbnails), as its own pages draw them. */
+  async personTitles(id: string | undefined, libraryId?: string, cursor?: string, signal?: AbortSignal): Promise<{ items: Card[]; cursor?: string }> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     if (!id || !hasPersonFilmography(adapter)) throw new Error('Person filmography is unavailable');
-    const result = await adapter.personTitles(id, libraryId, cursor);
+    const result = await this.retrying(() => adapter.personTitles(id, libraryId, cursor), signal);
     const images = await connection.images();
     const display = this.dateDisplay(libraryId);
-    const items = result.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), display));
+    const card = this.libraryPresentation(libraryId)?.card;
+    const items = result.items.map(item => libraryCardArtwork(withDateDisplay(entry(item, images, this.artWidth()), display), card));
     return { items, cursor: result.nextCursor };
   }
   private dateDisplay(id?: string): 'year' | 'date' {
@@ -112,13 +116,31 @@ export class Catalogue {
     return Object.values(state.library ?? {}).find(view => view.value?.id === id)?.value?.dateDisplay
       ?? state.libraries?.value?.find(library => library.id === id)?.dateDisplay ?? 'year';
   }
+  /** What the session knows of a library (its kind, media and declared card shape), from a view
+   * of it already read or the server's library list. */
+  libraryScope(id?: string): LibraryScope | undefined {
+    if (!id) return undefined;
+    const state = this.box.get();
+    const known = Object.values(state.library ?? {}).find(view => view.value?.id === id)?.value
+      ?? state.libraries?.value?.find(library => library.id === id);
+    return known ? { kind: known.kind, media: known.media, presentation: known.presentation } : undefined;
+  }
+  private libraryPresentation(id?: string): V.Library['presentation'] | undefined {
+    return this.libraryScope(id)?.presentation;
+  }
+  /** A read asked again while the server calls its refusal temporary (read-retry.ts), never
+   * after the session moved on or the reader aborted. */
+  private retrying<T>(read: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const epoch = this.session.epoch;
+    return withReadRetry(read, { ...this.retryOptions, signal, wanted: () => epoch === this.session.epoch });
+  }
 
-  async libraryLive(id: string, tab: string, search = '', filter = '', cursor?: string): Promise<LibraryLiveModel> {
+  async libraryLive(id: string, tab: string, search = '', filter = '', cursor?: string, signal?: AbortSignal): Promise<LibraryLiveModel> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     const available = this.session.features?.libraryLive?.available === true;
     if (!available || !hasLibraryLive(adapter)) throw new Error('Library live is unavailable');
-    const result = await adapter.libraryLive(id, { tab, query: search || undefined, filter: filter || undefined, cursor, limit: 50 });
+    const result = await this.retrying(() => adapter.libraryLive(id, { tab, query: search || undefined, filter: filter || undefined, cursor, limit: 50 }), signal);
     const images = await connection.images();
     return { items: result.items.map(item => libraryLiveCard(item, images, this.artWidth())), filters: result.filters,
       cursor: result.nextCursor ?? '', continuation: result.continuation };
@@ -133,8 +155,9 @@ export class Catalogue {
    * again or prefetched shows it at once. Recommendations carry the progress revision they were
    * read at; collections and genres stand for the session unless the viewer asks again. */
   private readonly partsHeld = new Map<string, { epoch: number; progressRevision: number; value: unknown }>();
-  /** Part reads in flight, shared by a prefetch and the page that then opens. */
-  private readonly partReads = new Map<string, { epoch: number; progressRevision: number; promise: Promise<unknown> }>();
+  /** Part reads in flight, shared by a prefetch and the page that then opens. A shared read stops
+   * retrying only once every reader that joined it has left (`join`). */
+  private readonly partReads = new Map<string, { epoch: number; progressRevision: number; promise: Promise<unknown>; join(signal?: AbortSignal): boolean }>();
   /** Collections are a side read some servers answer in tens of seconds: they wait in a lane of
    * their own, so they never hold every connection to the server (lane.ts). */
   private readonly sideLane = new Lane(SIDE_READS);
@@ -178,6 +201,7 @@ export class Catalogue {
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly artWidth: () => number,
+    private readonly retryOptions: Pick<ReadRetryOptions, 'sleep'> = {},
   ) {
     session.onReset(() => {
       this.libraryReads.clear();
@@ -242,16 +266,8 @@ export class Catalogue {
     return { model, answer };
   }
 
-  private async titleDetail(connection: Connection, id: string): Promise<V.TitleDetail> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await connection.adapter.detail(id);
-      } catch (error) {
-        const delay = titleRetryDelay(error, attempt);
-        if (delay === undefined) throw error;
-        await new Promise<void>(resolve => setTimeout(resolve, delay));
-      }
-    }
+  private titleDetail(connection: Connection, id: string): Promise<V.TitleDetail> {
+    return this.retrying(() => connection.adapter.detail(id));
   }
 
   /** Where the viewer left a title, applied at once to every title page drawn that shows it. */
@@ -303,7 +319,7 @@ export class Catalogue {
     const known = this.box.get().related[id];
     if (known && known.load !== 'failed') return;
     await this.read('related', id, async connection => {
-      const data = await connection.adapter.rows({ placement: 'detail', titleId: id });
+      const data = await this.retrying(() => connection.adapter.rows({ placement: 'detail', titleId: id }));
       const images = await connection.images();
       return data.items.map(row => feedRow(row, images, this.artWidth()));
     });
@@ -315,13 +331,16 @@ export class Catalogue {
    * read serves a prefetch and the page that opens; the answer is held for the session at the
    * progress revision it was read at.
    */
-  async libraryRecommendations(id: string, kind: V.Library['kind'], freshRows = false, tab?: string): Promise<Row[] | undefined> {
+  async libraryRecommendations(id: string, kind: V.Library['kind'], freshRows = false, tab?: string, signal?: AbortSignal): Promise<Row[] | undefined> {
     const progressRevision = this.box.get().home?.progressRevision ?? 0;
     const rowsTab = this.rowsTab(tab);
-    return this.part('rows', partKey('rows', id, rowsTab), progressRevision, false, async connection => {
+    return this.part('rows', partKey('rows', id, rowsTab), progressRevision, false, signal, async (connection, shared) => {
       const adapter = connection.adapter;
       if (!hasLibraryRecommendations(adapter)) return undefined;
-      const [value, images] = await Promise.all([rowsTab ? adapter.libraryRows(id, kind, freshRows, rowsTab) : adapter.libraryRows(id, kind, freshRows), connection.images()]);
+      const [value, images] = await Promise.all([
+        this.retrying(() => rowsTab ? adapter.libraryRows(id, kind, freshRows, rowsTab) : adapter.libraryRows(id, kind, freshRows), shared),
+        connection.images(),
+      ]);
       const display = this.dateDisplay(id);
       return value.map(row => { const model = feedRow(row, images, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; });
     });
@@ -330,36 +349,51 @@ export class Catalogue {
   /**
    * The first page of a library's collections (or a people tab), read only when a view shows
    * them, in the side lane. Held for the session: progress never changes them, so they are read
-   * again only when `refresh` asks (the viewer's Try again).
+   * again only when `refresh` asks (the viewer's Try again). A server still preparing the view
+   * (503, retry allowed) is asked again on its terms while the view stays loading; the lane's
+   * place is given up while waiting.
    */
-  async libraryCollectionPage(id: string, tab?: string, search?: string, refresh = false): Promise<CollectionPage | undefined> {
-    return this.part('collections', partKey('collections', id, tab, search), 0, refresh, async connection => {
+  async libraryCollectionPage(id: string, tab?: string, search?: string, refresh = false, signal?: AbortSignal): Promise<CollectionPage | undefined> {
+    return this.part('collections', partKey('collections', id, tab, search), 0, refresh, signal, async (connection, shared) => {
       const adapter = connection.adapter;
       if (!hasLibraryRecommendations(adapter)) return undefined;
-      const [page, images] = await Promise.all([this.sideLane.run(() => adapter.libraryCollections(id, undefined, tab, search)), connection.images()]);
+      const [page, images] = await Promise.all([this.retrying(() => this.sideLane.run(() => adapter.libraryCollections(id, undefined, tab, search)), shared), connection.images()]);
       const display = this.dateDisplay(id);
       return { items: page.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), display)), cursor: page.nextCursor ?? '' };
     });
   }
 
   /** A library's genres, read when a view lists them and held for the session. */
-  async libraryGenreChoices(id: string, refresh = false): Promise<Choice[] | undefined> {
-    return this.part('genres', partKey('genres', id), 0, refresh, async connection => {
+  async libraryGenreChoices(id: string, refresh = false, signal?: AbortSignal): Promise<Choice[] | undefined> {
+    return this.part('genres', partKey('genres', id), 0, refresh, signal, async (connection, shared) => {
       const adapter = connection.adapter;
-      return hasLibraryRecommendations(adapter) ? adapter.libraryGenres(id) : undefined;
+      return hasLibraryRecommendations(adapter) ? this.retrying(() => adapter.libraryGenres(id), shared) : undefined;
     });
   }
 
-  /** One part read, shared while in flight and held once answered. A failure is not held. */
-  private async part<T>(name: 'rows' | 'collections' | 'genres', key: string, progressRevision: number, refresh: boolean,
-    work: (connection: Connection) => Promise<T | undefined>): Promise<T | undefined> {
+  /** One part read, shared while in flight and held once answered. A failure is not held. The
+   * read's own signal aborts (no further retry) once every reader's `signal` has; a reader
+   * without one keeps it going. */
+  private async part<T>(name: 'rows' | 'collections' | 'genres', key: string, progressRevision: number, refresh: boolean, signal: AbortSignal | undefined,
+    work: (connection: Connection, signal: AbortSignal) => Promise<T | undefined>): Promise<T | undefined> {
     const epoch = this.session.epoch;
     const held = this.heldPart<T>(key);
     if (held && !refresh && (name !== 'rows' || held.progressRevision === progressRevision)) return held.value;
     const shared = this.partReads.get(key);
-    if (shared && shared.epoch === epoch && shared.progressRevision === progressRevision) return shared.promise as Promise<T | undefined>;
-    const promise = (async () => work(await this.session.ready()))();
-    this.partReads.set(key, { epoch, progressRevision, promise });
+    if (shared && shared.epoch === epoch && shared.progressRevision === progressRevision && shared.join(signal)) return shared.promise as Promise<T | undefined>;
+    const controller = new AbortController();
+    let readers = 0;
+    const join = (reader?: AbortSignal) => {
+      if (controller.signal.aborted || reader?.aborted) return false;
+      if (!reader) { readers = Infinity; return true; }
+      readers++;
+      reader.addEventListener('abort', () => { if (--readers <= 0) controller.abort(reader.reason); }, { once: true });
+      return true;
+    };
+    signal?.throwIfAborted();
+    join(signal);
+    const promise = (async () => work(await this.session.ready(), controller.signal))();
+    this.partReads.set(key, { epoch, progressRevision, promise, join });
     try {
       const value = await promise;
       if (value !== undefined && epoch === this.session.epoch) {
@@ -373,17 +407,17 @@ export class Catalogue {
     }
   }
 
-  async moreLibraryCollections(id: string, cursor: string, tab?: string, search?: string): Promise<{ items: Card[]; cursor: string }> {
+  async moreLibraryCollections(id: string, cursor: string, tab?: string, search?: string, signal?: AbortSignal): Promise<{ items: Card[]; cursor: string }> {
     const connection = await this.session.ready();
     if (!hasLibraryRecommendations(connection.adapter)) return { items: [], cursor: '' };
     const adapter = connection.adapter;
-    const [page, images] = await Promise.all([this.sideLane.run(() => adapter.libraryCollections(id, cursor, tab, search)), connection.images()]);
+    const [page, images] = await Promise.all([this.retrying(() => this.sideLane.run(() => adapter.libraryCollections(id, cursor, tab, search)), signal), connection.images()]);
     return { items: page.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), this.dateDisplay(id))), cursor: page.nextCursor ?? '' };
   }
 
   async moreLibraryRow(id: string, cursor: string, libraryId?: string): Promise<Row> {
     const connection = await this.session.ready();
-    const data = await connection.adapter.row(id, cursor);
+    const data = await this.retrying(() => connection.adapter.row(id, cursor));
     const row = feedRow(data, await connection.images(), this.artWidth());
     const display = this.dateDisplay(libraryId);
     return { ...row, items: row.items.map(item => withDateDisplay(item, display)) };
@@ -415,7 +449,8 @@ export class Catalogue {
         do {
           if (cursor && seen.has(cursor)) throw new Error('Invalid library continuation');
           if (cursor) seen.add(cursor);
-          result = await api.library(id, { ...browse, cursor }, { snapshot: true, fresh });
+          const page = cursor;
+          result = await this.retrying(() => api.library(id, { ...browse, cursor: page }, { snapshot: true, fresh }));
           for (const item of result.items) entries.set(item.id, item);
           read++;
           cursor = result.continuation === 'more' ? result.nextCursor : undefined;
@@ -458,7 +493,7 @@ export class Catalogue {
     if (more && previous?.continuation !== 'more') return;
     await this.read('collections', id, async connection => {
       const cursor = previous?.cursor;
-      const data = await connection.adapter.collection(id, cursor, PAGE);
+      const data = await this.retrying(() => connection.adapter.collection(id, cursor, PAGE));
       if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) {
         throw new Error('Invalid collection continuation');
       }
@@ -501,16 +536,8 @@ export class Catalogue {
   }
 }
 
-/** Retry only protocol-declared temporary title reads, at most twice and within a short wait. */
-export function titleRetryDelay(error: unknown, attempt: number): number | undefined {
-  if (!(error instanceof VelaError) || error.detail.retry.allowed !== true || attempt >= 2) return undefined;
-  const maximum = Number.isFinite(error.detail.retry.maxAttempts) ? Math.max(1, Math.floor(error.detail.retry.maxAttempts!)) : 3;
-  if (attempt + 1 >= maximum) return undefined;
-  const header = Number(error.retryAfter);
-  const hinted = Number.isFinite(error.detail.retry.afterSeconds) ? Math.max(0, error.detail.retry.afterSeconds!) : 0;
-  const seconds = Math.max(1, 2 ** attempt, hinted, Number.isFinite(header) ? header : 0);
-  return seconds <= 30 ? seconds * 1000 : undefined;
-}
+/** Retry only protocol-declared temporary title reads (read-retry.ts). */
+export const titleRetryDelay = readRetryDelay;
 
 type SliceValue<K extends 'titles' | 'related' | 'library' | 'collections'> = {
   titles: DetailModel;
@@ -565,6 +592,25 @@ function libraryModel(
     more: result.continuation === 'more',
     ...(Number.isSafeInteger(result.total) && result.total! >= 0 ? { total: result.total } : {}),
     pages,
+  };
+}
+
+/** A library as a page scoped to it (a person opened from it) needs it. */
+export interface LibraryScope { kind: string; media?: V.MediaClass; presentation?: V.Library['presentation'] }
+
+/**
+ * The i18n keys heading a person's movie-kind and other titles on a page in a library's scope.
+ * Only a video library of posters holds movies and TV shows: a landscape (or square) library of
+ * movie-kind items holds clips, scenes or home videos, and a book or audio library holds books;
+ * their titles are just "Titles". A movies library never calls its titles TV shows, nor a shows
+ * library its titles movies. Without a library, "Movies" and "TV Shows".
+ */
+export function personSectionLabels(scope: LibraryScope | undefined): { movies: string; tv: string } {
+  if (!scope) return { movies: 'person.movies', tv: 'person.tvShows' };
+  const video = (scope.media ?? 'video') === 'video' && (scope.presentation?.card ?? 'poster') === 'poster';
+  return {
+    movies: video && scope.kind !== 'shows' ? 'person.movies' : 'person.titles',
+    tv: video && scope.kind !== 'movies' ? 'person.tvShows' : 'person.titles',
   };
 }
 

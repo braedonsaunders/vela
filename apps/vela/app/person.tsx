@@ -1,8 +1,8 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, Platform } from 'react-native';
 import { useVela, useVelaState } from '@vela/core/react';
-import type { Card, Load } from '@vela/core';
+import { libraryCard, msg, personSectionLabels, type Card, type Load } from '@vela/core';
 import type { SkinHost } from '@vela/skin';
 import { DocumentScreen } from '../src/screen';
 import { closeModal } from '../src/modal-motion';
@@ -18,6 +18,16 @@ function PersonContent() {
   const store = useVela();
   const detail = useVelaState(state => state.titles[title]);
   const castPerson = detail?.value?.castPeople.find(p => p.name === name);
+  // Opened from a library (its people tab, a title in it): that library's scope and card shape.
+  const libraries = useVelaState(state => state.libraries.load);
+  const scope = store.catalogue.libraryScope(library || undefined);
+  const card = scope ? libraryCard(scope.presentation?.card) : undefined;
+  const headings = personSectionLabels(scope);
+  const moviesLabel = msg(headings.movies);
+  const tvLabel = msg(headings.tv);
+  // Leaving the page stops a read the server asked to retry later.
+  const leave = useRef<AbortController>(undefined);
+  useEffect(() => { const controller = new AbortController(); leave.current = controller; return () => controller.abort(); }, []);
   const person = id ? { id, name, canOpen: true, portrait: '', role: '' } : castPerson;
   const [items, setItems] = useState<Card[]>([]);
   const [cursor, setCursor] = useState<string>();
@@ -29,14 +39,17 @@ function PersonContent() {
     if (!person?.canOpen) { setStatus('failed'); return; }
     setStatus('loading');
     try {
-      const result = await store.catalogue.personTitles(person.id, library || undefined, next);
+      const result = await store.catalogue.personTitles(person.id, library || undefined, next, leave.current?.signal);
       setItems(previous => next ? [...previous, ...result.items] : result.items);
       setCursor(result.cursor);
       setStatus('ready');
     } catch { setStatus('failed'); }
   }, [store, person?.id, person?.canOpen, name, library]);
   useEffect(() => { if (title && !detail) void store.catalogue.title(title); }, [store, title, detail]);
-  useEffect(() => { if (detail?.value || detail?.load === 'failed' || !title) void load(); }, [load, detail?.value, detail?.load, title]);
+  // A person opened directly (a reload, a shared link) waits for the server's library list: it
+  // tells the adapter the server has filmographies, and gives the library's scope.
+  const listed = libraries === 'ready' || libraries === 'failed';
+  useEffect(() => { if ((detail?.value || detail?.load === 'failed' || !title) && (listed || !!title)) void load(); }, [load, detail?.value, detail?.load, title, listed]);
   useEffect(() => {
     if (!person?.canOpen || !person.id) return;
     let active = true;
@@ -66,12 +79,12 @@ function PersonContent() {
   const page = useCallback((host: SkinHost): SkinHost => ({
     ...host,
     env: { ...host.env, load: failed ? 'failed' : loading && !items.length ? 'loading' : 'ready',
-      personPage: { name: profile?.name ?? name, portrait: profile?.portrait || person?.portrait || '', role: profile?.knownFor || person?.role || '', biography: profile?.biography ?? '', birthday: profile?.birthday ?? '', items, more: !!cursor, loading } },
+      personPage: { name: profile?.name ?? name, portrait: profile?.portrait || person?.portrait || '', role: profile?.knownFor || person?.role || '', biography: profile?.biography ?? '', birthday: profile?.birthday ?? '', items, more: !!cursor, loading, card, moviesLabel, tvLabel } },
     dispatch: (action, arg) => {
       if (action === 'personMore') { if (cursor && !loading) void load(cursor); }
       else if (action === 'retry') void load();
       else host.dispatch(action, arg);
     },
-  }), [name, person?.portrait, person?.role, profile, items, cursor, loading, failed, load]);
+  }), [name, person?.portrait, person?.role, profile, items, cursor, loading, failed, load, card, moviesLabel, tvLabel]);
   return <DocumentScreen route="person" entry={title} library={library} page={page} />;
 }
