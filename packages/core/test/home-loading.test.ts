@@ -183,3 +183,26 @@ test('reading progress re-reads the progress shelves once and advances the libra
   expect(fresh).toEqual([false, true]);
   expect(box.get().home.progressRevision).toBe(1);
 });
+
+test('the library list never waits on probing a server for library views (a collections read that can take tens of seconds)', async () => {
+  const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
+  let release!: () => void;
+  const probe = new Promise<void>(resolve => { release = resolve; });
+  const probed: string[] = [];
+  const api = {
+    libraries: async () => ({ items: [{ id: 'live', name: 'Live', kind: 'live', artwork: [] }, { id: 'movies', name: 'Movies', kind: 'movies', artwork: [] }], continuation: 'exhausted' }),
+    probeLibraryViews: (id: string) => { probed.push(id); return probe; },
+  };
+  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter: api, images: async () => ({ origin: 'https://fixture.test' }) }), check: () => {} };
+  const home = new Home(box, session as unknown as Session, () => 640);
+  await home.libraries();
+  const listed = box.get().libraries;
+  expect(listed.load).toBe('ready');
+  expect(listed.value?.map(library => library.id)).toEqual(['live', 'movies']);
+  expect(probed).toEqual(['movies']);
+  // Once the probe answers, the same list is published again so library pages learn what they can show.
+  release();
+  await probe; await Promise.resolve();
+  expect(box.get().libraries.value).not.toBe(listed.value);
+  expect(box.get().libraries.value).toEqual(listed.value);
+});

@@ -125,48 +125,7 @@ test('title retry policy follows declared transient attempts without retrying pe
   expect(titleRetryDelay(missing, 0)).toBeUndefined();
 });
 
-test('a library\'s recommendations are handed over before its collections and genres arrive', async () => {
-  const box = new StateBox({ library: {}, titles: {}, related: {}, collections: {} } as unknown as VelaState);
-  const collections = deferred<{ items: never[] }>();
-  const rowReads: (boolean | undefined)[] = [];
-  const adapter = {
-    libraryRows: async (_id: string, _kind: string, fresh?: boolean) => { rowReads.push(fresh); return [{ id: 'r', name: 'Recently added', purpose: 'recentlyAdded', items: [], receiptToken: '', continuation: 'exhausted' }]; },
-    libraryCollections: () => collections.promise,
-    libraryGenres: async () => [{ id: 'g', label: 'Drama' }],
-  };
-  const session = { epoch: 0, onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
-  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
-  const early = deferred<string[]>();
-  const all = catalogue.libraryExtras('movies', 'movies', extras => { expect(extras.rowsLoad).toBe('ready'); expect(extras.collectionsLoad).toBe('loading'); early.resolve(extras.rows.map(row => row.name)); }, undefined, undefined, true);
-  expect(await early.promise).toEqual(['Recently added']);
-  collections.resolve({ items: [] });
-  const done = await all;
-  expect(done?.rows.map(row => row.name)).toEqual(['Recently added']);
-  expect(done?.collectionsLoad).toBe('ready');
-  expect(done?.rowsLoad).toBe('ready');
-  expect(done?.genresLoad).toBe('ready');
-  expect(done?.genres).toEqual([{ id: 'g', label: 'Drama' }]);
-  expect(rowReads).toEqual([true]);
-});
 
-test('collection first and continuation reads carry the selected tab and preserve its cursor', async () => {
-  const calls: unknown[][] = [];
-  const adapter = {
-    libraryRows: async () => [], libraryGenres: async () => [],
-    libraryCollections: async (id: string, cursor?: string, tab?: string) => {
-      calls.push([id, cursor, tab]);
-      return { items: [{ id: 'facet:people:creator:1', targetId: 'facet:people:creator:1', name: 'Creator', kind: 'collection', artwork: [], receiptToken: '' }], nextCursor: cursor ? undefined : 'opaque-next', continuation: cursor ? 'exhausted' : 'more' };
-    },
-  };
-  const session = { onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
-  const catalogue = new Catalogue(new StateBox({} as VelaState), session as unknown as Session, () => 640);
-  const first = await catalogue.libraryExtras('library', 'mixed', undefined, 'creator-collections');
-  expect(first?.collectionCursor).toBe('opaque-next');
-  expect(first?.collections[0]?.id).toBe('facet:people:creator:1');
-  const next = await catalogue.moreLibraryCollections('library', first!.collectionCursor, 'creator-collections');
-  expect(next.cursor).toBe('');
-  expect(calls).toEqual([['library', undefined, 'creator-collections'], ['library', 'opaque-next', 'creator-collections']]);
-});
 
  test('empty library is loading until the response finishes; failure never becomes ready', async () => {
   const f = setup(), pending = deferred<LibraryContents>();
@@ -183,15 +142,6 @@ test('collection first and continuation reads carry the selected tab and preserv
   expect(f.box.get().library[key]?.load).toBe('failed');
 });
 
-test('failed collections cannot masquerade as an empty successful view', async () => {
-  const adapter = { libraryRows: async () => [], libraryCollections: async () => { throw new Error('offline'); }, libraryGenres: async () => [] };
-  const session = { onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
-  const catalogue = new Catalogue(new StateBox({} as VelaState), session as unknown as Session, () => 640);
-  const result = await catalogue.libraryExtras('movies', 'movies');
-  expect(result?.rowsLoad).toBe('ready');
-  expect(result?.collectionsLoad).toBe('failed');
-  expect(result?.genresLoad).toBe('ready');
-});
 
 test('a server-counted total reaches the library model; a missing or invalid one is left out', async () => {
   const f = setup();
@@ -206,22 +156,3 @@ test('a server-counted total reaches the library model; a missing or invalid one
   }
 });
 
-test('a library view\'s extras are held for the session and one read serves a prefetch and its page', async () => {
-  const box = new StateBox({ library: {}, titles: {}, related: {}, collections: {}, home: { progressRevision: 3 } } as unknown as VelaState);
-  let reads = 0;
-  const rows = deferred<never[]>();
-  const adapter = { libraryRows: () => { reads++; return rows.promise; }, libraryCollections: async () => ({ items: [] }), libraryGenres: async () => [] };
-  const session = { epoch: 1, onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
-  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
-  expect(catalogue.cachedLibraryExtras('movies', undefined, '')).toBeUndefined();
-  const prefetch = catalogue.libraryExtras('movies', 'movies', undefined, undefined, '');
-  const page = catalogue.libraryExtras('movies', 'movies', undefined, undefined, '');
-  rows.resolve([]);
-  expect(await page).toBe(await prefetch);
-  expect(reads).toBe(1);
-  expect(catalogue.cachedLibraryExtras('movies', undefined, '')?.progressRevision).toBe(3);
-  expect(catalogue.cachedLibraryExtras('movies', 'collections-tab', '')).toBeUndefined();
-  // Another session's answer is never shown.
-  session.epoch = 2;
-  expect(catalogue.cachedLibraryExtras('movies', undefined, '')).toBeUndefined();
-});

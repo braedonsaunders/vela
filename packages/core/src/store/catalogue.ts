@@ -12,9 +12,10 @@ import { personDates } from '../discovery/person-date';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow, libraryLiveCard, withDateDisplay } from '../discovery/models';
 import { detailCard, detailWatched, recorded, type Watched } from '../discovery/progress';
-import type { Card, CollectionModel, DetailModel, LibraryExtras, LibraryLiveModel, LibraryModel, Row } from '../models';
+import type { Card, Choice, CollectionModel, DetailModel, LibraryLiveModel, LibraryModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
 import { msg } from '../i18n';
+import { Lane } from './lane';
 import { PendingTitles } from './pending';
 import type { Session } from './session';
 import { failed, loading, ready, type Loadable, type StateBox } from './state';
@@ -127,16 +128,31 @@ export class Catalogue {
     catch { return false; }
   }
   private readonly libraryReads = new Map<string, { pages: number; promise: Promise<void> }>();
-  /** Each library view's last recommendations, collections and genres in this session (a few
-   * dozen views at most), so a section drawn again or prefetched shows them at once. */
-  private readonly extrasHeld = new Map<string, { epoch: number; progressRevision: number; value: LibraryExtras }>();
-  /** Reads of extras in flight, shared by a prefetch and the page that then opens. */
-  private readonly extrasReads = new Map<string, { progressRevision: number; promise: Promise<LibraryExtras | undefined> }>();
+  /** Each library part's last answer in this session (a few dozen at most), so a section drawn
+   * again or prefetched shows it at once. Recommendations carry the progress revision they were
+   * read at; collections and genres stand for the session unless the viewer asks again. */
+  private readonly partsHeld = new Map<string, { epoch: number; progressRevision: number; value: unknown }>();
+  /** Part reads in flight, shared by a prefetch and the page that then opens. */
+  private readonly partReads = new Map<string, { epoch: number; progressRevision: number; promise: Promise<unknown> }>();
+  /** Collections are a side read some servers answer in tens of seconds: they wait in a lane of
+   * their own, so they never hold every connection to the server (lane.ts). */
+  private readonly sideLane = new Lane(SIDE_READS);
 
-  /** The session's last answer for a library view's extras, with the progress revision it was read at. */
-  cachedLibraryExtras(id: string, tab?: string, search?: string): { progressRevision: number; value: LibraryExtras } | undefined {
-    const held = this.extrasHeld.get(extrasKey(id, tab, search));
-    return held && held.epoch === this.session.epoch ? held : undefined;
+  /** The session's last recommendations for a library, with the progress revision they were read at. */
+  cachedLibraryRecommendations(id: string): { progressRevision: number; value: Row[] } | undefined {
+    return this.heldPart<Row[]>(partKey('rows', id));
+  }
+  /** The session's first page of a library's collections (or people) for a tab and search. */
+  cachedLibraryCollections(id: string, tab?: string, search?: string): CollectionPage | undefined {
+    return this.heldPart<CollectionPage>(partKey('collections', id, tab, search))?.value;
+  }
+  /** The session's genres for a library. */
+  cachedLibraryGenres(id: string): Choice[] | undefined {
+    return this.heldPart<Choice[]>(partKey('genres', id))?.value;
+  }
+  private heldPart<T>(key: string): { progressRevision: number; value: T } | undefined {
+    const held = this.partsHeld.get(key);
+    return held && held.epoch === this.session.epoch ? held as { progressRevision: number; value: T } : undefined;
   }
   private readonly librarySnapshots = new Map<string, { cursor?: string; seen: Set<string>; indices: Map<string, number> }>();
   /** What each collection has read so far, and where the server said to continue. */
@@ -279,70 +295,74 @@ export class Catalogue {
     });
   }
 
-  /** Library-specific native server views. Ether v0 does not identify a library in RowsQuery. */
-  /** A library's recommendations, collections and genres, read together. `onRows` has the
-   * recommendations as soon as they arrive, so they show while the others are still read. */
-  async libraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void, tab?: string, search?: string, freshRows = false): Promise<LibraryExtras | undefined> {
-    const key = extrasKey(id, tab, search);
+  /**
+   * A library's recommended rows on their own: a view shows them as soon as they arrive, never
+   * waiting on its collections or genres. Undefined when the server has no library views. One
+   * read serves a prefetch and the page that opens; the answer is held for the session at the
+   * progress revision it was read at.
+   */
+  async libraryRecommendations(id: string, kind: V.Library['kind'], freshRows = false): Promise<Row[] | undefined> {
     const progressRevision = this.box.get().home?.progressRevision ?? 0;
-    const shared = this.extrasReads.get(key);
-    if (shared && shared.progressRevision === progressRevision) {
-      const value = await shared.promise;
-      if (value) onRows?.(value);
-      return value;
-    }
+    return this.part('rows', partKey('rows', id), progressRevision, false, async connection => {
+      const adapter = connection.adapter;
+      if (!hasLibraryRecommendations(adapter)) return undefined;
+      const [value, images] = await Promise.all([adapter.libraryRows(id, kind, freshRows), connection.images()]);
+      const display = this.dateDisplay(id);
+      return value.map(row => { const model = feedRow(row, images, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; });
+    });
+  }
+
+  /**
+   * The first page of a library's collections (or a people tab), read only when a view shows
+   * them, in the side lane. Held for the session: progress never changes them, so they are read
+   * again only when `refresh` asks (the viewer's Try again).
+   */
+  async libraryCollectionPage(id: string, tab?: string, search?: string, refresh = false): Promise<CollectionPage | undefined> {
+    return this.part('collections', partKey('collections', id, tab, search), 0, refresh, async connection => {
+      const adapter = connection.adapter;
+      if (!hasLibraryRecommendations(adapter)) return undefined;
+      const [page, images] = await Promise.all([this.sideLane.run(() => adapter.libraryCollections(id, undefined, tab, search)), connection.images()]);
+      const display = this.dateDisplay(id);
+      return { items: page.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), display)), cursor: page.nextCursor ?? '' };
+    });
+  }
+
+  /** A library's genres, read when a view lists them and held for the session. */
+  async libraryGenreChoices(id: string, refresh = false): Promise<Choice[] | undefined> {
+    return this.part('genres', partKey('genres', id), 0, refresh, async connection => {
+      const adapter = connection.adapter;
+      return hasLibraryRecommendations(adapter) ? adapter.libraryGenres(id) : undefined;
+    });
+  }
+
+  /** One part read, shared while in flight and held once answered. A failure is not held. */
+  private async part<T>(name: 'rows' | 'collections' | 'genres', key: string, progressRevision: number, refresh: boolean,
+    work: (connection: Connection) => Promise<T | undefined>): Promise<T | undefined> {
     const epoch = this.session.epoch;
-    const promise = this.readLibraryExtras(id, kind, onRows, tab, search, freshRows);
-    this.extrasReads.set(key, { progressRevision, promise });
+    const held = this.heldPart<T>(key);
+    if (held && !refresh && (name !== 'rows' || held.progressRevision === progressRevision)) return held.value;
+    const shared = this.partReads.get(key);
+    if (shared && shared.epoch === epoch && shared.progressRevision === progressRevision) return shared.promise as Promise<T | undefined>;
+    const promise = (async () => work(await this.session.ready()))();
+    this.partReads.set(key, { epoch, progressRevision, promise });
     try {
       const value = await promise;
-      if (value && !value.failed && epoch === this.session.epoch) {
-        this.extrasHeld.delete(key);
-        this.extrasHeld.set(key, { epoch, progressRevision, value });
-        for (const old of this.extrasHeld.keys()) { if (this.extrasHeld.size <= EXTRAS_HELD) break; this.extrasHeld.delete(old); }
+      if (value !== undefined && epoch === this.session.epoch) {
+        this.partsHeld.delete(key);
+        this.partsHeld.set(key, { epoch, progressRevision, value });
+        for (const old of this.partsHeld.keys()) { if (this.partsHeld.size <= PARTS_HELD) break; this.partsHeld.delete(old); }
       }
       return value;
     } finally {
-      if (this.extrasReads.get(key)?.promise === promise) this.extrasReads.delete(key);
+      if (this.partReads.get(key)?.promise === promise) this.partReads.delete(key);
     }
-  }
-
-  private async readLibraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void, tab?: string, search?: string, freshRows = false): Promise<LibraryExtras | undefined> {
-    const connection = await this.session.ready();
-    const adapter = connection.adapter;
-    if (!hasLibraryRecommendations(adapter)) return undefined;
-    const images = connection.images();
-    const reading = adapter.libraryRows(id, kind, freshRows);
-    const display = this.dateDisplay(id);
-    const row = (value: V.Row, sized: Images) => { const model = feedRow(value, sized, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; };
-    if (onRows) void Promise.all([reading, images]).then(([value, sized]) => onRows({
-      recommendationsAvailable: true, collectionsAvailable: true, rows: value.map(value => row(value, sized)),
-      rowsLoad: 'ready', collectionsLoad: 'loading', genresLoad: 'loading',
-      collections: [], collectionCursor: '', genres: [], failed: false,
-    }), () => {});
-    const [rows, collections, genres] = await Promise.allSettled([reading, adapter.libraryCollections(id, undefined, tab, search), adapter.libraryGenres(id)]);
-    return this.extras(rows, collections, genres, await images, display);
-  }
-
-  private extras(rows: PromiseSettledResult<V.Row[]>, collections: PromiseSettledResult<V.Page<V.RowEntry>>, genres: PromiseSettledResult<{ id: string; label: string }[]>, images: Images, display: 'year' | 'date'): LibraryExtras {
-    return {
-      rowsLoad: rows.status === 'fulfilled' ? 'ready' : 'failed',
-      collectionsLoad: collections.status === 'fulfilled' ? 'ready' : 'failed',
-      genresLoad: genres.status === 'fulfilled' ? 'ready' : 'failed',
-      recommendationsAvailable: true,
-      collectionsAvailable: true,
-      rows: rows.status === 'fulfilled' ? rows.value.map(row => { const model = feedRow(row, images, this.artWidth()); return { ...model, items: model.items.map(item => withDateDisplay(item, display)) }; }) : [],
-      collections: collections.status === 'fulfilled' ? collections.value.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), display)) : [],
-      collectionCursor: collections.status === 'fulfilled' ? collections.value.nextCursor ?? '' : '',
-      genres: genres.status === 'fulfilled' ? genres.value : [],
-      failed: [rows, collections, genres].some(result => result.status === 'rejected'),
-    };
   }
 
   async moreLibraryCollections(id: string, cursor: string, tab?: string, search?: string): Promise<{ items: Card[]; cursor: string }> {
     const connection = await this.session.ready();
     if (!hasLibraryRecommendations(connection.adapter)) return { items: [], cursor: '' };
-    const [page, images] = await Promise.all([connection.adapter.libraryCollections(id, cursor, tab, search), connection.images()]);
+    const adapter = connection.adapter;
+    const [page, images] = await Promise.all([this.sideLane.run(() => adapter.libraryCollections(id, cursor, tab, search)), connection.images()]);
     return { items: page.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), this.dateDisplay(id))), cursor: page.nextCursor ?? '' };
   }
 
@@ -533,7 +553,12 @@ function libraryModel(
   };
 }
 
-const EXTRAS_HELD = 24;
-function extrasKey(id: string, tab?: string, search?: string): string {
-  return `${id}\u0000${tab ?? ''}\u0000${search ?? ''}`;
+/** A library's collections page: its cards and the server's cursor for the next ('' at the end). */
+export interface CollectionPage { items: Card[]; cursor: string }
+
+const PARTS_HELD = 48;
+/** Collections reads running at once; more wait in the side lane. */
+const SIDE_READS = 2;
+function partKey(part: 'rows' | 'collections' | 'genres', id: string, tab?: string, search?: string): string {
+  return part === 'collections' ? `${part}\u0000${id}\u0000${tab ?? ''}\u0000${search ?? ''}` : `${part}\u0000${id}`;
 }

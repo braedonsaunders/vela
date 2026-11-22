@@ -364,12 +364,19 @@ export class Home {
           items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
         }
         if (page.continuation === 'exhausted') {
-          const first = items.find(item => item.kind !== 'live');
-          if (first && 'probeLibraryViews' in connection.adapter && typeof connection.adapter.probeLibraryViews === 'function') {
-            try { await connection.adapter.probeLibraryViews(first.id); } catch { /* Library browsing remains usable if probing fails. */ }
-          }
           this.session.check(epoch, 'libraries');
           this.box.update('libraries', () => ready(items));
+          // A server that does not declare its library tabs is probed for library views, which
+          // reads a collections route some servers answer in tens of seconds: the shell never
+          // waits on it. The list is published again once the probe answers, so library pages
+          // drawn meanwhile learn whether they can recommend.
+          const first = items.find(item => item.kind !== 'live');
+          const adapter = connection.adapter;
+          if (first && 'probeLibraryViews' in adapter && typeof adapter.probeLibraryViews === 'function') {
+            void (adapter.probeLibraryViews(first.id) as Promise<void>).then(() => {
+              if (epoch === this.session.epoch && this.box.get().libraries.value === items) this.box.update('libraries', () => ready([...items]));
+            }, () => { /* Library browsing remains usable if probing fails. */ });
+          }
           return;
         }
         if (page.continuation !== 'more' || !page.nextCursor || seen.has(page.nextCursor)) {

@@ -1,24 +1,27 @@
-// Reading a library section ahead of its first visit: its first page, and the recommendations,
-// collections and genres its first tab shows, into core's store. A section opened afterwards
-// draws them at once (useLibraryPage reads the same keys). Nothing here navigates or draws.
+// Reading a library section ahead of its first visit: its first page, and the recommendations
+// its first tab shows, into core's store. A section opened afterwards draws them at once
+// (useLibraryPage reads the same keys). Collections are never read ahead: some servers take tens
+// of seconds to answer them, so they are read only when the viewer opens them. Nothing here
+// navigates or draws.
 import { libraryKey, libraryTabs, type LibraryModel, type LibraryQuery, type Vela } from '@vela/core';
 import { queryOf } from './library-query';
 
 /** What a library page opened without parameters reads first: a level or Smart View tab is read
- * by its own query; a recommended or library tab also reads the extras; a live tab reads neither. */
+ * by its own query; a Recommended tab (or a library without tabs, which opens on its
+ * recommendations) also reads the recommendations; a live tab reads neither. */
 export function firstView(tabs: LibraryModel['tabs'], liveAvailable: boolean, query: LibraryQuery):
-  { query: LibraryQuery; extras: boolean } | null {
+  { query: LibraryQuery; recommendations: boolean } | null {
   const first = libraryTabs(tabs)?.filter(tab => tab.kind !== 'live' || liveAvailable)[0];
   if (first?.kind === 'live') return null;
   if (first?.kind === 'view' || (first?.kind === 'library' && first.level)) {
-    return { query: { ...query, tab: first.id, sort: first.sort ?? query.sort, direction: first.direction ?? query.direction }, extras: false };
+    return { query: { ...query, tab: first.id, sort: first.sort ?? query.sort, direction: first.direction ?? query.direction }, recommendations: false };
   }
-  return { query, extras: first?.kind !== 'collections' && first?.kind !== 'people' };
+  return { query, recommendations: !first || first.kind === 'recommended' };
 }
 
-/** Read one library's first page and first tab ahead, unless already held. `extras` false reads
- * the first page only: recommendations are the server's slowest answer. */
-export async function prefetchLibrary(store: Vela, id: string, extras = true): Promise<void> {
+/** Read one library's first page and first tab ahead, unless already held. `recommendations`
+ * false reads the first page only. */
+export async function prefetchLibrary(store: Vela, id: string, recommendations = true): Promise<void> {
   const state = store.getState();
   if (state.auth.phase !== 'signed-in') return;
   const library = state.libraries.value?.find(item => item.id === id);
@@ -34,10 +37,9 @@ export async function prefetchLibrary(store: Vela, id: string, extras = true): P
   const view = firstView(model.tabs, state.home.value?.libraryLiveAvailable ?? false, query);
   if (!view) return;
   if (view.query !== query) { await read(view.query); return; }
-  if (!extras || !view.extras || !store.catalogue.libraryRecommendationsAvailable) return;
-  const progressRevision = store.getState().home.progressRevision;
-  if (store.catalogue.cachedLibraryExtras(id, undefined, '')?.progressRevision === progressRevision) return;
-  await store.catalogue.libraryExtras(id, model.kind, undefined, undefined, '', progressRevision > 0);
+  if (!recommendations || !view.recommendations || !store.catalogue.libraryRecommendationsAvailable) return;
+  // A held answer at this progress revision is returned without a read.
+  await store.catalogue.libraryRecommendations(id, model.kind, store.getState().home.progressRevision > 0);
 }
 
 /** Read ahead the first few libraries' first pages, one at a time, once the app is idle: the
