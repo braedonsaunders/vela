@@ -140,7 +140,8 @@ test('Ether ending the old session as it starts the new-height one is a handover
   expect(tile.state).not.toBe('failed');
   expect(tile.plan!.sessionId).toBe(next);
   expect(tile.next).toBeNull();
-  expect(calls.stopped).toEqual([first]);
+  // Ether ended it: there is nothing to stop.
+  expect(calls.stopped).toEqual([]);
 });
 
 test('the old session ending while the new height is still being asked for waits for that answer', async () => {

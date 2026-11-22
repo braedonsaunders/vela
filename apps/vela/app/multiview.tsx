@@ -1,6 +1,7 @@
 // Live TV multiview: up to four live channels on one screen (packages/skin/src/widgets/multiview).
 // `?add=<channelId>` adds a channel on arrival; `?channels=a,b,c&layout=grid&focus=1` sets the
-// whole screen (a deep link, and how a device check opens a known screen).
+// whole screen (a deep link, and how a device check opens a known screen); `&full=1` shows that
+// tile full screen and `&full=-1` returns to the grid.
 import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -13,7 +14,7 @@ import { useVela } from '../src/vela';
 const LAYOUTS: MultiviewLayout[] = ['split', 'grid', 'feature'];
 
 export default function Multiview() {
-  const { add, channels: listed, layout, focus } = useLocalSearchParams<{ add?: string; channels?: string; layout?: string; focus?: string }>();
+  const { add, channels: listed, layout, focus, full } = useLocalSearchParams<{ add?: string; channels?: string; layout?: string; focus?: string; full?: string }>();
   const { host } = useVela();
   const multiview = useMultiview();
   const focused = useIsFocused();
@@ -24,7 +25,7 @@ export default function Multiview() {
   const applied = useRef('');
   useEffect(() => {
     const controller = multiview?.controller;
-    const key = `${add ?? ''}|${listed ?? ''}|${layout ?? ''}|${focus ?? ''}`;
+    const key = `${add ?? ''}|${listed ?? ''}|${layout ?? ''}|${focus ?? ''}|${full ?? ''}`;
     if (!controller || applied.current === key) return;
     applied.current = key;
     if (listed) {
@@ -36,7 +37,12 @@ export default function Multiview() {
     if (layout && LAYOUTS.includes(layout as MultiviewLayout)) controller.setLayout(layout as MultiviewLayout);
     const tile = focus !== undefined ? controller.view().tiles[Number(focus)] : undefined;
     if (tile) controller.focus(tile.slot);
-  }, [multiview, add, listed, layout, focus]);
+    if (full !== undefined) {
+      const big = controller.view().tiles[Number(full)];
+      if (!big) controller.exitFullscreen();
+      else if (controller.view().fullscreen !== big.slot) controller.toggleFullscreen(big.slot);
+    }
+  }, [multiview, add, listed, layout, focus, full]);
 
   const leave = useCallback(() => {
     if (router.canGoBack()) router.back();

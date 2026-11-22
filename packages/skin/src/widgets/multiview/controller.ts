@@ -386,7 +386,7 @@ export class MultiviewController {
     const tile = this.tile(slot);
     if (tile?.next?.sessionId === plan.sessionId) { tile.next = plan; this.emit(); return; }
     if (!tile?.plan || tile.plan.sessionId !== plan.sessionId || plan.revision < tile.plan.revision) return;
-    if (plan.state === 'ended') { this.oldEnded(tile, new Error('')); return; }
+    if (plan.state === 'ended') { this.oldEnded(tile, new Error(''), true); return; }
     tile.plan = plan;
     this.emit();
   }
@@ -470,8 +470,8 @@ export class MultiviewController {
   /** The tile's current session ended or its player gave up. During a height change that is the
    * handover (Ether ends the old session as it starts the new one): the new session takes over, or
    * the tile waits for it. Otherwise the tile has failed. */
-  private oldEnded(tile: TileRecord, error: unknown): void {
-    if (tile.next) { this.takeNext(tile, false); return; }
+  private oldEnded(tile: TileRecord, error: unknown, ended = false): void {
+    if (tile.next) { this.takeNext(tile, false, ended); return; }
     if (tile.regrading) {
       if (tile.handover) return;
       tile.handover = true;
@@ -653,7 +653,8 @@ export class MultiviewController {
   }
 
   /** The new-height session shows its first picture: it takes the tile's place and the old one stops. */
-  private takeNext(tile: TileRecord, playing = true): void {
+  /** `ended`: the old session already ended (Ether's handover), so there is nothing to stop. */
+  private takeNext(tile: TileRecord, playing = true, ended = false): void {
     const next = tile.next;
     if (!next) return;
     const old = tile.plan;
@@ -669,7 +670,7 @@ export class MultiviewController {
     tile.command = { id: tile.commandId, type: 'mute', muted: tile.muted };
     this.unfollow(tile);
     this.follow(tile, next);
-    if (old) this.stopPlan(old);
+    if (old && !ended) this.stopPlan(old);
     this.emit();
   }
 
