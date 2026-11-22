@@ -108,7 +108,7 @@ export function bestWatch(event: LiveEvent): WatchTarget | undefined {
 
 /** Whether a target can be tuned here (a Live TV channel). Only these are actions: a broadcast or
  * a target with nothing to tune is information and never opens anything. */
-export const tunable = (target: WatchTarget | undefined): target is WatchTarget & { channelId: string } => !!target?.channelId;
+export const tunable = (target: WatchTarget | undefined): target is WatchTarget & { channelId: string } => !!target?.channelId && target.available !== false;
 
 /** The best target that can be tuned, if any. */
 export function watchTarget(event: LiveEvent): (WatchTarget & { channelId: string }) | undefined {
@@ -126,12 +126,15 @@ export function targetLabel(target: WatchTarget): string {
 export function airingText(event: LiveEvent): string {
   // An add-on that carries it names a place; a plugin's target is a web link (the page lists those).
   const untunable = (event.watch ?? []).filter(target => !tunable(target) && target.kind === 'addon').map(target => target.name);
+  // A channel Ether knows cannot play now is named, greyed in words, never offered as a button.
+  const unavailable = (event.watch ?? []).filter(target => target.channelId && target.available === false)
+    .map(target => msg('sports.unavailableNow', { name: target.number ? msg('sports.onChannel', { name: target.name, number: target.number }) : target.name }));
   const rank = { tv: 0, stream: 1, radio: 2 } as const;
   const broadcasts = [...(event.broadcasts ?? [])].sort((a, b) => (rank[a.kind] ?? 3) - (rank[b.kind] ?? 3)).map(b => b.name);
   // A broadcast that is the channel a Watch button already names is not said twice.
   const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9+]/g, '');
   const tuned = new Set((event.watch ?? []).filter(tunable).map(target => key(target.name)));
-  const names = [...new Set([...untunable, ...broadcasts].map(name => name.trim()).filter(name => name && !tuned.has(key(name))))];
+  const names = [...new Set([...unavailable, ...untunable, ...broadcasts].map(name => name.trim()).filter(name => name && !tuned.has(key(name))))];
   return names.slice(0, 2).join(' · ');
 }
 

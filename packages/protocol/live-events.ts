@@ -36,6 +36,9 @@ export interface WatchTarget {
   name: string; number?: string; logo?: string;
   /** On air now. */ live: boolean;
   /** 0..1. */ confidence: number;
+  /** false: Ether knows the channel cannot play now (its source is failing). Shown as
+   * "unavailable right now", never as a button. Absent means available. */
+  available?: boolean;
 }
 export interface LiveEvent {
   /** Namespaced by Ether (`pluginID:feedID:id`); opaque to clients. */ id: ID;

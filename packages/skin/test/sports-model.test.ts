@@ -153,3 +153,15 @@ test('a broadcast already named by a Watch button is not repeated', () => {
   const e = event({ broadcasts: [{ name: 'FS1', kind: 'tv' }, { name: 'ESPN+', kind: 'stream' }], watch: [{ kind: 'channel', channelId: 'c', name: 'FS1', number: '141', live: true, confidence: 0.6 }] });
   expect(airingText(e)).toBe('ESPN+');
 });
+
+test('a channel Ether marks unavailable is named as unavailable and never offered as a button', async () => {
+  const { airingText, tunable, watchTarget } = await import('../src/widgets/sports/model');
+  const event = {
+    id: 'e', feed: 'sports', category: 'football', league: { id: 'nfl', name: 'NFL' }, start: '2026-11-22T18:00:00Z',
+    status: { state: 'in', detail: 'Q4' }, competitors: [], updatedAt: '2026-11-22T20:00:00Z',
+    watch: [{ kind: 'channel', channelId: 'fox', name: 'FOX', number: '134', live: true, confidence: 0.9, available: false }],
+  } as never;
+  expect(tunable((event as { watch: never[] }).watch[0])).toBe(false);
+  expect(watchTarget(event)).toBeUndefined();
+  expect(airingText(event)).toBe('FOX · 134 unavailable right now');
+});

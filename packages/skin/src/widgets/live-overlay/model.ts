@@ -229,7 +229,7 @@ export interface AlertWatch {
  * target that is the channel already playing is no target ("on now"); a non-channel target
  * (an add-on) cannot be opened from a toast. */
 export function alertWatch(targets: readonly WatchTarget[] | undefined, playingChannelId?: string): AlertWatch {
-  const channels = (targets ?? []).filter((target): target is WatchTarget & { channelId: string } => !!target.channelId)
+  const channels = (targets ?? []).filter((target): target is WatchTarget & { channelId: string } => !!target.channelId && target.available !== false)
     .sort((a, b) => Number(b.live) - Number(a.live) || (b.confidence ?? 0) - (a.confidence ?? 0));
   const onNow = !!playingChannelId && channels.some(target => target.channelId === playingChannelId);
   if (onNow) return { onNow };
