@@ -38,20 +38,27 @@ test('2×2 is four equal quarters', () => {
   expect(grid[0]!.width).toBeGreaterThan(900);
 });
 
-test('one big + three small: the big tile is as tall as the column, both top-aligned, filling the width', () => {
-  const [big, ...small] = slotRects('feature', 4, TV, 14);
+test('one big + three small: the big tile is as tall as the column, filling the width, centred with its captions', () => {
+  const [big, ...small] = slotRects('feature', 4, TV, 14, 112);
   expect(big!.width).toBeGreaterThan(1400);
   expect(small[0]!.y).toBeCloseTo(big!.y);
   expect(small[2]!.y + small[2]!.height).toBeCloseTo(big!.y + big!.height);
   expect(small[0]!.x + small[0]!.width).toBeCloseTo(1920 - 14);
   expect(big!.x).toBeCloseTo(14);
-  // The band under them is what is left of the screen, the full width of the tiles.
-  const band = featureBand(TV, 14);
+  // The caption band sits under the tiles, and the whole stands in the middle of the screen.
+  const band = featureBand(TV, 14, 112);
   expect(band.y).toBeCloseTo(big!.y + big!.height + 14);
-  expect(band.y + band.height).toBeCloseTo(1080 - 14);
+  expect(band.height).toBe(112);
   expect(band.width).toBeCloseTo(1920 - 28);
+  expect(big!.y).toBeCloseTo(1080 - (band.y + band.height), 5);
   // With fewer beside it, the big tile keeps its place and size.
-  expect(slotRects('feature', 2, TV, 14)[0]).toEqual(big!);
+  expect(slotRects('feature', 2, TV, 14, 112)[0]).toEqual(big!);
+});
+
+test('side by side tiles and their captions stand together in the middle', () => {
+  const [a, b] = slotRects('split', 2, TV, 14, 112);
+  expect(a!.y).toBeCloseTo(b!.y);
+  expect(a!.y).toBeCloseTo(1080 - (a!.y + a!.height + 14 + 112), 5);
 });
 
 test('a screen too short for the column keeps every tile on it', () => {

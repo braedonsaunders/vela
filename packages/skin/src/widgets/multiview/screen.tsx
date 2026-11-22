@@ -26,6 +26,8 @@ const TOUCH = !TV && Platform.OS !== 'web';
 /** Tile motion: a long, soft ease-out, the same for layout, full screen and entry. */
 const MOVE = { duration: 460, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
 const FADE = { duration: 320, easing: Easing.out(Easing.cubic) };
+/** The caption row's height under side-by-side and one-big tiles. */
+const CAPTION = TV ? 112 : Platform.OS === 'web' ? 84 : 64;
 const useTVEvents = typeof useTVEventHandler === 'function' ? useTVEventHandler : (_handler: (event: { eventType?: string }) => void) => undefined;
 
 export interface MultiviewScreenProps {
@@ -65,7 +67,10 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
   const byId = useMemo(() => new Map(channels.map(channel => [channel.id, channel])), [channels]);
   const gap = TV ? 14 : Platform.OS === 'web' ? 10 : 6;
   const count = view.tiles.length;
-  const rects = useMemo(() => slotRects(view.layout, count, size, gap), [view.layout, count, size, gap]);
+  // Side by side and one big + three small say what is on each tile under the tiles.
+  const captioned = count > 1 && (view.layout === 'feature' || view.layout === 'split');
+  const caption = captioned ? CAPTION : 0;
+  const rects = useMemo(() => slotRects(view.layout, count, size, gap, caption), [view.layout, count, size, gap, caption]);
   const full: Rect = { x: 0, y: 0, width: size.width, height: size.height };
   // Each tile asks for the stream height it is drawn at, in device pixels.
   const heights = view.tiles.map((tile, index) => `${tile.slot}:${Math.round((view.fullscreen === tile.slot ? size.height : rects[index]?.height ?? 0) * PixelRatio.get())}`).join(',');
@@ -147,7 +152,7 @@ export function MultiviewScreen({ controller, Player, channels, onLeave, useLive
           onLongPress={() => controller.toggleFullscreen(tile.slot)}
           onOptions={() => setPanel({ slot: tile.slot, mode: 'actions' })} />;
       })}
-      {view.fullscreen < 0 && count > 1 && (view.layout === 'feature' || view.layout === 'split') ? (
+      {view.fullscreen < 0 && captioned ? (
         <Captions key={view.layout} look={look} still={still} view={view} rects={rects} size={size} gap={gap} byId={byId} useLiveEvent={useLiveEvent} />
       ) : null}
       {count === 0 ? <Empty look={look} onAdd={() => setPanel({ slot: -1, mode: 'add' })} onLeave={onLeave} preferred={!panelOpen} /> : null}
@@ -302,20 +307,19 @@ function Captions({ look, still, view, rects, size, gap, byId, useLiveEvent }: {
   useEffect(() => {
     Animated.timing(opacity, { toValue: 1, duration: still ? 0 : 420, delay: still ? 0 : 160, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [opacity, still]);
-  const minimum = TV ? 96 : 56;
   if (view.layout === 'split') {
     return <>{view.tiles.map((tile, index) => {
       const rect = rects[index];
       if (!rect) return null;
       const top = rect.y + rect.height + gap;
-      if (size.height - top - gap < minimum) return null;
+      if (size.height - top < CAPTION) return null;
       return <Animated.View key={tile.slot} pointerEvents="none" style={{ position: 'absolute', left: rect.x, top, width: rect.width, opacity }}>
         <Caption look={look} tile={tile} channel={byId.get(tile.channelId)} focused={view.focused === tile.slot} useLiveEvent={useLiveEvent} />
       </Animated.View>;
     })}</>;
   }
-  const band = featureBand(size, gap);
-  if (band.height < minimum) return null;
+  const band = featureBand(size, gap, CAPTION);
+  if (band.y + band.height > size.height) return null;
   return (
     <Animated.View pointerEvents="none" style={{ position: 'absolute', left: band.x, top: band.y, width: band.width, height: band.height,
       flexDirection: 'row', gap, alignItems: 'center', opacity }}>

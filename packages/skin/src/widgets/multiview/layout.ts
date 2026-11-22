@@ -33,15 +33,20 @@ function fit(x: number, y: number, width: number, height: number): Rect {
 }
 
 /** Each slot's rect, in display order, for `count` tiles on a screen of `size` with `gap` between and
- * around tiles. `feature` is one large tile with the rest stacked beside it (1 big + up to 3 small). */
-export function slotRects(layout: MultiviewLayout, count: number, size: Size, gap: number): Rect[] {
+ * around tiles. `feature` is one large tile with the rest stacked beside it (1 big + up to 3 small).
+ * `caption` is the height of what is on each tile, drawn under the tiles of `split` and `feature`:
+ * the tiles and their captions stand together in the middle of the screen. */
+export function slotRects(layout: MultiviewLayout, count: number, size: Size, gap: number, caption = 0): Rect[] {
   const { width: W, height: H } = size;
   const n = Math.max(0, Math.min(MAX_TILES, count));
   if (n === 0) return [];
   if (layout === 'single' || n === 1) return [{ x: 0, y: 0, width: W, height: H }];
   if (layout === 'split') {
     const w = (W - gap * 3) / 2;
-    return [0, 1].slice(0, n).map(i => fit(gap + i * (w + gap), gap, w, H - gap * 2));
+    const below = caption > 0 ? caption + gap : 0;
+    const h = Math.min(w / ASPECT, H - gap * 2 - below);
+    const top = Math.max(gap, (H - h - below) / 2);
+    return [0, 1].slice(0, n).map(i => fit(gap + i * (w + gap), top, w, h));
   }
   if (layout === 'grid') {
     const w = (W - gap * 3) / 2;
@@ -53,19 +58,20 @@ export function slotRects(layout: MultiviewLayout, count: number, size: Size, ga
       return fit(x, gap + row * (h + gap), w, h);
     });
   }
-  const { big, side } = featureFrame(size, gap);
+  const { big, side } = featureFrame(size, gap, caption);
   const sides = Array.from({ length: n - 1 }, (_, i) => side[i]!);
   return [big, ...sides];
 }
 
 /** One big tile and a column of three beside it, the same height, at the top; the band below holds
  * what is on each tile. The big tile keeps its size whether one, two or three stand beside it. */
-function featureFrame(size: Size, gap: number): { big: Rect; side: Rect[]; band: Rect } {
+function featureFrame(size: Size, gap: number, caption: number): { big: Rect; side: Rect[]; band: Rect } {
   const { width: W, height: H } = size;
+  const below = caption > 0 ? caption + gap : 0;
   // Heights match when the big tile is three small ones and their two gaps tall.
   let small = (W - 3 * gap - (2 * gap) * ASPECT) / 4;
   let bigW = 3 * small + 2 * gap * ASPECT;
-  const tallest = H - 2 * gap;
+  const tallest = H - 2 * gap - below;
   if (bigW / ASPECT > tallest) {
     const scale = tallest / (bigW / ASPECT);
     small *= scale;
@@ -73,15 +79,15 @@ function featureFrame(size: Size, gap: number): { big: Rect; side: Rect[]; band:
   }
   const bigH = bigW / ASPECT, smallH = small / ASPECT;
   const left = (W - (bigW + gap + small)) / 2;
-  const big = { x: left, y: gap, width: bigW, height: bigH };
-  const side = [0, 1, 2].map(i => ({ x: left + bigW + gap, y: gap + i * (smallH + gap), width: small, height: smallH }));
-  const top = gap + bigH + gap;
-  return { big, side, band: { x: left, y: top, width: bigW + gap + small, height: Math.max(0, H - top - gap) } };
+  const top = Math.max(gap, (H - bigH - below) / 2);
+  const big = { x: left, y: top, width: bigW, height: bigH };
+  const side = [0, 1, 2].map(i => ({ x: left + bigW + gap, y: top + i * (smallH + gap), width: small, height: smallH }));
+  return { big, side, band: { x: left, y: top + bigH + gap, width: bigW + gap + small, height: caption } };
 }
 
-/** The band under the feature layout's tiles. */
-export function featureBand(size: Size, gap: number): Rect {
-  return featureFrame(size, gap).band;
+/** The band under the feature layout's tiles, `caption` tall. */
+export function featureBand(size: Size, gap: number, caption: number): Rect {
+  return featureFrame(size, gap, caption).band;
 }
 
 /** The transform that puts a full-screen view of `size` onto `rect`. */
