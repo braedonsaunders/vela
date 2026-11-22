@@ -107,10 +107,48 @@ function settingKey(setting: (typeof SUBTITLE_SETTINGS)[number]['setting']) {
   return keys[setting];
 }
 
+/** Delivery choices an engine may honour, with their values in menu order. */
+const OUTPUT_SETTINGS: Record<string, readonly string[]> = {
+  surround: ['lossless', 'compatible'],
+  immersive: ['on', 'off'],
+  speakerLayout: ['5.1.2', '5.1.4', '7.1.2', '7.1.4', '9.1.6'],
+  dolbyVision: ['auto', 'base-layer'],
+};
+
+function outputLabel(name: string, value: string): string {
+  return name === 'speakerLayout' ? value : msg(`player.output.${name}.${value}`);
+}
+
+/** The engine's delivery choices (surround, Atmos rendering, speakers, Dolby Vision); none when it has none. */
+function OutputSettings({ look, view, blocked, send }: Props) {
+  const settings = view.output.filter(({ name }) => OUTPUT_SETTINGS[name]);
+  if (!settings.length) return null;
+  return (
+    <>
+      <MenuRule look={look} />
+      <MenuHeading look={look} text={msg('player.output')} />
+      {settings.map(({ name, value }) => (
+        <SegmentRow
+          key={name}
+          look={look}
+          name={msg(`player.output.${name}`)}
+          enabled={!blocked}
+          current={value}
+          options={OUTPUT_SETTINGS[name].map(option => ({ value: option, label: outputLabel(name, option) }))}
+          onPick={next => { if (next !== value) send({ type: 'outputPreference', value: `${name}=${next}` }); }}
+        />
+      ))}
+    </>
+  );
+}
+
 export function AudioMenu({ look, view, blocked, send }: Props) {
   if (!view.audio.length) {
     return (
-      <ChoiceRow look={look} name={msg('player.audioDefault')} selected enabled={false} onChoose={() => undefined} />
+      <>
+        <ChoiceRow look={look} name={msg('player.audioDefault')} selected enabled={false} onChoose={() => undefined} />
+        <OutputSettings look={look} view={view} blocked={blocked} send={send} />
+      </>
     );
   }
   return (
@@ -127,6 +165,7 @@ export function AudioMenu({ look, view, blocked, send }: Props) {
           onChoose={() => { if (view.audioId !== track.id && view.pendingAudioId !== track.id) send({ type: 'audio', trackId: track.id }); }}
         />
       ))}
+      <OutputSettings look={look} view={view} blocked={blocked} send={send} />
     </>
   );
 }

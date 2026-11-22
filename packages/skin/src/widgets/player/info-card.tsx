@@ -1,6 +1,8 @@
 // Live playback facts in a small glass card: the bitrate, the connection against what this
 // quality needs (with its recent history), the buffer, the resolution, the codec, the delivery
-// path and dropped frames. A fact the engine does not report is left out, never guessed.
+// path and dropped frames, then the source → output chain for video and audio (codec, profile, HDR
+// format, frame rate, matching; channels, objects, lossless, passthrough or rendered, MAT). A fact the
+// engine does not report is left out, never guessed.
 import { BlurView } from 'expo-blur';
 import { StyleSheet, Text, View } from 'react-native';
 import { msg } from '@vela/core';
@@ -12,11 +14,20 @@ export function InfoCard({ look, view, top }: { look: PlayerLook; view: PlayerVi
   const facts: [string, string][] = [
     [msg('player.info.buffer'), s.buffer],
     [msg('player.info.resolution'), s.resolution],
-    [msg('player.info.video'), s.video],
+    [msg('player.info.video'), view.format.video ? '' : s.video],
     [msg('player.info.delivery'), view.path || s.delivery],
     [msg('player.info.dropped'), s.dropped],
   ];
   const known = facts.filter(([, value]) => value !== '');
+  const f = view.format;
+  const chain: [string, string][] = (
+    [
+      [msg('player.info.video'), f.video],
+      [msg('player.info.videoOut'), f.videoOut],
+      [msg('player.info.audio'), f.audio],
+      [msg('player.info.audioOut'), f.audioOut],
+    ] as [string, string][]
+  ).filter(([, value]) => value !== '');
   const connection = s.required
     ? msg('player.info.versus', { measured: s.throughput, needed: s.required })
     : s.throughput;
@@ -32,7 +43,7 @@ export function InfoCard({ look, view, top }: { look: PlayerLook; view: PlayerVi
         top,
         right: look.small ? look.size(12) : look.gutter,
         left: look.small ? look.size(12) : undefined,
-        width: look.small ? undefined : look.size(300),
+        width: look.small ? undefined : look.size(view.format.video || view.format.audio ? 420 : 300),
         padding: look.size(18),
         gap: look.size(14),
         borderRadius: Math.min(look.radiusPanel, look.size(18)),
@@ -77,6 +88,20 @@ export function InfoCard({ look, view, top }: { look: PlayerLook; view: PlayerVi
               ))}
             </View>
           ) : null}
+        </View>
+      ) : null}
+      {chain.length ? (
+        <View style={{ gap: look.size(8) }} testID="player-info-format">
+          {chain.map(([name, value]) => (
+            <View key={name} style={{ gap: look.size(2) }}>
+              <Text style={[look.text(11, 650, look.inkQuiet), { letterSpacing: look.size(0.6), textTransform: 'uppercase' }]}>
+                {name}
+              </Text>
+              <Text numberOfLines={2} style={[look.text(12), { fontVariant: ['tabular-nums'] }]}>
+                {value}
+              </Text>
+            </View>
+          ))}
         </View>
       ) : null}
       {known.length ? (

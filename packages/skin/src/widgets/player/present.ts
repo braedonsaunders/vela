@@ -5,6 +5,7 @@
 import { msg, number, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
+import { formatLines, type FormatLines } from './format';
 
 type Path = PlaybackPlan['paths'][number];
 type Range = VideoInfo['dynamicRange'];
@@ -99,6 +100,10 @@ export interface PlayerView {
   path: string;
   chapters: ChapterMark[];
   stats: PlayerStats;
+  /** Source → output video and audio, from the engine's format facts. */
+  format: FormatLines;
+  /** The delivery choices the engine honours (audio menu), in order, with their current values. */
+  output: { name: string; value: string }[];
   pip: boolean;
   fullscreen: boolean;
   /** The engine's own failure, in words ("" while it plays). */
@@ -426,6 +431,11 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
       at: duration > 0 ? Math.min(1, c.startSeconds / duration) : 0,
     })),
     stats: facts,
+    format: formatLines(snapshot?.format),
+    output: (snapshot?.outputPreferencesAvailable ?? []).flatMap(name => {
+      const value = snapshot?.outputPreferences?.[name];
+      return value ? [{ name, value }] : [];
+    }),
     pip: snapshot?.capabilities.pip ?? false,
     fullscreen: snapshot?.capabilities.fullscreen ?? false,
     reason: snapshot?.failure?.message ?? '',
