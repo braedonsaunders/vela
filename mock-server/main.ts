@@ -473,9 +473,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const library = libraries.find(l => l.id === decodeURIComponent(libraryRowsMatch[1]!));
     if (!library) fail('not-found', 'not_found', 'Library not found');
     // ?tab= names a recommended tab (features.pluginLevels.tabRows); none, or the first, is the library's rows.
-    const tabId = url.searchParams.get('tab') ?? '';
+    // An unknown tab is not found, as Ether answers; a server from before plugin levels ignores the parameter.
+    const tabId = levelsEnabled ? url.searchParams.get('tab') ?? '' : '';
     const recommended = (library.tabs ?? []).filter(tab => tab.kind === 'recommended');
-    if (tabId && (!levelsEnabled || !recommended.some(tab => tab.id === tabId))) fail('request', 'invalid_tab', 'Unknown recommended tab');
+    if (tabId && !recommended.some(tab => tab.id === tabId)) fail('not-found', 'tab_not_found', 'Unknown recommended tab');
     const rowsTab = tabId && tabId !== recommended[0]?.id ? tabId : undefined;
     if (isMedia(library.id)) { const shelves = mediaLibraryRows(g, library.id, rowsTab); return cached(req, page(shelves.map(row => boundRow(g, row)), url, g, `library-rows:${library.id}:${rowsTab ?? ''}:${mac(JSON.stringify(shelves))}`), g.id); }
     if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${library.id}`), g.id); }

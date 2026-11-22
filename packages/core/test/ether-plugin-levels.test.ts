@@ -47,7 +47,8 @@ test('a server without plugin levels has no tab rows, no counts and no video chi
     expect((await adapter.describe()).features.pluginLevels).toBeUndefined();
     const music = (await adapter.libraries({ limit: 100 })).items.find(library => library.id === 'music')!;
     expect(music.tabs?.some(tab => tab.id === 'concerts')).toBe(false);
-    await expect(adapter.libraryRows('music', 'shows', false, 'concerts')).rejects.toMatchObject({ status: 400 });
+    // An older server ignores ?tab=: the library's own rows (Vela never sends it one).
+    expect((await adapter.libraryRows('music', 'shows', false, 'concerts')).map(row => row.id)).toEqual((await adapter.libraryRows('music', 'shows')).map(row => row.id));
     const artist = (await adapter.detail('artist-hollow-lanterns')).title;
     expect(artist.media?.childCounts).toBeUndefined();
     expect(artist.media?.childCount).toBe(3);

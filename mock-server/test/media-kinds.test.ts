@@ -161,7 +161,7 @@ describe('media kinds', () => {
     const shelves = (await get<V.Page<V.Row>>('/libraries/music/rows?tab=concerts')).items;
     expect(shelves.map(row => row.id)).toContain('plugin:music:tab:concerts:shelf:recent');
     expect(shelves.find(row => row.purpose === 'continue')?.items).toHaveLength(1);
-    expect((await fetch(`${mock.url}/vela/v0/libraries/music/rows?tab=artists`, { headers: headers() })).status).toBe(400);
+    expect((await fetch(`${mock.url}/vela/v0/libraries/music/rows?tab=artists`, { headers: headers() })).status).toBe(404);
     expect((await get<V.ChildrenPage>('/titles/artist-velvet-comet/children?level=concert')).items).toHaveLength(3);
     expect((await get<V.ChildrenPage>('/titles/artist-velvet-comet/children')).items).toHaveLength(5);
     // A concert plays through the video path: never refused as not playable audio.
