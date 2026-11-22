@@ -12,6 +12,75 @@ products. The Expo apple-player plugin pins its LGPL FFmpegBuild dependency to
 3.15.0. Aether's own dynamic AetherLib frameworks supply FFmpeg; there is no
 second provider or static FFmpeg symbol override. Deployment targets are 18.0.
 
+## Audio and picture delivery
+
+Full-screen loads take the viewer's choices from `PlaybackPreferences` (the player's Audio menu,
+"Sound and picture"; kept in UserDefaults, applied to the playing title with
+`reloadAtCurrentPosition(applying:)`). Previews and multiview tiles keep the engine's defaults.
+
+| Setting | Default | Engine option |
+| --- | --- | --- |
+| Surround: Lossless PCM / Dolby Digital Plus (ARC soundbar) | Lossless | `audioBridgeMode = .lossless` / `.surroundCompat` |
+| Atmos from TrueHD and DTS:X: On / Off | On | `objectAudioRendering = .render(layout)` / `.off` |
+| Speakers: 5.1.2, 5.1.4, 7.1.2, 7.1.4, 9.1.6 | 7.1.4 | the rendered bed's `SpatialSpeakerLayout` |
+| Dolby Vision: Automatic / HDR10 base layer | Automatic | `dolbyVisionHandling = .automatic` / `.baseLayerOnly` |
+
+Before this, Vela left Aether's default `.surroundCompat`: TrueHD, DTS-HD MA and PCM above two
+channels left as 768 kbit/s E-AC-3 5.1. Lossless is bit-perfect FLAC up to 7.1 at the source rate,
+decoded to LPCM by the system. It needs an AVR over HDMI or an eARC receiver or soundbar; behind
+legacy ARC tvOS downmixes LPCM to stereo, which is what the Dolby Digital Plus choice is for. Aether
+cannot tell the two apart (AE#794: with Continuous Audio Connection every HDMI route reports 32
+channels).
+
+**TrueHD Atmos and Dolby MAT.** tvOS gives apps no compressed or IEC 61937 output: a TrueHD
+bitstream cannot be wrapped in MAT and passed through, by any app. tvOS itself produces Dolby MAT 2.0
+on HDMI, from E-AC-3 JOC played by AVPlayer (stream-copied unchanged, the receiver shows Atmos) or
+from multichannel PCM or APAC in an Atmos speaker layout. Aether's object route decodes a TrueHD
+track's channel and object presentations (LibTrueHD), renders the objects into the chosen bed with
+heights and hands it to the system as 24-bit PCM (APAC over AirPlay); tvOS carries it to the receiver
+as Dolby MAT, and Aether loops a silent E-AC-3 Atmos stream beside it so soundbars switch to Atmos.
+Objects reach the receiver as that fixed bed, not as objects: the most any tvOS app can deliver. This
+is a decode and render of the stream, not a re-encode by Vela and not a Dolby MAT encoder (the MAT
+framing is tvOS's own). DTS:X heights take the same route through FFmpeg's `dca` decoder; tvOS has no
+DTS output, so the receiver shows Dolby Atmos for them. It needs tvOS/iOS 26 and 48 kHz sources;
+anything else, or a failure to start, plays the lossless channel presentation.
+
+**Dolby Vision.** Profiles 5, 8.1 and 8.4 play natively. Profile 7 (MEL and FEL) is converted to 8.1
+per packet with libdovi; with the `DolbyVisionFelCurves` trait a FEL enhancement layer's luma residual
+is folded into the 8.1 RPU so the platform decoder applies it. The `DualLayerDolbyVision` composer is
+not built: it evaluates MMR prediction covered by live Dolby patents, and on its software route an
+E-AC-3 JOC track loses its objects. HDR10+ SEI is kept to the display; HLG and HDR10 are native. A
+display without Dolby Vision presenting HDR shows the HDR10 base layer; Profile 5 is composed by
+AVPlayer everywhere.
+
+**Optional components.** `apps/vela/plugins/apple-player.js` gives the Pods project's AetherEngine
+reference the `TrueHDObjectAudio`, `DTSXObjectAudio` and `DolbyVisionFelCurves` traits in a Podfile
+`post_integrate` hook (React Native's `spm_dependency` cannot name traits and CocoaPods' project model
+drops the key) and pins LibTrueHD 3.2.0 exactly; the macOS host's generated Package.swift names the
+same traits. `AetherEngine.OptionalComponent` hides a setting a build cannot honour.
+
+**Licensing.** LibTrueHD is MIT and compiles in the truehdd `truehd` and `oamd` crates (Apache-2.0);
+both texts and its NOTICE ship in VelaPlayerLicenses. DTS:X decoding is FFmpeg's (LGPL). No Dolby or
+DTS encoder is involved. The TrueHD object decoder is an independent implementation, not Dolby's;
+Aether notes that these components may be subject to third-party patent licensing, which falls to the
+integrator. The owner approved enabling them on 2026-11-22.
+
+**Info card.** `PlaybackFormat` reports what Aether (`sourceVideo*`, `sourceDVProfile`,
+`dolbyVisionConversion`, `videoFormat`, `activeVideoDecoder`, the active `TrackInfo`, `audioDelivery`,
+`LiveTelemetry.objectAudio`), `AVAudioSession` (route, `renderingMode`) and `AVDisplayManager`
+(matching enabled, criteria requested, switching) say, as `Snapshot.format`; a `[vela-format]` line logs
+it without URLs. Dolby MAT is named only when the system's rendering mode is Dolby Atmos on HDMI.
+
+**Capabilities.** `PlayerCapabilities` declares hardware video codecs for server HLS, software
+decoders for original files (AV1 only in hardware: every Apple TV decodes it in software, too slow
+for 4K), `hdr10+` beside `hdr10`, `dolbyVisionProfiles` 5/7/8.1/8.4 on a Dolby Vision display (else
+`dolbyVisionReshape` for what AVPlayer composes) and `audioOutput`: Dolby passthrough and E-AC-3 JOC,
+`truehd-atmos`/`dtsx` while rendering is on, and `lossless` while surround is lossless.
+
+**Needs a real receiver** (the simulator outputs none of this): TrueHD Atmos and DTS:X showing Atmos,
+E-AC-3 JOC showing Atmos, lossless 7.1 reaching the receiver as 8-channel PCM, Dolby Digital Plus 5.1
+on legacy ARC, a speaker layout change mid-title, and Dolby Vision Profile 7/8 on a Dolby Vision TV.
+
 An engine refusal emits the existing native session-command event. PathRecovery
 selects an untried ready or on-demand path (preferring server transcodes) using
 `switch` with the current position. If the plan advertises idle fallback, it
