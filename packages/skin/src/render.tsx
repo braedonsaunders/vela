@@ -2,7 +2,7 @@ import { ScreenActive } from './screen-active';
 import { pagerState, readsPager, reportPager, subscribePager } from './pager-book';
 export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
-import { lazyExtent, lazyNear, lazyPitch, type LazySample } from './lazy-items';
+import { LAZY_STILL_MS, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
 import { msg } from '@vela/core';
 import { restartAction, secondaryPlayAction } from './restart-action';
@@ -1255,8 +1255,11 @@ const LAZY_REPEATS: Record<string, { axis: 'x' | 'y'; first: number; batch: numb
   'library.rows': { axis: 'y', first: 3, batch: 2 },
   'row.items': { axis: 'x', first: 8, batch: 6 },
 } : {};
-/** How far past the screen's edge, in screen lengths, lazily drawn items are drawn ahead. */
-const LAZY_REACH = 1;
+/** When the route or a row last scrolled (lazily drawn items draw further ahead once it is still),
+ * and when still-time drawing last added to the page: one piece at a time, across the page. */
+let lazyScrolledAt = 0;
+let lazyStillDrawnAt = 0;
+const LAZY_STILL_PIECE_MS = 48;
 
 /** Items drawn as they come within reach, the rest held by a spacer of their estimated extent (the
  * drawn items' average pitch), so a row's scroll extent and a page's height stay as they were.
@@ -1276,21 +1279,46 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
   const row = useContext(RowScroll);
   const shown = Math.min(count, children.length);
   const complete = shown >= children.length;
+  const later = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const ahead = useCallback(() => {
     const at = counted.current;
+    const moving = Date.now() - lazyScrolledAt < LAZY_STILL_MS;
     spacer.current?.measureInWindow((x, y, w, h) => {
       // A hidden scene (a retained section behind another) has no size: it draws nothing ahead.
       if (!w && !h) return;
-      if (lazyNear(axis, { x, y, height: h }, Dimensions.get('window'), LAZY_REACH)) setCount(n => (n === at && n < total.current ? n + batch : n));
+      const rect = { x, y, height: h };
+      const screen = Dimensions.get('window');
+      if (!lazyNear(axis, rect, screen, lazyReach(axis, moving, Platform.isTV))) return;
+      // Beyond what a scroll is about to reach, the page draws one piece at a time while still.
+      if (!moving && !lazyNear(axis, rect, screen, lazyReach(axis, true, Platform.isTV))) {
+        const now = Date.now();
+        if (now - lazyStillDrawnAt < LAZY_STILL_PIECE_MS) {
+          clearTimeout(later.current);
+          later.current = setTimeout(() => aheadRef.current(), LAZY_STILL_PIECE_MS);
+          return;
+        }
+        lazyStillDrawnAt = now;
+      }
+      setCount(n => (n === at && n < total.current ? n + lazyBatch(axis, batch, moving) : n));
     });
   }, [axis, batch]);
+  const aheadRef = useRef(ahead);
+  aheadRef.current = ahead;
+  // A scroll checks at once (it may be about to reach the spacer) and again once it is still.
+  const scrolled = useCallback(() => {
+    lazyScrolledAt = Date.now();
+    ahead();
+    clearTimeout(later.current);
+    later.current = setTimeout(() => aheadRef.current(), LAZY_STILL_MS + 16);
+  }, [ahead]);
+  useEffect(() => () => clearTimeout(later.current), []);
   useEffect(() => {
     if (complete) return;
     const frame = requestAnimationFrame(ahead);
     return () => cancelAnimationFrame(frame);
   }, [count, complete, ahead]);
-  useEffect(() => (complete || !route ? undefined : route.onScroll(ahead)), [complete, route, ahead]);
-  useEffect(() => (complete || !row || axis !== 'x' ? undefined : row.onScroll(ahead)), [complete, row, ahead, axis]);
+  useEffect(() => (complete || !route ? undefined : route.onScroll(scrolled)), [complete, route, scrolled]);
+  useEffect(() => (complete || !row || axis !== 'x' ? undefined : row.onScroll(scrolled)), [complete, row, scrolled, axis]);
   // Until two counts have been laid out, a row's items are taken to start its content and a page's
   // rows to be a third of the screen apart.
   const guess = axis === 'x' ? 0 : Dimensions.get('window').height / 3;

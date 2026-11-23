@@ -21,3 +21,23 @@ export function lazyNear(axis: 'x' | 'y', rect: { x: number; y: number; height: 
     ? rect.y < screen.height * (1 + reach)
     : rect.x < screen.width * (1 + reach) && rect.y < screen.height * (1 + reach) && rect.y + rect.height > -screen.height * reach;
 }
+
+/** A scroll is moving until this long after its last scroll event. */
+export const LAZY_STILL_MS = 200;
+
+/** How far past the screen's edge, in screen lengths, items are drawn ahead. Drawing a batch holds
+ * the UI thread for a few frames (creating and first drawing a row of cards), so while the viewer
+ * scrolls only what the scroll is about to reach is drawn, and once it is still the page draws
+ * further ahead, a little at a time, for the next scroll to find. A TV draws only what it reaches:
+ * its section switches would wait on the extra rows. */
+export function lazyReach(axis: 'x' | 'y', moving: boolean, tv: boolean): number {
+  if (tv || moving) return 1;
+  return axis === 'y' ? 2 : 1.5;
+}
+
+/** Items added at once: while still, one at a time for the page's rows (each is a row of cards)
+ * and half a batch for a row's cards, so a touch arriving meanwhile waits on little. */
+export function lazyBatch(axis: 'x' | 'y', batch: number, moving: boolean): number {
+  if (moving) return batch;
+  return axis === 'y' ? 1 : Math.max(1, Math.ceil(batch / 2));
+}
