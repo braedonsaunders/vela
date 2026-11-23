@@ -185,3 +185,23 @@ test('a lane runs at most its limit at once, in arrival order, and frees its pla
   expect(started).toEqual([0, 1, 2, 3]);
   expect(lane.size).toBe(0);
 });
+
+test('marking a title watched drops it from a held library Continue watching row and asks shown libraries to read again', async () => {
+  const f = setup();
+  const title = { id: 'scene', kind: 'movie', name: 'Scene', summary: '', genres: [], durationSeconds: 100, artwork: [],
+    watch: { positionSeconds: 40, played: false, favorite: false, watchlisted: false } };
+  f.rows(async () => [{ id: 'continue', name: 'Continue watching', purpose: 'continue', receiptToken: '', continuation: 'exhausted',
+    items: [{ id: 'entry:scene', kind: 'title', title, receiptToken: '' }] } as unknown as Row]);
+  const adapter = (await f.session.ready()).adapter as Record<string, unknown>;
+  adapter.titleActions = async () => ({});
+  adapter.setTitleWatch = async () => ({});
+  adapter.title = async () => { throw new Error('not needed'); };
+  (f.session as unknown as { key(): string }).key = () => 'k';
+  f.box.replace({ ...f.box.get(), rows: {}, search: { fast: { items: [] }, descriptive: { items: [] }, ai: { items: [] } } } as never);
+  const before = await f.catalogue.libraryRecommendations('adult', 'movies');
+  expect(before?.[0]?.items.map(item => item.id)).toEqual(['scene']);
+  const revision = f.box.get().home.progressRevision;
+  await f.catalogue.setTitleWatch('scene', { played: true });
+  expect(f.catalogue.cachedLibraryRecommendations('adult')?.value[0]?.items).toEqual([]);
+  expect(f.box.get().home.progressRevision).toBe(revision + 1);
+});

@@ -21,7 +21,7 @@ import { PendingTitles } from './pending';
 import type { Session } from './session';
 import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
-import { optimisticWatchState } from './watch-state';
+import { optimisticWatchState, watchRow } from './watch-state';
 import { readRetryDelay, withReadRetry, type ReadRetryOptions } from './read-retry';
 
 /** A library view: sort, direction and filters; absent fields are the server's defaults. */
@@ -76,6 +76,15 @@ export class Catalogue {
     try {
       await api.setTitleWatch(id, { ...change, idempotencyKey: this.session.key() });
       void this.title(id, true);
+      // A library's recommended rows (a plugin library's Continue watching, say) live outside the
+      // store: patch the held answers at once, and let any library on show read its rows again.
+      if (change.played !== undefined || change.continueWatching === false) {
+        for (const [key, held] of this.partsHeld) {
+          if (!key.startsWith('rows') || !Array.isArray(held.value)) continue;
+          this.partsHeld.set(key, { ...held, value: (held.value as Row[]).map(item => watchRow(item, id, change)) });
+        }
+        this.box.update('home', home => ({ ...home, progressRevision: home.progressRevision + 1 }));
+      }
     } catch (error) {
       // A removal has no card left to map back into the row, so restore the captured immutable
       // snapshot rather than trying to synthesize an inverse mutation.
