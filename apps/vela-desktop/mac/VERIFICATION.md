@@ -65,3 +65,31 @@ Dolby Vision metadata preservation and E-AC-3/JOC passthrough depend on the
 AVFoundation path and output route; neither Dolby Vision panel output nor Atmos
 receiver acceptance has been demonstrated on this Mac. Aether's current
 macOS display-criteria implementation does not switch display modes.
+
+## Styled ASS through libass (2026-11-23)
+
+Fixture: a 30-second 1280x720 H.264 MKV whose ASS track has a `\pos`+`\frz` sign in Permanent
+Marker (attached to the MKV only, not installed on the Mac), a BorderStyle 3 box, `\an9`+`\frx`,
+`\move` with `\blur`, `\k` karaoke, `\frz-90`, inline italic/colour/underline and a Hebrew+Arabic
+line, served by the mock as the session's original (`/__admin/original`, `selectSubtitle`).
+
+- Vela 0.2.50's published Mac app (unchanged payload) draws the cues as plain white text stacked at
+  the bottom: no positions, fonts, colours or karaoke. Its `libVelaNative.dylib` links neither
+  libass nor FriBidi.
+- The same app with this branch's `native-mac` payload logs
+  `[vela-captions] libass track=2 codec=ass header=892 fonts=1` and draws every event as authored:
+  the attachment's font, positions, rotations, the box, the karaoke sweep and the `\move`
+  advancing between captures, and the right-to-left line shaped (FriBidi, Core Text fallback).
+- The Mac captures are in-process renders of the native view's layer tree (the agent shell has no
+  Screen Recording permission, and the window server returns blank frames for Electron windows
+  without it), so they show the caption layers without the video beneath.
+- tvOS 27.0 (Apple TV 4K 1080p) and iOS 27.1 (iPhone Duo) simulators, Release arm64 builds of this
+  branch against the same mock, draw the staggered fixture as authored over the picture: all eight
+  events, the attachment's font, karaoke and `\move` where their timing puts them (tvOS at 0:18.8,
+  iOS at 0:22.8). Those platforms already had libass before this branch.
+- AetherEngine 7.70.0 delivers at most three cues sharing an identical start and end time: with
+  seven events on 0:00-0:30 (plus karaoke on 0:00-0:04) only three of the seven reached the
+  renderer, on 0.2.50's plain text as well. Staggering the starts delivered all of them. Typeset
+  signs built from several same-timed layers lose layers until that is fixed upstream.
+- Not observed: Developer ID signed and notarized packaging of the new payload (the frameworks
+  sign with the Developer ID and hardened runtime and pass strict verification on their own).

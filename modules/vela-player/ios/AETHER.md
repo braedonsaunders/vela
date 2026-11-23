@@ -90,7 +90,11 @@ stripped and signed ad hoc with the hardened runtime. `tools/apple-tv.sh`, `tool
 build is missing or was made by another version of the script; the podspec vendors the result and
 bundles its licences, and the Mac host links it as SwiftPM binary targets and ships the frameworks
 beside `libVelaNative.dylib`. A build without them draws ASS as plain text (the macOS host up to
-0.2.50 did). Other text
+0.2.50 did). Simulator builds are arm64 only (the libass and LibDovi simulator
+slices are). AetherEngine 7.70.0 delivers at most three cues that share an identical start and end
+time (observed 2026-11-23 on macOS with plain text and libass alike), so a sign typeset as several
+same-timed layers loses layers until that is fixed upstream; see
+`apps/vela-desktop/mac/VERIFICATION.md`. Other text
 formats (SRT, WebVTT, mov_text, teletext) keep their bold, italic, underline, strike-through and colour
 runs and ASS `\an`/`\pos` placement, sized against the picture in the viewer's subtitle appearance
 (size, shadow or box, white or yellow, bottom or raised; kept per device). PGS, DVB, DVD and VobSub stay

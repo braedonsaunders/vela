@@ -166,7 +166,8 @@ for test in json.load(open("manifest.json")):
 fi
 if [ "$simulator" = 1 ]; then
   # Signed to run locally: an unsigned app has no Keychain, where the app keeps its sessions.
-  set -- -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=""
+  # Apple silicon only: the libass and LibDovi simulator slices are arm64.
+  set -- -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" ARCHS=arm64
   products=Release-iphonesimulator
 else
   set -- -sdk iphoneos -destination 'generic/platform=iOS' -allowProvisioningUpdates DEVELOPMENT_TEAM="$team" CODE_SIGN_STYLE=Automatic

@@ -98,7 +98,8 @@ if [ -n "$(find "$root/modules" -path '*/ios/*' -newer Pods/Manifest.lock -print
 fi
 if [ "$simulator" = 1 ]; then
   # Signed to run locally: an unsigned app has no Keychain, where the app keeps its sessions.
-  set -- -sdk appletvsimulator -destination 'generic/platform=tvOS Simulator' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=""
+  # Apple silicon only: the libass and LibDovi simulator slices are arm64.
+  set -- -sdk appletvsimulator -destination 'generic/platform=tvOS Simulator' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" ARCHS=arm64
   products=Release-appletvsimulator
 else
   set -- -sdk appletvos -destination 'generic/platform=tvOS' -allowProvisioningUpdates DEVELOPMENT_TEAM="$team" CODE_SIGN_STYLE=Automatic
