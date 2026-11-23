@@ -392,9 +392,15 @@ const EMPTY: Card[] = [];
 
 // ── Book ─────────────────────────────────────────────────────────────────────
 
-/** Books are read on phones, tablets, the web and desktop. A TV offers no Read at all (a book's page
- * there is its details; audiobooks and music still play). */
+/** Books are read on phones, tablets, the web and desktop. A TV offers no Read at all: a book's page
+ * there is its details, with a quiet line saying where reading is. */
 const READS_HERE = !Platform.isTV;
+
+/** On a TV, in place of Read: the reader's own words for where books are read. */
+function ReadElsewhere() {
+  const m = useMediaLook();
+  return <Text testID="media-read-elsewhere" style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.reader.unsupported')}</Text>;
+}
 
 function readLabel(card: Card): string {
   const fraction = card.media?.readingFraction ?? 0;
@@ -433,6 +439,7 @@ function BookPage({ card }: { card: Card }) {
           <PillButton primary icon="book" label={readLabel(card)} onPress={() => actions.read(card)} disabled={!canRead} testID="media-read" nativeID="media-primary" />
         </Buttons> : null}
         {READS_HERE && !canRead ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotRead')}</Text> : null}
+        {READS_HERE ? null : <ReadElsewhere />}
       </Hero>
       {card.summary ? <View style={{ marginBottom: 44 }}><Summary text={card.summary} serif /></View> : null}
       <FactList card={card} />
@@ -495,6 +502,7 @@ function SeriesPage({ card }: { card: Card }) {
             onPress={() => actions.openTitle(next)} disabled={!canStart} testID="media-play" nativeID="media-primary" /> : null}
         </Buttons>
         {start && !canStart && (READS_HERE || start.icon !== 'book') ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{start.unavailable}</Text> : null}
+        {start && !READS_HERE && start.icon === 'book' ? <ReadElsewhere /> : null}
       </Hero>
       {card.summary ? <View style={{ marginBottom: 40 }}><Summary text={card.summary} serif /></View> : null}
       <SectionHeading title={copy.heading} />
