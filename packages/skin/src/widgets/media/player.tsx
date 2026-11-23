@@ -4,7 +4,7 @@
 // Both take the active document's `ui` look.
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
-import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import { AUDIO_RATES, chapterEnd, clock, currentInQueue, durationLabel, msg, number, upNext, type AudioState, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
@@ -16,6 +16,10 @@ import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './pa
 import { Arrive, MOTION, Presence, useLast } from '../../presence';
 
 const web = Platform.OS === 'web';
+/** A TV's focus engine moves by geometry: Now Playing's column and transport row are focus guides, so
+ * the remote reaches them from the queue beside them and from the scrubber above. */
+const Guide = Platform.isTV ? TVFocusGuideView : View;
+const guided = Platform.isTV ? { autoFocus: true } : {};
 
 function spoken(item: Card | undefined): boolean {
   const cls = item?.media?.class;
@@ -70,12 +74,12 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
   );
 }
 
-function PlayButton({ playing, size, onPress, testID, nativeID }: { playing: boolean; size: number; onPress(): void; testID?: string; nativeID?: string }) {
+function PlayButton({ playing, size, onPress, testID, nativeID, preferred }: { playing: boolean; size: number; onPress(): void; testID?: string; nativeID?: string; preferred?: boolean }) {
   const m = useMediaLook();
   const { state, handlers } = useInteraction();
   const lit = state.hover || state.focus;
   return (
-    <Pressable {...handlers} onPress={onPress} testID={testID} nativeID={nativeID} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')}
+    <Pressable {...handlers} onPress={onPress} testID={testID} nativeID={nativeID} {...(preferred ? { hasTVPreferredFocus: true } : {})} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')}
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center',
         backgroundColor: lit ? m.ui.inkHover : m.ui.accent, transform: [{ scale: state.pressed ? 0.94 : lit ? 1.04 : 1 }] },
         state.focus ? m.box({ 'box-shadow': `0px 0px 0px 4px ${m.ui.focusHalo}` }) : {},
@@ -188,7 +192,7 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
   const sleepLeft = audio.sleep.mode === 'timer' ? Math.max(0, (audio.sleep.endsAt - Date.now()) / 1000) : 0;
   const after = upNext(audio.queue);
   const controls = (
-    <View style={{ gap: 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
+    <Guide {...guided} style={{ gap: 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
       <View style={{ gap: 6 }}>
         <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
         {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
@@ -199,20 +203,20 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
       {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text></Arrive> : null}
       <View style={{ zIndex: 3 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Guide {...guided} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           {book
             ? <RoundButton icon="speed" label={`${msg('media.player.speed')}: ${rateLabel(audio.rate)}`} onPress={() => setPanel(panel === 'speed' ? '' : 'speed')} active={audio.rate !== 1 || panel === 'speed'} testID="now-playing-speed" />
             : <RoundButton icon="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={audio.queue.shuffle} testID="now-playing-shuffle" />}
           {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={54} testID="now-playing-back15" />
             : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={54} testID="now-playing-previous" iconSize={22} />}
-          <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()} testID="now-playing-toggle" nativeID="now-playing-toggle" />
+          <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()} testID="now-playing-toggle" nativeID="now-playing-toggle" preferred={Platform.isTV} />
           {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={54} testID="now-playing-forward30" />
             : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={54} testID="now-playing-next" iconSize={22} />}
           {book
             ? <RoundButton icon="moon" label={msg('media.player.sleep')} onPress={() => setPanel(panel === 'sleep' ? '' : 'sleep')} active={sleeping || panel === 'sleep'} testID="now-playing-sleep" />
             : <RoundButton icon={audio.queue.repeat === 'one' ? 'repeatOne' : 'repeat'} label={audio.queue.repeat === 'one' ? msg('media.player.repeatOne') : msg('media.player.repeat')}
                 onPress={() => store.audio.cycleRepeat()} active={audio.queue.repeat !== 'off'} testID="now-playing-repeat" />}
-        </View>
+        </Guide>
         {/* Speed and sleep open as a popover under the transport, over what follows, so nothing below
             moves; it drops in and lifts away with the shared motion. */}
         <Presence shown={!!panel} still={m.look.still} offstage={{ y: -8, scale: 0.98 }} exitMs={MOTION.quick} pointerEvents="auto" testID="now-playing-panel"
@@ -236,7 +240,7 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
           {[audio.rate !== 1 ? rateLabel(audio.rate) : '', audio.sleep.mode === 'timer' ? msg('media.player.sleepIn', { time: durationLabel(sleepLeft) }) : audio.sleep.mode === 'chapter' ? msg('media.player.sleepChapter') : audio.sleep.mode === 'item' ? msg('media.player.sleepItem') : ''].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-    </View>
+    </Guide>
   );
   const listItems = list === 'chapters' ? (
     audio.chapters.map((c, i) => <ListRow key={c.id} number={number(i + 1)} title={c.name} trailing={clock(c.startSeconds)} current={chapterAt === i} playing={playing}

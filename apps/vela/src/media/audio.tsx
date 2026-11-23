@@ -1,14 +1,15 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
+import { Platform, StyleSheet, TVFocusGuideView, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HostContext } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/widgets/media';
 import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '@vela/skin/src/widgets/media/player';
 import { MOTION, Presence } from '@vela/skin/src/presence';
+import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
 import { useVela } from '../vela';
 import { createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
@@ -21,6 +22,27 @@ const fill = StyleSheet.absoluteFill;
  * a window of its own above it, so the mini player and Now Playing stay on top of an album's page. A TV
  * presents pages inside the root view, and Android draws the dock above its stack already. */
 const Above = Platform.OS === 'ios' && !Platform.isTV ? FullWindowOverlay : Fragment;
+
+type Focusable = { requestTVFocus?(): void };
+// RN's generated TV guide declarations omit the ref that its implementation forwards.
+const FocusGuide = TVFocusGuideView as ComponentType<ComponentProps<typeof TVFocusGuideView> & { ref?: Ref<Focusable> }>;
+
+/** On a TV, Now Playing draws over a page that stays in the focus engine: while open it takes the
+ * focus and keeps it (the remote's presses never reach the page beneath), and gives it back on close. */
+function TVFocusTrap({ open, children }: { open: boolean; children: ReactNode }) {
+  const guide = useRef<Focusable>(null);
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => guide.current?.requestTVFocus?.());
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+  if (!Platform.isTV) return <>{children}</>;
+  return (
+    <FocusGuide ref={guide} style={fill} autoFocus focusable={open} trapFocusUp={open} trapFocusDown={open} trapFocusLeft={open} trapFocusRight={open}>
+      {children}
+    </FocusGuide>
+  );
+}
 /** Now Playing's rise is a long move, so a little longer than a section; its fall is quicker. */
 const NOW_PLAYING_ENTER = 420;
 const NOW_PLAYING_EXIT = 280;
@@ -42,6 +64,8 @@ export function AudioDock() {
   useEffect(() => { if (audio.error) console.warn(`Vela audio: ${audio.error}`); }, [audio.error]);
   useEffect(() => { if (!audio.queue) setOpen(false); }, [audio.queue]);
   const close = useCallback(() => setOpen(false), []);
+  // Back (Menu on tvOS) closes Now Playing before it reaches the page beneath.
+  useEffect(() => (audio.queue && open ? holdBack(() => { setOpen(false); return true; }) : undefined), [audio.queue, open]);
   const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/')), []);
   const actions = useMediaPageActions(undefined, back, useMediaPlayerActions(), useReaderActions(undefined));
   const host = vela.host('home', '');
@@ -63,7 +87,9 @@ export function AudioDock() {
               <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
             </Presence>
             <Presence shown={playing && open} still={still} offstage={{ y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
+              <TVFocusTrap open={playing && open}>
               <NowPlaying onClose={close} />
+            </TVFocusTrap>
             </Presence>
           </View>
         </Above>
