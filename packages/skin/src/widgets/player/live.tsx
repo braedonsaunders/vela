@@ -146,6 +146,9 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
       // The engine knows its own edge; one without a live report seeks to the plan's.
       if (live?.edgeSeconds != null || !window) send?.({ type: 'catchUp' });
       else send?.({ type: 'seek', seconds: clampSeek(window, window.edge) });
+      // Live is for watching: a paused picture plays again there. The view takes one command a
+      // render, so the play follows the move rather than replacing it.
+      if (snapshot?.state === 'paused') setTimeout(() => send?.({ type: 'play' }), 250);
     },
     leftLive: () => { wentLive.current = 0; },
     startOver: canStartOver && controller && guideChannel
