@@ -46,6 +46,7 @@ const codecs: Record<string, SubtitleCodec> = {
   'S_TEXT/ASS': 'ass',
   'S_TEXT/SSA': 'ssa',
   'S_HDMV/PGS': 'pgs',
+  S_VOBSUB: 'vobsub',
 };
 const MAX_PACKET_BYTES = 16 * 1024 * 1024;
 /** A text event shown at T began at most this long before T, in practice. */

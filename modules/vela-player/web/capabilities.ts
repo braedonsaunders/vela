@@ -162,8 +162,9 @@ async function probe(signal: AbortSignal): Promise<PlayerCapabilities> {
   const managed = (globalThis as typeof globalThis & { ManagedMediaSource?: typeof MediaSource })
     .ManagedMediaSource;
   const mediaSource = managed ?? globalThis.MediaSource;
+  // VobSub is decoded by the app's own code (subtitles/vobsub.ts), not a payload library.
   const embedded = original
-    ? payload!.embeddedSubtitleFormats.filter((format) => EMBEDDED_SUBTITLES.includes(format))
+    ? [...payload!.embeddedSubtitleFormats.filter((format) => EMBEDDED_SUBTITLES.includes(format)), 'vobsub']
     : [];
   const overlays = payload ? ['webvtt', 'ether-vtt-window', ...embedded] : [];
   return {

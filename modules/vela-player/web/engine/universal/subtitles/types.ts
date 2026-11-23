@@ -1,4 +1,4 @@
-export type SubtitleCodec = 'srt' | 'webvtt' | 'ass' | 'ssa' | 'pgs' | 'tx3g' | 'unknown';
+export type SubtitleCodec = 'srt' | 'webvtt' | 'ass' | 'ssa' | 'pgs' | 'vobsub' | 'tx3g' | 'unknown';
 export type SubtitleDelivery =
   | { kind: 'embedded' }
   | { kind: 'external'; format: 'webvtt' | 'webvtt-window' | 'srt' | 'ass' | 'ssa' | 'sup'; url: string }

@@ -29,7 +29,9 @@ export async function switchPathFromCommand(
         : undefined;
     const subtitle = context.tracks.overlay?.tracks.find((t) => t.id === context.tracks.subtitle);
     const burn =
-      subtitle?.delivery.kind === 'embedded' && subtitle.codec === 'pgs' ? subtitle.serverId : undefined;
+      subtitle?.delivery.kind === 'embedded' && (subtitle.codec === 'pgs' || subtitle.codec === 'vobsub')
+        ? subtitle.serverId
+        : undefined;
     if (audio || burn) {
       context.tracks.deferredPath = source.id;
       context.tracks.deferredPosition = readPosition(context);

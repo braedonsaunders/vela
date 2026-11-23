@@ -6,6 +6,7 @@ import { assEvent, decodeSubtitleText, tx3gCue, utf8Cue, wvttCues } from './cues
 import { SubtitleCueIndex, parseTextSubtitles, type SubtitleTextCue } from './text';
 import { paintPGS, paintText, type SubtitleViewport } from './canvas';
 import { PGSDecoder, type PGSDisplay } from './pgs';
+import { decodeVobSub, joinVobSubPackets, parseVobSubIdx, type VobSubCue } from './vobsub';
 import { createAssOutput, type AssOutput } from './ass';
 import { streamingPGS } from './streaming-pgs';
 import {
@@ -76,11 +77,13 @@ function externalCodec(description: SubtitleDescription): SubtitleTrack['codec']
     ? 'webvtt'
     : format === 'sup' || format === 'hdmv_pgs_subtitle'
       ? 'pgs'
+      : format === 'dvd_subtitle' || format === 'dvdsub'
+        ? 'vobsub'
       : format === 'subrip'
         ? 'srt'
         : format === 'mov_text'
           ? 'tx3g'
-          : ['srt', 'webvtt', 'ass', 'ssa', 'pgs', 'tx3g'].includes(format ?? '')
+          : ['srt', 'webvtt', 'ass', 'ssa', 'pgs', 'vobsub', 'tx3g'].includes(format ?? '')
             ? (format as SubtitleTrack['codec'])
             : description.delivery?.kind === 'burn-in'
               ? 'unknown'
@@ -469,6 +472,21 @@ export class SubtitleSession {
       draw = (stamp) => {
         advance(stamp);
         if (display) paintPGS(context, display, surface.viewport());
+      };
+    } else if (track.codec === 'vobsub') {
+      if (!this.container) throw new Error('VobSub subtitles must be embedded');
+      const configuration = parseVobSubIdx(this.container.configuration(track.id));
+      const cues = joinVobSubPackets(packets)
+        .map((packet) =>
+          decodeVobSub(packet.data, packet.time, configuration, packet.duration === null ? null : packet.time + packet.duration),
+        )
+        .filter((cue): cue is VobSubCue => cue !== null)
+        .sort((a, b) => a.start - b.start);
+      draw = (stamp) => {
+        // The latest subpicture that has started and not stopped; a newer one replaces it.
+        let active: VobSubCue | undefined;
+        for (const cue of cues) if (cue.start <= stamp && stamp < cue.end) active = cue;
+        if (active) paintPGS(context, active.display, surface.viewport());
       };
     } else {
       let cues: SubtitleTextCue[];
