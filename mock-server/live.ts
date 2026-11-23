@@ -65,8 +65,11 @@ async function rebase(resource: string, offsetSeconds: number): Promise<Uint8Arr
         const scale = scales.get(track);
         if (!scale) throw new Error('Missing live track timescale');
         const delta = BigInt(Math.round(offsetSeconds * scale));
-        if (bytes[a] === 1) view.setBigUint64(a + 4, view.getBigUint64(a + 4) + delta);
-        else view.setUint32(a + 4, view.getUint32(a + 4) + Number(delta));
+        // An archive starts at zero, and the fixture's audio begins a little before each 4 s mark:
+        // its first decode time is held at zero rather than wrapping negative (Media3 refuses it).
+        const at = (value: bigint) => (value + delta < 0n ? 0n : value + delta);
+        if (bytes[a] === 1) view.setBigUint64(a + 4, at(view.getBigUint64(a + 4)));
+        else view.setUint32(a + 4, Number(at(BigInt(view.getUint32(a + 4)))));
       });
     });
   });
