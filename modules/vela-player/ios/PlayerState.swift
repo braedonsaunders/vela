@@ -28,6 +28,7 @@ struct PlayerState {
     var audioCodec: String?
     /// Source → output facts (Snapshot.format).
     var format: [String: Any]?
+    var subtitleOffset = 0.0
     var failure: String?
     var failureKind = "source"
 
@@ -77,6 +78,7 @@ struct PlayerState {
         case "video-codec-name": videoCodec = value as? String
         case "audio-codec-name": audioCodec = value as? String
         case "format": format = value as? [String: Any]
+        case "sub-delay": subtitleOffset = value as? Double ?? 0
         default: break
         }
     }

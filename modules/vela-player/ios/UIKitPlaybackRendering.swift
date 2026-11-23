@@ -19,6 +19,10 @@ final class UIKitPlaybackRendering: PlaybackRendering {
     private var frozenPicture: UIView?
     private let captions = UILabel()
     private var bitmapCaptions: [Int: UIImageView] = [:]
+    /// ASS/SSA as authored, where the libass frameworks are built in.
+    private lazy var styled = ASSSubtitles()
+    private let styledCaption = UIImageView()
+    private var textKey = ""
     private let retainPausedPicture: Bool
     private var displayCriteriaObservation: NSKeyValueObservation?
     private var displayObservers: [NSObjectProtocol] = []
@@ -77,9 +81,9 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         return nil
         #endif
     }
-    func drawCaptions(engine: AetherEngine) {
+    func drawCaptions(engine: AetherEngine, offset: Double) {
         guard let surface else { return }
-        let time = engine.clock.sourceTime
+        let time = engine.clock.sourceTime - offset
         let cues = engine.subtitleCues.filter { $0.startTime <= time && time < $0.endTime }
         let imageIDs = Set(cues.compactMap { cue -> Int? in
             if case .image = cue.body { return cue.id }; return nil
@@ -90,6 +94,12 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         let coded = CGSize(width: Int(engine.sourceVideoWidth), height: Int(engine.sourceVideoHeight))
         let display = engine.softwareDisplaySize ?? coded
         let rect = engine.nativePlayerLayer?.videoRect ?? AVMakeRect(aspectRatio: display, insideRect: surface.bounds)
+        if drawStyled(engine: engine, cues: cues, time: time, rect: rect, coded: coded, surface: surface) {
+            captions.attributedText = nil
+            textKey = ""
+            return
+        }
+        styledCaption.isHidden = true
         for cue in cues {
             guard case .image(let image) = cue.body else { continue }
             let view = bitmapCaptions[cue.id] ?? UIImageView()
@@ -108,15 +118,101 @@ final class UIKitPlaybackRendering: PlaybackRendering {
                                 y: canvasRect.minY + image.position.minY * canvasRect.height,
                                 width: image.position.width * canvasRect.width, height: image.position.height * canvasRect.height)
         }
-        let text = cues.compactMap { cue -> String? in
+        drawText(cues.filter { if case .image = $0.body { return false }; return true }, rect: rect, surface: surface)
+    }
+
+    /// Text cues in the viewer's appearance, sized and placed against the picture, keeping the runs'
+    /// bold, italic, underline, strike-through and colour, and an ASS `\an` top or middle placement.
+    private func drawText(_ cues: [SubtitleCue], rect: CGRect, surface: UIView) {
+        let look = SubtitleAppearance.current
+        // Drawn on every clock tick: only a change of cues, look or picture rebuilds the text.
+        let key = "\(cues.map(\.id))|\(look)|\(rect)"
+        guard key != textKey else { return }
+        textKey = key
+        let height = max(18, rect.height * look.heightFraction)
+        let ink: UIColor = look.color == "yellow" ? UIColor(red: 1, green: 0.92, blue: 0.23, alpha: 1) : .white
+        let base = UIFont.systemFont(ofSize: height, weight: .semibold)
+        let shadow = NSShadow()
+        shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
+        shadow.shadowBlurRadius = height * 0.12
+        shadow.shadowOffset = CGSize(width: 0, height: height * 0.04)
+        let text = NSMutableAttributedString()
+        for cue in cues {
+            if text.length > 0 { text.append(NSAttributedString(string: "\n")) }
+            let runs: [SubtitleTextRun]
             switch cue.body {
-            case .text(let text): return text
-            case .richText(let runs): return runs.map(\.text).joined()
-            case .image: return nil
+            case .text(let plain): runs = [SubtitleTextRun(text: plain, color: nil)]
+            case .richText(let styled): runs = styled
+            case .image: runs = []
             }
-        }.joined(separator: "\n")
-        captions.text = text
-        captions.frame = CGRect(x: 40, y: surface.bounds.height * 0.7, width: max(0, surface.bounds.width - 80), height: surface.bounds.height * 0.25)
+            for run in runs {
+                var traits: UIFontDescriptor.SymbolicTraits = []
+                if run.isBold { traits.insert(.traitBold) }
+                if run.isItalic { traits.insert(.traitItalic) }
+                let font = base.fontDescriptor.withSymbolicTraits(traits).map { UIFont(descriptor: $0, size: height) } ?? base
+                var attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: run.color.map { UIColor(red: CGFloat($0.r) / 255, green: CGFloat($0.g) / 255, blue: CGFloat($0.b) / 255, alpha: 1) } ?? ink,
+                ]
+                if look.background == "shadow" {
+                    attributes[.shadow] = shadow
+                    attributes[.strokeColor] = UIColor.black
+                    attributes[.strokeWidth] = -2.5
+                }
+                if run.isUnderlined { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+                if run.isStruckThrough { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+                text.append(NSAttributedString(string: run.text, attributes: attributes))
+            }
+        }
+        captions.attributedText = text
+        captions.isHidden = text.length == 0
+        guard text.length > 0 else { return }
+        captions.backgroundColor = look.background == "box" ? UIColor.black.withAlphaComponent(0.65) : .clear
+        captions.layer.cornerRadius = look.background == "box" ? height * 0.2 : 0
+        captions.clipsToBounds = look.background == "box"
+        let inset = look.background == "box" ? height * 0.35 : 0
+        let width = rect.width * 0.9
+        let fitted = captions.sizeThatFits(CGSize(width: width - inset * 2, height: .greatestFiniteMagnitude))
+        let box = CGSize(width: min(width, fitted.width + inset * 2), height: fitted.height + inset)
+        let margin = rect.height * (look.position == "raised" ? 0.16 : 0.06)
+        let placement = cues.lazy.compactMap(\.placement).first
+        var y = rect.maxY - margin - box.height
+        if let alignment = placement?.alignment {
+            if alignment >= 7 { y = rect.minY + rect.height * 0.06 } else if alignment >= 4 { y = rect.midY - box.height / 2 }
+        }
+        var x = rect.midX - box.width / 2
+        if let point = placement?.position, (0...1).contains(point.x), (0...1).contains(point.y) {
+            x = min(max(rect.minX, rect.minX + point.x * rect.width - box.width / 2), rect.maxX - box.width)
+            y = min(max(rect.minY, rect.minY + point.y * rect.height - box.height), rect.maxY - box.height)
+        }
+        captions.frame = CGRect(x: x, y: y, width: box.width, height: box.height)
+    }
+
+    /// Draws the active ASS/SSA track through libass; false when it is not one or libass is not built in.
+    private func drawStyled(engine: AetherEngine, cues: [SubtitleCue], time: Double, rect: CGRect, coded: CGSize,
+                            surface: UIView) -> Bool {
+        guard ASSSubtitles.isAvailable, let index = engine.activeSubtitleTrackIndex,
+              let track = engine.subtitleTracks.first(where: { $0.id == index }),
+              ["ass", "ssa"].contains(track.codec),
+              let header = track.isExternal ? engine.sidecarASSHeader : track.assHeader,
+              let styled, rect.width > 0 else { return false }
+        if styledCaption.superview !== surface {
+            styledCaption.layer.zPosition = 2
+            surface.addSubview(styledCaption)
+        }
+        // Rendered at the picture's pixel size, at most 1920 wide: libass's cost grows with the area.
+        let scale = min(surface.window?.screen.scale ?? 1, 1920 / rect.width)
+        let pixels = CGSize(width: rect.width * scale, height: rect.height * scale)
+        guard let (image, box) = styled.render(key: "\(track.id)|\(track.isExternal)", header: header, fonts: engine.fontAttachments,
+                                                cues: cues, time: time, pixels: pixels, storage: coded) else {
+            styledCaption.isHidden = true
+            return true
+        }
+        styledCaption.image = UIImage(cgImage: image)
+        styledCaption.frame = CGRect(x: rect.minX + box.minX / scale, y: rect.minY + box.minY / scale,
+                                     width: box.width / scale, height: box.height / scale)
+        styledCaption.isHidden = false
+        return true
     }
     func freezePicture(frame: CGImage?, aspectFill: Bool) {
         guard frozenPicture == nil, let host else { return }
@@ -146,6 +242,7 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         displayObservers.removeAll()
         bitmapCaptions.values.forEach { $0.removeFromSuperview() }
         bitmapCaptions.removeAll()
+        styledCaption.removeFromSuperview()
         surface?.removeFromSuperview()
         surface = nil
     }

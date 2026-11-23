@@ -77,6 +77,26 @@ for 4K), `hdr10+` beside `hdr10`, `dolbyVisionProfiles` 5/7/8.1/8.4 on a Dolby V
 `dolbyVisionReshape` for what AVPlayer composes) and `audioOutput`: Dolby passthrough and E-AC-3 JOC,
 `truehd-atmos`/`dtsx` while rendering is on, and `lossless` while surround is lossless.
 
+**Subtitles.** ASS/SSA tracks are drawn as authored by libass 0.17.5 (positions, styles, colours,
+outlines, rotation, karaoke and the container's embedded fonts, through Core Text for system fonts):
+loads set `preserveASSMarkup`, and `ASSSubtitles` feeds the raw event lines, the track's header and
+`fontAttachments` to libass and lays its bitmaps over the picture at its pixel size (at most 1920 wide).
+`modules/vela-player/ios/ass/build.sh` builds `Libass.xcframework` (libass with FreeType and HarfBuzz,
+ISC/FTL/MIT) and `Fribidi.xcframework` (LGPL-2.1, a separate replaceable dynamic framework) from pinned,
+checksummed sources; `tools/apple-tv.sh` and `tools/ios.sh` run it once per checkout, and the podspec
+vendors the result and bundles its licences. A build without them draws ASS as plain text. Other text
+formats (SRT, WebVTT, mov_text, teletext) keep their bold, italic, underline, strike-through and colour
+runs and ASS `\an`/`\pos` placement, sized against the picture in the viewer's subtitle appearance
+(size, shadow or box, white or yellow, bottom or raised; kept per device). PGS, DVB, DVD and VobSub stay
+Aether's bitmaps. The subtitle menu's delay (±10 minutes) shifts the overlay against the clock, and
+`maximumSubtitleOffsetSeconds` follows it so the cues it reaches stay decoded.
+
+**Not available on Apple TV.** DTS bitstreaming (tvOS has no DTS output; DTS-HD MA decodes losslessly
+to PCM, DTS:X heights render as above). Any compressed passthrough other than what AVPlayer forwards
+for Dolby Digital and Dolby Digital Plus. Hardware AV1 (Apple TV 4K third generation decodes it in
+software, so AV1 is not claimed to servers). Gapless album playback: AetherEngine has no queued
+next-item path; a gap between tracks remains.
+
 **Needs a real receiver** (the simulator outputs none of this): TrueHD Atmos and DTS:X showing Atmos,
 E-AC-3 JOC showing Atmos, lossless 7.1 reaching the receiver as 8-channel PCM, Dolby Digital Plus 5.1
 on legacy ARC, a speaker layout change mid-title, and Dolby Vision Profile 7/8 on a Dolby Vision TV.

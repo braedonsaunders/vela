@@ -60,6 +60,8 @@ final class PlaybackClient {
     private var muted: Bool
     private var audio: Int?
     private var subtitle: Int?
+    /// The viewer's subtitle delay for this title, in seconds (positive shows cues later).
+    private var subtitleOffset = 0.0
     // Idle engines are reused across titles. A mounted client leases its engine exclusively,
     // including while a paused outgoing picture overlaps the next view.
     private static var primaryEngine: AetherEngine?
@@ -115,6 +117,13 @@ final class PlaybackClient {
         if name == "mute" { engine?.volume = flag ? 0 : volume }
     }
     func set(_ name: String, double: Double) {
+        if name == "sub-delay" {
+            subtitleOffset = max(-600, min(600, double))
+            // Aether keeps decoded cues this far either side of the clock for the overlay's offset.
+            engine?.maximumSubtitleOffsetSeconds = abs(subtitleOffset)
+            emit("sub-delay", subtitleOffset)
+            drawCaptions()
+        }
         if name == "volume" { volume = Float(double / 100) }
         if name == "volume" { engine?.volume = muted ? 0 : volume }
     }
@@ -156,7 +165,7 @@ final class PlaybackClient {
                 if self.tile == nil { if preview { Self.previewEngine = nil } else { Self.primaryEngine = nil } }
                 self.engine = engine
                 engine.logTag = self.tile.map { "tile\($0)" }
-                engine.maximumSubtitleOffsetSeconds = 0
+                engine.maximumSubtitleOffsetSeconds = abs(self.subtitleOffset)
                 engine.videoGravity = self.aspectFill ? .resizeAspectFill : .resizeAspect
                 try self.rendering.bind(engine: engine)
                 self.layout()
@@ -254,6 +263,8 @@ final class PlaybackClient {
                     opts.matchContentEnabled = false
                 }
                 self.preferences.configure(&opts, fullScreen: self.fullScreen)
+                // libass draws ASS/SSA as authored from the raw events, header and container fonts.
+                if ASSSubtitles.isAvailable && !preview { opts.preserveASSMarkup = true }
                 self.rendering.configureLoad(options: &opts, preview: preview)
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
@@ -356,7 +367,7 @@ final class PlaybackClient {
          "lang": track.language ?? "und", "codec": track.codec, "external": track.isExternal]
     }
     private func drawCaptions() {
-        if let engine { rendering.drawCaptions(engine: engine) }
+        if let engine { rendering.drawCaptions(engine: engine, offset: subtitleOffset) }
     }
     private func failPath() {
         guard !dead, !failed, !reconnecting else { return }

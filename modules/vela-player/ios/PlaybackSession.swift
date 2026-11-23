@@ -638,6 +638,19 @@ final class PlaybackSession {
             return selectAudio(command["trackId"] as? String)
         case "subtitle":
             return selectSubtitle(command["trackId"] as? String)
+        case "subtitleStyle":
+            if let value = command["value"] as? String, value.hasPrefix("subtitleOffset=") {
+                guard let seconds = Double(value.dropFirst("subtitleOffset=".count)), seconds.isFinite, abs(seconds) <= 600 else {
+                    return "Subtitle delay is at most ten minutes"
+                }
+                player?.set("sub-delay", double: seconds)
+                return nil
+            }
+            var next = SubtitleAppearance.current
+            guard let value = command["value"] as? String, next.apply(value) else {
+                return "Unknown subtitle appearance"
+            }
+            SubtitleAppearance.current = next
         case "outputPreference":
             var next = PlaybackPreferences.current
             guard let value = command["value"] as? String, next.apply(value) else {

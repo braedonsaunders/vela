@@ -76,10 +76,10 @@ final class AppKitPlaybackRendering: PlaybackRendering {
         options.matchContentEnabled = fullscreen && !preview
         if !fullscreen || preview { options.displayCriteriaOwner = .host }
     }
-    func drawCaptions(engine: AetherEngine) {
+    func drawCaptions(engine: AetherEngine, offset: Double) {
         configureDynamicRange(engine: engine)
         guard let surface else { return }
-        let time = engine.clock.sourceTime
+        let time = engine.clock.sourceTime - offset
         let cues = engine.subtitleCues.filter { $0.startTime <= time && time < $0.endTime }
         let ids = Set(cues.map(\.id))
         for id in Array(images.keys) where !ids.contains(id) { images.removeValue(forKey: id)?.removeFromSuperlayer() }

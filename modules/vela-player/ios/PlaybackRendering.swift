@@ -8,7 +8,8 @@ protocol PlaybackRendering: AnyObject {
     func bind(engine: AetherEngine) throws
     func layout()
     func configureLoad(options: inout LoadOptions, preview: Bool)
-    func drawCaptions(engine: AetherEngine)
+    /// `offset` is the viewer's subtitle delay: positive shows cues later.
+    func drawCaptions(engine: AetherEngine, offset: Double)
     func freezePicture(frame: CGImage?, aspectFill: Bool)
     func clearFrozenPicture()
     func removeSurface()
