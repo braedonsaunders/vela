@@ -64,6 +64,7 @@
       "./plugins/android-cleartext",
       "./plugins/android-signing",
       "./plugins/android-tv-keys",
+      "./plugins/android-hardware-bitmaps",
       "./plugins/apple-player"
     ]
   }
