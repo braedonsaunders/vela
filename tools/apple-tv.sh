@@ -78,8 +78,9 @@ fi
 project="$root/apps/vela/ios/Vela.xcodeproj/project.pbxproj"
 # A project generated for iPhone (tools/ios.sh) builds nothing for Apple TV: regenerate it.
 if [ -f "$project" ] && ! grep -q 'SDKROOT = appletvos' "$project"; then prebuild=1; fi
-# libass (ASS/SSA as authored) is built once per checkout; the podspec picks it up at pod install.
-if [ ! -d "$root/modules/vela-player/ios/ass/build/Libass.xcframework" ]; then
+# libass (ASS/SSA as authored) is built once per checkout and again when ass/build.sh changes; the
+# podspec picks it up at pod install.
+if ! "$root/modules/vela-player/ios/ass/build.sh" --check; then
   locked "$root/modules/vela-player/ios/ass/build.sh" --work "$build/libass"
   prebuild=1
 fi

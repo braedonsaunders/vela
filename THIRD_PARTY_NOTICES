@@ -106,6 +106,16 @@ The Linux desktop builds FFmpeg 8.0.1 (GPL and nonfree off), dav1d 1.5.3 (BSD-2-
 libplacebo 7.387.0 and libmpv (-Dgpl=false, pinned mpv commit) with
 apps/vela-desktop/linux/build-libraries.sh, keeping source archives and notices beside them.
 
+Apple subtitles (libass)
+------------------------
+tvOS, iOS and the macOS desktop host draw ASS/SSA with libass 0.17.5 (ISC), built with
+FreeType 2.15.0 (FreeType License) and HarfBuzz 15.2.0 (MIT) into Libass.framework, and
+GNU FriBidi 1.0.18 (LGPL-2.1-or-later) as the separate, dynamically linked and replaceable
+Fribidi.framework, all from pinned, checksummed upstream sources by
+modules/vela-player/ios/ass/build.sh. The licence texts, SOURCES.txt and fribidi.NOTICE.txt
+(LGPL obligations: dynamic linking, source location and offer, how to replace it) ship in
+the tvOS/iOS VelaPlayerLicenses bundle and the Mac app's native-mac/Licenses folder.
+
 Apple TV media framework (FFmpeg)
 ---------------------------------
 native/apple/media/build-ffmpeg.sh builds VelaMedia.framework from FFmpeg 7.1.2

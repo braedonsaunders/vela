@@ -18,6 +18,14 @@ const run = (cmd, args, cwd = stage) => {
 mkdirSync(join(stage, 'Sources/VelaNative'), { recursive: true });
 mkdirSync(output, { recursive: true });
 const ios = resolve(here, '../../../modules/vela-player/ios');
+// libass for ASS/SSA as authored (ASSSubtitles): the same Libass and Fribidi xcframeworks as tvOS and iOS,
+// built once per checkout by ass/build.sh (meson, ninja and pkg-config) and again when the script changes.
+const ass = join(ios, 'ass');
+if (spawnSync('sh', [join(ass, 'build.sh'), '--check']).status !== 0) run('sh', [join(ass, 'build.sh'), '--work', join(stage, 'libass')]);
+for (const name of ['Libass', 'Fribidi']) {
+  rmSync(join(stage, name + '.xcframework'), { recursive: true, force: true });
+  cpSync(join(ass, 'build', name + '.xcframework'), join(stage, name + '.xcframework'), { recursive: true, verbatimSymlinks: true });
+}
 for (const name of ['PlaybackClient', 'PlaybackSession', 'PlaybackHost', 'PlaybackRendering', 'PreviewPlayback', 'PlayerState', 'PlayerReport', 'PlayerCapabilities', 'PlaybackPreferences', 'PlaybackFormat', 'PlaybackCacheBudget', 'ASSSubtitles', 'SubtitleAppearance', 'PlaybackPlan', 'PathRecovery', 'MediaAccess', 'MediaRedirects', 'ScopedMediaHTTP', 'ScopedAetherReader'])
   cpSync(join(ios, name + '.swift'), join(stage, 'Sources/VelaNative', name + '.swift'));
 for (const name of ['AppKitPlaybackRendering.swift', 'NativeHost.swift']) cpSync(join(here, name), join(stage, 'Sources/VelaNative', name));
@@ -25,7 +33,7 @@ for (const name of ['AppKitPlaybackRendering.swift', 'NativeHost.swift']) cpSync
 const traits = require('../../vela/plugins/apple-player.js').AETHER_TRAITS.map(trait => `"${trait}"`).join(', ');
 writeFileSync(join(stage, 'Package.swift'), `// swift-tools-version: 6.1
 import PackageDescription
-let package = Package(name: "VelaNative", platforms: [.macOS("15.0")], products: [.library(name: "VelaNative", type: .dynamic, targets: ["VelaNative"])], dependencies: [.package(url: "https://github.com/superuser404notfound/AetherEngine", exact: "7.70.0", traits: [${traits}]), .package(url: "https://github.com/superuser404notfound/LibTrueHD", exact: "3.2.0")], targets: [.target(name: "VelaNative", dependencies: [.product(name: "AetherEngine", package: "AetherEngine")], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("IOKit")])], swiftLanguageModes: [.v5])
+let package = Package(name: "VelaNative", platforms: [.macOS("15.0")], products: [.library(name: "VelaNative", type: .dynamic, targets: ["VelaNative"])], dependencies: [.package(url: "https://github.com/superuser404notfound/AetherEngine", exact: "7.70.0", traits: [${traits}]), .package(url: "https://github.com/superuser404notfound/LibTrueHD", exact: "3.2.0")], targets: [.target(name: "VelaNative", dependencies: [.product(name: "AetherEngine", package: "AetherEngine"), "Libass", "Fribidi"], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("IOKit")]), .binaryTarget(name: "Libass", path: "Libass.xcframework"), .binaryTarget(name: "Fribidi", path: "Fribidi.xcframework")], swiftLanguageModes: [.v5])
 `);
 if (process.argv.includes('--prepare-only')) process.exit(0);
 cpSync(join(here, 'Package.resolved'), join(stage, 'Package.resolved'));
@@ -48,7 +56,7 @@ for (const match of loadCommands.stdout.matchAll(/cmd LC_RPATH\n\s*cmdsize \d+\n
     run('xcrun', ['install_name_tool', '-delete_rpath', runtimePath, nativeLibrary]);
 }
 run('codesign', ['--force', '--sign', '-', nativeLibrary]);
-// Dynamic dependency bundles must stay adjacent and replaceable (LGPL).
+// Dynamic dependency bundles (AetherLib's FFmpeg, Libass, Fribidi) must stay adjacent and replaceable (LGPL).
 for (const name of readdirSync(bin)) if (name.endsWith('.framework') || name.endsWith('.bundle')) {
   rmSync(join(output, name), { recursive: true, force: true });
   cpSync(realpathSync(join(bin, name)), join(output, name), { recursive: true, dereference: false, verbatimSymlinks: true });
@@ -57,3 +65,4 @@ const headers = arg('node-headers') || join(process.env.HOME, '.electron-gyp/40.
 if (!existsSync(join(headers, 'node_api.h'))) throw new Error('Pass --node-headers=<Electron include/node directory>');
 run('xcrun', ['clang++', '-arch', swiftArch, '-mmacosx-version-min=15.0', '-std=c++17', '-shared', '-undefined', 'dynamic_lookup', '-I', headers, join(here, 'addon.mm'), '-L', output, '-lVelaNative', '-Wl,-rpath,@loader_path', '-o', join(output, 'vela-native.node')]);
 cpSync(join(ios, 'Licenses'), join(output, 'Licenses'), { recursive: true });
+cpSync(join(ass, 'build', 'licenses'), join(output, 'Licenses'), { recursive: true });

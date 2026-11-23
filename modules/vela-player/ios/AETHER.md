@@ -2,8 +2,8 @@
 
 Vela's tvOS and iOS apps use AetherEngine 7.70.0 exclusively. AVPlayer and
 software decoding are routes inside that engine. No MPVKit, libmpv, MoltenVK,
-libplacebo, libass or mpv-only libraries are linked or bundled on Apple mobile
-platforms. The macOS Electron host reuses these playback sources through an AppKit rendering
+libplacebo or mpv-only libraries are linked or bundled on Apple mobile
+platforms; libass is Vela's own subtitle renderer (Subtitles, below). The macOS Electron host reuses these playback sources through an AppKit rendering
 adapter (macOS 15+, Apple silicon). Linux and Windows retain their own mpv
 implementations. See `apps/vela-desktop/NATIVE_PLAYER.md` for the IPC contract.
 
@@ -78,13 +78,19 @@ for 4K), `hdr10+` beside `hdr10`, `dolbyVisionProfiles` 5/7/8.1/8.4 on a Dolby V
 `truehd-atmos`/`dtsx` while rendering is on, and `lossless` while surround is lossless.
 
 **Subtitles.** ASS/SSA tracks are drawn as authored by libass 0.17.5 (positions, styles, colours,
-outlines, rotation, karaoke and the container's embedded fonts, through Core Text for system fonts):
-loads set `preserveASSMarkup`, and `ASSSubtitles` feeds the raw event lines, the track's header and
-`fontAttachments` to libass and lays its bitmaps over the picture at its pixel size (at most 1920 wide).
-`modules/vela-player/ios/ass/build.sh` builds `Libass.xcframework` (libass with FreeType and HarfBuzz,
-ISC/FTL/MIT) and `Fribidi.xcframework` (LGPL-2.1, a separate replaceable dynamic framework) from pinned,
-checksummed sources; `tools/apple-tv.sh` and `tools/ios.sh` run it once per checkout, and the podspec
-vendors the result and bundles its licences. A build without them draws ASS as plain text. Other text
+outlines, rotation, karaoke and the container's embedded fonts, through Core Text for system fonts)
+on tvOS, iOS and the macOS desktop host alike: loads set `preserveASSMarkup`, and `ASSSubtitles` feeds
+the raw event lines, the track's header and `fontAttachments` to libass, and the platform's rendering
+(`UIKitPlaybackRendering`, `AppKitPlaybackRendering`) lays its bitmaps over the picture at its pixel
+size (at most 1920 wide). `modules/vela-player/ios/ass/build.sh` builds `Libass.xcframework` (libass
+with FreeType and HarfBuzz, ISC/FTL/MIT) and `Fribidi.xcframework` (LGPL-2.1, a separate replaceable
+dynamic framework) for tvOS, iOS (device and simulator) and macOS, from pinned, checksummed sources,
+stripped and signed ad hoc with the hardened runtime. `tools/apple-tv.sh`, `tools/ios.sh`,
+`tools/testflight.sh` and `apps/vela-desktop/mac/build.mjs` run it when `build.sh --check` says the
+build is missing or was made by another version of the script; the podspec vendors the result and
+bundles its licences, and the Mac host links it as SwiftPM binary targets and ships the frameworks
+beside `libVelaNative.dylib`. A build without them draws ASS as plain text (the macOS host up to
+0.2.50 did). Other text
 formats (SRT, WebVTT, mov_text, teletext) keep their bold, italic, underline, strike-through and colour
 runs and ASS `\an`/`\pos` placement, sized against the picture in the viewer's subtitle appearance
 (size, shadow or box, white or yellow, bottom or raised; kept per device). PGS, DVB, DVD and VobSub stay
@@ -275,7 +281,9 @@ https://github.com/superuser404notfound/AetherEngine/tree/7.70.0 .
 FFmpegBuild 3.15.0: dynamic LGPL FFmpeg provider and dependency notices:
 https://github.com/superuser404notfound/FFmpegBuild/tree/3.15.0 .
 LibDovi and Anime4K: MIT. The VelaPlayerLicenses resource bundle carries their
-texts and FFmpegBuild's LGPL, dav1d, zimg and libzvbi notices. FFmpegBuild's
+texts and FFmpegBuild's LGPL, dav1d, zimg and libzvbi notices, and ass/build.sh's
+libass (ISC), HarfBuzz (MIT), FreeType (FTL) and FriBidi (LGPL-2.1, with
+`fribidi.NOTICE.txt`: dynamic linking, source, replacement) texts. FFmpegBuild's
 published build script documents its FFmpeg patches and GPL source exclusions.
 
 ## Historical device verification (before mpv removal)

@@ -252,7 +252,8 @@ does no Bonjour or broadcast discovery, so it declares no Bonjour services.
 
 **LGPL components.** FFmpeg (FFmpegBuild 3.15.0's AetherLib frameworks) and FriBidi 1.0.18
 (`Fribidi.framework`, from `modules/vela-player/ios/ass/build.sh`) ship as separate dynamic
-frameworks inside `Vela.app/Frameworks`, so they stay replaceable. Their licence texts and source
+frameworks inside `Vela.app/Frameworks` (the Mac app keeps them, with `Libass.framework`, in
+`Contents/Resources/native-mac`), so they stay replaceable. Their licence texts and source
 pointers travel in the `VelaPlayerLicenses` bundle. AetherEngine is LGPL-3.0 with an App Store
 exception, built from unmodified 7.70.0 source; see
 `modules/vela-player/ios/AETHER.md`, "Distribution notices". libass, HarfBuzz and FreeType are

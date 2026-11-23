@@ -14,7 +14,12 @@ node apps/vela-desktop/mac/build.mjs --arch=arm64 --out=$HOME/.scratch/tmp/<thre
 `--node-headers` optionally selects an
 Electron `include/node` directory; the default is the existing 40.8.0 N-API
 headers. The addon uses the stable N-API, not Electron's V8 ABI. SwiftPM builds
-AetherEngine 7.70.0; Package.resolved pins its transitive dependencies. Build
+AetherEngine 7.70.0; Package.resolved pins its transitive dependencies. ASS/SSA
+subtitles render through libass, as on tvOS and iOS: the build runs
+`modules/vela-player/ios/ass/build.sh` (needs meson, ninja and pkg-config) when its
+output is missing or stale, links `Libass.xcframework` and `Fribidi.xcframework` as
+binary targets and copies both frameworks, ad-hoc signed with the hardened runtime,
+beside `libVelaNative.dylib`, with their licences in `Licenses`. Build
 staging is adjacent to the output. No generated binaries belong in Git.
 
 The shared desktop build accepts `--native-mac=<payload>` and copies it to
@@ -24,7 +29,7 @@ the host remains unavailable without that bundle.
 Sign every nested framework, dylib and addon with the app's Developer ID and
 hardened runtime before signing the app. Same-team signing avoids disabling
 library validation. Ship the copied `Licenses` directory with the binaries;
-FFmpeg frameworks remain dynamic and replaceable under LGPL 2.1. Their build
+FFmpeg frameworks and `Fribidi.framework` remain dynamic and replaceable under LGPL 2.1. Their build
 source and instructions are linked in the bundled FFmpegBuild README.
 
 `host.diagnostics()` reports current and potential screen EDR headroom. An HDR

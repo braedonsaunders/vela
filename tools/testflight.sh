@@ -100,8 +100,9 @@ if [ -z "$number" ]; then
 fi
 echo "testflight: Vela $version ($number)"
 
-# libass (ASS/SSA as authored) is built once per checkout; the podspec picks it up at pod install.
-if [ ! -d "$root/modules/vela-player/ios/ass/build/Libass.xcframework" ]; then
+# libass (ASS/SSA as authored) is built once per checkout and again when ass/build.sh changes; the
+# podspec picks it up at pod install.
+if ! "$root/modules/vela-player/ios/ass/build.sh" --check; then
   locked "$root/modules/vela-player/ios/ass/build.sh" --work "$build/libass"
 fi
 
