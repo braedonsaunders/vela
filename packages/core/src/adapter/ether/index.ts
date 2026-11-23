@@ -486,6 +486,12 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.SessionSnapshot>('GET', `/sessions/${segment(sessionId)}`);
   }
 
+  /** A session's trickplay sheet (bearer and device, revalidated by ETag); the route width is the offer's. */
+  trickplaySheet(sessionId: string, offer: V.TrickplayMetadata, index: number, etag?: string, signal?: AbortSignal) {
+    if (!Number.isInteger(index) || index < 0 || !Number.isInteger(offer.width) || offer.width <= 0) return Promise.resolve(null);
+    return this.http.bytes(`/sessions/${segment(sessionId)}/trickplay/${offer.width}/${index}.jpg`, etag, signal);
+  }
+
   streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
     const path = `/sessions/${segment(sessionId)}/events`;
     return this.http.stream(path, { 'Last-Event-ID': cursor }, onEvent, signal);

@@ -99,6 +99,30 @@ export class EtherTransport {
     return value;
   }
 
+  /**
+   * An authenticated binary GET (a trickplay sheet), revalidated with `etag`: the bytes, or
+   * `unchanged` on 304, or null when the server has no such resource (404). Never cached here.
+   */
+  async bytes(path: string, etag?: string, signal?: AbortSignal): Promise<{ bytes: Uint8Array; mimeType: string; etag?: string } | 'unchanged' | null> {
+    signal?.throwIfAborted();
+    let tokens = await abortable(this.credentials.get(), signal);
+    if (!tokens) throw new Error('Sign in required');
+    const send = (token: Token, revalidate: boolean) =>
+      this.fetchBound(`/vela/v0${path}`, { method: 'GET', signal, headers: revalidate && etag ? { 'If-None-Match': etag } : {} }, token);
+    let response = await send(tokens, true);
+    if (response.status === 401) {
+      tokens = await abortable(this.refresh(tokens), signal);
+      signal?.throwIfAborted();
+      response = await send(tokens, true);
+    }
+    if (response.status === 304 && etag) return 'unchanged';
+    if (response.status === 404) return null;
+    if (!response.ok) throw await this.failure(response, signal);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    signal?.throwIfAborted();
+    return { bytes, mimeType: response.headers.get('content-type') ?? '', ...(response.headers.get('etag') ? { etag: response.headers.get('etag')! } : {}) };
+  }
+
   /** Replace the current viewer while holding the same cross-window lock as token refresh. */
   replaceSession<T>(work: () => Promise<T>): Promise<T> {
     return acrossWindows(`vela-refresh:${this.origin}`, work);

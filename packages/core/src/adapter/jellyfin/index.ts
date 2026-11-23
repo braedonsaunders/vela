@@ -2,10 +2,13 @@ import type { TitleActions } from '../media-actions';
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { ClientDeclaration, LiveTv, PasswordSignIn, QuickConnectSignIn, TrackChanges, TrackCommand } from '../capabilities';
+import type { ClientDeclaration, LiveTv, PasswordSignIn, QuickConnectSignIn, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets } from '../capabilities';
 import { VelaError } from '../errors';
 import { seriesOrder } from '../series';
 import type { Item, Result, User, Auth, Info, MediaSource } from './types';
+import { jellyfinTrickplay } from '../../protocol/trickplay';
+/** The wire offer, without the media source it was read for. */
+const offerOf = ({ sourceId: _source, ...offer }: V.TrickplayMetadata & { sourceId: string }): V.TrickplayMetadata => offer;
 const seconds = (ticks?: number) => ticks === undefined ? undefined : ticks / 10000000;
 const ticks = (value: number) => Math.round(value * 10000000);
 const e = encodeURIComponent;
@@ -28,13 +31,15 @@ interface Session {
     stopped: boolean;
     pending: Promise<unknown>;
     mutations: Map<string, V.PlaybackPlan>;
+    /** The media source whose scrub thumbnails the plan offers. */
+    trickplaySource?: string;
 }
 /** All API requests are pinned to this server/base path and refuse redirects.
  * Media URLs contain no account credential. The host supplies scoped media headers.
  * Jellyfin has no refresh tokens: the token is validated, never fictitiously rotated.
  */
 export class JellyfinAdapter
-    implements ServerAdapter, PasswordSignIn, QuickConnectSignIn, ClientDeclaration, LiveTv, TrackChanges {
+    implements ServerAdapter, PasswordSignIn, QuickConnectSignIn, ClientDeclaration, LiveTv, TrackChanges, TrickplaySheets {
     private base: URL;
     private sessions = new Map<string, Session>();
     private starts = new Map<string, Promise<V.PlaybackPlan>>();
@@ -60,33 +65,37 @@ export class JellyfinAdapter
                 url.searchParams.delete(key);
         return url.href;
     }
+    /** This client's MediaBrowser authorization, with the session's token when there is one. */
+    private authorization(tokens: V.Tokens | null): Record<string, string> {
+        const quote = (s: string) => s.replace(/["\\\r\n]/g, '');
+        const device = this.credentials.device;
+        const authorization = `MediaBrowser Client="Vela", Device="${quote(device.name)}", DeviceId="${quote(device.id)}", Version="${quote(device.appVersion)}"${tokens ? `, Token="${quote(tokens.accessToken)}"` : ''}`;
+        return { Authorization: authorization, ...(tokens ? { 'X-Emby-Token': tokens.accessToken } : {}) };
+    }
+    private async rejected(response: Response, tokens: V.Tokens | null): Promise<never> {
+        if (response.status === 401 && tokens) {
+            await this.credentials.set(null);
+            this.sessions.clear();
+            this.starts.clear();
+            this.onSessionRejected?.();
+        }
+        throw this.error(response.status === 401 ? 'auth' : response.status === 404 ? 'not-found' : response.status === 403 ? 'policy' : 'request', 'jellyfin_http_error', `Server returned ${response.status}`, response.status);
+    }
     private async request<T>(method: string, path: string, body?: unknown, auth = true, signal?: AbortSignal): Promise<T> {
         const tokens = auth ? await this.credentials.get() : null;
         if (auth && !tokens)
             throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
-        const quote = (s: string) => s.replace(/["\\\r\n]/g, '');
-        const device = this.credentials.device;
-        const authorization = `MediaBrowser Client="Vela", Device="${quote(device.name)}", DeviceId="${quote(device.id)}", Version="${quote(device.appVersion)}"${tokens ? `, Token="${quote(tokens.accessToken)}"` : ''}`;
         const response = await fetch(this.url(path).href, {
             method, signal, redirect: 'error', headers: {
-                Authorization: authorization, ...(tokens ? {
-                    'X-Emby-Token': tokens.accessToken
-                } : {}), ...(body === undefined ? {} : {
+                ...this.authorization(tokens), ...(body === undefined ? {} : {
                     'Content-Type': 'application/json'
                 })
             }, ...(body === undefined ? {} : {
                 body: JSON.stringify(body)
             })
         });
-        if (!response.ok) {
-            if (response.status === 401 && tokens) {
-                await this.credentials.set(null);
-                this.sessions.clear();
-                this.starts.clear();
-                this.onSessionRejected?.();
-            }
-            throw this.error(response.status === 401 ? 'auth' : response.status === 404 ? 'not-found' : response.status === 403 ? 'policy' : 'request', 'jellyfin_http_error', `Server returned ${response.status}`, response.status);
-        }
+        if (!response.ok)
+            await this.rejected(response, tokens);
         if (response.status === 204 || response.headers.get('content-length') === '0')
             return undefined as T;
         const text = await response.text();
@@ -606,8 +615,9 @@ export class JellyfinAdapter
                 } : {})
             };
         });
+        const trickplay = r.channelId ? null : jellyfinTrickplay(item.Trickplay, source.Id);
         const plan: V.PlaybackPlan = {
-            sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0, ...(r.channelId ? {
+            sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0, ...(trickplay ? { trickplay: offerOf(trickplay) } : {}), ...(r.channelId ? {
                 channelId: id
             } : r.extraId ? {
                 extraId: id
@@ -618,9 +628,42 @@ export class JellyfinAdapter
             }
         };
         this.sessions.set(sessionId, {
-            plan, itemId: id, client: r.client, playSessionId: sessionId, source, sequence: -1, started: false, stopped: false, pending: Promise.resolve(), mutations: new Map()
+            plan, itemId: id, client: r.client, playSessionId: sessionId, source, sequence: -1, started: false, stopped: false, pending: Promise.resolve(), mutations: new Map(),
+            ...(trickplay ? { trickplaySource: trickplay.sourceId } : {})
         });
         return plan;
+    }
+    /** The item's scrub thumbnails, read again: a server that makes them while a session streams
+     * offers them only after playback starts. The plan keeps what the session started with. */
+    async trickplayOffer(sessionId: string): Promise<V.TrickplayMetadata | null> {
+        const s = this.session(sessionId);
+        if (s.plan.channelId)
+            return null;
+        const item = await this.request<Item>('GET', `${await this.userPath()}/Items/${e(s.itemId)}${query({ Fields: 'Trickplay,MediaSources' })}`);
+        const trickplay = jellyfinTrickplay(item.Trickplay, s.source.Id);
+        if (!trickplay)
+            return null;
+        s.trickplaySource = trickplay.sourceId;
+        return offerOf(trickplay);
+    }
+    async trickplaySheet(sessionId: string, offer: V.TrickplayMetadata, index: number, etag?: string, signal?: AbortSignal): Promise<TrickplaySheet | null> {
+        const s = this.session(sessionId);
+        if (!Number.isInteger(index) || index < 0 || !Number.isInteger(offer.width) || offer.width <= 0)
+            return null;
+        const tokens = await this.credentials.get();
+        if (!tokens)
+            throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
+        const path = `Videos/${e(s.itemId)}/Trickplay/${offer.width}/${index}.jpg${query({ MediaSourceId: s.trickplaySource ?? s.source.Id })}`;
+        const response = await fetch(this.url(path).href, { signal, redirect: 'error', headers: { ...this.authorization(tokens), ...(etag ? { 'If-None-Match': etag } : {}) } });
+        if (response.status === 304 && etag)
+            return 'unchanged';
+        if (response.status === 404)
+            return null;
+        if (!response.ok)
+            await this.rejected(response, tokens);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const tag = response.headers.get('etag');
+        return { bytes, mimeType: response.headers.get('content-type') ?? 'image/jpeg', ...(tag ? { etag: tag } : {}) };
     }
     private trackIndex(id: string): number {
         if (!/^\d+$/.test(id))

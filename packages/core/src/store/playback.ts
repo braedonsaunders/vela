@@ -6,7 +6,9 @@ import type * as V from '../wire';
 import { hasSubtitleSearch } from '../adapter/media-actions';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
-import { hasEventStream, hasLibraryLive, hasVersions } from '../adapter/capabilities';
+import { hasEventStream, hasLibraryLive, hasTrickplaySheets, hasVersions } from '../adapter/capabilities';
+import type { TrickplayFrame } from '../protocol/trickplay';
+import { TrickplayCache } from './trickplay';
 import { finalRefusal, startRefusal, startRetry } from './start-retry';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
@@ -97,6 +99,8 @@ const MAX_PREPARATIONS = 30;
 const POLL_SECONDS = 5;
 /** A plan offered with placeholder versions is read once more this long after it starts. */
 const COLD_VERSIONS_SECONDS = 4;
+/** A server that offers scrub thumbnails only once a session streams is asked again this often, while the viewer scrubs. */
+const TRICKPLAY_OFFER_MS = 20_000;
 
 export class Playback {
   /** The current playback's own token: work for an older one stops when this changes. */
@@ -125,6 +129,11 @@ export class Playback {
   /** The last position the player reported for the current session. */
   private lastPosition: { sessionId: string; seconds: number; ended: boolean } | undefined;
 
+  /** The session's scrub thumbnail sheets, and an offer read apart from the plan (`trickplayOffer`). */
+  private readonly trickplay = new TrickplayCache();
+  private trickplayOffer: { sessionId: string; offer: V.TrickplayMetadata | null; at: number; reading: boolean } | undefined;
+  private readonly trickplayListeners = new Set<() => void>();
+
   /**
    * `watched` receives only server-confirmed resume state after stop/end, and `reconcile`
    * refreshes the page after the last report. A session with no reports changes no resume.
@@ -135,6 +144,7 @@ export class Playback {
     private readonly watched: (watched: Watched) => void,
     private readonly reconcile: (watched: Watched) => void,
   ) {
+    this.trickplay.subscribe(() => this.trickplayChanged());
     session.onReset(() => {
       this.end();
       this.media = undefined;
@@ -635,6 +645,8 @@ export class Playback {
   }
 
   private end(): void {
+    this.trickplay.clear();
+    this.trickplayOffer = undefined;
     this.abandoned = null;
     this.recovering = false;
     this.established = false;
@@ -654,6 +666,59 @@ export class Playback {
     if (this.versionsTimer) clearTimeout(this.versionsTimer);
     this.versionsTimer = undefined;
     this.versionsRead = undefined;
+  }
+
+  /**
+   * The scrub thumbnail at title time `seconds` of the playing session, or null: none offered, no
+   * frame there yet, or its sheet still on its way (`onTrickplay` hears when it lands). The image
+   * is a `data:` URI; the sheet was read with the session's credentials, which never leave core.
+   */
+  trickplayFrame(sessionId: string, seconds: number): TrickplayFrame | null {
+    const { plan } = this.box.get().playback;
+    if (!plan || plan.sessionId !== sessionId || plan.live || plan.channelId) return null;
+    const offer = plan.trickplay ?? this.readTrickplayOffer(sessionId);
+    if (!offer) return null;
+    return this.trickplay.frame(sessionId, plan.sourceGeneration, offer, seconds, async (index, etag, signal) => {
+      const connection = await this.session.ready();
+      return hasTrickplaySheets(connection.adapter) ? connection.adapter.trickplaySheet(sessionId, offer, index, etag, signal) : null;
+    });
+  }
+
+  /** Hear when a scrub thumbnail sheet (or a late offer) arrives. */
+  onTrickplay(listener: () => void): () => void {
+    this.trickplayListeners.add(listener);
+    return () => this.trickplayListeners.delete(listener);
+  }
+
+  private trickplayChanged(): void {
+    for (const listener of [...this.trickplayListeners]) listener();
+  }
+
+  /** The offer of a server that tells it apart from the plan, read now and then while asked for. */
+  private readTrickplayOffer(sessionId: string): V.TrickplayMetadata | null {
+    const held = this.trickplayOffer?.sessionId === sessionId ? this.trickplayOffer : undefined;
+    if (held && (held.reading || Date.now() - held.at < TRICKPLAY_OFFER_MS)) return held.offer;
+    const entry = { sessionId, offer: held?.offer ?? null, at: Date.now(), reading: true };
+    this.trickplayOffer = entry;
+    void (async () => {
+      let asked = false;
+      try {
+        const connection = await this.session.ready();
+        const adapter = connection.adapter;
+        if (hasTrickplaySheets(adapter) && adapter.trickplayOffer) {
+          asked = true;
+          entry.offer = await adapter.trickplayOffer(sessionId);
+        }
+      } catch {
+        // No thumbnails this time; the next scrub asks again.
+      } finally {
+        entry.reading = false;
+        // A server with no such read is never asked again for this session.
+        entry.at = asked ? Date.now() : Number.POSITIVE_INFINITY;
+        if (this.trickplayOffer === entry && entry.offer) this.trickplayChanged();
+      }
+    })();
+    return entry.offer;
   }
 
   /**

@@ -156,6 +156,24 @@ export function hasVersions(adapter: ServerAdapter): adapter is ServerAdapter & 
   return 'titleVersions' in adapter && 'clearVersionChoice' in adapter && 'switchVersion' in adapter;
 }
 
+/** One trickplay sprite sheet as read, or `unchanged` when the server confirmed the held copy (304). */
+export type TrickplaySheet = { bytes: Uint8Array; mimeType: string; etag?: string } | 'unchanged';
+
+/**
+ * Scrub thumbnails for a playing session. The offer rides on the plan (`plan.trickplay`); a
+ * server whose offer can appear only once the session streams also re-reads it on request.
+ */
+export interface TrickplaySheets {
+  /** Sheet `index` of the session's offer, or null when the server has none (yet). `etag`
+   * revalidates a sheet already held. Sheets are private: read with the session's credentials. */
+  trickplaySheet(sessionId: string, offer: V.TrickplayMetadata, index: number, etag?: string, signal?: AbortSignal): Promise<TrickplaySheet | null>;
+  /** The session's current offer, read again; null when it has none. */
+  trickplayOffer?(sessionId: string): Promise<V.TrickplayMetadata | null>;
+}
+export function hasTrickplaySheets(adapter: ServerAdapter): adapter is ServerAdapter & TrickplaySheets {
+  return 'trickplaySheet' in adapter && typeof (adapter as unknown as TrickplaySheets).trickplaySheet === 'function';
+}
+
 /** Multiview tile upgrade: a tile's session replanned at a new height (spec B). */
 export interface TileReplan {
   replanTile(sessionId: string, command: Extract<V.SessionCommand, { kind: 'replan' }>): Promise<V.PlaybackPlan>;

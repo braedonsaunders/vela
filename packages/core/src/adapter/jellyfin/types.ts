@@ -24,6 +24,8 @@ export interface Item {
     ParentBackdropImageTags?: string[];
     ParentLogoItemId?: string;
     ParentLogoImageTag?: string;
+    /** Scrub thumbnails by media source and width (Jellyfin 10.9+); read by `jellyfinTrickplay`. */
+    Trickplay?: unknown;
     UserData?: {
         PlaybackPositionTicks?: number;
         Played?: boolean;

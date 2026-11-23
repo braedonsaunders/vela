@@ -24,6 +24,7 @@ export type { HomeRetry, HomeState } from './store/home';
 export { personSectionLabels, libraryKey, type CollectionPage, type LibraryQuery, type LibraryScope } from './store/catalogue';
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
+export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protocol/trickplay';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
