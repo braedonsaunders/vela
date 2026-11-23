@@ -194,11 +194,15 @@ function isClose(sim: Sim, rules: Rules): boolean {
     default: return false;
   }
 }
+/** The event's programme on a channel when its archive holds it (catch-up spec C7), from the mock's guide. */
+let watchProgramme: ((channelId: string, eventStart: number) => V.WatchTarget['programme']) | undefined;
+export function setWatchProgramme(find: typeof watchProgramme): void { watchProgramme = find; }
 function watchTargets(sim: Sim): V.WatchTarget[] {
   const live = sim.state === 'in';
   const targets: V.WatchTarget[] = sim.channels.flatMap((index, n) => {
     const channel = lineup[index];
-    return channel ? [{ kind: 'channel' as const, channelId: channel.id, name: channel.name, number: channel.number, live, confidence: n ? 0.7 : 0.95 }] : [];
+    const programme = channel && sim.state !== 'pre' ? watchProgramme?.(channel.id, sim.start) : undefined;
+    return channel ? [{ kind: 'channel' as const, channelId: channel.id, name: channel.name, number: channel.number, live, confidence: n ? 0.7 : 0.95, ...(programme ? { programme } : {}) }] : [];
   });
   if (sim.addon) targets.push({ kind: 'addon', name: sim.addon, live, confidence: 0.6 });
   return targets;

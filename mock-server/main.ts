@@ -7,19 +7,24 @@ import type * as V from '../packages/protocol/types';
 import { allTitles, artwork, channels as defaultChannels, detail, extras, featuredSources, featuredTitles, guide as defaultGuide, rows, titles } from '../packages/protocol/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
-import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
+import { applyCommand, createSession, events, observe, publish, requestedInit, sessions, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
 import { renderCover } from './covers';
 
 import { scaleGuide } from './guide-fixture';
-import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
+import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
+import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
+withArchives(channels);
+const channelById = new Map(channels.map(c => [c.id, c]));
 initSports(channels);
-const fixtureGuide = scaleFixture?.guide ?? defaultGuide;
+// Guide programmes carry the catch-up flags their channel's archive implies, computed as they are read.
+const fixtureGuide = (from: number, until: number, ids: string[]) => (scaleFixture?.guide ?? defaultGuide)(from, until, ids).map(p => flagProgramme(p, channelById.get(p.channelId)));
+setWatchProgramme((channelId, eventStart) => eventProgramme(channelById.get(channelId), fixtureGuide(eventStart - 6 * 3600_000, eventStart + 3600_000, [channelId]), eventStart));
 const mockSeasonCount = Math.max(0, Math.floor(Number(process.env.VELA_MOCK_SEASONS) || 0));
 const gapChannels = new Set((process.env.VELA_MOCK_GUIDE_GAPS ?? '').split(','));
 const gapHour = Math.floor(Date.now() / 3600000) * 3600000;
@@ -45,6 +50,7 @@ const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds:
 const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
 // Sports (0.3.19): live events, the plugin screen it lists in navigation, and multiview.
 if (sportsEnabled) Object.assign(capabilities.features, { liveEvents: { available: true }, multiview: { available: true, maxTiles: 4 } });
+Object.assign(capabilities.features, catchUpFeature());
 const navigation: V.NavigationEntry[] = sportsEnabled ? [{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }] : [];
 if (mediaEnabled) Object.assign(capabilities.features, {
   mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook'] },
@@ -838,7 +844,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const answer: V.GuideWindowResponse = { from: new Date(from).toISOString(), until: new Date(until).toISOString(),
       revision: mac(JSON.stringify([from, until, ids, programmes.map(p => p.id), [...unavailable]])),
       validUntil: new Date(Math.min((Math.floor(now / 300000) + 1) * 300000, ids.some(id => unavailable.has(id)) ? now + 60000 : Infinity)).toISOString(),
-      channels: ids.map(channelId => ({ channelId, state: unavailable.has(channelId) ? 'unavailable' : 'ready', programmes: unavailable.has(channelId) ? [] : programmes.filter(p => p.channelId === channelId) })),
+      channels: ids.map(channelId => ({ channelId, state: unavailable.has(channelId) ? 'unavailable' : 'ready', programmes: unavailable.has(channelId) ? [] : programmes.filter(p => p.channelId === channelId),
+        ...(channelById.get(channelId)?.archiveDays ? { archiveDays: channelById.get(channelId)!.archiveDays } : {}) })),
     };
     return cached(req, answer, g.id);
   }
@@ -864,6 +871,11 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     // VELA_MOCK_DOWN_CHANNELS (ids or numbers): channels whose provider is down, refused as final the way a lab's broken tuner is.
     if (channel && (process.env.VELA_MOCK_DOWN_CHANNELS ?? '').split(',').some(down => down && (down === channel.id || down === String(channel.number)))) fail('source', 'network', 'The connection to the Live TV provider failed.', {}, 503);
     if (title && !['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Select an episode to play');
+    // A programme from the channel's archive (spec C3): an ended one, or the one on air from its start.
+    const archive = channel && (body.programmeId || body.startAt) ? archiveRange(body, channel, id => {
+      const start = Number(id.slice(id.lastIndexOf(':') + 1));
+      return Number.isFinite(start) ? guide(start - 1, start + 1, [channel.id]).find(p => p.id === id) : undefined;
+    }, fail) : undefined;
     const versionData = title && !videoChild ? versionsFor(title.id, g.id) : undefined;
     const requestedVersion = body.versionId ? versionData?.versions.find(version => version.id === body.versionId) : undefined;
     if (body.versionId && !requestedVersion) fail('request', 'invalid_version', 'Unknown version');
@@ -887,6 +899,11 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (pending && !s.plan.paths.some(p => p.id === pending.pathId)) { sessions.delete(s.plan.sessionId); fail('source', 'media_not_generated', 'Requested MSE fixture is unavailable'); }
     if (body.multiview && channel) { placeTile(body.multiview, channel.id, s.plan.sessionId); capTileHeight(s.plan, body.multiview); }
     if (channel) s.liveEvent = liveEventOnChannel(channel.id);
+    if (channel && archive) {
+      archivePlan(s.plan, (s.plan.paths[0]?.url ?? '').replace(/\/live\/master\.m3u8$/, ''), channel, archive);
+      // Only the programme on air is the game on air.
+      if (!archive.airing) s.liveEvent = null;
+    }
     return json(s.plan);
   }
   const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
@@ -920,9 +937,11 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
         if (!Number.isFinite(body.maxHeight) || body.maxHeight <= 0) fail('request', 'invalid_command', 'maxHeight must be a positive number');
         return json(replanTile(s.plan, body.maxHeight));
       }
-      if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch', 'version'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
+      if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch', 'version', 'goLive'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
+      checkTimeshiftCommand(s.plan, body, fail);
+      if (body.kind === 'goLive') { goLive(s.plan, (s.plan.paths[0]?.url ?? '').replace(/\/live\/(archive\/[^/]+\/[^/]+\/)?master\.m3u8$/, '')); publish(s); return json(s.plan); }
       const duration = s.plan.durationSeconds ?? fixtureDurationSeconds;
-      if (body.kind === 'seek' && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > duration)) fail('request', 'invalid_position', `Position must be 0–${duration}`);
+      if (body.kind === 'seek' && !s.plan.live && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > duration)) fail('request', 'invalid_position', `Position must be 0–${duration}`);
       if (body.kind === 'tracks') fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
       if (body.kind === 'stop') recordPlayback(s, false);

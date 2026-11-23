@@ -1,12 +1,27 @@
 import { join } from 'node:path';
 import { mediaRoot, serveMedia } from './media';
 
-// One shared broadcast clock; URLs keep sequence identity across playlist refreshes.
-const epoch = Date.now() - 60_000;
+// One shared broadcast clock; URLs keep sequence identity across playlist refreshes. With catch-up
+// (VELA_MOCK_CATCHUP, on unless 0) the broadcast began twenty minutes before the mock did, so a channel
+// opens with a rewind window that keeps growing to VELA_MOCK_TIMESHIFT_MINUTES (60).
+export const catchUpEnabled = process.env.VELA_MOCK_CATCHUP !== '0';
+export const timeshiftMinutes = catchUpEnabled ? Math.max(0, Math.min(240, Number(process.env.VELA_MOCK_TIMESHIFT_MINUTES ?? 60) || 0)) : 0;
+const epoch = Date.now() - (timeshiftMinutes ? 20 * 60_000 : 60_000);
 export const liveFaults = { gapEvery: 0, delayEvery: 0, delayMs: 8000 };
+/** The newest published segment's sequence number. */
+export const edgeSequence = (now = Date.now()) => Math.floor((now - epoch) / 4000);
+/** The segment carrying a wall-clock instant (negative before the broadcast began: the archive). */
+export const sequenceAt = (ms: number) => Math.floor((ms - epoch) / 4000);
+const windowSegments = () => (timeshiftMinutes ? timeshiftMinutes * 15 : 12);
 export function liveWindow() {
-  const edge = Math.floor((Date.now() - epoch) / 4000) * 4;
-  return { mode: 'adaptive' as const, windowStartSeconds: Math.max(0, edge - 48), liveEdgeSeconds: edge, maxDriftSeconds: 45 };
+  const edgeSeq = edgeSequence(), edge = edgeSeq * 4;
+  return { mode: 'adaptive' as const, windowStartSeconds: Math.max(0, edgeSeq - windowSegments()) * 4, liveEdgeSeconds: edge, maxDriftSeconds: 45,
+    ...(timeshiftMinutes ? { timeshift: { maxMinutes: timeshiftMinutes }, edgeAt: new Date(epoch + edgeSeq * 4000).toISOString() } : {}) };
+}
+/** A programme from the archive, on its own timeline from zero: its start, and its end (still airing: open). */
+export function archiveWindow(startSeq: number, endSeq: number | null) {
+  const edgeSeq = Math.min(edgeSequence(), endSeq ?? Infinity);
+  return { edge: Math.max(0, edgeSeq - startSeq) * 4, edgeAt: new Date(epoch + edgeSeq * 4000).toISOString(), ended: endSeq !== null && endSeq <= edgeSequence() };
 }
 const headers = { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' };
 
@@ -20,7 +35,7 @@ function boxes(bytes: Uint8Array, begin: number, end: number, visit: (type: stri
     visit(type, at + 8, at + size); at += size;
   }
 }
-async function rebase(resource: string, cycle: number): Promise<Uint8Array> {
+async function rebase(resource: string, offsetSeconds: number): Promise<Uint8Array> {
   const [variant] = resource.split('/');
   const init = new Uint8Array(await Bun.file(join(mediaRoot, variant, 'init.mp4')).arrayBuffer());
   const scales = new Map<number, number>();
@@ -49,7 +64,7 @@ async function rebase(resource: string, cycle: number): Promise<Uint8Array> {
         if (type !== 'tfdt') return;
         const scale = scales.get(track);
         if (!scale) throw new Error('Missing live track timescale');
-        const delta = BigInt(cycle * 60 * scale);
+        const delta = BigInt(Math.round(offsetSeconds * scale));
         if (bytes[a] === 1) view.setBigUint64(a + 4, view.getBigUint64(a + 4) + delta);
         else view.setUint32(a + 4, view.getUint32(a + 4) + Number(delta));
       });
@@ -57,7 +72,40 @@ async function rebase(resource: string, cycle: number): Promise<Uint8Array> {
   });
   return bytes;
 }
+/** One fixture segment for a sequence number, its decode times moved `shift` seconds earlier. */
+async function segmentBytes(variant: string, seq: number, shift: number): Promise<Uint8Array> {
+  const k = ((seq % 15) + 15) % 15, cycle = Math.floor(seq / 15);
+  return rebase(`${variant}/seg-${String(k).padStart(3, '0')}.m4s`, cycle * 60 - shift);
+}
+
+/**
+ * A programme from the archive: `archive/<startSeq>/<endSeq|open>/…`. Its playlist runs from the
+ * programme's first segment, rebased so the programme starts at zero: an ended one is on-demand
+ * media (ENDLIST), one still airing an EVENT playlist that grows with the broadcast (Start over).
+ */
+async function serveArchive(req: Request, startSeq: number, endSeq: number | null, rest: string): Promise<Response> {
+  if (rest === 'master.m3u8') return serveLive(req, rest);
+  const playlist = /^(v360|v540|v720)\/index\.m3u8$/.exec(rest);
+  if (playlist) {
+    const last = Math.min(edgeSequence(), endSeq ?? Infinity), ended = endSeq !== null && endSeq <= edgeSequence();
+    const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS', '#EXT-X-TARGETDURATION:4', `#EXT-X-PLAYLIST-TYPE:${ended ? 'VOD' : 'EVENT'}`, '#EXT-X-MEDIA-SEQUENCE:0', '#EXT-X-MAP:URI="init.mp4"'];
+    for (let seq = startSeq; seq < last; seq++) lines.push(`#EXT-X-PROGRAM-DATE-TIME:${new Date(epoch + seq * 4000).toISOString()}`, '#EXTINF:4.000,', `segment-${seq}.m4s`);
+    if (ended) lines.push('#EXT-X-ENDLIST');
+    return new Response(lines.join('\n') + '\n', { headers });
+  }
+  const segment = /^(v360|v540|v720)\/segment-(-?\d+)\.m4s$/.exec(rest);
+  if (segment) {
+    const seq = Number(segment[2]);
+    if (!Number.isSafeInteger(seq) || seq < startSeq || seq >= Math.min(edgeSequence(), endSeq ?? Infinity)) return new Response('Not in the archive', { status: 404 });
+    const bytes = await segmentBytes(segment[1]!, seq, startSeq * 4);
+    return new Response(req.method === 'HEAD' ? null : bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'video/iso.segment', 'Cache-Control': 'no-store', 'Content-Length': String(bytes.length) } });
+  }
+  return serveMedia(req, rest);
+}
+
 export async function serveLive(req: Request, resource: string): Promise<Response> {
+  const archive = /^archive\/(-?\d+)\/(-?\d+|open)\/(.+)$/.exec(resource);
+  if (archive) return serveArchive(req, Number(archive[1]), archive[2] === 'open' ? null : Number(archive[2]), archive[3]!);
   if (resource === 'master.m3u8') {
     const text = await Bun.file(join(mediaRoot, resource)).text();
     // The generated video ladder already contains English audio. Avoid a second
@@ -66,7 +114,7 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
   }
   const playlist = /^(v360|v540|v720)\/index\.m3u8$/.exec(resource);
   if (playlist) {
-    const edge = Math.floor((Date.now() - epoch) / 4000), first = Math.max(0, edge - 12);
+    const edge = edgeSequence(), first = Math.max(0, edge - windowSegments());
     const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS', '#EXT-X-TARGETDURATION:4', `#EXT-X-MEDIA-SEQUENCE:${first}`, '#EXT-X-MAP:URI="init.mp4"'];
     for (let seq = first; seq < edge; seq++) {
       lines.push(`#EXT-X-PROGRAM-DATE-TIME:${new Date(epoch + seq * 4000).toISOString()}`, '#EXTINF:4.000,');
@@ -84,7 +132,7 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
       await new Promise<void>(resolve => { const timer = setTimeout(done, Math.min(60000, liveFaults.delayMs)); function done() { clearTimeout(timer); req.signal.removeEventListener('abort', done); resolve(); } req.signal.addEventListener('abort', done, { once: true }); if (req.signal.aborted) done(); });
       if (req.signal.aborted) return new Response(null, { status: 499 });
     }
-    const bytes = await rebase(`${segment[1]}/seg-${String(seq % 15).padStart(3, '0')}.m4s`, Math.floor(seq / 15));
+    const bytes = await segmentBytes(segment[1]!, seq, 0);
     return new Response(req.method === 'HEAD' ? null : bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'video/iso.segment', 'Cache-Control': 'no-store', 'Content-Length': String(bytes.length) } });
   }
   return serveMedia(req, resource);

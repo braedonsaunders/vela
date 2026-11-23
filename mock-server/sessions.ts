@@ -1,6 +1,7 @@
 import type { LiveEventRef, PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../packages/protocol/types';
 import { faults, mediaRoot, fixtureDurationSeconds, originalFixture } from './media';
 import { liveWindow } from './live';
+import { refreshLive } from './catch-up';
 import { mseFixture } from './mse';
 interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec: string; audioCodec?: string }>; timers: Map<string, ReturnType<typeof setTimeout>> }
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs;
@@ -12,6 +13,7 @@ export function snapshot(s: Session): SessionSnapshot {
 const encode = (event: SessionEvent) => new TextEncoder().encode(`id: ${event.cursor}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
 export function publish(s: Session) {
   s.plan.revision++;
+  refreshLive(s.plan);
   const base = { cursor: String(s.plan.revision), revision: s.plan.revision, sessionId: s.plan.sessionId };
   const event: SessionEvent = s.plan.state === 'ended' ? { ...base, type: 'ended', reason: 'stopped' } : { ...base, type: 'plan', plan: structuredClone(s.plan) };
   s.history.push(event); if (s.history.length > 128) s.history.shift();
