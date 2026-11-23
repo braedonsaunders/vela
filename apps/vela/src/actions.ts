@@ -4,7 +4,7 @@
 import { router } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
-import { spoilerFreeOf, type Vela as Store } from '@vela/core';
+import { opensMediaPage, spoilerFreeOf, type Vela as Store } from '@vela/core';
 import { focusElement, page, type SkinHost } from '@vela/skin';
 import { liveAction, requestGuideTop, type LiveController } from '@vela/skin/src/widgets/guide';
 import type { Action } from '../../../packages/protocol/skin';
@@ -44,9 +44,6 @@ interface Context {
   multiview: ((channelId?: string) => void) | null;
 }
 
-/** Music, book and audiobook cards carry their role as kind (docs/media-kinds.md). */
-const MEDIA_KINDS = ['artist', 'album', 'track', 'series', 'book', 'audiobook', 'part'];
-
 const run = (go: () => void) => go();
 
 function notYet(action: string, arg: string): void {
@@ -74,7 +71,7 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       }
     }
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
-    else if (id && MEDIA_KINDS.includes(kind)) openMediaTitle(id, kind, place.route === 'library' ? place.entry : place.library);
+    else if (id && opensMediaPage(kind)) openMediaTitle(id, kind, place.route === 'library' ? place.entry : place.library);
     else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id, kind);
     else if (id && TITLE_KINDS.includes(kind)) {
       noteTitleNavigation(id);

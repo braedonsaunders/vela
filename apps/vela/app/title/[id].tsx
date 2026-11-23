@@ -12,10 +12,11 @@ import { closeModal } from '../../src/modal-motion';
 
 export default function Title() {
   const { id, library, media } = useLocalSearchParams<{ id: string; library?: string; media?: string }>();
-  // A music, book or audiobook title draws its own page (docs/media-kinds.md): known from the card
-  // that opened it, or from the title once read.
-  const role = useVelaState(state => state.titles[id ?? '']?.value?.title[0]?.media?.role);
-  const mediaPage = isMediaPageRole(role ?? media ?? '');
+  // A music, book, audiobook, podcast or photo title draws its own page (docs/media-kinds.md):
+  // known from the card that opened it, or from the title once read (its card kind: a podcast's
+  // show is 'podcast', never video's 'show').
+  const kind = useVelaState(state => state.titles[id ?? '']?.value?.title[0]?.kind);
+  const mediaPage = isMediaPageRole(kind ?? media ?? '');
   const { openTitle } = useVela();
   const openedInApp = isTitleNavigation(id);
   // tvOS Menu also reaches the native stack. Close an open description/menu first.

@@ -2,6 +2,7 @@
 // app reads them. Everything here is derived from the wire's optional `media` block; a title
 // without one is video and keeps every existing behaviour.
 import type * as V from './wire';
+import type { Card } from './models';
 import { clock, minute, msg, number, percent, plural } from './i18n';
 import { childCountsLine, childCountsOf } from './plugin-levels';
 
@@ -151,6 +152,7 @@ export function mediaFacts(media: CardMedia, title: V.Title): string {
     case 'book': return [media.readingFraction > 0 && media.readingFraction < 0.98 ? msg('media.readPercent', { percent: percent(media.readingFraction) }) : year,
       media.pages ? msg(`media.pages.${plural(media.pages)}`, { count: number(media.pages) }) : ''].filter(Boolean).join(' · ');
     case 'audiobook': return [year, hours].filter(Boolean).join(' · ');
+    case 'show': return media.class === 'podcast' ? count('episodes') || year : [year, hours].filter(Boolean).join(' · ');
     // A part names its book: on a shelf it may stand alone (Continue listening).
     case 'part': return [media.parent?.name, media.indexLabel, hours].filter(Boolean).join(' · ');
     default: return [year, hours].filter(Boolean).join(' · ');
@@ -165,14 +167,31 @@ export function durationLabel(seconds: number): string {
   return msg('media.hoursMinutes', { hours: number(hours), minutes: number(minutes) });
 }
 
-/** A media title's card kind: its role, so presses route to media pages rather than video ones. */
+/** A media title's card kind: its role, so presses route to media pages rather than video ones.
+ * Photos and podcasts have kinds of their own: a photo is any role of the photo class, and a
+ * podcast's show and episodes would otherwise share video's 'show' and 'episode' and open the
+ * video title page. */
 export function mediaCardKind(media: CardMedia | undefined, fallback: string): string {
-  return media && media.role !== 'item' ? media.role : fallback;
+  if (!media) return fallback;
+  if (media.class === 'photo') return 'photo';
+  if (media.class === 'podcast' && media.role === 'show') return 'podcast';
+  if (media.class === 'podcast' && (media.role === 'episode' || media.role === 'item')) return 'podcastEpisode';
+  return media.role !== 'item' ? media.role : fallback;
 }
 
 /** Roles that open a purpose-built media page instead of the document's title page. */
 export const MEDIA_PAGE_ROLES: readonly V.MediaRole[] = ['artist', 'album', 'series', 'book', 'audiobook', 'show'];
 
+/** Card kinds (mediaCardKind) that open a media page. A video show keeps the kind 'show' and its
+ * document's title page; a podcast's show is 'podcast'. */
+export const MEDIA_PAGE_KINDS: readonly string[] = ['artist', 'album', 'track', 'series', 'book', 'audiobook', 'part', 'photo', 'podcast', 'podcastEpisode'];
+
 export function opensMediaPage(kind: string): boolean {
-  return (MEDIA_PAGE_ROLES as readonly string[]).includes(kind) || kind === 'track' || kind === 'part';
+  return MEDIA_PAGE_KINDS.includes(kind);
+}
+
+/** A podcast's episodes newest first: by date (or year), then by number. */
+export function podcastOrder(episodes: Card[]): Card[] {
+  const day = (card: Card) => /^\d{4}-\d{2}-\d{2}/.test(card.airDate) ? card.airDate.slice(0, 10) : card.year ? `${String(card.year).padStart(4, '0')}-00-00` : '';
+  return [...episodes].sort((a, b) => day(b).localeCompare(day(a)) || (b.media?.index ?? 0) - (a.media?.index ?? 0));
 }

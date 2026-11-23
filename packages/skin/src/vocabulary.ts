@@ -148,6 +148,8 @@ export function kindLabelKey(x: Pick<Card, 'kind' | 'media'>): string {
       case 'book': return 'media.ui.book';
       case 'part': return 'media.ui.part';
     }
+    if (media.class === 'photo') return 'media.ui.photo';
+    if (media.class === 'podcast') return media.role === 'show' ? 'media.ui.podcast' : 'media.ui.episode';
     if (media.class === 'book') return 'media.ui.book';
     if (media.class === 'audiobook') return 'media.ui.audiobook';
     if (media.class === 'music') return 'media.ui.album';
