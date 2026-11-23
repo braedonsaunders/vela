@@ -338,6 +338,13 @@ final class PlaybackSession {
                                     isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient, tile: tile)
         player = client
         client.set("volume", double: report.volume * 100)
+        client.set("speed", double: plan.isLive ? 1 : report.speed)
+        report.pip = false
+        client.pictureInPicture?.onChange = { [weak self, weak client] in
+            guard let self, let client, self.player === client else { return }
+            self.report.pip = client.pictureInPicture?.available ?? false
+            self.report.publish(self.state, seekTarget: self.pendingSeek, force: true)
+        }
         client.onBackend = { [weak self] backend in
             guard let self else { return }
             self.report.backend = backend + (path.isOriginalFile ? "-original" : "-hls")
@@ -645,11 +652,30 @@ final class PlaybackSession {
             return catchUp()
         case "quality", "switchPath":
             let value = (command["renditionId"] as? String) ?? (command["pathId"] as? String) ?? ""
-            let pathId = value.hasPrefix("path:") ? String(value.dropFirst(5)) : value
-            guard !pathId.isEmpty, pathId != report.pathId else {
-                return pathId.isEmpty ? "Automatic quality is the server's choice on this player" : nil
+            // The chrome offers no Automatic row here: it shows one only for engines that choose HLS
+            // renditions themselves (present.ts qualityAuto). A quality is a server path.
+            guard !value.isEmpty else {
+                return "Automatic quality is the server's choice on this player"
             }
+            guard let pathId = plan?.switchTarget(value) else {
+                return "That quality is not available on this player"
+            }
+            guard pathId != report.pathId else { return nil }
             report.sessionCommand(["kind": "switch", "pathId": pathId, "atSeconds": state.position])
+        case "speed":
+            guard plan?.isLive != true else {
+                return "Live playback speed is managed automatically"
+            }
+            guard let value = number(command["value"]), value >= 0.5, value <= 2 else {
+                return "Playback speed must be between 0.5 and 2"
+            }
+            report.speed = value
+            player?.set("speed", double: value)
+        case "pip":
+            guard let pip = player?.pictureInPicture else {
+                return "Picture in picture is not available on this player"
+            }
+            return pip.toggle()
         case "volume":
             guard let value = number(command["value"]) else {
                 return "volume needs a value"

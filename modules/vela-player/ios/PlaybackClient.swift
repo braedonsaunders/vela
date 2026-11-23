@@ -66,6 +66,11 @@ final class PlaybackClient {
     private var subtitle: Int?
     /// The viewer's subtitle delay for this title, in seconds (positive shows cues later).
     private var subtitleOffset = 0.0
+    /// The viewer's playback speed. Pitch-preserving on every route (Aether pins TimeDomain stretching);
+    /// a live stream always plays at 1×.
+    private var rate: Float = 1
+    /// A full-screen watch's picture in picture; previews and tiles have none.
+    let pictureInPicture: PictureInPicture?
     // Idle engines are reused across titles. A mounted client leases its engine exclusively,
     // including while a paused outgoing picture overlaps the next view.
     private static var primaryEngine: AetherEngine?
@@ -84,6 +89,7 @@ final class PlaybackClient {
         self.remoteHLS = remoteHLS
         self.loops = loops
         self.aspectFill = aspectFill
+        pictureInPicture = !preview && tile == nil && PictureInPicture.supported ? PictureInPicture(automatic: true) : nil
     }
 
     func layout() {
@@ -127,6 +133,11 @@ final class PlaybackClient {
             engine?.maximumSubtitleOffsetSeconds = abs(subtitleOffset)
             emit("sub-delay", subtitleOffset)
             drawCaptions()
+        }
+        if name == "speed" {
+            rate = Float(max(0.5, min(2, double)))
+            if !isLive { engine?.setRate(rate) }
+            emit("speed", Double(rate))
         }
         if name == "volume" { volume = Float(double / 100) }
         if name == "volume" { engine?.volume = muted ? 0 : volume }
@@ -175,7 +186,11 @@ final class PlaybackClient {
                 engine.logTag = self.tile.map { "tile\($0)" }
                 engine.maximumSubtitleOffsetSeconds = abs(self.subtitleOffset)
                 engine.videoGravity = self.aspectFill ? .resizeAspectFill : .resizeAspect
+                // Only a full-screen watch plays on behind the home screen (or in its PiP window); a
+                // preview or a tile releases its pipeline there, as before the app had a background mode.
+                engine.backgroundPlaybackEnabled = self.fullScreen
                 try self.rendering.bind(engine: engine)
+                self.pictureInPicture?.attach(engine)
                 self.layout()
                 engine.volume = self.muted ? 0 : self.volume
                 engine.diagnostics.$sessionCacheStatus.removeDuplicates().sink { [weak self] status in
@@ -298,6 +313,9 @@ final class PlaybackClient {
                         }
                     }
                 }
+                // A new source starts at 1× in Aether; the viewer's speed carries over (not on live).
+                if !self.isLive, self.rate != 1 { engine.setRate(self.rate) }
+                self.pictureInPicture?.rebuild()
                 if self.properties["reconnecting"] as? Bool == true { self.emit("reconnecting", false) }
                 self.readLiveWindow()
                 self.emit("track-list", engine.audioTracks.map { self.track($0, type: "audio") } + engine.subtitleTracks.map { self.track($0, type: "sub") })
@@ -486,6 +504,7 @@ final class PlaybackClient {
         liveRateObservation = nil
         liveItemObservation = nil
         subscriptions.removeAll()
+        pictureInPicture?.detach()
 
         engine?.stop()
         retire(engine)
@@ -529,6 +548,7 @@ final class PlaybackClient {
         liveRateObservation = nil
         liveItemObservation = nil
         subscriptions.removeAll()
+        pictureInPicture?.detach()
 
         engine?.stop()
         retire(engine)
