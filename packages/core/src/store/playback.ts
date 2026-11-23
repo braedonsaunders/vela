@@ -7,7 +7,7 @@ import { hasSubtitleSearch } from '../adapter/media-actions';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
 import { hasEventStream, hasLibraryLive, hasVersions } from '../adapter/capabilities';
-import { startRefusal, startRetry } from './start-retry';
+import { finalRefusal, startRefusal, startRetry } from './start-retry';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
@@ -269,10 +269,13 @@ export class Playback {
   /**
    * A refused start. A failure the server allows retrying is asked again on its terms
    * (startRetry); anything else ends in the failed state with the server's words. Only a session
-   * that was already established keeps recovery's patient backoff.
+   * that was already established keeps recovery's patient backoff, and only through failures
+   * that may pass (no answer, a 5xx): a final refusal ends recovery too, and the session is no
+   * longer recovered, so a late engine report cannot ask again.
    */
   private failed(intent: Intent, error: unknown, attempt: number, preparation: number): void {
-    if (this.recovering && this.established) { this.scheduleRecovery(intent); return; }
+    if (this.recovering && this.established && !finalRefusal(error)) { this.scheduleRecovery(intent); return; }
+    if (this.recovering) this.established = false;
     this.recovering = false;
     const refusal = startRefusal(error, 'Playback failed');
     const seconds = startRetry(error, attempt);

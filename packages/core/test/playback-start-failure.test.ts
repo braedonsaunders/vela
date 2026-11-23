@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { VelaError } from '../src/adapter/errors';
 import { Playback, initialPlayback } from '../src/store/playback';
-import { startRefusal, startRetry } from '../src/store/start-retry';
+import { finalRefusal, startRefusal, startRetry } from '../src/store/start-retry';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
@@ -104,4 +104,106 @@ test('startRefusal carries the server\'s message and class, or a fallback', () =
   expect(startRefusal(refused({ allowed: false }))).toEqual({ message: 'The connection to the Live TV provider failed.', code: 'network', errorClass: 'source' });
   expect(startRefusal(new Error('boom'), 'x')).toEqual({ message: 'boom', code: '', errorClass: '' });
   expect(startRefusal('weird', 'Playback failed').message).toBe('Playback failed');
+});
+
+// Ether's answer for a title with no source at all (frontends/vela: ErrNotAvailable), verbatim.
+const notAvailable = () => new VelaError({ class: 'source', code: 'not_available', message: 'not available', retry: { allowed: false } }, 409, null);
+
+test('Ether\'s terminal 409 not_available fails at once with its message after exactly one request', async () => {
+  const { box, playback, requests } = harness([async () => { throw notAvailable(); }]);
+  await playback.start({ kind: 'title', id: 'plugin-item' });
+  expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'not available', errorCode: 'not_available', errorClass: 'source', retryAfterSeconds: 0, retryAttempt: 0 });
+  // Engine and stale view reports cannot turn a refused first start into a recovery.
+  playback.recover('');
+  playback.recover(box.get().playback.sessionId);
+  await wait(1200);
+  expect(requests()).toBe(1);
+  expect(box.get().playback.phase).toBe('failed');
+  await playback.stop();
+});
+
+/** Timers run by hand: `run(ms)` fires the pending timer of that delay and settles what follows. */
+function manualTimers() {
+  const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
+  const timers = new Map<number, { ms: number; fire: () => unknown }>();
+  let sequence = 0;
+  globalThis.setTimeout = ((fire: () => unknown, ms: number) => { const id = ++sequence; timers.set(id, { ms, fire }); return id; }) as never;
+  globalThis.clearTimeout = ((id: number) => { timers.delete(id); }) as never;
+  const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
+  return {
+    pending: (ms: number) => [...timers.values()].some(t => t.ms === ms),
+    async run(ms: number) {
+      const entry = [...timers].find(([, t]) => t.ms === ms);
+      expect(entry).toBeDefined();
+      timers.delete(entry![0]); await entry![1].fire(); await settle();
+    },
+    settle,
+    restore() { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; },
+  };
+}
+
+function recoveryHarness(refusal: () => unknown) {
+  const requests: unknown[] = [];
+  const plan = { sessionId: 's1', state: 'playing', positionSeconds: 0, audioTracks: [], subtitleTracks: [], sourceGeneration: 0, seekGeneration: 0 } as unknown as PlaybackPlan;
+  const adapter = {
+    startPlayback: async (request: unknown) => { requests.push(request); if (requests.length > 1) throw refusal(); return plan; },
+    // The session is followed by snapshot reads that never answer: only recover() starts recovery here.
+    sessionSnapshot: () => new Promise<never>(() => {}),
+    command: async () => plan,
+  };
+  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
+  const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
+  const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+  return { box, playback, requests };
+}
+
+test('a terminal refusal while recovering a session ends recovery in the failed state; it is not asked again', async () => {
+  const clock = manualTimers();
+  try {
+    const { box, playback, requests } = recoveryHarness(notAvailable);
+    await playback.start({ kind: 'title', id: 'movie' });
+    expect(box.get().playback.phase).toBe('playing');
+    // The engine lost the source: the session is recovered with a new start after a second.
+    playback.recover('s1');
+    expect(box.get().playback.phase).toBe('preparing');
+    await clock.run(1000);
+    expect(requests).toHaveLength(2);
+    expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'not available', errorClass: 'source', retryAfterSeconds: 0 });
+    // No backoff left behind, and a late engine report for the old session starts nothing.
+    expect(clock.pending(2000)).toBe(false);
+    playback.recover('s1');
+    playback.recover(box.get().playback.sessionId);
+    await clock.settle();
+    expect(clock.pending(1000)).toBe(false);
+    expect(requests).toHaveLength(2);
+    await playback.stop();
+  } finally { clock.restore(); }
+});
+
+test('a server error while recovering keeps recovery\'s backoff: only a 4xx refusal is final', async () => {
+  const clock = manualTimers();
+  try {
+    const { box, playback, requests } = recoveryHarness(() => new VelaError({ class: 'transient', code: 'service_unavailable', message: 'service unavailable', retry: { allowed: false } }, 503));
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.recover('s1');
+    await clock.run(1000);
+    await clock.run(2000);
+    await clock.run(4000);
+    expect(requests).toHaveLength(4);
+    expect(box.get().playback.phase).toBe('preparing');
+    await playback.stop();
+  } finally { clock.restore(); }
+});
+
+test('finalRefusal: a 4xx the server does not allow retrying, never a network failure, 5xx, 408 or 429', () => {
+  const error = (status: number, allowed = false) => new VelaError({ class: 'source', code: 'x', message: 'x', retry: { allowed } }, status);
+  expect(finalRefusal(notAvailable())).toBe(true);
+  expect(finalRefusal(error(404))).toBe(true);
+  expect(finalRefusal(error(403))).toBe(true);
+  expect(finalRefusal(error(409, true))).toBe(false);
+  expect(finalRefusal(error(502))).toBe(false);
+  expect(finalRefusal(error(503))).toBe(false);
+  expect(finalRefusal(error(408))).toBe(false);
+  expect(finalRefusal(error(429))).toBe(false);
+  expect(finalRefusal(new Error('connection refused'))).toBe(false);
 });

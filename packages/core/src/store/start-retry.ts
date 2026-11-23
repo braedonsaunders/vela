@@ -27,6 +27,17 @@ export function startRetry(error: unknown, retries: number): number {
   return seconds <= MAX_WAIT_SECONDS && retries < limit ? seconds : 0;
 }
 
+/**
+ * The server answered and refused for good: a 4xx it does not allow retrying (Ether's 409
+ * `not_available` for a title with no source, a 404, a policy refusal). No retry or recovery asks
+ * again. A request that never reached the server, a 5xx, a timeout (408) or a rate limit (429)
+ * is not final: a session being recovered waits those out.
+ */
+export function finalRefusal(error: unknown): boolean {
+  if (!(error instanceof VelaError) || error.detail.retry?.allowed === true) return false;
+  return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
+}
+
 /** A refused start in the words the server gave, for the viewer. */
 export interface StartRefusal {
   message: string;
