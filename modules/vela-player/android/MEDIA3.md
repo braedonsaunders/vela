@@ -137,6 +137,36 @@ IV bursts (Pc 17), written to an `ENCODING_IEC61937` AudioTrack at 8 channels,
 192 kHz, with position and pause/flush handling. It needs such a device and an
 AV receiver to verify, so it is not built blind.
 
+## Music, audiobooks and podcasts; the media session
+
+`AudioPlayback` is the app's one audio player (modules/vela-player/src/audio.ts):
+an ExoPlayer with the platform decoders first and the FFmpeg extension for the
+rest (ALAC; Opus, Vorbis and FLAC where MediaCodec lacks them), audio focus,
+becoming-noisy (headphones out pauses) and a network wake lock. It does not use
+float output: DefaultAudioSink applies speed only in integer PCM (Sonic), and
+speed with the pitch kept is what audiobooks need, so 24-bit sources reach the
+AudioTrack as 16-bit. Requests go through `ScopedMediaDataSource` with the load's
+own grant (Jellyfin, Emby and Plex headers; none for Ether).
+
+`VelaAudioService` is a Media3 `MediaSessionService` (foreground type
+`mediaPlayback`, bound by the module on first use) hosting the app's one
+`MediaSession`: the media notification, lock screen, Bluetooth and headset buttons,
+Android TV's Now Playing, Android Auto and the Assistant. `MediaSessionHub` shows
+the player that owns it: the audio player, or the full-screen video player (never a
+preview or a multiview tile), the last to claim winning. The session sees a
+`SessionPlayer` (a `ForwardingSimpleBasePlayer`) with the owner's metadata and
+commands; every system command goes to the owner instead of the player: the audio
+player hands them to JavaScript (the store's queue, as the browser's Media Session
+handlers do), the video controller runs them as `command` props. Music offers
+previous and next, spoken word 15/30-second skips, video 10-second skips. Media3
+keeps the service in the foreground for ten minutes after a pause, and the audio
+player keeps an unloaded item, paused, for 15 s while the next one loads, so a queue moves on
+from the background without a refused foreground start; only an unload with no
+load after it empties the player, and the notification goes with it
+(`SHOW_NOTIFICATION_FOR_IDLE_PLAYER_NEVER`). The release build needs the Play
+Console foreground-service declaration for media playback; media notifications
+need no POST_NOTIFICATIONS prompt.
+
 ## Dolby Vision
 
 Media3 gives Dolby Vision Profile 7 (UHD Blu-ray: an HDR10 base layer plus an

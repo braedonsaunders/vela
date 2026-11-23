@@ -185,6 +185,23 @@ must not combine `NSAllowsArbitraryLoads` with `NSAllowsLocalNetworking`: the
 latter overrides the former on current Apple OS versions. Local and public HTTP
 connections were checked on the Basement Apple TV.
 
+## Music, audiobooks and podcasts
+
+Audio-only plans do not use AetherEngine. `AudioPlayback` is one AVPlayer for the
+app (modules/vela-player/src/audio.ts): MP3, AAC and ALAC (MP4/M4A/M4B, ADTS), FLAC
+and WAV play directly; Opus and Vorbis are declared as unsupported so the server
+transcodes them (AVPlayer has no Ogg or WebM demuxer). The audio session is
+`.playback` with the long-form route policy (`.spokenAudio` mode for audiobooks and
+podcasts), the app has the background audio mode (apps/vela/plugins/apple-player.js),
+interruptions pause and resume as the system says, and losing the route (headphones
+out) pauses. Speed uses the spectral time-pitch algorithm. While it plays it owns
+`SystemMediaControls`: Now Playing as audio (title, artist, album, artwork,
+duration, position, rate) and the remote commands for its style, previous and next
+for music, 15/30-second skips (and previous/next for the headset) for spoken word.
+Every command goes to JavaScript, which drives the queue as the app's own buttons
+do. Between items a background task keeps the app running while JavaScript asks for
+the next plan.
+
 ## Multiview tiles
 
 A view with the `tile` prop (0-3) is one of up to four live tiles on one screen.
