@@ -847,6 +847,9 @@ extension PlaybackSession: SystemMediaOwner {
             _ = perform(["type": "seekBy", "seconds": seconds])
         case .seek(let position):
             _ = perform(["type": "seek", "seconds": position])
+        case .next, .previous:
+            // A video takes no next or previous; its style never registers them.
+            break
         }
         report.publish(state, seekTarget: pendingSeek, force: true)
         updateNowPlaying()

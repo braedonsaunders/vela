@@ -169,6 +169,9 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     pendingTile = value
   }
 
+  /** What the system's media session shows for this player (full watch only). */
+  fun setMetadata(value: Map<String, Any?>?) = controller.setMetadata(value)
+
   fun setPlan(plan: Map<String, Any?>?) {
     pendingPlan = plan
 

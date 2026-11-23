@@ -24,27 +24,54 @@ final class SystemMediaControls {
     /// the Now Playing app, so JavaScript never sees it as a press while a player owns the controls.
     var playPauseClaim: (() -> Void)?
 
-    /// Makes `owner` the player the system's controls reach.
+    /// The commands registered, for the style of the owner they were registered for.
+    private var registeredStyle: SystemMediaStyle?
+
+    /// Makes `owner` the player the system's controls reach, with the commands its style takes. An owner
+    /// whose style changed (music, then an audiobook) claims again to swap them.
     func claim(_ owner: SystemMediaOwner) {
         self.owner = owner
         ownerID = ObjectIdentifier(owner)
-        guard registrations.isEmpty else {
+        let style = owner.systemMediaStyle
+        if registeredStyle == style, !registrations.isEmpty {
             return
         }
+        unregister()
+        registeredStyle = style
         let center = MPRemoteCommandCenter.shared()
-        center.skipForwardCommand.preferredIntervals = [NSNumber(value: skipInterval)]
-        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: skipInterval)]
         register(center.playCommand) { _ in .play }
         register(center.pauseCommand) { _ in .pause }
         register(center.togglePlayPauseCommand) { _ in .toggle }
-        register(center.skipForwardCommand) { [skipInterval] _ in .skip(seconds: skipInterval) }
-        register(center.skipBackwardCommand) { [skipInterval] _ in .skip(seconds: -skipInterval) }
         register(center.changePlaybackPositionCommand) { event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else {
                 return nil
             }
             return .seek(to: event.positionTime)
         }
+        let skips: (back: Double, forward: Double)? = switch style {
+        case .video: (skipInterval, skipInterval)
+        case .music: nil
+        case .spoken: (15, 30)
+        }
+        if let skips {
+            center.skipForwardCommand.preferredIntervals = [NSNumber(value: skips.forward)]
+            center.skipBackwardCommand.preferredIntervals = [NSNumber(value: skips.back)]
+            register(center.skipForwardCommand) { _ in .skip(seconds: skips.forward) }
+            register(center.skipBackwardCommand) { _ in .skip(seconds: -skips.back) }
+        }
+        if style != .video {
+            register(center.nextTrackCommand) { _ in .next }
+            register(center.previousTrackCommand) { _ in .previous }
+        }
+    }
+
+    private func unregister() {
+        for registration in registrations {
+            registration.command.removeTarget(registration.target)
+            registration.command.isEnabled = false
+        }
+        registrations = []
+        registeredStyle = nil
     }
 
     /// Gives the controls up, if `owner` holds them, and clears Now Playing.
@@ -54,11 +81,7 @@ final class SystemMediaControls {
         }
         self.owner = nil
         ownerID = nil
-        for registration in registrations {
-            registration.command.removeTarget(registration.target)
-            registration.command.isEnabled = false
-        }
-        registrations = []
+        unregister()
         published = nil
         artworkFor = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -78,10 +101,12 @@ final class SystemMediaControls {
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: state.title,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: state.position,
-            MPNowPlayingInfoPropertyPlaybackRate: state.playing ? 1.0 : 0.0,
-            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
+            MPNowPlayingInfoPropertyPlaybackRate: state.playing ? state.rate : 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: state.rate,
+            MPNowPlayingInfoPropertyMediaType: (state.audio ? MPNowPlayingInfoMediaType.audio : .video).rawValue,
         ]
         info[MPMediaItemPropertyArtist] = state.subtitle
+        info[MPMediaItemPropertyAlbumTitle] = state.album
         info[MPMediaItemPropertyPlaybackDuration] = state.duration
         let shownArtwork = MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork]
         if let shownArtwork, artworkFor == state.artworkURL {
@@ -96,9 +121,10 @@ final class SystemMediaControls {
 
     /// A change of title, rate or duration, or a jump the system's extrapolation would not reach.
     private static func differs(_ old: NowPlayingState, _ new: NowPlayingState, elapsed: TimeInterval) -> Bool {
-        let expected = old.position + (old.playing ? elapsed : 0)
-        return old.title != new.title || old.subtitle != new.subtitle || old.artworkURL != new.artworkURL
-            || old.duration != new.duration || old.playing != new.playing || abs(new.position - expected) > 5
+        let expected = old.position + (old.playing ? elapsed * old.rate : 0)
+        return old.title != new.title || old.subtitle != new.subtitle || old.album != new.album || old.artworkURL != new.artworkURL
+            || old.duration != new.duration || old.playing != new.playing || old.rate != new.rate || old.audio != new.audio
+            || abs(new.position - expected) > (new.audio ? 2 : 5)
     }
 
     private func loadArtwork(_ url: URL) {
@@ -148,8 +174,17 @@ final class SystemMediaControls {
     }
 }
 
-/// The audio session for Aether playback, including multichannel HDMI output.
+/// The audio session for Aether playback, including multichannel HDMI output, and for music and spoken word.
 enum PlaybackAudioSession {
+    /// Long-form audio (AirPlay 2 routes it as such); spoken word pauses, rather than ducks, for other speech.
+    static func activateForAudio(spoken: Bool) {
+        let session = AVAudioSession.sharedInstance()
+        if (try? session.setCategory(.playback, mode: spoken ? .spokenAudio : .default, policy: .longFormAudio, options: [])) == nil {
+            try? session.setCategory(.playback, mode: .default, options: [])
+        }
+        try? session.setActive(true)
+    }
+
     static func activate() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .moviePlayback, options: [])

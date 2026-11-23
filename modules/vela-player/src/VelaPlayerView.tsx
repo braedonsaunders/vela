@@ -4,6 +4,7 @@
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import { createElement, useEffect, useState, useSyncExternalStore } from 'react';
 import { redactMediaError } from './media-error';
+import { withAudioPlayback } from './audio';
 import { Platform } from 'react-native';
 import type { NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 import type {
@@ -97,8 +98,9 @@ const planIdentity = (plan: PlaybackPlan) => `${plan.sessionId}:${plan.sourceGen
 /** What AetherEngine plays on Apple devices: originals of these families, never converted by the server.
  * A constant until the native side probes VideoToolbox and the audio route. */
 export const VelaPlayer: VelaPlayerModule = {
-  // The native side probes the device (hardware decoders) rather than declaring a fixed list.
-  capabilities: async () => nativeModule.capabilities(),
+  // The native side probes the device (hardware decoders) rather than declaring a fixed list; the
+  // audio player's own files (music and audiobooks) are added for direct play.
+  capabilities: async () => withAudioPlayback(nativeModule.capabilities(), Platform.OS),
   setMediaAccess(access: MediaAccess | null) {
     const generation = ++accessGeneration;
     if (!access) {

@@ -2,10 +2,17 @@
 // (packages/player-api).
 package app.ether.vela.player
 
+import expo.modules.kotlin.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class VelaPlayerModule : Module() {
+  /** The audio player, reporting to this module's JavaScript. */
+  private fun audio(): AudioPlayback {
+    AudioPlayback.emit = { body -> sendEvent("onAudio", body) }
+    return AudioPlayback
+  }
+
   override fun definition() = ModuleDefinition {
     Name("VelaPlayer")
 
@@ -38,6 +45,27 @@ class VelaPlayerModule : Module() {
       }
     }
 
+    // Music, audiobooks and podcasts: one Media3 player for the app in the media session
+    // (modules/vela-player/src/audio.ts). Its status and the system's media commands arrive as onAudio.
+    Events("onAudio")
+
+    AsyncFunction("audioLoad") { request: Map<String, Any?> ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Player context unavailable")
+      audio().load(context, (request["id"] as? Number)?.toInt() ?: 0, request["url"] as? String ?: "",
+        @Suppress("UNCHECKED_CAST") (request["access"] as? Map<String, Any?>),
+        (request["start"] as? Number)?.toDouble() ?: 0.0, (request["rate"] as? Number)?.toDouble() ?: 1.0)
+    }.runOnQueue(Queues.MAIN)
+    AsyncFunction("audioPlay") { audio().play() }.runOnQueue(Queues.MAIN)
+    AsyncFunction("audioPause") { audio().pause() }.runOnQueue(Queues.MAIN)
+    AsyncFunction("audioSeek") { seconds: Double -> audio().seek(seconds) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("audioSetRate") { rate: Double -> audio().setRate(rate) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("audioUnload") { audio().unload() }.runOnQueue(Queues.MAIN)
+    AsyncFunction("audioNowPlaying") { info: Map<String, Any?>? ->
+      val artwork = (info?.get("artwork") as? String)?.takeIf { it.isNotEmpty() }?.let(android.net.Uri::parse)
+      audio().setNowPlaying(info?.let { SessionInfo(it["title"] as? String ?: "", it["artist"] as? String ?: "", it["album"] as? String ?: "", artwork) },
+        info?.get("spoken") as? Boolean ?: false)
+    }.runOnQueue(Queues.MAIN)
+
     // The viewer left the app: playing views pause, previews stop with their windows.
     OnActivityEntersBackground {
       VelaPlayerView.live.forEach { it.enterBackground() }
@@ -66,6 +94,9 @@ class VelaPlayerModule : Module() {
       }
       Prop("tile") { view: VelaPlayerView, tile: Int? ->
         view.setTile(tile)
+      }
+      Prop("metadata") { view: VelaPlayerView, metadata: Map<String, Any?>? ->
+        view.setMetadata(metadata)
       }
       Prop("plan") { view: VelaPlayerView, plan: Map<String, Any?>? ->
         view.setPlan(plan)

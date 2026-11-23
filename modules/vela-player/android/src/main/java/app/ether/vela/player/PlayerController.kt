@@ -35,7 +35,7 @@ internal class PlayerController(
   private val context: Context,
   private val host: PlayerHost,
   private val report: PlayerReport,
-) {
+) : SessionOwner {
   private val main = Handler(Looper.getMainLooper())
   private val preferences = context.getSharedPreferences("vela.player", Context.MODE_PRIVATE)
   /** The viewer's delivery choices, kept per device (OutputPreferences). */
@@ -74,6 +74,7 @@ internal class PlayerController(
   var ambient = false
     set(value) {
       if (value && !field && engine != null) host.preferDisplay(null)
+      if (value) MediaSessionHub.release(this)
       field = value
       report.ambient = value
       // Props arrive in any order: a view that became ambient after it started goes quiet.
@@ -84,11 +85,40 @@ internal class PlayerController(
   var tile: Int? = null
     set(value) {
       if (value != null && field == null && !muteCommanded) report.muted = true
+      if (value != null) MediaSessionHub.release(this)
       field = value
     }
   private var muteCommanded = false
   /** Whether this view may set the display's mode: full watch only, never a preview or a tile. */
   private val ownsDisplay: Boolean get() = !ambient && tile == null
+
+  // The system's media session (notification, lock screen, Bluetooth, Assistant): full watch only.
+
+  private var info: SessionInfo? = null
+
+  /** The title, subtitle and artwork the system shows (the contract's `metadata` prop). */
+  fun setMetadata(value: Map<String, Any?>?) {
+    info = value?.let { map ->
+      SessionInfo(map.text("title") ?: "", map.text("subtitle") ?: "", "", map.text("artworkUrl")?.let(MediaAccessStore::resolve))
+    }
+    MediaSessionHub.update(this)
+  }
+
+  override val sessionPlayer: androidx.media3.common.Player? get() = engine?.sessionPlayer
+  override val sessionStyle: SessionStyle get() = SessionStyle.VIDEO
+  override val sessionMetadata: androidx.media3.common.MediaMetadata? get() = (info ?: SessionInfo("", "", "", null)).metadata(spoken = false, video = true)
+
+  /** A system command, through the same paths as the `command` prop. */
+  override fun sessionCommand(command: String, seconds: Double?) {
+    when (command) {
+      "play" -> perform(mapOf("type" to "play"))
+      "pause" -> perform(mapOf("type" to "pause"))
+      "skip" -> seconds?.let { perform(mapOf("type" to "seekBy", "seconds" to it)) }
+      "seek" -> seconds?.let { perform(mapOf("type" to "seek", "seconds" to (engine?.titleSeconds(it) ?: it))) }
+      else -> return
+    }
+    report.publish(state, pendingSeek, force = true)
+  }
 
   /** Direct play: the playing source is an original file, so seeks and its tracks are the view's own. */
   private val playsOriginal: Boolean
@@ -280,6 +310,7 @@ internal class PlayerController(
     client.volume(if (ambient || report.muted) 0f else report.volume.toFloat())
     client.load(url, plan, position)
     client.play(wantsPlay)
+    if (ownsDisplay) MediaSessionHub.claim(context, this)
     report.publish(state, null, force = true)
   }
 
@@ -315,6 +346,8 @@ internal class PlayerController(
     readRetry = null
     awaitSeek(null)
     val client = engine ?: return
+    // The session leaves the player before it is released.
+    MediaSessionHub.release(this)
     engine = null
     client.release()
     host.keepScreenOn(false)

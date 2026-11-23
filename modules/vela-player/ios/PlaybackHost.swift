@@ -7,6 +7,16 @@ enum SystemMediaCommand {
     case toggle
     case skip(seconds: Double)
     case seek(to: Double)
+    case next
+    case previous
+}
+
+/// Which remote commands an owner takes: a video's 10-second skips, music's next and previous, or spoken
+/// word's 15/30-second skips (with next and previous for the headset's double and triple press).
+enum SystemMediaStyle: Equatable {
+    case video
+    case music
+    case spoken
 }
 
 /// What the owner says about itself for Now Playing.
@@ -17,11 +27,20 @@ struct NowPlayingState: Equatable {
     var duration: Double?
     var position: Double
     var playing: Bool
+    var album: String? = nil
+    /// The speed while playing (Now Playing extrapolates the position at it).
+    var rate: Double = 1
+    var audio = false
 }
 
 @MainActor
 protocol SystemMediaOwner: AnyObject {
     func systemMediaCommand(_ command: SystemMediaCommand)
+    var systemMediaStyle: SystemMediaStyle { get }
+}
+
+extension SystemMediaOwner {
+    var systemMediaStyle: SystemMediaStyle { .video }
 }
 
 

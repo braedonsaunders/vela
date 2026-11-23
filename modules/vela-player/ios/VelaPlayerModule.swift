@@ -42,6 +42,14 @@ private final class UIFrameTiming: NSObject {
 }
 
 public final class VelaPlayerModule: Module {
+    /// The audio player, reporting to this module's JavaScript.
+    @MainActor
+    private func audio() -> AudioPlayback {
+        let audio = AudioPlayback.shared
+        audio.emit = { [weak self] body in self?.sendEvent("onAudio", body) }
+        return audio
+    }
+
     public func definition() -> ModuleDefinition {
         Name("VelaPlayer")
 
@@ -59,10 +67,53 @@ public final class VelaPlayerModule: Module {
         }
 
         // The app takes the remote's play/pause for itself (an alert toast's action) until released.
-        Events("onClaimedPlayPause")
+        // onAudio: the audio player's status and the system's media commands (AudioPlayback).
+        Events("onClaimedPlayPause", "onAudio")
         AsyncFunction("claimPlayPause") { [weak self] (claimed: Bool) in
             MainActor.assumeIsolated {
                 SystemMediaControls.shared.playPauseClaim = claimed ? { self?.sendEvent("onClaimedPlayPause", [:]) } : nil
+            }
+        }.runOnQueue(.main)
+
+        // Music, audiobooks and podcasts: one AVPlayer for the app (modules/vela-player/src/audio.ts).
+        AsyncFunction("audioLoad") { [weak self] (request: [String: Any]) in
+            MainActor.assumeIsolated {
+                let audio = self?.audio() ?? AudioPlayback.shared
+                let id = (request["id"] as? NSNumber)?.intValue ?? 0
+                let access = (request["access"] as? [String: Any]).flatMap { try? VelaMediaAuth($0) }
+                guard let text = request["url"] as? String, let url = URL(string: text), url.scheme == "http" || url.scheme == "https" else {
+                    audio.emit?(["id": id, "type": "status", "state": "failed", "position": 0, "duration": 0, "error": "This item has no playable audio"])
+                    return
+                }
+                audio.load(id: id, url: url, access: access, start: (request["start"] as? NSNumber)?.doubleValue ?? 0,
+                           rate: (request["rate"] as? NSNumber)?.doubleValue ?? 1)
+            }
+        }.runOnQueue(.main)
+        AsyncFunction("audioPlay") { [weak self] in
+            MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).play() }
+        }.runOnQueue(.main)
+        AsyncFunction("audioPause") { [weak self] in
+            MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).pause() }
+        }.runOnQueue(.main)
+        AsyncFunction("audioSeek") { [weak self] (seconds: Double) in
+            MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).seek(seconds) }
+        }.runOnQueue(.main)
+        AsyncFunction("audioSetRate") { [weak self] (rate: Double) in
+            MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).setRate(rate) }
+        }.runOnQueue(.main)
+        AsyncFunction("audioUnload") { [weak self] in
+            MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).unload() }
+        }.runOnQueue(.main)
+        AsyncFunction("audioNowPlaying") { [weak self] (info: [String: Any]?) in
+            MainActor.assumeIsolated {
+                let audio = self?.audio() ?? AudioPlayback.shared
+                guard let info else {
+                    audio.setNowPlaying(nil)
+                    return
+                }
+                let artwork = (info["artwork"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
+                audio.setNowPlaying(.init(title: info["title"] as? String ?? "", artist: info["artist"] as? String ?? "",
+                                          album: info["album"] as? String ?? "", artwork: artwork, spoken: info["spoken"] as? Bool ?? false))
             }
         }.runOnQueue(.main)
 

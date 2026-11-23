@@ -1,4 +1,4 @@
-// The app's audio: the platform engine attached to the store's queue, the browser's media
+// The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -27,7 +27,7 @@ export function AudioDock() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
-  useEffect(() => store.audio.attach(createAudioEngine()), [store]);
+  useEffect(() => store.audio.attach(createAudioEngine(() => store.playback.mediaAccess())), [store]);
   const controls = useMemo<MediaSessionControls>(() => ({
     play: () => store.audio.resume(), pause: () => store.audio.pause(), next: () => store.audio.next(),
     previous: () => store.audio.previous(), seek: seconds => store.audio.seek(seconds), skip: delta => store.audio.skip(delta),

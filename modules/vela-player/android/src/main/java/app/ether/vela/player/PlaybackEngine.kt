@@ -41,6 +41,10 @@ internal interface PlaybackEngine {
   fun release()
   /** Stops now and releases once the decoder has wound down, without holding the caller meanwhile. */
   fun releaseSoon() = release()
+  /** The player the system's media session shows (MediaSessionHub), for a full-screen engine. */
+  val sessionPlayer: Player? get() = null
+  /** A position on the engine's media clock as title time (a server HLS may start mid-title). */
+  fun titleSeconds(mediaSeconds: Double): Double = mediaSeconds
 }
 
 /** `shared`: a multiview tile playing beside others. It never takes audio focus or a tunneled decoder
@@ -123,6 +127,8 @@ internal class Media3Engine(
       .setTargetBufferBytes(if (preview) 8 * 1024 * 1024 else if (shared) 16 * 1024 * 1024 else 64 * 1024 * 1024).build())
     .build()
   override val liveWindowSeconds: Double get() = player.duration.takeIf { it > 0 }?.div(1000.0) ?: Double.NaN
+  override val sessionPlayer: Player get() = player
+  override fun titleSeconds(mediaSeconds: Double): Double = timeline.titleTime(mediaSeconds)
   private var plan: PlaybackPlan? = null
   private var timeline = MediaTimeline()
   private var refused = false

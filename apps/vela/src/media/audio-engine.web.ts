@@ -4,7 +4,8 @@
 import type { AudioEngine, AudioEngineEvent, AudioState } from '@vela/core';
 import { currentInQueue } from '@vela/core';
 
-export function createAudioEngine(): AudioEngine | null {
+/** The browser plays only URLs that carry their own authorization, so it takes no authorizer. */
+export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
   if (typeof document === 'undefined' || typeof Audio === 'undefined') return null;
   const element = new Audio();
   element.preload = 'auto';

@@ -1,3 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- The media session's service runs in the foreground while something plays (Android 14+ needs the type). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <application>
+    <service
+      android:name="app.ether.vela.player.VelaAudioService"
+      android:exported="true"
+      android:foregroundServiceType="mediaPlayback">
+      <intent-filter>
+        <action android:name="androidx.media3.session.MediaSessionService" />
+      </intent-filter>
+    </service>
+  </application>
 </manifest>
