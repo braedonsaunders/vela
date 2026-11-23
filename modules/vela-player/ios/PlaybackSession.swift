@@ -292,7 +292,9 @@ final class PlaybackSession {
             artworkURL: artwork,
             duration: plan?.isLive == true ? nil : state.duration,
             position: pendingSeek ?? state.position,
-            playing: state.phase == .playing
+            playing: state.phase == .playing,
+            // Now Playing extrapolates the position at the video's speed (live always plays at 1).
+            rate: plan?.isLive == true ? 1 : report.speed
         )
         host.updateNowPlaying(now, owner: self)
     }
