@@ -451,3 +451,9 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     recoverable: snapshot?.failure?.recoverable ?? true,
   };
 }
+
+/** Where the bubble's left edge sits: centred on the target, clamped to the timeline. */
+export function bubbleLeft(fraction: number, trackWidth: number, bubbleWidth: number): number {
+  const centred = fraction * trackWidth - bubbleWidth / 2;
+  return Math.max(0, Math.min(Math.max(0, trackWidth - bubbleWidth), centred));
+}

@@ -14,7 +14,7 @@ import { Platform, Text, View, type GestureResponderEvent } from 'react-native';
 import { msg } from '@vela/core';
 import type { PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
-import { timecode, type PlayerView } from './present';
+import { bubbleLeft, timecode, type PlayerView } from './present';
 import { pressed, useRemote } from './remote';
 import { useFocusClaim } from '../common/focus-claim';
 
@@ -50,6 +50,8 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
   const [target, setTarget] = useState<number | null>(null);
   const [held, setHeld] = useState<{ seconds: number; at: number } | null>(null);
   const [focused, setFocused] = useState(false);
+  /** The timeline's width, so the bubble can stay over it at either end. */
+  const [trackWidth, setTrackWidth] = useState(0);
   const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const duration = view.duration;
 
@@ -136,11 +138,19 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
   const thumb = look.size(14);
   const height = look.size(look.tv ? 30 : 22);
   const still = preview !== null && thumbnail ? thumbnail(preview) : null;
+  // The last frame drawn stays mounted (unseen) between previews, so its sheet, a large image, is
+  // decoded once rather than each time the bubble comes up.
+  const lastStill = useRef<TrickplayFrame | null>(null);
+  if (still) lastStill.current = still;
+  const kept = still ?? lastStill.current;
   const bubbleWidth = look.size(still ? (look.tv ? 240 : 176) : 72);
   return (
     <View
       ref={box}
-      onLayout={measure}
+      onLayout={event => {
+        setTrackWidth(event.nativeEvent.layout.width);
+        measure();
+      }}
       style={{ height, justifyContent: 'center' }}
       onStartShouldSetResponderCapture={() => !disabled && duration > 0}
       onMoveShouldSetResponderCapture={() => !disabled && duration > 0}
@@ -252,36 +262,44 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
           }}
         />
       </Pressable>
-      {preview !== null ? (
+      {preview !== null || kept ? (
+        // One bubble, kept mounted while there is a frame to keep, unseen between previews.
         <View
           pointerEvents="none"
-          testID="player-scrub-bubble"
+          testID={preview !== null ? 'player-scrub-bubble' : undefined}
           style={{
             position: 'absolute',
             bottom: height + look.size(8),
-            left: `${previewFraction * 100}%`,
+            // Centred over the target, but kept over the timeline near either end.
+            left: bubbleLeft(previewFraction, trackWidth, bubbleWidth),
             width: bubbleWidth,
-            marginLeft: -bubbleWidth / 2,
             alignItems: 'center',
             gap: look.size(6),
+            opacity: preview !== null ? 1 : 0,
           }}
         >
-          {still ? <FramePreview frame={still} width={bubbleWidth} radius={look.size(8)} background={look.raised} /> : null}
-          <Text
-            style={[
-              look.text(13, 600),
-              {
-                paddingHorizontal: look.size(8),
-                paddingVertical: look.size(3),
-                borderRadius: look.size(6),
-                backgroundColor: look.popover,
-                fontVariant: ['tabular-nums'],
-                overflow: 'hidden',
-              },
-            ]}
-          >
-            {say(preview)}
-          </Text>
+          {kept ? (
+            <View style={still ? undefined : { position: 'absolute', opacity: 0 }}>
+              <FramePreview frame={kept} width={look.size(look.tv ? 240 : 176)} radius={look.size(8)} background={look.raised} />
+            </View>
+          ) : null}
+          {preview !== null ? (
+            <Text
+              style={[
+                look.text(13, 600),
+                {
+                  paddingHorizontal: look.size(8),
+                  paddingVertical: look.size(3),
+                  borderRadius: look.size(6),
+                  backgroundColor: look.popover,
+                  fontVariant: ['tabular-nums'],
+                  overflow: 'hidden',
+                },
+              ]}
+            >
+              {say(preview)}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </View>
