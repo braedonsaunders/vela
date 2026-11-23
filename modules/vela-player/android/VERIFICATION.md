@@ -112,3 +112,49 @@ that external-file case.
 - `115563b2`: encoded grant prefixes and nested traversal rejection.
 
 The branch is based on `origin/main` at `7b73e593`; no commits were pushed.
+
+# Audio/video formats, 22–23 November 2026
+
+Branch `bb/av-formats-android-and-android-tv-thr_6ekp6jirfq`. Built for the API 36
+Android TV emulator (x86_64, `-gpu swangle_indirect -feature -HardwareDecoder`) on
+bb-worker-server, against the mock with format fixtures made by ffmpeg 7.1, mkvmerge
+and dovi_tool 3.4.0 (libdovi's own Profile 7 FEL RPU, an enhancement layer muxed in as
+NAL 63, mkvmerge's `dvcC` record: profile 7, BL compatibility 6). Logcat tag
+`vela-media3` gives every result below; `format {...}` lines are Snapshot.format.
+
+| Check | Emulator evidence |
+| --- | --- |
+| Dolby Vision Profile 7 FEL MKV, no DV decoder | `dolby vision profile 7: BASE_LAYER`; the HEVC decoder gets the base layer with RPU and EL removed and plays mid-file. Card: source `dv`/`7`, output `hdr10`, `dvConversion: base-layer`. A 10-bit base layer cannot be tested: the emulator's software HEVC decoder refuses Main 10 with or without Dolby Vision. |
+| libdovi bridge | `libvela_dovi.so` loads in the APK (`profile 7 conversion true`). On the host JVM the same bridge is byte-exact with dovi_tool's expected outputs (MEL to 8.1; FEL through MEL to 8.1). The 8.1 path itself needs a Profile 8 decoder. |
+| FLAC 7.1 24-bit 96 kHz | AudioTrack `encoding 4` (float) mask `0x18fc` (7.1) 96000 Hz; AudioFlinger shows the float 7.1 96 kHz track. The emulator mixer folds it to 2 ch/48 kHz, and the card says `downmixed`, not lossless. |
+| TrueHD 5.1 | `truehd major sync: atmos false`; `ffmpegLavc60.3.100-truehd` decodes to float 5.1 (`mask 0xfc`). |
+| Frame-rate facts | 23.976 from the server's probe; `frameRateMatch: unsupported` (one 60 Hz mode). |
+| HDR to SDR request | `tone mapping requested; decoder cannot map` (software decoder); card `toneMapped: false`, `range: hdr10`. |
+| Styled ASS (libass) | `\pos`+`\frz`, outlined style, `\move` with `\3c` border, `\k` karaoke and inline overrides render as authored, in step with the burned-in frame time. |
+| Embedded SRT after the transcoding move | Media3 cues render, italics included. |
+
+## Needs real hardware
+
+Shield TV (Pro, Android 11) on HDMI to an Atmos/DTS:X AV receiver (eARC or direct), with
+the receiver's front-panel format display visible:
+
+1. TrueHD Atmos MKV: the receiver shows Dolby Atmos (TrueHD); logcat `audio output
+   encoding 14` (ENCODING_DOLBY_TRUEHD), card `delivery: passthrough`, `immersive: atmos`,
+   profile `Dolby TrueHD + Atmos`.
+2. DTS-HD MA / DTS:X: receiver shows DTS-HD MA / DTS:X; `encoding 8` (DTS_HD).
+3. E-AC-3 JOC: receiver shows Dolby Atmos (DD+); `encoding 18`.
+4. With passthrough off in Shield settings (or a PCM-only receiver): TrueHD 7.1 arrives as
+   8-channel PCM; the receiver's multichannel PCM indicator; card `decoded`, `lossless:
+   true` for 24-bit sources. Check the `tunneling` value in the `audio output` line.
+5. 23.976 MKV: the TV/receiver reports 23.976/24p on start, back to the UI rate on exit;
+   card `frameRateMatch: matched`. Repeat 25/50 and 29.97/59.94.
+6. Dolby Vision TV: a Profile 7 FEL/MEL UHD-BD remux shows the TV's Dolby Vision badge
+   (`dolby vision profile 7: CONVERT_TO_81` if the Shield has a Profile 8 decoder only,
+   `KEEP` if it lists Profile 7). Profile 8.1 and 5 files show Dolby Vision as well.
+7. HDR10+ title on an HDR10+ TV (Samsung): HDR10+ badge.
+
+A Chromecast with Google TV or Fire TV 4K Max: the same audio checks (Fire TV HALs often
+lack TrueHD/DTS-HD encodings, so those decode to PCM until an IEC 61937 path exists), and
+Android 12+ match-content behaviour with the system setting on Always, then Seamless only.
+An Android 13+ phone with an SDR panel: an HDR10 file reports `toneMapped: true` where the
+decoder supports it. Each check is read from logcat (`adb logcat -s vela-media3`).
