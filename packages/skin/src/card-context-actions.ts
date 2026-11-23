@@ -73,7 +73,7 @@ export function cardContextActions(card: Card, primary: CardPress, management?: 
   } else if (playable) {
     const playArg = primary.action === 'play' ? primary.arg : card.id;
     actions.push(dispatch('play', resumable ? resumeLabel(card) : msg('cardMenu.play'), 'play', playArg, 'play', 'play'));
-    if (resumable) actions.push(dispatch('restart', msg('ui.playFromBeginning'), 'play', restartArg(playArg), 'restart', 'play'));
+    if (resumable) actions.push(dispatch('restart', msg('ui.restart'), 'play', restartArg(playArg), 'restart', 'play'));
   } else {
     actions.push(dispatch('open', TITLE_KINDS.has(card.kind) ? msg('cardMenu.openDetails') : msg('cardMenu.open'), primary.action, primary.arg, 'info', 'details'));
   }
