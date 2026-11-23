@@ -133,6 +133,21 @@ NAL 63, mkvmerge's `dvcC` record: profile 7, BL compatibility 6). Logcat tag
 | Styled ASS (libass) | `\pos`+`\frz`, outlined style, `\move` with `\3c` border, `\k` karaoke and inline overrides render as authored, in step with the burned-in frame time. |
 | Embedded SRT after the transcoding move | Media3 cues render, italics included. |
 
+## Subtitle delay, speed, output choices and picture-in-picture
+
+Android 16 phone (Pixel 6, google_apis) and Android TV 16 emulators on gpu-workstation, against
+the mock with an embedded-SRT original whose cues name their own two seconds, and the lab:
+
+| Check | Observed |
+| --- | --- |
+| Delay, paused on one frame (11.512 s) | 0 s shows `Cue 6: 10–12 s`; +2.0 s `Cue 5: 8–10 s`; −2.0 s `Cue 7: 12–14 s`; no seek. TV: +1.5 s at 10.552 s shows `Cue 5`. |
+| Speed 2× | Title clock advanced 40.7 s in 20.28 s wall time (phone and TV); 1.25× from the lab. |
+| Output menu | Phone speaker: Dolby Vision only; TV: passthrough and Dolby Vision. A change reloads in place (paused, same frame). E-AC-3 5.1 with passthrough off: `ffmpeg…-eac3`, float PCM `mask 0xfc`. |
+| Picture-in-picture | Button and Home enter it (pinned task, auto-enter); window shows the video and subtitles only; its pause action pauses; expanding returns to the same session; closing pauses the AudioTrack and the session restarts at its position on return. Not offered on TV. |
+
+Still needs a device: passthrough off on a receiver (the PCM indicator instead of the
+bitstream), speed on a Shield with tunneling, and picture-in-picture on a real phone.
+
 ## Needs real hardware
 
 Shield TV (Pro, Android 11) on HDMI to an Atmos/DTS:X AV receiver (eARC or direct), with

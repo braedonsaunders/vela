@@ -32,6 +32,10 @@ internal interface PlaybackEngine {
   fun volume(value: Float)
   fun seek(seconds: Double)
   fun select(type: String, id: Long?)
+  /** Subtitle delay in seconds: positive shows cues later (SubtitleDelay). */
+  fun subtitleOffset(seconds: Double) {}
+  /** Playback speed, pitch kept. The audio output reports the speed it achieved (PlayerState.speed). */
+  fun speed(value: Double) {}
   /** Draws the selected ASS/SSA track at the playing position: -1 none selected, 0 unchanged, 1 drawn, 2 blank. */
   fun renderAss(bitmap: android.graphics.Bitmap, force: Boolean): Int
   fun release()
@@ -41,7 +45,13 @@ internal interface PlaybackEngine {
 
 /** `shared`: a multiview tile playing beside others. It never takes audio focus or a tunneled decoder
  * (most TVs have one), and buffers like a live preview so four fit in memory. */
-internal class Media3Engine(context: Context, private val preview: Boolean, live: Boolean = false, shared: Boolean = false) : PlaybackEngine {
+internal class Media3Engine(
+  context: Context,
+  private val preview: Boolean,
+  live: Boolean = false,
+  shared: Boolean = false,
+  output: OutputPreferences = OutputPreferences(),
+) : PlaybackEngine {
   override val state = PlayerState()
   override var onChange: () -> Unit = {}
   override var onFailure: (Int, Boolean) -> Unit = { _, _ -> }
@@ -50,6 +60,9 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   private val selector = DefaultTrackSelector(context)
   private val grant = MediaAccessStore.current
   private val buffering = playbackBuffering(preview || shared, live)
+  private val subtitleDelay = SubtitleDelay()
+  /** A full-screen player on a TV tunnels its video at 1× (a tunneled AudioTrack cannot change speed). */
+  private val tunnels = !preview && !shared && context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
   /** libass for full-screen ASS/SSA; null keeps Media3's own SSA cues. */
   private val ass: AssSubtitles? = if (preview || shared) null else AssSubtitles.create()
   /** The original file being played, whose attached fonts libass may need. */
@@ -65,6 +78,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     ass = ass,
     dolbyVisionDecoderProfiles = PlayerCapabilities.dolbyVisionDecoderProfiles(),
     convertsDolbyVision = DolbyVision.convertsProfile7,
+    dolbyVisionBaseLayer = output.baseLayer,
     onTrueHd = { id, atmos ->
       Log.i("vela-media3", "truehd major sync: atmos $atmos")
       main.post { state.format.trueHdAtmos[id.orEmpty()] = atmos }
@@ -88,10 +102,15 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
       onToneMapped = { mapped ->
         if (!preview) Log.i("vela-media3", "hdr to sdr tone mapping requested; decoder ${if (mapped) "maps" else "cannot map"}")
         main.post { state.format.toneMapped = mapped }
-      }).setEnableDecoderFallback(true)
+      },
+      subtitleDelay = subtitleDelay.takeIf { !preview },
+      decodeAll = output.decodeAll && !preview,
+    ).setEnableDecoderFallback(true)
       // Float PCM keeps 24-bit lossless sources (FLAC, ALAC, FFmpeg-decoded TrueHD and DTS-HD MA) whole;
       // without it DefaultAudioSink truncates every high-resolution stream to 16 bits.
       .setEnableAudioFloatOutput(!preview && !shared)
+      // Speed at the AudioTrack, which time-stretches float PCM (VelaRenderersFactory.buildAudioSink).
+      .setEnableAudioOutputPlaybackParameters(!preview && !shared)
       .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
     // Foreground streaming needs consistent Wi-Fi latency as well as an awake display.
     // Media3 releases both locks on pause, background pause and engine release.
@@ -125,7 +144,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     selector.parameters = selector.buildUponParameters()
       .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, preview)
       .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, preview)
-      .setTunnelingEnabled(!preview && !shared && context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION)
+      .setTunnelingEnabled(tunnels)
       .build()
     // Subtitles drawn by libass follow the picture on screen, not the audio clock.
     if (ass != null) player.setVideoFrameMetadataListener { presentationTimeUs, releaseTimeNs, _, _ ->
@@ -269,6 +288,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     state.windowPosition = player.currentPosition / 1000.0
     state.live = if (plan?.live == true) readLiveWindow() else null
     if (player.playbackState == Player.STATE_READY) state.reconnecting = false
+    state.speed = player.playbackParameters.speed.toDouble()
     state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let(timeline::titleTime)
     state.cacheAhead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000.0
     player.videoDecoderCounters?.let { counters ->
@@ -306,6 +326,11 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   override fun attach(surface: Surface?) { player.setVideoSurface(surface) }
   override fun play(playing: Boolean) { player.playWhenReady = playing }
   override fun volume(value: Float) { player.volume = value }
+  override fun subtitleOffset(seconds: Double) { subtitleDelay.set(seconds) }
+  override fun speed(value: Double) {
+    if (tunnels) selector.parameters = selector.buildUponParameters().setTunnelingEnabled(value == 1.0).build()
+    player.playbackParameters = PlaybackParameters(value.toFloat())
+  }
   override fun seek(seconds: Double) { player.seekTo((timeline.mediaTime(seconds) * 1000).toLong()) }
   override fun select(type: String, id: Long?) {
     val trackType = if (type == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
@@ -349,7 +374,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     // While playing, the picture tracks the last released frame (whose release may be up to a frame ahead).
     val since = (System.nanoTime() - frameRelease) / 1_000_000
     val time = if (player.isPlaying && framePts >= 0 && since in -100..250) framePts / 1000 + since else player.currentPosition
-    return ass?.render(track, time, bitmap, width, height, force) ?: -1
+    return ass?.render(track, time - subtitleDelay.offsetUs / 1000, bitmap, width, height, force) ?: -1
   }
   override fun release() { main.removeCallbacks(tick); player.release(); fontLoader?.shutdownNow(); ass?.release() }
 

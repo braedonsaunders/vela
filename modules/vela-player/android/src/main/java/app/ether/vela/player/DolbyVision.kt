@@ -20,8 +20,10 @@ internal object DolbyVision {
   /** Whether Vela converts a Profile 7 stream to 8.1 before decoding (declared as '7' in capabilities). */
   val convertsProfile7: Boolean get() = DoviNative.available
 
-  /** What to do with a Dolby Vision track of `profile`, given the device's Dolby Vision decoder profiles. */
-  fun plan(profile: Int?, decoderProfiles: Set<Int>, canConvert: Boolean): DolbyVisionAction = when {
+  /** What to do with a Dolby Vision track of `profile`, given the device's Dolby Vision decoder profiles.
+   * `baseLayer` (the viewer's output preference) plays the HDR10/HLG base of Profiles 7 and 8 instead. */
+  fun plan(profile: Int?, decoderProfiles: Set<Int>, canConvert: Boolean, baseLayer: Boolean = false): DolbyVisionAction = when {
+    baseLayer && (profile == 7 || profile == 8) -> DolbyVisionAction.BASE_LAYER
     profile != 7 -> DolbyVisionAction.KEEP
     PROFILE_7 in decoderProfiles -> DolbyVisionAction.KEEP
     PROFILE_8 in decoderProfiles && canConvert -> DolbyVisionAction.CONVERT_TO_81

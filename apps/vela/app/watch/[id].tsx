@@ -6,7 +6,7 @@ import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'ex
 import { useCallback, useEffect, useMemo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { msg, type PlaybackTarget } from '@vela/core';
-import { VelaPlayer, VelaPlayerView } from '@vela/player';
+import { pictureInPicture, VelaPlayer, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
 import { useLiveContext, useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
 import { backFromNavigation, useBackHeld, usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
@@ -50,7 +50,8 @@ export default function Watch() {
     retry: () => live.controller.retryWatch(id),
     updatePlan: (plan: Parameters<typeof live.controller.updateWatchPlan>[0]) => live.controller.updateWatchPlan(plan),
   } : undefined;
-  const session = usePlaybackSession(target, owned);
+  // Android's picture-in-picture window keeps the watch on screen while the app is in the background.
+  const session = usePlaybackSession(target, owned, pictureInPicture);
   const skin = host('watch', id);
   const sessionId = session.view.plan?.sessionId ?? '';
   const channels = liveView.guide?.channels;

@@ -40,6 +40,8 @@ internal class PlayerState {
   var windowPosition = 0.0
   /** A lost connection is being re-established (a read retry), until playback is ready again. */
   var reconnecting = false
+  /** The speed the player runs at (the audio output may refuse a requested one). */
+  var speed = 1.0
   var failure: String? = null
   var failureKind = "source"
 

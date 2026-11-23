@@ -132,6 +132,7 @@ function settingKey(setting: (typeof SUBTITLE_SETTINGS)[number]['setting']) {
 /** Delivery choices an engine may honour, with their values in menu order. */
 const OUTPUT_SETTINGS: Record<string, readonly string[]> = {
   surround: ['lossless', 'compatible'],
+  passthrough: ['auto', 'off'],
   immersive: ['on', 'off'],
   speakerLayout: ['5.1.2', '5.1.4', '7.1.2', '7.1.4', '9.1.6'],
   dolbyVision: ['auto', 'base-layer'],
@@ -141,7 +142,7 @@ function outputLabel(name: string, value: string): string {
   return name === 'speakerLayout' ? value : msg(`player.output.${name}.${value}`);
 }
 
-/** The engine's delivery choices (surround, Atmos rendering, speakers, Dolby Vision); none when it has none. */
+/** The engine's delivery choices (surround, passthrough, Atmos rendering, speakers, Dolby Vision); none when it has none. */
 function OutputSettings({ look, view, blocked, send }: Props) {
   const settings = view.output.filter(({ name }) => OUTPUT_SETTINGS[name]);
   if (!settings.length) return null;

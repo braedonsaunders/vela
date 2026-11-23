@@ -33,6 +33,12 @@ internal class PlayerReport(
   var display: (Double?) -> Map<String, Any> = { emptyMap() }
   /** The server is applying a seek: observations wait for the plan that answers it. */
   var awaitingSeek = false
+  /** The viewer's delivery choices (OutputPreferences), and whether the route takes any encoded format. */
+  var output = OutputPreferences()
+  var routePassthrough = false
+  var television = false
+  /** Whether this view can open the picture-in-picture window now. */
+  var pictureInPicture: () -> Boolean = { false }
 
   private var plan: PlaybackPlan? = null
   private var previewing = false
@@ -142,7 +148,7 @@ internal class PlayerReport(
       "sourceGeneration" to (plan?.sourceGeneration ?: 0),
       "seekGeneration" to (plan?.seekGeneration ?: 0),
       "state" to phase,
-      "capabilities" to mapOf("pip" to false, "fullscreen" to false, "audioSwitch" to !previewing),
+      "capabilities" to mapOf("pip" to (!previewing && pictureInPicture()), "fullscreen" to false, "audioSwitch" to !previewing),
       "qualityIds" to emptyList<String>(),
       "renditions" to emptyList<Any>(),
       "audioTracks" to plan?.audioTracks.orEmpty().map { it.snapshot },
@@ -156,8 +162,11 @@ internal class PlayerReport(
       "audioTrackIds" to plan?.audioTracks.orEmpty().map { it.id },
       "chapters" to plan?.chapters.orEmpty().map { it.snapshot },
       "throughputHistory" to listOfNotNull(throughput(state)),
-      "speed" to 1,
-      "speeds" to listOf(1),
+      "speed" to if (previewing || plan?.live == true) 1.0 else state.speed,
+      "speeds" to if (previewing) listOf(1.0) else PlaybackSpeed.offered(plan?.live == true, state.format.passthrough),
+      "outputPreferences" to if (previewing) null else output.values,
+      "outputPreferencesAvailable" to if (previewing) emptyList() else
+        output.available(state.format.route?.passthrough?.isNotEmpty() ?: routePassthrough, television),
       "subtitleStyleAvailable" to !previewing,
       "subtitleClientOnly" to subtitleClientOnly,
       "audioClientOnly" to audioClientOnly,
