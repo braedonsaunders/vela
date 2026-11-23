@@ -146,12 +146,30 @@ for platform in $platforms; do
     echo "testflight: $platform archive failed; the log is $log" >&2
     exit 1
   fi
+  # FFmpegBuild 3.15.0's frameworks claim MinimumOSVersion 26.0 in their Info.plist although their
+  # binaries target 16.0; App Store validation refuses a framework that claims more than the app
+  # (ITMS-90208). Lower the claim to the app's and re-sign; the export signs everything again anyway.
+  appdir=$archive/Products/Applications/Vela.app
+  minimum=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$appdir/Info.plist")
+  identity=$(codesign -dvv "$appdir" 2>&1 | sed -n 's/^Authority=//p' | head -1)
+  patched=0
+  for framework in "$appdir"/Frameworks/*.framework; do
+    claimed=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$framework/Info.plist" 2>/dev/null) || continue
+    if [ "$(printf '%s\n%s\n' "$minimum" "$claimed" | sort -V | tail -1)" != "$minimum" ]; then
+      /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion $minimum" "$framework/Info.plist"
+      codesign --force --sign "$identity" --preserve-metadata=identifier,flags "$framework" 2>/dev/null
+      echo "testflight: $(basename "$framework") claimed iOS/tvOS $claimed; now $minimum like the app"
+      patched=1
+    fi
+  done
+  # The app's seal covers its frameworks.
+  [ "$patched" = 0 ] || codesign --force --sign "$identity" --preserve-metadata=identifier,entitlements,flags "$appdir" 2>/dev/null
   log=$build/$platform-export.log
   rm -rf "$build/export-$platform"
   # shellcheck disable=SC2046
   if ! locked xcodebuild -exportArchive -archivePath "$archive" -exportPath "$build/export-$platform" \
       -exportOptionsPlist "$options" $(auth) >"$log" 2>&1; then
-    grep -E "error|Error|ITMS-|failed" "$log" | grep -v '^ *$' | head -40
+    grep -E "error|Error|ITMS-|failed" "$log" | sort -u | head -40
     echo "testflight: $platform export/upload failed; the log is $log" >&2
     exit 1
   fi
