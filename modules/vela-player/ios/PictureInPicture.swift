@@ -23,7 +23,9 @@ final class PictureInPicture: NSObject {
     private(set) var active = false
 
     static var supported: Bool {
-        #if os(tvOS)
+        // Not offered on the Mac desktop host yet: macOS never reports PiP stopping when Vela
+        // closes it, and a closed window has not been confirmed gone. iOS and iPadOS offer it.
+        #if os(tvOS) || os(macOS)
         return false
         #else
         return AVPictureInPictureController.isPictureInPictureSupported()
