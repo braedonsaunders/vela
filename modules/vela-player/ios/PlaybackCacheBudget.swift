@@ -40,9 +40,10 @@ struct PlaybackCacheBudget: Equatable {
         return PlaybackCacheBudget(byteBudget: hardLimit, hardLimit: hardLimit, freeReserve: reserve)
     }
 
-    /// Bytes free for the app on the temporary directory's volume, purgeable space included.
+    /// Bytes free for the app on the temporary directory's volume (purgeable space included on iOS).
     static func freeBytes(at directory: URL = URL(fileURLWithPath: NSTemporaryDirectory())) -> Int64? {
-        #if os(iOS) || os(tvOS)
+        // tvOS has no important-usage figure; there purgeable space does not count, which errs small.
+        #if os(iOS)
         if let values = try? directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
            let important = values.volumeAvailableCapacityForImportantUsage {
             return important

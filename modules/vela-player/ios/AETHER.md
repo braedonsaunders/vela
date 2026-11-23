@@ -101,7 +101,8 @@ next-item path; a gap between tracks remains.
 volume (`storageExhausted`, ENOSPC) and the killed sessions left 2.7 GB in `tmp/aether-segments`, so not
 even the production build could be reinstalled (0 bytes free). Every load now sets
 `sessionCacheHardLimitBytes`, `sessionCacheByteBudget` and `sessionCacheFreeReserveBytes` from the space
-free for the app (`volumeAvailableCapacityForImportantUsage`, purgeable included) through
+free for the app (`volumeAvailableCapacityForImportantUsage` on iOS, purgeable included; tvOS only has
+`volumeAvailableCapacity`, which leaves purgeable space out and so errs small) through
 `PlaybackCacheBudget.plan`: 40% of free space, at most 2 GB, keeping 1 GB free; below 3 GB free the
 reserve is a quarter of free space (at least 200 MB) and the cache keeps a 320 MB working floor so
 playback still runs. Previews and multiview tiles take a quarter share. Under a hard limit AetherEngine
