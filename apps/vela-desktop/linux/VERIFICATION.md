@@ -83,3 +83,37 @@ shared bridge and renderer (base player payload digest unchanged):
 
 Delivery also includes `native-linux-lgpl.tar.gz` for the shared packager.
 No artifacts were pushed or published.
+
+# AV formats addendum: 2026-11-22
+
+Libraries rebuilt in a named Ubuntu 22.04 container (`vela-linux-av-thr_nu84uuveqn`) on
+gpu-workstation's WSL: FFmpeg 8.0.1 (GPL and nonfree off, plus dav1d 1.5.3, zlib, bzip2,
+lzma), libplacebo 7.387.0, and mpv at commit 3e8aa53ec1 (`-Dgpl=false`). The helper passes
+`--audit`. Every library and the helper stay at or below GLIBC_2.35. The helper ran under
+Xvfb, Openbox and xcompmgr with software OpenGL, driven over mpv IPC.
+
+- **Renderer:** the helper reports `ready gpu-next`.
+- **Dolby Vision Profile 5** (Jellyfin "Test Jellyfin 1080p DV P5"): with gpu-next the
+  frame shows the Jellyfin purple and blue, matching the HDR10 version of the same clip. With
+  `VELA_MPV_RENDERER=gpu` (the only renderer mpv 0.41 offered through the render API) the
+  same frame is teal and green. mpv reports `dolby-vision-profile` 5 and colormatrix
+  `dolbyvision`; Profile 8.1 reports profile 8.
+- **Formats played:** HEVC Main10 HDR10 (PQ BT.2020) and AV1 10-bit decoded through
+  `libdav1d`.
+- **Bit-perfect PCM:** a 24/96 FLAC decoded through mpv (`ao=pcm`, s32, 96 kHz, no
+  resample) is byte-identical to FFmpeg's reference decode.
+- **Channel order:** 7.1 FLAC with a different tone on each channel comes out of mpv
+  with every tone on the same channel as FFmpeg 9's reference decode. TrueHD 5.1 decodes
+  to s32 PCM with matching channels.
+- **Passthrough negotiation:** with `ao=pcm`, AC-3 → `spdif-ac3` at 48 kHz, E-AC-3 →
+  `spdif-eac3` at 192 kHz, TrueHD → `spdif-truehd` as 8 channels at 192 kHz (HBR), and DTS →
+  `spdif-dts` (via the `dts-hd` path, which falls back to core DTS for a non-HD stream).
+  The container has no sound card, so passthrough to a real HDMI receiver, ELD parsing on
+  real hardware and PulseAudio/PipeWire sinks remain to be tested on a Linux PC with an AVR.
+- **mpv facts:** the property shapes match `mpv-format.ts` (`current-tracks/*`,
+  `video-params`, `audio-out-params`).
+
+Still pending:
+- an Electron/AppImage rebuild with this payload;
+- VA-API/NVDEC with gpu-next on real GPUs;
+- frame-rate matching, which is not implemented on Linux and is reported as `unsupported`.

@@ -199,7 +199,8 @@ function audioOutput(facts: MpvFacts, host: HostOutputFacts, source: AudioSource
   if (layout) out.layout = layout;
   if (sampleRate) out.sampleRate = sampleRate;
   const bits = sampleBits(sampleFormat);
-  if (bits) out.bitDepth = bits;
+  // s32 is a container: WASAPI and ALSA carry 24 valid bits in it, and mpv does not say how many.
+  if (bits && bits !== 32) out.bitDepth = bits;
   const sourceChannels = source.channels ?? positive(number(decoded, 'channel-count'));
   if (channels && sourceChannels) out.downmixed = channels < sourceChannels;
   const decodedRate = positive(number(decoded, 'samplerate')) ?? source.sampleRate;

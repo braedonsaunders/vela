@@ -32,7 +32,7 @@ internal sealed class Playback : IDisposable
     /// and is tone-mapped by libplacebo otherwise; Dolby Vision RPUs are applied by libplacebo. Audio is
     /// WASAPI: bitstreams the receiver accepts pass through (exclusive, IEC 61937), PCM is shared or, when
     /// asked, exclusive at the source's own rate and bit depth.</summary>
-    static IEnumerable<KeyValuePair<string, string>> Options(PlaybackSettings settings, AudioEndpointInfo endpoint)
+    internal static IEnumerable<KeyValuePair<string, string>> Options(PlaybackSettings settings, AudioEndpointInfo endpoint)
     {
         var options = new Dictionary<string, string>
         {

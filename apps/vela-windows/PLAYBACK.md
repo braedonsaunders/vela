@@ -102,23 +102,34 @@ should take their own advice on the patent position of shipping those decoders.
 
 ## Verification
 
-Verified on gpu-workstation (RTX 4080, Windows build 26300) over SSH, in session 0:
-- The host builds.
-- `--av-report` loads the LGPL DLL (mpv v0.42.0-225, FFmpeg N-129222).
-- The endpoint probe gives these real answers: the Realtek USB S/PDIF output accepts AC-3
-  and DTS only; THX Spatial takes 8-channel PCM; ordinary endpoints take 2-channel PCM up
-  to 192 kHz exclusive.
+`Vela.exe --av-play <file> report.json` plays a file for ten seconds with these settings in
+mpv's own window and records what mpv chose. On gpu-workstation (RTX 4080, Windows build
+26300), over SSH in session 0, on 2026-11-22:
 
-That box had no logged-on user and no HDMI sink, so the following still need an interactive
-desktop, an HDR display and an HDMI receiver:
+- **Build:** the host builds, and `--av-report` loads the LGPL DLL (mpv v0.42.0-225,
+  FFmpeg N-129222, `-Dgpl=false`).
+- **Endpoint probe:** these are real answers. The Realtek USB S/PDIF output accepts AC-3
+  and DTS only; THX Spatial takes 8-channel PCM; ordinary endpoints take 2-channel PCM up to
+  192 kHz exclusive.
+- **Passthrough:** on that S/PDIF output, AC-3 5.1 and DTS 5.1 played as
+  `spdif-ac3`/`spdif-dts` through WASAPI. E-AC-3, which S/PDIF cannot carry, was not
+  attempted and was decoded to 5.1 instead.
+- **Exclusive PCM:** with `"exclusive": true`, a 24/96 FLAC opened the device as
+  "stereo s32 (24/24 bits) @ 96000 Hz (exclusive)", with no resampling. The same mpv chain
+  produced output byte-identical to FFmpeg's reference decode of that FLAC
+  (apps/vela-desktop/linux/VERIFICATION.md).
+- **Video:** gpu-next initialised Direct3D 11 feature level 12_1 on the RTX 4080 with
+  shaderc. Session 0 has no desktop, so the swapchain (and video) needs a logged-on user.
+
+These still need an interactive desktop, an HDR display and an HDMI receiver:
 
 1. Install the build, sign in to Ether and play an HDR10 film windowed. The card should
    show HDR10 → SDR or HDR10 (depending on the Windows HDR setting).
 2. Press F11. The monitor should switch to 23.976 Hz (card: frame-rate "matched") and turn
    HDR on. Leave fullscreen: both return to what they were.
 3. Play Dolby Vision Profile 5 (for example Jellyfin's "Test Jellyfin 1080p DV P5"). Colours
-   must be natural, not green and purple. The card should read Dolby Vision 5 → HDR10
-   (reshaped).
+   must be the Jellyfin purple and blue, not teal and green. The card should read Dolby
+   Vision 5 → HDR10 (reshaped).
 4. With an HDMI AVR, play TrueHD Atmos. The receiver should show Dolby Atmos/TrueHD; the
    card should read passthrough, MAT, Atmos. Then E-AC-3 JOC (receiver: Dolby Atmos),
    DTS-HD MA and DTS:X (receiver: DTS-HD MA / DTS:X).

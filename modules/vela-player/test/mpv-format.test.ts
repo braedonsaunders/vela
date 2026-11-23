@@ -73,7 +73,7 @@ describe('mpvPlaybackFormat audio', () => {
     }, { exclusive: true });
     expect(format?.audio?.immersive).toBe('dtsx');
     expect(format?.audioOut).toEqual({ delivery: 'decoded', codec: 'pcm', carrier: 'lpcm', channels: 8, layout: '7.1',
-      sampleRate: 48000, bitDepth: 32, downmixed: false, resampled: false, decoderName: 'FFmpeg dca', lossless: true, exclusive: true });
+      sampleRate: 48000, downmixed: false, resampled: false, decoderName: 'FFmpeg dca', lossless: true, exclusive: true });
   });
 
   test('a downmix, a resample or a volume change is not lossless', () => {
