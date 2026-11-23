@@ -105,9 +105,10 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
   const notices = rewindable && live ? liveNotices({ ...live, canCatchUp: false, ...(window!.delayed ? { delivery: 'available' as const } : {}) }) : liveNotices(live);
   if (rewindable && window!.delayed) notices.push(msg('catchUp.behindLive', { delay: clock(window!.behind) }));
   // Start over plays its programme from the beginning: an engine joins a growing stream at its edge,
-  // so the session is placed at its start once, when the engine first knows the window.
+  // so the session is placed at its start once, when the engine itself reports the window (a seek
+  // before then is refused; one that never reports places Start over on its own).
   const placed = useRef('');
-  const placeAt = archived?.kind === 'startOver' && window?.seekable && snapshot?.state === 'playing' && plan && placed.current !== plan.sessionId
+  const placeAt = archived?.kind === 'startOver' && window?.seekable && live?.edgeSeconds != null && snapshot?.state === 'playing' && plan && placed.current !== plan.sessionId
     // A second in: a live engine reads position 0 as "join at the edge".
     && window.position - window.start > LIVE_SLACK_SECONDS ? window.start + 1 : null;
   useEffect(() => {
