@@ -62,6 +62,9 @@ export const initialSearch: SearchState = {
 
 /** How long typing must pause before the slower lanes start. */
 const PAUSE_MS = 600;
+/** How long after the last keystroke the title search is sent: one request per pause in typing,
+ * not one per key. A superseded request is still cancelled. */
+export const TYPING_MS = 180;
 /** A unified server that keeps reporting slower lookups pending is asked again at most this often
  * per query; its last answer then stands. */
 const MAX_REASKS = 20;
@@ -69,6 +72,8 @@ const MAX_REASKS = 20;
 export class Search {
   private controller = new AbortController();
   private pause: ReturnType<typeof setTimeout> | undefined;
+  /** The title search waiting for typing to pause. */
+  private typing: ReturnType<typeof setTimeout> | undefined;
   /** Typing has paused on this generation: a description search may start. */
   private paused = 0;
   /** The generation a unified-search server answers (its pages and re-asks stay in `auto` mode). */
@@ -87,6 +92,8 @@ export class Search {
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly artWidth: () => number,
+    /** The typing pause before a title search is sent (0 sends at once). */
+    private readonly typingMs = TYPING_MS,
   ) {
     session.onReset(() => {
       this.controller.abort();
@@ -96,8 +103,9 @@ export class Search {
     });
   }
 
-  /** A new query: a new generation, with every lane started again. An empty query clears search. */
-  setQuery(query: string): void {
+  /** A new query: a new generation, with every lane started again. An empty query clears search.
+   * Typed queries wait `typingMs` after the last keystroke; `immediate` (a changed filter) does not. */
+  setQuery(query: string, immediate = false): void {
     const previous = this.box.get().search;
     const generation = previous.generation + 1;
     this.controller.abort();
@@ -123,7 +131,8 @@ export class Search {
       descriptive: { ...initialSearch.descriptive, status: descriptive ? 'idle' : 'unavailable' },
       ai: emptyLane,
     }));
-    void this.fast(text, generation);
+    if (immediate || this.typingMs <= 0) void this.fast(text, generation);
+    else this.typing = setTimeout(() => { this.typing = undefined; void this.fast(text, generation); }, this.typingMs);
     this.reasks = 0;
     // Armed even when no description search is offered yet: the server's features may only be
     // known once the first page is asked (a search opened before home has loaded).
@@ -131,7 +140,7 @@ export class Search {
       this.pause = undefined;
       this.paused = generation;
       this.describeIfWanted(text, generation);
-    }, PAUSE_MS);
+    }, PAUSE_MS + (immediate ? 0 : this.typingMs));
   }
 
   /** Start the description search once typing has paused, if the list will show it. */
@@ -156,7 +165,7 @@ export class Search {
     const options = this.options({ ...state, ...change });
     if (state.sort === options.sort && state.direction === options.direction && state.kind === options.kind && state.library === options.library) return;
     this.box.update('search', s => ({ ...s, sort: undefined, direction: undefined, kind: undefined, library: undefined, ...options }));
-    this.setQuery(state.query);
+    this.setQuery(state.query, true);
   }
 
   /** The list's next page, from the lane the list shows. Each cursor belongs to its lane and generation. */
@@ -343,6 +352,8 @@ export class Search {
 
   private stopTimers(): void {
     if (this.pause) clearTimeout(this.pause);
+    if (this.typing) clearTimeout(this.typing);
+    this.typing = undefined;
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     this.pause = undefined;

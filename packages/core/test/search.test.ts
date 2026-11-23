@@ -18,7 +18,7 @@ interface FakeAdapter {
 }
 
 /** A session holding one connection to a fake adapter; `descriptive` turns the feature on. */
-function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds' | 'searchLibraries'>, unified = false) {
+function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds' | 'searchLibraries'>, unified = false, typingMs = 0) {
   const resets: (() => void)[] = [];
   const connection = { adapter, images: async () => ({ origin: 'https://server.example' }) };
   const session = {
@@ -30,7 +30,7 @@ function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerC
     onReset: (listener: () => void) => { resets.push(listener); return () => {}; },
   } as unknown as Session;
   const box = new StateBox({ search: initialSearch, libraries: { value: [{ id: 'movies' }, { id: 'shows' }] } } as unknown as VelaState);
-  const search = new Search(box, session, () => 400);
+  const search = new Search(box, session, () => 400, typingMs);
   return { search, session: session as unknown as { features?: unknown }, state: (): SearchState => box.get().search, reset: () => resets.forEach(r => r()) };
 }
 
@@ -41,6 +41,32 @@ async function settle() {
 
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
+
+describe('Search typing', () => {
+  test('typing sends one title search after the last keystroke, not one per key', async () => {
+    const calls: Request[] = [];
+    const { search, state } = harness({ search: async r => { calls.push(r); return answer(r, [title('b', 'Bond')]); } }, false, undefined, false, 180);
+    for (const query of ['j', 'ja', 'jam', 'jame', 'james']) { search.setQuery(query); jest.advanceTimersByTime(100); await settle(); }
+    expect(calls).toHaveLength(0);
+    expect(state()).toMatchObject({ query: 'james', fast: { status: 'loading' } });
+    jest.advanceTimersByTime(80);
+    await settle();
+    expect(calls.map(c => c.query)).toEqual(['james']);
+    expect(state().fast.items.map(c => c.name)).toEqual(['Bond']);
+  });
+
+  test('a changed filter searches at once', async () => {
+    const calls: Request[] = [];
+    const { search } = harness({ search: async r => { calls.push(r); return answer(r, []); } }, false,
+      { searchKinds: ['movie', 'show'] } as Pick<V.ServerCapabilities, 'searchKinds'>, false, 180);
+    search.setQuery('bond');
+    jest.advanceTimersByTime(180);
+    await settle();
+    search.setOptions({ kind: 'movie' });
+    await settle();
+    expect(calls.map(c => c.query)).toEqual(['bond', 'bond']);
+  });
+});
 
 describe('Search', () => {
   test('the fast lane answers; a server without descriptive search says so at once', async () => {
