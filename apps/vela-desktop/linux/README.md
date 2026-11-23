@@ -6,12 +6,35 @@ built-in X11 VO: mpv 0.41 gates that backend on GPL. XWayland is supported via
 Electron's X11 platform. A compositing window manager is required for transparent
 Electron content; no compositor means the browser fallback must be used.
 
-HDR sources are tone-mapped by mpv to sRGB/BT.709. Native Wayland surfaces and
-HDR signaling (`target-colorspace-hint`) are not implemented. VA-API/VDPAU/NVDEC
-availability depends on the audited FFmpeg build, driver and codec. Hardware
-failures can fall back to software decode. Audio passthrough is requested for
-AC3/EAC3/DTS/DTS-HD/TrueHD; actual output depends on the audio device/server.
-ASS/PGS decoding and rendering belong to libmpv/libass.
+Rendering uses mpv's **gpu-next** renderer (libplacebo) through the render API. That renderer
+reached the render API after mpv 0.42.0, so the payload pins mpv master at commit
+3e8aa53ec1. mpv 0.41/0.42's render API only had the old `gpu` renderer, which drops the
+Dolby Vision mapping: Profile 5 showed green and purple. libplacebo applies every Dolby
+Vision profile's RPU (5, 8.1, 8.4; 7 from its base layer and RPU) and uses HDR10+ dynamic
+metadata. X11 has no HDR signalling, so HDR10, HDR10+, HLG and reshaped Dolby Vision are
+tone-mapped to SDR BT.709. HDR is not advertised to the server; `dolbyVisionReshape` is.
+The helper prints the renderer it got (`ready gpu-next`). It falls back to `gpu` only for a
+GL driver libplacebo cannot use. Native Wayland surfaces, HDR output and display-mode
+(refresh-rate) switching are not implemented; the info card reports them as `unsupported`.
+
+VA-API/VDPAU/NVDEC availability depends on the audited FFmpeg build, driver and codec.
+dav1d provides software AV1, because FFmpeg's own AV1 decoder is hardware-only.
+`deinterlace=auto` deinterlaces interlaced frames only. libmpv/libass render ASS/SSA with
+styling, and mpv draws PGS, VobSub and DVB bitmaps. The player menu's subtitle size,
+colour, background and position reach mpv as `sub-*` properties.
+
+Audio follows `playback.json` in Electron's user-data folder, with the same fields as
+Windows (`passthrough`, `exclusive`, `audioDevice`):
+
+- Through PulseAudio/PipeWire (the default), mpv tries AC-3/E-AC-3/DTS/DTS-HD/TrueHD
+  passthrough and decodes when the sink refuses. The default sink's channel count is what
+  the server is told.
+- For bit-perfect output and HDMI high-bit-rate passthrough (TrueHD Atmos, DTS-HD MA/DTS:X),
+  name a direct ALSA device, e.g. `"audioDevice": "alsa/hdmi:CARD=NVidia,DEV=0"`. The
+  receiver's HDMI ELD (`/proc/asound/<card>/eld#*`) then decides which bitstreams are
+  attempted and claimed. A direct device has no mixer, resampler or volume stage.
+- FFmpeg decodes anything not passed through, losslessly for TrueHD and DTS-HD MA, without
+  Atmos/DTS:X objects.
 
 Media uses an ephemeral loopback proxy. Only exact-origin, path-boundary URLs
 receive immutable grant headers. Redirects are checked before each request;
@@ -22,7 +45,7 @@ mpv options or events. Live playback stays at rate 1; no catch-up is issued.
 ## Packaging
 
 Build audited LGPL FFmpeg with shared libraries, GPL/nonfree disabled, and
-libmpv with `-Dgpl=false -Dlibmpv=true -Dcplayer=false`. Enable the OpenGL render
+libmpv with `-Dgpl=false -Dlibmpv=true -Dcplayer=false`, plus dav1d (BSD-2-Clause) for software AV1. Enable the OpenGL render
 API, EGL, audio outputs and desired FFmpeg hardware accelerators. Do not enable
 mpv's built-in X11 VO. The required compiler baseline is Ubuntu 22.04 (glibc 2.35), provided by
 `linux/Dockerfile.jammy`. Compile **both** the libraries and helper inside that
@@ -49,7 +72,7 @@ The prefix must contain `include/`, `lib/`, `notices/` and `provenance.json`:
 
 ```json
 {
-  "mpv": { "version": "0.41.0", "gpl": false },
+  "mpv": { "version": "git-3e8aa53ec1", "gpl": false },
   "ffmpeg": { "version": "8.0.1", "gpl": false, "nonfree": false },
   "sources": [{ "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz", "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41" }],
   "libraries": ["libmpv.so.2", "libavcodec.so.62"]

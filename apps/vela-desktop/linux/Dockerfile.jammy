@@ -5,7 +5,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     build-essential pkg-config python3-pip ninja-build cmake git curl ca-certificates nasm \
     libass-dev libepoxy-dev libegl1-mesa-dev libgl1-mesa-dev libvulkan-dev \
     libva-dev libvdpau-dev libasound2-dev libpulse-dev liblcms2-dev \
-    libx11-dev libxext-dev libxrandr-dev libxpresent-dev libxss-dev \
+    zlib1g-dev libbz2-dev liblzma-dev libx11-dev libxext-dev libxrandr-dev libxpresent-dev libxss-dev \
     libxkbcommon-dev libdrm-dev libgbm-dev libssl-dev \
     xvfb xcompmgr openbox xauth libnss3 libgtk-3-0 libnotify4 libsecret-1-0 \
     libatspi2.0-0 libxshmfence1 libgbm1 libnspr4 uuid-runtime dbus-x11 \

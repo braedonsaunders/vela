@@ -63,26 +63,35 @@ int main(int argc, char **argv) {
         {"config","no"},{"load-scripts","no"},{"terminal","no"},
         {"input-default-bindings","no"},{"input-vo-keyboard","no"},
         {"vo","libmpv"},{"hwdec","auto-safe"},{"gpu-sw","yes"},
-        {"tone-mapping","bt.2390"},{"target-trc","srgb"},{"target-prim","bt.709"},
-        {"audio-spdif","ac3,eac3,dts,dts-hd,truehd"},{"network-timeout","20"},
+        // X11 carries no HDR signalling: libplacebo tone-maps HDR10/HDR10+/HLG and reshaped Dolby Vision to SDR.
+        {"target-trc","srgb"},{"target-prim","bt.709"},{"deinterlace","auto"},
+        {"audio-spdif","ac3,eac3,dts-hd,truehd"},{"network-timeout","20"},
+        {"keep-open","yes"},{"sub-auto","no"},{"audio-file-auto","no"},{"osd-level","0"},
+        {"cache","yes"},{"demuxer-max-bytes","400MiB"},{"demuxer-max-back-bytes","100MiB"},
         {"speed","1"},{"idle","yes"},{"input-ipc-server",argv[2]}
     };
     for (size_t i=0;i<sizeof(options)/sizeof(options[0]);i++)
         if (mpv_set_option_string(mpv,options[i][0],options[i][1])<0) { fprintf(stderr,"Unsupported option: %s\n",options[i][0]); return 6; }
     if (mpv_initialize(mpv)<0) return 7;
     mpv_opengl_init_params gl={.get_proc_address=get_proc};
+    // gpu-next (libplacebo) applies Dolby Vision RPUs and HDR10+ metadata; the older gpu renderer drops
+    // Dolby Vision mapping, so it is only the fallback for a GL driver libplacebo cannot use.
+    const char *renderer=getenv("VELA_MPV_RENDERER") && !strcmp(getenv("VELA_MPV_RENDERER"),"gpu") ? "gpu" : "gpu-next";
     mpv_render_param params[]={
         {MPV_RENDER_PARAM_API_TYPE,MPV_RENDER_API_TYPE_OPENGL},
         {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&gl},
-        {MPV_RENDER_PARAM_X11_DISPLAY,display},{MPV_RENDER_PARAM_INVALID,NULL}
+        {MPV_RENDER_PARAM_X11_DISPLAY,display},{MPV_RENDER_PARAM_RENDERER,(void *)renderer},{MPV_RENDER_PARAM_INVALID,NULL}
     };
     mpv_render_context *render;
-    if (mpv_render_context_create(&render,mpv,params)<0) { mpv_terminate_destroy(mpv); return 8; }
+    if (mpv_render_context_create(&render,mpv,params)<0) {
+        renderer="gpu"; params[3].data=(void *)renderer;
+        if (mpv_render_context_create(&render,mpv,params)<0) { mpv_terminate_destroy(mpv); return 8; }
+    }
     int notify[2]; if (pipe(notify)) return 9;
     fcntl(notify[0],F_SETFL,O_NONBLOCK); fcntl(notify[1],F_SETFL,O_NONBLOCK);
     mpv_render_context_set_update_callback(render,wake,&notify[1]);
     mpv_set_wakeup_callback(mpv,wake,&notify[1]);
-    setvbuf(stdin,NULL,_IONBF,0); puts("ready"); fflush(stdout);
+    setvbuf(stdin,NULL,_IONBF,0); printf("ready %s\n",renderer); fflush(stdout);
     int width=1,height=1,shown=0,running=1;
     while (running) {
         fd_set readfds; FD_ZERO(&readfds); FD_SET(0,&readfds); FD_SET(notify[0],&readfds);
