@@ -47,6 +47,8 @@ internal class PlayerController(
   private var pendingSeek: Double? = null
   /** A seek the server applies (its HLS, an extra): sent as a session command, made when its plan arrives. */
   private var awaitedSeek: Double? = null
+  /** A start-over plan's position, checked once its live window is known: live HLS may join at the edge. */
+  private var pendingLiveStart: Double? = null
   private var wantsPlay = true
   private var displayFacts: VideoFacts? = null
   private var loggedOutput = false
@@ -122,10 +124,13 @@ internal class PlayerController(
       return
     }
     // An initial live join uses the manifest's safe start offset rather than zero
-    // (the oldest segment). Later recovery/reloads must keep explicit positions.
-    val initialLiveJoin = next.live && startedLiveSession != next.sessionId && next.positionSeconds <= 0.0
+    // (the oldest segment). Later recovery/reloads must keep explicit positions. A start-over
+    // plan's playlist begins at the programme's start, where it is joined (its plan position).
+    val firstJoin = next.live && startedLiveSession != next.sessionId
+    val initialLiveJoin = firstJoin && !next.startOver && next.positionSeconds <= 0.0
     if (next.live) startedLiveSession = next.sessionId
     start(next, path, url, source, if (initialLiveJoin) null else next.positionSeconds)
+    if (firstJoin && next.startOver) pendingLiveStart = next.positionSeconds
   }
 
   fun setServerError(failure: Map<String, Any?>?) {
@@ -197,6 +202,7 @@ internal class PlayerController(
     activeSource = source
     state = PlayerState()
     pendingSeek = null
+    pendingLiveStart = null
     awaitSeek(null)
     loggedOutput = false
     report.pathId = path.id
@@ -213,6 +219,9 @@ internal class PlayerController(
         videoChanged()
         host.keepScreenOn(!ambient && state.phase == PlayerState.Phase.PLAYING)
         pendingSeek?.let { if (abs(state.position - it) < 2) pendingSeek = null }
+        // A live window slides under a seek; once playback settles again the seek has landed.
+        if (this.plan?.live == true && state.loaded && !state.pausedForCache) pendingSeek = null
+        startOverPlacement()
         report.publish(state, pendingSeek)
       }
     }
@@ -230,6 +239,7 @@ internal class PlayerController(
             readRetryPosition = position
             state.failure = null
             state.loaded = false
+            state.reconnecting = true
             report.publish(state, null, force = true)
             readRetry = Runnable {
               readRetry = null
@@ -384,10 +394,24 @@ internal class PlayerController(
   }
 
   private fun seek(seconds: Double) {
-    val end = (state.duration ?: Double.MAX_VALUE) - 1
-    val target = max(0.0, min(seconds, end))
+    val target = if (plan?.live == true) {
+      // A live stream has no duration; it seeks inside the window its playlist retains.
+      LiveTimeline.clamp(seconds, state.live ?: return) ?: return
+    } else {
+      val end = (state.duration ?: Double.MAX_VALUE) - 1
+      max(0.0, min(seconds, end))
+    }
     pendingSeek = target
     engine?.seek(target)
+  }
+
+  /** Start over, once the window is known: Media3 honours the plan position given at load, so this only
+   * moves playback that joined the edge instead. */
+  private fun startOverPlacement() {
+    val target = pendingLiveStart ?: return
+    if (state.live == null || !state.loaded) return
+    pendingLiveStart = null
+    if (pendingSeek == null && abs(state.position - target) > 5) seek(target)
   }
 
   // Commands
@@ -397,17 +421,25 @@ internal class PlayerController(
     when (val type = command.text("type") ?: "") {
       "play" -> {
         wantsPlay = true
+        // A long pause on live: the window may have slid past the position. Resume a little inside its
+        // start, never at the edge. A window that expired under the pause and failed the player
+        // (BehindLiveWindowException) already restarted near its start in recover(), still paused.
+        val window = state.live
+        if (plan?.live == true && pendingSeek == null && window != null) {
+          LiveTimeline.resumeTarget(window, state.windowPosition)?.let { seek(it) }
+        }
         engine?.play(true)
       }
       "pause" -> {
         wantsPlay = false
         engine?.play(false)
       }
-      "seek" -> requestSeek(command.number("seconds") ?: return "seek needs seconds")
+      "seek" -> return requestSeek(command.number("seconds") ?: return "seek needs seconds")
       "seekBy" -> {
         val seconds = command.number("seconds") ?: return "seekBy needs seconds"
-        requestSeek((pendingSeek ?: state.position) + seconds)
+        return requestSeek((pendingSeek ?: state.position) + seconds)
       }
+      "catchUp" -> return catchUp()
       "quality", "switchPath" -> return switchPath(command.text("renditionId") ?: command.text("pathId"))
       "volume" -> {
         val value = command.number("value") ?: return "volume needs a value"
@@ -432,17 +464,34 @@ internal class PlayerController(
     return null
   }
 
-  /** A seek: local on an original file; on the server's HLS, a session command whose plan moves the clock. */
-  private fun requestSeek(seconds: Double) {
+  /** A seek: local on an original file and inside a live window; on the server's HLS, a session command
+   * whose plan moves the clock. */
+  private fun requestSeek(seconds: Double): String? {
+    if (plan?.live == true) {
+      val window = state.live ?: return "The live window is not known yet"
+      LiveTimeline.clamp(seconds, window) ?: return "seek needs a finite position"
+      seek(seconds)
+      return null
+    }
     val end = (state.duration ?: Double.MAX_VALUE) - 1
     val target = max(0.0, min(seconds, end))
     if (playsOriginal) {
       seek(target)
-      return
+      return null
     }
     pendingSeek = target
     awaitSeek(target)
     report.sessionCommand(mapOf("kind" to "seek", "positionSeconds" to target))
+    return null
+  }
+
+  /** Back to live: the edge less the latency target, on the device. Playing or paused stays as it was. */
+  private fun catchUp(): String? {
+    if (plan?.live != true) return "Only a live stream can catch up to live"
+    val window = state.live ?: return "The live window is not known yet"
+    val target = LiveTimeline.catchUpTarget(window, pendingSeek ?: state.position) ?: return "No newer live media to catch up to"
+    seek(target)
+    return null
   }
 
   /** Another of the plan's paths: the server switches it and answers with a plan. */

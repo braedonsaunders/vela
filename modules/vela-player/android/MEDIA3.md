@@ -37,6 +37,17 @@ PathRecovery uses only plan-advertised paths and existing generation-aware
 `switch` and `prepare-fallback` session commands. Attempts are bounded per
 session, prefer transcodes, and preserve the current position. The historical
 `mpv-sub-` client-only subtitle identifier is a wire spelling, not an engine.
+
+Live timeshift (pause, rewind, back to live) is local, as on Apple. A live plan's
+snapshot `live` block reads the current Timeline window on Media3's window time,
+which is also `position`: start 0, edge the window's duration, latency the live
+configuration's resolved target offset (else 6 s), segment the HLS target
+duration; `duration` is null. Live `seek`/`seekBy` clamp into [0, edge - 1 s] and
+never become a server session command; `catchUp` seeks to the edge less the
+latency. Resuming a pause the window slid past lands 5 s inside its start; an
+expired window that fails with BehindLiveWindowException restarts near its start
+and keeps the pause. A start-over plan (`live.mode == "startOver"`) loads at its
+plan position instead of the live edge.
 Media3 text and bitmap cues render in the Vela view's subtitle overlay. Embedded
 and external tracks are selected through track overrides without reloading the
 media item.

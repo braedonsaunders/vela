@@ -17,7 +17,13 @@ internal class PlaybackPlan(
   val chapters: List<PlanChapter>,
   val fallbackState: String? = null,
   val live: Boolean = false,
+  /** `live.mode`: adaptive, low-delay or startOver (a growing programme played from its start). */
+  val liveMode: String? = null,
 ) {
+  /** Start over: a live (EVENT) playlist that begins at the programme's start; it is joined at the plan position. */
+  val startOver: Boolean
+    get() = live && liveMode == "startOver"
+
   val selectedPath: PlanPath?
     get() = paths.firstOrNull { it.id == selectedPathId }
 
@@ -30,6 +36,9 @@ internal class PlaybackPlan(
     fun from(value: Map<String, Any?>): PlaybackPlan? {
       return PlaybackPlan(
         live = value.text("channelId") != null || value.map("live") != null,
+        // Only the mode is read from `live`; its window, edgeAt, behindLiveSeconds and timeshift (and the
+        // plan's catchUp block) are the server's view, and the player measures its own window.
+        liveMode = value.map("live")?.text("mode"),
         sessionId = value.text("sessionId") ?: return null,
         revision = value.int("revision") ?: return null,
         sourceGeneration = value.int("sourceGeneration") ?: return null,

@@ -42,6 +42,8 @@ internal class PlayerReport(
   private var lastObservation = 0L
   private var endedReported = ""
   private var failureReported = ""
+  /** Playback is behind live enough to tell the viewer (LiveTimeline.behind), held between snapshots. */
+  private var liveBehind = false
   private val isoTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
     timeZone = TimeZone.getTimeZone("UTC")
   }
@@ -82,6 +84,7 @@ internal class PlayerReport(
       audioClientOnly = false
       subtitleClientOnly = false
       sequence = 0
+      liveBehind = false
     }
     if (!audioClientOnly) {
       audioTrackId = plan.selectedAudioTrackId
@@ -177,10 +180,10 @@ internal class PlayerReport(
       "pendingSubtitleTrackId" to null,
       "subtitleError" to null,
       "subtitleStyle" to if (previewing) null else subtitleLook.snapshot,
-      "live" to null,
+      "live" to if (plan?.live == true) live(state, seekTarget) else null,
       "seekTarget" to seekTarget,
       "preparation" to preparation(state, phase),
-      "duration" to state.duration,
+      "duration" to if (plan?.live == true) null else state.duration,
       "throughputBps" to throughput(state),
       "droppedFrames" to state.droppedFrames,
       "totalFrames" to state.totalFrames,
@@ -208,6 +211,28 @@ internal class PlayerReport(
       return null
     }
     return if (state.tracks.isEmpty()) "media-metadata" else "initial-buffer"
+  }
+
+  /** The model.ts LiveSnapshot: the window on the axis of `position` (Media3's window time, from 0 to the
+   * window's duration), and how far behind live that is. */
+  private fun live(state: PlayerState, seekTarget: Double?): Map<String, Any?> {
+    val position = seekTarget ?: state.position
+    val window = state.live
+    val lag = window?.let { LiveTimeline.lag(it, position) }
+    liveBehind = window != null && LiveTimeline.behind(lag, liveBehind, window.segment) &&
+      LiveTimeline.catchUpTarget(window, position) != null
+    // A stall while playing is the connection, not a seek or a pause.
+    val reconnecting = state.reconnecting ||
+      (state.loaded && state.pausedForCache && !state.paused && !state.seeking && seekTarget == null)
+    return mapOf(
+      "edgeSeconds" to window?.edge,
+      "windowStartSeconds" to window?.start,
+      "driftSeconds" to if (liveBehind) lag else 0.0,
+      "edgeSource" to window?.source,
+      "reconnecting" to reconnecting,
+      "delivery" to if (window != null && !reconnecting) "available" else "unknown",
+      "canCatchUp" to liveBehind,
+    )
   }
 
   private fun video(state: PlayerState): Map<String, Any?>? {

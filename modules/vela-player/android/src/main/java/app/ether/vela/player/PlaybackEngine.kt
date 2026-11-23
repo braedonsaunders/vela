@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -108,6 +109,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   private var refused = false
   private var loggedLiveWindow = false
   private val choices = mutableMapOf<Long, Pair<Tracks.Group, Int>>()
+  private val liveWindow = Timeline.Window()
   private val tick = object : Runnable {
     override fun run() { update(); main.postDelayed(this, 250) }
   }
@@ -264,6 +266,9 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     state.pausedForCache = player.playbackState == Player.STATE_BUFFERING
     state.finished = player.playbackState == Player.STATE_ENDED
     state.position = timeline.titleTime(player.currentPosition.coerceAtLeast(0) / 1000.0)
+    state.windowPosition = player.currentPosition / 1000.0
+    state.live = if (plan?.live == true) readLiveWindow() else null
+    if (player.playbackState == Player.STATE_READY) state.reconnecting = false
     state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let(timeline::titleTime)
     state.cacheAhead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000.0
     player.videoDecoderCounters?.let { counters ->
@@ -279,6 +284,23 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
         "light" to if (format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION) "dolby-vision" else "")
     }
     onChange()
+  }
+
+  /** The live window on the axis of `position`: Media3's window time, from 0 to the window's duration.
+   * A start-over (EVENT) playlist's window grows from the programme's start; once it ends (ENDLIST) it is
+   * still the window. Latency is the target offset the live configuration resolved (18 s, clamped to the
+   * window), which is where Media3 joins; the segment is the playlist's target duration. */
+  private fun readLiveWindow(): LiveWindow? {
+    val timeline = player.currentTimeline
+    if (timeline.isEmpty || player.currentMediaItemIndex >= timeline.windowCount) return null
+    val window = timeline.getWindow(player.currentMediaItemIndex, liveWindow)
+    val durationMs = window.durationMs
+    if (durationMs == C.TIME_UNSET || durationMs <= 0) return null
+    val target = window.liveConfiguration?.targetOffsetMs?.takeIf { it != C.TIME_UNSET && it > 0 }
+    val playlist = (player.currentManifest as? HlsManifest)?.mediaPlaylist
+    val segment = playlist?.targetDurationUs?.takeIf { it > 0 }?.div(1_000_000.0)
+    return LiveWindow(start = 0.0, edge = durationMs / 1000.0, latency = target?.div(1000.0) ?: 6.0,
+      segment = segment ?: 2.0, source = if (playlist != null) "playlist" else "seekable")
   }
 
   override fun attach(surface: Surface?) { player.setVideoSurface(surface) }
