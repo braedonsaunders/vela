@@ -29,6 +29,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val content = FrameLayout(context)
   private val video = SurfaceView(context)
   private val subtitleLayer = androidx.media3.ui.SubtitleView(context)
+  private val assLayer = AssOverlay(context)
   private val previewVideo = TextureView(context)
   private val previewPaint = Paint()
   private var previewAlpha = -1
@@ -107,6 +108,8 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     }
     content.addView(video, videoLayout())
     content.addView(subtitleLayer, videoLayout())
+    content.addView(assLayer, videoLayout())
+    assLayer.source = { bitmap, force -> controller.renderAss(bitmap, force) }
     report.subtitleLook = SubtitleLook.from { lookStore.getString(it, null) }
     subtitleLook(report.subtitleLook, persist = false)
     addView(content, videoLayout())
@@ -125,6 +128,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
 
   private fun usePreview(enabled: Boolean) {
     if (previewMode == enabled) return
+    if (enabled) assLayer.stop() else if (isAttachedToWindow) assLayer.start()
     if (enabled) {
       controller.releaseForPreview()
       content.removeView(video)
@@ -217,6 +221,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
     applyProps()
+    if (!previewMode) assLayer.start()
     preview.setOnScreen(windowVisibility == View.VISIBLE)
   }
 
@@ -252,8 +257,11 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       video.layout(x, y, x + videoWidth, y + videoHeight)
       subtitleLayer.measure(MeasureSpec.makeMeasureSpec(videoWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(videoHeight, MeasureSpec.EXACTLY))
       subtitleLayer.layout(x, y, x + videoWidth, y + videoHeight)
+      assLayer.measure(MeasureSpec.makeMeasureSpec(videoWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(videoHeight, MeasureSpec.EXACTLY))
+      assLayer.layout(x, y, x + videoWidth, y + videoHeight)
     } else {
       subtitleLayer.layout(0, 0, width, height)
+      assLayer.layout(0, 0, width, height)
     }
   }
 

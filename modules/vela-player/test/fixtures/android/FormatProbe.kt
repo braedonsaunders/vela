@@ -117,5 +117,12 @@ fun main() {
   check(DolbyVision.rewrite(access) { seen = it; converted }!!.contentEquals(four + vps + four + slice + four + converted))
   check(seen!!.contentEquals(rpu))
   check(DolbyVision.rewrite(four + vps + four + slice) { null } == null)
+  // Matroska ASS samples as MatroskaExtractor emits them, for libass.
+  val (duration, chunk) = AssSample.parse("Dialogue: 0:00:00:00,0:00:02:50,3,0,Default,,0,0,0,,{\\pos(1,2)}Hi, there".toByteArray())!!
+  check(duration == 2500L && String(chunk) == "3,0,Default,,0,0,0,,{\\pos(1,2)}Hi, there")
+  check(AssSample.timecodeMs("1:02:03:04") == 3_723_040L && AssSample.timecodeMs("0:00:01.50") == 1500L)
+  check(AssSample.parse("Comment: 0:00:00:00,0:00:01:00,x".toByteArray()) == null)
+  check(AssSample.parse("Dialogue: 0:00:00:00".toByteArray()) == null)
+  check(AssSample.parse("Dialogue: 0:00:00:00,bad,x".toByteArray()) == null)
   println("Android formats, display matching and subtitle appearance passed")
 }

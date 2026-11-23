@@ -124,11 +124,24 @@ input/output format and every change of Snapshot.format.
 
 ## Subtitles
 
-The CC menu's size, colour, background and position apply to text cues and are
-kept in the app's preferences. ASS/SSA is Media3's SsaParser: colours, italics,
-bold, alignment and \pos placement survive; fonts, outlines, karaoke and
-animated tags do not (libass is future work). PGS, VobSub and DVB are Media3
-bitmap cues.
+ASS/SSA in Matroska is drawn by libass 0.17.5 (with HarfBuzz shaping, FriBidi
+and FreeType), so positioning, rotation, movement, borders, shadows, karaoke and
+fades render as authored. Subtitle transcoding runs after the extractor tap, so
+the tap hands libass each raw event with its absolute time while Media3 still
+builds its own cues; for the selected ASS track those cues are suppressed and
+the overlay (AssOverlay) draws libass frames on every display frame, timed to the
+video frame on screen (VideoFrameMetadataListener) rather than the audio clock.
+Android has no font provider for libass: fonts embedded in the script are used,
+and every other family falls back to Roboto (Noto Sans CJK for Chinese, Japanese
+or Korean system languages). Matroska font attachments are not read yet. If the
+library is missing, Media3's SsaParser cues are shown instead (colours, italics,
+bold, alignment and placement only). Build libass with
+`modules/vela-player/android/ass/build.sh` (pinned sources, meson/ninja) before
+Gradle.
+
+The CC menu's size, colour, background and position apply to text cues (SRT,
+WebVTT, TTML and Media3's SSA fallback) and are kept in the app's preferences;
+an ASS track keeps its own styling. PGS, VobSub and DVB are Media3 bitmap cues.
 
 ## Containers
 
@@ -142,7 +155,9 @@ and has no readers for HDMV LPCM, TrueHD, PGS or VC-1 in TS, and parses 0x86
 Shipped native code: Media3 (Apache-2.0), FFmpeg 6.0.1 audio decoders built with
 GPL, nonfree and version3 disabled (LGPL-2.1, relinkable from the pinned source
 and build script), and libdovi (MIT) with its Rust dependencies (MIT/Apache-2.0,
-used under MIT). Their texts are in assets/vela-licenses. Passthrough sends Dolby
+used under MIT), libass (ISC), HarfBuzz (MIT), FreeType (FreeType License) and
+FriBidi (LGPL-2.1, static, relinkable from the pinned source and ass/build.sh).
+Their texts are in assets/vela-licenses. Passthrough sends Dolby
 and DTS bitstreams unchanged; decoding them uses FFmpeg's independent decoders,
 not licensed Dolby or DTS implementations, and patent licensing for that use is
 the distributor's responsibility where patents remain. Dolby Vision processing is

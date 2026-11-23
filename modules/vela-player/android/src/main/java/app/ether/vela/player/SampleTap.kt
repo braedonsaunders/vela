@@ -1,7 +1,10 @@
 // Extractor-level taps on original files: every track passes through untouched except
 //   - TrueHD, whose first access units are read (not changed) for the Atmos presentation flag, and
-//   - Dolby Vision Profile 7, converted to 8.1 or reduced to its HDR10 base layer (DolbyVision.plan).
-// Server HLS does not come through here; it never carries either.
+//   - Dolby Vision Profile 7, converted to 8.1 or reduced to its HDR10 base layer (DolbyVision.plan), and
+//   - ASS/SSA, whose raw events (with their absolute times) also go to libass (AssSubtitles).
+// Subtitle transcoding (Media3's parse-during-extraction) is applied here, after the tap, instead of inside
+// each extractor, so the tap sees raw subtitle samples; Media3's cues are unchanged.
+// Server HLS does not come through here.
 package app.ether.vela.player
 
 import android.net.Uri
@@ -17,7 +20,9 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.PositionHolder
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
+import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleParser
+import androidx.media3.extractor.text.SubtitleTranscodingExtractorOutput
 import java.io.EOFException
 
 /** What the taps need of the device, and where they report (on the loading thread). */
@@ -26,40 +31,50 @@ internal class TapPolicy(
   val convertsDolbyVision: Boolean,
   val onTrueHd: (formatId: String?, atmos: Boolean) -> Unit,
   val onDolbyVision: (formatId: String?, profile: Int, action: DolbyVisionAction) -> Unit,
+  /** Raw ASS/SSA tracks and events go to libass when set. */
+  val ass: AssSubtitles? = null,
 )
 
 internal class TappedExtractorsFactory(private var base: ExtractorsFactory, private val policy: TapPolicy) : ExtractorsFactory {
+  // Media3 configures subtitle parsing through the factory. The wrapped extractors emit raw subtitle samples;
+  // the tapped output transcodes them with the configured parsers after the tap.
+  private var transcode = true
+  private var parsers: SubtitleParser.Factory = DefaultSubtitleParserFactory()
+  init { base = base.experimentalSetTextTrackTranscodingEnabled(false) }
+
   override fun createExtractors(): Array<Extractor> = wrap(base.createExtractors())
   override fun createExtractors(uri: Uri, responseHeaders: Map<String, List<String>>): Array<Extractor> =
     wrap(base.createExtractors(uri, responseHeaders))
 
-  // Media3 configures subtitle parsing through the factory; it must reach the wrapped one.
   override fun experimentalSetTextTrackTranscodingEnabled(textTrackTranscodingEnabled: Boolean): ExtractorsFactory =
-    apply { base = base.experimentalSetTextTrackTranscodingEnabled(textTrackTranscodingEnabled) }
+    apply { transcode = textTrackTranscodingEnabled }
   override fun setSubtitleParserFactory(subtitleParserFactory: SubtitleParser.Factory): ExtractorsFactory =
-    apply { base = base.setSubtitleParserFactory(subtitleParserFactory) }
+    apply { parsers = subtitleParserFactory; base = base.setSubtitleParserFactory(subtitleParserFactory) }
   override fun experimentalSetCodecsToParseWithinGopSampleDependencies(codecsToParseWithinGopSampleDependencies: Int): ExtractorsFactory =
     apply { base = base.experimentalSetCodecsToParseWithinGopSampleDependencies(codecsToParseWithinGopSampleDependencies) }
   override fun setParseHagcMetadata(parseHagcMetadata: Boolean): ExtractorsFactory =
     apply { base = base.setParseHagcMetadata(parseHagcMetadata) }
 
   private fun wrap(extractors: Array<Extractor>): Array<Extractor> =
-    extractors.map { TappedExtractor(it, policy) }.toTypedArray()
+    extractors.map { TappedExtractor(it, policy, if (transcode) parsers else null) }.toTypedArray()
 }
 
-private class TappedExtractor(private val inner: Extractor, private val policy: TapPolicy) : Extractor {
+private class TappedExtractor(private val inner: Extractor, private val policy: TapPolicy, private val parsers: SubtitleParser.Factory?) : Extractor {
   private val taps = mutableListOf<TrackTap>()
   override fun sniff(input: ExtractorInput) = inner.sniff(input)
   override fun getSniffFailureDetails() = inner.sniffFailureDetails
-  override fun init(output: ExtractorOutput) = inner.init(object : ExtractorOutput {
-    override fun track(id: Int, type: Int): TrackOutput {
-      val track = output.track(id, type)
-      if (type != C.TRACK_TYPE_AUDIO && type != C.TRACK_TYPE_VIDEO) return track
-      return TrackTap(track, policy).also { taps += it }
-    }
-    override fun endTracks() = output.endTracks()
-    override fun seekMap(seekMap: SeekMap) = output.seekMap(seekMap)
-  })
+  override fun init(output: ExtractorOutput) {
+    val downstream = parsers?.let { SubtitleTranscodingExtractorOutput(output, it) } ?: output
+    inner.init(object : ExtractorOutput {
+      override fun track(id: Int, type: Int): TrackOutput {
+        val track = downstream.track(id, type)
+        if (type != C.TRACK_TYPE_AUDIO && type != C.TRACK_TYPE_VIDEO && type != C.TRACK_TYPE_TEXT) return track
+        return TrackTap(track, policy).also { taps += it }
+      }
+      override fun endTracks() = downstream.endTracks()
+      override fun seekMap(seekMap: SeekMap) = downstream.seekMap(seekMap)
+    })
+  }
   override fun read(input: ExtractorInput, seekPosition: PositionHolder) = inner.read(input, seekPosition)
   override fun seek(position: Long, timeUs: Long) {
     taps.forEach(TrackTap::discard)
@@ -70,7 +85,7 @@ private class TappedExtractor(private val inner: Extractor, private val policy: 
 }
 
 private class TrackTap(private val track: TrackOutput, private val policy: TapPolicy) : TrackOutput {
-  private enum class Mode { PASS, INSPECT_TRUEHD, DOLBY_VISION }
+  private enum class Mode { PASS, INSPECT_TRUEHD, DOLBY_VISION, ASS }
   private var mode = Mode.PASS
   private var action = DolbyVisionAction.KEEP
   private var formatId: String? = null
@@ -83,6 +98,15 @@ private class TrackTap(private val track: TrackOutput, private val policy: TapPo
   override fun format(format: Format) {
     formatId = format.id
     val mime = format.sampleMimeType
+    if (mime == MimeTypes.TEXT_SSA && policy.ass != null) {
+      // initializationData: Media3's Matroska format line, then the script header (codec private).
+      format.initializationData.getOrNull(1)?.let { header ->
+        policy.ass.track(format.id.orEmpty(), header)
+        mode = Mode.ASS
+      }
+      track.format(format)
+      return
+    }
     if (mime == MimeTypes.AUDIO_TRUEHD) {
       if (mode != Mode.INSPECT_TRUEHD) { mode = Mode.INSPECT_TRUEHD; inspected = 0 }
       track.format(format)
@@ -133,10 +157,11 @@ private class TrackTap(private val track: TrackOutput, private val policy: TapPo
   private fun accepted(at: Int, length: Int, part: Int) {
     pendingSize += length
     if (part != TrackOutput.SAMPLE_DATA_PART_MAIN) opaque = true
-    if (mode == Mode.INSPECT_TRUEHD) {
-      // Read, never altered: the bytes go straight on, and only the first ones stay for the parse.
+    if (mode == Mode.INSPECT_TRUEHD || mode == Mode.ASS) {
+      // Read, never altered: the bytes go straight on. TrueHD keeps only its first bytes for the parse;
+      // an ASS sample is kept whole for libass.
       track.sampleData(ParsableByteArray(pending.copyOfRange(at, at + length)), length, part)
-      pendingSize = minOf(pendingSize, INSPECT_BYTES)
+      if (mode == Mode.INSPECT_TRUEHD) pendingSize = minOf(pendingSize, INSPECT_BYTES)
     }
   }
 
@@ -153,6 +178,13 @@ private class TrackTap(private val track: TrackOutput, private val policy: TapPo
         track.sampleMetadata(timeUs, flags, size, offset, cryptoData)
       }
       Mode.DOLBY_VISION -> emit(timeUs, flags, size, offset, cryptoData)
+      Mode.ASS -> {
+        val end = pendingSize - offset
+        if (end - size >= 0 && cryptoData == null) policy.ass?.event(formatId.orEmpty(), timeUs, pending.copyOfRange(end - size, end))
+        System.arraycopy(pending, end.coerceAtLeast(0), pending, 0, pendingSize - end.coerceAtLeast(0))
+        pendingSize -= end.coerceAtLeast(0)
+        track.sampleMetadata(timeUs, flags, size, offset, cryptoData)
+      }
     }
   }
 

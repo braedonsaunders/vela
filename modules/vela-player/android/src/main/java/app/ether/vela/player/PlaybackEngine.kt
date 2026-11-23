@@ -31,6 +31,8 @@ internal interface PlaybackEngine {
   fun volume(value: Float)
   fun seek(seconds: Double)
   fun select(type: String, id: Long?)
+  /** Draws the selected ASS/SSA track at the playing position: -1 none selected, 0 unchanged, 1 drawn, 2 blank. */
+  fun renderAss(bitmap: android.graphics.Bitmap, force: Boolean): Int
   fun release()
 }
 
@@ -45,8 +47,16 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   private val selector = DefaultTrackSelector(context)
   private val grant = MediaAccessStore.current
   private val buffering = playbackBuffering(preview || shared, live)
+  /** libass for full-screen ASS/SSA; null keeps Media3's own SSA cues. */
+  private val ass: AssSubtitles? = if (preview || shared) null else AssSubtitles.create()
+  /** Format id of the selected subtitle track when libass draws it. */
+  private var assTrack: String? = null
+  /** The last video frame sent to the display: its media time and system release time (nanoTime). */
+  @Volatile private var framePts = -1L
+  @Volatile private var frameRelease = 0L
   // Facts from the loading thread reach the state on the main thread.
   private val taps = TapPolicy(
+    ass = ass,
     dolbyVisionDecoderProfiles = PlayerCapabilities.dolbyVisionDecoderProfiles(),
     convertsDolbyVision = DolbyVision.convertsProfile7,
     onTrueHd = { id, atmos ->
@@ -109,6 +119,11 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
       .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, preview)
       .setTunnelingEnabled(!preview && !shared && context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION)
       .build()
+    // Subtitles drawn by libass follow the picture on screen, not the audio clock.
+    if (ass != null) player.setVideoFrameMetadataListener { presentationTimeUs, releaseTimeNs, _, _ ->
+      framePts = presentationTimeUs
+      frameRelease = releaseTimeNs
+    }
     if (!preview) player.addAnalyticsListener(object : AnalyticsListener {
       override fun onAudioDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
         Log.i("vela-media3", "audio decoder $decoderName")
@@ -151,7 +166,8 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
         Log.i("vela-media3", "live window ${window.durationMs / 1000.0}s; initial ${player.currentPosition / 1000.0}s; default ${window.defaultPositionMs / 1000.0}s; speed ${player.playbackParameters.speed}")
       }
       override fun onRenderedFirstFrame() { state.hasFrame = true; update() }
-      override fun onCues(cueGroup: CueGroup) { onSubtitleCues(cueGroup) }
+      // libass draws the selected ASS track; Media3's plainer cues for it would be a second copy.
+      override fun onCues(cueGroup: CueGroup) { onSubtitleCues(if (assTrack != null) CueGroup.EMPTY_TIME_ZERO else cueGroup) }
       override fun onTracksChanged(tracks: Tracks) {
         updateTracks(tracks)
         // ExoPlayer can otherwise play supported audio while silently omitting unsupported video.
@@ -204,6 +220,13 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   }
 
   private fun updateTracks(tracks: Tracks) {
+    // Transcoded subtitle formats keep the source MIME type in codecs.
+    assTrack = tracks.groups.firstNotNullOfOrNull { group ->
+      if (group.type != C.TRACK_TYPE_TEXT) return@firstNotNullOfOrNull null
+      (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { group.getTrackFormat(it) }
+        ?.takeIf { it.codecs == MimeTypes.TEXT_SSA || it.sampleMimeType == MimeTypes.TEXT_SSA }
+        ?.id?.takeIf { ass?.has(it) == true }
+    }
     choices.clear()
     state.audioId = null
     state.subtitleId = null
@@ -262,5 +285,14 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     if (choice != null) params.addOverride(TrackSelectionOverride(choice.first.mediaTrackGroup, choice.second))
     selector.parameters = params.build()
   }
-  override fun release() { main.removeCallbacks(tick); player.release() }
+  override fun renderAss(bitmap: android.graphics.Bitmap, force: Boolean): Int {
+    val track = assTrack ?: return -1
+    val width = (state.videoParams["w"] as? Long)?.toInt() ?: 0
+    val height = (state.videoParams["h"] as? Long)?.toInt() ?: 0
+    // While playing, the picture tracks the last released frame (whose release may be up to a frame ahead).
+    val since = (System.nanoTime() - frameRelease) / 1_000_000
+    val time = if (player.isPlaying && framePts >= 0 && since in -100..250) framePts / 1000 + since else player.currentPosition
+    return ass?.render(track, time, bitmap, width, height, force) ?: -1
+  }
+  override fun release() { main.removeCallbacks(tick); player.release(); ass?.release() }
 }

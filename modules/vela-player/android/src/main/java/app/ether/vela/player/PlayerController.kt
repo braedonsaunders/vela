@@ -518,6 +518,9 @@ internal class PlayerController(
     return null
   }
 
+  /** The selected ASS/SSA track drawn by libass at the playing position (PlaybackEngine.renderAss). */
+  fun renderAss(bitmap: android.graphics.Bitmap, force: Boolean): Int = engine?.renderAss(bitmap, force) ?: -1
+
   /** Replays the plan as if it had just arrived. */
   private fun retry() {
     val plan = plan ?: return
