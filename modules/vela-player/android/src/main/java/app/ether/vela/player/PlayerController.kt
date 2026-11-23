@@ -244,6 +244,7 @@ internal class PlayerController(
     }
     host.surface?.let { client.attach(it) }
     displayFacts = if (path.isOriginalFile) DisplayMatching.facts(path.originalFrameRate) else null
+    if (path.isOriginalFile) client.state.format.declaredFrameRate = path.originalFrameRate
     if (ownsDisplay) host.preferDisplay(displayFacts)
     client.volume(if (ambient || report.muted) 0f else report.volume.toFloat())
     client.load(url, plan, position)

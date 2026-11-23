@@ -49,7 +49,10 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   private val taps = TapPolicy(
     dolbyVisionDecoderProfiles = PlayerCapabilities.dolbyVisionDecoderProfiles(),
     convertsDolbyVision = DolbyVision.convertsProfile7,
-    onTrueHd = { id, atmos -> main.post { state.format.trueHdAtmos[id.orEmpty()] = atmos } },
+    onTrueHd = { id, atmos ->
+      Log.i("vela-media3", "truehd major sync: atmos $atmos")
+      main.post { state.format.trueHdAtmos[id.orEmpty()] = atmos }
+    },
     onDolbyVision = { id, profile, action ->
       Log.i("vela-media3", "dolby vision profile $profile: $action")
       main.post { state.format.dolbyVision[id.orEmpty()] = profile to action }

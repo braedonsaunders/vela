@@ -170,7 +170,7 @@ internal class PlayerReport(
       "renditionId" to null,
       "lockedQuality" to null,
       "video" to video(state),
-      "format" to if (previewing) null else state.format.snapshot(display(state.format.frameRate ?: state.frameRate)),
+      "format" to if (previewing) null else format(state),
       "currentBitrateBps" to null,
       "requiredBandwidthBps" to null,
       "bufferAheadSeconds" to state.cacheAhead,
@@ -189,6 +189,18 @@ internal class PlayerReport(
       "subtitleTrackId" to subtitleTrackId,
       "failure" to state.failure?.let { mapOf("kind" to state.failureKind, "message" to it, "recoverable" to false) },
     )
+  }
+
+  private var loggedFormat: Map<String, Any?>? = null
+
+  /** Snapshot.format, logged when it changes so a device's logcat shows what the info card shows. */
+  private fun format(state: PlayerState): Map<String, Any?> {
+    val format = state.format.snapshot(display(state.format.frameRate ?: state.frameRate))
+    if (format != loggedFormat) {
+      loggedFormat = format
+      android.util.Log.i("vela-media3", "format $format")
+    }
+    return format
   }
 
   private fun preparation(state: PlayerState, phase: String): String? {

@@ -32,7 +32,11 @@ internal class PlaybackFormatFacts {
   private val sourceDolbyVision: Pair<Int, DolbyVisionAction>?
     get() = dolbyVision[video?.id.orEmpty()] ?: dolbyVision.values.singleOrNull()
 
-  val frameRate: Double? get() = video?.frameRate?.toDouble()?.takeIf { it > 0 }?.let(DisplayModes::exactRate)
+  /** The server's probed frame rate of an original: Matroska often gives Media3 none. */
+  var declaredFrameRate: Double? = null
+
+  val frameRate: Double?
+    get() = (video?.frameRate?.toDouble()?.takeIf { it > 0 } ?: declaredFrameRate?.takeIf { it > 0 })?.let(DisplayModes::exactRate)
 
   private fun video(): Map<String, Any>? {
     val format = video ?: return null
@@ -95,12 +99,17 @@ internal class PlaybackFormatFacts {
     val channels = Integer.bitCount(track.channelConfig)
     val sourceChannels = source?.channelCount?.takeIf { it > 0 }
     val sourceRate = source?.sampleRate?.takeIf { it > 0 }
-    val downmixed = pcm && sourceChannels != null && channels < sourceChannels
-    val resampled = pcm && sourceRate != null && track.sampleRate != sourceRate
+    // The route can fold the AudioTrack further: Android's mixer downmixes to the device's channels and
+    // resamples to its rates (an emulator or a phone speaker: 2 channels at 48 kHz).
+    val routeChannels = route?.maxChannels?.takeIf { it > 0 }
+    val routeRate = route?.maxSampleRate
+    val downmixed = pcm && ((sourceChannels != null && channels < sourceChannels) || (routeChannels != null && routeChannels < channels))
+    val resampled = pcm && ((sourceRate != null && track.sampleRate != sourceRate) || (routeRate != null && routeRate < track.sampleRate))
     return buildMap {
       put("delivery", if (pcm) "decoded" else "passthrough")
       put("codec", if (pcm) "pcm" else AudioRoute.passthroughToken(track.encoding) ?: "bitstream")
-      if (channels > 0) { put("channels", channels); AvFormats.layout(channels)?.let { put("layout", it) } }
+      val delivered = if (pcm && routeChannels != null) minOf(channels, routeChannels) else channels
+      if (delivered > 0) { put("channels", delivered); AvFormats.layout(delivered)?.let { put("layout", it) } }
       if (track.sampleRate > 0) put("sampleRate", track.sampleRate)
       if (pcm) pcmBits(track.encoding)?.let { put("bitDepth", it) }
       if (pcm) { put("downmixed", downmixed); put("resampled", resampled) }
