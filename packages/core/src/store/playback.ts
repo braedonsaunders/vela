@@ -113,6 +113,8 @@ export class Playback {
   private subtitle: string | null | undefined;
   private externalId: string | undefined;
   private follow: AbortController | undefined;
+  /** Read the followed session's snapshot now (servers without an event stream), not at the next poll. */
+  private followNow: ((sessionId: string) => void) | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private media: { identity: string; handle: string } | undefined;
   /** The version read in flight, so a second ask for the same session shares it. */
@@ -319,6 +321,10 @@ export class Playback {
       if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
     };
     const adapter = connection.adapter;
+    this.followNow = hasEventStream(adapter) ? undefined : id => {
+      if (id !== sessionId || this.run !== run || controller.signal.aborted) return;
+      void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(snapshot.plan)); }).catch(() => undefined);
+    };
     const loop = async () => {
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
         try {
@@ -561,6 +567,8 @@ export class Playback {
     const connection = await this.session.ready();
     const sent = connection.adapter.reportObservation(sessionId, observation);
     this.reporting = sent.catch(() => undefined);
+    // A session may go on past the player's end (a multi-part title's next part): show its plan at once.
+    if (ended) void sent.then(() => this.followNow?.(sessionId), () => undefined);
     return sent;
   }
 
@@ -649,6 +657,7 @@ export class Playback {
     this.run = undefined;
     this.follow?.abort();
     this.follow = undefined;
+    this.followNow = undefined;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     if (this.versionsTimer) clearTimeout(this.versionsTimer);
