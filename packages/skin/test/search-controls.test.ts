@@ -3,6 +3,8 @@ import { searchCollection, SEARCH_VOCABULARY } from '../src/widgets/search/vocab
 import { searchView } from '../src/widgets/search/view';
 import { initialSearch } from '../../core/src/store/search';
 import type { Env, Ctx } from '../src/vocabulary';
+import { searchControls, searchPaging } from '../src/resolve/vela-base/search';
+import type { BoxNode, RepeatNode, WidgetNode } from '../../protocol/skin';
 
 test('server kinds and sorts preserve labels, order and unknown plugin IDs', () => {
   const env = { search: searchView({ ...initialSearch, query: 'portal', kind: 'game', searchKinds: [{ id: 'game', label: 'Video games' }, { id: 'custom_kind' }], searchSorts: [{ id: 'play_time', label: 'Play time', directions: ['desc'] }] }) } as Env;
@@ -41,4 +43,22 @@ test('an empty answer under a kind or library restriction is about the filters, 
   expect(SEARCH_VOCABULARY['search.filtered'](c, env)).toBe('false');
   env.search = searchView({ ...initialSearch, query: 'heat', searchLibraries: true, library: 'z' });
   expect(SEARCH_VOCABULARY['search.filtered'](c, env)).toBe('true');
+});
+
+test('every search control shows focus: lifted, ringed in the accent, the chosen kind keeping its fill', () => {
+  const kinds = (searchControls as BoxNode).children![0] as BoxNode;
+  const chip = (kinds.children![0] as RepeatNode).item as BoxNode;
+  const selects = (searchControls as BoxNode).children!.slice(1) as WidgetNode[];
+  const more = ((searchPaging as BoxNode).children ?? []) as BoxNode[];
+  for (const control of [chip, ...selects, ...more]) {
+    expect(control.focus?.scale).toBe('1.06');
+    expect(control.focus?.['box-shadow']).toContain('$ui.accent');
+    expect(control.focus?.['box-shadow']).toContain('$ui.focusHalo');
+  }
+  expect(selects.map(select => select.widget)).toEqual(['select', 'select', 'select']);
+  // The chosen chip is filled with the ink: focus lifts and rings it without washing that out.
+  const chosen = chip.states![0]!;
+  expect(chosen.style['background-color']).toBe('$ui.ink');
+  expect(chosen.focus?.['background-color']).toBeUndefined();
+  expect(chosen.focus?.scale).toBe('1.06');
 });

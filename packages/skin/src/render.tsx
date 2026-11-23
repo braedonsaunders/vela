@@ -22,7 +22,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Children, memo, cloneElement, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
+import { Children, Fragment, memo, cloneElement, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -118,6 +118,8 @@ interface RouteLayoutValue {
   onScroll(listener: () => void): () => void;
 }
 const RouteLayout = createContext<RouteLayoutValue | null>(null);
+/** What a host draws first in a route's own scroll, before the document's nodes (SkinRoute's `lead`). */
+const RouteLead = createContext<ReactNode>(null);
 /** A horizontal row's scroll, which its lazily drawn items hear of (LazyRepeat). */
 const RowScroll = createContext<ScrollListeners | null>(null);
 const LoadingLibraryNav = createContext(false);
@@ -228,9 +230,10 @@ function FitCell({ id, fit, measure, children }: { id: string; fit: string | nul
 }
 
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
- * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
-function SkinRouteView({ host, node, after, hideLibraryViews = false, openingFocus = true }: {
-  host: SkinHost; node: RNode; after?: RNode; hideLibraryViews?: boolean;
+ * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is
+ * open); `lead` is the host's own element drawn first in that scroll (Apple TV search's Back). */
+function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = false, openingFocus = true }: {
+  host: SkinHost; node: RNode; after?: RNode; lead?: ReactNode; hideLibraryViews?: boolean;
   /** Off where focus belongs elsewhere as the route opens (Apple TV's search keyboard above results). */
   openingFocus?: boolean;
 }) {
@@ -284,7 +287,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false, openingFoc
     <View style={{ flex: 1 }}>
       <TrackedHost host={host}><NavFit.Provider value={null}>
         <EpisodeNavigation.Provider value={episodeNav}><RouteFocusContext.Provider value={focus}>
-          <RouteLayout.Provider value={layout}>
+          <RouteLayout.Provider value={layout}><RouteLead.Provider value={lead}>
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
               <HiddenLibraryNav.Provider value={hideLibraryViews || floatingLibraryNav}>
                 {floatingLibraryNav && host.env.load !== 'ready' ? (
@@ -292,7 +295,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false, openingFoc
                 ) : <SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} />}
               </HiddenLibraryNav.Provider>
             </InstantContent.Provider>
-          </RouteLayout.Provider>
+          </RouteLead.Provider></RouteLayout.Provider>
         </RouteFocusContext.Provider></EpisodeNavigation.Provider>
       </NavFit.Provider></TrackedHost>
       {cover || leaving ? (
@@ -313,7 +316,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false, openingFoc
   );
 }
 
-export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after
+export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after && a.lead === b.lead
   && a.hideLibraryViews === b.hideLibraryViews && a.openingFocus === b.openingFocus
   && sameRouteHost(a.host, b.host, [b.node, b.after, b.host.doc.libraryViews]));
 
@@ -653,6 +656,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const host = useHost();
   const measuring = useContext(Measuring);
   const reportNav = useContext(NavFit);
+  const lead = useContext(RouteLead);
   const { env, viewport } = host;
   const [cardMenu, setCardMenu] = useState<{ anchor: CardMenuAnchor; mode: CardMenuOpenMode } | null>(null);
   // Only the hero reads the hero's count and index: every other box redraws without them.
@@ -781,6 +785,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     ? <ReadingStop.Provider key={i} value><SkinNode node={child} ctx={ctx} /></ReadingStop.Provider>
     : <SkinNode key={i} node={child} ctx={ctx} />);
   if (after) children.push(<SkinNode key="after" node={after} ctx={ctx} />);
+  if (route && lead) children.unshift(<Fragment key="lead">{lead}</Fragment>);
   let content: ReactNode = children;
   if (fx.grid) {
     // A grid's cells are its drawn items: a repeat contributes one cell per item, as CSS grid
@@ -1607,6 +1612,9 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   );
 }
 
+/** Widgets whose press target draws no focus itself: their box shows it. */
+const RINGED_WIDGETS = new Set(['select']);
+
 /** A widget draws inside its node's box. The widget reports its own hover and focus
  * (useWidgetInteraction), and the box shows the node's hover and focus looks for them. */
 function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: Ctx }) {
@@ -1623,13 +1631,17 @@ function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: 
     },
   }), [group, routeFocus]);
   const { style, text, fx } = useLeafStyle(node, ctx, ui);
+  const { still } = useHost().env;
   const Part = WIDGETS[node.widget];
   const Frame = frameFor(node);
   if (fx.hidden || !Part) return null;
+  // A focused drop-down always shows it: in its document's focus look, else the shared ring (as a
+  // press box without a look of its own), since the widget draws no focus of its own.
+  const ring = ui.focus && RINGED_WIDGETS.has(node.widget) && !focusLook(node) ? focusStyle(style.transform, still) : undefined;
   return (
     <Inherited.Provider value={text}>
       <WidgetInteractionContext.Provider value={interaction}>
-        <Frame style={style as ViewStyle}><Part params={node.params} ctx={ctx} /></Frame>
+        <Frame style={{ ...style, ...ring } as ViewStyle}><Part params={node.params} ctx={ctx} /></Frame>
       </WidgetInteractionContext.Provider>
     </Inherited.Provider>
   );

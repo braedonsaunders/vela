@@ -420,27 +420,59 @@ export const searchMotion = {
   },
 };
 
+/** A focused search control, in the document's colours: it lifts, rings in the accent inside the
+ * accent's halo and raises its fill, drawn over its neighbours. Clear across a room on a TV, where
+ * focus is the only pointer, and the same under a keyboard elsewhere. */
+export const searchControlFocus: Style = {
+  scale: '1.06',
+  'background-color': '$ui.controlHover',
+  color: '$ui.ink',
+  'box-shadow': '0px 0px 0px 2px $ui.accent, 0px 0px 0px 7px $ui.focusHalo',
+  'z-index': '1',
+};
+const controlMotion: Style = {
+  transition: 'background-color 180ms linear, color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
+};
+
+/** A kind chip: the chosen one keeps its ink fill when focused, and lifts and rings as the rest do. */
+const kindChip = (): BoxNode => {
+  const chip = libChip([{ test: 'search.kindOn' }], '{opt.id}', '{opt.label}');
+  const { 'background-color': _fill, color: _ink, ...lift } = searchControlFocus;
+  return {
+    ...chip,
+    press: { action: 'searchKind', arg: '{opt.id}' },
+    style: { ...chip.style, ...controlMotion },
+    focus: searchControlFocus,
+    states: chip.states?.map(state => ({ ...state, style: { ...state.style, ...controlMotion }, focus: lift })),
+  };
+};
+
+/** A drop-down over the results (library, sort, direction): the select widget reports its focus to
+ * this box, which shows it. */
+const searchSelect = (when: Condition[], params: Record<string, string>, style: Style): Node => ({
+  type: 'widget', widget: 'select', when, params,
+  style: { ...style, ...controlMotion },
+  focus: { ...searchControlFocus, 'border-color': '$ui.accent' },
+});
+
 /** Shared controls are also inserted before search routes supplied by a skin. */
 export const searchControls: Node = {
   type: 'box', id: 'vela-search-controls',
   style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter },
   small: { ...gutterSmall },
   children: [
-    { ...chipGroup('Filter search', [{ type: 'repeat', over: 'search.kinds', item: {
-      ...libChip([{ test: 'search.kindOn' }], '{opt.id}', '{opt.label}'),
-      press: { action: 'searchKind', arg: '{opt.id}' },
-    } }], [{ test: 'search.kindCount', is: 'gt', value: '0' }]), style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '4px', padding: '4px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', 'max-width': '100%', 'flex-shrink': '1' } },
-    { type: 'widget', widget: 'select', when: [{ test: 'search.libraryCount', is: 'gt', value: '1' }],
-      params: { options: 'search.libraries', action: 'searchLibrary', label: 'Search library', testId: 'search-library' }, style: { ...glassSelect, 'min-width': '140px', 'max-width': '100%', 'flex-shrink': '1' } },
-    { type: 'widget', widget: 'select', when: [{ test: 'search.sortCount', is: 'gt', value: '0' }],
-      params: { options: 'search.sorts', action: 'searchSort', label: 'Sort search', testId: 'search-sort' }, style: { ...glassSelect, 'min-width': '140px', 'max-width': '100%' } },
-    { type: 'widget', widget: 'select', when: [{ test: 'search.directionCount', is: 'gt', value: '1' }],
-      params: { options: 'search.directions', action: 'searchDirection', label: 'Sort direction' }, style: glassSelect },
+    { ...chipGroup('Filter search', [{ type: 'repeat', over: 'search.kinds', item: kindChip() }], [{ test: 'search.kindCount', is: 'gt', value: '0' }]), style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '4px', padding: '4px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', 'max-width': '100%', 'flex-shrink': '1' } },
+    searchSelect([{ test: 'search.libraryCount', is: 'gt', value: '1' }],
+      { options: 'search.libraries', action: 'searchLibrary', label: 'Search library', testId: 'search-library' }, { ...glassSelect, 'min-width': '140px', 'max-width': '100%', 'flex-shrink': '1' }),
+    searchSelect([{ test: 'search.sortCount', is: 'gt', value: '0' }],
+      { options: 'search.sorts', action: 'searchSort', label: 'Sort search', testId: 'search-sort' }, { ...glassSelect, 'min-width': '140px', 'max-width': '100%' }),
+    searchSelect([{ test: 'search.directionCount', is: 'gt', value: '1' }],
+      { options: 'search.directions', action: 'searchDirection', label: 'Sort direction' }, glassSelect),
   ],
 };
 export const searchPaging: Node = {
   type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter },
   children: ['fast', 'descriptive'].map(lane => ({ type: 'box', when: [{ test: lane === 'fast' ? 'search.moreFast' : 'search.moreDescriptive' }],
-    press: { action: 'searchMore', arg: lane }, label: 'Show more', style: { ...glassSelect, padding: '12px' }, focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
+    press: { action: 'searchMore', arg: lane }, label: 'Show more', style: { ...glassSelect, padding: '12px', ...controlMotion }, focus: { ...searchControlFocus, 'border-color': '$ui.accent' },
     children: [{ type: 'text', text: lane === 'fast' ? 'More title matches' : 'More descriptive matches' }] } as Node)),
 };

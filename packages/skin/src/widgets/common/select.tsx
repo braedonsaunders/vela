@@ -5,7 +5,7 @@ import { holdBack } from '../../menu-key';
 import { FocusPressable as Pressable } from '../../focus';
 import { useEffect, useState } from 'react';
 import { FlatList, Modal, StyleSheet, Text, View } from 'react-native';
-import { useHost, useInheritedText, type WidgetProps } from '../../host';
+import { useHost, useInheritedText, useWidgetInteraction, type WidgetProps } from '../../host';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from './controls';
 import { useLook } from './look';
 import { useSelectModel, type Choice } from './select-model';
@@ -14,6 +14,8 @@ import { useFocusClaim } from './focus-claim';
 export function Select(props: WidgetProps) {
   const model = useSelectModel(props);
   const drawn = useInheritedText();
+  // The node's box shows its focus and hover looks for this press target (a TV remote's focus).
+  const interaction = useWidgetInteraction();
   const [open, setOpen] = useState(false);
   useEffect(() => open ? holdBack(() => { setOpen(false); return true; }) : undefined, [open]);
   const current = model.choices.find(choice => choice.value === model.value) ?? model.choices[0];
@@ -25,6 +27,10 @@ export function Select(props: WidgetProps) {
     <>
       <Pressable
         onPress={() => setOpen(true)}
+        onFocus={() => interaction.report('focus', true)}
+        onBlur={() => interaction.report('focus', false)}
+        onHoverIn={() => interaction.report('hover', true)}
+        onHoverOut={() => interaction.report('hover', false)}
         accessibilityRole="combobox"
         accessibilityLabel={model.label || undefined}
         accessibilityValue={{ text: current?.label }}
@@ -119,7 +125,8 @@ function ChoiceRow({ choice, on, onChoose }: { choice: Choice; on: boolean; onCh
       'border-radius': '12px',
     },
     state,
-    { hover: { 'background-color': '$ui.control' }, focus: { 'background-color': '$ui.controlHover' } },
+    // Focus (a TV remote's, a keyboard's) rings the row in the accent as well as raising it.
+    { hover: { 'background-color': '$ui.control' }, focus: { 'background-color': '$ui.controlHover', 'box-shadow': '0px 0px 0px 2px $ui.accent' } },
   );
   return (
     <APressable
