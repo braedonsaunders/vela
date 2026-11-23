@@ -14,6 +14,12 @@ function openWatch(channelId: string, replace: boolean): void {
   else router.push(target);
 }
 
+function openCatchUp(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean): void {
+  const target = { pathname: '/watch/[id]' as const, params: { id: programmeId, kind: 'programme', channelId, ...(from ? { from } : {}) } };
+  if (replace) router.replace(target);
+  else router.push(target);
+}
+
 /** `session` changes with the server and viewer (the auth revision); null while signed out. */
 export function useLiveController(store: Store, session: number | null): LiveController | null {
   const [controller, setController] = useState<LiveController | null>(null);
@@ -38,6 +44,8 @@ export function useLiveController(store: Store, session: number | null): LiveCon
           previewMode: access.previewMode,
           memory: preferences,
           openWatch,
+          catchUp: access.catchUp,
+          ...(access.catchUp.archive ? { openCatchUp } : {}),
         });
         setController(made);
       },

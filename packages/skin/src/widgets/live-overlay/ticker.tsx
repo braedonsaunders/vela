@@ -25,11 +25,12 @@ export function tickerHeight(look: PlayerLook): number {
   return look.small ? 30 : look.size(36);
 }
 
-export function LiveTicker({ look, shown }: { look: PlayerLook; shown: boolean }) {
+/** `withheld`: the game on screen while it plays behind live; its scores are not run ahead of the picture. */
+export function LiveTicker({ look, shown, withheld = '' }: { look: PlayerLook; shown: boolean; withheld?: string }) {
   return (
     <Presence shown={shown} still={look.still} offstage={{ y: tickerHeight(look) }} exitMs={MOTION.exit}
       style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }} pointerEvents="box-none">
-      <Band look={look} />
+      <Band look={look} withheld={withheld} />
     </Presence>
   );
 }
@@ -39,13 +40,13 @@ function useTickerScreen(): string {
   return useVelaState(state => state.home.value?.screens?.[0]?.id ?? '');
 }
 
-function Band({ look }: { look: PlayerLook }) {
+function Band({ look, withheld }: { look: PlayerLook; withheld: string }) {
   const vela = useVela();
   const screen = useTickerScreen();
   const ticker = useVelaState(state => state.liveEvents.ticker[screen]);
   const events = useVelaState(state => state.liveEvents.events);
   const ids = ticker?.value;
-  const items = useMemo(() => tickerItems(ids, events), [ids, events]);
+  const items = useMemo(() => tickerItems(ids, events, withheld), [ids, events, withheld]);
   useEffect(() => {
     void vela.liveEvents.loadTicker(screen);
     const timer = setInterval(() => void vela.liveEvents.loadTicker(screen), REFRESH_MS);

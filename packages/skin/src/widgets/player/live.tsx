@@ -4,15 +4,16 @@
 // fallen behind) with the same buttons as every other control. The mini guide shows while a
 // channel is being dialled, and the remote's channel keys flick channels. The delivery rule and
 // the flicking come from the live TV widgets (widgets/guide); this only places them.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { MOTION, Presence, useLast } from '../../presence';
-import { msg } from '@vela/core';
+import { catchUpPictureTime, clampSeek, clock, delayLabel, LIVE_SLACK_SECONDS, msg, pictureTime, timeshiftWindow, type TimeshiftWindow } from '@vela/core';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { liveBehind, liveNotices, liveWatchKey, MiniGuide, useLiveContext, useLiveView } from '../guide';
 import { ChromeButton } from './button';
 import { useMultiview } from '../multiview/context';
 import type { ChromeTarget, CommandInput } from './context';
-import { liveWatchOf } from './target';
+import { catchUpWatchOf, liveWatchOf } from './target';
 import type { PlayerLook } from './look';
 
 export interface LiveWatch {
@@ -29,24 +30,127 @@ export interface LiveWatch {
   /** A key for live watch (dialling, tuning, forgetting); answers whether it was taken. */
   key(key: string): boolean;
   zap(step: -1 | 1): void;
+  /** A programme from the channel's archive: Start over (still growing) or catch-up (ended); null on a channel. */
+  archive: 'startOver' | 'catchUp' | null;
+  /** The rewind window (a channel with timeshift, or Start over); null where there is none to draw. */
+  window: TimeshiftWindow | null;
+  /** "-12:30" while the picture trails live by intent, else ''. */
+  delay: string;
+  /** Seconds the picture trails live (0 at live): what the score bug must not run ahead of. */
+  behindSeconds: number;
+  /** The real time on screen (ms). */
+  pictureAt: number;
+  /** The real time the window starts (ms): Start over's programme start, else the rewind window's. */
+  windowStartAt: number;
+  /** Back to live: the edge of this channel, or the channel live from a programme in the archive. */
+  backToLive(): void;
+  /** The programme on air plays from its start (its start is in the archive); null when it cannot. */
+  startOver: (() => void) | null;
+  /** The viewer moved off live (a seek or a pause): Back to live's grace ends. */
+  leftLive(): void;
 }
 
-export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot | null, target?: ChromeTarget): LiveWatch {
+/** How long Back to live reads as live while the engine gets there. */
+const GO_LIVE_GRACE_MS = 20_000;
+
+/** The plan's arrival, so the window's edge can grow in real time from it. */
+function usePlanArrival(plan: PlaybackPlan | null): number {
+  // Not the revision: a plan event that only reports progress carries the same edge, which has grown since.
+  const key = plan ? `${plan.sessionId}|${plan.seekGeneration}|${plan.live?.liveEdgeSeconds ?? ''}` : '';
+  return useMemo(() => Date.now(), [key]);
+}
+
+/** When the engine's reported edge last moved (it stands still while the engine is paused). */
+function useEdgeMovedAt(edge: number | null | undefined, now: number): number | undefined {
+  const last = useRef<{ edge: number; at: number } | null>(null);
+  if (edge == null) { last.current = null; return undefined; }
+  if (!last.current || last.current.edge !== edge) last.current = { edge, at: Math.min(now, Date.now()) };
+  return last.current.at;
+}
+
+/** A second's clock while a window or delay is shown: the edge grows even while the picture is paused. */
+function useSecondClock(on: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [on]);
+  return on ? Math.max(now, Date.now()) : now;
+}
+
+export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot | null, target?: ChromeTarget, send?: (command: CommandInput) => void): LiveWatch {
   const context = useLiveContext();
   const view = useLiveView();
-  const { live: isLive, channelId } = liveWatchOf(plan, target);
+  const watched = liveWatchOf(plan, target);
+  const archived = catchUpWatchOf(plan, target);
+  // A programme from the archive belongs to its channel: up and down flick from there, back to live.
+  const channelId = watched.channelId || archived?.channelId || '';
+  const isLive = watched.live;
   const controller = context?.controller;
   const live = snapshot?.live ?? null;
+  const receivedAt = usePlanArrival(plan);
+  const now = useSecondClock(!!plan?.live || !!plan?.catchUp);
+  const position = snapshot?.position ?? plan?.positionSeconds ?? 0;
+  const edgeMovedAt = useEdgeMovedAt(live?.edgeSeconds, now);
+  const measured = plan?.live ? timeshiftWindow({ live: plan.live, receivedAt, now, position, engine: live ? { ...live, edgeMovedAt } : null }) : null;
+  // Back to live is taken at its word while the engine moves there and settles its latency.
+  const wentLive = useRef(0);
+  const window = measured && measured.delayed && now - wentLive.current < GO_LIVE_GRACE_MS ? { ...measured, delayed: false } : measured;
+  const rewindable = !!window?.seekable;
+  const behindSeconds = window && (window.delayed || window.startOver) ? window.behind
+    : plan?.catchUp ? Math.max(0, (now - (catchUpPictureTime(plan, position) ?? now)) / 1000) : 0;
+  // A deliberate rewind is no delivery trouble: the window tells the delay, not "N seconds behind".
+  // Behind live on purpose, the edge's publication waits are not the picture's business either.
+  const notices = rewindable && live ? liveNotices({ ...live, canCatchUp: false, ...(window!.delayed ? { delivery: 'available' as const } : {}) }) : liveNotices(live);
+  if (rewindable && window!.delayed) notices.push(msg('catchUp.behindLive', { delay: clock(window!.behind) }));
+  // Start over plays its programme from the beginning: an engine joins a growing stream at its edge,
+  // so the session is placed at its start once, when the engine first knows the window.
+  const placed = useRef('');
+  const placeAt = archived?.kind === 'startOver' && window?.seekable && snapshot?.state === 'playing' && plan && placed.current !== plan.sessionId
+    // A second in: a live engine reads position 0 as "join at the edge".
+    && window.position - window.start > LIVE_SLACK_SECONDS ? window.start + 1 : null;
+  useEffect(() => {
+    if (placeAt === null || !plan) return;
+    placed.current = plan.sessionId;
+    send?.({ type: 'seek', seconds: placeAt });
+  }, [placeAt, plan?.sessionId]);
+  const pictureAt = pictureTime(now, behindSeconds);
+  const archiveStart = plan?.catchUp ? Date.parse(plan.catchUp.startAt) : NaN;
+  const windowStartAt = Number.isFinite(archiveStart) ? archiveStart : pictureAt - ((window?.position ?? 0) - (window?.start ?? 0)) * 1000;
+  const guideChannel = channelId ? view.guide?.channels.find(c => c.id === channelId) : undefined;
+  const offer = controller?.catchUpOffer;
+  const canStartOver = !archived && isLive && !!offer?.archive && !!guideChannel?.nowStartOver && !!guideChannel.nowId;
   return {
     live: isLive,
     channelId,
     canZap: !!controller && !!channelId,
-    notices: liveNotices(live),
-    behind: liveBehind(live),
+    notices,
+    behind: rewindable ? 0 : liveBehind(live),
     key: key => (controller && channelId ? liveWatchKey(controller, key, channelId, view.watchZap !== '') : false),
     zap: step => {
       if (controller && channelId) controller.zapWatch(step, channelId);
     },
+    archive: archived?.kind ?? null,
+    window,
+    delay: window?.delayed || window?.startOver ? delayLabel(window.behind) : plan?.catchUp ? delayLabel(behindSeconds) : '',
+    behindSeconds,
+    pictureAt,
+    windowStartAt,
+    backToLive: () => {
+      wentLive.current = Date.now();
+      if (archived) {
+        controller?.backToLive(archived.channelId);
+        return;
+      }
+      // The engine knows its own edge; one without a live report seeks to the plan's.
+      if (live?.edgeSeconds != null || !window) send?.({ type: 'catchUp' });
+      else send?.({ type: 'seek', seconds: clampSeek(window, window.edge) });
+    },
+    leftLive: () => { wentLive.current = 0; },
+    startOver: canStartOver && controller && guideChannel
+      ? () => controller.playProgramme(guideChannel.id, guideChannel.nowId, 'startOver', true)
+      : null,
   };
 }
 
@@ -89,17 +193,18 @@ export function LiveMultiview({ look, watch }: { look: PlayerLook; watch: LiveWa
   );
 }
 
-/** LIVE at the edge; a Go live button (the same control as the others) once playback is behind. */
-export function LiveMark({ look, watch, send }: { look: PlayerLook; watch: LiveWatch; send(command: CommandInput): void }) {
-  if (watch.behind > 0) {
+/** LIVE at the edge; Back to live (the same control as the others) once the picture trails live, or
+ * from a programme in the archive. */
+export function LiveMark({ look, watch }: { look: PlayerLook; watch: LiveWatch }) {
+  if (watch.behind > 0 || watch.window?.delayed || watch.archive) {
     return (
       <ChromeButton
         look={look}
         icon="live"
-        text={msg('live.catchUp')}
-        label={msg('live.catchUp')}
+        text={msg('catchUp.backToLive')}
+        label={msg('catchUp.backToLive')}
         testID="player-go-live"
-        onPress={() => send({ type: 'catchUp' })}
+        onPress={watch.backToLive}
       />
     );
   }

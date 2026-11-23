@@ -9,6 +9,9 @@ export interface SportsActions {
   openEvent(event: LiveEvent): void;
   /** Watch where a target says: a Live TV channel tunes it. */
   watch(target: WatchTarget, event: LiveEvent): void;
+  /** Present where the app plays programmes from a channel's archive: the target's programme from its
+   * beginning (on air: Start over; ended: catch-up). */
+  watchFromStart?(target: WatchTarget, kind: 'catchUp' | 'startOver', event: LiveEvent): void;
   /** Present when the multiview is available: add the target's channel as a tile. */
   addToMultiview?(target: WatchTarget, event: LiveEvent): void;
   /** Leave the game page (its close control and Back). */

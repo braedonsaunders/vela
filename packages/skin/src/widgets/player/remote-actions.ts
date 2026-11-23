@@ -36,8 +36,8 @@ export function remotePress(type: string, actions: Shortcuts, focus?: string): v
       return;
     case 'left':
     case 'right':
-      // A channel plays at the live edge: nothing to step through.
-      if (picture && !actions.liveKey) {
+      // A channel plays at the live edge: nothing to step through, unless it has a rewind window.
+      if (picture && (!actions.liveKey || actions.liveSteps)) {
         actions.seekBy(type === 'right' ? 10 : -10);
         actions.wake('timeline');
         return;

@@ -2,7 +2,7 @@
 // scored, the ticker's items and its endless scroll, which alerts stand as toasts, and where an
 // alert's Watch goes. Nothing here draws; score-bug.tsx, ticker.tsx and alerts.tsx do.
 import { leagueLabel } from '../sports/model';
-import { sides, teamColor, type LiveAlert, type LiveCompetitor, type LiveEvent, type WatchTarget } from '@vela/core';
+import { delayedScores, msg, sides, teamColor, type LiveAlert, type LiveCompetitor, type LiveEvent, type LivePlay, type WatchTarget } from '@vela/core';
 
 /** How an event's status reads: on now, finished, still to come, or held up. */
 export type BugTone = 'live' | 'final' | 'upcoming' | 'quiet';
@@ -151,6 +151,31 @@ export function scoreChange(previous: BugModel | null | undefined, next: BugMode
 
 // The player
 
+/**
+ * The event as the picture shows it when the picture trails live (paused, rewound, Start over or
+ * a catch-up). Close to live it is the live event. Further behind, a feed that times and scores its
+ * plays gives the score on screen (and the play's clock); any other feed has its scores withheld,
+ * as for a spoiler-free viewer, with a note saying why. Real time never runs ahead of the picture.
+ */
+export function delayedEvent(event: LiveEvent | undefined, plays: readonly LivePlay[] | undefined, pictureAt: number, behindSeconds: number): { event: LiveEvent | undefined; note: string } {
+  if (!event) return { event, note: '' };
+  const scores = delayedScores(plays, pictureAt, behindSeconds);
+  if (scores.kind === 'live') return { event, note: '' };
+  if (scores.kind === 'hidden') return { event: { ...event, spoiler: true }, note: msg('catchUp.scoresHidden') };
+  const play = [...(plays ?? [])].filter(p => p.at && p.score && Date.parse(p.at) <= pictureAt).sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!))[0];
+  const detail = play?.clock ? [play.period ? `P${play.period}` : '', play.clock].filter(Boolean).join(' · ') : '';
+  return {
+    event: {
+      ...event,
+      // The game on screen is still on: no final, no winner, no situation from later.
+      status: { ...event.status, state: event.status.state === 'post' ? 'in' : event.status.state, detail, clock: play?.clock, period: play?.period },
+      competitors: event.competitors.map(c => ({ ...c, score: scores.scores[c.id] ?? (c.entityId ? scores.scores[c.entityId] : undefined) ?? '0', winner: undefined })),
+      situation: undefined, probability: undefined, ranking: undefined,
+    },
+    note: '',
+  };
+}
+
 /** What the live player overlays: nothing at all unless the server offers live events and a
  * channel is playing; then the bug for the event on air and the ticker when the viewer wants it. */
 export function overlayShown(available: boolean, live: boolean, eventId: string | undefined, tickerOn: boolean): { available: boolean; eventId: string; ticker: boolean } {
@@ -169,13 +194,14 @@ export interface TickerItem {
 }
 
 /** The ticker's events in the server's order (it ranks them), each once, those it can draw. */
-export function tickerItems(ids: readonly string[] | undefined, events: Record<string, LiveEvent>): TickerItem[] {
+export function tickerItems(ids: readonly string[] | undefined, events: Record<string, LiveEvent>, withheld = ''): TickerItem[] {
   const seen = new Set<string>();
   const items: TickerItem[] = [];
   for (const id of ids ?? []) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const bug = bugModel(events[id], 0);
+    // The game on screen, watched behind live: its scores are withheld here too.
+    const bug = bugModel(id === withheld && events[id] ? { ...events[id]!, spoiler: true } : events[id], 0);
     if (bug && events[id]!.status.state !== 'canceled') items.push({ id, tone: bug.tone, league: bug.league, bug });
   }
   return items;

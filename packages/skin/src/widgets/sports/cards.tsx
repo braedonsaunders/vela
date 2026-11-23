@@ -8,7 +8,7 @@ import { View } from 'react-native';
 import { msg, type LiveEntity, type LiveEvent, type LiveTable } from '@vela/core';
 import { useLiveEvent, useSportsActions } from './context';
 import type { SportsLook } from './look';
-import { airingText, cardLine, heroTint, matchup, probabilityLead, rankRows, targetLabel, watchLabel, watchTarget, type Matchup, type Side } from './model';
+import { airingText, cardLine, fromStart, heroTint, matchup, probabilityLead, rankRows, targetLabel, watchLabel, watchTarget, type Matchup, type Side } from './model';
 import { fitTable } from './table';
 import { Crest, FavouriteMark, FocusRow, Glyph, GridMark, LiveBadge, Pill, ProbabilityBar, Score, Surface, Txt } from './parts';
 import { alpha } from './colour';
@@ -180,6 +180,9 @@ export function HeroCard({ look, event: given, favourite, testID }: { look: Spor
           ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: look.px(10) }}>
             {watch ? <Pill look={look} primary glyph="play-fill" label={msg('sports.watchOn', { name: targetLabel(watch) })} onPress={() => actions?.watch(watch, event)} testID="sports-hero-watch" /> : null}
+            {watch && actions?.watchFromStart && fromStart(watch) ? (
+              <HeroButton look={look} label={msg('catchUp.watchFromStart')} onPress={() => actions.watchFromStart?.(watch, fromStart(watch)!, event)} icon={<Glyph name="replay" size={look.px(15)} color={WHITE} />} testID="sports-hero-from-start" />
+            ) : null}
             {watch && actions?.addToMultiview ? (
               <HeroButton look={look} label={msg('sports.addToMultiview')} onPress={() => actions.addToMultiview?.(watch, event)} icon={<GridMark size={look.px(15)} color={WHITE} />} testID="sports-hero-multiview" />
             ) : null}

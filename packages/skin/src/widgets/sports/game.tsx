@@ -9,7 +9,7 @@ import { msg, venueText, type LiveEvent, type LiveEventDetail, type LivePlay } f
 import { useVela, useVelaState } from '@vela/core/react';
 import { useLiveEvent, useSportsActions } from './context';
 import { useSportsLook, type SportsLook } from './look';
-import { airingText, heroTint, newestFirst, situationEntries, matchup, probabilityLead, targetLabel, tunable, type Matchup, type Side } from './model';
+import { airingText, fromStart, heroTint, newestFirst, situationEntries, matchup, probabilityLead, targetLabel, tunable, type Matchup, type Side } from './model';
 import { Crest, Glyph, GridMark, LiveBadge, Pill, Placeholder, ProbabilityBar, Rise, Score, Surface, Txt } from './parts';
 import { Ranking, TableView } from './cards';
 import { ProbabilityGraph, readableTeam } from './graph';
@@ -185,6 +185,9 @@ function WatchRow({ look, event }: { look: SportsLook; event: LiveEvent }) {
           const label = targetLabel(target);
           return <Pill key={`${n}-${target.channelId}`} look={look} primary={n === 0} glyph="play-fill" label={msg('sports.watchOn', { name: label })} onPress={() => actions?.watch(target, event)} testID={`sports-watch-${n}`} hasTVPreferredFocus={n === 0} />;
         })}
+        {first && actions?.watchFromStart && fromStart(first) ? (
+          <Pill look={look} glyph="replay" label={msg('catchUp.watchFromStart')} onPress={() => actions.watchFromStart?.(first, fromStart(first)!, event)} testID="sports-watch-from-start" />
+        ) : null}
         {first && actions?.addToMultiview ? (
           <Surface look={look} onPress={() => actions.addToMultiview?.(first, event)} label={msg('sports.addToMultiview')} testID="sports-game-multiview" radius={look.px(21)} fill={alpha(look.ink, 0.12)} focusFill={alpha(look.ink, 0.22)} lift={1.06}
             style={{ height: look.px(42), paddingHorizontal: look.px(18), flexDirection: 'row', alignItems: 'center', gap: look.px(8) }}>

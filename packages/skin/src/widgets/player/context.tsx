@@ -26,8 +26,11 @@ export interface StartRetrying {
 
 /** What the route asked to play: a channel or a live library plays live before (or without) a plan. */
 export interface ChromeTarget {
-  kind: 'title' | 'extra' | 'channel' | 'library-live';
+  kind: 'title' | 'extra' | 'channel' | 'library-live' | 'programme';
   id: string;
+  /** A programme's channel (catch-up and Start over), and whether it plays from the start of one on air. */
+  channelId?: string;
+  from?: 'start';
 }
 
 export interface PlayerChromeState {

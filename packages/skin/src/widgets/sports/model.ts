@@ -1,7 +1,7 @@
 // What the Sports screen and game page say about an event, worked out once and drawn by every
 // skin: the two sides in reading order, the score as shown (or withheld), the status line, where to
 // watch, and the smooth path of a win-probability series. Pure, so it is tested without a renderer.
-import { msg, probabilityFor, seriesPoints, sides, teamColor, time, type LiveCompetitor, type LiveEvent, type LivePlay, type LiveProbabilityPoint, type LiveRankingRow, type WatchTarget } from '@vela/core';
+import { msg, watchFromStart, probabilityFor, seriesPoints, sides, teamColor, time, type LiveCompetitor, type LiveEvent, type LivePlay, type LiveProbabilityPoint, type LiveRankingRow, type WatchTarget } from '@vela/core';
 
 export type Phase = 'live' | 'upcoming' | 'final' | 'off';
 
@@ -114,6 +114,12 @@ export const tunable = (target: WatchTarget | undefined): target is WatchTarget 
 export function watchTarget(event: LiveEvent): (WatchTarget & { channelId: string }) | undefined {
   const target = bestWatch({ ...event, watch: (event.watch ?? []).filter(tunable) });
   return tunable(target) ? target : undefined;
+}
+
+/** "Watch from start" for a target whose programme the channel's archive holds; the server sets the
+ * programme and its flags only where it keeps an archive. */
+export function fromStart(target: WatchTarget | undefined, now = Date.now()): 'catchUp' | 'startOver' | null {
+  return target ? watchFromStart(target, now, { archive: true, timeshift: false }) : null;
 }
 
 /** A target's name as a button says it: "FOX · 205", or the name alone. */

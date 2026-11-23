@@ -6,7 +6,7 @@
 import { FocusPressable as Pressable } from '../../focus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
-import { msg } from '@vela/core';
+import { clampSeek, LIVE_SLACK_SECONDS, msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, type Opened, type Reveal } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
@@ -71,7 +71,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
-  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target);
+  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send);
   const overlay = usePlayerLiveOverlay(look, live.live);
   // The session that has played, so a later wait in it reads as a stall rather than a start.
   const playedSession = useRef('');
@@ -85,7 +85,18 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   useScreenAwake(view.playing);
   const { send } = state;
 
+  // A channel's rewind window bounds every seek; one that reaches the live edge goes back to live.
+  const rewind = live.live && live.window?.seekable ? live.window : null;
   const seek = (seconds: number) => {
+    if (rewind) {
+      if (!live.archive && seconds >= rewind.edge - LIVE_SLACK_SECONDS) {
+        lastStep.current = null;
+        live.backToLive();
+        return;
+      }
+      seconds = clampSeek(rewind, seconds);
+      live.leftLive();
+    }
     lastStep.current = { seconds, at: Date.now() };
     send({ type: 'seek', seconds });
   };
@@ -93,9 +104,9 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     lastStep.current && Date.now() - lastStep.current.at < STEP_MEMORY_MS ? lastStep.current.seconds : null;
   const seekBy = (delta: number) => {
     if (blocked) return;
-    const from = recentStep() ?? view.position;
-    const limit = view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
-    seek(Math.max(0, Math.min(limit, from + delta)));
+    const from = recentStep() ?? (rewind ? rewind.position : view.position);
+    const limit = rewind ? rewind.edge : view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
+    seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)));
   };
   const toggle = (menu: Exclude<Opened, null>) => {
     // One version read per opening of the quality menu, never a poll while it stands open.
@@ -104,12 +115,14 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   };
   const toggleInfo = () => setInfo(on => !on);
   const togglePlay = () => {
+    if (view.playing) live.leftLive();
     if (!view.ended && state.plan) send({ type: view.playing ? 'pause' : 'play' });
   };
   const play = () => {
     if (!view.ended && state.plan && !view.playing) send({ type: 'play' });
   };
   const pause = () => {
+    live.leftLive();
     if (state.plan && view.playing) send({ type: 'pause' });
   };
 
@@ -137,7 +150,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
       if (view.fullscreen) send({ type: 'fullscreen' });
     },
     closeMenu: () => setOpened(null),
-    liveKey: live.live ? live.key : undefined,
+    liveKey: live.live || live.archive ? live.key : undefined,
+    liveSteps: !!rewind,
     alertKey: takeAlertKey,
   });
 
@@ -186,7 +200,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
       </View>
       {/* Sports: the score bug, the ticker and alert toasts, under the bars so a menu always covers them. */}
-      <PlayerLiveOverlays look={look} overlay={overlay} chrome={idle.visible || !!failed} top={top} info={info && !failed} channelId={live.channelId} />
+      <PlayerLiveOverlays look={look} overlay={overlay} chrome={idle.visible || !!failed} top={top} info={info && !failed} channelId={live.channelId}
+        behindSeconds={live.behindSeconds} pictureAt={live.pictureAt} />
       <View style={[styles.bottom, { bottom: overlay.lift }, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
         pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <BottomBar

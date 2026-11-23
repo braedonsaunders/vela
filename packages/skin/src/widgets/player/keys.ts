@@ -29,6 +29,8 @@ export interface Shortcuts {
   closeMenu(): void;
   /** Live watch takes its own keys first (up and down dial channels); answers whether it took one. */
   liveKey?(key: string): boolean;
+  /** A live channel with a rewind window: the side presses step through it as on a film. */
+  liveSteps?: boolean;
   /** A standing alert toast takes play/pause for its Watch; answers whether it took the press. */
   alertKey?(): boolean;
 }

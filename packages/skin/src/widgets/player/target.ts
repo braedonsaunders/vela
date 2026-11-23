@@ -13,3 +13,14 @@ export function liveWatchOf(plan: PlaybackPlan | null, target: ChromeTarget | un
   const channelId = plan?.channelId || (target?.kind === 'channel' ? target.id : '');
   return { live: !!channelId || !!plan?.live || target?.kind === 'library-live', channelId };
 }
+
+/**
+ * A programme from the channel's archive: Start over (the programme on air from its beginning, still
+ * growing) or a catch-up (one that has ended), and the channel Back to live returns to.
+ */
+export function catchUpWatchOf(plan: PlaybackPlan | null, target: ChromeTarget | undefined): { kind: 'startOver' | 'catchUp'; channelId: string } | null {
+  const channelId = plan?.catchUp?.channelId || (target?.kind === 'programme' ? target.channelId ?? '' : '');
+  if (!channelId) return null;
+  const startOver = plan ? plan.live?.mode === 'startOver' : target?.kind === 'programme' && target.from === 'start';
+  return { kind: startOver ? 'startOver' : 'catchUp', channelId };
+}

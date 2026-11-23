@@ -79,7 +79,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       setRefused('');
       pendingQuality.current = 0;
       setPendingQualityId(undefined);
-      const from = kind === 'title' && positionSeconds !== undefined ? { positionSeconds } : {};
+      const from = (kind === 'title' || kind === 'programme') && positionSeconds !== undefined ? { positionSeconds } : {};
       void vela.playback.start({ ...target, ...from } as PlaybackTarget);
     },
     [vela, kind, id, target.kind === 'title' ? target.positionSeconds : undefined, target.kind === 'title' ? target.mediaSourceId : undefined, target.kind === 'title' ? target.audioTrackId : undefined],
@@ -244,7 +244,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
   };
 
-  const chromeTarget: ChromeTarget = { kind, id };
+  const chromeTarget: ChromeTarget = target.kind === 'programme' ? { kind, id, channelId: target.channelId, ...(target.from ? { from: target.from } : {}) } : { kind, id };
   const owned = owner && !ownedPlan ? owner : undefined;
   return {
     chrome: {

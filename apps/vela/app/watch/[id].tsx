@@ -24,17 +24,19 @@ function heading(detail: DetailModel | undefined): string {
   return title.name;
 }
 
-function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string): PlaybackTarget {
+function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string): PlaybackTarget {
   if (kind === 'channel') return { kind: 'channel', id };
+  // A programme from the channel's archive: ended (catch-up), or on air from its start.
+  if (kind === 'programme' && channelId) return { kind: 'programme', id, channelId, ...(from === 'start' ? { from: 'start' as const } : {}) };
   if (kind === 'extra') return { kind: 'extra', id };
   if (kind === 'library-live' && libraryId) return { kind: 'library-live', id, libraryId, tab };
   return { kind: 'title', id };
 }
 
 export default function Watch() {
-  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string }>();
+  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId]);
+  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from]);
   const live = useLiveContext();
   const liveView = useLiveView();
   // A channel's session is the live controller's: its plan, its refusal (or a retry on the
@@ -53,7 +55,8 @@ export default function Watch() {
   const sessionId = session.view.plan?.sessionId ?? '';
   const channels = liveView.guide?.channels;
   const focused = useIsFocused();
-  useLiveWatch(focused && target.kind === 'channel');
+  // A programme from the archive flicks channels too: up and down tune the neighbours live.
+  useLiveWatch(focused && (target.kind === 'channel' || target.kind === 'programme'));
   useEffect(() => {
     if (!live || target.kind !== 'channel' || !focused || !id) return;
     live.controller.enterWatch(id);
@@ -89,8 +92,11 @@ export default function Watch() {
   }, [stop]);
 
   const channel = target.kind === 'channel' ? channels?.find(c => c.id === id) : undefined;
+  const programmeChannel = target.kind === 'programme' ? channels?.find(c => c.id === target.channelId) : undefined;
   const title = channel
     ? `${channel.number} · ${channel.name}`
+    : target.kind === 'programme'
+      ? [session.view.plan?.title, programmeChannel?.name].filter(Boolean).join(' · ') || msg('catchUp.fromArchive')
     : target.kind === 'library-live'
       ? session.view.plan?.title ?? 'Live'
       : heading(skin?.env.detail);

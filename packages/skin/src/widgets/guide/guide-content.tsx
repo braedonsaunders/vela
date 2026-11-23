@@ -143,10 +143,15 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   // Select opens airing programmes in full screen; focus changes only update details.
   const press = useCallback((channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
-    const action = programmeSelection(currentlyAiring(controller.view().guide, channel.id, programme.id));
+    const current = controller.view().guide?.channels.find(c => c.id === channel.id)?.programmes.find(p => p.id === programme.id);
+    const action = programmeSelection(currentlyAiring(controller.view().guide, channel.id, programme.id), current?.replay ?? programme.replay);
     if (action === 'watch') controller.watch(channel.id);
+    else if (action === 'replay') controller.playProgramme(channel.id, programme.id, 'catchUp');
   }, [controller, select]);
   const watch = useCallback((channelId: string) => controller.watch(channelId), [controller]);
+  const replay = useCallback((channelId: string, programmeId: string, kind: 'catchUp' | 'startOver') =>
+    controller.playProgramme(channelId, programmeId, kind), [controller]);
+  const archive = controller.catchUpOffer.archive;
   useEffect(() => {
     controller.setRetainedChannels([selected.channel, handOff?.channelId ?? "", view.tunedId]);
   }, [controller, selected.channel, handOff?.channelId, view.tunedId]);
@@ -223,6 +228,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
               copyTop={cinematic && band.stacked ? tileHeight + band.gap : 0}
               compact={cinematic && (band.stacked || band.height < 240)}
               onWatch={watch}
+              onReplay={archive ? replay : undefined}
             />
           ) : null}
           {view.tile.state !== 'off' ? (

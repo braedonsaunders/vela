@@ -7,7 +7,7 @@ import Animated, { useAnimatedStyle, useSharedValue, useReducedMotion, withSprin
 import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import { cellId, labelFollows, programmeFocusFrame } from './geometry';
 import type { GuideLook } from './look';
-import { Line, Press } from './parts';
+import { Glyph, Line, Press } from './parts';
 
 export interface CellProps {
   look: GuideLook;
@@ -74,12 +74,14 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
   const width = p.span * scale;
   const elapsed = p.airing ? Math.max(0, Math.min(width, (nowMinute - p.at) * scale)) : 0;
   const labelled = width >= 10 * scale;
+  // A past programme the archive still holds looks playable: it keeps its colour and gains a replay mark.
+  const replay = p.replay === 'catchUp';
   const label = msg('ui.programmeStartToEndChannelProgrammeDetails', {
     programme: p.name,
     start: p.startLabel,
     end: p.endLabel,
     channel: channel.name,
-  });
+  }) + (replay ? `, ${msg('catchUp.replayable')}` : '');
   return (
     <CellSurface
       lift
@@ -105,7 +107,7 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
         borderWidth: focused || Platform.isTV && selected ? 2 : 0,
         borderColor: focused || Platform.isTV && selected ? look.accent : hovered ? look.edgeStrong : p.airing ? look.liveEdge : look.hairline,
         backgroundColor: focused || Platform.isTV && selected ? look.cellHover : p.airing ? look.live : hovered ? look.cellHover : look.cell,
-        opacity: p.ended && !(focused || Platform.isTV && selected) ? 0.72 : 1,
+        opacity: p.ended && !replay && !(focused || Platform.isTV && selected) ? 0.72 : 1,
         zIndex: focused || Platform.isTV && selected ? 3 : 0,
         boxShadow: Platform.isTV ? selected ? `0px 0px 2px ${look.shadow}` : undefined : focused
           ? `inset 0px 0px 0px 1px ${look.accent}, 0px 0px 2px ${look.shadow}`
@@ -127,7 +129,7 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
             width: 3,
             borderRadius: 2,
             backgroundColor: look.tone(p.tone),
-            opacity: p.ended ? 0.5 : 0.9,
+            opacity: p.ended && !replay ? 0.5 : 0.9,
           }}
         />
       ) : null}
@@ -135,7 +137,10 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
         <ProgrammeFill elapsed={elapsed} left={left + 2} scrollX={scrollX} color={look.accent} line />
       ) : null}
       {labelled ? <View style={{ flex: 1, justifyContent: 'center', gap: small ? 3 : 4, paddingLeft: 12, paddingRight: 10, minWidth: 0 }}>
-        <Line look={look} size={small ? 13 : 14} weight={p.airing ? 680 : 600}>{p.name}</Line>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          {replay ? <View testID={`replay-${p.id}`}><Glyph name="replay" size={small ? 11 : 12} color={look.accent} /></View> : null}
+          <View style={{ flexShrink: 1, minWidth: 0 }}><Line look={look} size={small ? 13 : 14} weight={p.airing ? 680 : 600}>{p.name}</Line></View>
+        </View>
         {width > 110 ? <Line look={look} size={12} color={p.airing ? look.accent : look.inkSecondary} tabular>{metaLine(p)}</Line> : null}
       </View> : null}
     </CellSurface>
@@ -146,7 +151,8 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
   && a.programme.id === b.programme.id && a.programme.name === b.programme.name
   && a.programme.at === b.programme.at && a.programme.span === b.programme.span
   && (!Platform.isTV || nearViewportEdge(a) === nearViewportEdge(b))
-  && a.programme.episode === b.programme.episode && a.programme.tone === b.programme.tone);
+  && a.programme.episode === b.programme.episode && a.programme.tone === b.programme.tone
+  && a.programme.replay === b.programme.replay && a.programme.ended === b.programme.ended);
 
 function ProgrammeFill({ elapsed, left, scrollX, color, line = false }: {
   elapsed: number; left: number; scrollX: SharedValue<number>; color: string; line?: boolean;

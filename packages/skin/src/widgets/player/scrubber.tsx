@@ -36,9 +36,12 @@ interface Props {
   preferred?: boolean;
   /** The target of a step the chrome took a moment ago, not yet reported by the engine. */
   stepFrom?(): number | null;
+  /** A live rewind window: how a point reads (its distance behind live), and the live edge marked at the end. */
+  live?: { label(seconds: number): string; color: string; atEdge: boolean };
 }
 
-export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, preferred, stepFrom }: Props) {
+export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, preferred, stepFrom, live }: Props) {
+  const say = (seconds: number) => (live ? live.label(seconds) : timecode(seconds));
   const claim = useFocusClaim(preferred);
   const box = useRef<ComponentRef<typeof View>>(null);
   const frame = useRef({ left: 0, width: 1 });
@@ -148,11 +151,11 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
       <Pressable
         accessibilityRole="adjustable"
         accessibilityLabel={msg('ui.playbackPosition')}
-        accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(shown), text: timecode(shown) }}
+        accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(shown), text: say(shown) }}
         aria-valuemin={0}
         aria-valuemax={Math.round(duration)}
         aria-valuenow={Math.round(shown)}
-        aria-valuetext={timecode(shown)}
+        aria-valuetext={say(shown)}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={e =>
           commit(shown + (e.nativeEvent.actionName === 'increment' ? STEP_SECONDS : -STEP_SECONDS))
@@ -217,6 +220,17 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
               }}
             />
           ))}
+        {live ? (
+          // The live edge: a dot at the end of the window, lit while the picture is there.
+          <View
+            pointerEvents="none"
+            testID="player-live-edge"
+            style={{
+              position: 'absolute', right: -look.size(4), width: look.size(8), height: look.size(8), borderRadius: look.size(4),
+              backgroundColor: live.atEdge ? live.color : look.track, borderWidth: 1.5, borderColor: live.color,
+            }}
+          />
+        ) : null}
         <View
           pointerEvents="none"
           style={{
@@ -271,7 +285,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
               },
             ]}
           >
-            {timecode(target)}
+            {say(target)}
           </Text>
         </View>
       ) : null}

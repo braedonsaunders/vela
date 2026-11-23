@@ -50,6 +50,11 @@ export interface LiveOptions {
   memory: { get(key: string): string | null; set(key: string, value: string): void };
   /** Open full-screen live watch; `replace` swaps the watched channel in place. */
   openWatch(channelId: string, replace: boolean): void;
+  /** Open a programme from the channel's archive full screen (features.liveCatchUp): an ended one, or
+   * with `from: 'start'` the one on air from its beginning. Absent: the host has no catch-up. */
+  openCatchUp?(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean): void;
+  /** What the server offers for catch-up and timeshift; absent: neither. */
+  catchUp?: import('@vela/core').CatchUpOffer;
 }
 
 const MINUTE = 60000;
@@ -230,6 +235,23 @@ export class LiveController {
   watch(channelId: string): void {
     if (!channelId) return;
     this.tile.watch(channelId);
+  }
+
+  /** What the server offers for catch-up and timeshift; the archive only where the host can open it. */
+  get catchUpOffer(): import('@vela/core').CatchUpOffer {
+    const offer = this.options.catchUp;
+    return { archive: !!offer?.archive && !!this.options.openCatchUp, timeshift: !!offer?.timeshift };
+  }
+
+  /** Play a programme from the channel's archive: an ended one (catch-up), or the one on air from its start. */
+  playProgramme(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver', replace = false): void {
+    if (!channelId || !programmeId || !this.options.openCatchUp) return;
+    this.options.openCatchUp(channelId, programmeId, kind === 'startOver' ? 'start' : undefined, replace);
+  }
+
+  /** From a programme in the archive back to the channel live, in place. */
+  backToLive(channelId: string): void {
+    if (channelId) this.watchNow(channelId, true);
   }
 
   enterWatch(channelId: string): void {
@@ -414,7 +436,7 @@ export class LiveController {
         return Promise.resolve(advanceGuideClock(block, this.now));
       }
       return loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids, range,
-        { clock: () => this.timing.now(), revalidate: read, currentUntil: this.clockUntil });
+        { clock: () => this.timing.now(), revalidate: read, currentUntil: this.clockUntil, archive: this.catchUpOffer.archive });
     })).then(
       models => {
         if (generation !== this.loadGeneration) return;

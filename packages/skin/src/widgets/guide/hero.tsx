@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { memo } from 'react';
-import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
+import { catchUpRefusalMessage, msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import type { GuideLook } from './look';
 import { Glyph, Line, LiveBadge, Press, Progress } from './parts';
 
@@ -22,9 +22,11 @@ interface HeroProps {
   copyTop?: number;
   compact?: boolean;
   onWatch(channelId: string): void;
+  /** The server offers catch-up: Start over and Replay act here, and a past programme says why it cannot. */
+  onReplay?(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver'): void;
 }
 
-export function GuideHero({ look, channel, programme, small, still, inset, side, onWatch, spacious = false, copyTop = 0, compact = false }: HeroProps) {
+export function GuideHero({ look, channel, programme, small, still, inset, side, onWatch, onReplay, spacious = false, copyTop = 0, compact = false }: HeroProps) {
   return (
     <View style={StyleSheet.absoluteFill}>
       {programme ? (
@@ -64,7 +66,7 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
           accessibilityLiveRegion="polite"
         >
           {programme ? (
-            <ProgrammeCopy look={look} channel={channel} programme={programme} small={small || compact} onWatch={onWatch} spacious={spacious} compact={compact} />
+            <ProgrammeCopy look={look} channel={channel} programme={programme} small={small || compact} onWatch={onWatch} onReplay={onReplay} spacious={spacious} compact={compact} />
           ) : (
             <ChannelCopy look={look} channel={channel} small={small} onWatch={onWatch} />
           )}
@@ -174,12 +176,47 @@ function WatchPill({
   );
 }
 
+/** Start over (on air) or Replay (ended), beside Watch: a quieter outlined pill with the replay mark. */
+function ReplayPill({ look, channel, programme, onReplay }: {
+  look: GuideLook; channel: GuideChannel; programme: GuideProgramme;
+  onReplay?(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver'): void;
+}) {
+  const kind = programme.replay;
+  if (!onReplay || !kind) return null;
+  const label = kind === 'startOver' ? msg('catchUp.startOver') : msg('catchUp.replay');
+  return (
+    <Press
+      label={label}
+      onPress={() => onReplay(channel.id, programme.id, kind)}
+      testID={kind === 'startOver' ? 'guide-start-over' : 'guide-replay'}
+      style={({ hovered, focused, pressed }) => ({
+        flexDirection: 'row', gap: 8, alignItems: 'center', height: 30, paddingLeft: 12, paddingRight: 14, flexShrink: 0,
+        borderRadius: look.radiusControl, borderWidth: 1.5, borderColor: hovered || focused ? look.ink : look.accent,
+        backgroundColor: hovered || focused ? look.cellHover : 'transparent',
+        transform: [{ scale: pressed ? 0.97 : 1 }],
+        boxShadow: focused ? `0px 0px 0px 2px ${look.page}, 0px 0px 0px 4px ${look.accent}` : undefined,
+      })}
+    >
+      <Glyph name="replay" size={13} color={look.ink} />
+      <Line look={look} size={13} weight={650}>{label}</Line>
+    </Press>
+  );
+}
+
+/** A past programme the archive does not hold, where the server offers catch-up: why it cannot replay. */
+function ReplayNote({ look, channel, programme, onReplay }: { look: GuideLook; channel: GuideChannel; programme: GuideProgramme; onReplay?: unknown }) {
+  if (!onReplay || !programme.ended || programme.replay) return null;
+  const note = catchUpRefusalMessage(channel.archiveDays > 0 ? 'too-old' : 'no-archive');
+  return note ? <Line look={look} size={12} color={look.inkSecondary} style={{ flexShrink: 1, minWidth: 0 }}>{note}</Line> : null;
+}
+
 function ProgrammeCopy({
   look,
   channel,
   programme,
   small,
   onWatch,
+  onReplay,
   spacious,
   compact,
 }: {
@@ -190,8 +227,9 @@ function ProgrammeCopy({
   programme: GuideProgramme;
   small: boolean;
   onWatch(id: string): void;
+  onReplay?(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver'): void;
 }) {
-  if (spacious && !compact) return <SpaciousProgrammeCopy look={look} channel={channel} programme={programme} onWatch={onWatch} />;
+  if (spacious && !compact) return <SpaciousProgrammeCopy look={look} channel={channel} programme={programme} onWatch={onWatch} onReplay={onReplay} />;
   const times = msg('ui.startEnd', { start: programme.startLabel, end: programme.endLabel });
   const watchLabel = programme.airing ? msg('live.watch') : msg('ui.watchChannel', { channel: channel.name });
   return (
@@ -223,6 +261,7 @@ function ProgrammeCopy({
         {!small ? (
           <WatchPill look={look} label={watchLabel} onPress={() => onWatch(channel.id)} testID="guide-watch" />
         ) : null}
+        {!small ? <ReplayPill look={look} channel={channel} programme={programme} onReplay={onReplay} /> : null}
         <Line look={look} size={13} weight={600} tabular>
           {times}
         </Line>
@@ -235,9 +274,10 @@ function ProgrammeCopy({
           </>
         ) : (
           <Line look={look} size={12} color={look.inkSecondary}>
-            {programme.ended ? msg('live.ended') : programme.startsLabel}
+            {programme.ended ? (programme.replay === 'catchUp' ? msg('catchUp.replayable') : msg('live.ended')) : programme.startsLabel}
           </Line>
         )}
+        {!compact ? <ReplayNote look={look} channel={channel} programme={programme} onReplay={onReplay} /> : null}
         {programme.episode && (!small || spacious) ? (
           <Line look={look} size={12} color={look.inkSecondary} style={{ flexShrink: 1, minWidth: 0 }}>
             {programme.episode}
@@ -270,11 +310,12 @@ function ProgrammeCopy({
 }
 
 /** Cinematic's details column: a clear reading order beside the full live picture. */
-function SpaciousProgrammeCopy({ look, channel, programme, onWatch }: {
+function SpaciousProgrammeCopy({ look, channel, programme, onWatch, onReplay }: {
   look: GuideLook;
   channel: GuideChannel;
   programme: GuideProgramme;
   onWatch(id: string): void;
+  onReplay?(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver'): void;
 }) {
   return (
     <>
@@ -299,6 +340,8 @@ function SpaciousProgrammeCopy({ look, channel, programme, onWatch }: {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
         <WatchPill look={look} label={programme.airing ? msg('live.watch') : msg('ui.watchChannel', { channel: channel.name })}
           onPress={() => onWatch(channel.id)} testID="guide-watch" />
+        <ReplayPill look={look} channel={channel} programme={programme} onReplay={onReplay} />
+        <ReplayNote look={look} channel={channel} programme={programme} onReplay={onReplay} />
         {programme.genre ? <Line look={look} size={13} color={look.inkSecondary}>{programme.genre}</Line> : null}
         {programme.rating ? <Line look={look} size={13} color={look.inkSecondary}>{programme.rating}</Line> : null}
       </View>

@@ -29,6 +29,11 @@ export function useAppSportsActions(close?: () => void): SportsActions {
     watch: target => {
       if (target.channelId) router.navigate({ pathname: '/watch/[id]', params: { id: target.channelId, kind: 'channel' } });
     },
+    // The game from its first minute: the programme on air from its start, or the ended one from the archive.
+    watchFromStart: (target, kind) => {
+      if (target.channelId && target.programme) router.navigate({ pathname: '/watch/[id]',
+        params: { id: target.programme.id, kind: 'programme', channelId: target.channelId, ...(kind === 'startOver' ? { from: 'start' } : {}) } });
+    },
     ...(add ? { addToMultiview: add } : {}),
     ...(close ? { close } : {}),
     openLink: url => { void Linking.openURL(url).catch(() => {}); },

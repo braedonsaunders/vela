@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRef, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { msg } from '@vela/core';
+import { delayLabel, msg, time } from '@vela/core';
 import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
@@ -160,9 +160,10 @@ export function BottomBar(props: BottomProps) {
             <ChapterStrip look={look} view={view} disabled={blocked} onSeek={props.seek} />
           ) : null}
           {props.live.live ? (
-            <View style={{ alignItems: look.small ? 'stretch' : 'flex-start', gap: look.size(10) }}>
+            <View style={{ alignItems: look.small || props.live.window?.seekable ? 'stretch' : 'flex-start', gap: look.size(10) }}>
               <LiveDial channelId={props.live.channelId} small={look.small} still={look.still} />
               <LiveStatusLine look={look} watch={props.live} />
+              {props.live.window?.seekable ? <LiveTimeline {...props} /> : null}
             </View>
           ) : (
             <Timeline {...props} />
@@ -196,6 +197,40 @@ function Timeline({ look, state, view, blocked, seek, onActive, visible, reveal,
   );
 }
 
+/**
+ * A channel's rewind window (or Start over's programme so far) as the timeline: the start's clock
+ * time on the left, the delay ("-12:30") or LIVE on the right, the live edge marked at the end.
+ * Positions are the window's own; the scrubber works in seconds from its start.
+ */
+function LiveTimeline({ look, view, blocked, seek, onActive, visible, reveal, stepFrom, live }: BottomProps) {
+  const window = live.window!;
+  const span = Math.max(0, window.edge - window.start);
+  const relative = { ...view, position: window.position - window.start, duration: span, buffered: [], chapters: [] };
+  const startsAt = live.windowStartAt;
+  return (
+    <View testID="player-live-timeline">
+      <Scrubber
+        look={look}
+        view={relative}
+        preferred={Platform.isTV && visible && !blocked && reveal === 'timeline'}
+        stepFrom={() => { const from = stepFrom(); return from === null ? null : from - window.start; }}
+        disabled={blocked}
+        onSeek={seconds => seek(window.start + seconds)}
+        onActive={onActive}
+        live={{ label: seconds => delayLabel(span - seconds) || msg('data.live'), color: look.live, atEdge: !window.delayed && !window.startOver }}
+      />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={[look.text(12, 400, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>
+          {live.archive === 'startOver' ? msg('catchUp.startOver') + ' · ' + time(startsAt) : time(startsAt)}
+        </Text>
+        <Text testID="player-live-delay" style={[look.text(12, live.delay ? 600 : 700, live.delay ? look.ink : look.live), { fontVariant: ['tabular-nums'] }]}>
+          {live.delay || msg('data.live')}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function Controls({
   state,
   look,
@@ -217,8 +252,9 @@ function Controls({
   overlay,
 }: BottomProps) {
   // A channel plays at the live edge: channel up and down and the LIVE mark take the place of
-  // the ten-second steps; no speed, no chapters.
+  // the ten-second steps; no speed, no chapters. A rewind window brings the steps back.
   const timeline = !live.live;
+  const rewind = live.live && !!live.window?.seekable;
   const gap = look.size(look.small ? 4 : 8);
   const anchorRef = useRef<ComponentRef<typeof View>>(null);
   const names: Record<Exclude<Opened, null>, string> = {
@@ -262,38 +298,45 @@ function Controls({
         key={Platform.isTV && visible && !blocked ? 'focus-ready' : 'inactive'}
         look={look}
         primary
-        preferred={Platform.isTV && visible && !blocked && (reveal === 'toggle' || !timeline)}
+        preferred={Platform.isTV && visible && !blocked && (reveal === 'toggle' || (!timeline && !rewind))}
         icon={view.playing ? 'pause' : 'play'}
         label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
         disabled={blocked}
         size={look.small ? 48 : 52}
         testID="player-toggle"
-        onPress={() => send({ type: view.playing ? 'pause' : 'play' })}
+        onPress={() => { if (view.playing) live.leftLive(); send({ type: view.playing ? 'pause' : 'play' }); }}
       />
-      {timeline ? (
+      {timeline || rewind ? (
         <>
           <ChromeButton
             look={look}
             icon="skipBack"
             label={msg('ui.back10Seconds')}
             disabled={blocked}
+            testID="player-back-10"
             onPress={() => seekBy(-10)}
           />
           <ChromeButton
             look={look}
             icon="skipForward"
             label={msg('ui.forward10Seconds')}
-            disabled={blocked || view.duration <= 0}
+            disabled={blocked || (rewind ? !live.window?.delayed && !live.window?.startOver : view.duration <= 0)}
+            testID="player-forward-10"
             onPress={() => seekBy(10)}
           />
         </>
       ) : null}
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
+      {/* On a channel: the programme on air from its start (its start is in the archive); in Start over, back to its beginning. */}
+      {!timeline && live.archive === 'startOver' && live.window ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
+        disabled={blocked} testID="player-start-over" onPress={() => seek(live.window!.start)} /> : null}
+      {!timeline && !live.archive && live.startOver ? <ChromeButton look={look} icon="restart" text={msg('catchUp.startOver')} label={msg('catchUp.startOver')}
+        disabled={blocked} testID="player-start-over" onPress={live.startOver} /> : null}
       {timeline ? null : <LiveZap look={look} watch={live} disabled={!live.canZap} />}
-      {timeline ? null : <LiveMultiview look={look} watch={live} />}
+      {timeline || live.archive ? null : <LiveMultiview look={look} watch={live} />}
       <Volume look={look} view={view} send={send} onActive={onActive} />
-      {timeline ? null : <LiveMark look={look} watch={live} send={send} />}
+      {timeline && live.archive !== 'catchUp' ? null : <LiveMark look={look} watch={live} />}
       <View style={cluster}>
         {look.small ? null : (
           <Text

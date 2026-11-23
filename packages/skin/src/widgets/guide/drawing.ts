@@ -22,9 +22,11 @@ export function rowDrawing(channel: GuideChannel, programmes: GuideProgramme[], 
   return { channelId: channel.id, originX, width: Math.max(1, window.to * scale - originX), height, radius: look.radiusCell,
     colours: { background: look.page, surface: look.ui.raised, cell: look.cell, live: look.live, liveEdge: look.liveEdge, edge: look.hairline, fill: look.liveFill, accent: look.accent, ink: look.ink, secondary: look.inkSecondary },
     font: String(look.font(600).fontFamily ?? ''), boldFont: String(look.font(680).fontFamily ?? ''), titleSize: (small ? 13 : 14) * 1.3, detailSize: 12 * 1.3,
-    cells: programmes.map(p => ({ id: p.id, x: p.at * scale + 2 - originX, width: Math.max(2, p.span * scale - 4), ended: p.ended, airing: p.airing,
+    // A past programme the archive still holds draws like a playable one, its title behind a replay mark.
+    cells: programmes.map(p => ({ id: p.id, x: p.at * scale + 2 - originX, width: Math.max(2, p.span * scale - 4), ended: p.ended && p.replay !== 'catchUp', airing: p.airing,
       elapsed: p.airing ? Math.max(0, Math.min(p.span * scale - 4, (now - p.at) * scale)) : 0,
-      title: p.span >= 10 ? p.name : '', detail: p.span * scale > 110 ? [p.airing ? p.remainingLabel : msg('ui.startEnd', { start: p.startLabel, end: p.endLabel }), p.episode].filter(Boolean).join(' · ') : '',
+      title: p.span >= 10 ? (p.replay === 'catchUp' ? `\u21BA ${p.name}` : p.name) : '', detail: p.span * scale > 110 ? [p.airing ? p.remainingLabel : msg('ui.startEnd', { start: p.startLabel, end: p.endLabel }), p.episode].filter(Boolean).join(' · ') : '',
       tone: p.tone >= 0 && p.span * scale > 24 ? look.tone(p.tone) : '',
-      label: msg('ui.programmeStartToEndChannelProgrammeDetails', { programme: p.name, channel: channel.name, start: p.startLabel, end: p.endLabel }) })) };
+      label: msg('ui.programmeStartToEndChannelProgrammeDetails', { programme: p.name, channel: channel.name, start: p.startLabel, end: p.endLabel })
+        + (p.replay === 'catchUp' ? `, ${msg('catchUp.replayable')}` : '') })) };
 }
