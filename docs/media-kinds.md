@@ -242,7 +242,10 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   re-lays out in place. The cover opens from the middle of the screen (no card to grow
   from). If the system reclaims the web view it reopens at the last reported place.
 - TV (Android TV, tvOS) has no reader: a book's page offers no Read and a book
-  series no Start; audiobooks and music still play.
+  series no Start, and both say instead, quietly, that reading is on phones,
+  tablets, web and desktop. Audiobooks and music on a TV wait for the native audio
+  engine (the Media3 and AVAudioSession work in `modules/vela-player`); until it
+  lands, native audio reports itself unsupported there, as on phones (section 4).
 
 ## 4. Where Vela stands (2026-11-20)
 
@@ -250,6 +253,6 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
 | --- | --- | --- |
 | Cards and pages | Square, round and bound-book covers in every document; album, artist, book, series, audiobook pages | Same React tree; not yet looked at on a device or TV focus engine |
 | Audio | One HTMLAudioElement, Media Session (lock screen, media keys) | Reports unsupported. Apple: audio-only plans in the player module with AVAudioSession `.playback`, MPNowPlayingInfoCenter and MPRemoteCommandCenter. Android: Media3 MediaSessionService with a notification. |
-| Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Phones and tablets: the same engine in an Expo DOM component (`@expo/dom-webview`). TV: no Read action. |
+| Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Phones and tablets: the same engine in an Expo DOM component (`@expo/dom-webview`). TV: no Read action, a line saying where reading is. |
 
 Server notes for Ether are in section 2 (URLs, file transport for audio, progress ordering).
