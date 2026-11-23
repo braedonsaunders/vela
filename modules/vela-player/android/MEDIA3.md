@@ -131,9 +131,11 @@ the tap hands libass each raw event with its absolute time while Media3 still
 builds its own cues; for the selected ASS track those cues are suppressed and
 the overlay (AssOverlay) draws libass frames on every display frame, timed to the
 video frame on screen (VideoFrameMetadataListener) rather than the audio clock.
-Android has no font provider for libass: fonts embedded in the script are used,
-and every other family falls back to Roboto (Noto Sans CJK for Chinese, Japanese
-or Korean system languages). Matroska font attachments are not read yet. If the
+Android has no font provider for libass. Fonts attached to the Matroska file
+(found through the SeekHead or before the first Cluster, read with one ranged
+request through the same scoped grant when the first ASS track appears) and
+fonts embedded in the script are used by family name; every other family falls
+back to Roboto (Noto Sans CJK for Chinese, Japanese or Korean system languages). If the
 library is missing, Media3's SsaParser cues are shown instead (colours, italics,
 bold, alignment and placement only). Build libass with
 `modules/vela-player/android/ass/build.sh` (pinned sources, meson/ninja) before

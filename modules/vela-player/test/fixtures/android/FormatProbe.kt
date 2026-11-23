@@ -124,5 +124,31 @@ fun main() {
   check(AssSample.parse("Comment: 0:00:00:00,0:00:01:00,x".toByteArray()) == null)
   check(AssSample.parse("Dialogue: 0:00:00:00".toByteArray()) == null)
   check(AssSample.parse("Dialogue: 0:00:00:00,bad,x".toByteArray()) == null)
+  // Matroska attachments: found through the SeekHead, or before the first Cluster; fonts only.
+  fun ebmlId(id: Long) = (if (id > 0xffffff) 4 else if (id > 0xffff) 3 else if (id > 0xff) 2 else 1).let { n -> ByteArray(n) { ((id shr (8 * (n - 1 - it))) and 0xff).toByte() } }
+  fun el(id: Long, body: ByteArray) = ebmlId(id) + byteArrayOf(0x01, 0, 0, 0, 0, 0, 0, 0).also { size -> // 8-byte size
+    for (i in 0 until 7) size[7 - i] = ((body.size.toLong() shr (8 * i)) and 0xff).toByte()
+  } + body
+  val unknownSize = byteArrayOf(0x01, 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte())
+  val font = ByteArray(300) { (it * 7).toByte() }
+  val attachmentsEl = el(0x1941A469, el(0x61A7, el(0x466E, "Fancy.TTF".toByteArray()) + el(0x4660, "application/octet-stream".toByteArray()) + el(0x465C, font)) +
+    el(0x61A7, el(0x466E, "cover.jpg".toByteArray()) + el(0x4660, "image/jpeg".toByteArray()) + el(0x465C, ByteArray(10))))
+  val info = el(0x1549A966, ByteArray(40))
+  fun seekHead(position: Int) = el(0x114D9B74, el(0x4DBB, el(0x53AB, ebmlId(0x1941A469)) + el(0x53AC, byteArrayOf(0, 0, 0, position.toByte()))))
+  val cluster = el(0x1F43B675, ByteArray(8))
+  // SeekPosition counts from the Segment's data: the SeekHead, then Info, then Attachments.
+  val withAttachments = el(0x1A45DFA3, ByteArray(4)) + ebmlId(0x18538067) + unknownSize +
+    seekHead(seekHead(0).size + info.size) + info + attachmentsEl + cluster
+  fun reader(file: ByteArray): (Long, Int) -> ByteArray? = { position, length ->
+    if (position >= file.size) null else file.copyOfRange(position.toInt(), minOf(file.size, position.toInt() + length))
+  }
+  val found = MatroskaAttachments.fonts(reader(withAttachments))
+  check(found.size == 1 && found[0].name == "Fancy.TTF" && found[0].data.contentEquals(font)) // by extension, not MIME type
+  val noSeek = el(0x1A45DFA3, ByteArray(4)) + ebmlId(0x18538067) + unknownSize + info + attachmentsEl + cluster
+  check(MatroskaAttachments.fonts(reader(noSeek)).map { it.name } == listOf("Fancy.TTF"))
+  val afterCluster = el(0x1A45DFA3, ByteArray(4)) + ebmlId(0x18538067) + unknownSize + info + cluster + attachmentsEl
+  check(MatroskaAttachments.fonts(reader(afterCluster)).isEmpty()) // without a SeekHead, nothing past the first Cluster
+  check(MatroskaAttachments.fonts(reader(ByteArray(64))).isEmpty())
+  check(MatroskaAttachments.isFont(MatroskaAttachment("a.bin", "font/otf", ByteArray(0))))
   println("Android formats, display matching and subtitle appearance passed")
 }

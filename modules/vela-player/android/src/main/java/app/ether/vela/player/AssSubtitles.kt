@@ -14,6 +14,7 @@ internal object AssNative {
   // Public members of an internal object: JNI binds by the unmangled name.
   @JvmStatic external fun create(fontPath: String, family: String): Long
   @JvmStatic external fun addFont(handle: Long, name: String, data: ByteArray)
+  @JvmStatic external fun reloadFonts(handle: Long)
   @JvmStatic external fun newTrack(handle: Long, header: ByteArray): Long
   @JvmStatic external fun addEvent(track: Long, chunk: ByteArray, startMs: Long, durationMs: Long)
   @JvmStatic external fun freeTrack(track: Long)
@@ -27,9 +28,20 @@ internal class AssSubtitles private constructor(private val handle: Long) {
   private val tracks = mutableMapOf<String, Long>()
   private var released = false
 
+  /** Called once, when the first ASS track appears (the engine then reads the file's attached fonts). */
+  var onFirstTrack: () -> Unit = {}
+
   @Synchronized fun track(id: String, header: ByteArray) {
     if (released || id in tracks) return
     AssNative.newTrack(handle, header).takeIf { it != 0L }?.let { tracks[id] = it }
+    if (tracks.size == 1) onFirstTrack()
+  }
+
+  /** Fonts attached to the media file, which scripts name by family. */
+  @Synchronized fun addFonts(fonts: List<MatroskaAttachment>) {
+    if (released || fonts.isEmpty()) return
+    fonts.forEach { AssNative.addFont(handle, it.name, it.data) }
+    AssNative.reloadFonts(handle)
   }
 
   @Synchronized fun event(id: String, timeUs: Long, sample: ByteArray) {

@@ -10,6 +10,7 @@ typedef struct {
   ASS_Library *library;
   ASS_Renderer *renderer;
   int width, height;
+  char *fontPath, *family;
 } Context;
 
 JNIEXPORT jlong JNICALL
@@ -27,10 +28,12 @@ Java_app_ether_vela_player_AssNative_create(JNIEnv *env, jclass cls, jstring fon
   ass_set_extract_fonts(context->library, 1);
   const char *path = (*env)->GetStringUTFChars(env, fontPath, NULL);
   const char *name = (*env)->GetStringUTFChars(env, family, NULL);
-  // No system font provider on Android: every family resolves to embedded fonts or this default file.
-  ass_set_fonts(context->renderer, path, name, ASS_FONTPROVIDER_NONE, NULL, 0);
+  context->fontPath = strdup(path);
+  context->family = strdup(name);
   (*env)->ReleaseStringUTFChars(env, fontPath, path);
   (*env)->ReleaseStringUTFChars(env, family, name);
+  // No system font provider on Android: every family resolves to added fonts or this default file.
+  ass_set_fonts(context->renderer, context->fontPath, context->family, ASS_FONTPROVIDER_NONE, NULL, 0);
   return (jlong)(intptr_t)context;
 }
 
@@ -46,6 +49,14 @@ Java_app_ether_vela_player_AssNative_addFont(JNIEnv *env, jclass cls, jlong hand
     (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
   }
   (*env)->ReleaseStringUTFChars(env, name, font);
+}
+
+// Fonts added with addFont take effect when the font selection is rebuilt.
+JNIEXPORT void JNICALL
+Java_app_ether_vela_player_AssNative_reloadFonts(JNIEnv *env, jclass cls, jlong handle) {
+  (void)env; (void)cls;
+  Context *context = (Context *)(intptr_t)handle;
+  ass_set_fonts(context->renderer, context->fontPath, context->family, ASS_FONTPROVIDER_NONE, NULL, 0);
 }
 
 JNIEXPORT jlong JNICALL
@@ -137,5 +148,7 @@ Java_app_ether_vela_player_AssNative_destroy(JNIEnv *env, jclass cls, jlong hand
   Context *context = (Context *)(intptr_t)handle;
   ass_renderer_done(context->renderer);
   ass_library_done(context->library);
+  free(context->fontPath);
+  free(context->family);
   free(context);
 }

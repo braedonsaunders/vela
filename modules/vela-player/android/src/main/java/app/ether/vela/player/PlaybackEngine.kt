@@ -49,6 +49,9 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   private val buffering = playbackBuffering(preview || shared, live)
   /** libass for full-screen ASS/SSA; null keeps Media3's own SSA cues. */
   private val ass: AssSubtitles? = if (preview || shared) null else AssSubtitles.create()
+  /** The original file being played, whose attached fonts libass may need. */
+  @Volatile private var originalUri: Uri? = null
+  private val fontLoader = if (ass != null) java.util.concurrent.Executors.newSingleThreadExecutor() else null
   /** Format id of the selected subtitle track when libass draws it. */
   private var assTrack: String? = null
   /** The last video frame sent to the display: its media time and system release time (nanoTime). */
@@ -108,6 +111,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   }
 
   init {
+    ass?.onFirstTrack = { main.post(::loadAttachedFonts) }
     if (!preview) Log.i("vela-media3", "dolby vision decoder profiles 0x${Integer.toHexString(taps.dolbyVisionDecoderProfiles.fold(0) { a, b -> a or b })}; " +
       "profile 7 conversion ${taps.convertsDolbyVision}; float output ${!shared}")
     player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), !preview && !shared)
@@ -188,6 +192,7 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
 
   override fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean) {
     this.plan = plan
+    originalUri = url.takeIf { plan?.selectedPath?.isOriginalFile == true }
     // Live windows have their own clock; never rebase them or move them to the edge.
     timeline = MediaTimeline(if (plan?.live != true && plan?.selectedPath?.transport == "hls") plan?.selectedPath?.timelineOriginSeconds ?: 0.0 else 0.0)
     if (!preview) Log.i("vela-media3", "media timeline origin ${timeline.origin}s")
@@ -285,6 +290,34 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     if (choice != null) params.addOverride(TrackSelectionOverride(choice.first.mediaTrackGroup, choice.second))
     selector.parameters = params.build()
   }
+  /** Reads the fonts attached to the original (Matroska attachments) for libass, once, off the main thread. */
+  private fun loadAttachedFonts() {
+    val ass = ass ?: return
+    val uri = originalUri ?: return
+    val source = ScopedMediaDataSource.Factory(grant)
+    fontLoader?.execute {
+      val fonts = runCatching { MatroskaAttachments.fonts { position, length -> readRange(source, uri, position, length) } }
+        .onFailure { Log.w("vela-media3", "attached fonts unreadable: ${it.javaClass.simpleName}") }.getOrDefault(emptyList())
+      Log.i("vela-media3", "attached fonts: ${fonts.size}")
+      ass.addFonts(fonts)
+    }
+  }
+
+  private fun readRange(factory: ScopedMediaDataSource.Factory, uri: Uri, position: Long, length: Int): ByteArray? {
+    val source = factory.createDataSource()
+    return try {
+      source.open(androidx.media3.datasource.DataSpec.Builder().setUri(uri).setPosition(position).build())
+      val buffer = ByteArray(length)
+      var filled = 0
+      while (filled < length) {
+        val read = source.read(buffer, filled, length - filled)
+        if (read == C.RESULT_END_OF_INPUT) break
+        filled += read
+      }
+      if (filled == length) buffer else buffer.copyOf(filled)
+    } finally { source.close() }
+  }
+
   override fun renderAss(bitmap: android.graphics.Bitmap, force: Boolean): Int {
     val track = assTrack ?: return -1
     val width = (state.videoParams["w"] as? Long)?.toInt() ?: 0
@@ -294,5 +327,5 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     val time = if (player.isPlaying && framePts >= 0 && since in -100..250) framePts / 1000 + since else player.currentPosition
     return ass?.render(track, time, bitmap, width, height, force) ?: -1
   }
-  override fun release() { main.removeCallbacks(tick); player.release(); ass?.release() }
+  override fun release() { main.removeCallbacks(tick); player.release(); fontLoader?.shutdownNow(); ass?.release() }
 }

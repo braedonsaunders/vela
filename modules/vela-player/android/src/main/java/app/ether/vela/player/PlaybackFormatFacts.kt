@@ -114,7 +114,8 @@ internal class PlaybackFormatFacts {
       val delivered = if (pcm && routeChannels != null) minOf(channels, routeChannels) else channels
       if (delivered > 0) { put("channels", delivered); AvFormats.layout(delivered)?.let { put("layout", it) } }
       if (track.sampleRate > 0) put("sampleRate", track.sampleRate)
-      if (pcm) pcmBits(track.encoding)?.let { put("bitDepth", it) }
+      // Float PCM has no integer depth (it carries 24-bit samples exactly); `lossless` says what survived.
+      if (pcm && track.encoding != C.ENCODING_PCM_FLOAT) pcmBits(track.encoding)?.let { put("bitDepth", it) }
       if (pcm) { put("downmixed", downmixed); put("resampled", resampled) }
       lossless(source, track, pcm, downmixed || resampled)?.let { put("lossless", it) }
       // A bitstream carries the objects to the receiver; decoding to PCM keeps the channel bed only.
