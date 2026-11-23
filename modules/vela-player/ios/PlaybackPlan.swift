@@ -35,6 +35,18 @@ struct VelaPlan: Decodable {
         subtitleTracks.first { $0.id == id }
     }
 
+    /// The server path a quality choice stands for: `path:<id>` or a path id, or an HLS rendition of a
+    /// path's ladder (a Quality id). AVPlayer chooses inside the ladder itself, so a rendition is the
+    /// converted path of the same height when the server offers one; otherwise nil.
+    func switchTarget(_ choice: String) -> String? {
+        let id = choice.hasPrefix("path:") ? String(choice.dropFirst(5)) : choice
+        if paths.contains(where: { $0.id == id }) { return id }
+        guard let height = paths.lazy.compactMap({ $0.qualities?.first { $0.id == id }?.height }).first else { return nil }
+        return paths.first {
+            $0.original != true && $0.quality?.height == height && ["ready", "on-demand"].contains($0.readiness)
+        }?.id
+    }
+
     /// A plan from the view's `plan` prop (the JSON object React Native passes).
     static func decode(_ object: [String: Any]) -> VelaPlan? {
         guard let data = try? JSONSerialization.data(withJSONObject: object) else {
@@ -58,6 +70,8 @@ struct VelaPlanPath: Decodable {
     let timelineOriginSeconds: Double?
     let originalVideo: VelaOriginalVideo?
     let quality: VelaQualityTarget?
+    /// The HLS ladder the server publishes for this path, when it has one.
+    let qualities: [VelaRendition]?
 
     /// An original file the server serves by byte range: the native engine's input.
     var isOriginalFile: Bool {
@@ -74,6 +88,12 @@ struct VelaOriginalVideo: Decodable {
     let colorTransfer: String?
     let colorPrimaries: String?
     let dvProfile: Int?
+}
+
+/// One rung of a path's HLS ladder (Quality): optional fields, so an unexpected rung never fails the plan.
+struct VelaRendition: Decodable {
+    let id: String?
+    let height: Int?
 }
 
 /// The output a converted path targets (QualityTarget).

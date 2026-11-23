@@ -26,7 +26,7 @@ for (const name of ['Libass', 'Fribidi']) {
   rmSync(join(stage, name + '.xcframework'), { recursive: true, force: true });
   cpSync(join(ass, 'build', name + '.xcframework'), join(stage, name + '.xcframework'), { recursive: true, verbatimSymlinks: true });
 }
-for (const name of ['PlaybackClient', 'PlaybackSession', 'PlaybackHost', 'PlaybackRendering', 'PreviewPlayback', 'PlayerState', 'PlayerReport', 'PlayerCapabilities', 'PlaybackPreferences', 'PlaybackFormat', 'PlaybackCacheBudget', 'ASSSubtitles', 'SubtitleAppearance', 'PlaybackPlan', 'PathRecovery', 'MediaAccess', 'MediaRedirects', 'ScopedMediaHTTP', 'ScopedAetherReader'])
+for (const name of ['PlaybackClient', 'PlaybackSession', 'PlaybackHost', 'PlaybackRendering', 'PreviewPlayback', 'PlayerState', 'PlayerReport', 'PlayerCapabilities', 'PictureInPicture', 'PlaybackPreferences', 'PlaybackFormat', 'PlaybackCacheBudget', 'ASSSubtitles', 'SubtitleAppearance', 'PlaybackPlan', 'PathRecovery', 'MediaAccess', 'MediaRedirects', 'ScopedMediaHTTP', 'ScopedAetherReader'])
   cpSync(join(ios, name + '.swift'), join(stage, 'Sources/VelaNative', name + '.swift'));
 for (const name of ['AppKitPlaybackRendering.swift', 'NativeHost.swift']) cpSync(join(here, name), join(stage, 'Sources/VelaNative', name));
 // AetherEngine's optional components, the same traits as the tvOS and iOS apps (apps/vela/plugins/apple-player.js).

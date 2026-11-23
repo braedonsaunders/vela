@@ -19,7 +19,7 @@ export function windowsSnapshot(value: unknown, props: VelaPlayerProps, subtitle
     sessionId: plan?.sessionId ?? null, sourceGeneration: plan?.sourceGeneration ?? 0,
     seekGeneration: plan?.seekGeneration ?? 0, state,
     sourceId: plan?.selectedPathId ?? null, strategy: path?.kind ?? null, backend: raw.backend ?? 'file',
-    renditionId: null, qualityIds: [], capabilities: { pip: false, fullscreen: true, audioSwitch: raw.capabilities?.audioSwitch ?? audioTracks.length > 1 },
+    renditionId: null, qualityIds: [], capabilities: { pip: raw.capabilities?.pip === true, fullscreen: true, audioSwitch: raw.capabilities?.audioSwitch ?? audioTracks.length > 1 },
     lockedQuality: null, audioTracks, subtitleTracks, renditions: [], video: raw.video ?? null, diagnostics: raw.diagnostics,
     currentBitrateBps: null, requiredBandwidthBps: null, bufferAheadSeconds, throughputHistory: [],
     speed: number(raw.speed, 1), speeds: raw.speeds ?? [0.5, 0.75, 1, 1.25, 1.5, 2], pendingSubtitleTrackId: null,

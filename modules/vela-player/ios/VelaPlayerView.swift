@@ -26,7 +26,38 @@ final class VelaPlayerView: ExpoView {
         backgroundColor = .clear
         clipsToBounds = true
     }
-    override func didMoveToWindow() { super.didMoveToWindow(); session.hostAttachmentChanged() }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        #if os(iOS)
+        // iOS takes the view out of its window when the app leaves the foreground. That is not the viewer
+        // leaving the page: a watch plays on behind the home screen (UIBackgroundModes audio) or in its
+        // picture-in-picture window. Back in the foreground, a view still without a window has left.
+        if window == nil, UIApplication.shared.applicationState != .active {
+            returnObserver = returnObserver ?? NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.endReturnObservation()
+                    if self.window == nil { self.session.hostAttachmentChanged() }
+                }
+            }
+            return
+        }
+        endReturnObservation()
+        #endif
+        session.hostAttachmentChanged()
+    }
+    #if os(iOS)
+    deinit {
+        if let returnObserver { NotificationCenter.default.removeObserver(returnObserver) }
+    }
+    private var returnObserver: NSObjectProtocol?
+    private func endReturnObservation() {
+        if let returnObserver { NotificationCenter.default.removeObserver(returnObserver) }
+        returnObserver = nil
+    }
+    #endif
     override func layoutSubviews() { super.layoutSubviews(); session.layout() }
     func commitProps() { session.commitProps() }
     func setAmbient(_ value: Bool) { session.setAmbient(value) }

@@ -12,6 +12,12 @@ final class PlayerReport {
     var volume: Double = 1
     var muted = false
     var waitForFrame = false
+    /// A picture-in-picture window can be opened for the playing title (PictureInPicture.available).
+    var pip = false
+    /// The viewer's playback speed, kept across sources as the web player keeps it; live reports 1×.
+    var speed: Double = 1
+    /// The web player's speeds (modules/vela-player/web/engine/host/telemetry.ts): AetherEngine caps video at 2×.
+    static let speeds: [Double] = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 
     private let emitSnapshot: ([String: Any]) -> Void
     private let emitObservation: ([String: Any]) -> Void
@@ -106,7 +112,7 @@ final class PlayerReport {
             "sourceGeneration": plan.sourceGeneration,
             "seekGeneration": plan.seekGeneration,
             "state": phase,
-            "capabilities": ["pip": false, "fullscreen": false, "audioSwitch": true],
+            "capabilities": ["pip": pip, "fullscreen": false, "audioSwitch": true],
             "qualityIds": [String](),
             "renditions": [Any](),
             "audioTracks": plan.audioTracks.map(\.snapshot),
@@ -121,8 +127,9 @@ final class PlayerReport {
             "audioTrackIds": plan.audioTracks.map(\.id),
             "chapters": (plan.chapters ?? []).map(\.snapshot),
             "throughputHistory": state.cacheSpeed.map { [Double($0 * 8)] } ?? [],
-            "speed": 1,
-            "speeds": [1],
+            // Live speed is managed by the player, as on the web: no choices, always 1×.
+            "speed": plan.isLive ? 1 : speed,
+            "speeds": plan.isLive ? [Double]() : Self.speeds,
             "subtitleStyleAvailable": SubtitleAppearance.honoured,
             "subtitleClientOnly": subtitleClientOnly,
             "audioClientOnly": audioClientOnly,

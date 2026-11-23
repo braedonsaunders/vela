@@ -11,6 +11,7 @@ import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, qualityReached } from './present';
+import { stopsInBackground } from './background';
 import { startFailure, startFailureOf, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
 
@@ -93,13 +94,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
 
   // A backgrounded app may be suspended and ended there without running JavaScript (the Apple TV's TV
   // button): the session is stopped as the app leaves the foreground, and started again where it was when
-  // it returns. The transient 'inactive' state (Control Center, a system alert) keeps it. A browser tab
-  // in the background keeps playing, so the web keeps its session.
+  // it returns (stopsInBackground: not a playing iPhone or iPad watch, nor the web). The transient
+  // 'inactive' state (Control Center, a system alert) keeps it.
   const away = useRef(false);
   useEffect(() => {
     if (!id || external || Platform.OS === 'web') return;
     const subscription = AppState.addEventListener('change', state => {
-      if (state === 'background' && !away.current) {
+      if (state === 'background' && !away.current && stopsInBackground({ os: Platform.OS, tv: Platform.isTV }, paused.current)) {
         away.current = true;
         void vela.playback.stop();
       } else if (state === 'active' && away.current) {

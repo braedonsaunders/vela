@@ -33,6 +33,16 @@ describe('windowsSnapshot', () => {
     expect(snapshot.subtitleTracks.map(t => t.label)).toEqual(['English']);
   });
 
+  test('the Mac host offers picture in picture and speeds when it reports them', () => {
+    const mac = windowsSnapshot({ capabilities: { pip: true, fullscreen: false, audioSwitch: true }, speed: 1.5, speeds: [0.5, 1, 1.5, 2] }, { plan });
+    expect(mac.capabilities).toEqual({ pip: true, fullscreen: true, audioSwitch: true });
+    expect(mac).toMatchObject({ speed: 1.5, speeds: [0.5, 1, 1.5, 2] });
+    // A live stream's host reports no speeds: the chrome offers none.
+    expect(windowsSnapshot({ speeds: [] }, { plan }).speeds).toEqual([]);
+    // mpv hosts report no capabilities: no PiP button.
+    expect(windowsSnapshot({ state: 'playing' }, { plan }).capabilities.pip).toBe(false);
+  });
+
   test('without native values the plan supplies position and duration', () => {
     const snapshot = windowsSnapshot(undefined, { plan });
     expect(snapshot).toMatchObject({ state: 'loading', preparation: 'media-metadata', position: 42, duration: 3600, speed: 1, volume: 1, muted: false, waiting: false });

@@ -101,6 +101,26 @@ runs and ASS `\an`/`\pos` placement, sized against the picture in the viewer's s
 Aether's bitmaps. The subtitle menu's delay (±10 minutes) shifts the overlay against the clock, and
 `maximumSubtitleOffsetSeconds` follows it so the cues it reaches stay decoded.
 
+**Speed, picture in picture and the background (2026-11-23).** The player offers the web's speeds,
+0.5× to 2× (`PlayerReport.speeds`), through `AetherEngine.setRate`, pitch-preserving on every route
+(Aether pins TimeDomain stretching); a speed carries across sources as on the web, and a live stream
+reports no speeds and plays at 1× (`perform` refuses a speed on live). iOS, iPadOS and the macOS host
+offer picture in picture (`PictureInPicture`): a controller around `nativePlayerLayer` on the native
+routes or `softwarePiPSource` on the software route, rebuilt on every route or source change, setting
+`pictureInPictureActive` from its delegate; on iOS it opens on its own when the app goes home while a
+title plays (`canStartPictureInPictureAutomaticallyFromInline`). Previews and multiview tiles have none,
+and Apple TV offers none (AVKit there does not present the software route, and Vela's chrome hides the
+system affordance). The app's `UIBackgroundModes` `audio` key (the apple-player config plugin; a plain
+Info.plist key, no entitlement or capability, so TestFlight and App Store need nothing more) keeps a
+playing iPhone or iPad watch going behind the home screen: the native route keeps playing and the software
+route drops to audio only (`[SWHost] background audio-only`), restoring the picture on return. iOS takes the
+player view out of its window in the background, which `VelaPlayerView` no longer treats as leaving the
+page, and the player's JavaScript keeps a playing iPhone or iPad session (`stopsInBackground`). Apple TV,
+Android and a paused iPhone keep stopping the session as the app leaves and starting it again on return;
+previews and tiles set `backgroundPlaybackEnabled = false`. The quality menu never offers Automatic here:
+it is shown only for engines that pick HLS renditions themselves (`present.ts` `qualityAuto`); an HLS
+rung the chrome offers maps to the server path of the same height (`VelaPlan.switchTarget`).
+
 **Not available on Apple TV.** DTS bitstreaming (tvOS has no DTS output; DTS-HD MA decodes losslessly
 to PCM, DTS:X heights render as above). Any compressed passthrough other than what AVPlayer forwards
 for Dolby Digital and Dolby Digital Plus. Hardware AV1 (Apple TV 4K third generation decodes it in
