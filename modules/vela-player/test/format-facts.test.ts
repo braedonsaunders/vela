@@ -31,7 +31,8 @@ function video(overrides: Partial<VideoTrack> = {}): VideoTrack {
     height: 2160,
     rotation: 0,
     fieldOrder: 'progressive',
-    color: { primaries: 'bt2020', transfer: 'pq', matrix: 'bt2020-ncl', fullRange: false },
+    // Mediabunny reports these H.273 names, which the DOM typings predate.
+    color: { primaries: 'bt2020', transfer: 'pq', matrix: 'bt2020-ncl', fullRange: false } as unknown as VideoColorSpaceInit,
     config: { codec: 'hvc1.2.4.L153.B0', description: hvcC(2, 2) },
     ...overrides,
   };

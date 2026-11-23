@@ -1,6 +1,7 @@
-import type { InputVideoTrack } from 'mediabunny';
 import { readMPEG4TrackConfiguration, type MPEG4TrackCodec } from 'webgpu-player/src/demux/mpeg4/MPEG4TrackConfiguration';
 import { readVC1TrackConfiguration } from 'webgpu-player/src/demux/vc1/VC1TrackConfiguration';
+
+type InputVideoTrack = Parameters<typeof readVC1TrackConfiguration>[1];
 
 const MPEG4_FAMILY = new Set(['mpeg4', 'h263', 'msmpeg4v1', 'msmpeg4v2', 'msmpeg4v3']);
 
