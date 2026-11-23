@@ -222,9 +222,30 @@ export class Audio {
     this.lastObservation = 0;
     const start = plan.positionSeconds > 0 ? plan.positionSeconds : startSeconds;
     this.patch({ chapters: plan.chapters ?? [], durationSeconds: plan.durationSeconds ?? this.state.durationSeconds, positionSeconds: start });
-    this.engine.load(path.url, start, this.state.rate);
-    if (this.autoplay) this.engine.play();
-    else this.held('paused');
+    this.loadEngine(path.url, start, () => {
+      if (this.autoplay) this.engine?.play();
+      else this.held('paused');
+    });
+  }
+
+  /**
+   * Load the plan's URL into the engine. A Jellyfin, Emby or Plex plan's URL carries no credential
+   * and an audio element sends no headers, so it plays the server's credentialed form of the URL
+   * (`Playback.mediaAccess`), minted per load and never kept; Ether's own URLs are unchanged.
+   * Nothing loads if another item or URL took over meanwhile.
+   */
+  private loadEngine(url: string, start: number, then: () => void): void {
+    const sessionId = this.sessionId;
+    void (async () => {
+      let resolved = url;
+      try {
+        const access = await this.playback.mediaAccess();
+        if (access?.nativeURL) resolved = await access.nativeURL(url);
+      } catch { /* The URL as planned: a server that needs no credential still plays it. */ }
+      if (!this.engine || this.sessionId !== sessionId || this.url !== url) return;
+      this.engine.load(resolved, start, this.state.rate);
+      then();
+    })();
   }
 
   private follow(): void {
@@ -236,8 +257,7 @@ export class Audio {
       if (path && 'url' in path && path.url && path.url !== this.url && this.state.phase !== 'paused') {
         this.url = path.url;
         const at = this.engine?.position() ?? this.state.positionSeconds;
-        this.engine?.load(path.url, at, this.state.rate);
-        this.engine?.play();
+        this.loadEngine(path.url, at, () => this.engine?.play());
       }
       return;
     }
@@ -252,10 +272,12 @@ export class Audio {
       this.sessionId = playback.sessionId;
       this.url = recovered.url;
       this.sequence = 0;
-      this.engine?.load(recovered.url, at, this.state.rate);
       // After playback has finished taking the new plan (it arms its watchdog as it does).
-      if (this.state.phase === 'paused') queueMicrotask(() => this.held('paused'));
-      else this.engine?.play();
+      const paused = this.state.phase === 'paused';
+      this.loadEngine(recovered.url, at, () => {
+        if (paused) queueMicrotask(() => this.held('paused'));
+        else this.engine?.play();
+      });
       return;
     }
     // Another session took over.

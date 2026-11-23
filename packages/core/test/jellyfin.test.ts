@@ -29,7 +29,7 @@ describe('JellyfinAdapter addresses', () => {
 
   test('native playback URLs carry the token only as a query the host strips again', async () => {
     const adapter = new JellyfinAdapter(BASE, new FakeCredentials(tokens('abc')));
-    expect(await adapter.nativePlaybackURL('/jf/Videos/1/stream')).toBe('https://media.example/jf/Videos/1/stream?api_key=abc');
+    expect(await adapter.nativePlaybackURL('/jf/Videos/1/stream')).toBe('https://media.example/jf/Videos/1/stream?api_key=abc&ApiKey=abc');
     expect(await adapter.mediaHeaders()).toEqual({ Authorization: 'MediaBrowser Token="abc"' });
   });
 });

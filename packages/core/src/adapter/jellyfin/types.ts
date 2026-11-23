@@ -28,6 +28,8 @@ export interface Item {
         PlaybackPositionTicks?: number;
         Played?: boolean;
         IsFavorite?: boolean;
+        PlayedPercentage?: number;
+        LastPlayedDate?: string;
     };
     People?: {
         Id: string;
@@ -47,6 +49,27 @@ export interface Item {
     Number?: string;
     ChannelNumber?: string;
     EpisodeTitle?: string;
+    MediaType?: string;
+    IsFolder?: boolean;
+    ParentId?: string;
+    Path?: string;
+    Container?: string;
+    ChildCount?: number;
+    AlbumCount?: number;
+    SongCount?: number;
+    Album?: string;
+    AlbumId?: string;
+    AlbumArtist?: string;
+    AlbumArtists?: { Id: string; Name: string }[];
+    ArtistItems?: { Id: string; Name: string }[];
+    Artists?: string[];
+    AlbumPrimaryImageTag?: string;
+    ParentThumbItemId?: string;
+    ParentThumbImageTag?: string;
+    PrimaryImageAspectRatio?: number;
+    DateCreated?: string;
+    Width?: number;
+    Height?: number;
 }
 export interface Stream {
     Index: number;
