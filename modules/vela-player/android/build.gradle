@@ -1,4 +1,5 @@
-// Android has one playback engine: Media3 with its LGPL FFmpeg audio renderer.
+// Android has one playback engine: Media3 with its LGPL FFmpeg audio renderer, plus libdovi (MIT) for
+// Dolby Vision Profile 7 to 8.1 conversion.
 plugins {
   id 'com.android.library'
   id 'expo-module-gradle-plugin'
@@ -9,11 +10,16 @@ version = '0.1.0'
 def media3Version = '1.11.1'
 def ffmpegDir = file(project.findProperty('velaMedia3Dir')
   ?: "${System.getProperty('user.home')}/.scratch/vela-build/media3/${media3Version}/libraries/decoder_ffmpeg/src/main")
+def doviDir = file(project.findProperty('velaDoviDir')
+  ?: "${System.getProperty('user.home')}/.scratch/vela-build/dovi/3.4.0")
 def supportedAbis = ['armeabi-v7a', 'arm64-v8a', 'x86_64']
 def requestedAbis = (project.findProperty('reactNativeArchitectures') ?: supportedAbis.join(',')).split(',')
 requestedAbis.each { abi ->
   if (!supportedAbis.contains(abi) || !new File(ffmpegDir, "jni/ffmpeg/android-libs/${abi}/libavcodec.a").exists()) {
     throw new GradleException("Build the LGPL Media3 audio extension for ${abi} with modules/vela-player/android/ffmpeg/build.sh first")
+  }
+  if (!new File(doviDir, "${abi}/libdolby_vision.a").exists()) {
+    throw new GradleException("Build libdovi for ${abi} with modules/vela-player/android/dovi/build.sh first")
   }
 }
 
@@ -25,7 +31,7 @@ android {
     consumerProguardFiles 'proguard-rules.pro'
     ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
     externalNativeBuild {
-      cmake { arguments '-DANDROID_STL=c++_shared', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', "-DVELA_MEDIA3_DIR=${ffmpegDir}" }
+      cmake { arguments '-DANDROID_STL=c++_shared', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', "-DVELA_MEDIA3_DIR=${ffmpegDir}", "-DVELA_DOVI_DIR=${doviDir}" }
     }
   }
   externalNativeBuild {
