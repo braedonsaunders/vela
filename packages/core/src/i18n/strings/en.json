@@ -646,6 +646,8 @@
   "player.output.dolbyVision": "Dolby Vision",
   "player.output.dolbyVision.auto": "Automatic",
   "player.output.dolbyVision.base-layer": "HDR10 base layer",
+  "player.subtitleDelay": "Subtitle delay {value}",
+  "player.subtitleDelayReset": "Reset",
   "detail.seasonEpisode": "Season {season}, Episode {episode}",
   "detail.themeMusic": "Theme music",
   "live.previewStuck": "This channel can’t be previewed.",

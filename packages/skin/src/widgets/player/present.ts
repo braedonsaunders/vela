@@ -89,6 +89,8 @@ export interface PlayerView {
   pendingSubtitleId: string;
   subtitleError: string;
   subtitleLook: SubtitleLook | null;
+  /** The subtitle delay in seconds (positive shows cues later); null where the engine has none. */
+  subtitleOffset: number | null;
   qualities: QualityOption[];
   /** The engine picks the rendition itself unless one is locked. */
   qualityAuto: boolean;
@@ -109,6 +111,12 @@ export interface PlayerView {
   /** The engine's own failure, in words ("" while it plays). */
   reason: string;
   recoverable: boolean;
+}
+
+/** Nudges the subtitle delay by a step ('+0.1', '-0.5'), or back to zero ('0'); positive shows cues later. */
+export function nextSubtitleOffset(offset: number, step: string): number {
+  const next = step === '0' ? 0 : offset + Number(step);
+  return Math.max(-600, Math.min(600, Math.round(next * 1000) / 1000));
 }
 
 /** Seconds as a clock: 4:05, 1:02:09. */
@@ -414,6 +422,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
             position: style.subtitlePosition,
           }
         : null,
+    subtitleOffset: style && Number.isFinite(style.offsetSeconds) ? style.offsetSeconds : null,
     qualities: qualities(plan, path, snapshot),
     qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
     lockedQuality: lockedQuality(snapshot, path),

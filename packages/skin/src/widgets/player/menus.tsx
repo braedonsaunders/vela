@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, MenuSection, SegmentRow, VersionChoiceRow } from './menu';
-import type { PlayerView, QualityOption } from './present';
+import { nextSubtitleOffset, type PlayerView, type QualityOption } from './present';
 import type { PlaybackPlan } from '@vela/player-api';
 import { versionAvailability, versionMenuChips, versionMenuGroups } from '../versions';
 
@@ -77,6 +77,9 @@ export function SubtitlesMenu({ look, view, blocked, send }: Props) {
       ))}
       <SubtitleSearch look={look} send={send} />
       {view.subtitleError ? <MenuHeading look={look} text={view.subtitleError} /> : null}
+      {view.subtitleOffset !== null && view.subtitleId !== '' ? (
+        <SubtitleDelay look={look} offset={view.subtitleOffset} blocked={blocked} send={send} />
+      ) : null}
       {appearance && view.subtitleId !== '' ? (
         <>
           <MenuRule look={look} />
@@ -93,6 +96,25 @@ export function SubtitlesMenu({ look, view, blocked, send }: Props) {
           ))}
         </>
       ) : null}
+    </>
+  );
+}
+
+const DELAY_STEPS = ['-0.5', '-0.1', '0', '+0.1', '+0.5'] as const;
+
+function SubtitleDelay({ look, offset, blocked, send }: { look: PlayerLook; offset: number; blocked: boolean; send: Props['send'] }) {
+  const shown = `${offset > 0 ? '+' : ''}${number(offset, { minimumFractionDigits: 1, maximumFractionDigits: 3 })} s`;
+  return (
+    <>
+      <MenuRule look={look} />
+      <SegmentRow
+        look={look}
+        name={msg('player.subtitleDelay', { value: shown })}
+        enabled={!blocked}
+        current=""
+        options={DELAY_STEPS.map(step => ({ value: step, label: step === '0' ? msg('player.subtitleDelayReset') : `${step} s` }))}
+        onPick={step => send({ type: 'subtitleStyle', value: `subtitleOffset=${nextSubtitleOffset(offset, step)}` })}
+      />
     </>
   );
 }

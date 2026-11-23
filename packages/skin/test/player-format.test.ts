@@ -63,3 +63,11 @@ test('the view lists the delivery choices the engine honours, in its order, with
   ]);
   expect(present(plan, null).output).toEqual([]);
 });
+
+test('the subtitle delay steps from where it is, resets to zero and stays within ten minutes', async () => {
+  const { nextSubtitleOffset } = await import('../src/widgets/player/present');
+  expect(nextSubtitleOffset(0, '+0.1')).toBe(0.1);
+  expect(nextSubtitleOffset(0.3, '-0.5')).toBe(-0.2);
+  expect(nextSubtitleOffset(-2.75, '0')).toBe(0);
+  expect(nextSubtitleOffset(599.9, '+0.5')).toBe(600);
+});
