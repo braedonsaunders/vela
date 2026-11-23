@@ -44,3 +44,15 @@ test('a profile 7 access unit keeps its base layer and drops the enhancement lay
   expect([...filter(unit)!]).toEqual([...nal(35, 0, [0x10]), ...base]);
   expect(baseLayerFilter(track('av1'))).toBeNull();
 });
+
+test('AV1 and MPEG-1/2 packages are used only in Chromium', async () => {
+  const { packageRoute } = await import('../web/engine/core/decode/video');
+  const av1 = track('av1', new Uint8Array([0x81, 0x08, 0x4c, 0]));
+  expect(packageRoute(av1, true)).toBe(true);
+  expect(packageRoute(av1, false)).toBe(false);
+  expect(packageRoute(track('mpeg2video'), false)).toBe(false);
+  expect(packageRoute(track('mpeg4'), false)).toBe(true);
+  const hvcC = new Uint8Array(23);
+  hvcC[0] = 1;
+  expect(packageRoute(track('hevc', hvcC), false)).toBe(true);
+});

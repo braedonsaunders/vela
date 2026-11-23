@@ -31,6 +31,20 @@ export interface VideoCallbacks {
 }
 
 const SOFTWARE_FIRST = new Set(['h264', 'vp9', 'vp8', 'av1']);
+/** Packages qualified only in Chromium: WebKit's WGSL compiler rejects the MPEG-1/2 shaders, and its
+ * AV1 package decode froze the picture after a dozen frames while audio ran on. There the server's
+ * fallback plays instead. */
+const CHROMIUM_PACKAGES = new Set(['av1', 'mpeg1video', 'mpeg2video']);
+
+function chromium(): boolean {
+  const brands = (globalThis.navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } } | undefined)
+    ?.userAgentData?.brands;
+  return !!brands?.some((entry) => entry.brand === 'Chromium');
+}
+
+export function packageRoute(track: VideoTrack, isChromium = chromium()): boolean {
+  return PackageVideoDecoder.accepts(track) && (isChromium || !CHROMIUM_PACKAGES.has(track.codec));
+}
 
 /** Route selection is Vela-owned and based on the actual decoder configuration. */
 export class VideoDecoderRouter implements VideoBackend {
@@ -92,12 +106,10 @@ export class VideoDecoderRouter implements VideoBackend {
         signal.throwIfAborted();
         this.native?.dispose();
         this.native = undefined;
-        if (!PackageVideoDecoder.accepts(track)) throw error;
+        if (!packageRoute(track)) throw error;
       }
     }
-    const decoder = PackageVideoDecoder.accepts(track)
-      ? await abortable(this.packages.load(track.codec, signal), signal)
-      : null;
+    const decoder = packageRoute(track) ? await abortable(this.packages.load(track.codec, signal), signal) : null;
     signal.throwIfAborted();
     if (this.closed) throw new DOMException('Video route superseded', 'AbortError');
     if (decoder) {
