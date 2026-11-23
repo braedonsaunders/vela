@@ -181,8 +181,10 @@ ffmpeg with libx265, libsvtav1 and libvpx-vp9, and `dovi_tool` (`DOVI_TOOL=<path
 
 POST `/__admin/original` `{"name":"hevc-dv81-truehd-5.1.mkv"}` makes every later movie or episode
 session lead with that file as an `original` direct path (`{"name":null}` stops). The mock probes
-it with ffprobe, as Ether does, for the path's `originalVideo` and the plan's audio tracks; the
-synthetic remux/transcode paths stay behind it as the fallback.
+it with ffprobe, as Ether does, for the path's `originalVideo` and the plan's audio and embedded
+subtitle tracks; the synthetic remux/transcode paths stay behind it as the fallback. An optional
+`"video": {…}` overrides probed `originalVideo` facts (a Dolby Vision profile ffprobe cannot see in a
+raw-muxed file), and `"selectSubtitle": true` selects the first embedded subtitle track.
 
 Dense live-guide fixtures are opt-in. From the repository root, run:
 

@@ -59,6 +59,10 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
       plan.audioTracks = originalFixture.audio;
       plan.selectedAudioTrackId = request.audioTrackId && originalFixture.audio.some((track) => track.id === request.audioTrackId) ? request.audioTrackId : originalFixture.audio[0].id;
     }
+    if (originalFixture.subtitles?.length) {
+      plan.subtitleTracks = originalFixture.subtitles;
+      plan.selectedSubtitleTrackId = request.subtitleTrackId ?? (originalFixture.selectSubtitle ? originalFixture.subtitles[0].id : null);
+    }
   }
   if (request.channelId) {
     plan.durationSeconds = undefined;

@@ -6,10 +6,10 @@ export const fixtureDurationSeconds = 180;
 export const mediaRoot = join(homedir(), '.scratch/tmp/vela/media');
 /** Format-matrix fixtures (scripts/make-format-matrix.ts), served one at a time as sessions' original file. */
 export const formatsRoot = process.env.VELA_MOCK_FORMATS_ROOT ?? join(homedir(), '.scratch/tmp/vela/formats');
-export const originalFixture: { name: string | null; durationSeconds: number; video?: OriginalVideo; audio?: Track[] } = { name: null, durationSeconds: 30 };
+export const originalFixture: { name: string | null; durationSeconds: number; video?: OriginalVideo; audio?: Track[]; subtitles?: Track[]; selectSubtitle?: boolean } = { name: null, durationSeconds: 30 };
 
 /** What Ether's ffprobe reports for an original: the plan's originalVideo and the audio inventory. */
-export async function probeOriginalFixture(name: string): Promise<Pick<typeof originalFixture, 'durationSeconds' | 'video' | 'audio'>> {
+export async function probeOriginalFixture(name: string): Promise<Pick<typeof originalFixture, 'durationSeconds' | 'video' | 'audio' | 'subtitles'>> {
   const probe = Bun.spawn(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', join(formatsRoot, name)], { stdout: 'pipe', stderr: 'ignore' });
   const data = await new Response(probe.stdout).json() as { format: { duration?: string }; streams: Record<string, any>[] };
   if (await probe.exited) throw new Error('ffprobe failed');
@@ -28,7 +28,10 @@ export async function probeOriginalFixture(name: string): Promise<Pick<typeof or
   const audio = data.streams.filter((stream) => stream.codec_type === 'audio').map((stream, n) => ({
     id: `original-audio-${n}`, kind: 'audio' as const, streamIndex: stream.index, language: stream.tags?.language ?? 'und',
     name: `${String(stream.codec_name).toUpperCase()} ${stream.channel_layout ?? `${stream.channels} ch`}`, codec: stream.codec_name, channels: stream.channels, default: n === 0 }));
-  return { durationSeconds: Number(data.format.duration) || 30, video, audio };
+  const subtitles = data.streams.filter((stream) => stream.codec_type === 'subtitle').map((stream, n) => ({
+    id: `original-subtitle-${n}`, kind: 'subtitle' as const, streamIndex: stream.index, language: stream.tags?.language ?? 'und',
+    name: String(stream.codec_name), codec: stream.codec_name, forced: stream.disposition?.forced === 1, delivery: { kind: 'embedded' as const } }));
+  return { durationSeconds: Number(data.format.duration) || 30, video, audio, subtitles };
 }
 const originalTypes: Record<string, string> = { mkv: 'video/x-matroska', webm: 'video/webm', mp4: 'video/mp4', mov: 'video/quicktime' };
 export const originalFixtureName = /^[\w.()-]+\.(mkv|webm|mp4|mov)$/;
