@@ -19,6 +19,7 @@ internal sealed class MainWindow : Form
     private readonly string dataPath;
     private readonly string windowPath;
     private Playback? playback;
+    private PlaybackSettings playbackSettings = new();
     private string playerId = "";
     private string? mediaOrigin;
     private string? mediaPrefix;
@@ -39,6 +40,7 @@ internal sealed class MainWindow : Form
         dataPath = Environment.GetEnvironmentVariable("VELA_DATA_DIR") is { Length: > 0 } custom ? custom
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Vela");
         windowPath = Path.Combine(dataPath, "window.txt");
+        playbackSettings = PlaybackSettings.Load(dataPath);
         PlaceWindow();
         Controls.Add(browser);
         Controls.Add(video);
@@ -194,7 +196,7 @@ internal sealed class MainWindow : Form
             }
             if (kind == "capabilities")
             {
-                Post(new { kind, requestId = TextOf(message, "requestId"), value = Capabilities.Value });
+                Post(new { kind, requestId = TextOf(message, "requestId"), value = Capabilities.Value(playbackSettings) });
                 return;
             }
             if (kind == "media-access")
@@ -226,7 +228,9 @@ internal sealed class MainWindow : Form
                 SetNativeVideoLayer(true);
                 video.Visible = true;
                 browser.BringToFront();
-                playback = new Playback(video.Handle, Emit);
+                // Re-read so an edited playback.json applies from the next title on.
+                playbackSettings = PlaybackSettings.Load(dataPath);
+                playback = new Playback(video.Handle, Emit, playbackSettings) { Fullscreen = fullscreen };
                 playback.SetAccess(mediaOrigin, mediaPrefix, mediaHeaders);
             }
             if (id != playerId || playback == null) return;
@@ -330,6 +334,7 @@ internal sealed class MainWindow : Form
             WindowState = previousState;
         }
         fullscreen = on;
+        if (playback != null) playback.Fullscreen = on;
         Post(new { kind = "window-fullscreen", value = on });
     }
 

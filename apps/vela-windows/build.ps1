@@ -5,13 +5,18 @@
 
   -Ui is the root of a Vela web release (the folder tools/release/build.ts packs: index.html, _expo,
   assets, player, skins, routes.json, ...), so the desktop app ships the same UI bytes as the web.
-  libmpv is shinchiro's mpv-winbuild-cmake build, pinned by SHA-256. Needs .NET 8 SDK, Inno Setup 6
-  (iscc) and tar (bsdtar, which ships with Windows 10+ and reads .7z).
+  libmpv is the LGPL build of mpv-winbuild-cmake (mpv -Dgpl=false; FFmpeg without --enable-gpl or
+  --enable-nonfree, LGPLv3 through --enable-version3), pinned by SHA-256 and audited before packaging:
+  a GPL libmpv (shinchiro's default build links x264/x265, rubberband and dvdnav) is refused. Its
+  publisher keeps releases for about two weeks, so pass -MpvArchive with a kept copy of the pinned
+  archive (same hash) once the URL is gone. Needs .NET 8 SDK, Inno Setup 6 (iscc) and tar (bsdtar,
+  which ships with Windows 10+ and reads .7z). See PLAYBACK.md.
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Version,
   [Parameter(Mandatory = $true)][string]$Ui,
   [string]$Output = (Join-Path $PSScriptRoot "dist"),
+  [string]$MpvArchive,
   [string]$CertificateProfileName,
   [string]$SignTool = "signtool.exe",
   [string]$SigningDlib = $env:VELA_SIGNING_DLIB
@@ -19,8 +24,8 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$MpvUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261111/mpv-dev-x86_64-20261111-git-bcde6b93cc.7z"
-$MpvSha256 = "273c079b11ea5575822f972756f4c9a71149a5c10130353abeb8586738938452"
+$MpvUrl = "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-11-22-c2a42f414f/mpv-dev-lgpl-x86_64-20261122-git-c2a42f414f.7z"
+$MpvSha256 = "47540e48af9918f044688cb178d9e89d348f4c11868ad67bced3bc074abff8a9"
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be x.y.z" }
 if (-not (Test-Path (Join-Path $Ui "index.html"))) { throw "$Ui is not a Vela web release (no index.html)" }
@@ -62,12 +67,21 @@ dotnet publish (Join-Path $PSScriptRoot "Vela.Windows.csproj") -c Release -r win
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 $archive = Join-Path $work "mpv.7z"
-Invoke-WebRequest -UseBasicParsing $MpvUrl -OutFile $archive
+if ($MpvArchive) { Copy-Item $MpvArchive $archive } else { Invoke-WebRequest -UseBasicParsing $MpvUrl -OutFile $archive }
 $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($hash -ne $MpvSha256) { throw "libmpv archive hash mismatch: $hash" }
 tar -xf $archive -C $work libmpv-2.dll
 if ($LASTEXITCODE -ne 0) { throw "could not extract libmpv-2.dll" }
+# mpv records its meson options in the library; FFmpeg's GPL encoders leave their banners.
+$library = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $work "libmpv-2.dll")))
+if ($library.IndexOf("-Dgpl=false") -lt 0) { throw "libmpv-2.dll is not an LGPL build (-Dgpl=false absent)" }
+foreach ($marker in @("x265 (build", "librubberband")) {
+  if ($library.IndexOf($marker) -ge 0) { throw "libmpv-2.dll links a GPL component ($marker)" }
+}
 Copy-Item (Join-Path $work "libmpv-2.dll") $publish
+$notices = Join-Path $publish "licenses"
+New-Item -ItemType Directory -Force $notices | Out-Null
+Copy-Item (Join-Path $PSScriptRoot "licenses\*") $notices
 
 Copy-Item -Recurse $Ui (Join-Path $publish "ui")
 

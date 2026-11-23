@@ -95,8 +95,13 @@ fetched and verified by SHA-256 (modules/vela-player/ios/mpvkit-1.0.0.txt); they
 in this repository.
 Android builds libmpv with -Dgpl=false and FFmpeg without --enable-gpl (LGPLv3 because
 of --enable-version3) from libmpv-android, pinned in modules/vela-player/android/libmpv/pin.sh.
-The Windows host loads libmpv-2.dll at runtime; it is not in this repository and must
-ship with its licence and corresponding source.
+The Windows host loads libmpv-2.dll at runtime. It is the LGPL build of mpv-winbuild-cmake
+(mpv -Dgpl=false; FFmpeg without --enable-gpl/--enable-nonfree, LGPLv3 through
+--enable-version3), pinned by SHA-256 in apps/vela-windows/build.ps1, which refuses a GPL
+build. It ships with apps/vela-windows/licenses (licence texts, provenance, source offer).
+The Linux desktop builds FFmpeg 8.0.1 (GPL and nonfree off), dav1d 1.5.3 (BSD-2-Clause),
+libplacebo 7.387.0 and libmpv (-Dgpl=false, pinned mpv commit) with
+apps/vela-desktop/linux/build-libraries.sh, keeping source archives and notices beside them.
 
 Apple TV media framework (FFmpeg)
 ---------------------------------

@@ -1,0 +1,32 @@
+libmpv-2.dll in this folder
+===========================
+
+Vela for Windows plays video through libmpv-2.dll, a separately linked, replaceable library.
+Replace the file with any compatible libmpv build to use your own; Vela loads it by name.
+
+Build: the LGPL variant of mpv-winbuild-cmake (https://github.com/shinchiro/mpv-winbuild-cmake)
+as published by https://github.com/zhongfly/mpv-winbuild, release 2026-11-22-c2a42f414f,
+file mpv-dev-lgpl-x86_64-20261122-git-c2a42f414f.7z,
+SHA-256 47540e48af9918f044688cb178d9e89d348f4c11868ad67bced3bc074abff8a9.
+
+- mpv commit c2a42f414fcb5f8a21c9cd9a311d65932a5ef0cc, configured with -Dgpl=false:
+  LGPL-2.1-or-later (LGPL-2.1.txt).
+- FFmpeg git 329157f58, configured without --enable-gpl and without --enable-nonfree, with
+  --enable-version3: LGPL-3.0-or-later (LGPL-3.0.txt, which incorporates GPL-3.0.txt).
+- Statically linked into the same DLL: libplacebo (LGPL-2.1-or-later), libass (ISC),
+  FreeType (FTL), HarfBuzz (MIT), FriBidi (LGPL-2.1-or-later), dav1d (BSD-2-Clause),
+  libbluray (LGPL-2.1-or-later), lcms2 (MIT), zlib and that build's other non-GPL
+  dependencies.
+
+Source: the complete corresponding source for this libmpv-2.dll is available on request for
+three years from the date of the Vela release that shipped it: open an issue at
+https://github.com/braedonsaunders/vela/issues.
+
+Dolby, Dolby Atmos, Dolby TrueHD and Dolby Vision are trademarks of Dolby Laboratories; DTS,
+DTS-HD and DTS:X are trademarks of DTS, Inc. Vela does not encode Dolby or DTS audio. Bitstream
+passthrough sends the film's own audio, unchanged, to the receiver, which holds the decoding
+licence. When a receiver cannot take a bitstream, FFmpeg's own decoders turn it into PCM.
+FFmpeg's TrueHD decoder gives the 7.1 bed without Atmos objects, and its DTS decoder gives the
+lossless DTS-HD Master Audio channels without DTS:X objects. Dolby Vision is shown by
+libplacebo applying the stream's own RPU metadata. It is converted to HDR10 or SDR for the
+display, and no Dolby Vision signal is sent.

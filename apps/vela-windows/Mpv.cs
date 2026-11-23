@@ -14,19 +14,39 @@ internal sealed class Mpv : IDisposable
     [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr mpv_get_property_string(IntPtr ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
     [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void mpv_free(IntPtr value);
     [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void mpv_terminate_destroy(IntPtr ctx);
-    internal Mpv(IntPtr window)
+    /// <summary>Options are applied before initialization (the video and audio outputs are chosen then).
+    /// One libmpv build may lack an option another has; those are skipped and listed in <see cref="Skipped"/>.</summary>
+    internal Mpv(IntPtr window, IEnumerable<KeyValuePair<string, string>> options)
     {
         handle = mpv_create();
         if (handle == IntPtr.Zero) throw new InvalidOperationException("mpv_create failed");
         try
         {
             Check(mpv_set_option_string(handle, "config", "no"));
-            Check(mpv_set_option_string(handle, "scripts", ""));
-            Check(mpv_set_option_string(handle, "wid", window.ToInt64().ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            Check(mpv_set_option_string(handle, "load-scripts", "no"));
+            if (window != IntPtr.Zero) Check(mpv_set_option_string(handle, "wid", window.ToInt64().ToString(System.Globalization.CultureInfo.InvariantCulture)));
             Check(mpv_set_option_string(handle, "input-default-bindings", "no"));
+            foreach (var (name, value) in options)
+                if (mpv_set_option_string(handle, name, value) < 0) Skipped.Add(name);
             Check(mpv_initialize(handle));
         }
         catch { Dispose(); throw; }
+    }
+    internal List<string> Skipped { get; } = new();
+    /// <summary>Sets a property, reporting rather than throwing when this build refuses the value.</summary>
+    internal bool TrySet(string name, string value)
+    {
+        ObjectDisposedException.ThrowIf(handle == IntPtr.Zero, this);
+        return mpv_set_property_string(handle, name, value) >= 0;
+    }
+    [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int mpv_set_property_string(IntPtr ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+    /// <summary>A map or list property (video-params, current-tracks/audio) as JSON, or null when unavailable.</summary>
+    internal JsonElement? Node(string name)
+    {
+        var raw = Property(name);
+        if (string.IsNullOrEmpty(raw)) return null;
+        try { using var document = JsonDocument.Parse(raw); return document.RootElement.Clone(); }
+        catch (JsonException) { return null; }
     }
     internal void Command(params string[] args)
     {
