@@ -1,4 +1,5 @@
-// Exact engine, LGPL FFmpeg and LibTrueHD pins, and the engine's package traits, survive every Expo prebuild.
+// Exact engine, LGPL FFmpeg and LibTrueHD pins, the engine's package traits and the background audio mode
+// survive every Expo prebuild.
 const { withInfoPlist, withPodfile, withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
 
 // AetherEngine's optional components are SwiftPM package traits, off by default. React Native's
@@ -42,6 +43,9 @@ function withApplePlayer(config) {
     // Public HTTP servers are user-selected too. On modern Apple OS versions,
     // the local-only key overrides NSAllowsArbitraryLoads, even when both are true.
     if (ats?.NSAllowsArbitraryLoads === true) delete ats.NSAllowsLocalNetworking;
+    // Music, audiobooks and podcasts keep playing in the background and on the lock screen (AudioPlayback).
+    const modes = Array.isArray(mod.modResults.UIBackgroundModes) ? mod.modResults.UIBackgroundModes : [];
+    if (!modes.includes('audio')) mod.modResults.UIBackgroundModes = [...modes, 'audio'];
     return mod;
   });
   return withXcodeProject(config, mod => {
