@@ -12,6 +12,7 @@ import {
   QUALIFIED_ORIGINAL_VIDEO,
 } from './engine/universal/qualified';
 import { playerAssetBase } from './asset-base';
+import { audioOutputCapabilities } from './audio-output';
 
 /** The payload's declaration: installed decoder families and embedded subtitle formats. */
 export interface PayloadCapabilities {
@@ -124,20 +125,6 @@ async function originalPlayback(
     ...declaration,
     videoDecoders,
     audioDecoders: declaration.audioDecoders.filter((codec) => QUALIFIED_ORIGINAL_AUDIO.includes(codec)),
-  };
-}
-
-/** What reaches the speakers: a browser has no bitstream path, so every codec is decoded to PCM in
- * the page and mixed or folded to the output device's channels (at most 7.1; the engine renders no
- * height layout). The engine's AudioContext runs at 48 kHz, so higher rates are resampled. */
-export function audioOutputCapabilities(maxChannelCount: number | null): NonNullable<PlayerCapabilities['audioOutput']> {
-  const count = maxChannelCount ?? 2;
-  return {
-    passthrough: [],
-    immersive: [],
-    maxChannels: count >= 8 ? 8 : count >= 6 ? 6 : 2,
-    maxSampleRate: 48000,
-    lossless: true,
   };
 }
 

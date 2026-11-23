@@ -7,7 +7,7 @@ import {
   videoOutputFormat,
   videoSourceFormat,
 } from '../web/engine/core/format';
-import { av1BitDepth } from '../web/engine/core/decode/av1';
+import { av1BitDepth } from '../web/engine/core/decode/codec-config';
 import { audioOutputFacts } from '../web/engine/universal/audio/output-facts';
 import type { AudioTrack, VideoTrack } from '../web/engine/core/types';
 
@@ -181,7 +181,7 @@ test('decoded audio is lossless only when nothing was folded or resampled', () =
 });
 
 test('the browser video element reports only what the rendition declared', async () => {
-  const { browserFormat } = await import('../web/engine/host/telemetry');
+  const { browserFormat } = await import('../web/engine/host/browser-format');
   expect(browserFormat({ codec: 'h264', width: 1920, height: 1080, dynamicRange: 'sdr' }, { id: 'a', label: 'English', codec: 'aac', channels: 2, language: 'en' })).toEqual({
     video: { codec: 'h264', width: 1920, height: 1080, range: 'sdr' },
     videoOut: { frameRateMatch: 'unsupported', rangeMatch: 'unsupported' },

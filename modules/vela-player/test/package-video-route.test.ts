@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { containerVideoCodec } from '../web/engine/core/demux/video-codec';
-import { packageOutputFormat } from '../web/engine/core/decode/package-video';
-import { conventionalColour } from '../web/engine/core/render/video-presenter';
+import { packageOutputFormat } from '../web/engine/core/decode/codec-config';
+import { conventionalColour } from '../web/engine/core/render/colour';
 import type { VideoTrack } from '../web/engine/core/types';
 
 const track = (codec: string, description?: Uint8Array, size = { width: 1920, height: 1080 }): VideoTrack => ({

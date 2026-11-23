@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
-import { PackageVideoDecoder } from '../web/engine/core/decode/package-video';
+import { packageOutputFormat, packageRoute } from '../web/engine/core/decode/codec-config';
 import type { VideoTrack } from '../web/engine/core/types';
+
+const accepts = (value: VideoTrack) => packageOutputFormat(value) !== null;
 
 const track = (codec: string, description?: Uint8Array): VideoTrack => ({
   id: 'video:1',
@@ -20,13 +22,13 @@ const track = (codec: string, description?: Uint8Array): VideoTrack => ({
 test('a package route needs a configuration it can size its frame pool from', () => {
   const hvcC = new Uint8Array(23);
   hvcC[0] = 1;
-  expect(PackageVideoDecoder.accepts(track('hevc', hvcC))).toBe(true);
-  expect(PackageVideoDecoder.accepts(track('hevc'))).toBe(false);
-  expect(PackageVideoDecoder.accepts(track('hevc', new Uint8Array([0, 0, 0, 1])))).toBe(false);
-  expect(PackageVideoDecoder.accepts(track('av1', new Uint8Array([0x81, 0, 0x0c, 0])))).toBe(true);
-  expect(PackageVideoDecoder.accepts(track('av1'))).toBe(false);
-  expect(PackageVideoDecoder.accepts(track('mpeg2video', new Uint8Array(32)))).toBe(true);
-  expect(PackageVideoDecoder.accepts(track('vp9'))).toBe(false);
+  expect(accepts(track('hevc', hvcC))).toBe(true);
+  expect(accepts(track('hevc'))).toBe(false);
+  expect(accepts(track('hevc', new Uint8Array([0, 0, 0, 1])))).toBe(false);
+  expect(accepts(track('av1', new Uint8Array([0x81, 0, 0x0c, 0])))).toBe(true);
+  expect(accepts(track('av1'))).toBe(false);
+  expect(accepts(track('mpeg2video', new Uint8Array(32)))).toBe(true);
+  expect(accepts(track('vp9'))).toBe(false);
 });
 
 test('a profile 7 access unit keeps its base layer and drops the enhancement layer and RPU', async () => {
@@ -46,7 +48,6 @@ test('a profile 7 access unit keeps its base layer and drops the enhancement lay
 });
 
 test('AV1 and MPEG-1/2 packages are used only in Chromium', async () => {
-  const { packageRoute } = await import('../web/engine/core/decode/video');
   const av1 = track('av1', new Uint8Array([0x81, 0x08, 0x4c, 0]));
   expect(packageRoute(av1, true)).toBe(true);
   expect(packageRoute(av1, false)).toBe(false);

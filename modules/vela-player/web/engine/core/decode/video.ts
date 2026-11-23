@@ -4,6 +4,7 @@ import { VideoPackages } from '../../universal/video/packages';
 import { abortable } from '../async';
 import type { EncodedPacket, VideoTrack } from '../types';
 import { baseLayerFilter } from './base-layer';
+import { packageRoute } from './codec-config';
 import { NativeVideoDecoder, type NativeVideoFrame } from './native-video';
 import { PackageVideoDecoder, type PackageVideoFrame } from './package-video';
 
@@ -31,21 +32,6 @@ export interface VideoCallbacks {
 }
 
 const SOFTWARE_FIRST = new Set(['h264', 'vp9', 'vp8', 'av1']);
-/** Packages qualified only in Chromium: WebKit's WGSL compiler rejects the MPEG-1/2 shaders, and its
- * AV1 package decode froze the picture after a dozen frames while audio ran on. There the server's
- * fallback plays instead. */
-const CHROMIUM_PACKAGES = new Set(['av1', 'mpeg1video', 'mpeg2video']);
-
-function chromium(): boolean {
-  const brands = (globalThis.navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } } | undefined)
-    ?.userAgentData?.brands;
-  return !!brands?.some((entry) => entry.brand === 'Chromium');
-}
-
-export function packageRoute(track: VideoTrack, isChromium = chromium()): boolean {
-  return PackageVideoDecoder.accepts(track) && (isChromium || !CHROMIUM_PACKAGES.has(track.codec));
-}
-
 /** Route selection is Vela-owned and based on the actual decoder configuration. */
 export class VideoDecoderRouter implements VideoBackend {
   private backend?: Pick<VideoBackend, 'metrics' | 'frameBound' | 'decode' | 'drain' | 'dispose'>;

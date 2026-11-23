@@ -1,5 +1,4 @@
 import type { AudioOutputFormat } from '../../format-info';
-import type { AudioLayout } from './policy';
 
 /** Codecs whose decoded PCM is the exact signal the encoder was given. */
 const LOSSLESS = new Set(['truehd', 'mlp', 'flac', 'alac', 'wavpack', 'tta', 'ape', 'wmalossless']);
@@ -9,7 +8,8 @@ export interface AudioOutputRoute {
   sourceChannels: number;
   sourceSampleRate: number;
   outputChannels: number;
-  layout: AudioLayout;
+  /** The output layout's name: 'stereo', '5.1' or '7.1'. */
+  layout: string;
   outputSampleRate: number;
   /** 'webcodecs' for the browser's decoder, otherwise the WASM package id. */
   decoder: string;

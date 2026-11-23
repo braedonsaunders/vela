@@ -4,14 +4,7 @@ import {
   neutralizeNativeHDRAV1DecoderConfig,
 } from 'webgpu-player/src/decode/video/native/NativeHDRAV1ColorNeutralizer';
 import type { VideoTrack } from '../types';
-
-/** Bit depth from an av1C record (AV1-ISOBMFF 2.3.3): high_bitdepth, then twelve_bit. */
-export function av1BitDepth(description: Uint8Array | null): number | null {
-  if (!description || description.length < 4 || description[0] !== 0x81) return null;
-  const high = (description[2] >> 6) & 1,
-    twelve = (description[2] >> 5) & 1;
-  return high ? (twelve ? 12 : 10) : 8;
-}
+import { av1BitDepth } from './codec-config';
 
 function bytes(source: AllowSharedBufferSource | undefined): Uint8Array | null {
   if (!source) return null;
