@@ -160,7 +160,7 @@ export class Servers {
   /** Identify what answers at a typed address, before any credential is sent. */
   async probe(url: string): Promise<ProbeResult> {
     const secure = pageSecure(this.platform);
-    const probe = await probeServer(url, this.session.device.id, secure, this.session.servers.standalone);
+    const probe = await probeServer(url, this.session.device, secure, this.session.servers.standalone);
     let note = '';
     if (probe.state !== 'found') {
       if (probe.kind === 'ether') note = msg('server.probe.vela');
@@ -242,7 +242,7 @@ export class Servers {
 
   async plexStart(): Promise<void> {
     this.plexCancel();
-    const link = new PlexLink(this.session.device.id);
+    const link = new PlexLink(this.session.device);
     this.plexLink = link;
     try {
       const pin = await link.start();

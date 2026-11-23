@@ -373,14 +373,14 @@ export class Auth {
         this.patch({ error: '', plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
         return;
       }
-      const pin = await createPlexPin(this.session.device.id, !!authorization);
+      const pin = await createPlexPin(this.session.device, !!authorization);
       if (!current()) return;
       if (authorization) authorization.navigate(plexAuthUrl(this.session.device.id, pin.code));
       this.patch({ error: '', plex: { code: authorization ? '' : pin.code, linkUrl: authorization ? '' : 'https://plex.tv/link', state: 'waiting', choices: [], profiles: [] } });
       const poll = async () => {
         if (!current()) return;
         try {
-          const approved = await pollPlexPin(this.session.device.id, pin);
+          const approved = await pollPlexPin(this.session.device, pin);
           if (!current()) return;
           if (approved.authToken) {
             const answer = this.box.get().auth.plexHomeAvailable

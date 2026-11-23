@@ -4,7 +4,7 @@ import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
 import type { LiveTv, PathSwitching, SwitchCommand, TrackChanges, TrackCommand } from '../capabilities';
 import { VelaError } from '../errors';
-import { plexHeaders } from './auth';
+import { plexHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 export * from './auth';
@@ -55,7 +55,11 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const u = new URL(config.origin);
     if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.pathname !== '/' || u.search || u.hash) throw new Error('Plex requires a server origin');
     this.origin = u.origin;
-    plexHeaders(config.clientIdentifier);
+    plexHeaders(this.device);
+  }
+  /** This device as Plex sees it: the configured client identifier with the device's own name and platform. */
+  private get device(): PlexDevice {
+    return { ...this.config.credentials.device, id: this.config.clientIdentifier };
   }
   /** Credential-free media URL; the private host bridge attaches mediaHeaders only at this origin. */
   mediaURL(path: string): string {
@@ -67,7 +71,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async mediaHeaders(): Promise<Record<string, string>> {
     const tokens = await this.config.credentials.get();
     if (!tokens) fail('Sign in required', 'auth');
-    return { ...plexHeaders(this.config.clientIdentifier), 'X-Plex-Token': tokens.accessToken };
+    return { ...plexHeaders(this.device), 'X-Plex-Token': tokens.accessToken };
   }
   /** Delegation lifetime is set by PMS; never persist it or infer an expiry. */
   transientToken(): Promise<string> {
@@ -92,7 +96,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const u = new URL(path, this.origin);
     if (u.origin !== this.origin || u.username || u.password) fail('Plex request outside selected server');
     for (const [k, v] of Object.entries(query)) if (v !== undefined) u.searchParams.set(k, String(v));
-    const headers = auth ? await this.mediaHeaders() : plexHeaders(this.config.clientIdentifier);
+    const headers = auth ? await this.mediaHeaders() : plexHeaders(this.device);
     const response = await fetch(u.href, { method, headers, signal, redirect: 'error', credentials: 'omit' });
     if (response.status === 401) this.rotateTransientToken();
     if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : response.status === 404 ? 'not-found' : 'source',

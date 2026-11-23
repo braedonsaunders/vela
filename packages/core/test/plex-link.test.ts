@@ -14,7 +14,7 @@ async function linked(options: { ether?: boolean; advertised?: boolean; identity
     'GET /vela/v0/capabilities': options.ether === false ? new Response('', { status: 404 }) : { protocolVersion: 0, server: { id: 'server', name: 'Ether' }, features: {}, plexAccountSignIn: options.advertised !== false },
     'POST /vela/v0/auth/plex': options.exchange ?? tokens('vela-secret'),
   });
-  const link = new PlexLink('client');
+  const link = new PlexLink(device);
   await link.start();
   expect(await link.poll('123', Date.now())).toBe('linked');
   expect(link.servers('123', true).map(s => s.id)).toEqual(['machine']);

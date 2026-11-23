@@ -1,5 +1,5 @@
 import { serverAddress, type ServerKind } from '../session/servers';
-import { plexHeaders } from './plex/auth';
+import { plexHeaders, type PlexDevice } from './plex/auth';
 import { timeoutSignal } from '../protocol/timeout';
 
 /** What an address answers before any credential is sent. */
@@ -39,7 +39,7 @@ function candidates(input: string): string[] {
  * answers in other servers' protocols, so its own endpoint decides first. It is offered (`found`)
  * only where Ether servers can be added (a standalone app); elsewhere it is `unsupported`.
  */
-export async function probeServer(input: string, clientIdentifier: string, pageSecure: boolean, ether = false): Promise<Probe> {
+export async function probeServer(input: string, device: PlexDevice, pageSecure: boolean, ether = false): Promise<Probe> {
   const tried = candidates(input);
   let parsed = false, blocked = '';
   for (const candidate of tried) {
@@ -51,7 +51,7 @@ export async function probeServer(input: string, clientIdentifier: string, pageS
     const base = address.origin + (address.basePath === '/' ? '' : address.basePath);
     const [jellyfin, plex, vela] = await Promise.all([
       read(`${base}/System/Info/Public`, { Accept: 'application/json' }),
-      address.basePath === '/' ? read(`${address.origin}/identity`, plexHeaders(clientIdentifier)) : Promise.resolve(undefined),
+      address.basePath === '/' ? read(`${address.origin}/identity`, plexHeaders(device)) : Promise.resolve(undefined),
       address.basePath === '/' ? read(`${address.origin}/vela/v0/capabilities`, { Accept: 'application/json' }) : Promise.resolve(undefined),
     ]);
     const server = (vela?.server ?? undefined) as Record<string, unknown> | undefined;

@@ -1,7 +1,7 @@
 import { probeEther } from '../probe';
 import { exchangePlexAccount } from '../ether/plex';
 import type { Device, Tokens } from '../../wire';
-import { createPlexPin, pollPlexPin, discoverPlexServers, plexAccount, plexHeaders, type PlexResource } from './auth';
+import { createPlexPin, pollPlexPin, discoverPlexServers, plexAccount, plexHeaders, type PlexDevice, type PlexResource } from './auth';
 import { timeoutSignal } from '../../protocol/timeout';
 
 /** A discovered server as the viewer chooses it: names and connection kinds only. */
@@ -23,11 +23,11 @@ export class PlexLink {
   private account?: { token: string; viewer: Tokens['viewer'] };
   private resources: PlexResource[] = [];
   private exchangeKeys = new Map<string, string>();
-  constructor(private readonly clientIdentifier: string) {}
+  constructor(private readonly device: PlexDevice) {}
 
   async start(): Promise<{ code: string; expiresAt: string }> {
     this.cancel();
-    const pin = await createPlexPin(this.clientIdentifier);
+    const pin = await createPlexPin(this.device);
     if (!Number.isInteger(pin.id) || typeof pin.code !== 'string' || !pin.code || !Number.isFinite(Date.parse(pin.expiresAt))) throw new Error('Plex returned an invalid link code');
     this.pin = { id: pin.id, code: pin.code, expiresAt: pin.expiresAt };
     return { code: pin.code, expiresAt: pin.expiresAt };
@@ -39,7 +39,7 @@ export class PlexLink {
     if (!pin || pin.code !== code) return 'failed';
     if (at >= Date.parse(pin.expiresAt)) { this.cancel(); return 'expired'; }
     let result;
-    try { result = await pollPlexPin(this.clientIdentifier, pin); }
+    try { result = await pollPlexPin(this.device, pin); }
     catch (error) {
       // plex.tv forgets an expired PIN.
       if (error instanceof Error && /\(404\)/.test(error.message)) { this.cancel(); return 'expired'; }
@@ -47,7 +47,7 @@ export class PlexLink {
     }
     if (this.pin !== pin) return 'failed';
     if (!result.authToken) return 'waiting';
-    const [resources, account] = await Promise.all([discoverPlexServers(this.clientIdentifier, result.authToken), plexAccount(this.clientIdentifier, result.authToken)]);
+    const [resources, account] = await Promise.all([discoverPlexServers(this.device, result.authToken), plexAccount(this.device, result.authToken)]);
     if (this.pin !== pin) return 'failed';
     this.resources = resources.filter(r => r.accessToken && r.clientIdentifier && r.connections.length);
     this.account = { token: result.authToken, viewer: { id: account.uuid || String(account.id), name: account.friendlyName || account.title || account.username, policyRevision: 'plex' } };
@@ -57,7 +57,7 @@ export class PlexLink {
   async refreshServers(code: string): Promise<void> {
     const account = this.account;
     if (!account || this.pin?.code !== code) return;
-    const resources = await discoverPlexServers(this.clientIdentifier, account.token);
+    const resources = await discoverPlexServers(this.device, account.token);
     if (this.account === account && this.pin?.code === code) {
       this.resources = resources.filter(r => r.accessToken && r.clientIdentifier && r.connections.length);
     }
@@ -90,7 +90,7 @@ export class PlexLink {
     for (const connection of this.reachable(resource, pageSecure)) {
       const origin = new URL(connection.uri).origin;
       try {
-        const response = await fetch(`${origin}/identity`, { headers: { ...plexHeaders(this.clientIdentifier), 'X-Plex-Token': resource.accessToken },
+        const response = await fetch(`${origin}/identity`, { headers: { ...plexHeaders(this.device), 'X-Plex-Token': resource.accessToken },
           redirect: 'error', credentials: 'omit', signal: timeoutSignal(6000) });
         if (!response.ok) continue;
         const body = await response.json() as { MediaContainer?: { machineIdentifier?: string } };

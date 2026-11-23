@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { PlexAdapter, discoverPlexServers, plexHeaders } from '../src/adapter/plex';
 import { VelaError } from '../src/adapter/errors';
-import { FakeCredentials, restoreFetch, routeFetch } from './helpers';
+import { FakeCredentials, device, restoreFetch, routeFetch } from './helpers';
 
 afterEach(restoreFetch);
 
@@ -22,8 +22,31 @@ describe('PlexAdapter addresses', () => {
   });
 
   test('needs a client identifier', () => {
-    expect(() => plexHeaders('')).toThrow();
-    expect(plexHeaders('abc')).toMatchObject({ 'X-Plex-Client-Identifier': 'abc', Accept: 'application/json' });
+    expect(() => plexHeaders({ ...device, id: '' })).toThrow();
+    expect(plexHeaders({ ...device, id: 'abc' })).toMatchObject({ 'X-Plex-Client-Identifier': 'abc', Accept: 'application/json' });
+  });
+
+  test('names the real platform, device and version, as Plex clients do', () => {
+    const named = (platform: string, name: string) => plexHeaders({ id: 'abc', name, platform, appVersion: '0.2.50' });
+    expect(named('tvos', 'Apple TV')).toMatchObject({ 'X-Plex-Platform': 'tvOS', 'X-Plex-Device': 'Apple TV', 'X-Plex-Device-Name': 'Apple TV', 'X-Plex-Version': '0.2.50', 'X-Plex-Product': 'Vela' });
+    expect(named('ipados', 'iPad')).toMatchObject({ 'X-Plex-Platform': 'iOS', 'X-Plex-Device': 'iPad' });
+    expect(named('androidtv', 'Android TV')).toMatchObject({ 'X-Plex-Platform': 'Android', 'X-Plex-Device': 'Android TV' });
+    expect(named('windows', 'Vela for Windows')).toMatchObject({ 'X-Plex-Platform': 'Windows', 'X-Plex-Device-Name': 'Vela for Windows' });
+    expect(named('web', 'Vela browser')).toMatchObject({ 'X-Plex-Platform': 'Web', 'X-Plex-Device': 'Browser' });
+    // A platform Vela does not know yet still reads as a browser rather than nothing.
+    expect(named('fridge', '')).toMatchObject({ 'X-Plex-Platform': 'Web', 'X-Plex-Device-Name': 'Vela' });
+  });
+
+  test('server requests carry the signed-in device', async () => {
+    const seen = routeFetch({ 'GET /library/sections': { MediaContainer: { Directory: [] } } });
+    const credentials = new FakeCredentials();
+    const tv = Object.assign(credentials, { device: { id: 'ignored', name: 'Living Room', platform: 'androidtv', appVersion: '0.2.50' } });
+    await new PlexAdapter({ origin: ORIGIN, credentials: tv, clientIdentifier: 'client-1' }).libraries({}).catch(() => undefined);
+    const headers = seen[0]!.headers;
+    expect(headers.get('X-Plex-Client-Identifier')).toBe('client-1');
+    expect(headers.get('X-Plex-Platform')).toBe('Android');
+    expect(headers.get('X-Plex-Device')).toBe('Android TV');
+    expect(headers.get('X-Plex-Device-Name')).toBe('Living Room');
   });
 
   test('media URLs are credential-free paths under media roots', () => {
@@ -270,7 +293,7 @@ describe('discoverPlexServers', () => {
       ] },
       { name: 'Phone', clientIdentifier: 'b', accessToken: 't', owned: true, provides: 'player', connections: [] },
     ] });
-    const servers = await discoverPlexServers('client-1', 'account');
+    const servers = await discoverPlexServers(device, 'account');
     expect(servers.map(s => s.name)).toEqual(['Den']);
     expect(servers[0]!.connections.map(c => c.uri)).toEqual([
       'https://10-0-0-2.abc.plex.direct:32400', 'https://relay.plex.direct:8443', 'http://192.168.1.2:32400',
