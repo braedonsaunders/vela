@@ -83,6 +83,7 @@ internal object AudioPlayback : SessionOwner {
 
   fun load(context: Context, id: Int, url: String, access: Map<String, Any?>?, start: Double, rate: Double) {
     val player = player(context)
+    main.removeCallbacks(empty)
     loadId = id
     failure = null
     lastState = ""
@@ -121,13 +122,23 @@ internal object AudioPlayback : SessionOwner {
 
   fun setRate(rate: Double) { exo?.setPlaybackSpeed(rate.toFloat().coerceIn(0.25f, 4f)) }
 
-  /** Stops and empties the player: the notification and the lock-screen controls go with the item. */
+  /**
+   * Unloads the item. The store unloads before every load, so the player only pauses at first and keeps
+   * the item, and with it the notification and the service's foreground state: the next track, loaded
+   * from the background with the screen off, may not start a foreground service again. Only when no
+   * load follows is the player emptied, taking the notification and the lock-screen controls with it.
+   */
   fun unload() {
     val player = exo ?: return
     main.removeCallbacks(tick)
     failure = null
-    player.stop()
-    player.clearMediaItems()
+    player.pause()
+    main.removeCallbacks(empty)
+    main.postDelayed(empty, UNLOAD_GRACE_MS)
+  }
+
+  private val empty = Runnable {
+    exo?.let { it.stop(); it.clearMediaItems() }
     grant = null
     MediaSessionHub.release(this)
   }
@@ -192,3 +203,6 @@ internal object AudioPlayback : SessionOwner {
     })
   }
 }
+
+/** How long an unloaded item stays (paused) for the next one: a plan request, not a pause. */
+private const val UNLOAD_GRACE_MS = 15_000L

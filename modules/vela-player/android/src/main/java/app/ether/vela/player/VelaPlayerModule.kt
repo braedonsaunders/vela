@@ -2,7 +2,7 @@
 // (packages/player-api).
 package app.ether.vela.player
 
-import expo.modules.kotlin.Queues
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
