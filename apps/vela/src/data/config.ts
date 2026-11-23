@@ -10,7 +10,7 @@ export const config = {
   /** The mock server's demo sign-in (mock-server/). */
   mock: process.env.EXPO_PUBLIC_VELA_MOCK === '1',
   /** The build Ether is told this client is (the lab admits builds it knows). */
-  appVersion: process.env.EXPO_PUBLIC_VELA_APP_VERSION ?? '0.2.47',
+  appVersion: process.env.EXPO_PUBLIC_VELA_APP_VERSION ?? '0.2.48',
   /** The skin document to start with, by id (`?skin=` on the web). */
   skin: process.env.EXPO_PUBLIC_VELA_SKIN ?? '',
   /** A lab build's routes to open once home is ready, `|`-separated, a few seconds apart (a TV
