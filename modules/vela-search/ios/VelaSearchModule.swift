@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import UIKit
+import os
 
 #if os(tvOS)
 import React
@@ -12,7 +13,7 @@ public final class VelaSearchModule: Module {
     public func definition() -> ModuleDefinition {
         Name("VelaSearch")
         View(VelaSearchView.self) {
-            Events("onChangeText", "onSubmit", "onResultsLayout")
+            Events("onChangeText", "onSubmit", "onResultsLayout", "onLeave")
             Prop("placeholder") { (view: VelaSearchView, placeholder: String) in view.placeholder = placeholder }
             Prop("active") { (view: VelaSearchView, active: Bool) in view.setActive(active) }
             // A new number asks for focus to move into the results (after Return found something).
@@ -46,10 +47,14 @@ final class VelaSearchContainerController: UISearchContainerViewController {
     }
 }
 
+private let log = Logger(subsystem: "app.ether.vela", category: "search")
+
 final class VelaSearchView: ExpoView, UISearchResultsUpdating, UISearchBarDelegate, UIGestureRecognizerDelegate {
     let onChangeText = EventDispatcher()
     let onSubmit = EventDispatcher()
     let onResultsLayout = EventDispatcher()
+    /// Menu on the keyboard: the viewer is leaving search (React pops the route).
+    let onLeave = EventDispatcher()
 
     private let results = VelaSearchResultsController()
     private let search: UISearchController
@@ -85,7 +90,7 @@ final class VelaSearchView: ExpoView, UISearchResultsUpdating, UISearchBarDelega
         container.overrideUserInterfaceStyle = .dark
         container.view.backgroundColor = .clear
         results.onLayout = { [weak self] in self?.resultsLaidOut() }
-        menu.addTarget(self, action: #selector(menuToKeyboard))
+        menu.addTarget(self, action: #selector(menuPressed))
         menu.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
         menu.delegate = self
         addGestureRecognizer(menu)
@@ -177,7 +182,9 @@ final class VelaSearchView: ExpoView, UISearchResultsUpdating, UISearchBarDelega
     /// takes that inset, so the results start below the keyboard and scroll up under it.
     private func observeResultsScroll() {
         guard results.isViewLoaded, let scroll = firstScrollView(in: results.view) else { return }
-        if observed !== scroll {
+        // React recycles native views: a new results scroll can be the last one, its props reset
+        // (no inset adjustment), so the keyboard's inset is taken again then too.
+        if observed !== scroll || scroll.contentInsetAdjustmentBehavior != .scrollableAxes {
             observed = scroll
             insetSettled = false
             scroll.contentInsetAdjustmentBehavior = .scrollableAxes
@@ -225,28 +232,75 @@ final class VelaSearchView: ExpoView, UISearchResultsUpdating, UISearchBarDelega
         }
     }
 
+    /// Whether focus is on what was found. tvOS's own move on Return lands on whatever is nearest
+    /// under the keyboard, which can be the screen's Back: that does not count.
     private func focusInResults() -> Bool {
         guard results.isViewLoaded, let focused = UIFocusSystem(for: self)?.focusedItem as? UIView else { return false }
-        return focused.isDescendant(of: results.view)
+        return focused.isDescendant(of: results.view) && !isBack(focused)
+    }
+
+    private static let backID = "search-back"
+
+    private func isBack(_ view: UIView) -> Bool {
+        var current: UIView? = view
+        while let next = current, next !== results.view {
+            if next.accessibilityIdentifier == Self.backID { return true }
+            current = next.superview
+        }
+        return false
     }
 
     // MARK: Menu
 
-    /// Menu in the results goes back up to the keyboard, as in the system's search screens; Menu
-    /// on the keyboard leaves search. The navigation stack pops on Menu through a recognizer of
-    /// its own, so this recognizer begins only while focus is in the results, and the stack's
-    /// waits for it to fail.
-    @objc private func menuToKeyboard() {
-        // The keyboard must be back on screen before focus can move to it.
-        if let observed { observed.setContentOffset(CGPoint(x: 0, y: -observed.adjustedContentInset.top), animated: false) }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.requestFocus(self.search.searchBar)
+    /// Where focus is on this screen.
+    private enum Place { case results, keyboard, elsewhere }
+
+    private func focusPlace() -> Place {
+        guard let item = UIFocusSystem(for: self)?.focusedItem else { return .elsewhere }
+        if results.isViewLoaded, within(item, results) { return .results }
+        // The search controller is presented over the container (its own presentation, beside the
+        // container's view in this one), so the keyboard's keys sit under it, not the container.
+        if within(item, search) || within(item, container) { return .keyboard }
+        return .elsewhere
+    }
+
+    /// Whether a focus item lies in an environment (the keyboard's keys need not be views).
+    private func within(_ item: UIFocusEnvironment, _ environment: UIFocusEnvironment) -> Bool {
+        var current: UIFocusEnvironment? = item
+        while let next = current {
+            if next === environment { return true }
+            current = next.parentFocusEnvironment
+        }
+        return false
+    }
+
+    /// Menu steps back one level, as in the system's search screens: from the results up to the
+    /// keyboard, and from the keyboard out of search. Left alone, tvOS dismisses the screen's modal
+    /// in UIKit underneath React Navigation (the route stays mounted) or, with the press unclaimed,
+    /// leaves the app; so this recognizer takes every Menu while focus is on this screen, and the
+    /// navigation stack's own Menu recognizers wait for it to fail. Leaving is React's: it pops
+    /// the route, which dismisses the screen.
+    @objc private func menuPressed() {
+        switch focusPlace() {
+        case .results:
+            log.debug("menu: results to keyboard")
+            // The keyboard must be back on screen before focus can move to it.
+            if let observed { observed.setContentOffset(CGPoint(x: 0, y: -observed.adjustedContentInset.top), animated: false) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.requestFocus(self.search.searchBar)
+            }
+        case .keyboard:
+            log.debug("menu: leave search")
+            onLeave([:])
+        case .elsewhere:
+            break
         }
     }
 
     override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-        recognizer === menu ? active && focusInResults() : super.gestureRecognizerShouldBegin(recognizer)
+        guard recognizer === menu else { return super.gestureRecognizerShouldBegin(recognizer) }
+        return active && window != nil && focusPlace() != .elsewhere
     }
 
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
@@ -301,20 +355,22 @@ final class VelaSearchView: ExpoView, UISearchResultsUpdating, UISearchBarDelega
         }
     }
 
-    /// The top-left-most focusable view showing in the results.
+    /// The top-left-most focusable view showing in the results, past the screen's own Back (React's
+    /// `search-back`): Return goes to what was found.
     private func firstFocusable(in root: UIView) -> UIView? {
-        var best: (view: UIView, origin: CGPoint)?
+        var best: (view: UIView, frame: CGRect)?
         func walk(_ view: UIView) {
-            if view.isHidden || view.alpha < 0.01 { return }
+            if view.isHidden || view.alpha < 0.01 || view.accessibilityIdentifier == Self.backID { return }
             if view.canBecomeFocused {
                 let frame = view.convert(view.bounds, to: root)
                 guard frame.intersects(root.bounds) else { return }
                 if let current = best {
-                    let higher = frame.minY < current.origin.y - 1
-                    let level = abs(frame.minY - current.origin.y) <= 1
-                    if !(higher || (level && frame.minX < current.origin.x)) { return }
+                    // One row is what overlaps vertically (a chip inset in its group sits a little
+                    // lower than the drop-downs beside it): there, the leftmost; else the higher.
+                    let sameRow = frame.minY < current.frame.maxY && current.frame.minY < frame.maxY
+                    if sameRow ? frame.minX >= current.frame.minX : frame.minY >= current.frame.minY { return }
                 }
-                best = (view, frame.origin)
+                best = (view, frame)
                 return
             }
             view.subviews.forEach(walk)

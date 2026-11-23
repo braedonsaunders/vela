@@ -13,6 +13,8 @@ export interface NativeSearchProps extends ViewProps {
   onChangeText?(event: NativeSyntheticEvent<{ text: string }>): void;
   /** Return (or focus leaving the keyboard): `focused` when focus already moved into the results. */
   onSubmit?(event: NativeSyntheticEvent<{ text: string; focused: boolean }>): void;
+  /** Menu on the keyboard: leave search (Menu in the results goes up to the keyboard natively). */
+  onLeave?(event: NativeSyntheticEvent<Record<string, never>>): void;
   /** The results area under the system's field and keyboard; the children are laid out in it. */
   onResultsLayout?(event: NativeSyntheticEvent<{ x: number; y: number; width: number; height: number }>): void;
 }
