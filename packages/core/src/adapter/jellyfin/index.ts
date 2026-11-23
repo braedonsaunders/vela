@@ -647,8 +647,12 @@ export class JellyfinAdapter
             const result = await this.request<Result>('GET', `${user}/Items${query({ ...p, Fields: fields, EnableTotalRecordCount: true, ...params })}`);
             return this.page(result.Items.filter(i => this.isTitle(i, childHint)).map(i => this.title(i, childHint)), result, p.StartIndex);
         };
-        if (item.Type === 'MusicArtist')
-            return read({ AlbumArtistIds: id, IncludeItemTypes: 'MusicAlbum', Recursive: true, SortBy: 'ProductionYear,SortName', SortOrder: 'Descending' });
+        if (item.Type === 'MusicArtist') {
+            const newest = { IncludeItemTypes: 'MusicAlbum', SortBy: 'ProductionYear,SortName', SortOrder: 'Descending' };
+            const tagged = await read({ AlbumArtistIds: id, Recursive: true, ...newest });
+            // Albums without album-artist tags belong to the artist's folder (the Jellyfin demo's are so).
+            return tagged.items.length || p.StartIndex ? tagged : read({ ParentId: id, ...newest });
+        }
         if (hint.group)
             return read({ ParentId: id, IncludeItemTypes: (await this.isEmby()) ? 'Audio' : 'AudioBook', SortBy: 'ParentIndexNumber,IndexNumber,SortName' }, { audiobook: true, parent: { id, name: item.Name } });
         if (item.Type === 'MusicAlbum')

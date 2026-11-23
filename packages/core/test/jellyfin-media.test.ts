@@ -176,3 +176,14 @@ describe('Jellyfin audio and reading', () => {
     expect(emby.at(-1)).toMatchObject({ url: new URL('https://media.example/jf/Users/viewer-1/Items/b1/UserData'), body: { PlaybackPositionTicks: 2_500_000, Played: false } });
   });
 });
+
+test('an artist whose albums carry no album-artist tags has the albums in its folder', async () => {
+  const seen = routeFetch({ ...JELLYFIN,
+    'GET /jf/Users/viewer-1/Items/ar9': { Id: 'ar9', Name: 'Binaerpilot', Type: 'MusicArtist' },
+    'GET /jf/Users/viewer-1/Items': (r: { url: URL }) => r.url.searchParams.get('ParentId') === 'ar9'
+      ? { Items: [{ Id: 'promo', Name: 'Promo', Type: 'MusicAlbum' }], TotalRecordCount: 1 } : { Items: [], TotalRecordCount: 0 },
+  });
+  const albums = await new JellyfinAdapter(BASE, new FakeCredentials()).children('ar9');
+  expect(albums.items.map(a => [a.id, a.media?.role])).toEqual([['promo', 'album']]);
+  expect(seen.at(-1)!.url.searchParams.get('IncludeItemTypes')).toBe('MusicAlbum');
+});
