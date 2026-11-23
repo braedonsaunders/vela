@@ -26,17 +26,7 @@ internal object PlayerCapabilities {
   )
 
   fun capabilities(context: android.content.Context?): Map<String, Any> {
-    val display = context?.getSystemService(android.hardware.display.DisplayManager::class.java)
-      ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
-    val displayHdr = (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).toList().mapNotNull {
-      when (it) {
-        android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "hdr10"
-        android.view.Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS -> "hdr10+"
-        android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "hlg"
-        android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> "dv"
-        else -> null
-      }
-    }
+    val displayHdr = displayHdr(context)
     val hdr = playableHdr(displayHdr, decoders)
     val dvProfiles = dolbyVisionDecoderProfiles()
     val route = context?.let { runCatching { AudioRoute.probe(it) }.getOrNull() }
@@ -45,6 +35,22 @@ internal object PlayerCapabilities {
       // Shown as Dolby Vision only where the display takes it; elsewhere the base layer plays as HDR10/HLG.
       if ("dv" in hdr) put("dolbyVisionProfiles", AvFormats.dolbyVisionProfiles(dvProfiles, DolbyVision.convertsProfile7))
       route?.let { put("audioOutput", AvFormats.audioOutput(it.passthrough, it.maxChannels, it.maxSampleRate, floatPcm = true)) }
+    }
+  }
+
+  /** The HDR formats the default display reports ("hdr10", "hdr10+", "hlg", "dv"). */
+  fun displayHdr(context: android.content.Context?): List<String> {
+    val display = context?.getSystemService(android.hardware.display.DisplayManager::class.java)
+      ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+    @Suppress("DEPRECATION")
+    return (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).toList().mapNotNull {
+      when (it) {
+        android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "hdr10"
+        android.view.Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS -> "hdr10+"
+        android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "hlg"
+        android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> "dv"
+        else -> null
+      }
     }
   }
 

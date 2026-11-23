@@ -21,6 +21,8 @@ internal class PlaybackFormatFacts {
   val trueHdAtmos = mutableMapOf<String, Boolean>()
   /** Per format id: the source's Dolby Vision profile and what Vela did to it before decoding. */
   val dolbyVision = mutableMapOf<String, Pair<Int, DolbyVisionAction>>()
+  /** The decoder was asked for SDR output; true when its output format says it maps HDR to SDR. */
+  var toneMapped: Boolean? = null
   /** Hardware decoder, decodes Dolby Vision itself. */
   private var decoderKind: Pair<Boolean, Boolean>? = null
 
@@ -64,7 +66,8 @@ internal class PlaybackFormatFacts {
     val baseLayer = tapped == DolbyVisionAction.BASE_LAYER || (source == "dv" && decodesDv == false)
     return buildMap {
       putAll(display)
-      (if (baseLayer) baseRange(transfer) else source)?.let { put("range", it) }
+      (if (toneMapped == true) "sdr" else if (baseLayer) baseRange(transfer) else source)?.let { put("range", it) }
+      toneMapped?.let { put("toneMapped", it) }
       if (source == "dv" && decodesDv == true) AvFormats.dolbyVision(format.codecs, transfer)?.let { put("dvProfile", it.first) }
       when {
         baseLayer -> put("dvConversion", "base-layer")

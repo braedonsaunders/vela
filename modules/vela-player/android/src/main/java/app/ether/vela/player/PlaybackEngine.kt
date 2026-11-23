@@ -60,8 +60,19 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   )
   private val extractors: ExtractorsFactory =
     if (preview) DefaultExtractorsFactory() else TappedExtractorsFactory(DefaultExtractorsFactory(), taps)
+  private val displayHdr = PlayerCapabilities.displayHdr(context)
   private val player = ExoPlayer.Builder(context,
-    DefaultRenderersFactory(context).setEnableDecoderFallback(true)
+    VelaRenderersFactory(context,
+      // A preview's TextureView is always SDR; a full-screen surface is SDR where the display has no such HDR.
+      wantsSdr = { format -> when (format.colorInfo?.colorTransfer) {
+        C.COLOR_TRANSFER_ST2084 -> preview || "hdr10" !in displayHdr
+        C.COLOR_TRANSFER_HLG -> preview || "hlg" !in displayHdr
+        else -> false
+      } },
+      onToneMapped = { mapped ->
+        if (!preview) Log.i("vela-media3", "hdr to sdr tone mapping requested; decoder ${if (mapped) "maps" else "cannot map"}")
+        main.post { state.format.toneMapped = mapped }
+      }).setEnableDecoderFallback(true)
       // Float PCM keeps 24-bit lossless sources (FLAC, ALAC, FFmpeg-decoded TrueHD and DTS-HD MA) whole;
       // without it DefaultAudioSink truncates every high-resolution stream to 16 bits.
       .setEnableAudioFloatOutput(!preview && !shared)
