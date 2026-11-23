@@ -1,23 +1,19 @@
 import { chipGroup, libChip, glassSelect } from './library';
 // Search (routes.search), on the document's ui look: drawn in home's view under the search field
-// while a query is open. The title matches (or the honest empty or failed state), live hits on now
-// and coming up, and the descriptive lane with its failed answers. Titles lie in the library's
-// multi-row grid, not a sideways shelf.
+// while a query is open. One list of titles (or the honest empty or failed state): matched by name,
+// or by description as a fallback, with one quiet note saying so; then live hits on now and coming
+// up. The list stays a skeleton until the lane it shows has answered, so a fallback never moves a
+// list already shown. Titles lie in the library's multi-row grid, not a sideways shelf.
 import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { gridCard, titleGrid } from './cards';
-import { display, emptyState, enter, gutter, gutterSmall, is, pill, placeholder, pulse, rowSkeleton } from './look';
+import { display, emptyState, enter, gutter, gutterSmall, is, pill, placeholder, rowSkeleton } from './look';
 
 const some = (test: string): Condition => ({ test, is: 'gt', value: '0' });
 const none = (test: string): Condition => ({ test, is: 'gt', value: '0', not: true });
 const isNot = (test: string, value: string): Condition => ({ test, is: 'ne', value });
 
-/** Nothing further down answers yet: no live hits, and no descriptive answer coming or found. */
-const quiet: Condition[] = [
-  none('search.onNowCount'),
-  none('search.comingUpCount'),
-  isNot('search.descriptiveState', 'loading'),
-  none('search.descriptiveCount'),
-];
+/** Nothing further down answers: no live hits. */
+const quiet: Condition[] = [none('search.onNowCount'), none('search.comingUpCount')];
 
 const column = (gap: string): Style => ({ display: 'flex', 'flex-direction': 'column', gap });
 const secondary = (size: string): Style => ({ 'font-size': size, color: '$ui.inkSecondary' });
@@ -37,17 +33,6 @@ const retry = (height: number, padding: string, size: string): BoxNode => ({
   },
   hover: { 'background-color': '$ui.controlHover' },
   children: [{ type: 'text', text: '{t:ui.tryAgain}' }],
-});
-
-/** Still waiting on a slower lane: the breathing dots and what is happening. */
-const waiting = (text: string, when: Condition[], size: string, motion?: string): Node => ({
-  type: 'box',
-  when,
-  role: 'status',
-  ...(motion ? { motion } : {}),
-  style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', ...gutter },
-  small: { ...gutterSmall },
-  children: [pulse, { type: 'text', text, style: secondary(size) }],
 });
 
 /** A lane's heading, in the gutter. */
@@ -80,21 +65,19 @@ const shelf = (over: string, item: Node): Node => ({
   children: [{ type: 'repeat', over, item }],
 });
 
-/** A lane of titles: a heading over the library's grid of cards, rising in turn. */
-const titleLane = (name: string, over: string, when: Condition[], motion?: string): Node => ({
+/** The one list: the library's grid of cards, rising in turn. */
+const titleList: Node = {
   type: 'box',
-  when,
-  ...(motion ? { motion } : {}),
+  when: [some('search.titleCount')],
   style: { position: 'relative', ...column('18px'), 'padding-bottom': '28px' },
   small: { gap: '12px', 'padding-bottom': '18px' },
   children: [
-    laneHeading(name),
     {
       ...titleGrid,
-      children: [{ type: 'repeat', over, item: { ...gridCard, motion: 'velaCard', stagger: { step: 30, cap: 18 } } as Node }],
+      children: [{ type: 'repeat', over: 'search.titles', item: { ...gridCard, motion: 'velaCard', stagger: { step: 30, cap: 18 } } as Node }],
     } as Node,
   ],
-});
+};
 
 // ---- Live hits ----
 
@@ -291,25 +274,23 @@ const liveLane = (name: string, over: string, count: string): Node => ({
   children: [laneHeading(name), shelf(over, liveTile)],
 });
 
-// ---- The fast lane's answer ----
+// ---- The one list ----
+
+const hidden: Style = { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', opacity: '0' };
 
 const titles: Node[] = [
-  // Finding titles: the row's skeleton, announced.
+  // Finding titles, or looking by description: the row's skeleton either way, announced.
   {
     type: 'box',
     when: [is('env.search', 'loading')],
     style: { position: 'relative', display: 'flex', 'flex-direction': 'column' },
     children: [
-      {
-        type: 'text',
-        role: 'status',
-        text: '{t:ui.findingTitles}',
-        style: { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', opacity: '0' },
-      },
+      { type: 'text', role: 'status', when: [{ test: 'search.describing', not: true }], text: '{t:ui.findingTitles}', style: hidden },
+      { type: 'text', role: 'status', when: [{ test: 'search.describing' }], text: '{t:search.lookingForVibe}', style: hidden },
       rowSkeleton,
     ],
   },
-  titleLane('{t:ui.titleMatches}', 'search.titles', [some('search.titleCount')]),
+  titleList,
   {
     ...emptyState('alert', '{t:ui.searchUnavailable}', '{t:ui.searchIsUnavailableTryAnotherQuery}'),
     when: [is('env.search', 'failed'), ...quiet],
@@ -347,12 +328,12 @@ const titles: Node[] = [
   },
 ];
 
-// ---- The descriptive lane ----
+// ---- The description search's failure under what the list does show ----
 
-/** A failed descriptive answer under what did come back, with a way to ask again. */
+/** A failed description search under the list, with a way to ask again. */
 const partial = (text: string, when: Condition[]): Node => ({
   type: 'box',
-  when: [is('search.descriptiveState', 'failed'), ...when],
+  when: [is('search.descriptiveState', 'failed'), some('search.titleCount'), ...when],
   style: {
     display: 'flex',
     'flex-direction': 'row',
@@ -365,16 +346,9 @@ const partial = (text: string, when: Condition[]): Node => ({
   children: [{ type: 'text', text, style: secondary('14px') }, retry(36, '16px', '13px')],
 });
 
-const descriptive: Node[] = [
-  waiting(
-    '{t:search.lookingForVibe}',
-    [is('search.descriptiveState', 'loading'), isNot('env.search', 'loading')],
-    '15px',
-    enter(80),
-  ),
-  titleLane('{t:ui.theFeelingYouReLookingFor}', 'search.descriptive', [some('search.descriptiveCount')], enter(120)),
-  partial('{t:search.moodPartial}', [some('search.descriptiveCount')]),
-  partial('{t:search.moodUnavailableBelowTitles}', [none('search.descriptiveCount'), some('search.titleCount')]),
+const failedBelow: Node[] = [
+  partial('{t:search.moodPartial}', [{ test: 'search.describing' }]),
+  partial('{t:search.moodUnavailableBelowTitles}', [{ test: 'search.describing', not: true }]),
 ];
 
 export const search: Node = {
@@ -400,12 +374,20 @@ export const search: Node = {
           style: { ...display, 'font-size': '46px', 'line-clamp': '2' } as Style,
           small: { 'font-size': '32px' },
         },
+        // The one quiet note when the list matches a description; it arrives with the list.
+        {
+          type: 'text',
+          when: [is('env.search', 'ready'), { test: 'search.describing' }, some('search.titleCount')],
+          text: '{t:search.matchingDescription}',
+          style: secondary('15px'),
+          small: { 'font-size': '14px' },
+        },
       ],
     },
     ...titles,
+    ...failedBelow,
     liveLane('{t:live.onNow}', 'search.onNow', 'search.onNowCount'),
     liveLane('{t:search.live.comingUp}', 'search.comingUp', 'search.comingUpCount'),
-    ...descriptive,
   ],
 };
 
@@ -470,9 +452,10 @@ export const searchControls: Node = {
       { options: 'search.directions', action: 'searchDirection', label: 'Sort direction' }, glassSelect),
   ],
 };
+/** The one list's next page, whichever lane it comes from. */
 export const searchPaging: Node = {
   type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter },
-  children: ['fast', 'descriptive'].map(lane => ({ type: 'box', when: [{ test: lane === 'fast' ? 'search.moreFast' : 'search.moreDescriptive' }],
-    press: { action: 'searchMore', arg: lane }, label: 'Show more', style: { ...glassSelect, padding: '12px', ...controlMotion }, focus: { ...searchControlFocus, 'border-color': '$ui.accent' },
-    children: [{ type: 'text', text: lane === 'fast' ? 'More title matches' : 'More descriptive matches' }] } as Node)),
+  children: [{ type: 'box', when: [{ test: 'search.moreFast' }],
+    press: { action: 'searchMore', arg: 'fast' }, label: 'Show more', style: { ...glassSelect, padding: '12px', ...controlMotion }, focus: { ...searchControlFocus, 'border-color': '$ui.accent' },
+    children: [{ type: 'text', text: 'More results' }] }],
 };
