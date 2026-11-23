@@ -185,9 +185,17 @@ export class CoreAudioOutput implements AudioOutput {
           resolve();
         }
       };
+      // A wait may legitimately outlast the deadline while the output plays decoded audio out: a
+      // drain at end of file, or backpressure after the demuxer read audio far ahead (an MP4's
+      // audio track is read independently of its video). Only time without output progress counts.
+      let consumed = this.consumedFrames();
       const deadline = () => {
         const now = performance.now();
-        if (this.playing) active += now - last;
+        const progress = this.consumedFrames();
+        if (progress !== consumed) {
+          consumed = progress;
+          active = 0;
+        } else if (this.playing) active += now - last;
         last = now;
         if (active >= 8000) {
           clean();
@@ -202,6 +210,13 @@ export class CoreAudioOutput implements AudioOutput {
       timer = setTimeout(deadline, 250);
       check();
     });
+  }
+  private consumedFrames(): number | null {
+    try {
+      return this.output?.getTelemetry()?.consumedFrames ?? null;
+    } catch {
+      return null;
+    }
   }
   private retire() {
     const state = this.state;
