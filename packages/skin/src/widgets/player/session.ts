@@ -5,7 +5,7 @@
 import { quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { commandOrigin, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
+import { commandOrigin, msg, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
@@ -155,7 +155,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const switchVersion = useCallback((versionId: string) => {
     if (!sessionId || pendingVersionId) return;
     const token = ++versionAttempt.current;
-    setPendingVersionId(versionId); setVersionMessage('Preparing…');
+    setPendingVersionId(versionId); setVersionMessage(msg('player.version.preparing'));
     const attempt = async (number: number) => {
       try {
         await vela.playback.switchVersion(sessionId, versionId, position.current);
@@ -166,14 +166,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         const detail = error instanceof VelaError ? error.detail : undefined;
         const seconds = preparingRetry(detail?.code, detail?.retry, number);
         if (seconds !== null) {
-          setVersionMessage(`Preparing… retrying in ${seconds}s`);
+          setVersionMessage(msg('player.version.retrying', { seconds }));
           versionTimer.current = setTimeout(() => void attempt(number + 1), seconds * 1000);
           return;
         }
         setPendingVersionId(undefined);
-        setVersionMessage(detail?.code === 'version_unavailable' ? 'This version is no longer available. Playback continues.'
-          : detail?.code === 'feature_unavailable' ? 'This server cannot switch versions during playback. Playback continues.'
-          : 'Could not switch version. Playback continues.');
+        setVersionMessage(detail?.code === 'version_unavailable' ? msg('player.version.unavailable')
+          : detail?.code === 'feature_unavailable' ? msg('player.version.cannotSwitch') : msg('player.version.failed'));
         // The notice stays long enough to read, then clears itself.
         versionTimer.current = setTimeout(() => { if (versionAttempt.current === token) setVersionMessage(''); }, 6000);
       }

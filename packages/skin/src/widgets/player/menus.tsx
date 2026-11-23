@@ -216,10 +216,10 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
     return <ChoiceRow
       key={option.id}
       look={look}
-      name={originalQuality ? 'Original quality' : option.original
+      name={originalQuality ? msg('player.quality.original') : option.original
         ? [option.resolution, option.traits].filter(Boolean).join(' · ') : option.resolution}
       detail={option.disabledReason || (blocked ? msg('player.qualityUnavailable') : '') ||
-        (originalQuality ? 'No conversion' :
+        (originalQuality ? msg('player.quality.noConversion') :
           [option.original ? '' : option.traits, option.rate, hasVersions ? '' : option.needs].filter(Boolean).join(' · '))}
       selected={chosen(option)}
       pending={!!pendingQualityId && option.aliases.includes(pendingQualityId)}
@@ -231,7 +231,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
     ...(hasVersions ? originals.map(qualityRow) : []),
     view.qualityAuto ? (
       <ChoiceRow key="auto" look={look}
-        name={hasVersions ? 'Automatic quality' : msg('player.auto')}
+        name={hasVersions ? msg('player.quality.automatic') : msg('player.auto')}
         detail={blocked ? msg('player.qualityUnavailable') : view.lockedQuality ? '' : view.quality}
         selected={!view.lockedQuality}
         pending={pendingQualityId === 'auto'}
@@ -242,11 +242,11 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
     ...(hasVersions ? converted : groups.converted).map(qualityRow),
   ];
   const convertedTitle = selectedVersion && selectedVersion.id !== groups.versions[0]?.id
-    ? `Converted from ${selectedVersion.label.split(' · ')[0]}` : 'Converted from the current version';
+    ? msg('player.quality.convertedFrom', { version: selectedVersion.label.split(' · ')[0]! }) : msg('player.quality.convertedFromCurrent');
   const hasConversions = view.qualityAuto || converted.length > 0;
   const showQuality = hasVersions && (hasConversions || originals.length > 0);
   return [
-    hasVersions ? <MenuSection key="versions" look={look} title="Versions">
+    hasVersions ? <MenuSection key="versions" look={look} title={msg('player.versions')}>
       {groups.versions.map(version => {
         const unavailable = version.availability === 'unavailable';
         return <VersionChoiceRow key={`version:${version.id}`} look={look} name={version.label}
@@ -259,7 +259,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
     </MenuSection> : null,
     showQuality ? <MenuRule key="quality-divider" look={look} /> : null,
     ...(showQuality ? [
-      <MenuSection key="quality" look={look} title={hasConversions ? convertedTitle : 'Playback quality'}>{qualityRows}</MenuSection>,
+      <MenuSection key="quality" look={look} title={hasConversions ? convertedTitle : msg('player.quality.title')}>{qualityRows}</MenuSection>,
     ] : qualityRows),
     !view.qualities.length && !view.qualityAuto ? (
       <ChoiceRow key="current" look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
