@@ -53,3 +53,29 @@ test('ABI gate compares GLIBC versions numerically and refuses newer loaders', (
   expect(() => glibcRequirement('GLIBC_ABI_DT_RELR')).toThrow('Unsupported');
   expect(() => glibcRequirement('GLIBC_PRIVATE')).toThrow('Unsupported');
 });
+test('HDMI ELD lists the sink bitstreams and its widest LPCM', () => {
+  const { parseEld } = require('../logic');
+  const eld = ['monitor_present\t\t1', 'eld_valid\t\t1', 'monitor_name\t\tSR7015', 'sad_count\t\t5',
+    'sad0_coding_type\t[0x1] LPCM', 'sad0_channels\t\t8', 'sad0_rates\t\t[0x1ee0] 32000 44100 48000 88200 96000 176400 192000', 'sad0_bits\t\t[0xe0000] 16 20 24',
+    'sad1_coding_type\t[0x2] AC-3', 'sad2_coding_type\t[0x7] DTS', 'sad3_coding_type\t[0xa] E-AC-3/DD+ (Dolby Digital Plus)',
+    'sad4_coding_type\t[0xb] DTS-HD', 'sad5_coding_type\t[0xc] MLP (Dolby TrueHD)', 'sad6_coding_type\t[0xa] E-AC-3/DD+ (Dolby Digital Plus)'].join('\n');
+  expect(parseEld(eld)).toEqual({ name: 'SR7015', passthrough: ['ac3', 'dts', 'eac3', 'dts-hd', 'truehd'], maxChannels: 8, maxSampleRate: 192000 });
+  expect(parseEld(eld.replace('monitor_present\t\t1', 'monitor_present\t\t0'))).toBeNull();
+  expect(parseEld('monitor_present\t\t1\neld_valid\t\t0')).toBeNull();
+});
+test('playback settings and the mpv audio options they make', () => {
+  const { playbackSettings, audioOptions } = require('../logic');
+  expect(playbackSettings(null)).toEqual({ passthrough: ['ac3', 'eac3', 'dts', 'dts-hd', 'truehd'], exclusive: false, audioDevice: '' });
+  expect(playbackSettings({ passthrough: 'off', audioDevice: '$(rm -rf /)' })).toEqual({ passthrough: [], exclusive: false, audioDevice: '' });
+  const direct = playbackSettings({ passthrough: ['truehd', 'eac3', 'mp3'], audioDevice: 'alsa/hdmi:CARD=NVidia,DEV=0' });
+  expect(direct.passthrough).toEqual(['eac3', 'truehd']);
+  // A direct ALSA device only attempts what the receiver's ELD lists, and is exclusive by nature.
+  expect(audioOptions(direct, { passthrough: ['ac3', 'eac3'] })).toEqual({ 'audio-device': 'alsa/hdmi:CARD=NVidia,DEV=0', 'audio-spdif': 'eac3', 'audio-exclusive': true, 'audio-channels': 'auto' });
+  expect(audioOptions(playbackSettings({}), null)).toEqual({ 'audio-device': 'auto', 'audio-spdif': 'ac3,eac3,dts,dts-hd,truehd', 'audio-exclusive': false, 'audio-channels': 'auto-safe' });
+});
+test('subtitle preferences become mpv sub properties', () => {
+  const { subtitleProperties } = require('../logic');
+  expect(Object.fromEntries(subtitleProperties({ subtitleSize: 'large', subtitleBackground: 'box', subtitleColor: 'yellow', subtitlePosition: 'raised', offsetSeconds: -0.5 })))
+    .toEqual({ 'sub-scale': 1.25, 'sub-color': '#FFFFE14D', 'sub-pos': 88, 'sub-border-style': 'background-box', 'sub-shadow-offset': 0, 'sub-back-color': '#B0000000', 'sub-delay': -0.5 });
+  expect(subtitleProperties(null)).toEqual([]);
+});

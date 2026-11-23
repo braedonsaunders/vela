@@ -6,14 +6,46 @@ const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const { connect } = require('./mpv-ipc');
 const { createProxy } = require('./media-proxy');
-const { acceptPlan, physicalBounds, playbackRate } = require('./logic');
+const { acceptPlan, physicalBounds, playbackRate, parseEld, playbackSettings, audioOptions, subtitleProperties } = require('./logic');
 const root = () => process.env.VELA_LINUX_NATIVE_DIR || path.join(process.resourcesPath || path.dirname(__dirname), 'native-linux');
 function available() {
   return process.platform === 'linux' && !!process.env.DISPLAY && fs.existsSync(path.join(root(), 'vela-mpv'))
     && spawnSync(path.join(root(),'vela-mpv'),['--probe'],{env:{...process.env,LD_LIBRARY_PATH:path.join(root(),'lib')},timeout:2000,stdio:'ignore'}).status === 0;
 }
+/** playback.json beside Electron's other app data; the same fields as on Windows. */
+function settings() {
+  try {
+    const { app } = require('electron');
+    return playbackSettings(JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'playback.json'), 'utf8')));
+  } catch { return playbackSettings(null); }
+}
+/** The HDMI sink behind a direct ALSA device ("alsa/hdmi:CARD=NVidia,DEV=0"), from its ELD. */
+function sinkFor(device) {
+  const card = /CARD=([^,]+)/.exec(device || '')?.[1];
+  if (!card || !/^hdmi:/.test(device.slice(5)) || !/^\w+$/.test(card)) return null;
+  try {
+    const dir = path.join('/proc/asound', card);
+    const sinks = fs.readdirSync(dir).filter(name => name.startsWith('eld#')).map(name => parseEld(fs.readFileSync(path.join(dir, name), 'utf8'))).filter(Boolean);
+    if (sinks.length !== 1) return null; // none connected, or several and no way to tell which DEV is which
+    return sinks[0];
+  } catch { return null; }
+}
+/** Channels of the PulseAudio/PipeWire default sink, when pactl is installed. */
+function defaultSinkChannels() {
+  try {
+    const name = spawnSync('pactl', ['get-default-sink'], { encoding: 'utf8', timeout: 1000 }).stdout.trim();
+    const line = spawnSync('pactl', ['list', 'short', 'sinks'], { encoding: 'utf8', timeout: 1000 }).stdout.split('\n').find(l => l.split('\t')[1] === name);
+    const channels = Number(/(\d+)ch/.exec(line || '')?.[1]);
+    return Number.isFinite(channels) && channels > 0 ? { channels, hdmi: /hdmi/i.test(name) } : null;
+  } catch { return null; }
+}
 async function capabilities() {
-  return { containers: ['mp4','mkv','webm','mpegts'], videoCodecs: ['h264','hevc','vp9','av1'],
+  const wanted = settings(), sink = sinkFor(wanted.audioDevice), pulse = sink ? null : defaultSinkChannels();
+  // X11 has no HDR signalling, so HDR is tone-mapped and not claimed. Bitstreams are claimed only for a
+  // direct ALSA HDMI device whose sink lists them; through PulseAudio/PipeWire mpv still tries them.
+  const mpv = { hdrDisplay: false, passthrough: sink ? wanted.passthrough.filter(codec => sink.passthrough.includes(codec)) : [],
+    maxChannels: sink?.maxChannels || pulse?.channels || 2, maxSampleRate: sink?.maxSampleRate || undefined };
+  return { mpv, containers: ['mp4','mkv','webm','mpegts'], videoCodecs: ['h264','hevc','vp9','av1'],
     audioCodecs: ['aac','ac3','eac3','dts','truehd','flac','opus'], subtitleFormats: ['webvtt','srt','ass','ssa','pgs','tx3g'],
     hls: true, mse: false, originalPlayback: { version: 1, range: true, webgpu: false,
       demuxContainers: ['mkv','webm','mp4','mpegts'], videoDecoders: ['h264','hevc','vp9','av1'],
@@ -29,6 +61,8 @@ async function create({ window, emit }) {
     env: { ...process.env, LD_LIBRARY_PATH: path.join(root(), 'lib') }, stdio: ['pipe','pipe','ignore'] });
   let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {}, activeEntry = null;
   let rect = { x:0, y:0, width:0, height:0, scaleFactor:1 }, chain = Promise.resolve();
+  let renderer = '', facts = null, described = 0, subtitleAppearance = '';
+  const playback = settings(), sink = sinkFor(playback.audioDevice), audio = audioOptions(playback, sink);
   const windowEvents=['move','resize','show','hide','minimize','restore','focus','blur','enter-full-screen','leave-full-screen'];
   const send = (event, value) => { if (!disposed) emit(event, value); };
   function bounds() {
@@ -52,7 +86,7 @@ async function create({ window, emit }) {
   child.on('exit', code => { if (!disposed) { send('fallback',{message:'Native player exited',reason:`Native process exit ${code}`}); void destroy(); } });
   child.stdin.on('error', () => { if (!disposed) void fallback(); });
   try {
-    await Promise.race([once(child.stdout, 'data'), once(child, 'exit').then(() => { throw new Error('Native startup failed'); }),
+    await Promise.race([once(child.stdout, 'data').then(([line]) => { renderer = /^ready (\S+)/.exec(String(line))?.[1] || ''; }), once(child, 'exit').then(() => { throw new Error('Native startup failed'); }),
       new Promise((_, reject) => { const t = setTimeout(() => reject(new Error('Native startup timeout')), 5000); t.unref(); })]);
     ipc = await connect(socket, event => {
       if (event.event === 'start-file') activeEntry=event.playlist_entry_id;
@@ -65,6 +99,27 @@ async function create({ window, emit }) {
   const cmd = (...args) => ipc.command(...args);
   const get = name => cmd('get_property', name).catch(() => null);
   const enqueue = fn => { chain = chain.then(() => disposed ? undefined : fn()).catch(fallback); return chain; };
+  // A device or option this libmpv refuses leaves mpv's default in place.
+  for (const [name, value] of Object.entries(audio)) await cmd('set_property', name, value).catch(() => {});
+  const factNames = ['current-tracks/video','current-tracks/audio','video-params','video-target-params','audio-params','audio-out-params','hwdec-current','container-fps','deinterlace-active'];
+  async function describe(p) {
+    if (facts && Date.now() - described < 1000) return;
+    described = Date.now();
+    const values = await Promise.all(factNames.map(get));
+    const named = Object.fromEntries(factNames.map((n, i) => [n, values[i]]));
+    facts = { videoTrack: named['current-tracks/video'], audioTrack: named['current-tracks/audio'], 'video-params': named['video-params'],
+      'video-target-params': named['video-target-params'], 'audio-params': named['audio-params'], 'audio-out-params': named['audio-out-params'],
+      'hwdec-current': named['hwdec-current'], 'container-fps': named['container-fps'], 'deinterlace-active': named['deinterlace-active'],
+      volume: p.volume, speed: p.speed };
+  }
+  function output() {
+    let refreshRate;
+    try { const { screen } = require('electron'); refreshRate = screen.getDisplayMatching(window.getBounds()).displayFrequency || undefined; } catch {}
+    const passthrough = /^spdif-/.test(facts?.['audio-out-params']?.format || '');
+    return { display: refreshRate ? { refreshRate } : null, frameRateMatch: 'unsupported', rangeMatch: 'unsupported',
+      exclusive: audio['audio-exclusive'] || passthrough, route: /hdmi/i.test(playback.audioDevice) || (!playback.audioDevice && defaultHdmi) ? 'hdmi' : undefined };
+  }
+  const defaultHdmi = !playback.audioDevice && !!defaultSinkChannels()?.hdmi;
   for (const event of windowEvents) window.on(event, bounds);
   let ticking = false;
   timer = setInterval(() => {
@@ -77,6 +132,7 @@ async function create({ window, emit }) {
       const p = Object.fromEntries(names.map((n,i) => [n,values[i]]));
       if (Date.now()-loadedAt > 10000 && p['track-list']?.some(t => t.type === 'video') && !p['video-out-params']) throw new Error('Native video output unavailable');
       const offset = plan.paths.find(p => p.id === plan.selectedPathId)?.timelineOriginSeconds || 0;
+      if (p['time-pos'] != null) await describe(p);
       if (pendingSeek != null && p['time-pos'] != null) { await cmd('seek',pendingSeek,'absolute+exact'); pendingSeek=null; }
       const position = (p['time-pos'] || 0) + offset;
       const state = p['eof-reached'] ? 'ended' : p['paused-for-cache'] ? 'buffering' : p.pause ? 'paused' : p['time-pos'] == null ? 'loading' : 'playing';
@@ -88,7 +144,7 @@ async function create({ window, emit }) {
         else if (kind === 'subtitle' && track?.delivery?.kind === 'external' && externalSubtitle !== id) { await cmd('sub-add',proxy.register(track.delivery.url || track.url),'select'); externalSubtitle=id; }
         else if (kind === 'subtitle' && !id) await cmd('set_property','sid','no');
       }
-      send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:(p.duration || 0)+offset,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:playbackRate(plan,p.speed),speeds:plan.channelId || plan.live ? [1] : [.5,.75,1,1.25,1.5,2],droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps']});
+      send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:(p.duration || 0)+offset,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:playbackRate(plan,p.speed),speeds:plan.channelId || plan.live ? [1] : [.5,.75,1,1.25,1.5,2],droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps'],mpv:facts,output:output()});
       send('observation', {sessionId:plan.sessionId,observation:{idempotencyKey:`${source}:${++sequence}`,sequence,
         sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,observedAt:new Date().toISOString(),positionSeconds:position,state:state === 'loading' ? 'buffering' : state,
         selectedPathId:plan.selectedPathId,audioTrackId:plan.selectedAudioTrackId,subtitleTrackId:plan.selectedSubtitleTrackId,
@@ -100,6 +156,11 @@ async function create({ window, emit }) {
       if (props.preview || props.session) throw new Error('Browser fallback required');
       if (props.active === false || !props.plan) { await cmd('stop'); source=''; plan=null; return; }
       if (props.serverError) throw new Error('Server failed');
+      const appearance = JSON.stringify(props.subtitleAppearance ?? null);
+      if (appearance !== subtitleAppearance) {
+        subtitleAppearance = appearance;
+        for (const [name, value] of subtitleProperties(props.subtitleAppearance)) await cmd('set_property', name, value).catch(() => {});
+      }
       if (!acceptPlan(plan, props.plan)) return;
       const next = props.plan, selected = next.paths.find(p => p.id === next.selectedPathId);
       if (!proxy) return;
@@ -108,7 +169,7 @@ async function create({ window, emit }) {
       plan=next;
       const key = `${plan.sessionId}:${selected.id}:${plan.sourceGeneration}`;
       if (source !== key) {
-        await cmd('loadfile', proxy.register(selected.url), 'replace'); source=key; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now();
+        await cmd('loadfile', proxy.register(selected.url), 'replace'); source=key; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now(); facts=null;
         await cmd('set_property','speed',1);
       }
       const seekKey = `${key}:${plan.seekGeneration}`;
@@ -147,7 +208,7 @@ async function create({ window, emit }) {
       });
     },
     update(props) { latestProps=props; return enqueue(() => apply(props)); },
-    diagnostics: async () => ({active:!!source,hasAccess:!!proxy,sessionId:plan?.sessionId,position:await get('time-pos'),video:await get('video-out-params'),hwdec:await get('hwdec-current'),speed:await get('speed')}),
+    diagnostics: async () => ({renderer,active:!!source,hasAccess:!!proxy,sessionId:plan?.sessionId,position:await get('time-pos'),video:await get('video-out-params'),hwdec:await get('hwdec-current'),speed:await get('speed')}),
     destroy,
   };
 }
