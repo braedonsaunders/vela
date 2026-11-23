@@ -201,7 +201,9 @@ async function setup() {
   await ensureBundleId();
   const found = await requireApp();
   const internal = await group(found.id, INTERNAL_GROUP, true);
-  const testers = setting('VELA_TESTFLIGHT_INTERNAL_TESTERS').split(/[\s,]+/).filter(Boolean);
+  let testers = setting('VELA_TESTFLIGHT_INTERNAL_TESTERS').split(/[\s,]+/).filter(Boolean);
+  // Without a list, the team's account holder tests internally.
+  if (!testers.length) testers = (await list('/v1/users?filter[roles]=ACCOUNT_HOLDER')).map(u => String(u.attributes.username)).filter(Boolean);
   if (testers.length) await addTesters(internal.id, testers);
   await group(found.id, PUBLIC_GROUP, false);
   const complete = await testInformation(found.id);

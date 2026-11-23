@@ -193,6 +193,14 @@ steps authenticate with the App Store Connect API key, so the Mac needs no distr
 certificate, profile or Xcode account. Upload validation runs as part of the export, and its
 errors (ITMS-*) are in `<build dir>/<platform>-export.log`.
 
+Before the export, the script lowers the embedded frameworks' `MinimumOSVersion` to the app's
+(18.0) and re-seals them. FFmpegBuild 3.15.0's frameworks claim 26.0, although their binaries
+target 16.0, and validation refuses a framework that claims more than the app (ITMS-90208). On
+iOS, Expo's precompiled modules embed `libavif`, `SDWebImage` and its coders as unsigned
+prebuilt frameworks, and `libavif` has no privacy manifest. Apple accepted 0.2.49 that way. If an
+upload ever fails with ITMS-91061 or ITMS-91065 for them, set `EXPO_USE_PRECOMPILED_MODULES=0` for
+the store build so they build from source, as they already do on tvOS.
+
 After the uploads, `asc.ts distribute` waits for Apple to process each build. It then adds the
 "What to Test" notes, gives the builds to the internal group **Vela team** (which has every
 build), adds them to the external group **Public**, submits them for Beta App Review and turns on
@@ -210,14 +218,15 @@ as soon as processing finishes (5–30 minutes). Builds expire after 90 days.
    either file.
 2. **App record.** The API cannot create apps. `asc.ts setup` registers the bundle ID. Then:
    App Store Connect > Apps > + > New App, platforms iOS and tvOS, bundle ID `app.ether.vela`,
-   SKU `vela`.
+   SKU `vela`. The record is "Vela for Ether" (Apple ID 6838376478); the public TestFlight link
+   is https://testflight.apple.com/join/3stC2TNe.
 3. **Test information.** `tools/testflight/beta.json` holds the public text: beta description,
    default "What to Test", privacy policy ([privacy.md](privacy.md)) and reviewer notes. Personal
    details live in `~/.config/vela-release/testflight.env`:
 
    ```sh
    VELA_TESTFLIGHT_FEEDBACK_EMAIL=...
-   VELA_TESTFLIGHT_INTERNAL_TESTERS=owner@example.com   # App Store Connect users, comma separated
+   VELA_TESTFLIGHT_INTERNAL_TESTERS=owner@example.com   # App Store Connect users, comma separated (default: the account holder)
    VELA_REVIEW_CONTACT_FIRST_NAME=...
    VELA_REVIEW_CONTACT_LAST_NAME=...
    VELA_REVIEW_CONTACT_PHONE=...
@@ -229,6 +238,8 @@ as soon as processing finishes (5–30 minutes). Builds expire after 90 days.
    ```
 
    `asc.ts setup` (run by every upload) creates the two groups and writes this information.
+   Beta App Review signs in to Jellyfin's public demo (`https://demo.jellyfin.org/stable`, user
+   `demo`, no password).
    Without the contact details and feedback email, builds reach the internal group only.
 
 Export compliance is answered by `ITSAppUsesNonExemptEncryption = false` in `app.json`: Vela
