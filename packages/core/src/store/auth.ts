@@ -38,6 +38,8 @@ export interface AuthState {
   serverId: string;
   serverKind: ServerKind | '';
   serverName: string;
+  /** The server's own version (its capabilities); '' until it has answered. */
+  serverVersion: string;
   viewer: string;
   viewerId: string;
   passwordAvailable: boolean;
@@ -61,6 +63,7 @@ export const initialAuth: AuthState = {
   serverId: '',
   serverKind: '',
   serverName: '',
+  serverVersion: '',
   viewer: '', viewerId: '',
   passwordAvailable: false,
   plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plex: null,
@@ -83,6 +86,8 @@ export class Auth {
   private starting: Promise<void> | undefined;
   private retrying: Promise<void> | undefined;
   private linkError = '';
+  /** Each server's version as it last stated it, by server id. */
+  private readonly versions = new Map<string, string>();
   private linkGeneration = 0;
   private quick: { secret: string; serverId: string; timer?: ReturnType<typeof setTimeout> } | undefined;
   private redemption: { code: string; idempotencyKey: string; consumed: boolean } | undefined;
@@ -155,7 +160,8 @@ export class Auth {
       try {
         const connection = this.session.selected();
         server = { serverId: connection.record.id, serverKind: connection.record.kind,
-          serverName: this.session.names.get(connection.record.id) ?? connection.record.name };
+          serverName: this.session.names.get(connection.record.id) ?? connection.record.name,
+          serverVersion: this.versions.get(connection.record.id) ?? '' };
       } catch {
         // An unreadable stored registry must not break the recovery path too.
       }
@@ -248,7 +254,7 @@ export class Auth {
   private noServer(): void {
     this.cancelReconnect();
     this.patch({
-      phase: 'signed-out', serverId: '', serverKind: '', serverName: '', viewer: '', viewerId: '',
+      phase: 'signed-out', serverId: '', serverKind: '', serverName: '', serverVersion: '', viewer: '', viewerId: '',
       passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plex: null, secureOrigin: '', error: '',
       revision: this.session.epoch, quick: null,
     });
@@ -285,6 +291,8 @@ export class Auth {
       serverId: connection.record.id,
       serverKind: connection.record.kind,
       serverName: this.session.names.get(connection.record.id) ?? connection.record.name,
+      // An unreachable server keeps the version it last stated.
+      serverVersion: this.versions.get(connection.record.id) ?? '',
       viewer: tokens?.viewer.name ?? '',
       viewerId: tokens?.viewer.id ?? '',
       ...options,
@@ -298,6 +306,7 @@ export class Auth {
   private async options(connection: Connection) {
     const capabilities = await capabilitiesOf(connection.adapter);
     if (capabilities.server.name) this.session.names.set(connection.record.id, capabilities.server.name);
+    if (capabilities.server.version) this.versions.set(connection.record.id, capabilities.server.version);
     // A secure switch hands the session over with a web code, so only a server with web codes offers one.
     // A standalone app has no page to move, so it is never offered (its server record keeps its address).
     const secure = hasWebCodeSignIn(connection.adapter) && !this.session.servers.standalone

@@ -626,6 +626,16 @@ export const menu: Node = {
       ...puffy,
       children: [icon('out', 14), { type: 'text', text: '{s:signOut}', style: { 'font-size': '15px' } }],
     },
+    // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
+    {
+      type: 'box',
+      when: [{ test: 'env.aboutLine' }],
+      readingStop: true,
+      label: '{env.aboutLabel}',
+      testId: 'about-line',
+      style: { padding: '2px 4px 0px', 'border-radius': '10px' },
+      children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-soft', 'text-align': 'center' } }],
+    },
   ],
 };
 

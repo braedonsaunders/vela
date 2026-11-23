@@ -6,6 +6,7 @@ import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
 import { duration, msg, videoRoleLabel } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
+import { aboutLabel, aboutLine, type About } from './about';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
 import type { AuthView } from './widgets/auth/model';
@@ -51,6 +52,8 @@ export interface Env {
   libraries: Destination[];
   skinCount: number;
   skinName: string;
+  /** The About line's facts: this build, where it runs, the connected server (about.ts). */
+  about?: About;
   homeLoading: boolean;
   homeSlow: boolean;
   detail?: DetailModel;
@@ -343,6 +346,15 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.width': (_, e) => String(e.width),
   'env.skinCount': (_, e) => String(e.skinCount),
   'env.skinName': (_, e) => e.skinName,
+  // Renderer 18: the About line a profile menu ends with, and the facts in it.
+  'env.appVersion': (_, e) => e.about?.version ?? '',
+  'env.appBuild': (_, e) => e.about?.build ?? '',
+  'env.platform': (_, e) => e.about?.platform ?? '',
+  'env.serverProduct': (_, e) => e.about?.server ?? '',
+  'env.serverName': (_, e) => e.about?.serverName ?? '',
+  'env.serverVersion': (_, e) => e.about?.serverVersion ?? '',
+  'env.aboutLine': (_, e) => aboutLine(e.about),
+  'env.aboutLabel': (_, e) => aboutLabel(e.about),
   'env.libraryCount': (_, e) => String(e.libraries.length),
   'env.homeMoreLoading': (_, e) => yes(e.homeLoading),
   'env.homeSlow': (_, e) => yes(e.homeSlow),

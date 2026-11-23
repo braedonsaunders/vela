@@ -670,7 +670,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const guideRef = useRef<Focusable | null>(null);
   const releaseButton = useRef<(() => void) | undefined>(undefined);
   const band = useContext(Band);
-  const stop = useContext(ReadingStop);
+  // A section the remote reaches though it presses nothing: below a scroll's last control, or one
+  // the document marks (a menu's About line).
+  const stop = useContext(ReadingStop) || (Platform.isTV && node.readingStop === true);
   const routeFocus = useRouteFocusContext();
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);

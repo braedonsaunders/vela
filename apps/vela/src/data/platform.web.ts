@@ -61,6 +61,12 @@ export function desktopShell(): DesktopShell | undefined {
   return shell?.version === 1 && shell.platform in DESKTOP_NAMES ? shell : undefined;
 }
 
+/** The About line's app facts: the version and where it runs (a desktop app by its system). */
+export function aboutApp(): { version: string; build: string; platform: string } {
+  const desktop = desktopShell();
+  return { version: config.appVersion, build: '', platform: desktop ? { windows: 'Windows', mac: 'macOS', linux: 'Linux' }[desktop.platform] : 'Web' };
+}
+
 export function platform(): VelaPlatform {
   const development = __DEV__ ? config.server || DEVELOPMENT_SERVER : '';
   const desktop = desktopShell();

@@ -23,6 +23,17 @@ import {
   tabNode,
 } from './look';
 
+// Which Vela this is, where it runs and the server, under the menu's and the drawer's last row:
+// quiet, selectable, and on TV a stop the remote reaches.
+const aboutLine: Node = {
+  type: 'box',
+  when: [{ test: 'env.aboutLine' }],
+  readingStop: true,
+  label: '{env.aboutLabel}',
+  testId: 'about-line',
+  children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$secondary' } }],
+};
+
 const onLive: Condition = { test: 'env.section', is: 'eq', value: 'live' };
 const onHome: Condition = { test: 'env.section', is: 'eq', value: 'home' };
 // The header's sections: Home, the server's libraries in order (live only when offered),
@@ -293,6 +304,7 @@ const userMenu: Node[] = [
         focus: { outline: 'auto', 'background-color': '$hover' },
         children: [glyph('sign-out', 20), { type: 'text', text: '{s:signOut}' }],
       },
+      { ...aboutLine, style: { padding: '8px 12px 6px', 'border-radius': '6px' } },
     ],
   },
 ];
@@ -453,6 +465,7 @@ const drawer: Node[] = [
           drawerItem('jt-drawer-signout', '{s:signOut}', [glyph('sign-out', 22)], undefined, {
             action: 'signOut',
           }),
+          { ...aboutLine, style: { padding: '14px 20px 20px' } },
         ],
       },
     ],

@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.15';
+const id = 'latenight', version = '1.0.16';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -144,6 +144,10 @@ const menu: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:m
     { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
     { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
     menuRow('{s:signOut}', 'sign-out', { action: 'signOut' }),
+    // Which Vela this is, where it runs and the server, typed small on the label: selectable, and on TV a stop the remote reaches.
+    { type: 'box', when: [{ test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line', style: { 'padding-top': '4px' }, children: [
+      // Not upper-cased: a copied build hash or version must read as the server states it.
+      { type: 'text', text: '{env.aboutLine}', style: { 'font-family': print, 'font-size': '10px', 'line-height': '14px', 'letter-spacing': '0.08em', opacity: '0.7' } }] },
   ] };
 
 // The glass: bezel and curved corners, vignette, faint scanlines, a sheen, and now and
@@ -484,7 +488,7 @@ const fadeStill = { keyframes: 'dissolve', duration: 200 };
 const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
 
 export default {
-  schema: 1, renderer: 17, id, name: 'Late Night', version,
+  schema: 1, renderer: 18, id, name: 'Late Night', version,
   tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
   preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
   // Late Night's dark set, OSD green and the VCR's blue menus, for the routes it inherits (search, library, collection, sign-in).

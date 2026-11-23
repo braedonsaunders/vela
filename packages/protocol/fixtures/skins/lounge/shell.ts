@@ -613,6 +613,16 @@ export const shell: Node = {
             { type: 'text', text: '{s:signOut}', style: { 'font-weight': '650' } },
           ],
         },
+        // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
+        {
+          type: 'box',
+          when: [{ test: 'env.aboutLine' }],
+          readingStop: true,
+          label: '{env.aboutLabel}',
+          testId: 'about-line',
+          style: { padding: '12px 18px 4px', 'border-radius': '14px' },
+          children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': 'clamp(12px, 0.85vw, 16px)', 'line-height': '1.35', color: '$ink-quiet' } }],
+        },
       ],
     },
   ],

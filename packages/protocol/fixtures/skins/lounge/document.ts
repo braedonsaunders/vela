@@ -28,11 +28,11 @@ const rise = (delay: number) => ({
 });
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/.
-const version = '1.0.19';
+const version = '1.0.20';
 
 const lounge: SkinDocument = {
   schema: 1,
-  renderer: 17,
+  renderer: 18,
   id: 'lounge',
   name: 'Lounge',
   version,

@@ -19,7 +19,7 @@ import { documentKeyframes, type Motion } from './keyframes';
 import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). */
-export const RENDERER_VERSION = 17;
+export const RENDERER_VERSION = 18;
 
 const MAX_NODES = 4000;
 const MAX_DEPTH = 32;
@@ -63,7 +63,7 @@ interface Common {
 }
 
 export type RNode = Common & (
-  | { kind: 'box'; children: RNode[]; press?: { action: Action; arg?: Template; focus?: Template }; pager?: { inset?: number; peek?: number }; fit?: 'nav'; controlStates: boolean }
+  | { kind: 'box'; children: RNode[]; press?: { action: Action; arg?: Template; focus?: Template }; pager?: { inset?: number; peek?: number }; fit?: 'nav'; readingStop?: true; controlStates: boolean }
   | { kind: 'text'; text: Template; summary?: boolean; avatar?: boolean }
   | { kind: 'image'; src: Template; alt?: Template; fade: boolean }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
@@ -293,7 +293,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
       if (children.some(child => child.order !== 0)) children.sort((a, b) => a.order - b.order);
       return { ...common, kind: 'box', children, controlStates: node.controlStates !== false,
         press: node.press && { action: node.press.action, arg: compile(node.press.arg, r), focus: compile(node.press.focus, r) }, pager: node.pager,
-        ...(node.fit === 'nav' ? { fit: 'nav' as const } : {}) };
+        ...(node.fit === 'nav' ? { fit: 'nav' as const } : {}), ...(node.readingStop && !node.press ? { readingStop: true as const } : {}) };
     }
     // Legacy and new documents get the same safe synopsis control from this binding.
     // A text that is the viewer's initial is their badge: the renderer draws their avatar over it,

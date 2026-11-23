@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Condition, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.19';
+const version = '1.2.20';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -170,6 +170,9 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
       menuRow({ action: 'signOut' }, '{s:signOut}', 'sign-out', 'kids-sign-out'),
       { type: 'box', press: { action: 'reset' }, label: '{s:backToWatching}', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', height: '60px', 'margin-top': '6px', 'border-radius': '999px', 'background-color': '$sun', 'box-shadow': '0px 5px 0px #E8A419', 'font-size': '19px', 'font-weight': '800' },
         hover: lift, focus: ringed('0px 5px 0px #E8A419'), children: [{ type: 'text', text: '{s:backToWatching}' }] },
+      // For the grown-up: which Vela this is, where it runs and the server. Selectable, and on TV a stop the remote reaches.
+      { type: 'box', when: [{ test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line', style: { 'padding-top': '16px', 'border-radius': '12px' },
+        children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '13px', 'line-height': '18px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft' } }] },
     ] },
   ] },
 ] };
@@ -481,7 +484,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 
 const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
-  schema: 1, renderer: 17, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
+  schema: 1, renderer: 18, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   // Kids' cream, navy ink and a deep sky accent (readable as text on cream; the sun stays a fill),
   // for the routes it inherits (search, library, collection, sign-in).

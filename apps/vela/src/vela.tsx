@@ -33,7 +33,7 @@ import { setQuietPlayback } from '@vela/skin/src/quiet-playback';
 // A lab or development build (a pinned server on a device, start routes, or __DEV__) never starts
 // playback with sound: it may open a channel or multiview on launch on a shared TV.
 setQuietPlayback(__DEV__ || !!config.startRoutes || (Platform.OS !== 'web' && !!config.server));
-import { listenWebHandoff, platform } from './data/platform';
+import { aboutApp, listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';
 import { AppearancePicker } from './picker';
@@ -97,6 +97,9 @@ export function useSideInsets(): { paddingLeft: number; paddingRight: number; ba
   const page = useMemo(() => resolveUi(doc?.document.ui).page, [doc]);
   return useMemo(() => ({ paddingLeft: left, paddingRight: right, backgroundColor: page }), [left, right, page]);
 }
+
+/** The About line's app facts: fixed for the life of the bundle. */
+const ABOUT_APP = aboutApp();
 
 /** Routes a signed-out viewer may stay on. */
 const SIGNED_OUT_ROUTES = ['/sign-in', '/connect'];
@@ -411,6 +414,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       width,
       skinCount: documents.length,
       skinName: resolved.doc.name,
+      app: ABOUT_APP,
     });
     const key = `${route}:${entry}:${library ?? ''}`;
     const routeViewport = route === 'watch' ? viewport : contentViewport;

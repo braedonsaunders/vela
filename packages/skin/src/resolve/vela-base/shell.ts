@@ -207,6 +207,20 @@ export const viewerBadge = (size: number, fontSize: string): Node => ({
   },
 });
 
+// The menu ends quietly with which Vela this is, where it runs and the server it is connected to,
+// for a viewer asked what they run. Selectable on the web; on TV the remote reaches it and a
+// screen reader reads it whole.
+export const aboutLine: Node = {
+  type: 'box',
+  when: [{ test: 'env.aboutLine' }],
+  readingStop: true,
+  label: '{env.aboutLabel}',
+  testId: 'about-line',
+  style: { 'padding-top': '14px', 'margin-top': '-4px',
+    'border-style': 'solid', 'border-width': '0px', 'border-top-width': '1px', 'border-top-color': '$ui.glassEdge' },
+  children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ui.inkQuiet' } }],
+};
+
 export const shell: Node = {
   type: 'box',
   style: {
@@ -559,6 +573,7 @@ export const shell: Node = {
             { type: 'text', text: '{t:ui.signOut}' },
           ],
         },
+        aboutLine,
       ],
     },
   ],

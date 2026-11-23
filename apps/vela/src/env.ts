@@ -2,7 +2,7 @@
 // view state. A value the store has not read yet is honest about it: loading, or absent.
 import { Platform } from 'react-native';
 import { detailDateDisplay, spoilerFreeOf, type VelaState } from '@vela/core';
-import { searchView, type Env, type RouteName } from '@vela/skin';
+import { aboutOf, searchView, type About, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
 import { screenDestinationId, withScreens } from './plugin-screens';
@@ -18,6 +18,8 @@ export interface EnvInput {
   width: number;
   skinCount: number;
   skinName: string;
+  /** This build and where it runs (aboutApp); the server's facts come from the state. */
+  app: Pick<About, 'version' | 'build' | 'platform'>;
 }
 
 function load(value: { load: string; value?: unknown } | undefined): Env['load'] {
@@ -26,7 +28,7 @@ function load(value: { load: string; value?: unknown } | undefined): Env['load']
   return 'loading';
 }
 
-export function environment({ state, view, live, route, entry, library, width, skinCount, skinName }: EnvInput): Env {
+export function environment({ state, view, live, route, entry, library, width, skinCount, skinName, app }: EnvInput): Env {
   const home = state.home;
   const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
   const source = title?.value;
@@ -54,6 +56,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     libraries: withScreens(state.libraries.value ?? [], home.value?.screens),
     skinCount,
     skinName,
+    about: aboutOf(state, app),
     homeLoading: !home.value && home.load === 'loading',
     homeSlow: home.slow,
     detail: selectedDetail,
@@ -89,7 +92,7 @@ export function createEnvironmentReader() {
     const inputs = [state.auth.viewer, state.auth.plexHomeAvailable, state.home, state.libraries.value, state.search.query,
       route === 'home' || route === 'search' ? state.search : undefined, title, state.titles[season],
       view.season, view.flags, view.heroIndex, view.still,
-      input.live, input.width, input.skinCount, input.skinName, library, state.previews.cardId, route === 'home' ? state.previews.heroId : ''];
+      input.live, input.width, input.skinCount, input.skinName, input.app, state.auth.serverName, state.auth.serverVersion, state.servers.list.find(item => item.selected)?.kindLabel, library, state.previews.cardId, route === 'home' ? state.previews.heroId : ''];
     const key = `${route}:${entry}:${library ?? ''}`, previous = routes.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.env;
     const env = environment({ ...input, view: { ...view, season: selection || season } });

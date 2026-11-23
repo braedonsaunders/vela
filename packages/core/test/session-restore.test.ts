@@ -17,16 +17,17 @@ function harness(stage: 'credentials' | 'validation' | 'description') {
   const pending = deferred<any>();
   const saved = tokens();
   let validations = 0;
-  const description = { server: { name: 'Saved server' }, features: {}, secureOrigins: [] };
+  const description = { server: { name: 'Saved server', version: '1.40.2' }, features: {}, secureOrigins: [] };
+  let unreachable = false;
   const connection = { record: { id: 'saved', kind: 'plex', name: 'Saved server' },
-    adapter: { describe: () => stage === 'description' ? pending.promise : Promise.resolve(description) } };
+    adapter: { describe: () => unreachable ? Promise.reject(new Error('down')) : stage === 'description' ? pending.promise : Promise.resolve(description) } };
   const session = { epoch: 0, names: new Map(), onReset: () => {}, hasServer: () => true,
     servers: { standalone: true }, selected: () => connection, demoSignIn: () => false,
     tokens: () => stage === 'credentials' ? pending.promise : Promise.resolve(saved),
     validate: () => { validations++; return stage === 'validation' ? pending.promise : Promise.resolve(saved); } };
   const box = new StateBox({ auth: { ...initialAuth } } as VelaState);
   const auth = new Auth(box, session as unknown as Session, {} as VelaPlatform);
-  return { auth, state: () => box.get().auth, pending, saved, validations: () => validations, description };
+  return { auth, state: () => box.get().auth, pending, saved, validations: () => validations, description, down: () => { unreachable = true; } };
 }
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
@@ -53,10 +54,20 @@ test('a responsive restore settles normally and stays signed in past the deadlin
   const starting = h.auth.start();
   h.pending.resolve(h.description);
   await starting;
-  expect(h.state()).toMatchObject({ phase: 'signed-in', viewer: h.saved.viewer.name });
+  expect(h.state()).toMatchObject({ phase: 'signed-in', viewer: h.saved.viewer.name, serverVersion: '1.40.2' });
   jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS * 2);
   await settle();
   expect(h.state().phase).toBe('signed-in');
+});
+
+test('a server that stops answering keeps the version it last stated (the About line)', async () => {
+  const h = harness('description');
+  const starting = h.auth.start();
+  h.pending.resolve(h.description);
+  await starting;
+  h.down();
+  await h.auth.refresh();
+  expect(h.state()).toMatchObject({ phase: 'offline', serverName: 'Saved server', serverVersion: '1.40.2' });
 });
 
 test('retry revalidates a timed-out session and coalesces repeated attempts', async () => {

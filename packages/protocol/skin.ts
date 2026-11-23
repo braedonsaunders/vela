@@ -103,6 +103,10 @@ export interface BoxNode extends NodeBase {
    *  `nav.more` holds (draw a More control in the row on it: it is measured as if shown), `dest.more` holds for
    *  each library left out, `nav.liveMore` for Live TV, and `nav.moreOn` while the current section is one of them. */
   fit?: 'nav';
+  /** Renderer 18: on TV this box, which presses nothing, still takes focus (wearing the focus ring) so the
+   *  remote reaches it and a screen reader reads it as one passage, by its `label` or else its text: a menu's
+   *  About line below its last control. Elsewhere it is an ordinary box (its text selectable on the web). */
+  readingStop?: boolean;
   children?: Node[];
 }
 /** A text. One that is exactly `{env.viewerInitial}` and sets its own width and height is the viewer's

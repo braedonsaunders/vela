@@ -11,7 +11,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.13';
+const version = '1.0.14';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -103,6 +103,9 @@ const nav: Node = {
       { type: 'text', text: '{env.viewer}', style: { 'font-size': '12px' } },
     ] },
     plain('{s:signOut}', { action: 'signOut' }, [{ test: 'env.viewer' }]),
+    // Which Vela this is, where it runs and the server, as the rail's colophon: selectable, and on TV a stop the remote reaches.
+    { type: 'box', when: [{ test: 'env.viewer' }, { test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line', style: { padding: '4px' },
+      children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '11px', 'line-height': '15px', color: '$secondary' } }] },
   ],
 };
 
@@ -1251,7 +1254,7 @@ const title: Node = {
 
 export default {
   schema: 1,
-  renderer: 16,
+  renderer: 18,
   status: true,
   id,
   name: 'Index',

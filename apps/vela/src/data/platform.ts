@@ -2,6 +2,7 @@
 // build may pin its Ether server), the Keychain/Keystore, this device, and what the native player
 // (libmpv) says it plays.
 import { getRandomValues } from 'expo-crypto';
+import Constants from 'expo-constants';
 import { Dimensions, PixelRatio, Platform } from 'react-native';
 import type { VelaPlatform } from '@vela/core';
 import { VelaPlayer } from '@vela/player';
@@ -21,6 +22,17 @@ function device(): VelaPlatform['device'] {
   }
   if (Platform.isTV) return { name: 'Android TV', platform: 'androidtv' };
   return { name: 'Android', platform: 'android' };
+}
+
+const PLATFORM_NAMES: Record<VelaPlatform['device']['platform'], string> = {
+  ios: 'iOS', ipados: 'iPadOS', tvos: 'Apple TV', android: 'Android', androidtv: 'Android TV',
+};
+
+/** The About line's app facts: the version, Android's versionCode (the build a viewer sees in
+ * Settings → Apps) and where it runs. */
+export function aboutApp(): { version: string; build: string; platform: string } {
+  const code = Platform.OS === 'android' ? Constants.expoConfig?.android?.versionCode : undefined;
+  return { version: config.appVersion, build: code ? String(code) : '', platform: PLATFORM_NAMES[device().platform] ?? '' };
 }
 
 /** The longer side of the screen in pixels, at most twice its points. */

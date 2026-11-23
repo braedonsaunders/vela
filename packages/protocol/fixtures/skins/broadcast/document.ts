@@ -9,7 +9,7 @@ type Press = NonNullable<BoxNode['press']>;
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/,
 // and only that version's files are published and bundled.
-const id = 'broadcast', version = '1.0.6';
+const id = 'broadcast', version = '1.0.7';
 const ASSETS = `/vela/v0/appearance/skins/${id}/${version}`;
 const display = '"Barlow Condensed", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif';
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
@@ -115,6 +115,10 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
         { type: 'icon', symbol: 'sign-out', style: { width: '16px', height: '16px' } },
         { type: 'text', text: '{s:signOut}' },
       ]),
+      // Which Vela this is, where it runs and the server, as a caption: selectable, and on TV a stop the remote reaches.
+      { type: 'box', when: [{ test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line',
+        style: { 'padding-top': '10px', 'margin-top': '4px', 'border-style': 'solid', 'border-width': '0px', 'border-top-width': '1px', 'border-top-color': '$line' },
+        children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '11px', 'line-height': '15px', 'letter-spacing': '0.04em', color: '$ink3' } }] },
     ] },
 ] };
 
@@ -396,7 +400,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 17, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 18, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },

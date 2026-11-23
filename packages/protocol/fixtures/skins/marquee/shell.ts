@@ -458,6 +458,16 @@ const accountMenu: Node = {
     },
     divider,
     menuRow('{s:signOut}', glyph('signout', 18), { action: 'signOut' }),
+    // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
+    {
+      type: 'box',
+      when: [set('env.aboutLine')],
+      readingStop: true,
+      label: '{env.aboutLabel}',
+      testId: 'about-line',
+      style: { padding: '6px 16px 8px' },
+      children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-faint' } }],
+    },
   ],
 } as Node;
 
