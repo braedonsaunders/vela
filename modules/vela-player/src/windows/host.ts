@@ -1,4 +1,6 @@
 import type { VelaPlayerProps, WebPlayerHost } from '@vela/player-api';
+import { readSubtitlePreferences, updateSubtitlePreference } from '../../web/engine/universal/subtitles/preferences';
+import type { SubtitlePreferences } from '../../web/engine/universal/subtitles/types';
 import { desktopMediaAuthorization, isDesktopNativeHost, listen, send } from './bridge';
 import { snapshotMatchesPlan, windowsSnapshot } from './snapshot';
 
@@ -33,23 +35,26 @@ function toggleFullscreen() {
   void done.catch(() => { /* Refused without a user gesture; the next press tries again. */ });
 }
 
-function serializable(props: VelaPlayerProps) {
-  const command = props.command?.type === 'fullscreen' ? undefined : props.command;
-  return { plan: props.plan ?? null, command, active: props.active, metadata: props.metadata, serverError: props.serverError };
+/** Subtitle appearance is the page's preference (shared with the browser engine); libmpv draws it. */
+function serializable(props: VelaPlayerProps, subtitles: SubtitlePreferences) {
+  const command = props.command?.type === 'fullscreen' || props.command?.type === 'subtitleStyle' ? undefined : props.command;
+  return { plan: props.plan ?? null, command, active: props.active, metadata: props.metadata, serverError: props.serverError, subtitleAppearance: subtitles };
 }
 export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerProps, fallback?: (props: VelaPlayerProps) => WebPlayerHost): WebPlayerHost {
   const id = `windows-player-${++sequence}`;
   let props = initial;
+  let subtitles = readSubtitlePreferences();
+  let styleId = 0;
   const restore = seeThrough(node);
   let browser: WebPlayerHost | undefined;
   let revision = 0;
   const publish = (kind: 'mount' | 'update') => {
     const version = ++revision;
     const next = props;
-    if (!isDesktopNativeHost()) { send({ kind, id, props: serializable(next) }); return; }
+    if (!isDesktopNativeHost()) { send({ kind, id, props: serializable(next, subtitles) }); return; }
     void desktopMediaAuthorization(next).then(attachment => {
       if (disposed || browser || version !== revision || !attachment) return;
-      send({ kind: mounted ? 'update' : 'mount', id, props: { ...serializable(next), ...attachment } });
+      send({ kind: mounted ? 'update' : 'mount', id, props: { ...serializable(next, subtitles), ...attachment } });
       mounted = true;
       bounds();
     });
@@ -78,7 +83,7 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
           browser = fallback(props);
         }
         break;
-      case 'snapshot': if (snapshotMatchesPlan(message.value, props)) props.onSnapshot?.(windowsSnapshot(message.value, props)); break;
+      case 'snapshot': if (snapshotMatchesPlan(message.value, props)) props.onSnapshot?.(windowsSnapshot(message.value, props, subtitles)); break;
       case 'error': props.onError?.(message.value as Parameters<NonNullable<VelaPlayerProps['onError']>>[0]); break;
       case 'command': props.onCommand?.(message.value as Parameters<NonNullable<VelaPlayerProps['onCommand']>>[0]); break;
       case 'observation': props.onObservation?.(message.value as Parameters<NonNullable<VelaPlayerProps['onObservation']>>[0]); break;
@@ -96,6 +101,16 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
       if (next.command?.type === 'fullscreen' && next.command.id > fullscreenId) {
         fullscreenId = next.command.id;
         toggleFullscreen();
+      }
+      const command = next.command;
+      if (command?.type === 'subtitleStyle' && command.id > styleId) {
+        styleId = command.id;
+        try {
+          subtitles = updateSubtitlePreference(subtitles, command.value);
+          next.onCommand?.({ id: command.id, ok: true });
+        } catch (error) {
+          next.onCommand?.({ id: command.id, ok: false, failure: { kind: 'action', message: error instanceof Error ? error.message : 'Invalid subtitle style', recoverable: true } });
+        }
       }
       publish('update');
     },

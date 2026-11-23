@@ -1,4 +1,5 @@
 import type { MediaAccess, PlayerCapabilities, VelaPlayerProps } from '@vela/player-api';
+import { mpvCapabilities, type MpvProbe } from './mpv-format';
 
 type Message = { kind: string; [key: string]: unknown };
 type WebView = { postMessage(message: unknown): void; addEventListener(type: 'message', listener: (event: MessageEvent) => void): void; removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void };
@@ -28,7 +29,11 @@ export function windowsCapabilities(): Promise<PlayerCapabilities> {
       if (message.kind !== 'capabilities' || message.requestId !== requestId) return;
       clearTimeout(timer); unsubscribe();
       if (message.error) reject(new Error('Native player capabilities unavailable'));
-      else resolve(message.value as PlayerCapabilities);
+      // A libmpv host reports what it measured (display, audio endpoint, GPU); the lists are composed here.
+      else {
+        const value = message.value as PlayerCapabilities & { mpv?: MpvProbe };
+        resolve(value?.mpv ? mpvCapabilities(value.mpv) : value);
+      }
     });
     send({ kind: 'capabilities', requestId });
   });
