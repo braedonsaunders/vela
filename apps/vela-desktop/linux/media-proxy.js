@@ -13,7 +13,8 @@ function inScope(address, grant) {
 }
 async function createProxy(grant) {
   const secret = randomBytes(24).toString('hex'), routes = new Map(), reverse = new Map(), requests = new Set();
-  let base, closed = false;
+  // The newest media playlist's EXT-X-TARGETDURATION: the live segment length, for the live latency.
+  let base, closed = false, targetDuration = null;
   const register = address => {
     const url = new URL(address, grant.origin).href;
     if (!inScope(url, grant)) throw new Error('Media outside access grant');
@@ -49,6 +50,8 @@ async function createProxy(grant) {
       if (playlist && req.method !== 'HEAD' && response.ok) {
         const text = await response.text();
         if (text.length > 4*1024*1024 || !text.startsWith('#EXTM3U')) throw new Error('Invalid playlist');
+        const target = Number(/^#EXT-X-TARGETDURATION:\s*(\d+(?:\.\d+)?)\s*$/m.exec(text)?.[1]);
+        if (target > 0 && target <= 60) targetDuration = target;
         const rewritten = text.split('\n').map(line => line.startsWith('#')
           ? line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${register(new URL(uri, url).href)}"`)
           : line.trim() ? register(new URL(line.trim(), url).href) : line).join('\n');
@@ -66,6 +69,6 @@ async function createProxy(grant) {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${server.address().port}`;
-  return { register, close() { closed = true; for (const c of requests) c.abort(); routes.clear(); reverse.clear(); server.closeAllConnections(); server.close(); } };
+  return { register, targetDuration: () => targetDuration, close() { closed = true; for (const c of requests) c.abort(); routes.clear(); reverse.clear(); server.closeAllConnections(); server.close(); } };
 }
 module.exports = { inScope, createProxy };

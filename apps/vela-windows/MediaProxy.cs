@@ -21,6 +21,10 @@ public sealed class MediaProxy : IDisposable
     private string pathPrefix = "/";
     private Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Uri endpoint;
+    private double targetDuration;
+
+    /// <summary>The newest media playlist's EXT-X-TARGETDURATION (the live segment length), or null before one.</summary>
+    public double? TargetDurationSeconds => Volatile.Read(ref targetDuration) is var value && value > 0 ? value : null;
 
     public MediaProxy()
     {
@@ -121,6 +125,9 @@ public sealed class MediaProxy : IDisposable
                     byte[] chunk = new byte[8192]; int read;
                     while ((read = await input.ReadAsync(chunk, stopping.Token).ConfigureAwait(false)) != 0) { if (buffer.Length + read > MaxPlaylistBytes) throw new HttpRequestException("Playlist too large."); buffer.Write(chunk, 0, read); }
                     string text = Encoding.UTF8.GetString(buffer.ToArray());
+                    var duration = Regex.Match(text, @"(?m)^#EXT-X-TARGETDURATION:\s*(\d+(?:\.\d+)?)\s*$");
+                    if (duration.Success && double.TryParse(duration.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds > 0 && seconds <= 60)
+                        Volatile.Write(ref targetDuration, seconds);
                     string rewritten = Regex.Replace(text, @"(?m)^(?!#)([^\r\n]+)|URI=""([^""]+)""", match =>
                     {
                         string value = match.Groups[1].Success ? match.Groups[1].Value.Trim() : match.Groups[2].Value;

@@ -40,7 +40,9 @@ Media uses an ephemeral loopback proxy. Only exact-origin, path-boundary URLs
 receive immutable grant headers. Redirects are checked before each request;
 HLS playlist references are rewritten through opaque registered routes. Grant
 replacement closes existing connections immediately. Credentials never enter
-mpv options or events. Live playback stays at rate 1; no catch-up is issued.
+mpv options or events. Live playback stays at rate 1; no catch-up is issued on its
+own. The viewer's pause, rewind and Back to live work inside mpv's bounded cache
+(`../NATIVE_PLAYER.md`, live timeshift).
 
 ## Packaging
 

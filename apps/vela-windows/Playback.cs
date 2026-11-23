@@ -22,6 +22,11 @@ internal sealed class Playback : IDisposable
     double? pendingSeek;
     string appliedAudio = "", appliedSubtitle = "", matchedSource = "";
     object? facts, output;
+    // Live timeshift: when the plan arrived (a Start over edge grows from then), the behind-live verdict held
+    // between snapshots, and a local live seek in flight (on the axis of the reported position).
+    DateTime planReceivedAt, liveSeekAt;
+    bool liveBehind;
+    double? liveSeekTarget;
     static JsonElement Get(JsonElement e, string k) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var v) ? v : default;
     static string? Str(JsonElement e, string k) => Get(e,k).ValueKind == JsonValueKind.String ? Get(e,k).GetString() : null;
     static double Num(JsonElement e,string k) => Get(e,k).TryGetDoubleSafe();
@@ -89,7 +94,8 @@ internal sealed class Playback : IDisposable
             var next = Get(props,"plan"); if (next.ValueKind != JsonValueKind.Object) { Stop(); return; }
             if (Str(plan,"sessionId") == Str(next,"sessionId") && (Num(next,"sourceGeneration") < Num(plan,"sourceGeneration") || Num(next,"seekGeneration") < Num(plan,"seekGeneration"))) return;
             // Command ids keep rising across sessions; a session change must not replay the last one.
-            if (Str(plan,"sessionId") != Str(next,"sessionId")) sequence = 0;
+            if (Str(plan,"sessionId") != Str(next,"sessionId")) { sequence = 0; liveBehind = false; liveSeekTarget = null; }
+            if (Str(plan,"sessionId") != Str(next,"sessionId") || Num(plan,"revision") != Num(next,"revision")) planReceivedAt = DateTime.UtcNow;
             plan = next.Clone();
             var path = SelectedPath();
             string key = $"{Str(plan,"sessionId")}:{Str(path,"id")}:{Num(plan,"sourceGeneration")}";
@@ -105,9 +111,18 @@ internal sealed class Playback : IDisposable
                 // The server probed the original: switch the display before the first frame. A transcode's
                 // range may differ from the original's, so it waits for the decoded stream.
                 if (Get(path, "original").ValueKind == JsonValueKind.True) MatchDisplay(OriginalFrameRate(path), OriginalHdr(path));
+                // The demuxer reads these when it opens: live's bounded timeshift buffer, Start over from its first segment.
+                foreach (var (name, value) in LiveTimeline.DemuxerOptions(plan)) mpv.TrySet(name, value);
+                liveBehind = false; liveSeekTarget = null;
                 mpv.Command("loadfile",Url(Str(path,"url") ?? throw new InvalidOperationException()),"replace");
             }
-            if (seek != seekKey) { pendingSeek = Math.Max(0,Num(plan,"positionSeconds")-offset); seek = seekKey; }
+            if (seek != seekKey)
+            {
+                double target = Math.Max(0, Num(plan, "positionSeconds") - offset);
+                // A channel joins at its edge: its plan position is not on mpv's timeline. Start over starts at its position.
+                pendingSeek = !LiveTimeline.IsLive(plan) ? target : LiveTimeline.IsStartOver(plan) && target > 0 ? target : null;
+                seek = seekKey;
+            }
 
             var cmd = Get(props,"command");
             // Fullscreen and picture-in-picture belong to the page and the window, never the session.
@@ -115,7 +130,11 @@ internal sealed class Playback : IDisposable
             {
                 lastCommand = (long)id;
                 string? type = Str(cmd, "type");
-                bool ok = type switch
+                string? refusal = null;
+                bool ok = LiveTimeline.IsLive(plan) && type is "play" or "pause" or "seek" or "seekBy" or "catchUp"
+                    ? (refusal = LiveCommand(type!, cmd)) == null
+                    : type == "catchUp" ? (refusal = "Only a live stream can catch up to live") == null
+                    : type switch
                 {
                     "seek" or "seekBy" => Session(type, Get(cmd, "seconds")),
                     "audio" or "subtitle" => Session(type, Get(cmd, "trackId")),
@@ -123,17 +142,20 @@ internal sealed class Playback : IDisposable
                     "play" or "pause" => Session(type, default),
                     "volume" => mpv.TrySet("volume", Format(Math.Clamp(Num(cmd, "value"), 0, 1) * 100)),
                     "mute" => mpv.TrySet("mute", Get(cmd, "muted").ValueKind == JsonValueKind.True ? "yes" : "no"),
-                    "speed" => mpv.TrySet("speed", Format(Live() ? 1 : Math.Clamp(Num(cmd, "value"), .25, 4))),
+                    "speed" => mpv.TrySet("speed", Format(RateLocked() ? 1 : Math.Clamp(Num(cmd, "value"), .25, 4))),
                     _ => false,
                 };
-                emit("command", ok ? new { id, ok } : new { id, ok, failure = new { kind = "unsupported", message = "Not supported by the native player", recoverable = false } });
+                emit("command", ok ? new { id, ok }
+                    : refusal != null ? new { id, ok, failure = new { kind = "action", message = refusal, recoverable = true } }
+                    : (object)new { id, ok, failure = new { kind = "unsupported", message = "Not supported by the native player", recoverable = false } });
             }
         }
         catch { Fail(); }
     }
     JsonElement SelectedPath() => Get(plan,"paths").ValueKind == JsonValueKind.Array
         ? Get(plan,"paths").EnumerateArray().FirstOrDefault(p => Str(p,"id") == Str(plan,"selectedPathId")) : default;
-    bool Live() => Str(plan, "channelId") != null || Get(plan, "livePolicy").ValueKind == JsonValueKind.Object;
+    /// <summary>Live and anything carrying a live policy play at rate 1; the viewer cannot change the speed.</summary>
+    bool RateLocked() => LiveTimeline.IsLive(plan) || Get(plan, "livePolicy").ValueKind == JsonValueKind.Object;
 
     static double? OriginalFrameRate(JsonElement path) => Num(Get(path, "originalVideo"), "frameRate") is var fps && fps > 0 ? fps : null;
     static bool? OriginalHdr(JsonElement path)
@@ -211,6 +233,44 @@ internal sealed class Playback : IDisposable
         return true;
     }
 
+    /// <summary>The live window now, on the axis of the reported position.</summary>
+    LiveWindow? ReadLiveWindow() =>
+        LiveTimeline.Read(plan, mpv.Node("demuxer-cache-state"), offset, planReceivedAt, DateTime.UtcNow, proxy.TargetDurationSeconds);
+
+    /// <summary>A live plan's play, pause, seek and catchUp stay in mpv, inside the window it holds; none becomes
+    /// a session command (positions here are on mpv's timeline, not the server's). A refusal, or null when done.</summary>
+    string? LiveCommand(string type, JsonElement cmd)
+    {
+        double position = Read("time-pos") + offset;
+        var window = ReadLiveWindow();
+        double from = liveSeekTarget ?? position;
+        switch (type)
+        {
+            case "pause": mpv.Command("set", "pause", "yes"); return null;
+            case "play":
+                // A long pause: the window may have slid past the position. Resume inside it, never at the edge.
+                if (liveSeekTarget == null && window != null && LiveTimeline.ResumeTarget(window, position) is double resume) LiveSeek(resume);
+                mpv.Command("set", "pause", "no"); return null;
+            case "catchUp":
+                if (window == null || LiveTimeline.CatchUpTarget(window, from) is not double latest) return "No newer live media to catch up to";
+                return LiveSeek(latest) ? null : "The live seek failed";
+        }
+        if (Get(cmd, "seconds").ValueKind != JsonValueKind.Number) return "A seek needs seconds";
+        double seconds = Get(cmd, "seconds").TryGetDoubleSafe();
+        if (window == null || LiveTimeline.Clamp(window, type == "seekBy" ? from + seconds : seconds) is not double target)
+            return window?.Edge == null ? "The live window is not known yet" : "This live stream keeps no history to rewind";
+        return LiveSeek(target) ? null : "The live seek failed";
+    }
+
+    bool LiveSeek(double target)
+    {
+        pendingSeek = null;
+        try { mpv.Command("seek", Format(Math.Max(0, target - offset)), "absolute+exact"); }
+        catch (InvalidOperationException) { liveSeekTarget = null; return false; }
+        liveSeekTarget = target; liveSeekAt = DateTime.UtcNow;
+        return true;
+    }
+
     double Read(string property) => double.TryParse(mpv.Property(property),NumberStyles.Float,CultureInfo.InvariantCulture,out var n) && double.IsFinite(n) ? n : 0;
     double? Maybe(string property) => double.TryParse(mpv.Property(property),NumberStyles.Float,CultureInfo.InvariantCulture,out var n) && double.IsFinite(n) ? n : null;
 
@@ -269,9 +329,18 @@ internal sealed class Playback : IDisposable
             double position=Read("time-pos")+offset, ahead=Read("demuxer-cache-duration");
             string state=mpv.Property("eof-reached")=="yes" ? "ended" : mpv.Property("paused-for-cache")=="yes" ? "buffering" : mpv.Property("pause")=="yes" ? "paused" : "playing";
             Awake(state == "playing" || state == "buffering");
+            Dictionary<string, object?>? live = null;
+            if (LiveTimeline.IsLive(plan))
+            {
+                bool seeking = mpv.Property("seeking") == "yes";
+                if (liveSeekTarget is double landing && (!seeking && Math.Abs(position - landing) < 2 || (DateTime.UtcNow - liveSeekAt).TotalSeconds > 10)) liveSeekTarget = null;
+                // A stall while playing is the connection, not a seek or a pause.
+                bool reconnecting = state == "buffering" && mpv.Property("pause") != "yes" && !seeking && liveSeekTarget == null && pendingSeek == null;
+                (live, liveBehind) = LiveTimeline.Snapshot(ReadLiveWindow(), liveSeekTarget ?? position, liveBehind, reconnecting);
+            }
             emit("snapshot",new { sessionId=Str(plan,"sessionId"),sourceGeneration=Num(plan,"sourceGeneration"),seekGeneration=Num(plan,"seekGeneration"),
-                state,position,duration=Read("duration")+offset,bufferAheadSeconds=ahead,volume=Read("volume")/100,muted=mpv.Property("mute")=="yes",
-                speed=Read("speed"),speeds=Live() ? new[]{1.0} : new[]{.5,.75,1,1.25,1.5,2},droppedFrames=Read("frame-drop-count"),mpv=facts,output });
+                state,position,duration=live != null ? (double?)null : Read("duration")+offset,live,seekTarget=liveSeekTarget,bufferAheadSeconds=ahead,volume=Read("volume")/100,muted=mpv.Property("mute")=="yes",
+                speed=Read("speed"),speeds=RateLocked() ? new[]{1.0} : new[]{.5,.75,1,1.25,1.5,2},droppedFrames=Read("frame-drop-count"),mpv=facts,output });
             if (state!=phase || (DateTime.UtcNow-observed).TotalSeconds>=1) {
                 observed=DateTime.UtcNow; phase=state; sequence++;
                 emit("observation",new {sessionId=Str(plan,"sessionId"),observation=new {idempotencyKey=$"{seek}:{sequence}",sourceGeneration=Num(plan,"sourceGeneration"),seekGeneration=Num(plan,"seekGeneration"),sequence,observedAt=observed.ToString("O"),positionSeconds=position,state,selectedPathId=Str(plan,"selectedPathId"),audioTrackId=Str(plan,"selectedAudioTrackId"),subtitleTrackId=Str(plan,"selectedSubtitleTrackId"),playableRanges=ahead>0 ? new[]{new {startSeconds=position,endSeconds=position+ahead}} : Array.Empty<object>(),throughputBps=Read("cache-speed")*8,droppedFrames=Read("frame-drop-count")}});

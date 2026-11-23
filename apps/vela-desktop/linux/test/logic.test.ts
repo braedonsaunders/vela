@@ -79,3 +79,77 @@ test('subtitle preferences become mpv sub properties', () => {
     .toEqual({ 'sub-scale': 1.25, 'sub-color': '#FFFFE14D', 'sub-pos': 88, 'sub-border-style': 'background-box', 'sub-shadow-offset': 0, 'sub-back-color': '#B0000000', 'sub-delay': -0.5 });
   expect(subtitleProperties(null)).toEqual([]);
 });
+test('live plans: channels and Start over; catch-up plays as on-demand', () => {
+  const { isLive, isStartOver } = require('../logic');
+  expect(isLive({ channelId: 'c1' })).toBe(true);
+  expect(isLive({ live: { mode: 'startOver', windowStartSeconds: 0, liveEdgeSeconds: 600, edgeAt: '2026-11-23T10:00:00Z', behindLiveSeconds: 600 } })).toBe(true);
+  expect(isStartOver({ live: { mode: 'startOver' } })).toBe(true);
+  expect(isLive({ catchUp: { channelId: 'c1', startAt: '2026-11-23T08:00:00Z' }, livePolicy: { latencyProfile: 'auto', targetLatencySeconds: 6 } })).toBe(false);
+  expect(isLive(null)).toBe(false);
+});
+test('the demuxer cache is bounded: live leans back, Start over reads from its first segment', () => {
+  const { demuxerOptions } = require('../logic');
+  expect(Object.fromEntries(demuxerOptions({}))).toEqual({ 'demuxer-max-bytes': '400MiB', 'demuxer-max-back-bytes': '100MiB', 'demuxer-lavf-o': '' });
+  expect(Object.fromEntries(demuxerOptions({ channelId: 'c1', live: { mode: 'adaptive', timeshift: { maxMinutes: 60 } } })))
+    .toEqual({ 'demuxer-max-bytes': '192MiB', 'demuxer-max-back-bytes': '128MiB', 'demuxer-lavf-o': '' });
+  expect(Object.fromEntries(demuxerOptions({ live: { mode: 'startOver' } }))['demuxer-lavf-o']).toBe('live_start_index=0');
+});
+test('a channel window is the newest cached range on the position axis', () => {
+  const { liveWindow, liveLatency } = require('../logic');
+  const plan = { channelId: 'c1', live: { mode: 'adaptive', windowStartSeconds: 1200, liveEdgeSeconds: 4800 } };
+  const cacheState = { 'seekable-ranges': [{ start: 2, end: 9 }, { start: 20, end: 320 }] };
+  expect(liveWindow({ plan, cacheState, origin: 100, receivedAt: 0, now: 0, targetDuration: 4 }))
+    .toEqual({ start: 120, edge: 420, latency: 12, segment: 4, source: 'seekable' });
+  expect(liveWindow({ plan, cacheState: { 'seekable-ranges': [] }, receivedAt: 0, now: 0 })).toBeNull();
+  expect(liveWindow({ plan: {}, cacheState, receivedAt: 0, now: 0 })).toBeNull();
+  expect(liveLatency({}, undefined)).toBe(6);
+  expect(liveLatency({ livePolicy: { latencyProfile: 'stable', targetLatencySeconds: 20 } }, 4)).toBe(20);
+});
+test('a Start over window runs from the programme start to the edge grown since the plan arrived', () => {
+  const { liveWindow } = require('../logic');
+  const plan = { live: { mode: 'startOver', windowStartSeconds: 0, liveEdgeSeconds: 600 } };
+  expect(liveWindow({ plan, cacheState: { 'seekable-ranges': [{ start: 0, end: 90 }] }, receivedAt: 1000, now: 31000, targetDuration: 4 }))
+    .toEqual({ start: 0, edge: 630, latency: 12, segment: 4, source: 'server' });
+  expect(liveWindow({ plan, cacheState: { 'seekable-ranges': [{ start: 500, end: 640 }] }, receivedAt: 0, now: 0 })?.edge).toBe(640);
+});
+test('behind live is told only past the latency, and holds until back within 3 s', () => {
+  const { liveSnapshot } = require('../logic');
+  const window = { start: 0, edge: 300, latency: 12, segment: 4, source: 'seekable' };
+  // Where FFmpeg plays live: three segments short of the newest.
+  let report = liveSnapshot(window, 288, false, false);
+  expect(report.live).toEqual({ edgeSeconds: 300, windowStartSeconds: 0, driftSeconds: 0, edgeSource: 'seekable', reconnecting: false, delivery: 'available', canCatchUp: false });
+  report = liveSnapshot(window, 250, false, false);
+  expect(report.behind).toBe(true);
+  expect(report.live.driftSeconds).toBe(38);
+  expect(report.live.canCatchUp).toBe(true);
+  expect(liveSnapshot(window, 283, true, false).behind).toBe(true);
+  expect(liveSnapshot(window, 286, true, false).behind).toBe(false);
+  expect(liveSnapshot(null, 10, true, true).live).toEqual({ edgeSeconds: null, windowStartSeconds: null, driftSeconds: 0, edgeSource: null, reconnecting: true, delivery: 'unknown', canCatchUp: false });
+});
+test('live seeks clamp into the window; catch up goes to the edge less the latency; a slid window resumes inside', () => {
+  const { clampLiveSeek, catchUpTarget, resumeTarget } = require('../logic');
+  const window = { start: 100, edge: 400, latency: 12, segment: 4 };
+  expect(clampLiveSeek(window, 50)).toBe(100);
+  expect(clampLiveSeek(window, 1000)).toBe(399);
+  expect(clampLiveSeek(window, 250)).toBe(250);
+  expect(clampLiveSeek({ ...window, start: null }, 250)).toBeNull();
+  expect(catchUpTarget(window, 200)).toBe(388);
+  expect(catchUpTarget(window, 388)).toBeNull();
+  expect(catchUpTarget({ ...window, start: 395 }, 300)).toBe(395.05);
+  expect(resumeTarget(window, 60)).toBe(105);
+  expect(resumeTarget(window, 150)).toBeNull();
+});
+test('proxy keeps the media playlist target duration for the live latency', async () => {
+  const http = require('node:http');
+  const server = http.createServer((req, res) => {
+    res.setHeader('content-type','application/vnd.apple.mpegurl');
+    res.end('#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:10\n#EXTINF:6.000,\nsegment-10.ts\n');
+  });
+  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
+  const proxy = await createProxy({origin:`http://127.0.0.1:${server.address().port}`,pathPrefix:'/live',headers:{}});
+  try {
+    expect(proxy.targetDuration()).toBeNull();
+    await (await fetch(proxy.register('/live/index.m3u8'))).text();
+    expect(proxy.targetDuration()).toBe(6);
+  } finally { proxy.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});

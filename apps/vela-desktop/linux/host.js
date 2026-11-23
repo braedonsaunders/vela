@@ -6,7 +6,8 @@ const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const { connect } = require('./mpv-ipc');
 const { createProxy } = require('./media-proxy');
-const { acceptPlan, physicalBounds, playbackRate, parseEld, playbackSettings, audioOptions, subtitleProperties } = require('./logic');
+const { acceptPlan, physicalBounds, playbackRate, parseEld, playbackSettings, audioOptions, subtitleProperties,
+  isLive, isStartOver, demuxerOptions, liveWindow, liveSnapshot, catchUpTarget, clampLiveSeek, resumeTarget } = require('./logic');
 const root = () => process.env.VELA_LINUX_NATIVE_DIR || path.join(process.resourcesPath || path.dirname(__dirname), 'native-linux');
 function available() {
   return process.platform === 'linux' && !!process.env.DISPLAY && fs.existsSync(path.join(root(), 'vela-mpv'))
@@ -62,6 +63,9 @@ async function create({ window, emit }) {
   let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {}, activeEntry = null;
   let rect = { x:0, y:0, width:0, height:0, scaleFactor:1 }, chain = Promise.resolve();
   let renderer = '', facts = null, described = 0, subtitleAppearance = '';
+  // Live timeshift: when the plan arrived (its edge grows from then), the behind-live verdict held between
+  // snapshots, and a local live seek in flight ({ target, at }, on the axis of the reported position).
+  let planReceivedAt = 0, liveBehind = false, liveSeek = null;
   const playback = settings(), sink = sinkFor(playback.audioDevice), audio = audioOptions(playback, sink);
   const windowEvents=['move','resize','show','hide','minimize','restore','focus','blur','enter-full-screen','leave-full-screen'];
   const send = (event, value) => { if (!disposed) emit(event, value); };
@@ -128,7 +132,7 @@ async function create({ window, emit }) {
     ticking = true;
     void enqueue(async () => {
       if (!plan || !source || !proxy) return;
-      const names = ['time-pos','duration','pause','paused-for-cache','eof-reached','demuxer-cache-duration','volume','mute','frame-drop-count','track-list','video-out-params','hwdec-current','estimated-vf-fps','speed'];
+      const names = ['time-pos','duration','pause','paused-for-cache','eof-reached','demuxer-cache-duration','volume','mute','frame-drop-count','track-list','video-out-params','hwdec-current','estimated-vf-fps','speed','seeking','demuxer-cache-state'];
       const values = await Promise.all(names.map(get));
       const p = Object.fromEntries(names.map((n,i) => [n,values[i]]));
       if (Date.now()-loadedAt > 10000 && p['track-list']?.some(t => t.type === 'video') && !p['video-out-params']) throw new Error('Native video output unavailable');
@@ -137,6 +141,15 @@ async function create({ window, emit }) {
       if (pendingSeek != null && p['time-pos'] != null) { await cmd('seek',pendingSeek,'absolute+exact'); pendingSeek=null; }
       const position = (p['time-pos'] || 0) + offset;
       const state = p['eof-reached'] ? 'ended' : p['paused-for-cache'] ? 'buffering' : p.pause ? 'paused' : p['time-pos'] == null ? 'loading' : 'playing';
+      let live = null;
+      if (isLive(plan)) {
+        if (liveSeek && (!p.seeking && Math.abs(position - liveSeek.target) < 2 || Date.now() - liveSeek.at > 10000)) liveSeek = null;
+        const window = liveWindow({ plan, cacheState: p['demuxer-cache-state'], origin: offset, receivedAt: planReceivedAt, now: Date.now(), targetDuration: proxy.targetDuration() });
+        // A stall while playing is the connection, not a seek or a pause.
+        const reconnecting = state === 'buffering' && !p.pause && !p.seeking && !liveSeek && pendingSeek == null;
+        const report = liveSnapshot(window, liveSeek?.target ?? position, liveBehind, reconnecting);
+        liveBehind = report.behind; live = report.live;
+      }
       for (const kind of ['audio','subtitle']) {
         const id = plan[kind === 'audio' ? 'selectedAudioTrackId' : 'selectedSubtitleTrackId'];
         const track = plan[kind === 'audio' ? 'audioTracks' : 'subtitleTracks']?.find(t => t.id === id);
@@ -145,13 +158,48 @@ async function create({ window, emit }) {
         else if (kind === 'subtitle' && track?.delivery?.kind === 'external' && externalSubtitle !== id) { await cmd('sub-add',proxy.register(track.delivery.url || track.url),'select'); externalSubtitle=id; }
         else if (kind === 'subtitle' && !id) await cmd('set_property','sid','no');
       }
-      send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:(p.duration || 0)+offset,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:playbackRate(plan,p.speed),speeds:plan.channelId || plan.live ? [1] : [.5,.75,1,1.25,1.5,2],droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps'],mpv:facts,output:output()});
+      send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:live ? null : (p.duration || 0)+offset,live,seekTarget:liveSeek?.target ?? null,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:playbackRate(plan,p.speed),speeds:plan.channelId || plan.live ? [1] : [.5,.75,1,1.25,1.5,2],droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps'],mpv:facts,output:output()});
       send('observation', {sessionId:plan.sessionId,observation:{idempotencyKey:`${source}:${++sequence}`,sequence,
         sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,observedAt:new Date().toISOString(),positionSeconds:position,state:state === 'loading' ? 'buffering' : state,
         selectedPathId:plan.selectedPathId,audioTrackId:plan.selectedAudioTrackId,subtitleTrackId:plan.selectedSubtitleTrackId,
         playableRanges:p['demuxer-cache-duration'] > 0 ? [{startSeconds:position,endSeconds:position+p['demuxer-cache-duration']}] : []}});
     }).finally(() => { ticking = false; });
   }, 500);
+  /** The live window and position now, on the axis of the reported position. */
+  async function liveNow(origin) {
+    const [time, cacheState] = await Promise.all([get('time-pos'), get('demuxer-cache-state')]);
+    return { position: (time || 0) + origin, window: liveWindow({ plan, cacheState, origin, receivedAt: planReceivedAt, now: Date.now(), targetDuration: proxy.targetDuration() }) };
+  }
+  /** A seek inside the live window mpv holds; false when mpv refused it. */
+  async function liveSeekTo(target, origin) {
+    liveSeek = { target, at: Date.now() }; pendingSeek = null;
+    try { await cmd('seek', Math.max(0, target - origin), 'absolute+exact'); return true; }
+    catch { liveSeek = null; return false; }
+  }
+  /**
+   * A live plan's play, pause, seek and catchUp stay in mpv, inside the window it holds; none becomes a
+   * session command (positions here are on mpv's timeline, not the server's). Returns a refusal or null.
+   */
+  async function liveCommand(c, origin) {
+    const { position, window } = await liveNow(origin);
+    const from = liveSeek?.target ?? position;
+    if (c.type === 'pause') { await cmd('set_property','pause',true); return null; }
+    if (c.type === 'play') {
+      // A long pause: the window may have slid past the position. Resume inside it, never at the edge.
+      const target = !liveSeek && window ? resumeTarget(window, position) : null;
+      if (target !== null) await liveSeekTo(target, origin);
+      await cmd('set_property','pause',false);
+      return null;
+    }
+    if (c.type === 'catchUp') {
+      const target = window ? catchUpTarget(window, from) : null;
+      if (target === null) return 'No newer live media to catch up to';
+      return await liveSeekTo(target, origin) ? null : 'The live seek failed';
+    }
+    const target = window ? clampLiveSeek(window, c.type === 'seekBy' ? from + c.seconds : c.seconds) : null;
+    if (target === null) return window?.edge == null ? 'The live window is not known yet' : 'This live stream keeps no history to rewind';
+    return await liveSeekTo(target, origin) ? null : 'The live seek failed';
+  }
   let latestProps;
   const apply = async props => {
       if (props.preview || props.session) throw new Error('Browser fallback required');
@@ -166,21 +214,35 @@ async function create({ window, emit }) {
       const next = props.plan, selected = next.paths.find(p => p.id === next.selectedPathId);
       if (!proxy) return;
       if (!selected || !(selected.transport === 'hls' || selected.transport === 'file' && selected.original)) throw new Error('Unsupported path');
-      if (plan?.sessionId !== next.sessionId) { sequence=0; lastCommand=-1; }
+      if (plan?.sessionId !== next.sessionId) { sequence=0; lastCommand=-1; liveBehind=false; liveSeek=null; }
+      if (plan?.sessionId !== next.sessionId || plan.revision !== next.revision) planReceivedAt = Date.now();
       plan=next;
       const key = `${plan.sessionId}:${selected.id}:${plan.sourceGeneration}`;
-      if (source !== key) {
+      const loading = source !== key;
+      if (loading) {
+        // The demuxer reads these when it opens: live's bounded timeshift buffer, Start over from its first segment.
+        for (const [name, value] of demuxerOptions(plan)) await cmd('set_property', name, value).catch(() => {});
         await cmd('loadfile', proxy.register(selected.url), 'replace'); source=key; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now(); facts=null;
+        liveBehind=false; liveSeek=null;
         await cmd('set_property','speed',1);
       }
       const seekKey = `${key}:${plan.seekGeneration}`;
       if (seek !== seekKey) {
         const target = Math.max(0,plan.positionSeconds-(selected.timelineOriginSeconds || 0));
-        pendingSeek = target > 0 ? target : null; seek=seekKey;
+        // A channel joins at its edge: its plan position is not on mpv's timeline. Start over starts at its position.
+        pendingSeek = target > 0 && (!isLive(plan) || isStartOver(plan)) ? target : null; seek=seekKey;
       }
-      await cmd('set_property','pause',plan.state === 'paused');
+      // Live pause and play are the viewer's, held here: a refreshed live plan does not undo them.
+      if (!isLive(plan) || loading) await cmd('set_property','pause',plan.state === 'paused');
       const c = props.command;
-      if (c && c.id > lastCommand) {
+      if (c && c.id > lastCommand && isLive(plan) && ['play','pause','seek','seekBy','catchUp'].includes(c.type)) {
+        lastCommand = c.id;
+        const refusal = await liveCommand(c, selected.timelineOriginSeconds || 0);
+        send('command', refusal ? {id:c.id,ok:false,failure:{kind:'action',message:refusal,recoverable:true}} : {id:c.id,ok:true});
+      } else if (c && c.id > lastCommand && c.type === 'catchUp') {
+        lastCommand = c.id;
+        send('command',{id:c.id,ok:false,failure:{kind:'action',message:'Only a live stream can catch up to live',recoverable:true}});
+      } else if (c && c.id > lastCommand) {
         lastCommand = c.id;
         const kind = {play:'resume',audio:'tracks',subtitle:'tracks',seekBy:'seek',switchPath:'switch'}[c.type] || c.type;
         if (['play','pause','seek','seekBy','audio','subtitle','switchPath'].includes(c.type)) {

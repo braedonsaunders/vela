@@ -27,6 +27,26 @@ Snapshot normalization currently uses src/windows/snapshot.ts. Recovery must be
 bounded per session, prefer server paths as Apple PathRecovery does; live stays
 at rate 1.0 with no automatic catch-up. Do not claim unsupported HDR/Atmos.
 
+Live timeshift (Linux `linux/logic.js`, Windows `LiveTimeline.cs`, the same rules
+as web and Apple). A plan is live when it has `channelId` or `live`; a catch-up
+plan (top-level `catchUp`, neither of those) plays as on-demand. Live snapshots
+carry `live` (model.ts LiveSnapshot), `seekTarget` and a null duration. The
+window is on the axis of `position` (mpv time-pos + timeline origin): for a
+channel, the newest of mpv's `demuxer-cache-state` seekable ranges, i.e. what
+the bounded demuxer cache holds; for Start over (`live.mode: "startOver"`), 0
+(or `windowStartSeconds`) to the plan's edge grown in real time since the plan
+arrived, or the cache's end when newer. Latency is the plan's target (else 6 s)
+and at least three EXT-X-TARGETDURATIONs, where FFmpeg joins; behind is a lag of
+max(10, 2 × segment) s, held until back within 3 s. On live, play, pause, seek,
+seekBy and catchUp stay local and never become session commands: seeks clamp
+into [start, edge - 1], catchUp goes to edge - latency (refused when not live or
+nothing newer), play after the window slid past resumes 5 s inside it, and a
+refreshed plan never undoes the viewer's pause. A channel joins at its edge;
+Start over opens its EVENT playlist at its first segment (`live_start_index=0`)
+and seeks to a non-zero plan position. Live loads cap mpv's cache at 192 MiB
+ahead and 128 MiB behind (donation lets the back buffer use unused forward space,
+so at most 320 MiB, against on-demand's 400 + 100 MiB).
+
 Preload exposes `window.__VELA_NATIVE_PLAYER__ = {version:1, postMessage,
 addEventListener, removeEventListener}` only when host available. Renderer uses
 messages matching the Windows adapter: capabilities/requestId, media-access,

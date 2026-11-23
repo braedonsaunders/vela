@@ -57,6 +57,15 @@ PGS, VobSub and DVB bitmaps. Embedded and external tracks and forced flags follo
 track choice. The player menu's subtitle size, colour, background and position apply to text
 subtitles; styled ASS keeps its own look apart from size.
 
+## Live TV
+
+Live plays at 1× and never catches up on its own. Pause, rewind and Back to live stay in mpv
+(`LiveTimeline.cs`, rules in `apps/vela-desktop/NATIVE_PLAYER.md`): the rewind window is what
+mpv's cache holds, at most 192 MiB ahead and 128 MiB behind for live (320 MiB in all, about five
+minutes at 8 Mbit/s), so a pause keeps its picture and a rewind needs no server. A server's
+longer rewind window is not reachable this way. Start over opens its growing playlist at the
+programme's start.
+
 ## Settings
 
 `playback.json` in `%LOCALAPPDATA%\Vela` (or `VELA_DATA_DIR`) is read when each title starts:
