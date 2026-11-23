@@ -1,0 +1,22 @@
+diff --git a/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt b/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt
+index 2372cac..6b17b06 100644
+--- a/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt
++++ b/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt
+@@ -105,7 +105,16 @@ class ScreenStack(
+             check(!view.blockFrameworkTransitionFinalization) {
+                 "[RNScreens] Attempt to finalize transition on view that blocks the action!"
+             }
+-            endViewTransition(view)
++            // Vela patch (drop once react-native-screens stops ending the transition synchronously
++            // here; this call came with https://github.com/software-mansion/react-native-screens/pull/4161).
++            // This runs from the exit animation's onAnimationEnd, which Animation fires inside the
++            // outgoing screen's own View.draw. Ending the transition there detaches the screen in
++            // the middle of that draw; the rest of the frame then draws a detached tree, where every
++            // layered view (a masked view, a hardware texture) falls back to a software drawing cache
++            // and throws on a hardware bitmap ("Software rendering doesn't support hardware bitmaps").
++            // End it after the frame, as FragmentAnim's own EndViewTransitionAnimation does; a
++            // removal that restarts meanwhile blocks it again (blockFrameworkTransitionFinalization).
++            post { endViewTransition(view) }
+         }
+     }
+ 
