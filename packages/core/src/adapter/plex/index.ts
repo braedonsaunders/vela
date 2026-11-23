@@ -325,7 +325,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
           tabs: [tab('recommended', 'Recommended', 'recommended'), tab('library', 'Audiobooks', 'library'), tab('authors', 'Authors', 'library', { level: 'artist' })] }
       : { ...base, kind: 'mixed', media: 'music', presentation: { card: 'square' }, browse: browse({ genre: true, year: true, played: true }),
           tabs: [tab('recommended', 'Recommended', 'recommended'), tab('albums', 'Albums', 'library'), tab('artists', 'Artists', 'library', { level: 'artist' }), tab('tracks', 'Songs', 'library', { level: 'track', layout: 'list' })] };
-    if (n.type === 'photo') return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'landscape' }, dateDisplay: 'date', browse: browse({ year: true }),
+    if (n.type === 'photo') return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'square' }, dateDisplay: 'date', browse: browse({ year: true }),
       tabs: [tab('recommended', 'Recommended', 'recommended'), tab('library', 'Library', 'library')] };
     return { ...base, kind: n.type === 'movie' ? 'movies' : n.type === 'show' ? 'shows' : 'mixed', browse: browse({ genre: true, year: true, played: true }) };
   }

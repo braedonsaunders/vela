@@ -49,7 +49,7 @@ describe('Plex media sections', () => {
       ['Movies', undefined, undefined, undefined],
       ['Music', 'music', 'square', ['recommended', 'albums', 'artist', 'track']],
       ['Audiobooks', 'audiobook', 'square', ['recommended', 'library', 'artist']],
-      ['Photos', 'photo', 'landscape', ['recommended', 'library']],
+      ['Photos', 'photo', 'square', ['recommended', 'library']],
     ]);
     const types: (string | null)[] = [];
     for (const tab of [undefined, 'artists', 'tracks']) {

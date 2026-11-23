@@ -425,7 +425,7 @@ export class JellyfinAdapter
                     tabs: [recommended, tab('library', audiobooksOnly ? 'Audiobooks' : 'Books', 'library'), ...(both ? [tab('audiobooks', 'Audiobooks', 'library', { level: 'audiobook', card: 'square' })] : [])] };
             }
             case 'audiobooks': return { ...base, kind: 'mixed', media: 'audiobook', presentation: { card: 'square' }, browse: browse(media), tabs: [recommended, tab('library', 'Audiobooks', 'library')] };
-            case 'photos': return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'landscape' }, dateDisplay: 'date', browse: browse({ year: true, favorite: true }), tabs: [recommended, tab('library', 'Library', 'library')] };
+            case 'photos': return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'square' }, dateDisplay: 'date', browse: browse({ year: true, favorite: true }), tabs: [recommended, tab('library', 'Library', 'library')] };
             case 'musicvideos': return { ...base, kind: 'mixed', presentation: { card: 'landscape' }, browse: browse(media) };
             case 'playlists': return { ...base, kind: 'mixed', browse: browse({}), tabs: [tab('library', 'Playlists', 'library')] };
             case 'boxsets': return { ...base, kind: 'mixed', browse: browse({}), tabs: [tab('library', 'Collections', 'library')] };
@@ -579,7 +579,11 @@ export class JellyfinAdapter
             const shown = parent ?? i;
             if (seen.has(shown.Id) || !this.isTitle(shown, { audiobook, group: !!parent })) return [];
             seen.add(shown.Id);
-            return [this.entry(shown, { audiobook, group: !!parent })];
+            const entry = this.entry(shown, { audiobook, group: !!parent });
+            // A folder names no author: the part shown in its place does.
+            if (parent && entry.kind === 'title' && entry.title.media && !entry.title.media.credits?.length)
+                entry.title.media = { ...entry.title.media, credits: this.title(i, { audiobook: true }).media?.credits ?? [] };
+            return [entry];
         });
     }
     async collection(id: string, cursor?: string, limit = 100): Promise<V.CollectionContents> {

@@ -65,7 +65,8 @@ export function shapeOf(cls: V.MediaClass, role: V.MediaRole): CardShape {
   if (role === 'artist') return 'round';
   if (role === 'book' || role === 'series') return cls === 'audiobook' ? 'square' : 'book';
   if (cls === 'book') return 'book';
-  if (cls === 'music' || cls === 'audiobook' || cls === 'podcast') return 'square';
+  // Photos are of every shape: a square tile crops each evenly, as a gallery does.
+  if (cls === 'music' || cls === 'audiobook' || cls === 'podcast' || cls === 'photo') return 'square';
   return '';
 }
 

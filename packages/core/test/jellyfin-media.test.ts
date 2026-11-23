@@ -75,7 +75,7 @@ describe('Jellyfin media libraries', () => {
     expect(libraries.map(l => [l.name, l.media, l.presentation?.card, l.tabs?.map(t => t.level ?? t.id)])).toEqual([
       ['Music', 'music', 'square', ['recommended', 'albums', 'artist', 'track']],
       ['Books', 'book', 'poster', ['recommended', 'library', 'audiobook']],
-      ['Photos', 'photo', 'landscape', ['recommended', 'library']],
+      ['Photos', 'photo', 'square', ['recommended', 'library']],
     ]);
   });
 
