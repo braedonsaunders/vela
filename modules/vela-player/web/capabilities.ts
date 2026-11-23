@@ -70,6 +70,24 @@ async function payloadCapabilities(signal: AbortSignal): Promise<PayloadCapabili
   return value;
 }
 
+/** Codecs a browser may decode only in software, listed only when a hardware decoder takes a 4K
+ * stream: the server then sends the original rather than relying on a software decoder that may
+ * not keep up. H.264 and HEVC keep their existing routes (HEVC has the WebGPU package). */
+const HARDWARE_PROBES: Record<string, string> = { av1: 'av01.0.12M.10', vp9: 'vp09.00.50.08' };
+async function decodesInRealTime(codec: string): Promise<boolean> {
+  const probe = HARDWARE_PROBES[codec];
+  if (!probe) return true;
+  try {
+    const support = await abortable(
+      VideoDecoder.isConfigSupported({ codec: probe, codedWidth: 3840, codedHeight: 2160, hardwareAcceleration: 'prefer-hardware' }),
+      AbortSignal.timeout(1500),
+    );
+    return support.supported === true;
+  } catch {
+    return false;
+  }
+}
+
 /** The original-file route, if the payload installed it and this browser can run it. */
 async function originalPlayback(
   declaration: OriginalPlaybackCapabilities | undefined,
@@ -89,7 +107,10 @@ async function originalPlayback(
   const adapter = await abortable(gpu?.requestAdapter(), AbortSignal.timeout(2000)).catch(() => null);
   signal.throwIfAborted();
   if (!adapter) return null;
-  const videoDecoders = declaration.videoDecoders.filter((codec) => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
+  const qualified = declaration.videoDecoders.filter((codec) => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
+  const realTime = await Promise.all(qualified.map((codec) => decodesInRealTime(codec)));
+  signal.throwIfAborted();
+  const videoDecoders = qualified.filter((_, index) => realTime[index]);
   if (!videoDecoders.length) return null;
   return {
     ...declaration,
@@ -98,9 +119,36 @@ async function originalPlayback(
   };
 }
 
+/** What reaches the speakers: a browser has no bitstream path, so every codec is decoded to PCM in
+ * the page and mixed or folded to the output device's channels (at most 7.1; the engine renders no
+ * height layout). The engine's AudioContext runs at 48 kHz, so higher rates are resampled. */
+export function audioOutputCapabilities(maxChannelCount: number | null): NonNullable<PlayerCapabilities['audioOutput']> {
+  const count = maxChannelCount ?? 2;
+  return {
+    passthrough: [],
+    immersive: [],
+    maxChannels: count >= 8 ? 8 : count >= 6 ? 6 : 2,
+    maxSampleRate: 48000,
+    lossless: true,
+  };
+}
+
+async function destinationChannels(): Promise<number | null> {
+  if (typeof AudioContext !== 'function') return null;
+  // A suspended context needs no user activation and reports the current output device.
+  const context = new AudioContext({ latencyHint: 'playback' });
+  try {
+    const count = context.destination.maxChannelCount;
+    return Number.isSafeInteger(count) && count > 0 ? count : null;
+  } finally {
+    void context.close().catch(() => {});
+  }
+}
+
 async function probe(signal: AbortSignal): Promise<PlayerCapabilities> {
   const payload = await payloadCapabilities(signal).catch(() => null);
   const original = await originalPlayback(payload?.originalPlayback, signal);
+  const channels = original ? await destinationChannels().catch(() => null) : null;
   const video = document.createElement('video');
   const supports = (mime: string) => video.canPlayType(mime) !== '';
   const managed = (globalThis as typeof globalThis & { ManagedMediaSource?: typeof MediaSource })
@@ -111,7 +159,7 @@ async function probe(signal: AbortSignal): Promise<PlayerCapabilities> {
     : [];
   const overlays = payload ? ['webvtt', 'ether-vtt-window', ...embedded] : [];
   return {
-    ...(original ? { originalPlayback: original } : {}),
+    ...(original ? { originalPlayback: original, audioOutput: audioOutputCapabilities(channels) } : {}),
     containers: [
       ...['mp4', 'webm'].filter((container) => supports(`video/${container}`)),
       ...audioContainers.filter(([, mime]) => supports(mime)).map(([name]) => name),
