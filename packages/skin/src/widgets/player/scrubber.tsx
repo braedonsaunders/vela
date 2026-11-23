@@ -4,10 +4,12 @@
 // takes left and right as ten-second steps and seeks when the presses stop. On the web the
 // timeline is a focusable slider: the arrows step ten seconds (the chrome's shortcuts), Page Up and
 // Page Down a minute, Home and End go to the start and the end. A bubble over the thumb shows the
-// target time and, once a session offers trickplay, its frame.
+// target time and, once a session offers trickplay, its frame: while dragging, and on TV while the
+// remote steps and until the picture gets there.
+import type { TrickplayFrame } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Platform, Text, View, type GestureResponderEvent } from 'react-native';
 import { msg } from '@vela/core';
 import type { PlayerChromeState } from './context';
@@ -127,11 +129,14 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
   const shown = target ?? held?.seconds ?? view.position;
   const fraction = duration > 0 ? Math.max(0, Math.min(1, shown / duration)) : 0;
   const active = target !== null;
+  // The bubble: the drag or step target, and on TV where a step landed until the engine is there.
+  const preview = target ?? (look.tv && focused ? held?.seconds ?? stepFrom?.() ?? null : null);
+  const previewFraction = preview !== null && duration > 0 ? Math.max(0, Math.min(1, preview / duration)) : fraction;
   const bar = look.size(active || focused ? 6 : 4);
   const thumb = look.size(14);
   const height = look.size(look.tv ? 30 : 22);
-  const frameImage = active && thumbnail ? thumbnail(target) : null;
-  const bubbleWidth = look.size(frameImage ? 160 : 72);
+  const still = preview !== null && thumbnail ? thumbnail(preview) : null;
+  const bubbleWidth = look.size(still ? (look.tv ? 240 : 176) : 72);
   return (
     <View
       ref={box}
@@ -247,31 +252,21 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
           }}
         />
       </Pressable>
-      {active ? (
+      {preview !== null ? (
         <View
           pointerEvents="none"
+          testID="player-scrub-bubble"
           style={{
             position: 'absolute',
             bottom: height + look.size(8),
-            left: `${fraction * 100}%`,
+            left: `${previewFraction * 100}%`,
             width: bubbleWidth,
             marginLeft: -bubbleWidth / 2,
             alignItems: 'center',
             gap: look.size(6),
           }}
         >
-          {frameImage ? (
-            <Image
-              source={frameImage}
-              contentFit="cover"
-              style={{
-                width: bubbleWidth,
-                aspectRatio: 16 / 9,
-                borderRadius: look.size(8),
-                backgroundColor: look.raised,
-              }}
-            />
-          ) : null}
+          {still ? <FramePreview frame={still} width={bubbleWidth} radius={look.size(8)} background={look.raised} /> : null}
           <Text
             style={[
               look.text(13, 600),
@@ -285,10 +280,35 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
               },
             ]}
           >
-            {say(target)}
+            {say(preview)}
           </Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** One thumbnail of a trickplay sheet: the whole sheet drawn at scale, moved so that only the
+ * frame's cell shows through a window the thumbnail's shape. */
+function FramePreview({ frame, width, radius, background }: { frame: TrickplayFrame; width: number; radius: number; background: string }) {
+  const height = (width * frame.height) / frame.width;
+  // One source object per sheet, so a re-render never hands the image a new (large) source.
+  const source = useMemo(() => ({ uri: frame.uri }), [frame.uri]);
+  return (
+    <View testID="player-scrub-frame" style={{ width, height, borderRadius: radius, overflow: 'hidden', backgroundColor: background }}>
+      <Image
+        source={source}
+        contentFit="fill"
+        cachePolicy="memory"
+        transition={0}
+        style={{
+          position: 'absolute',
+          width: width * frame.columns,
+          height: height * frame.rows,
+          left: -frame.column * width,
+          top: -frame.row * height,
+        }}
+      />
     </View>
   );
 }

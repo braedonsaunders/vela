@@ -185,6 +185,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const refreshVersions = useCallback(() => {
     if (sessionId) void vela.playback.refreshVersions(sessionId);
   }, [vela, sessionId]);
+  // Scrub thumbnails: core reads the session's sheets as the scrubber asks; each arrival asks again.
+  const [sheets, setSheets] = useState(0);
+  useEffect(() => vela.playback.onTrickplay(() => setSheets(n => n + 1)), [vela]);
+  const thumbnail = useCallback(
+    (seconds: number) => (sessionId ? vela.playback.trickplayFrame(sessionId, seconds) : null),
+    [vela, sessionId, sheets],
+  );
   const versions = playback.versions;
   const chromePlan = useMemo(() => (plan ? withSessionVersions(plan, versions) : null), [plan, versions]);
   useEffect(() => {
@@ -265,6 +272,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       switchVersion,
       refreshVersions,
       retry,
+      thumbnail,
     },
     view,
     stop,
