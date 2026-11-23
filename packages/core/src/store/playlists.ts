@@ -134,9 +134,11 @@ export class Playlists {
     }
   }
 
-  async open(id: string, more = false): Promise<void> {
+  /** `refresh`: read the first page again (a like changed the Favorites list). */
+  async open(id: string, more = false, refresh = false): Promise<void> {
     const current = this.box.get().collections[id];
-    if (current?.load === 'loading' || current?.value && !more && current.load !== 'failed') return;
+    if (current?.load === 'loading' || current?.value && !more && !refresh && current.load !== 'failed') return;
+    if (refresh) this.reads.delete(id);
     const previous = more ? this.reads.get(id) : undefined;
     if (more && previous?.continuation !== 'more') return;
     this.box.update('collections', collections => ({ ...collections, [id]: loading(current) }));

@@ -57,4 +57,23 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
     stroke: true,
   },
   list: { paths: ['M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01'], stroke: true },
+  /** Music: play this next (a list with an arrow into its top). */
+  'play-next': { paths: ['M11 6h10M11 11h10M4 16h17M4 21h17', 'M3.5 4.5l4 3.5-4 3.5z'], stroke: true },
+  /** Music: add to the end of the queue. */
+  queue: { paths: ['M4 6h16M4 11h16M4 16h9M18 14v7M14.5 17.5h7'], stroke: true },
+  /** Music: an artist (a head and a microphone line). */
+  artist: { paths: ['M14 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM3.5 20.5v-1a6.5 5 0 0 1 10-4.2M17.5 11.5v7M17.5 18.5a2 2 0 1 1-2-2h2M17.5 11.5l3 1'], stroke: true },
+  /** Music: an album (a sleeve with its record). */
+  album: { paths: ['M3.5 4.5h11v15h-11zM14.5 7.5a4.5 4.5 0 1 1 0 9M9 12h.01'], stroke: true },
+  /** Music: lyrics (a speech mark with lines). */
+  lyrics: { paths: ['M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5V16.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM8 9.5h8M8 13h5'], stroke: true },
+  /** Music: your library (a stack of sleeves on a shelf). */
+  library: { paths: ['M4.5 4v16M9 4v16M13.5 4.5l5.5 15'], stroke: true },
+  /** More actions: three dots. */
+  more: { paths: ['M5 10.3a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4zM12 10.3a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4zM19 10.3a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4z'] },
+  clock: { paths: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2'], stroke: true },
+  /** Collapse or expand the library: a panel with its edge. */
+  sidebar: { paths: ['M4 4.5h16v15H4zM9.5 4.5v15'], stroke: true },
+  /** Expand to full screen. */
+  expand: { paths: ['M14.5 4H20v5.5M20 4l-6.5 6.5M9.5 20H4v-5.5M4 20l6.5-6.5'], stroke: true },
 };

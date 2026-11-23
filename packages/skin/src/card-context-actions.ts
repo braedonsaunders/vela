@@ -10,12 +10,16 @@ export type CardContextCommand =
   | { kind: 'dispatch'; action: Action; arg: string }
   | { kind: 'openLink'; href: string }
   | { kind: 'copyLink'; href: string }
-  | { kind: 'watch'; change: { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false } };
+  | { kind: 'watch'; change: { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false } }
+  /** Music: play now, play next or add to the queue (a track, or an album's/playlist's tracks). */
+  | { kind: 'audio'; op: 'play' | 'next' | 'queue' }
+  /** Music: take this entry out of the playlist it is listed in. */
+  | { kind: 'removeEntry'; playlistId: string; entryId: string };
 
 export interface CardContextAction {
   id: string;
   label: string;
-  icon: 'multiview' | 'play' | 'restart' | 'info' | 'external' | 'copy' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add';
+  icon: 'multiview' | 'play' | 'restart' | 'info' | 'external' | 'copy' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add' | 'play-next' | 'queue' | 'artist' | 'album';
   group: 'play' | 'details' | 'link' | 'watch' | 'remove';
   tone?: 'warning';
   command: CardContextCommand;
@@ -60,7 +64,55 @@ function addParentActions(actions: CardContextAction[], card: Card): void {
  * The useful actions for one drawn card. Server mutations are present only when the adapter
  * returned TitleActions; absence is a capability answer, never a disabled menu row.
  */
-export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: { continueWatching?: boolean; playlists?: boolean; href?: string; multiview?: boolean } = {}): CardContextAction[] {
+export interface CardMenuContext {
+  continueWatching?: boolean;
+  playlists?: boolean;
+  href?: string;
+  multiview?: boolean;
+  /** The card is an entry of this playlist (Remove from this playlist). */
+  playlistEntry?: { playlistId: string; entryId: string };
+}
+
+const MUSIC_QUEUEABLE = new Set(['track', 'album']);
+
+/** A music title's menu: the actions a listener expects on a song, an album or an artist. */
+function musicActions(card: Card, primary: CardPress, management: TitleActions | null | undefined, context: CardMenuContext): CardContextAction[] {
+  const media = card.media!;
+  const role = media.role;
+  const actions: CardContextAction[] = [];
+  const audio = (id: string, label: string, op: 'play' | 'next' | 'queue', icon: CardContextAction['icon']): CardContextAction =>
+    ({ id, label, icon, group: 'play', command: { kind: 'audio', op } });
+  if (MUSIC_QUEUEABLE.has(role)) {
+    actions.push(audio('play', msg('cardMenu.play'), 'play', 'play'));
+    actions.push(audio('play-next', msg('cardMenu.playNext'), 'next', 'play-next'));
+    actions.push(audio('add-queue', msg('cardMenu.addToQueue'), 'queue', 'queue'));
+  } else {
+    actions.push(dispatch('open', msg('cardMenu.open'), primary.action, primary.arg, 'info', 'details'));
+  }
+  if (management?.favorite) {
+    const on = management.watch.favorite;
+    const label = role === 'artist' ? (on ? 'cardMenu.unfollow' : 'cardMenu.follow')
+      : role === 'track' ? (on ? 'cardMenu.unlikeSong' : 'cardMenu.likeSong')
+      : (on ? 'cardMenu.removeFromLibrary' : 'cardMenu.saveToLibrary');
+    actions.push({ id: 'favorite', label: msg(label), icon: on ? 'heart-filled' : 'heart', group: 'watch', command: { kind: 'watch', change: { favorite: !on } } });
+  }
+  if (context.playlists && role !== 'artist') {
+    actions.push(dispatch('playlist', msg('cardMenu.addToPlaylist'), 'addToPlaylist', `${card.id}|${role}`, 'playlist-add', 'watch'));
+  }
+  if (context.playlistEntry) {
+    actions.push({ id: 'remove-entry', label: msg('cardMenu.removeFromPlaylist'), icon: 'remove', group: 'watch', command: { kind: 'removeEntry', ...context.playlistEntry } });
+  }
+  const artist = media.parents.find(parent => parent.role === 'artist')
+    ?? (media.bylineTarget.startsWith('title:') ? { id: media.bylineTarget.slice(6), name: media.byline, role: 'artist' as const } : undefined);
+  if (artist && role !== 'artist') actions.push(dispatch('artist', msg('cardMenu.goToArtist'), 'select', `${artist.id}|artist|`, 'artist', 'details'));
+  const album = role === 'track' ? media.parents.find(parent => parent.role === 'album') : undefined;
+  if (album) actions.push(dispatch('album', msg('cardMenu.goToAlbum'), 'select', `${album.id}|album|`, 'album', 'details'));
+  if (context.href) actions.push({ id: 'copy-link', label: msg('cardMenu.copyLink'), icon: 'copy', group: 'link', command: { kind: 'copyLink', href: context.href } });
+  return actions;
+}
+
+export function cardContextActions(card: Card, primary: CardPress, management?: TitleActions | null, context: CardMenuContext = {}): CardContextAction[] {
+  if (card.media?.class === 'music' && ['track', 'album', 'artist'].includes(card.media.role)) return musicActions(card, primary, management, context);
   const actions: CardContextAction[] = [];
   const playable = PLAYABLE_KINDS.has(card.kind);
   const resumable = playable && card.progressSeconds > 0 && card.durationSeconds > 0 && !card.played;
@@ -127,5 +179,5 @@ export function cardContextActions(card: Card, primary: CardPress, management?: 
 }
 
 export function supportsTitleActions(card: Card): boolean {
-  return TITLE_KINDS.has(card.kind);
+  return TITLE_KINDS.has(card.kind) || (card.media?.class === 'music' && ['track', 'album', 'artist'].includes(card.media.role));
 }

@@ -7,6 +7,7 @@ import { useLibraryPage } from '../../../src/browse/library-page';
 import { queryOf, type LibraryParams } from '../../../src/browse/library-query';
 import { libraryHostBuilder } from '../../../src/browse/page-host';
 import { DocumentScreen } from '../../../src/screen';
+import { MusicSection, useMusicShell } from '../../../src/music/music-section';
 
 export default function Library() {
   const params = useLocalSearchParams<LibraryParams & { id: string }>();
@@ -14,7 +15,13 @@ export default function Library() {
 }
 
 /** A retained section has a stable identity independent of the navigator's route key. */
-export function LibrarySection({ id, params }: { id: string; params: LibraryParams }) {
+export function LibrarySection({ id, params }: { id: string; params: LibraryParams & { m?: string } }) {
+  const music = useMusicShell(id);
+  if (music) return <MusicSection libraryId={id} at={params.m} />;
+  return <DocumentLibrarySection id={id} params={params} />;
+}
+
+function DocumentLibrarySection({ id, params }: { id: string; params: LibraryParams }) {
   const { sort, dir, kind, genre, year, played, fav, collectionId, query: search, facets } = params;
   const query = useMemo(
     () => queryOf({ sort, dir, kind, genre, year, played, fav, collectionId, query: search, facets }),

@@ -1,4 +1,4 @@
-import { msg, type Card, type TitleActions } from '@vela/core';
+import { audioCardsOf, msg, type Card, type TitleActions } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import { BlurView } from 'expo-blur';
 import { forwardRef, Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
@@ -36,6 +36,8 @@ interface Props {
   mode: CardMenuOpenMode;
   opener: Focusable | null;
   continueWatching?: boolean;
+  /** The card is listed as this playlist entry (music: Remove from this playlist). */
+  playlistEntry?: { playlistId: string; entryId: string };
   close(): void;
 }
 
@@ -83,7 +85,7 @@ async function copyLink(href: string): Promise<void> {
   if (!copied) throw new Error(msg('cardMenu.copyLinkFailed'));
 }
 
-export function CardContextMenu({ card, primary, href, anchor, mode, opener, continueWatching, close }: Props) {
+export function CardContextMenu({ card, primary, href, anchor, mode, opener, continueWatching, playlistEntry, close }: Props) {
   const host = useHost();
   const vela = useVela();
   const look = useLook();
@@ -118,7 +120,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
 
   const link = web && href ? new URL(href, window.location.href).href : undefined;
   const multiview = useMultiview() !== null;
-  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link, multiview }), [card, primary, management, continueWatching, host.env.canPlaylists, link, multiview]);
+  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link, multiview, playlistEntry }), [card, primary, management, continueWatching, host.env.canPlaylists, link, multiview, playlistEntry]);
   const focusFirst = mode === 'keyboard' || mode === 'tv';
   useEffect(() => {
     if (!focusFirst || menuSize.height <= 1) return;
@@ -151,6 +153,21 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
     if (item.command.kind === 'openLink') {
       dismiss(false);
       window.open(item.command.href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (item.command.kind === 'audio') {
+      const op = item.command.op;
+      dismiss(false);
+      const cards = await audioCardsOf(vela, card);
+      if (op === 'play') vela.audio.play({ items: cards, index: 0, source: card.media?.role === 'track' ? undefined : { id: card.id, name: card.name } });
+      else if (op === 'next') vela.audio.playNext(cards);
+      else vela.audio.addToQueue(cards);
+      return;
+    }
+    if (item.command.kind === 'removeEntry') {
+      setBusy(true);
+      await vela.playlists.removeEntry(item.command.playlistId, item.command.entryId);
+      dismiss();
       return;
     }
     if (item.command.kind === 'copyLink') {
@@ -287,6 +304,7 @@ const MenuItem = forwardRef<ComponentRef<typeof FocusPressable>, {
     external: 'external', copy: 'copy',
     heart: 'heart', 'heart-filled': 'heart-fill', bookmark: 'bookmark', 'bookmark-filled': 'bookmark-fill',
     remove: 'remove', show: 'layers', season: 'list', 'playlist-add': 'playlist-add', multiview: 'multiview',
+    'play-next': 'play-next', queue: 'queue', artist: 'artist', album: 'album',
   };
   const move = (event: NativeSyntheticEvent<unknown> & { key?: string; currentTarget?: unknown }) => {
     if (!web) return;

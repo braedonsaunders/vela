@@ -14,6 +14,7 @@ import { useMediaActions } from './context';
 import { MediaGlyph } from './icons';
 import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './parts';
 import { Arrive, MOTION, Presence, useLast } from '../../presence';
+import { LyricsPanel } from '../music/lyrics';
 
 const web = Platform.OS === 'web';
 /** A TV's focus engine moves by geometry: Now Playing's column and transport row are focus guides, so
@@ -200,7 +201,7 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
 function rateLabel(rate: number): string { return `${number(rate, { maximumFractionDigits: 2, minimumFractionDigits: rate % 1 ? 1 : 1 })}×`; }
 
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose }: { onClose(): void }) {
+export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel?: 'queue' | 'lyrics' }) {
   const host = useHost();
   const m = useMediaLook();
   const store = useVela();
@@ -212,9 +213,11 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
   const item = currentInQueue(audio.queue);
   const [panel, setPanel] = useState<'' | 'speed' | 'sleep'>('');
   const shownPanel = useLast(panel || undefined);
-  const [list, setList] = useState<'queue' | 'chapters'>('queue');
+  const [list, setList] = useState<'queue' | 'chapters' | 'lyrics'>(opening === 'lyrics' ? 'lyrics' : 'queue');
   const book = spoken(item);
-  useEffect(() => { setList(book && audio.chapters.length ? 'chapters' : 'queue'); }, [book, audio.chapters.length, item?.id]);
+  const music = item?.media?.class === 'music';
+  useEffect(() => { setList(current => (book && audio.chapters.length ? 'chapters' : current === 'lyrics' && music ? 'lyrics' : 'queue')); }, [book, music, audio.chapters.length, item?.id]);
+  useEffect(() => { if (opening) setList(opening === 'lyrics' && music ? 'lyrics' : 'queue'); }, [opening, music]);
   // Space plays and pauses; Escape closes (web).
   useEffect(() => {
     if (!web || typeof window === 'undefined') return;
@@ -289,7 +292,7 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
       ) : null}
     </Guide>
   );
-  const listItems = list === 'chapters' ? (
+  const listItems = list === 'lyrics' ? [<View key="lyrics" style={[{ height: Math.max(320, m.height - 220), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 9%, #000 86%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>] : list === 'chapters' ? (
     audio.chapters.map((c, i) => <ListRow key={c.id} number={number(i + 1)} title={c.name} trailing={clock(c.startSeconds)} current={chapterAt === i} playing={playing}
       dim={i < chapterAt} onPress={() => store.audio.seek(c.startSeconds)} testID={`now-playing-chapter-${i}`} />)
   ) : after.length ? after.map((card, i) => <ListRow key={`${card.id}-${i}`} number={number(i + 1)} title={card.name} subtitle={card.media?.byline}
@@ -299,6 +302,7 @@ export function NowPlaying({ onClose }: { onClose(): void }) {
     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }} accessibilityRole="tablist">
       <Chip label={msg('media.player.upNext')} selected={list === 'queue'} onPress={() => setList('queue')} testID="now-playing-queue-tab" />
       {audio.chapters.length ? <Chip label={msg('media.player.chapters')} selected={list === 'chapters'} onPress={() => setList('chapters')} testID="now-playing-chapters-tab" /> : null}
+      {music ? <Chip label={msg('music.lyrics')} selected={list === 'lyrics'} onPress={() => setList('lyrics')} testID="now-playing-lyrics-tab" /> : null}
     </View>
   );
   const top = Math.max(14, host.viewport.insets.top + 10);

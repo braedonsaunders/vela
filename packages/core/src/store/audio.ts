@@ -5,7 +5,7 @@
 // started elsewhere takes the session and the audio pauses.
 import type * as V from '../wire';
 import type { Card } from '../models';
-import { createQueue, current, cycleRepeat, jumpTo, next, previous, toggleShuffle, type AudioQueue, type Random } from '../audio/queue';
+import { clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, removeAt, toggleShuffle, type AudioQueue, type Random } from '../audio/queue';
 import type { Playback } from './playback';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -20,6 +20,8 @@ export interface AudioEngine {
   pause(): void;
   seek(seconds: number): void;
   setRate(rate: number): void;
+  /** 0..1; engines without one leave volume to the device. */
+  setVolume?(volume: number): void;
   unload(): void;
   position(): number;
   duration(): number;
@@ -44,11 +46,14 @@ export interface AudioState {
   error: string;
   /** No engine on this platform yet (native audio is device work). */
   unsupported: boolean;
+  /** The app's own volume, 0..1, and mute (the device's volume still applies). */
+  volume: number;
+  muted: boolean;
 }
 
 export const initialAudio: AudioState = {
   queue: null, phase: 'idle', positionSeconds: 0, durationSeconds: 0, rate: 1,
-  sleep: { mode: 'off', endsAt: 0 }, chapters: [], error: '', unsupported: false,
+  sleep: { mode: 'off', endsAt: 0 }, chapters: [], error: '', unsupported: false, volume: 1, muted: false,
 };
 
 export interface AudioRequest {
@@ -175,6 +180,32 @@ export class Audio {
     this.patch({ sleep: { mode, endsAt } });
   }
 
+  /** Play next / Add to queue; with nothing playing they start a queue of their own. */
+  playNext(cards: Card[]): void { this.enqueue(cards, 'next'); }
+  addToQueue(cards: Card[]): void { this.enqueue(cards, 'last'); }
+  private enqueue(cards: Card[], where: 'next' | 'last'): void {
+    const items = cards.filter(Boolean);
+    if (!items.length) return;
+    if (!this.state.queue) { this.play({ items, index: 0 }); return; }
+    this.patch({ queue: enqueue(this.state.queue, items, where) });
+  }
+  /** Remove the upcoming item at play position `position`. */
+  remove(position: number): void { if (this.state.queue) this.patch({ queue: removeAt(this.state.queue, position) }); }
+  /** Move an upcoming item between play positions. */
+  move(from: number, to: number): void { if (this.state.queue) this.patch({ queue: moveTo(this.state.queue, from, to) }); }
+  clearQueued(): void { if (this.state.queue) this.patch({ queue: clearQueued(this.state.queue) }); }
+
+  setVolume(volume: number): void {
+    const value = Math.min(1, Math.max(0, volume));
+    this.engine?.setVolume?.(value);
+    this.patch({ volume: value, muted: value === 0 ? this.state.muted : false });
+  }
+  toggleMute(): void {
+    const muted = !this.state.muted;
+    this.engine?.setVolume?.(muted ? 0 : this.state.volume);
+    this.patch({ muted });
+  }
+
   toggleShuffle(): void { if (this.state.queue) this.patch({ queue: toggleShuffle(this.state.queue, this.random) }); }
   cycleRepeat(): void { if (this.state.queue) this.patch({ queue: cycleRepeat(this.state.queue) }); }
 
@@ -184,7 +215,7 @@ export class Audio {
     // Asked before the queue and session are cleared: they are how the playback is known as ours.
     const owns = this.ownsPlayback();
     this.halt();
-    this.box.update('audio', audio => ({ ...initialAudio, rate: audio.rate, unsupported: audio.unsupported }));
+    this.box.update('audio', audio => ({ ...initialAudio, rate: audio.rate, unsupported: audio.unsupported, volume: audio.volume, muted: audio.muted }));
     if (owns) await this.playback.stop();
   }
 
@@ -244,6 +275,7 @@ export class Audio {
       } catch { /* The URL as planned: a server that needs no credential still plays it. */ }
       if (!this.engine || this.sessionId !== sessionId || this.url !== url) return;
       this.engine.load(resolved, start, this.state.rate);
+      this.engine.setVolume?.(this.state.muted ? 0 : this.state.volume);
       then();
     })();
   }

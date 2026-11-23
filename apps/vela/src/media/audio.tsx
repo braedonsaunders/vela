@@ -14,6 +14,7 @@ import { useVelaState } from '@vela/core/react';
 import { useVela } from '../vela';
 import { createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
 import { useMediaPageActions } from './actions';
+import { onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
 import { useMediaPlayerActions } from './player-actions';
 import { useReaderActions } from './reader-actions';
 
@@ -52,8 +53,11 @@ export function AudioDock() {
   const store = vela.store;
   const audio = useVelaState(state => state.audio);
   const pathname = usePathname();
+  const host = vela.host('home', '');
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<NowPlayingPanel | undefined>(undefined);
+  useEffect(() => onOpenNowPlaying(next => { setPanel(next); setOpen(true); }), []);
   useEffect(() => store.audio.attach(createAudioEngine(() => store.playback.mediaAccess())), [store]);
   const controls = useMemo<MediaSessionControls>(() => ({
     play: () => store.audio.resume(), pause: () => store.audio.pause(), next: () => store.audio.next(),
@@ -68,9 +72,11 @@ export function AudioDock() {
   useEffect(() => (audio.queue && open ? holdBack(() => { setOpen(false); return true; }) : undefined), [audio.queue, open]);
   const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/')), []);
   const actions = useMediaPageActions(undefined, back, useMediaPlayerActions(), useReaderActions(undefined));
-  const host = vela.host('home', '');
   // Video and the reader own the screen; the sign-in pages have nothing to play.
   const covered = pathname.startsWith('/watch') || pathname.startsWith('/read') || pathname.startsWith('/sign-in') || pathname.startsWith('/connect');
+  // The music app draws its own now-playing bar along the bottom; the floating one stands aside.
+  const musicLibrary = useVelaState(state => state.libraries.value?.some(library => library.media === 'music' && pathname === `/library/${library.id}`));
+  const inMusicShell = !!musicLibrary && !Platform.isTV && (host?.viewport.width ?? 0) >= 980;
   const playing = !!audio.queue && !covered;
   if (!host) return null;
   const bottom = Math.max(14, insets.bottom + 10);
@@ -83,12 +89,12 @@ export function AudioDock() {
       <MediaActionsContext.Provider value={actions}>
         <Above>
           <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-            <Presence shown={playing && !open} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
+            <Presence shown={playing && !open && !inMusicShell} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
               <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
             </Presence>
             <Presence shown={playing && open} still={still} offstage={{ y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
               <TVFocusTrap open={playing && open}>
-              <NowPlaying onClose={close} />
+              <NowPlaying onClose={close} panel={panel} />
             </TVFocusTrap>
             </Presence>
           </View>

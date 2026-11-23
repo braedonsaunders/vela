@@ -40,6 +40,7 @@ export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
     pause() { element.pause(); },
     seek(seconds) { if (element.readyState > 0) element.currentTime = seconds; else start = seconds; },
     setRate(rate) { element.playbackRate = rate; element.defaultPlaybackRate = rate; },
+    setVolume(volume) { element.volume = volume; },
     unload() {
       if (!loaded) return;
       loaded = false;

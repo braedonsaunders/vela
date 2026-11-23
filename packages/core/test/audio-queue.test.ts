@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Title } from '../src/wire';
 import { card } from '../src/discovery/models';
-import { createQueue, current, cycleRepeat, jumpTo, next, previous, toggleShuffle, upNext } from '../src/audio/queue';
+import { clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, queuedNext, removeAt, sourceNext, toggleShuffle, upNext } from '../src/audio/queue';
 import { chapterEnd } from '../src/store/audio';
 
 const track: Title = { id: 't', kind: 'episode', name: 'Low Tide', summary: '', genres: [], artwork: [], durationSeconds: 222,
@@ -62,4 +62,52 @@ test('a chapter ends at its end, else where the next begins', () => {
   expect(chapterEnd(chapters, 30)).toBe(60);
   expect(chapterEnd(chapters, 70)).toBe(110);
   expect(chapterEnd(chapters, 130)).toBeUndefined();
+});
+
+const ids = (cards: { id: string }[]) => cards.map(c => c.id);
+const extra = (id: string) => card({ ...track, id });
+
+test('play next goes straight after the current item, add to queue after what is already queued', () => {
+  let queue = createQueue(items, 1);
+  queue = enqueue(queue, [extra('x')], 'last');
+  queue = enqueue(queue, [extra('y')], 'last');
+  queue = enqueue(queue, [extra('z')], 'next');
+  expect(current(queue)?.id).toBe('b');
+  expect(ids(queuedNext(queue))).toEqual(['z', 'x', 'y']);
+  expect(ids(sourceNext(queue))).toEqual(['c', 'd', 'e']);
+  expect(ids(upNext(queue))).toEqual(['z', 'x', 'y', 'c', 'd', 'e']);
+  queue = next(queue)!;
+  expect(current(queue)?.id).toBe('z');
+  expect(ids(queuedNext(queue))).toEqual(['x', 'y']);
+});
+
+test('jumping past queued items drops them from the viewer queue; clear keeps the source', () => {
+  let queue = enqueue(createQueue(items, 0), [extra('x'), extra('y')], 'last');
+  const cleared = clearQueued(queue);
+  expect(ids(upNext(cleared))).toEqual(['b', 'c', 'd', 'e']);
+  queue = jumpTo(queue, queue.items.findIndex(c => c.id === 'c'));
+  expect(current(queue)?.id).toBe('c');
+  expect(queuedNext(queue)).toEqual([]);
+});
+
+test('remove and move keep the current item playing and the lanes honest', () => {
+  let queue = enqueue(createQueue(items, 0), [extra('x')], 'last');
+  queue = removeAt(queue, 2); // b
+  expect(ids(upNext(queue))).toEqual(['x', 'c', 'd', 'e']);
+  expect(removeAt(queue, queue.at)).toBe(queue);
+  queue = moveTo(queue, 4, 1); // e into the viewer's queue, ahead of x
+  expect(ids(queuedNext(queue))).toEqual(['e', 'x']);
+  queue = moveTo(queue, 1, 4); // e back out to the end of the source
+  expect(ids(queuedNext(queue))).toEqual(['x']);
+  expect(ids(upNext(queue))).toEqual(['x', 'c', 'd', 'e']);
+  expect(current(queue)?.id).toBe('a');
+});
+
+test('shuffle keeps the viewer queue right after the item playing, on and off', () => {
+  let queue = enqueue(createQueue(items, 0), [extra('x'), extra('y')], 'last');
+  queue = toggleShuffle(queue, fixed);
+  expect(current(queue)?.id).toBe('a');
+  expect(ids(upNext(queue)).slice(0, 2)).toEqual(['x', 'y']);
+  queue = toggleShuffle(queue, fixed);
+  expect(ids(upNext(queue))).toEqual(['x', 'y', 'b', 'c', 'd', 'e']);
 });
