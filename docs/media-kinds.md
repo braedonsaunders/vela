@@ -212,9 +212,28 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   box with id `{env.route}-scroll-{env.entry}`, and keeps the frame, its motion and
   its close control. A title page without that region gets a page of its own.
 - Player: persistent mini player + Now Playing (queue, shuffle, repeat), audiobook
-  mode (chapters, speed, sleep timer), web Media Session. Native lock-screen
-  controls need AVAudioSession/MPNowPlayingInfoCenter (Apple) and Media3
-  MediaSession (Android).
+  mode (chapters, speed, sleep timer), web Media Session.
+- Native audio: one player for the whole app in the player module, behind the
+  store's unchanged `AudioEngine` (`modules/vela-player/src/audio.ts`: load identity,
+  the position clock between native reports, native state to engine events). Apple:
+  AVPlayer with AVAudioSession `.playback` (long-form; spoken word pauses for other
+  speech), the background audio mode, interruptions and route changes (headphones
+  out pauses), spectral time-pitch at speed, and the system's controls through
+  `SystemMediaControls`: Now Playing (title, artist, album, artwork, duration,
+  position, rate) and the remote commands, next/previous for music, 15/30 s skips for
+  spoken word. Android: an ExoPlayer in `VelaAudioService`, a Media3
+  MediaSessionService (foreground type `mediaPlayback`), with audio focus,
+  becoming-noisy and Sonic speed (pitch kept). The app's one MediaSession
+  (`MediaSessionHub`) shows the audio player or the full-screen video player; the
+  notification, lock screen, headset, Android TV and Assistant reach the owner's own
+  command path. The system's commands for audio reach the store through
+  `syncMediaSession`'s controls, as the browser's Media Session handlers do. The
+  native declaration adds the files the player opens (Apple: MP3, AAC/ALAC in
+  MP4/M4A/M4B and ADTS, FLAC, WAV; Android also Ogg/WebM Opus and Vorbis) to
+  `audioCodecs`/`containers`, which is what Ether's audio plan reads, so those
+  direct-play (lossless stays lossless) and everything else is transcoded. Starting a
+  video takes the session: the audio engine unloads and its notification and Now
+  Playing go with it.
 - Reader: EPUB first (paginated, font size, light/sepia/dark, contents, progress
   sync, keyboard/touch/remote page turns), PDF/CBZ when `reading.formats` lists them.
   A book opens exactly at its saved locator; one the copy cannot resolve opens at the
@@ -243,16 +262,15 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   from). If the system reclaims the web view it reopens at the last reported place.
 - TV (Android TV, tvOS) has no reader: a book's page offers no Read and a book
   series no Start, and both say instead, quietly, that reading is on phones,
-  tablets, web and desktop. Audiobooks and music on a TV wait for the native audio
-  engine (the Media3 and AVAudioSession work in `modules/vela-player`); until it
-  lands, native audio reports itself unsupported there, as on phones (section 4).
+  tablets, web and desktop. Audiobooks and music play on a TV through the native
+  audio player (the Native audio item above), as on phones.
 
 ## 4. Where Vela stands (2026-11-20)
 
 | Area | Web | Native (needs device work) |
 | --- | --- | --- |
 | Cards and pages | Square, round and bound-book covers in every document; album, artist, book, series, audiobook pages | Same React tree; not yet looked at on a device or TV focus engine |
-| Audio | One HTMLAudioElement, Media Session (lock screen, media keys) | Reports unsupported. Apple: audio-only plans in the player module with AVAudioSession `.playback`, MPNowPlayingInfoCenter and MPRemoteCommandCenter. Android: Media3 MediaSessionService with a notification. |
+| Audio | One HTMLAudioElement, Media Session (lock screen, media keys) | Apple: AVPlayer with Now Playing and the remote commands, background audio. Android: Media3 in a MediaSessionService with the media notification. See the Native audio item in section 3. |
 | Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Phones and tablets: the same engine in an Expo DOM component (`@expo/dom-webview`). TV: no Read action, a line saying where reading is. |
 
 Server notes for Ether are in section 2 (URLs, file transport for audio, progress ordering).
