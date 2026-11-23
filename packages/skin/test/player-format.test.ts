@@ -71,3 +71,8 @@ test('the subtitle delay steps from where it is, resets to zero and stays within
   expect(nextSubtitleOffset(-2.75, '0')).toBe(0);
   expect(nextSubtitleOffset(599.9, '+0.5')).toBe(600);
 });
+
+test("libavcodec's dca reads as DTS", () => {
+  expect(audioSourceLine({ codec: 'dca', profile: 'DTS', channels: 6 })).toBe('DTS · 5.1');
+  expect(audioSourceLine({ codec: 'dca', profile: 'DTS-HD MA', channels: 8 })).toBe('DTS-HD MA · 7.1');
+});

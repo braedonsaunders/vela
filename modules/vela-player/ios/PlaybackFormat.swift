@@ -110,7 +110,8 @@ enum PlaybackFormat {
 
     private static func audioSource(_ engine: AetherEngine) -> [String: Any]? {
         guard let track = activeTrack(engine) else { return nil }
-        var out: [String: Any] = ["codec": track.codec]
+        // libavcodec names DTS "dca"; the shared vocabulary says "dts".
+        var out: [String: Any] = ["codec": track.codec == "dca" ? "dts" : track.codec]
         if let profile = track.profile { out["profile"] = profile } else if track.isAtmos { out["profile"] = "E-AC-3 + JOC" }
         if track.channels > 0 { out["channels"] = track.channels }
         if let layout = track.channelLayout { out["layout"] = layout }
@@ -126,7 +127,7 @@ enum PlaybackFormat {
     private static func isLossless(_ track: TrackInfo) -> Bool {
         if losslessCodecs.contains(track.codec) || track.codec.hasPrefix("pcm_") { return true }
         // DTS-HD Master Audio (and DTS:X, which rides on it); core, ES, 96/24 and High Resolution are lossy.
-        return track.codec == "dts" && (track.profile?.contains("MA") ?? false)
+        return ["dts", "dca"].contains(track.codec) && (track.profile?.contains("MA") ?? false)
     }
 
     private static func audioOutput(_ engine: AetherEngine, preferences: PlaybackPreferences) -> [String: Any]? {

@@ -23,6 +23,7 @@ final class UIKitPlaybackRendering: PlaybackRendering {
     private lazy var styled = ASSSubtitles()
     private let styledCaption = UIImageView()
     private var textKey = ""
+    private var styledTrack: Int?
     private let retainPausedPicture: Bool
     private var displayCriteriaObservation: NSKeyValueObservation?
     private var displayObservers: [NSObjectProtocol] = []
@@ -196,6 +197,10 @@ final class UIKitPlaybackRendering: PlaybackRendering {
               ["ass", "ssa"].contains(track.codec),
               let header = track.isExternal ? engine.sidecarASSHeader : track.assHeader,
               let styled, rect.width > 0 else { return false }
+        if styledTrack != track.id {
+            styledTrack = track.id
+            print("[vela-captions] libass track=\(track.id) codec=\(track.codec) header=\(header.count) fonts=\(engine.fontAttachments.count)")
+        }
         if styledCaption.superview !== surface {
             styledCaption.layer.zPosition = 2
             surface.addSubview(styledCaption)

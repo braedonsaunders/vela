@@ -25,7 +25,7 @@ const VIDEO_CODECS: Record<string, string> = {
 
 const AUDIO_CODECS: Record<string, string> = {
   truehd: 'TrueHD', mlp: 'MLP', eac3: 'E-AC-3', ac3: 'AC-3', dts: 'DTS', aac: 'AAC', flac: 'FLAC', alac: 'ALAC',
-  opus: 'Opus', vorbis: 'Vorbis', mp3: 'MP3', mp2: 'MP2', pcm: 'PCM', apac: 'APAC', pcm_bluray: 'PCM',
+  dca: 'DTS', opus: 'Opus', vorbis: 'Vorbis', mp3: 'MP3', mp2: 'MP2', pcm: 'PCM', apac: 'APAC', pcm_bluray: 'PCM',
   pcm_dvd: 'PCM', wavpack: 'WavPack', ape: 'APE',
 };
 
@@ -130,7 +130,8 @@ export function videoOutputLine(out: VideoOutputFormat | null | undefined): stri
 export function audioSourceLine(audio: AudioSourceFormat | null | undefined): string {
   if (!audio) return '';
   const immersive = immersiveLabel(audio.immersive);
-  const codec = audio.codec === 'dts' && audio.profile?.includes('MA') ? 'DTS-HD MA' : audioCodec(audio.codec);
+  const dts = audio.codec === 'dts' || audio.codec === 'dca';
+  const codec = dts && audio.profile?.includes('MA') ? 'DTS-HD MA' : audioCodec(audio.codec);
   return join([
     [codec, immersive && !codec.includes(immersive) ? immersive : ''].filter(Boolean).join(' '),
     channelLabel(audio.channels, audio.layout),
