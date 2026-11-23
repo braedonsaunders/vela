@@ -42,6 +42,12 @@ describe('mpvPlaybackFormat video', () => {
     expect(format?.videoOut?.dvConversion).toBeUndefined();
   });
 
+  test('a render-API host states its fixed SDR output when mpv reports no target', () => {
+    const format = mpvPlaybackFormat({ videoTrack: { ...hevc, 'dolby-vision-profile': 5 }, 'video-params': { gamma: 'pq', colormatrix: 'dolbyvision' }, 'hwdec-current': 'no' },
+      { range: 'sdr', frameRateMatch: 'unsupported', rangeMatch: 'unsupported' });
+    expect(format?.videoOut).toMatchObject({ range: 'sdr', dvConversion: 'reshaped', toneMapped: true, rangeMatch: 'unsupported' });
+  });
+
   test('unknown facts stay absent rather than guessed', () => {
     const format = mpvPlaybackFormat({ videoTrack: { codec: 'vc1' } }, null);
     expect(format?.video).toEqual({ codec: 'vc1' });

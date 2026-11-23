@@ -37,6 +37,8 @@ export interface HostOutputFacts {
   display?: { width?: number; height?: number; refreshRate?: number; hdr?: boolean } | null;
   frameRateMatch?: MatchState;
   rangeMatch?: MatchState;
+  /** The range the host fixed for its output, used when mpv reports no video-target-params (the render API). */
+  range?: RangeFormat;
   /** Exclusive device access was requested for PCM (passthrough is always exclusive on WASAPI). */
   exclusive?: boolean;
   route?: string;
@@ -131,7 +133,7 @@ function videoOutput(facts: MpvFacts, host: HostOutputFacts, source: VideoSource
   const target = facts['video-target-params'];
   const out: VideoOutputFormat = {};
   // gpu-next applies the Dolby Vision RPU itself; the display is sent PQ or SDR, never DV.
-  const range = rangeOf(target, false);
+  const range = rangeOf(target, false) ?? host.range;
   if (range) out.range = range === 'hdr10+' ? 'hdr10' : range;
   if (source.range === 'dv') out.dvConversion = 'reshaped';
   const hwdec = facts['hwdec-current'];

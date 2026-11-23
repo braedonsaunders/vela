@@ -116,7 +116,8 @@ async function create({ window, emit }) {
     let refreshRate;
     try { const { screen } = require('electron'); refreshRate = screen.getDisplayMatching(window.getBounds()).displayFrequency || undefined; } catch {}
     const passthrough = /^spdif-/.test(facts?.['audio-out-params']?.format || '');
-    return { display: refreshRate ? { refreshRate } : null, frameRateMatch: 'unsupported', rangeMatch: 'unsupported',
+    // The helper fixes the target to SDR BT.709 (no HDR signalling on X11); mpv's render API reports no target.
+    return { display: refreshRate ? { refreshRate } : null, range: 'sdr', frameRateMatch: 'unsupported', rangeMatch: 'unsupported',
       exclusive: audio['audio-exclusive'] || passthrough, route: /hdmi/i.test(playback.audioDevice) || (!playback.audioDevice && defaultHdmi) ? 'hdmi' : undefined };
   }
   const defaultHdmi = !playback.audioDevice && !!defaultSinkChannels()?.hdmi;
