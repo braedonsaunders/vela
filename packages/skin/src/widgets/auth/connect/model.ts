@@ -79,6 +79,8 @@ export interface ServerActions {
   remove(id: string): Promise<Outcome>;
   plexStart(): Promise<unknown>;
   plexChoose(choiceId: string): Promise<Outcome>;
+  /** Sign in as one member of a linked Plex Home (state 'profiles'). */
+  plexChooseProfile(id: string, pin?: string): Promise<Outcome>;
   plexCancel(): void;
   jellyfinSignIn(id: string, username: string, password: string): Promise<Outcome>;
   jellyfinQuickStart(id: string): Promise<unknown>;

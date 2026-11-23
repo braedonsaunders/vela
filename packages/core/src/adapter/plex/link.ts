@@ -1,13 +1,15 @@
 import { probeEther } from '../probe';
 import { exchangePlexAccount } from '../ether/plex';
 import type { Device, Tokens } from '../../wire';
-import { createPlexPin, pollPlexPin, discoverPlexServers, plexAccount, plexHeaders, type PlexResource } from './auth';
+import { createPlexPin, pollPlexPin, discoverPlexServers, plexAccount, plexHeaders, plexHomeUsers, switchPlexHomeUser, type PlexHomeUser, type PlexResource } from './auth';
 import { timeoutSignal } from '../../protocol/timeout';
 
 /** A discovered server as the viewer chooses it: names and connection kinds only. */
 export type PlexConnectionKind = 'relay' | 'secure-direct' | 'secure' | 'local' | 'remote';
 export interface PlexChoice { id: string; name: string; owned: boolean; connection: PlexConnectionKind; recommended: boolean }
-export type PlexLinkState = 'waiting' | 'linked' | 'expired' | 'failed';
+export type PlexLinkState = 'waiting' | 'profiles' | 'linked' | 'expired' | 'failed';
+/** A Plex Home member to sign in as, for the picker. */
+export interface PlexProfileChoice { id: string; name: string; protected: boolean; avatarUrl?: string; restricted?: boolean }
 
 const secure = (uri: string) => uri.startsWith('https://');
 const direct = (uri: string) => { try { return new URL(uri).hostname.endsWith('.plex.direct'); } catch { return false; } };
@@ -23,6 +25,8 @@ export class PlexLink {
   private account?: { token: string; viewer: Tokens['viewer'] };
   private resources: PlexResource[] = [];
   private exchangeKeys = new Map<string, string>();
+  /** A Plex Home's members, between the PIN's approval and the viewer's choice of who signs in. */
+  private home?: { token: string; users: PlexHomeUser[] };
   constructor(private readonly clientIdentifier: string) {}
 
   async start(): Promise<{ code: string; expiresAt: string }> {
@@ -35,6 +39,7 @@ export class PlexLink {
   /** `at` is the foundation's clock; the data module keeps none. */
   async poll(code: string, at: number): Promise<PlexLinkState> {
     if (this.account && this.pin?.code === code) return 'linked';
+    if (this.home && this.pin?.code === code) return 'profiles';
     const pin = this.pin;
     if (!pin || pin.code !== code) return 'failed';
     if (at >= Date.parse(pin.expiresAt)) { this.cancel(); return 'expired'; }
@@ -47,11 +52,37 @@ export class PlexLink {
     }
     if (this.pin !== pin) return 'failed';
     if (!result.authToken) return 'waiting';
-    const [resources, account] = await Promise.all([discoverPlexServers(this.clientIdentifier, result.authToken), plexAccount(this.clientIdentifier, result.authToken)]);
+    // A Plex Home asks who is watching first: each member sees the servers shared with them.
+    const users = await plexHomeUsers(this.clientIdentifier, result.authToken).catch(() => []);
     if (this.pin !== pin) return 'failed';
-    this.resources = resources.filter(r => r.accessToken && r.clientIdentifier && r.connections.length);
-    this.account = { token: result.authToken, viewer: { id: account.uuid || String(account.id), name: account.friendlyName || account.title || account.username, policyRevision: 'plex' } };
+    if (users.length > 1) { this.home = { token: result.authToken, users }; return 'profiles'; }
+    await this.become(result.authToken);
+    return this.pin === pin ? 'linked' : 'failed';
+  }
+  /** The Home's members, while the viewer chooses one. */
+  profiles(code: string): PlexProfileChoice[] {
+    if (!this.home || this.pin?.code !== code) return [];
+    return this.home.users.map(u => ({ id: u.uuid, name: u.title || u.username || 'Plex user', protected: !!u.protected,
+      ...(u.thumb && /^https:\/\//.test(u.thumb) ? { avatarUrl: u.thumb } : {}), ...(u.restricted ? { restricted: true } : {}) }));
+  }
+  /** Sign in as one member of the Home (with their PIN if they keep one): their servers, their token. */
+  async chooseProfile(code: string, id: string, pin?: string): Promise<PlexLinkState> {
+    const home = this.home, link = this.pin;
+    const user = home?.users.find(u => u.uuid === id);
+    if (!home || !link || link.code !== code || !user) throw new Error('Link Plex again to choose a profile');
+    const switched = await switchPlexHomeUser(this.clientIdentifier, home.token, id, pin);
+    if (this.home !== home || this.pin !== link) return 'failed';
+    await this.become(switched.authToken);
+    if (this.pin !== link) return 'failed';
+    this.home = undefined;
     return 'linked';
+  }
+  private async become(token: string): Promise<void> {
+    const pin = this.pin;
+    const [resources, account] = await Promise.all([discoverPlexServers(this.clientIdentifier, token), plexAccount(this.clientIdentifier, token)]);
+    if (this.pin !== pin) return;
+    this.resources = resources.filter(r => r.accessToken && r.clientIdentifier && r.connections.length);
+    this.account = { token, viewer: { id: account.uuid || String(account.id), name: account.friendlyName || account.title || account.username, policyRevision: 'plex' } };
   }
   /** Refresh the newly linked account's view: plex.tv can lag the PIN approval. */
   async refreshServers(code: string): Promise<void> {
@@ -118,5 +149,5 @@ export class PlexLink {
     }
     throw new Error('This Plex server could not be reached from here');
   }
-  cancel(): void { this.pin = undefined; this.account = undefined; this.resources = []; this.exchangeKeys.clear(); }
+  cancel(): void { this.pin = undefined; this.account = undefined; this.home = undefined; this.resources = []; this.exchangeKeys.clear(); }
 }
