@@ -295,7 +295,13 @@ const titles: Node[] = [
     ...emptyState('alert', '{t:ui.searchUnavailable}', '{t:ui.searchIsUnavailableTryAnotherQuery}'),
     when: [is('env.search', 'failed'), ...quiet],
   },
-  { ...retry(44, '22px', '14px'), when: [is('env.search', 'failed')], press: { action: 'retry' } },
+  // Asking again after a failed search: a centred pill, not a bar across the page.
+  {
+    type: 'box',
+    when: [is('env.search', 'failed')],
+    style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center' },
+    children: [{ ...retry(44, '22px', '14px'), when: [is('env.search', 'failed')], press: { action: 'retry' } }],
+  },
   // No titles, and nothing further down answers: say so, about the mood when the query describes one.
   {
     type: 'box',

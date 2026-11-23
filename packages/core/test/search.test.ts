@@ -31,7 +31,7 @@ function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerC
   } as unknown as Session;
   const box = new StateBox({ search: initialSearch, libraries: { value: [{ id: 'movies' }, { id: 'shows' }] } } as unknown as VelaState);
   const search = new Search(box, session, () => 400);
-  return { search, state: (): SearchState => box.get().search, reset: () => resets.forEach(r => r()) };
+  return { search, session: session as unknown as { features?: unknown }, state: (): SearchState => box.get().search, reset: () => resets.forEach(r => r()) };
 }
 
 /** Let pending promise chains run to their next timer. */
@@ -449,6 +449,47 @@ test('library options are ignored without server support', async () => {
   expect(state().library).toBeUndefined();
 });
 
+describe('lanes decided once the first page is asked', () => {
+  test('a search opened before home loaded the features still falls back by description', async () => {
+    let reply: ((value: V.SearchResponse) => void) | undefined;
+    let request: Request | undefined;
+    const described: Request[] = [];
+    const { search, session, state } = harness({
+      search: r => { request = r; return new Promise(resolve => { reply = resolve; }); },
+      searchByDescription: async r => { described.push(r); return answer(r, [title('lj', 'The Lisbon Job')], { state: 'ready' }); },
+    });
+    const features = session.features;
+    session.features = undefined;
+    search.setQuery('a slow-burn heist in Lisbon');
+    expect(state().descriptive.status).toBe('unavailable');
+    session.features = features;
+    await settle();
+    expect(state().descriptive.status).toBe('idle');
+    jest.advanceTimersByTime(600);
+    await settle();
+    reply!(answer(request!, []));
+    await settle();
+    expect(described).toHaveLength(1);
+    expect(searchList(state()).items.map(c => c.id)).toEqual(['lj']);
+  });
+
+  test('without features, the server is asked for them', async () => {
+    const auto: Request[] = [];
+    const { search, session, state } = harness({
+      search: async r => answer(r, []),
+      searchAuto: async r => { auto.push(r); return { ...answer(r, [title('s', 'Skyfall')]), match: 'title', state: 'complete' }; },
+      describe: async () => ({ searchKinds: ['movie'], features: { unifiedSearch: { available: true }, descriptiveSearch: { available: true } } }),
+    } as FakeAdapter, true, undefined, true);
+    session.features = undefined;
+    search.setQuery('james bond');
+    await settle();
+    expect(auto).toHaveLength(1);
+    expect(state().match).toBe('title');
+    // The filters arrive with them.
+    expect(state().searchKinds).toEqual(['movie']);
+  });
+});
+
 describe('a unified-search server', () => {
   const ranked = (r: Request, items: V.Title[], extra: Partial<V.SearchResponse> = {}): V.SearchResponse => ({ ...answer(r, items), ...extra });
 
@@ -521,6 +562,18 @@ describe('a unified-search server', () => {
     await settle();
     expect(searchList(state())).toMatchObject({ state: 'ready', byDescription: true, description: 'ready' });
     expect(searchList(state()).items.map(c => c.id)).toEqual(['lj']);
+  });
+
+  test('a server that never stops reporting pending is asked again only so often', async () => {
+    let asked = 0;
+    const { search, state } = harness({
+      search: async r => answer(r, []),
+      searchAuto: async r => { asked++; return ranked(r, [title('i', 'Iron Man')], { match: 'description', state: 'pending', retry: { allowed: true, afterSeconds: 1 }, descriptive: { state: 'ready' } }); },
+    }, false, undefined, true);
+    search.setQuery('vblrqxt');
+    for (let i = 0; i < 40; i++) { jest.advanceTimersByTime(1000); await settle(); }
+    expect(asked).toBe(21);
+    expect(searchList(state())).toMatchObject({ state: 'ready', byDescription: true });
   });
 
   test('a pending answer that may not be asked again is final, and a failed description offers a retry', async () => {

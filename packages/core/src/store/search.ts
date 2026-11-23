@@ -8,7 +8,9 @@
 // lane asks it in `auto` mode, asks again while it reports slower lookups pending, and the list is
 // its answer as-is; the descriptive lane is then not run by Vela.
 import type * as V from '../wire';
+import { capabilitiesOf } from '../adapter/advertise';
 import { hasDescriptiveSearch, hasUnifiedSearch } from '../adapter/capabilities';
+import type { ServerAdapter } from '../adapter';
 import { card } from '../discovery/models';
 import { liveSearch } from '../live/search';
 import { randomId } from '../protocol/id';
@@ -60,12 +62,19 @@ export const initialSearch: SearchState = {
 
 /** How long typing must pause before the slower lanes start. */
 const PAUSE_MS = 600;
+/** A unified server that keeps reporting slower lookups pending is asked again at most this often
+ * per query; its last answer then stands. */
+const MAX_REASKS = 20;
 
 export class Search {
   private controller = new AbortController();
   private pause: ReturnType<typeof setTimeout> | undefined;
   /** Typing has paused on this generation: a description search may start. */
   private paused = 0;
+  /** The generation a unified-search server answers (its pages and re-asks stay in `auto` mode). */
+  private unifiedFor = 0;
+  /** Re-asks of a pending unified answer for the current generation. */
+  private reasks = 0;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   /**
    * Makes each generation's idempotency keys unique to this run and session. Generations restart
@@ -115,7 +124,9 @@ export class Search {
       ai: emptyLane,
     }));
     void this.fast(text, generation);
-    if (!descriptive) return;
+    this.reasks = 0;
+    // Armed even when no description search is offered yet: the server's features may only be
+    // known once the first page is asked (a search opened before home has loaded).
     this.pause = setTimeout(() => {
       this.pause = undefined;
       this.paused = generation;
@@ -159,6 +170,29 @@ export class Search {
     else void this.descriptive(state.query.trim(), state.generation, state.descriptive.nextCursor);
   }
 
+  /**
+   * Which lanes this generation runs, decided once its first page is asked, from the server's
+   * features (asked for here when home has not loaded them yet): a unified server's one list, or
+   * the fast lane with a description fallback where it is offered. Undefined when the query moved on.
+   */
+  private async lanes(api: ServerAdapter, generation: number, signal: AbortSignal): Promise<boolean | undefined> {
+    const known = this.session.features;
+    const fetched = known ? undefined : await capabilitiesOf(api).catch(() => undefined);
+    const features = known ?? fetched?.features;
+    if (signal.aborted || !this.current(generation)) return undefined;
+    // The controls too, when home has not brought them yet (the request itself went without).
+    if (fetched && !this.session.searchCapabilities) {
+      const { searchSorts, searchKinds, searchLibraries } = fetched;
+      this.box.update('search', search => ({ ...search, searchSorts, searchKinds, searchLibraries }));
+    }
+    const unified = !!features?.unifiedSearch?.available && hasUnifiedSearch(api);
+    const describes = !unified && !!features?.descriptiveSearch.available && hasDescriptiveSearch(api);
+    this.unifiedFor = unified ? generation : 0;
+    const status = this.box.get().search.descriptive.status;
+    if (status === 'idle' || status === 'unavailable') this.patch('descriptive', { status: describes ? 'idle' : 'unavailable' });
+    return unified;
+  }
+
   /** The selected server ranks one list itself: stated in its features and implemented by its adapter. */
   private offersUnified(): boolean {
     return !!this.session.features?.unifiedSearch?.available && hasUnifiedSearch(this.session.selected().adapter);
@@ -184,11 +218,12 @@ export class Search {
       const connection = await this.session.ready();
       if (!this.current(generation) || signal.aborted) return;
       const api = connection.adapter;
-      const unified = this.offersUnified() && hasUnifiedSearch(api);
+      const unified = cursor || again ? this.unifiedFor === generation : await this.lanes(api, generation, signal);
+      if (unified === undefined) return;
       // A first page is asked once per generation; asking again (a pending answer) is a new request.
       const idempotencyKey = cursor || again ? this.session.key() : `search-${this.scope}-${generation}`;
       const request = { ...options, query, generation, cursor, idempotencyKey };
-      const result = await (unified ? api.searchAuto(request, signal) : api.search(request, signal));
+      const result = await (unified && hasUnifiedSearch(api) ? api.searchAuto(request, signal) : api.search(request, signal));
       const images = await connection.images();
       if (signal.aborted || !this.current(generation) || result.generation !== generation) return;
       const live = liveSearch(result.live, images, Date.now());
@@ -209,7 +244,7 @@ export class Search {
       const connection = await this.session.ready();
       if (!this.current(generation) || signal.aborted) return;
       const api = connection.adapter;
-      if (!this.session.features?.descriptiveSearch.available || !hasDescriptiveSearch(api)) {
+      if (!hasDescriptiveSearch(api)) {
         this.patch('descriptive', { status: 'unavailable' });
         return;
       }
@@ -234,7 +269,7 @@ export class Search {
    */
   private ranked(query: string, generation: number, result: V.SearchResponse, items: Card[], live: Pick<SearchState['fast'], 'liveChannels' | 'liveProgrammes'>): void {
     const retry = result.retry;
-    const pending = result.state === 'pending' && retry?.allowed === true;
+    const pending = result.state === 'pending' && retry?.allowed === true && this.reasks < MAX_REASKS;
     const described = result.descriptive?.state;
     const describing = described === 'pending' || described === 'busy' || described === 'partial';
     const hold = pending && (items.length === 0 || describing);
@@ -255,7 +290,10 @@ export class Search {
       this.patch('descriptive', { status: 'failed', canRetry: false });
       if (result.descriptive?.retry?.allowed) this.later(this.wait(result.descriptive.retry), generation, () => this.patch('descriptive', { canRetry: true }));
     } else this.patch('descriptive', { status: 'ready', canRetry: false });
-    if (pending) this.later(this.wait(retry), generation, () => void this.fast(query, generation, undefined, true));
+    if (pending) {
+      this.reasks++;
+      this.later(this.wait(retry), generation, () => void this.fast(query, generation, undefined, true));
+    }
   }
 
   private wait(retry: { afterSeconds?: number } | undefined): number {
