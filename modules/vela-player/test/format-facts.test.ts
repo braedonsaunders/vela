@@ -183,3 +183,14 @@ test('the browser video element reports only what the rendition declared', async
   expect(browserFormat(null, undefined)).toBeNull();
   expect(browserFormat({ codec: '', width: 1, height: 1, dynamicRange: null }, undefined)).toBeNull();
 });
+
+test('interlaced video is reported deinterlaced only on the package route that deinterlaces it', () => {
+  const interlaced = videoSourceFormat(
+    video({ codec: 'mpeg2video', fieldOrder: 'tt', width: 720, height: 480, color: {}, config: { codec: 'mpeg2video' } }),
+    undefined,
+    { kind: 'none' },
+  );
+  expect(interlaced.interlaced).toBe(true);
+  expect(videoOutputFormat(interlaced, { kind: 'none' }, { decoder: 'software', decoderName: 'WebGPU mpeg2 package', deinterlaces: true }, false).deinterlaced).toBe(true);
+  expect(videoOutputFormat(interlaced, { kind: 'none' }, { decoder: 'hardware', decoderName: 'WebCodecs' }, false).deinterlaced).toBe(false);
+});

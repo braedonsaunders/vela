@@ -43,6 +43,7 @@ interface Fixture {
   audio: Audio;
   seconds?: number;
   size?: string;
+  rate?: string;
 }
 
 const aac: Audio = { codec: ['-c:a', 'aac', '-b:a', '192k'], layout: 'stereo', rate: 48000 };
@@ -60,6 +61,10 @@ const fixtures: Fixture[] = [
   { name: 'vp9-p0-vorbis.webm', format: 'yuv420p', video: ['-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '3M', '-g', '48', '-row-mt', '1'], audio: { codec: ['-c:a', 'vorbis', '-q:a', '5'], layout: 'stereo', rate: 48000 } },
   { name: 'vp9-p2-hdr10-opus.webm', format: 'yuv420p10le', video: ['-c:v', 'libvpx-vp9', '-profile:v', '2', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '4M', '-g', '48', '-row-mt', '1', ...PQ], audio: { codec: ['-c:a', 'libopus', '-b:a', '160k'], layout: 'stereo', rate: 48000 } },
   { name: 'mpeg2-ac3.mkv', format: 'yuv420p', video: ['-c:v', 'mpeg2video', '-b:v', '8M', '-g', '12'], audio: { codec: ['-c:a', 'ac3', '-b:a', '384k'], layout: '5.1(side)', rate: 48000 } },
+  // DVD-like NTSC: 720×480 at 30000/1001, interlaced top field first, no colour description.
+  { name: 'mpeg2-480i-ac3.mkv', size: '720x480', rate: '30000/1001', format: 'yuv420p', video: ['-c:v', 'mpeg2video', '-b:v', '6M', '-g', '15', '-flags', '+ilme+ildct', '-field_order', 'tt'], audio: { codec: ['-c:a', 'ac3', '-b:a', '448k'], layout: '5.1(side)', rate: 48000 } },
+  // Matroska keeps MS-MPEG4 v3 (DivX 3) in a VfW BITMAPINFOHEADER (V_MS/VFW/FOURCC).
+  { name: 'msmpeg4v3-mp3.mkv', size: '640x360', format: 'yuv420p', video: ['-c:v', 'msmpeg4', '-q:v', '4', '-g', '48'], audio: { codec: ['-c:a', 'libmp3lame', '-b:a', '128k'], layout: 'stereo', rate: 48000 } },
   { name: 'mpeg4-mp3.mkv', format: 'yuv420p', video: ['-c:v', 'mpeg4', '-q:v', '4', '-g', '48'], audio: { codec: ['-c:a', 'libmp3lame', '-b:a', '192k'], layout: 'stereo', rate: 48000 } },
   { name: 'h264-flac-7.1-s24-96k.mkv', format: 'yuv420p', video: ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-g', '48'], audio: { codec: ['-c:a', 'flac'], layout: '7.1', rate: 96000, sampleFormat: 's32' } },
   { name: 'h264-flac-2.0-s24-192k.mkv', format: 'yuv420p', video: ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-g', '48'], audio: { codec: ['-c:a', 'flac'], layout: 'stereo', rate: 192000, sampleFormat: 's32' } },
@@ -100,7 +105,7 @@ async function make(root: string, fixture: Fixture, doviTool: string) {
   const work = await mkdtemp(join(root, '.format-'));
   try {
     const seconds = fixture.seconds ?? SECONDS;
-    const pattern = `testsrc2=size=${fixture.size ?? SIZE}:rate=${RATE}:duration=${seconds}`;
+    const pattern = `testsrc2=size=${fixture.size ?? SIZE}:rate=${fixture.rate ?? RATE}:duration=${seconds}`;
     const audio = ['-filter_complex', toneGraph(fixture.audio.layout, fixture.audio.rate, seconds)];
     let video = ['-f', 'lavfi', '-i', pattern];
     if (fixture.dv) {
@@ -120,7 +125,7 @@ async function make(root: string, fixture: Fixture, doviTool: string) {
     const output = join(work, `out${fixture.name.slice(fixture.name.lastIndexOf('.'))}`);
     await run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', ...video, ...audio,
       '-map', '0:v:0', '-map', '[a]',
-      '-vf', `format=${fixture.format}${colour(fixture.video)}`, ...fixture.video,
+      '-vf', `format=${fixture.format}${colour(fixture.video)}${fixture.video.includes('+ilme+ildct') ? ',setfield=tff' : ''}`, ...fixture.video,
       ...fixture.audio.codec, '-ar', String(fixture.audio.rate), ...(fixture.audio.sampleFormat ? ['-sample_fmt', fixture.audio.sampleFormat] : []),
       '-t', String(seconds), '-strict', 'experimental', ...(output.endsWith('.mp4') || output.endsWith('.mov') ? ['-movflags', '+faststart'] : []), output], fixture.name);
     // Exclusive publication: a concurrent generator cannot overwrite an existing fixture.

@@ -29,6 +29,8 @@ export interface VideoCallbacks {
   onFailure(error: Error): void;
 }
 
+const SOFTWARE_FIRST = new Set(['h264', 'vp9', 'vp8', 'av1']);
+
 /** Route selection is Vela-owned and based on the actual decoder configuration. */
 export class VideoDecoderRouter implements VideoBackend {
   private backend?: Pick<VideoBackend, 'metrics' | 'frameBound' | 'decode' | 'drain' | 'dispose'>;
@@ -36,7 +38,7 @@ export class VideoDecoderRouter implements VideoBackend {
   private gpu?: PackageVideoDecoder;
   private closed = false;
   /** The decoder that took the stream, for the info card. */
-  route: { decoder: 'hardware' | 'software'; decoderName: string } | null = null;
+  route: { decoder: 'hardware' | 'software'; decoderName: string; deinterlaces?: boolean } | null = null;
   constructor(
     private readonly presentation: VideoPresentation,
     private readonly packages: VideoPackages,
@@ -74,7 +76,20 @@ export class VideoDecoderRouter implements VideoBackend {
         signal.throwIfAborted();
       }
     }
-    // Only HEVC has a package route in the core; other codecs retry on the browser's software decoder.
+    // Browsers decode H.264, VP9 and AV1 well in software, so those try WebCodecs software before a
+    // WebGPU package; codecs without a WebCodecs registration (MPEG-2, VC-1, MPEG-4 Part 2) and HEVC
+    // go to their package first.
+    if (SOFTWARE_FIRST.has(track.codec)) {
+      try {
+        await this.software(track, epoch, signal);
+        return;
+      } catch (error) {
+        signal.throwIfAborted();
+        this.native?.dispose();
+        this.native = undefined;
+        if (!PackageVideoDecoder.accepts(track)) throw error;
+      }
+    }
     const decoder = PackageVideoDecoder.accepts(track)
       ? await abortable(this.packages.load(track.codec, signal), signal)
       : null;
@@ -89,11 +104,15 @@ export class VideoDecoderRouter implements VideoBackend {
       await this.presentation.prepare(track, epoch, signal, { kind: 'gpu', format });
       signal.throwIfAborted();
       this.backend = gpu;
-      this.route = { decoder: 'software', decoderName: `WebGPU ${decoder.id} package` };
+      // The package's parser reports each picture's fields, so the presenter deinterlaces them.
+      this.route = { decoder: 'software', decoderName: `WebGPU ${decoder.id} package`, deinterlaces: true };
       return;
     }
-    // Chromium can expose a software WebCodecs implementation without a separate
-    // WGSL package (notably AVC). This still decodes original packets locally.
+    if (SOFTWARE_FIRST.has(track.codec)) throw new Error(`No decoder took this ${track.codec} configuration`);
+    await this.software(track, epoch, signal);
+  }
+  /** Chromium can expose a software WebCodecs implementation without a separate WGSL package. */
+  private async software(track: VideoTrack, epoch: number, signal: AbortSignal) {
     const software = (this.native = new NativeVideoDecoder(
       this.callbacks.output,
       this.callbacks.onFailure,

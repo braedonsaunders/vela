@@ -22,6 +22,17 @@ import type { CorePresenter } from '../runtime';
 import type { VideoTrack } from '../types';
 import { av1BitDepth } from '../decode/av1';
 
+/** The colour players assume for SDR video that declares none: HD is BT.709; SD is BT.601 with
+ * PAL primaries for 576/288 lines and NTSC (SMPTE 170M) primaries otherwise. */
+export function conventionalColour(track: Pick<VideoTrack, 'width' | 'height'>): {
+  primaries: 'bt709' | 'bt470bg' | 'smpte170m';
+  matrix: 'bt709' | 'bt470bg' | 'smpte170m';
+} {
+  if (track.height > 576 || track.width > 1024) return { primaries: 'bt709', matrix: 'bt709' };
+  const pal = track.height === 576 || track.height === 288;
+  return pal ? { primaries: 'bt470bg', matrix: 'bt470bg' } : { primaries: 'smpte170m', matrix: 'smpte170m' };
+}
+
 /** Upstream colour/frame presentation as a component; Vela owns its scheduling. */
 export class CoreVideoPresenter implements CorePresenter, VideoPresentation {
   private presenter: Presenter;
@@ -151,10 +162,16 @@ export class CoreVideoPresenter implements CorePresenter, VideoPresentation {
     const transfer = String(track.color.transfer ?? '');
     const hdr =
       transfer === 'pq' || transfer === 'hlg' || transfer === 'smpte2084' || transfer === 'arib-std-b67';
-    if (track.rotation !== 0 || (track.fieldOrder && track.fieldOrder !== 'progressive'))
+    // A package's parser hands the presenter each picture's fields, which it deinterlaces; a
+    // browser decoder's frames carry no field facts.
+    const interlaced = !!track.fieldOrder && track.fieldOrder !== 'progressive';
+    if (track.rotation !== 0 || (interlaced && route.kind !== 'gpu'))
       throw new Error('This actual scan/rotation needs an additional presentation route');
-    const primaries = track.color.primaries,
-      matrix = track.color.matrix;
+    // Undeclared SDR colour on the package route takes the convention every player applies:
+    // BT.709 for HD, BT.601 (625 or 525 lines) for SD.
+    const assumed = route.kind === 'gpu' && !hdr ? conventionalColour(track) : null;
+    const primaries = track.color.primaries ?? assumed?.primaries,
+      matrix = track.color.matrix ?? assumed?.matrix;
     // Native VideoFrames carry their decoder/browser colour conversion. Missing
     // container facts must not become invented source metadata; raw planes and
     // HDR still require the qualified colour route below.

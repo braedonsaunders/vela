@@ -6,7 +6,11 @@ import type { PlayerCapabilities } from '@vela/player-api';
 import type { OriginalPlaybackCapabilities } from '../../../packages/protocol/types';
 import { canAttemptOriginal } from './engine/original-support';
 import { abortable } from './engine/core/async';
-import { QUALIFIED_ORIGINAL_AUDIO, QUALIFIED_ORIGINAL_VIDEO } from './engine/universal/qualified';
+import {
+  QUALIFIED_CHROMIUM_PACKAGE_VIDEO,
+  QUALIFIED_ORIGINAL_AUDIO,
+  QUALIFIED_ORIGINAL_VIDEO,
+} from './engine/universal/qualified';
 import { playerAssetBase } from './asset-base';
 
 /** The payload's declaration: installed decoder families and embedded subtitle formats. */
@@ -107,7 +111,11 @@ async function originalPlayback(
   const adapter = await abortable(gpu?.requestAdapter(), AbortSignal.timeout(2000)).catch(() => null);
   signal.throwIfAborted();
   if (!adapter) return null;
-  const qualified = declaration.videoDecoders.filter((codec) => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
+  const brands = (navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } }).userAgentData?.brands;
+  const chromium = !!brands?.some((entry) => entry.brand === 'Chromium');
+  const qualified = declaration.videoDecoders.filter(
+    (codec) => QUALIFIED_ORIGINAL_VIDEO.includes(codec) || (chromium && QUALIFIED_CHROMIUM_PACKAGE_VIDEO.includes(codec)),
+  );
   const realTime = await Promise.all(qualified.map((codec) => decodesInRealTime(codec)));
   signal.throwIfAborted();
   const videoDecoders = qualified.filter((_, index) => realTime[index]);

@@ -103,7 +103,7 @@ export function videoSourceFormat(
 export function videoOutputFormat(
   source: VideoSourceFormat,
   dolbyVision: DolbyVisionRoute,
-  decoder: { decoder: 'hardware' | 'software'; decoderName: string } | null,
+  decoder: { decoder: 'hardware' | 'software'; decoderName: string; deinterlaces?: boolean } | null,
   hdrOutput: boolean,
 ): VideoOutputFormat {
   const base = dolbyVision.kind === 'base-layer' ? dolbyVision.base : source.range;
@@ -111,11 +111,11 @@ export function videoOutputFormat(
   return {
     range: hdr && hdrOutput ? base : base ? 'sdr' : undefined,
     ...(dolbyVision.kind === 'base-layer' ? { dvConversion: 'base-layer' as const } : {}),
-    ...(decoder ?? {}),
+    ...(decoder ? { decoder: decoder.decoder, decoderName: decoder.decoderName } : {}),
     frameRateMatch: 'unsupported',
     rangeMatch: 'unsupported',
     ...(base ? { toneMapped: hdr && !hdrOutput } : {}),
-    ...(source.interlaced !== undefined ? { deinterlaced: false } : {}),
+    ...(source.interlaced !== undefined ? { deinterlaced: source.interlaced && decoder?.deinterlaces === true } : {}),
   };
 }
 

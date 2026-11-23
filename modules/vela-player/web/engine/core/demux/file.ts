@@ -1,3 +1,5 @@
+import { containerVideoCodec } from './video-codec';
+import { focusedVideoConfiguration } from './focused-video';
 import {
   ALL_FORMATS,
   CustomSource,
@@ -189,35 +191,53 @@ export class PacketDemux {
       void indexing?.catch(() => {});
       const tracks: MediaTrack[] = [];
       for (const track of videos) {
-        const [codec, width, height, rotation, config, color, fieldOrder, language] = await Promise.all([
-          track.getCodec(),
-          track.getCodedWidth(),
-          track.getCodedHeight(),
-          track.getRotation(),
-          track.getDecoderConfig(),
-          track.getColorSpace(),
-          track.getFieldOrder(),
-          track.getLanguageCode(),
-        ]);
+        const [codec, width, height, rotation, config, color, fieldOrder, language, internalCodecId] =
+          await Promise.all([
+            track.getCodec(),
+            track.getCodedWidth(),
+            track.getCodedHeight(),
+            track.getRotation(),
+            track.getDecoderConfig(),
+            track.getColorSpace(),
+            track.getFieldOrder(),
+            track.getLanguageCode(),
+            track.getInternalCodecId(),
+          ]);
+        // A codec WebCodecs has no registration for (MPEG-2, VC-1, MPEG-4 Part 2) still reaches its
+        // decoder package by name, with the container's extradata as its description.
+        const named = containerVideoCodec(codec, internalCodecId, config ? null : velaTrackPrivate(track, null));
+        // MPEG-4 Part 2, H.263, MS-MPEG4 and VC-1 packages read a BITMAPINFOHEADER description, and a
+        // decode-order VfW track is read through upstream's presentation-order restamping track.
+        const focused = await focusedVideoConfiguration(named.codec, track, internalCodecId, width, height);
+        const packetTrack = focused?.videoTrack ?? track;
+        const packageConfig =
+          named.codec !== 'unknown' && (!config || focused)
+            ? {
+                codec: named.codec,
+                ...((focused?.description ?? named.extradata) ? { description: (focused?.description ?? named.extradata)! } : {}),
+              }
+            : null;
         const id = `video:${track.containerTrackId ?? track.id}`;
         const actual: VideoTrack = {
           id,
           kind: 'video',
           sourceIndex: null,
           containerTrackId: track.containerTrackId,
-          codec: codec === 'avc' ? 'h264' : (codec ?? 'unknown'),
+          codec: named.codec,
           width,
           height,
           rotation,
           fieldOrder,
           language,
           color,
-          config: config
-            ? { ...config, ...(config.description ? { description: copyBytes(config.description) } : {}) }
-            : null,
+          config:
+            packageConfig ??
+            (config
+              ? { ...config, ...(config.description ? { description: copyBytes(config.description) } : {}) }
+              : null),
         };
         tracks.push(actual);
-        this.tracks.set(id, track);
+        this.tracks.set(id, packetTrack);
         onVideo?.(actual);
       }
       for (const track of audios) {
