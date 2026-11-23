@@ -28,6 +28,15 @@ beforeAll(async () => {
 });
 afterAll(async () => { await mock?.stop(); });
 
+/** The first of these channels with a programme on air now (the fixture guide has gaps), and its programmes. */
+async function airingOn(ids: string[]) {
+  for (const id of ids) {
+    const found = await programmes(id);
+    if (found.airing && found.ended) return { id, ...found };
+  }
+  throw new Error(`Nothing on air on ${ids.join(', ')}`);
+}
+
 /** An ended and an airing programme on a channel, from today's guide. */
 async function programmes(channelId: string) {
   const now = Date.now();
@@ -48,11 +57,11 @@ describe('catch-up capability and guide', () => {
   test('two of every three channels keep an archive, and their programmes say what they can do', async () => {
     const channels = await get<V.Page<V.Channel>>('/live/channels?limit=6');
     expect(channels.items.map(c => c.archiveDays ?? 0)).toEqual([3, 3, 0, 3, 3, 0]);
-    const { ended, airing } = await programmes('channel-1');
+    const { ended, airing } = await airingOn(['channel-1', 'channel-2', 'channel-5', 'channel-8']);
     expect(ended.catchUp).toBe(true);
     expect(ended.startOver).toBeUndefined();
     expect(airing.startOver).toBe(true);
-    const none = await programmes('channel-3');
+    const none = await airingOn(['channel-3', 'channel-6', 'channel-9']);
     expect(none.ended.catchUp).toBeUndefined();
     expect(none.airing.startOver).toBeUndefined();
   });
@@ -75,8 +84,8 @@ describe.skipIf(!mediaGenerated)('catch-up playback', () => {
   });
 
   test('Start over plays the programme on air from its start, growing, and goLive makes it the live channel', async () => {
-    const { airing } = await programmes('channel-2');
-    const plan = await (await post('/playback', { channelId: 'channel-2', programmeId: airing.id, from: 'start', client, idempotencyKey: key() })).json() as V.PlaybackPlan;
+    const { id: channelId, airing } = await airingOn(['channel-2', 'channel-1', 'channel-8', 'channel-10']);
+    const plan = await (await post('/playback', { channelId, programmeId: airing.id, from: 'start', client, idempotencyKey: key() })).json() as V.PlaybackPlan;
     expect(plan.channelId).toBeUndefined();
     expect(plan.durationSeconds).toBeUndefined();
     expect(plan.live).toMatchObject({ mode: 'startOver', windowStartSeconds: 0 });
@@ -86,7 +95,7 @@ describe.skipIf(!mediaGenerated)('catch-up playback', () => {
     expect(playlist).toContain('#EXT-X-PLAYLIST-TYPE:EVENT');
     expect(playlist).not.toContain('#EXT-X-ENDLIST');
     const live = await (await post(`/sessions/${plan.sessionId}/commands`, { kind: 'goLive', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration, idempotencyKey: key() })).json() as V.PlaybackPlan;
-    expect(live.channelId).toBe('channel-2');
+    expect(live.channelId).toBe(channelId);
     expect(live.catchUp).toBeUndefined();
     expect(live.live?.mode).toBe('adaptive');
   });
