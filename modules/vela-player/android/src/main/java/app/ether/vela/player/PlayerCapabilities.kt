@@ -12,6 +12,11 @@ internal object PlayerCapabilities {
     "video/hevc" to "hevc",
     "video/av01" to "av1",
     "video/x-vnd.on2.vp9" to "vp9",
+    "video/x-vnd.on2.vp8" to "vp8",
+    "video/mpeg2" to "mpeg2video",
+    "video/mp4v-es" to "mpeg4",
+    "video/wvc1" to "vc1",
+    "video/3gpp" to "h263",
     "video/dolby-vision" to "dv",
   )
 
@@ -26,12 +31,32 @@ internal object PlayerCapabilities {
     val displayHdr = (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).toList().mapNotNull {
       when (it) {
         android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "hdr10"
+        android.view.Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS -> "hdr10+"
         android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "hlg"
         android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> "dv"
         else -> null
       }
     }
-    return probed + mapOf("hdr" to playableHdr(displayHdr, decoders))
+    val hdr = playableHdr(displayHdr, decoders)
+    val dvProfiles = dolbyVisionDecoderProfiles()
+    val route = context?.let { runCatching { AudioRoute.probe(it) }.getOrNull() }
+    return probed + buildMap {
+      put("hdr", hdr)
+      // Shown as Dolby Vision only where the display takes it; elsewhere the base layer plays as HDR10/HLG.
+      if ("dv" in hdr) put("dolbyVisionProfiles", AvFormats.dolbyVisionProfiles(dvProfiles, DolbyVision.convertsProfile7))
+      route?.let { put("audioOutput", AvFormats.audioOutput(it.passthrough, it.maxChannels, it.maxSampleRate, floatPcm = true)) }
+    }
+  }
+
+  /** Profile bits (CodecProfileLevel.DolbyVisionProfile*) of the hardware Dolby Vision decoders. */
+  fun dolbyVisionDecoderProfiles(): Set<Int> =
+    decoders.filter { it.codec == "dv" && it.hardware }.flatMap { it.profiles.map { p -> p.first } }.toSet()
+
+  /** Whether a decoder is a hardware decoder, and whether it decodes Dolby Vision itself, by codec name. */
+  fun decoderKind(name: String?): Pair<Boolean, Boolean>? {
+    name ?: return null
+    val info = runCatching { MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.firstOrNull { it.name == name } }.getOrNull() ?: return null
+    return hardware(info) to info.supportedTypes.any { it.equals("video/dolby-vision", true) }
   }
 
   /** Full platform profiles/levels for device diagnostics; the v0 wire has codec names and global limits. */
@@ -53,7 +78,8 @@ internal object PlayerCapabilities {
         "version" to 1,
         "range" to true,
         "webgpu" to false,
-        "demuxContainers" to listOf("mkv", "webm", "mp4", "mpegts"),
+        // Media3's extractors. Not m2ts: Media3 reads 188-byte TS only, without the Blu-ray stream types.
+        "demuxContainers" to listOf("mkv", "webm", "mp4", "mov", "mpegts", "avi", "ogg", "flv", "mpegps"),
         "videoDecoders" to video,
         "audioDecoders" to audio,
       ),
@@ -89,7 +115,14 @@ internal object PlayerCapabilities {
             "av1" -> profile in listOf(2, 4096, 8192) // AV1 Main10 and HDR variants.
             else -> false
           } }
-          val modes = if (codec == "dv" && profiles.isNotEmpty()) setOf("dv") else if (main10) setOf("hdr10", "hlg") else emptySet()
+          // HDR10+ only where the decoder names an HDR10+ profile (HEVC/AV1 0x2000, VP9 0x4000/0x8000).
+          val hdr10Plus = profiles.any { (profile, _) -> when (codec) {
+            "hevc", "av1" -> profile == 8192
+            "vp9" -> profile == 16384 || profile == 32768
+            else -> false
+          } }
+          val modes = if (codec == "dv" && profiles.isNotEmpty()) setOf("dv")
+            else if (main10) setOfNotNull("hdr10", "hlg", "hdr10+".takeIf { hdr10Plus }) else emptySet()
           val rate = runCatching { video.getSupportedFrameRatesFor(size.first, size.second).upper.takeIf { it.isFinite() && it > 0 } }.getOrNull()
           VideoDecoderFacts(decoder.name, codec, mime, size.first, size.second, rate, profiles, modes, acceleratedDecoder)
         }.getOrNull()

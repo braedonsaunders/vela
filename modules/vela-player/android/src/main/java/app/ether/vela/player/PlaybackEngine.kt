@@ -15,6 +15,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
 
 /** One engine per full-screen or preview session. No alternate local decoder engine. */
 internal interface PlaybackEngine {
@@ -43,14 +45,29 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   private val selector = DefaultTrackSelector(context)
   private val grant = MediaAccessStore.current
   private val buffering = playbackBuffering(preview || shared, live)
+  // Facts from the loading thread reach the state on the main thread.
+  private val taps = TapPolicy(
+    dolbyVisionDecoderProfiles = PlayerCapabilities.dolbyVisionDecoderProfiles(),
+    convertsDolbyVision = DolbyVision.convertsProfile7,
+    onTrueHd = { id, atmos -> main.post { state.format.trueHdAtmos[id.orEmpty()] = atmos } },
+    onDolbyVision = { id, profile, action ->
+      Log.i("vela-media3", "dolby vision profile $profile: $action")
+      main.post { state.format.dolbyVision[id.orEmpty()] = profile to action }
+    },
+  )
+  private val extractors: ExtractorsFactory =
+    if (preview) DefaultExtractorsFactory() else TappedExtractorsFactory(DefaultExtractorsFactory(), taps)
   private val player = ExoPlayer.Builder(context,
     DefaultRenderersFactory(context).setEnableDecoderFallback(true)
+      // Float PCM keeps 24-bit lossless sources (FLAC, ALAC, FFmpeg-decoded TrueHD and DTS-HD MA) whole;
+      // without it DefaultAudioSink truncates every high-resolution stream to 16 bits.
+      .setEnableAudioFloatOutput(!preview && !shared)
       .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
     // Foreground streaming needs consistent Wi-Fi latency as well as an awake display.
     // Media3 releases both locks on pause, background pause and engine release.
     .setWakeMode(C.WAKE_MODE_NETWORK)
     .setTrackSelector(selector)
-    .setMediaSourceFactory(DefaultMediaSourceFactory(ScopedMediaDataSource.Factory(grant)))
+    .setMediaSourceFactory(DefaultMediaSourceFactory(ScopedMediaDataSource.Factory(grant), extractors))
     .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(
       buffering.minimumMs, buffering.maximumMs, buffering.startMs, buffering.resumeMs)
       .setPrioritizeTimeOverSizeThresholds(buffering.prioritizeTime)
@@ -67,6 +84,8 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
   }
 
   init {
+    if (!preview) Log.i("vela-media3", "dolby vision decoder profiles 0x${Integer.toHexString(taps.dolbyVisionDecoderProfiles.fold(0) { a, b -> a or b })}; " +
+      "profile 7 conversion ${taps.convertsDolbyVision}; float output ${!shared}")
     player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), !preview && !shared)
     player.setHandleAudioBecomingNoisy(!preview && !shared)
     // Media3's renderer handles Surface frame-rate hints. Never let previews write them.
@@ -76,12 +95,36 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
       .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, preview)
       .setTunnelingEnabled(!preview && !shared && context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION)
       .build()
-    player.addAnalyticsListener(object : AnalyticsListener {
+    if (!preview) player.addAnalyticsListener(object : AnalyticsListener {
       override fun onAudioDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
-        if (!preview) Log.i("vela-media3", "audio decoder $decoderName")
+        Log.i("vela-media3", "audio decoder $decoderName")
+        state.format.audioDecoder = decoderName
       }
       override fun onVideoDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
-        if (!preview) Log.i("vela-media3", "video decoder $decoderName")
+        Log.i("vela-media3", "video decoder $decoderName")
+        state.format.videoDecoder = decoderName
+      }
+      override fun onVideoInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
+        Log.i("vela-media3", "video input ${format.sampleMimeType} ${format.codecs} ${format.width}x${format.height}@${format.frameRate} ${format.colorInfo}")
+        state.format.video = format
+      }
+      override fun onAudioInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
+        Log.i("vela-media3", "audio input ${format.sampleMimeType} ${format.codecs} ${format.channelCount}ch ${format.sampleRate}Hz pcm ${format.pcmEncoding}")
+        state.format.audio = format
+      }
+      override fun onAudioTrackInitialized(eventTime: AnalyticsListener.EventTime, audioTrackConfig: androidx.media3.exoplayer.audio.AudioSink.AudioTrackConfig) {
+        val route = runCatching { AudioRoute.probe(context) }.getOrNull()
+        Log.i("vela-media3", "audio output encoding ${audioTrackConfig.encoding} mask 0x${Integer.toHexString(audioTrackConfig.channelConfig)} " +
+          "${audioTrackConfig.sampleRate}Hz tunneling ${audioTrackConfig.tunneling} offload ${audioTrackConfig.offload}; route ${route?.route} " +
+          "${route?.deviceName} passthrough ${route?.passthrough} max ${route?.maxChannels}ch")
+        state.format.audioTrack = audioTrackConfig
+        state.format.route = route
+      }
+      override fun onAudioDisabled(eventTime: AnalyticsListener.EventTime, counters: androidx.media3.exoplayer.DecoderCounters) {
+        state.format.audio = null; state.format.audioTrack = null; state.format.audioDecoder = null
+      }
+      override fun onVideoDisabled(eventTime: AnalyticsListener.EventTime, counters: androidx.media3.exoplayer.DecoderCounters) {
+        state.format.video = null; state.format.videoDecoder = null
       }
     })
     player.addListener(object : Player.Listener {

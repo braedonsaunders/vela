@@ -107,6 +107,8 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     }
     content.addView(video, videoLayout())
     content.addView(subtitleLayer, videoLayout())
+    report.subtitleLook = SubtitleLook.from { lookStore.getString(it, null) }
+    subtitleLook(report.subtitleLook, persist = false)
     addView(content, videoLayout())
     live.add(this)
   }
@@ -263,6 +265,22 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     DisplayMatching.prefer(facts, surface, appContext.currentActivity)
 
   override fun describeDisplay() = DisplayMatching.describe(appContext.currentActivity)
+
+  override fun displayOutput(frameRate: Double?) = DisplayMatching.output(appContext.currentActivity, frameRate)
+
+  private val lookStore get() = context.getSharedPreferences("vela.player", Context.MODE_PRIVATE)
+
+  override fun subtitleLook(look: SubtitleLook, persist: Boolean) {
+    val text = if (look.color == "yellow") Color.rgb(255, 214, 10) else Color.WHITE
+    val box = if (look.background == "box") Color.argb(184, 0, 0, 0) else Color.TRANSPARENT
+    val edge = if (look.background == "shadow") androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW else androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE
+    subtitleLayer.setStyle(androidx.media3.ui.CaptionStyleCompat(text, box, Color.TRANSPARENT, edge, Color.BLACK, null))
+    // The viewer's size wins over a track's own font sizes; its colours, italics and placement stay.
+    subtitleLayer.setApplyEmbeddedFontSizes(false)
+    subtitleLayer.setFractionalTextSize(look.textFraction)
+    subtitleLayer.setBottomPaddingFraction(look.bottomFraction)
+    if (persist) lookStore.edit().apply { look.snapshot.forEach { (key, value) -> if (value is String) putString(key, value) } }.apply()
+  }
 
   override fun keepScreenOn(on: Boolean) {
     video.keepScreenOn = on

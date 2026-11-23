@@ -23,3 +23,36 @@ const scratchRoot = existsSync(join(homedir(), '.scratch/tmp')) ? join(homedir()
     expect(await run.exited, await new Response(run.stderr).text()).toBe(0);
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }, 60_000);
+
+(compiler ? test : test.skip)('Android display matching, format facts and subtitle appearance run on the JVM', async () => {
+  const scratch = await mkdtemp(join(scratchRoot, 'vela-android-formats-'));
+  const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');
+  try {
+    const sources = ['DisplayModes', 'AvFormats', 'SubtitleLook', 'DolbyVision'].map(f => join(source, f + '.kt'));
+    const probe = join(import.meta.dir, 'fixtures/android/FormatProbe.kt');
+    const compile = Bun.spawn([compiler!, ...sources, probe, '-include-runtime', '-d', join(scratch, 'formats.jar')], { stdout: 'pipe', stderr: 'pipe' });
+    const output = await new Response(compile.stderr).text();
+    expect(await compile.exited, output).toBe(0);
+    const runtime = process.env.VELA_KOTLIN_STDLIB;
+    const run = Bun.spawn(['java', '-cp', [join(scratch, 'formats.jar'), runtime].filter(Boolean).join(':'), 'app.ether.vela.player.FormatProbeKt'], { stdout: 'pipe', stderr: 'pipe' });
+    expect(await run.exited, await new Response(run.stderr).text()).toBe(0);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+}, 60_000);
+
+// The libdovi JNI bridge built for the host (VELA_DOVI_HOST_DIR holds libvela_dovi.so), against dovi_tool's
+// test RPUs (VELA_DOVI_ASSETS is its assets/tests directory). See modules/vela-player/android/dovi/build.sh.
+const doviHost = process.env.VELA_DOVI_HOST_DIR, doviAssets = process.env.VELA_DOVI_ASSETS;
+(compiler && doviHost && doviAssets ? test : test.skip)('Android libdovi bridge converts Profile 7 RPUs to 8.1', async () => {
+  const scratch = await mkdtemp(join(scratchRoot, 'vela-android-dovi-'));
+  const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');
+  try {
+    const compile = Bun.spawn([compiler!, join(source, 'DolbyVision.kt'), join(import.meta.dir, 'fixtures/android/DoviProbe.kt'),
+      '-include-runtime', '-d', join(scratch, 'dovi.jar')], { stdout: 'pipe', stderr: 'pipe' });
+    const output = await new Response(compile.stderr).text();
+    expect(await compile.exited, output).toBe(0);
+    const runtime = process.env.VELA_KOTLIN_STDLIB;
+    const run = Bun.spawn(['java', `-Djava.library.path=${doviHost}`, '-cp', [join(scratch, 'dovi.jar'), runtime].filter(Boolean).join(':'),
+      'app.ether.vela.player.DoviProbeKt', doviAssets!], { stdout: 'pipe', stderr: 'pipe' });
+    expect(await run.exited, await new Response(run.stderr).text()).toBe(0);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+}, 60_000);

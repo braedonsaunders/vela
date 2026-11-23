@@ -32,6 +32,8 @@ internal class PlayerState {
   var videoParams: Map<String, Any?> = emptyMap()
   var frameRate: Double? = null
   var videoCodec: String? = null
+  /** Source and output facts for the info card. */
+  val format = PlaybackFormatFacts()
   var failure: String? = null
   var failureKind = "source"
 

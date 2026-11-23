@@ -18,7 +18,11 @@ internal interface PlayerHost {
   /** Display mode matching for the window the view is in. */
   fun preferDisplay(facts: VideoFacts?)
   fun describeDisplay(): String
+  /** The display mode and frame-rate match state for the info card. */
+  fun displayOutput(frameRate: Double?): Map<String, Any>
   fun keepScreenOn(on: Boolean)
+  /** Draws text subtitles in the viewer's appearance, and keeps it for the next title. */
+  fun subtitleLook(look: SubtitleLook, persist: Boolean)
 }
 
 internal class PlayerController(
@@ -27,6 +31,7 @@ internal class PlayerController(
   private val report: PlayerReport,
 ) {
   private val main = Handler(Looper.getMainLooper())
+  init { report.display = { if (ownsDisplay) host.displayOutput(it) else emptyMap() } }
   private var engine: PlaybackEngine? = null
   private val recovery = PathRecovery()
   private var recovering = false
@@ -415,6 +420,11 @@ internal class PlayerController(
       }
       "audio" -> return selectAudio(command.text("trackId"))
       "subtitle" -> return selectSubtitle(command.text("trackId"))
+      "subtitleStyle" -> {
+        val look = report.subtitleLook.updated(command.text("value") ?: "") ?: return "Invalid subtitle appearance preference"
+        report.subtitleLook = look
+        host.subtitleLook(look, persist = true)
+      }
       "retry" -> retry()
       else -> return "$type is not available in this player yet"
     }

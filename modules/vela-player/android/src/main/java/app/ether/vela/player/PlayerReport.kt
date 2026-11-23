@@ -27,6 +27,10 @@ internal class PlayerReport(
   var muted = false
   /** A muted preview reports its state but sends the server no observations. */
   var ambient = false
+  /** The viewer's text subtitle appearance; a preview offers none. */
+  var subtitleLook = SubtitleLook()
+  /** The display mode and frame-rate match for a video frame rate (PlayerHost). */
+  var display: (Double?) -> Map<String, Any> = { emptyMap() }
   /** The server is applying a seek: observations wait for the plan that answers it. */
   var awaitingSeek = false
 
@@ -151,7 +155,7 @@ internal class PlayerReport(
       "throughputHistory" to listOfNotNull(throughput(state)),
       "speed" to 1,
       "speeds" to listOf(1),
-      "subtitleStyleAvailable" to false,
+      "subtitleStyleAvailable" to !previewing,
       "subtitleClientOnly" to subtitleClientOnly,
       "audioClientOnly" to audioClientOnly,
       "diagnostics" to mapOf("implementation" to "vela-media3", "metadataDiscrepancies" to emptyList<String>()),
@@ -166,12 +170,13 @@ internal class PlayerReport(
       "renditionId" to null,
       "lockedQuality" to null,
       "video" to video(state),
+      "format" to if (previewing) null else state.format.snapshot(display(state.format.frameRate ?: state.frameRate)),
       "currentBitrateBps" to null,
       "requiredBandwidthBps" to null,
       "bufferAheadSeconds" to state.cacheAhead,
       "pendingSubtitleTrackId" to null,
       "subtitleError" to null,
-      "subtitleStyle" to null,
+      "subtitleStyle" to if (previewing) null else subtitleLook.snapshot,
       "live" to null,
       "seekTarget" to seekTarget,
       "preparation" to preparation(state, phase),
