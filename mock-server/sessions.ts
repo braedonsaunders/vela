@@ -3,6 +3,7 @@ import { faults, mediaRoot, fixtureDurationSeconds, originalFixture } from './me
 import { liveWindow } from './live';
 import { refreshLive } from './catch-up';
 import { mseFixture } from './mse';
+import { trickplayOffer } from './trickplay';
 interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec: string; audioCodec?: string }>; timers: Map<string, ReturnType<typeof setTimeout>> }
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs;
   /** The live event on air on a live channel session (Sports A6); undefined for other sessions. */ liveEvent?: LiveEventRef | null }
@@ -66,6 +67,9 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
       plan.selectedSubtitleTrackId = request.subtitleTrackId ?? (originalFixture.selectSubtitle ? originalFixture.subtitles[0].id : null);
     }
   }
+  // The fixture's scrub thumbnails, for on-demand plans of the fixture itself (not a format original).
+  const trickplay = !request.channelId && !originalFixture.name && available ? await trickplayOffer() : null;
+  if (trickplay) plan.trickplay = trickplay;
   if (request.channelId) {
     plan.durationSeconds = undefined;
     plan.live = { ...liveWindow(), mode: request.liveMode ?? 'adaptive' };

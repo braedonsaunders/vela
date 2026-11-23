@@ -7,6 +7,7 @@ import type * as V from '../packages/protocol/types';
 import { allTitles, artwork, channels as defaultChannels, detail, extras, featuredSources, featuredTitles, guide as defaultGuide, rows, titles } from '../packages/protocol/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
+import { trickplaySheet } from './trickplay';
 import { applyCommand, createSession, events, observe, publish, requestedInit, sessions, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
@@ -906,6 +907,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     }
     return json(s.plan);
   }
+  const sheet = /^\/sessions\/([^/]+)\/trickplay\/([^/]+)\/([^/]+)\.jpg$/.exec(path);
+  if (sheet && method === 'GET') return trickplaySheet(currentSession(sheet[1]!, g).plan, sheet[2]!, sheet[3]!, req);
   const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
   if (match) {
     const preview = previewSessions.get(match[1]);

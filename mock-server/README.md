@@ -45,6 +45,12 @@ Movie metadata describes fictional full-length titles; all playback is explicitl
 this three-minute test fixture. Remux copies the original 720p video; transcode
 alternatives are generated offline. No actual on-demand encoder scheduler exists.
 
+Scrub thumbnails: `bun mock-server/scripts/make-trickplay.ts` (after make-media) writes two
+10×10 sheets of 320×180 counter stills, one per second, each showing its own second, under
+`trickplay/320/`. Fixture plans then carry `trickplay` and
+`GET /vela/v0/sessions/:id/trickplay/320/:sheet.jpg` serves them to the owning session
+(`private, no-cache`, ETag, 304, `X-Ether-Trickplay-Fallback: false`).
+
 For existing media, `bun mock-server/scripts/make-media.ts --mse-only` adds
 video-only `video360/`, `video540/`, `video720/`, `mse-master.m3u8` and a local
 `mse.json` descriptor without overwriting any existing native/muxed/audio files.
