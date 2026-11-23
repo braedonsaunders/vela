@@ -21,7 +21,7 @@ test('lossless decode, passthrough and an ARC conversion each say what reached t
   expect(audioOutputLine({ delivery: 'decoded', codec: 'pcm', channels: 8, sampleRate: 96000, bitDepth: 24, lossless: true, route: 'hdmi' }))
     .toBe('PCM · 7.1 · 96 kHz / 24-bit · Lossless · HDMI');
   expect(audioOutputLine({ delivery: 'passthrough', codec: 'eac3', channels: 6, immersive: 'atmos', lossless: true }))
-    .toBe('Passthrough · E-AC-3 · 5.1 · Lossless · Atmos');
+    .toBe('Passthrough · E-AC-3 · 5.1 · Atmos');
   expect(audioOutputLine({ delivery: 'transcoded', codec: 'eac3', channels: 6, sampleRate: 48000, lossless: false, downmixed: true, resampled: true }))
     .toBe('Converted · E-AC-3 · 5.1 · 48 kHz · Lossy · Downmixed · Resampled');
   expect(audioOutputLine({ delivery: 'passthrough', codec: 'truehd', carrier: 'iec61937', exclusive: true, route: 'hdmi-earc' }))

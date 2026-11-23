@@ -156,7 +156,8 @@ export function audioOutputLine(out: AudioOutputFormat | null | undefined): stri
         : '';
   return join([
     head,
-    out.lossless === true ? msg('player.format.lossless') : out.lossless === false && out.delivery !== 'passthrough' ? msg('player.format.lossy') : '',
+    // A passthrough is the source's own bitstream; "lossless" there would read as a claim about the codec.
+    out.delivery === 'passthrough' ? '' : out.lossless === true ? msg('player.format.lossless') : out.lossless === false ? msg('player.format.lossy') : '',
     out.immersive ? immersiveLabel(out.immersive) : '',
     carrier,
     out.objectsActive ? msg('player.format.objects', { count: number(out.objectsActive) }) : '',
