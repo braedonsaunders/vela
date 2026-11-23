@@ -135,16 +135,17 @@ enum PlaybackFormat {
         var out: [String: Any] = [:]
         let route = currentRoute()
         if let kind = route.kind { out["route"] = kind }
-        if let objects = engine.liveTelemetry?.objectAudio {
+        let objects = engine.liveTelemetry?.objectAudio
+        if let layout = objects?.layout ?? renderedLayout(engine.activeAudioDecoder) {
             // TrueHD Atmos or DTS:X rendered into a bed with heights; tvOS carries it to the receiver as Dolby MAT.
             out["delivery"] = "rendered"
-            out["codec"] = route.kind == "airplay" ? "apac" : "pcm"
-            out["layout"] = objects.layout.rawValue
-            out["channels"] = objects.layout.speakers.count
+            out["codec"] = engine.activeAudioDecoder?.contains("APAC") == true || route.kind == "airplay" ? "apac" : "pcm"
+            out["layout"] = layout.rawValue
+            out["channels"] = layout.speakers.count
             out["sampleRate"] = 48_000
             out["bitDepth"] = 24
             out["immersive"] = immersive(track) ?? "atmos"
-            out["objectsActive"] = objects.activeObjects
+            if let objects { out["objectsActive"] = objects.activeObjects }
             out["lossless"] = false
         } else {
             switch engine.audioDelivery {
@@ -193,6 +194,15 @@ enum PlaybackFormat {
             if route.kind == "hdmi" { out["carrier"] = "mat" }
         }
         return out
+    }
+
+    /// The bed named by the engine's audio label ("TRUEHD Atmos → PCM 7.1.4"), for when the 1 Hz telemetry
+    /// has no object activity yet (or is not sampling on this route).
+    static func renderedLayout(_ label: String?) -> SpatialSpeakerLayout? {
+        guard let label, let arrow = label.range(of: "→") else { return nil }
+        let tail = label[arrow.upperBound...]
+        guard tail.contains("PCM") || tail.contains("APAC") else { return nil }
+        return SpatialSpeakerLayout.allCases.first { tail.hasSuffix($0.rawValue) || tail.contains(" \($0.rawValue)") }
     }
 
     private struct Route {

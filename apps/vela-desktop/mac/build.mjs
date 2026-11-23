@@ -18,7 +18,7 @@ const run = (cmd, args, cwd = stage) => {
 mkdirSync(join(stage, 'Sources/VelaNative'), { recursive: true });
 mkdirSync(output, { recursive: true });
 const ios = resolve(here, '../../../modules/vela-player/ios');
-for (const name of ['PlaybackClient', 'PlaybackSession', 'PlaybackHost', 'PlaybackRendering', 'PreviewPlayback', 'PlayerState', 'PlayerReport', 'PlayerCapabilities', 'PlaybackPreferences', 'PlaybackFormat', 'ASSSubtitles', 'SubtitleAppearance', 'PlaybackPlan', 'PathRecovery', 'MediaAccess', 'MediaRedirects', 'ScopedMediaHTTP', 'ScopedAetherReader'])
+for (const name of ['PlaybackClient', 'PlaybackSession', 'PlaybackHost', 'PlaybackRendering', 'PreviewPlayback', 'PlayerState', 'PlayerReport', 'PlayerCapabilities', 'PlaybackPreferences', 'PlaybackFormat', 'PlaybackCacheBudget', 'ASSSubtitles', 'SubtitleAppearance', 'PlaybackPlan', 'PathRecovery', 'MediaAccess', 'MediaRedirects', 'ScopedMediaHTTP', 'ScopedAetherReader'])
   cpSync(join(ios, name + '.swift'), join(stage, 'Sources/VelaNative', name + '.swift'));
 for (const name of ['AppKitPlaybackRendering.swift', 'NativeHost.swift']) cpSync(join(here, name), join(stage, 'Sources/VelaNative', name));
 // AetherEngine's optional components, the same traits as the tvOS and iOS apps (apps/vela/plugins/apple-player.js).

@@ -45,6 +45,8 @@ final class PlaybackClient {
     private var lastLiveDiagnostic = Date.distantPast
     private var lastCacheDiagnostic = Date.distantPast
     private var lastFormatDiagnostic = Date.distantPast
+    /// Halved each time the volume still ran out under the budget (storageExhausted), at most twice.
+    private var cacheShrink = 1.0
     private var formatDescription: NSDictionary?
     private var preferences = PlaybackPreferences.current
     /// A full-screen watch: not a preview or a multiview tile. Only it takes the viewer's delivery choices.
@@ -263,6 +265,7 @@ final class PlaybackClient {
                     opts.matchContentEnabled = false
                 }
                 self.preferences.configure(&opts, fullScreen: self.fullScreen)
+                self.configureCache(&opts)
                 // libass draws ASS/SSA as authored from the raw events, header and container fonts.
                 if ASSSubtitles.isAvailable && !preview { opts.preserveASSMarkup = true }
                 self.rendering.configureLoad(options: &opts, preview: preview)
@@ -291,6 +294,18 @@ final class PlaybackClient {
             }
         }
     }
+    /// The segment cache's share of the device, from the space free now (PlaybackCacheBudget). Orphaned
+    /// sessions are swept first so their bytes count as free. Previews and tiles take a quarter share.
+    private func configureCache(_ options: inout LoadOptions) {
+        let swept = PlaybackCacheBudget.removeStaleSessions()
+        guard let free = PlaybackCacheBudget.freeBytes() else { return }
+        let budget = PlaybackCacheBudget.plan(freeBytes: free, shrink: fullScreen ? cacheShrink : cacheShrink * 0.25)
+        options.sessionCacheByteBudget = budget.byteBudget
+        options.sessionCacheHardLimitBytes = budget.hardLimit
+        options.sessionCacheFreeReserveBytes = budget.freeReserve
+        print("[vela-aether-cache] budget free=\(free) swept=\(swept) limit=\(budget.hardLimit) reserve=\(budget.freeReserve) shrink=\(cacheShrink)")
+    }
+
     /// Source → output facts for the info card, at most once a second unless a route or format changed.
     private func publishFormat(force: Bool = false) {
         guard !dead, !failed, !preview, let engine else { return }
@@ -371,6 +386,17 @@ final class PlaybackClient {
     }
     private func failPath() {
         guard !dead, !failed, !reconnecting else { return }
+        // The volume ran out even inside the budget (other apps wrote meanwhile): play on from here with a
+        // smaller cache rather than ask the server for a transcode, which needs the same disk.
+        if let failure = engine?.errorInfo, failure.kind.rawValue == "storageExhausted", cacheShrink > 0.3, let url {
+            cacheShrink /= 2
+            start = (properties["time-pos"] as? Double) ?? start
+            print("[vela-aether-cache] storage exhausted; reloading with shrink=\(cacheShrink)")
+            logCacheStatus(engine!.diagnostics.sessionCacheStatus, force: true)
+            engine?.stop()
+            load(url)
+            return
+        }
         let ioCodes = [-110, -104, -1001, -1005, -1009, -1004]
         if let failure = engine?.errorInfo,
            (ioCodes.contains(Int(failure.underlyingCode ?? 0)) || ioCodes.contains(Int(failure.ffmpegErrorCode ?? 0))),

@@ -97,6 +97,20 @@ for Dolby Digital and Dolby Digital Plus. Hardware AV1 (Apple TV 4K third genera
 software, so AV1 is not claimed to servers). Gapless album playback: AetherEngine has no queued
 next-item path; a gap between tracks remains.
 
+**Segment cache sizing (2026-11-22).** A 4K TrueHD Atmos remux on the Basement Apple TV filled the
+volume (`storageExhausted`, ENOSPC) and the killed sessions left 2.7 GB in `tmp/aether-segments`, so not
+even the production build could be reinstalled (0 bytes free). Every load now sets
+`sessionCacheHardLimitBytes`, `sessionCacheByteBudget` and `sessionCacheFreeReserveBytes` from the space
+free for the app (`volumeAvailableCapacityForImportantUsage`, purgeable included) through
+`PlaybackCacheBudget.plan`: 40% of free space, at most 2 GB, keeping 1 GB free; below 3 GB free the
+reserve is a quarter of free space (at least 200 MB) and the cache keeps a 320 MB working floor so
+playback still runs. Previews and multiview tiles take a quarter share. Under a hard limit AetherEngine
+evicts history behind the playhead and waits instead of writing past it. Session directories whose
+`session.lock` no live engine holds (AetherEngine keeps an flock on it for a session's lifetime) are
+swept at launch and before every load. If the volume still runs out, the title reloads at its position
+with half the share (twice at most) instead of asking the server for a transcode, which needs the same
+disk. The earlier "no Vela cache sizing policy ships" decision above is superseded.
+
 **Needs a real receiver** (the simulator outputs none of this): TrueHD Atmos and DTS:X showing Atmos,
 E-AC-3 JOC showing Atmos, lossless 7.1 reaching the receiver as 8-channel PCM, Dolby Digital Plus 5.1
 on legacy ARC, a speaker layout change mid-title, and Dolby Vision Profile 7/8 on a Dolby Vision TV.

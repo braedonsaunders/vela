@@ -53,6 +53,9 @@ public final class VelaPlayerModule: Module {
 
         OnCreate {
             TVTextFields.install()
+            // Segments a killed session left in tmp (AetherEngine holds a lock on every live one).
+            let swept = PlaybackCacheBudget.removeStaleSessions()
+            if swept > 0 { print("[vela-aether-cache] launch swept=\(swept)") }
         }
 
         // The app takes the remote's play/pause for itself (an alert toast's action) until released.
