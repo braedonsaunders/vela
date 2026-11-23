@@ -39,6 +39,9 @@ export interface WatchTarget {
   /** false: Ether knows the channel cannot play now (its source is failing). Shown as
    * "unavailable right now", never as a button. Absent means available. */
   available?: boolean;
+  /** The event's programme on this channel when it is archived (catchUp) or on air with its start archived
+   * (startOver): "Watch from start" (features.liveCatchUp). */
+  programme?: { id: ID; start: Timestamp; end: Timestamp; catchUp?: boolean; startOver?: boolean };
 }
 export interface LiveEvent {
   /** Namespaced by Ether (`pluginID:feedID:id`); opaque to clients. */ id: ID;
@@ -65,7 +68,10 @@ export interface LiveEvent {
 }
 /** Generic table (box score, linescore, standings). Cells are display strings. */
 export interface LiveTable { title: string; columns: string[]; rows: string[][] }
-export interface LivePlay { clock?: string; period?: number; text: string; emphasis: 'score' | 'key' | 'normal'; competitorId?: ID }
+export interface LivePlay { clock?: string; period?: number; text: string; emphasis: 'score' | 'key' | 'normal'; competitorId?: ID;
+  /** Optional, plugin-supplied: when the play happened, and the score after it by competitor id. With them a
+   * delayed (timeshifted) viewer sees the score as of the picture. */
+  at?: Timestamp; score?: Record<ID, string> }
 /** `t` orders the series: elapsed fraction/seconds (number) or a timestamp (string). */
 export interface LiveProbabilityPoint { t: number | string; value: number }
 export interface LiveEventDetail extends LiveEvent {

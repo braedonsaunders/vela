@@ -11,6 +11,7 @@ export type { FailureKind } from './store/state';
 export { advanceGuideClock, guideFocus, liveIdentity, loadGuide } from './live/guide';
 export { guideRetry } from './live/retry';
 export { liveSearch } from './live/search';
+export { catchUpErrorMessage, catchUpOffer, catchUpPictureTime, catchUpRefusal, catchUpRefusalMessage, catchUpRequest, clampSeek, delayedScores, delayLabel, LIVE_SLACK_SECONDS, pictureTime, programmeCatchUp, SPOILER_DELAY_SECONDS, stepLandsLive, timeshiftWindow, watchFromStart, windowFraction, type CatchUpKind, type CatchUpOffer, type CatchUpRefusal, type DelayedScores, type EngineWindow, type TimeshiftWindow } from './live/timeshift';
 export { consoleURL, pageServerOrigin, parseWebHandoff } from './session/web-handoff';
 export { randomId } from './protocol/id';
 export * from './models';

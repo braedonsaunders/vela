@@ -164,6 +164,14 @@ export function hasTileReplan(adapter: ServerAdapter): adapter is ServerAdapter 
   return 'replanTile' in adapter && typeof (adapter as unknown as TileReplan).replanTile === 'function';
 }
 
+/** Live timeshift (features.liveCatchUp): a live session to its live edge, a start-over session to live. */
+export interface GoLive {
+  goLive(sessionId: string, command: Extract<V.SessionCommand, { kind: 'goLive' }>): Promise<V.PlaybackPlan>;
+}
+export function hasGoLive(adapter: ServerAdapter): adapter is ServerAdapter & GoLive {
+  return 'goLive' in adapter && typeof (adapter as unknown as GoLive).goLive === 'function';
+}
+
 /** Ranking receipts: what the viewer saw, selected and played. */
 export interface Interactions {
   sendInteractions(request: V.InteractionsRequest): Promise<V.Ack>;

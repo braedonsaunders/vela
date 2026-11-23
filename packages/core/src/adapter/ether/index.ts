@@ -470,6 +470,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.sessionCommand(sessionId, command);
   }
 
+  goLive(sessionId: string, command: Extract<V.SessionCommand, { kind: 'goLive' }>) {
+    return this.sessionCommand(sessionId, command);
+  }
+
   replanTile(sessionId: string, command: Extract<V.SessionCommand, { kind: 'replan' }>) {
     return this.sessionCommand(sessionId, command);
   }

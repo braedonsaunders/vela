@@ -13,6 +13,7 @@ import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
 import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
+import { VelaError } from '../adapter/errors';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -22,7 +23,18 @@ export type PlaybackTarget =
   | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string }
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string }
+  /** A programme from the channel's archive (features.liveCatchUp): ended, or with `from: 'start'` on air from its start. */
+  | { kind: 'programme'; id: string; channelId: string; from?: 'start'; positionSeconds?: number }
   | { kind: 'library-live'; id: string; libraryId: string; tab?: string };
+
+/** The window start a `timeshift_position_evicted` refusal names, or null for any other error. */
+function evictedWindowStart(error: unknown): number | null {
+  if (!(error instanceof VelaError) || error.detail.code !== 'timeshift_position_evicted') return null;
+  // The bounds ride in `details`, or beside the code on servers that flatten them.
+  const start = (error.detail.details as { windowStartSeconds?: unknown } | undefined)?.windowStartSeconds
+    ?? (error.detail as unknown as { windowStartSeconds?: unknown }).windowStartSeconds;
+  return typeof start === 'number' && Number.isFinite(start) ? start : null;
+}
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
 
@@ -141,7 +153,9 @@ export class Playback {
           current.target.audioTrackId === target.audioTrackId)) &&
         (target.kind !== 'library-live' || (current.target.kind === 'library-live' &&
           current.target.libraryId === target.libraryId &&
-          current.target.tab === target.tab))) return;
+          current.target.tab === target.tab)) &&
+        (target.kind !== 'programme' || (current.target.kind === 'programme' &&
+          current.target.channelId === target.channelId && current.target.from === target.from))) return;
     const stopping = this.stop();
     const run = {};
     this.run = run;
@@ -184,12 +198,14 @@ export class Playback {
       const api = connection.adapter;
       await this.session.negotiate(api);
       if (this.run !== run) return;
-      const position = target.kind === 'title' ? target.positionSeconds : undefined;
+      const position = target.kind === 'title' || target.kind === 'programme' ? target.positionSeconds : undefined;
       if (target.kind === 'library-live') {
         if (!this.session.features?.libraryLive?.available || !hasLibraryLive(api)) throw new Error('Library live is unavailable');
         reply = await api.startLibraryLive(target.libraryId, { itemId: target.id, tab: target.tab, liveMode: 'adaptive', client: this.session.client, idempotencyKey: intent.key });
       } else reply = await api.startPlayback({
-          ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id } : { titleId: target.id }),
+          ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id }
+            : target.kind === 'programme' ? { channelId: target.channelId, programmeId: target.id, ...(target.from ? { from: target.from } : {}) }
+            : { titleId: target.id }),
           ...(position !== undefined ? { positionSeconds: position } : {}),
           ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
           ...(target.kind === 'title' && target.versionId ? { versionId: target.versionId } : {}),
@@ -224,7 +240,7 @@ export class Playback {
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried.
-    const live = target.kind === 'channel' || target.kind === 'library-live';
+    const live = target.kind === 'channel' || target.kind === 'library-live' || (target.kind === 'programme' && target.from === 'start');
     const audio = this.audio !== undefined && plan.audioTracks.some(t => t.id === this.audio) ? this.audio : undefined;
     const subtitle = this.subtitle === null || (this.subtitle !== undefined && plan.subtitleTracks.some(t => t.id === this.subtitle)) ? this.subtitle : undefined;
     const differs = (audio !== undefined && audio !== plan.selectedAudioTrackId)
@@ -443,6 +459,13 @@ export class Playback {
     } catch (error) {
       const words = commandFailure(command, error, origin);
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
+      // A paused live position the rewind window left behind resumes at the window's start (spec B2).
+      const start = evictedWindowStart(error);
+      if (start !== null && (command.kind === 'resume' || command.kind === 'seek') && this.box.get().playback.sessionId === sessionId) {
+        const plan = this.box.get().playback.plan;
+        if (plan) await this.command(sessionId, { kind: 'seek', positionSeconds: start, sourceGeneration: plan.sourceGeneration,
+          seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() }, origin);
+      }
     }
   }
 

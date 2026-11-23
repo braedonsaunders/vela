@@ -74,6 +74,10 @@ export interface ServerCapabilities {
     liveEvents?: Feature;
     /** Live TV multiview groups: POST /multiview, PlaybackRequest.multiview. */
     multiview?: Feature & { maxTiles: number };
+    /** Live TV catch-up and timeshift. `available`: some channel the viewer sees has a provider archive
+     * (Channel.archiveDays, programme catchUp/startOver); `timeshift` is always present and independent:
+     * live plans may carry `live.timeshift` (pause, rewind and go live inside the window). */
+    liveCatchUp?: Feature & { maxDays?: number; timeshift: Feature & { maxMinutes?: number } };
     /** Plugin branching levels: GET /libraries/:id/rows?tab= for any recommended tab, and
      * GET /titles/:id/children?role= (or ?level=) with TitleMedia.childCounts. */
     pluginLevels?: Feature & { tabRows?: boolean; childRoles?: boolean } };
@@ -272,14 +276,27 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };
-  live?: { mode: 'adaptive' | 'low-delay'; anchor?: LiveAnchor; windowStartSeconds?: number; liveEdgeSeconds?: number; maxDriftSeconds?: number } }
+  /** A live channel, or a start-over plan (`mode: 'startOver'`, a growing programme from its start: window
+   * start 0, a growing edge). Positions and the window share the plan's timeline. */
+  live?: { mode: 'adaptive' | 'low-delay' | 'startOver'; anchor?: LiveAnchor; windowStartSeconds?: number; liveEdgeSeconds?: number; maxDriftSeconds?: number;
+    /** The server's view of how far the viewer is behind the live edge. */ behindLiveSeconds?: number;
+    /** Wall-clock time of liveEdgeSeconds when the plan was issued; the edge grows in real time from it. */ edgeAt?: Timestamp;
+    /** Present when the session has a rewind window: pause, seek inside the window and goLive. */ timeshift?: { maxMinutes: number } };
+  /** A programme from the provider's archive (catch-up or start over). Such a plan has no top-level
+   * channelId; a finite catch-up plays as on-demand media with positions relative to startAt. */
+  catchUp?: { channelId: ID; programmeId?: ID; startAt: Timestamp; endAt?: Timestamp } }
 export type PlaybackTarget = { titleId: ID; channelId?: never; extraId?: never } |
-  { channelId: ID; titleId?: never; extraId?: never } | { extraId: ID; titleId?: never; channelId?: never };
+  { channelId: ID; titleId?: never; extraId?: never; /** features.liveCatchUp: an archived programme (ended), or with
+   * from 'start' the programme on air from its beginning. */ programmeId?: ID; from?: 'start';
+    /** features.liveCatchUp: an explicit archive range instead of a programme. */ startAt?: Timestamp; durationSeconds?: number } |
+  { extraId: ID; titleId?: never; channelId?: never };
 export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabilities; positionSeconds?: number; mediaSourceId?: ID;
   versionId?: ID; audioTrackId?: ID; subtitleTrackId?: ID | null; allowTranscode?: boolean; liveMode?: 'adaptive' | 'low-delay';
   /** A live-channel tile of a multiview group (features.multiview). */ multiview?: MultiviewTile };
 export type SessionCommand = Mutation & Generations & (
   { kind: 'seek'; positionSeconds: number } | { kind: 'pause' | 'resume' | 'stop' } |
+  /** A live session jumps to the live edge; a start-over session switches to the channel's live session. */
+  { kind: 'goLive' } |
   { kind: 'tracks'; audioTrackId?: ID; subtitleTrackId?: ID | null } |
   { kind: 'switch'; pathId: ID; atSeconds: number } | { kind: 'version'; versionId: ID; positionSeconds?: number } | { kind: 'prepare-fallback'; maxBitrate: number } |
   /** A multiview tile's new height (spec B): the same session is replanned; its old output plays until the
@@ -309,15 +326,19 @@ export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'sourc
   details?: ProviderCapDetails | Record<string, unknown> }
 export interface ErrorResponse { error: ProtocolError }
 export interface LiveGuide { id: ID; name: string }
-export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string; guides?: LiveGuide[] }
+export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string; guides?: LiveGuide[];
+  /** Days of provider archive (features.liveCatchUp); absent: none. */ archiveDays?: number }
 export interface Programme { id: ID; channelId: ID; name: string; summary: string; start: Timestamp; end: Timestamp;
-  titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[] }
+  titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[];
+  /** Hints from the server, absent when false: ended and inside the archive (catchUp), or on air with its
+   * start inside the archive (startOver). Clients recompute from archiveDays as time passes. */
+  catchUp?: boolean; startOver?: boolean }
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }
 export interface GuideResponse extends Page<Programme> { from: Timestamp; until: Timestamp }
 export interface GuideWindowRequest { channelIds: ID[]; from: Timestamp; until: Timestamp }
 export interface GuideWindowResponse {
   from: Timestamp; until: Timestamp; revision: string; validUntil: Timestamp;
-  channels: { channelId: ID; state: 'ready' | 'unavailable'; programmes: Programme[] }[];
+  channels: { channelId: ID; state: 'ready' | 'unavailable'; programmes: Programme[]; archiveDays?: number }[];
 }
 export interface ExtrasResponse extends PartialAnswer { items: Extra[] }
 export interface ChildrenPage extends Page<Title>, PartialAnswer {}

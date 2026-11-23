@@ -1,6 +1,7 @@
 import { readGuideWindow } from './bulk';
 import { guideRetry, guideRetryable } from './retry';
 import { guideWindows } from './window';
+import { programmeCatchUp, type CatchUpKind } from './timeshift';
 import { VelaError } from '../adapter/errors';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { localeContext, minute, msg, number, time, withLocale } from '../i18n';
@@ -23,6 +24,9 @@ export interface GuideProgramme {
   /** A future programme's start for people: minutes within the hour, else its clock time and day. */
   startsLabel: string;
   episode: string; rating: string; genre: string; tone: number; art: string;
+  /** Plays from the channel's archive if the server offers catch-up: ended (catchUp), or on air from its
+   * start (startOver); '' otherwise. Projected with the clock, so a cached page moves along. */
+  replay: CatchUpKind | '';
 }
 export interface GuideChannel {
   id: string; number: string; listingsUnavailable?: boolean; name: string; favorite: boolean; logo: string; group: string; listed: boolean; listingsLoaded: boolean;
@@ -32,6 +36,10 @@ export interface GuideChannel {
   /** The airing programme's still, episode line and first genre (a live home shows them without the day's grid). */
   nowArt: string; nowEpisode: string; nowGenre: string;
   programmes: GuideProgramme[];
+  /** Days of provider archive; 0 when none. */
+  archiveDays: number;
+  /** The programme on air can Start over (from the archive). */
+  nowStartOver: boolean;
 }
 export interface GuideModel {
   /** Minutes from the start of the loaded timeline to each day. */
@@ -306,6 +314,8 @@ export interface GuideReadOptions {
   revalidate?: object;
   /** Retain now/next data through this epoch time, for one ahead-of-clock window. */
   currentUntil?: number;
+  /** The server offers catch-up from channel archives (features.liveCatchUp): programmes carry `replay`. */
+  archive?: boolean;
 }
 const clockModels = new WeakMap<GuideModel, { at: number; project(now: number): GuideModel }>();
 /** Recompute labels/progress from retained listings without reaching the adapter. */
@@ -382,6 +392,7 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
       for (const key of projections.keys()) if (projections.size > 8 && key !== projectionKey) projections.delete(key);
     }
     const projectionLocale = JSON.stringify(localeContext());
+    const offer = { archive: !!options?.archive, timeshift: false };
     const channels: GuideChannel[] = [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).map(channel => {
       if (channel.group && !groupSet.has(channel.group)) { groupSet.add(channel.group); groups.push(channel.group); }
       const entries = grouped.get(channel.id) ?? [];
@@ -404,6 +415,8 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
         nextLabel: next ? msg('live.nextAt', { time: time(Date.parse(next.start)), programme: next.name }) : '',
         nowArt: airing ? picture(airing.artwork, ['still', 'backdrop', 'poster'], 640, 360, images) : '',
         nowEpisode: airing ? episodeLine(airing) : '', nowGenre: airing?.genres?.[0] ?? '',
+        archiveDays: channel.archiveDays ?? 0,
+        nowStartOver: !!airing && programmeCatchUp(airing, channel.archiveDays, now, offer) === 'startOver',
         programmes: entries.map(p => {
           const a = Date.parse(p.start), b = Date.parse(p.end);
           const onAir = a <= now && now < b;
@@ -420,6 +433,7 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
               : a < tomorrow ? msg('live.startsAt', { time: time(a) }) : a < dayAfterTomorrow ? msg('live.startsTomorrow', { time: time(a) }) : msg('live.startsOn', { day: weekday.format(a), time: time(a) }),
             episode, rating: p.rating ?? '', genre, tone: tone(genre),
             art: picture(p.artwork, ['still', 'backdrop', 'poster'], 640, 360, images),
+            replay: programmeCatchUp(p, channel.archiveDays, now, offer) ?? '',
           };
         }),
       };

@@ -21,6 +21,7 @@ export interface LiveState {
 export const initialLive: LiveState = { guide: {} };
 
 /** The selected server's live TV, for a live controller: listings, and tuning that returns validated plans. */
+import { catchUpOffer, type CatchUpOffer } from '../live/timeshift';
 export interface LiveTvAccess {
   api: GuideApi & {
     startPlayback(request: V.PlaybackRequest): Promise<V.PlaybackPlan | V.PlaybackPreparing>;
@@ -32,6 +33,8 @@ export interface LiveTvAccess {
   images: Images;
   /** Server-owner policy. Older servers omit it and retain the original automatic preview. */
   previewMode: V.LivePreviewMode;
+  /** Catch-up and timeshift (features.liveCatchUp): past programmes and Start over, and the rewind window. */
+  catchUp: CatchUpOffer;
   /** Multiview groups (features.multiview); absent where the server has none. Tiles join with
    * PlaybackRequest.multiview through `api.startPlayback`. */
   multiview?: {
@@ -84,6 +87,7 @@ export class Live {
       scope: `${connection.record.id}|${tokens?.viewer.id ?? ''}`,
       images: await connection.images(),
       previewMode: features.livePreview?.available === false ? 'off' : features.livePreview?.mode ?? 'auto',
+      catchUp: catchUpOffer(features),
       ...(hasMultiview(adapter) && features.multiview?.available ? {
         multiview: {
           maxTiles: features.multiview.maxTiles,

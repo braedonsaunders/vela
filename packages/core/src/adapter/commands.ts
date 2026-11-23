@@ -1,6 +1,6 @@
 import type * as V from '../wire';
 import type { ServerAdapter } from './index';
-import { hasPathSwitching, hasProactiveFallback, hasTileReplan, hasTrackChanges, hasVersions } from './capabilities';
+import { hasGoLive, hasPathSwitching, hasProactiveFallback, hasTileReplan, hasTrackChanges, hasVersions } from './capabilities';
 import { notOffered } from './errors';
 
 /**
@@ -25,6 +25,9 @@ export async function sendCommand(
     case 'replan':
       if (!hasTileReplan(adapter)) throw notOffered('Replanning a multiview tile');
       return adapter.replanTile(sessionId, command);
+    case 'goLive':
+      if (!hasGoLive(adapter)) throw notOffered('Going back to live');
+      return adapter.goLive(sessionId, command);
     case 'version':
       if (!hasVersions(adapter)) throw notOffered('Switching versions');
       return adapter.switchVersion(sessionId, command);

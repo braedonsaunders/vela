@@ -4,6 +4,7 @@
 // fallback it prepares) fails silently, because the engine plans again from the next plan.
 import type * as V from '../wire';
 import { VelaError } from '../adapter/errors';
+import { catchUpErrorMessage } from '../live/timeshift';
 
 /** Who sent a session command: the viewer's own choice, or the engine on its own. */
 export type CommandOrigin = 'viewer' | 'engine';
@@ -17,6 +18,7 @@ const copy: Partial<Record<V.SessionCommand['kind'], string>> = {
   seek: 'Could not move to that point. Playback continues.',
   pause: 'Could not pause. Try again.',
   resume: 'Could not resume. Try again.',
+  goLive: 'Could not go back to live. Try again.',
   tracks: 'Could not change the audio or subtitles. Playback continues.',
   switch: 'Could not change the quality. Playback continues.',
 };
@@ -30,6 +32,9 @@ export function commandFailure(command: Pick<V.SessionCommand, 'kind'>, error: u
   if (origin === 'engine' && command.kind === 'switch') return '';
   if (command.kind === 'prepare-fallback' || command.kind === 'stop') return '';
   if (staleGeneration(error)) return '';
+  // Outside the rewind window, or paused past its start: the viewer's own words (spec C6).
+  const timeshift = error instanceof VelaError ? catchUpErrorMessage(error.detail.code) : '';
+  if (timeshift) return timeshift;
   return copy[command.kind] ?? 'Something went wrong. Playback continues.';
 }
 
