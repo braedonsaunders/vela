@@ -130,14 +130,14 @@ describe('PlexAdapter requests', () => {
     expect(seen.map(call => call.url.pathname)).toEqual(['/library/sections/7/collections', '/library/sections/7/genre']);
   });
 
-  test('libraries keep movie and show sections and refuse unsupported filters', async () => {
+  test('libraries list movie, show and music sections and refuse unsupported filters', async () => {
     const seen = routeFetch({
       'GET /library/sections': { MediaContainer: { Directory: [{ key: 1, title: 'Films', type: 'movie' }, { key: 2, title: 'Music', type: 'artist' }, { key: 3, title: 'TV', type: 'show' }] } },
       'GET /library/sections/1/all': { MediaContainer: { Metadata: [movie], totalSize: 30, size: 1 } },
     });
     const adapter = plex();
     const libraries = await adapter.libraries({});
-    expect(libraries.items.map(l => [l.id, l.kind])).toEqual([['1', 'movies'], ['3', 'shows']]);
+    expect(libraries.items.map(l => [l.id, l.kind, l.media])).toEqual([['1', 'movies', undefined], ['2', 'mixed', 'music'], ['3', 'shows', undefined]]);
     const contents = await adapter.library('1', { sort: 'year', direction: 'desc', played: false, cursor: '5', limit: 1 });
     const query = seen.at(-1)!.url.searchParams;
     expect(query.get('sort')).toBe('year:desc');

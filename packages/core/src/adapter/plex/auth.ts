@@ -28,12 +28,13 @@ export function plexHeaders(device: PlexDevice): Record<string, string> {
     'X-Plex-Client-Identifier': device.id, 'X-Plex-Platform': known.platform, 'X-Plex-Device': known.device,
     'X-Plex-Device-Name': device.name || 'Vela' };
 }
-async function cloud<T>(path: string, device: PlexDevice, method = 'GET', accountToken?: string): Promise<T> {
+async function cloud<T>(path: string, device: PlexDevice, method = 'GET', accountToken?: string, refused?: string): Promise<T> {
   const url = new URL(path, 'https://plex.tv');
   if (url.origin !== 'https://plex.tv' || !url.pathname.startsWith('/api/v2/')) throw new Error('Invalid Plex account endpoint');
   const response = await fetch(url.href, { method, cache: 'no-store', redirect: 'error', credentials: 'omit',
     headers: { ...plexHeaders(device), ...(accountToken ? { 'X-Plex-Token': accountToken } : {}) } });
-  if (!response.ok) throw new Error(response.status === 429 ? 'Too many Plex sign-in attempts. Wait before trying again.' : 'Plex is temporarily unavailable. Wait before trying again.');
+  if (!response.ok) throw new Error(response.status === 429 ? 'Too many Plex sign-in attempts. Wait before trying again.'
+    : refused && [401, 403, 422].includes(response.status) ? refused : 'Plex is temporarily unavailable. Wait before trying again.');
   return response.json() as Promise<T>;
 }
 export function createPlexPin(device: PlexDevice, strong = false): Promise<PlexPin> {
@@ -57,4 +58,21 @@ export async function discoverPlexServers(device: PlexDevice, accountToken: stri
 export interface PlexAccount { id: number; uuid?: string; username: string; title?: string; friendlyName?: string }
 export function plexAccount(device: PlexDevice, accountToken: string): Promise<PlexAccount> {
   return cloud('/api/v2/user', device, 'GET', accountToken);
+}
+
+/** A Plex Home member as plex.tv lists them (GET /api/v2/home/users). */
+export interface PlexHomeUser { id: number; uuid: string; title: string; username?: string; thumb?: string; protected?: boolean; admin?: boolean; restricted?: boolean; guest?: boolean }
+/** The members of the account's Plex Home; an account outside a Home has only itself (or none). */
+export async function plexHomeUsers(device: PlexDevice, accountToken: string): Promise<PlexHomeUser[]> {
+  const body = await cloud<{ users?: PlexHomeUser[] } | PlexHomeUser[]>('/api/v2/home/users', device, 'GET', accountToken);
+  return (Array.isArray(body) ? body : body.users ?? []).filter(u => u && typeof u.uuid === 'string' && !!u.uuid && !u.guest);
+}
+/** Become another member of the Home: plex.tv answers with that member's own account token. */
+export async function switchPlexHomeUser(device: PlexDevice, accountToken: string, uuid: string, pin?: string): Promise<PlexAccount & { authToken: string }> {
+  const query = pin ? `?pin=${encodeURIComponent(pin)}` : '';
+  const user = await cloud<PlexAccount & { authToken?: string; authenticationToken?: string }>(`/api/v2/home/users/${encodeURIComponent(uuid)}/switch${query}`, device, 'POST', accountToken,
+    pin ? 'That Plex Home PIN was not accepted.' : 'This Plex Home profile needs its PIN.');
+  const authToken = user.authToken ?? user.authenticationToken;
+  if (typeof authToken !== 'string' || !authToken) throw new Error('Plex did not switch to this profile');
+  return { ...user, authToken };
 }

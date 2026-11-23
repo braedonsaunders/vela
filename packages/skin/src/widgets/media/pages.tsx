@@ -1,35 +1,39 @@
 // Purpose-built pages for media titles (docs/media-kinds.md): an album with its tracklist, an
 // artist with songs and albums, a book with its cover, author, series and reading progress, a
-// series of books, an audiobook with chapters or parts. A track opens its album and a part its
-// audiobook. The app draws one of these in place of the document's title page; each takes the
-// document's `ui` look.
+// series of books, an audiobook with chapters or parts, a podcast with its episodes, a photo. A
+// track opens its album, a part its audiobook and a podcast episode its show. The app draws one of
+// these in place of the document's title page; each takes the document's `ui` look.
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View, type ViewStyle } from 'react-native';
-import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, msg, number, percent, plural, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
+import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, localeContext, msg, number, opensMediaPage, percent, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
 import { useMediaActions, type MediaActions } from './context';
 import { alpha, Cover, CoverTile, ListRow, PillButton, Progress, RoundButton, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
 import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from './series';
 
-/** The roles this page draws; anything else stays with the document's title page. */
-export function isMediaPageRole(role: string): boolean {
-  return ['artist', 'album', 'track', 'series', 'book', 'audiobook', 'part'].includes(role);
+/** The card kinds this page draws (core's opensMediaPage); anything else, a video show among
+ * them, stays with the document's title page. */
+export function isMediaPageRole(kind: string): boolean {
+  return opensMediaPage(kind);
 }
 
 /** `framed`: drawn inside the document's title frame (the `mediaPage` widget), which brings the
  * scrim, the opening motion and the close control; otherwise a page of its own. */
-export function MediaTitlePage({ id, framed = false }: { id: string; framed?: boolean }) {
+export function MediaTitlePage({ id, framed = false, marked = '' }: { id: string; framed?: boolean; marked?: string }) {
   const detail = useDetail(id);
   const card = detail.value?.title[0];
   const role = card?.media?.role ?? '';
+  const cls = card?.media?.class ?? '';
   const parent = card?.media?.parent;
-  // A track opens its album, a part its audiobook, with the item marked.
-  if ((role === 'track' || role === 'part') && parent) return <MediaTitlePage key={parent.id} id={parent.id} framed={framed} />;
+  // A track opens its album, a part its audiobook, a podcast episode its show, with the item marked.
+  if ((role === 'track' || role === 'part' || card?.kind === 'podcastEpisode') && parent) return <MediaTitlePage key={parent.id} id={parent.id} framed={framed} marked={id} />;
   return (
     <Frame framed={framed} accent={card?.accent ?? ''} backdrop={card ? (role === 'artist' && card.backdrop !== card.poster ? card.backdrop : card.poster) : ''} wideArt={role === 'artist' && !!card && card.backdrop !== card.poster}>
       {!card ? <Pending load={detail} id={id} />
+        : cls === 'photo' ? <PhotoPage card={card} />
+        : cls === 'podcast' ? <PodcastPage card={card} marked={marked} />
         : role === 'album' ? <AlbumPage card={card} detail={detail.value!} />
         : role === 'artist' ? <ArtistPage card={card} />
         : role === 'book' ? <BookPage card={card} />
@@ -599,3 +603,104 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
     </View>
   );
 }
+
+/** A date as the viewer reads it ("23 Nov 2026"), else the year label; '' when neither is known. */
+function dayLabel(card: Card): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(card.airDate)) {
+    const date = new Date(`${card.airDate}T00:00:00Z`);
+    if (Number.isFinite(date.getTime())) {
+      try { return new Intl.DateTimeFormat(localeContext().formatLocale, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date); } catch { /* The year below. */ }
+    }
+  }
+  return card.yearLabel;
+}
+
+// ── Photo ────────────────────────────────────────────────────────────────────
+
+/** A photo, as large as the page allows in its own shape, with its name and date. Nothing plays or
+ * reads: the page is the picture. */
+function PhotoPage({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const host = useHost();
+  // The largest art the card carries: its landscape sizes are read at the backdrop width.
+  const uri = card.thumbnail || card.backdrop || card.poster;
+  const height = Math.max(240, Math.round(m.height * (m.small ? 0.58 : 0.7)));
+  return (
+    <View testID="media-photo-page">
+      <View style={{ width: '100%', height, marginBottom: m.small ? 20 : 28, alignItems: 'center', justifyContent: 'center' }} testID="media-photo">
+        {uri ? <Image source={host.image(uri)} contentFit="contain" transition={200} accessibilityLabel={card.name}
+          style={{ width: '100%', height: '100%' }} />
+          : <View style={{ width: '60%', height: '80%', borderRadius: 10, backgroundColor: m.ui.skeleton }} />}
+      </View>
+      <View style={{ gap: 8, marginBottom: 32 }}>
+        <Eyebrow>{msg('media.ui.photo')}</Eyebrow>
+        <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '26px' : '34px', 'line-height': '1.1', color: '$ui.ink' })}>{card.name}</Text>
+        <Facts items={[dayLabel(card)]} />
+      </View>
+      <FactList card={card} />
+    </View>
+  );
+}
+
+// ── Podcast ──────────────────────────────────────────────────────────────────
+
+/** A podcast show and its episodes, newest first; or one episode on its own (no show to open). */
+function PodcastPage({ card, marked }: { card: Card; marked: string }) {
+  const m = useMediaLook();
+  const store = useVela();
+  const actions = useMediaActions();
+  const canListen = store.media.features().audio;
+  const show = card.kind === 'podcast';
+  const children = useChildren(show ? card.id : undefined);
+  const episodes = useMemo(() => show ? podcastOrder(playable(children?.value?.items ?? EMPTY)) : [card], [show, children?.value, card]);
+  const source = { id: card.id, name: card.name };
+  const resumable = (episode: Card) => episode.progressSeconds > 0 && !episode.played;
+  // Play resumes the episode under way, else the newest the viewer has not heard.
+  const primary = episodes.find(resumable) ?? episodes.find(episode => !episode.played) ?? episodes[0];
+  const play = (episode: Card, from: 'resume' | 'start' = 'resume') =>
+    actions.play({ items: [episode], index: 0, positionSeconds: from === 'resume' && resumable(episode) ? episode.progressSeconds : 0, source: show ? source : { id: episode.id, name: episode.name } });
+  const count = episodes.length && show ? episodes.length : card.media?.childCount ?? 0;
+  const left = !show && resumable(card) && card.durationSeconds ? Math.max(0, card.durationSeconds - card.progressSeconds) : 0;
+  return (
+    <View>
+      <Hero cover={<Cover uri={card.poster} shape="square" size={heroCover(m)} title={card.name} byline={card.media?.byline} accent={card.accent} lift={1.6} />}>
+        <Eyebrow>{show ? msg('media.ui.podcast') : [msg('media.ui.episode'), dayLabel(card)].filter(Boolean).join(' · ')}</Eyebrow>
+        <Title>{card.name}</Title>
+        {card.media?.byline ? <TextLink label={card.media.byline} onPress={openByline(card, actions)} testID="media-byline"
+          style={m.text({ 'font-size': '19px', 'font-weight': '600', color: '$ui.ink' })} /> : null}
+        <Facts items={[show && count ? msg(`media.count.episodes.${plural(count)}`, { count: number(count) }) : '', !show && card.durationSeconds ? durationLabel(card.durationSeconds) : '', card.genres[0] ?? '']} />
+        {left ? (
+          <View style={{ gap: 8, maxWidth: 420, marginTop: 4 }} testID="media-listen-progress">
+            <Progress fraction={card.progressSeconds / card.durationSeconds} height={5} />
+            <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.left', { time: durationLabel(left) })}</Text>
+          </View>
+        ) : null}
+        <Buttons>
+          <PillButton primary icon="play" label={primary && resumable(primary) ? msg('media.ui.resume') : msg('media.ui.play')} onPress={() => primary && play(primary)}
+            disabled={!canListen || !primary} testID="media-play" nativeID="media-primary" />
+          {!show && resumable(card) ? <PillButton icon="back15" label={msg('media.ui.startOver')} onPress={() => play(card, 'start')} disabled={!canListen} testID="media-start-over" /> : null}
+        </Buttons>
+        {!canListen ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotPlayPodcast')}</Text> : null}
+      </Hero>
+      {card.summary ? <View style={{ marginBottom: 44 }}><Summary text={card.summary} /></View> : null}
+      {show ? (
+        <View style={{ gap: 2, marginBottom: 40 }} testID="media-episodes">
+          <SectionHeading title={msg('media.ui.episodes')} />
+          {children?.load === 'loading' && !episodes.length ? <ListSkeleton rows={Math.min(10, count || 8)} /> : null}
+          {children?.load === 'failed' && !episodes.length ? <ChildrenFailed id={card.id} /> : null}
+          {episodes.map((episode, i) => {
+            const playingThis = actions.nowPlaying?.id === episode.id;
+            const remaining = resumable(episode) && episode.durationSeconds ? msg('media.ui.left', { time: durationLabel(Math.max(0, episode.durationSeconds - episode.progressSeconds)) }) : '';
+            return <ListRow key={episode.id} number={number(episode.media?.index || episodes.length - i)} title={episode.name}
+              subtitle={[dayLabel(episode), remaining].filter(Boolean).join(' · ') || undefined}
+              trailing={episode.durationSeconds ? durationLabel(episode.durationSeconds) : ''}
+              current={playingThis || episode.id === marked} playing={playingThis && actions.nowPlaying?.playing} dim={episode.played}
+              onPress={() => play(episode)} testID={`media-episode-${episode.id}`} />;
+          })}
+        </View>
+      ) : null}
+      <FactList card={card} />
+    </View>
+  );
+}
+

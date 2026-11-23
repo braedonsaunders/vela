@@ -40,6 +40,7 @@ test('cover shapes follow class and role', () => {
   expect(shapeOf('book', 'book')).toBe('book');
   expect(shapeOf('book', 'series')).toBe('book');
   expect(shapeOf('audiobook', 'audiobook')).toBe('square');
+  expect(shapeOf('photo', 'item')).toBe('square');
   expect(shapeOf('video', 'item')).toBe('');
 });
 

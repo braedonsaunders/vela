@@ -4,7 +4,7 @@
 // only: no credential reaches this state.
 import type { Connection } from '../adapter/connection';
 import { hasPasswordSignIn, hasQuickConnectSignIn } from '../adapter/capabilities';
-import { PlexLink, type PlexLinkState } from '../adapter/plex/link';
+import { PlexLink, type PlexLinkState, type PlexProfileChoice } from '../adapter/plex/link';
 import { probeEther, probeServer } from '../adapter/probe';
 import type * as V from '../wire';
 import type { ServerKind, ServerRecord } from '../session/servers';
@@ -55,6 +55,8 @@ export interface PlexLinkView {
   state: PlexLinkState;
   /** The account's servers, once linked. */
   choices: PlexChoiceOption[];
+  /** A Plex Home's members, to choose who signs in (state 'profiles'). */
+  profiles?: PlexProfileChoice[];
 }
 
 export interface ServersState {
@@ -274,6 +276,10 @@ export class Servers {
       this.schedulePlexPoll(link, code);
       return;
     }
+    if (state === 'profiles') {
+      this.patch({ plex: { code, linkUrl: PLEX_LINK_URL, state, choices: [], profiles: link.profiles(code) } });
+      return;
+    }
     const choices = state === 'linked' ? link.servers(code, pageSecure(this.platform)) : [];
     let retryDelay = 0;
     if (state === 'linked' && this.plexDiscoveryAttempt < 2 && !(await link.hasEtherServer(code, pageSecure(this.platform)))) {
@@ -296,6 +302,22 @@ export class Servers {
       },
     });
     if (retryDelay) this.schedulePlexPoll(link, code, retryDelay);
+  }
+
+  /** Sign in as one member of the linked Plex Home, then list the servers that member has. */
+  async plexChooseProfile(id: string, pin?: string): Promise<ServerResult> {
+    const link = this.plexLink;
+    const code = this.box.get().servers.plex?.code;
+    try {
+      if (!link || !code) throw new Error(msg('server.plex.again'));
+      await link.chooseProfile(code, id, pin);
+      if (this.plexLink !== link) throw new Error(msg('server.plex.again'));
+      this.plexDiscoveryAttempt = 0;
+      await this.plexPoll(link, code);
+      return { id: '', error: '' };
+    } catch (error) {
+      return { id: '', error: signInFailure(error, msg('server.plex.again')) };
+    }
   }
 
   /** Add (or relocate) and select the chosen Plex server, proven by its own identity. */

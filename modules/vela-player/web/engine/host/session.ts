@@ -1,3 +1,4 @@
+import { playsOnAfterEnd } from './continuation';
 import type { PlaybackSession } from '../model';
 import type { HostContext } from './state';
 import { detachMedia } from './native-events';
@@ -105,6 +106,9 @@ export async function loadSession(context: HostContext, session: PlaybackSession
     // update metadata and must not override an explicit pause.
     context.playback.wantsPlay = session.serverState !== 'paused' && session.serverState !== 'ended';
   }
+  if (playsOnAfterEnd({ ended: context.playback.status === 'ended', sameSession: session.id === context.session.current?.id, serverState: session.serverState,
+    sourceGeneration: session.sourceGeneration, previousSourceGeneration: context.session.current?.sourceGeneration }))
+    context.playback.wantsPlay = true;
   context.session.controller.start(session.id, session.sourceGeneration, session.seekGeneration);
   resetMedia(context);
   context.session.current = session;

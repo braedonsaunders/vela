@@ -13,6 +13,9 @@ test('a plugin book that arrives as a movie is named by its media class, not as 
   expect(kindLabelKey({ kind: 'show', media: media('music', 'artist') })).toBe('media.ui.artist');
   // A role the page does not name falls back to the class.
   expect(kindLabelKey({ kind: 'movie', media: media('book', 'item') })).toBe('media.ui.book');
+  expect(kindLabelKey({ kind: 'photo', media: media('photo', 'item') })).toBe('media.ui.photo');
+  expect(kindLabelKey({ kind: 'podcast', media: media('podcast', 'show') })).toBe('media.ui.podcast');
+  expect(kindLabelKey({ kind: 'podcastEpisode', media: media('podcast', 'episode') })).toBe('media.ui.episode');
 });
 
 test('video titles keep their structural kind', () => {
