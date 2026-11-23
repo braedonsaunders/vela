@@ -4,7 +4,7 @@
  * show the wrong colours, so it is refused and the server's fallback plays instead. */
 export type DolbyVisionRoute =
   | { kind: 'none' }
-  | { kind: 'base-layer'; profile: string; base: 'hdr10' | 'hlg' | 'sdr' }
+  | { kind: 'base-layer'; profile: string; base: 'hdr10' | 'hlg' | 'sdr'; dualLayer?: boolean }
   | { kind: 'refuse'; reason: string };
 
 export interface DolbyVisionFacts {
@@ -24,7 +24,7 @@ export function dolbyVisionProfileName(profile: number, compatibility?: number) 
 /** The route for the server's (ffprobe's) Dolby Vision facts. Profile 8 and AV1 profile 10 carry
  * their base layer's signal compatibility id: 1 is HDR10, 4 HLG and 2 SDR, each checked against the
  * transfer the stream actually declares when it declares one. Profile 5 (IPTPQc2) has no compatible
- * base; profile 7 is dual-layer and stays refused until a real profile 7 title has been qualified. */
+ * base; profile 7 plays its HDR10 base layer without the enhancement layer. */
 export function dolbyVisionRoute(facts: DolbyVisionFacts): DolbyVisionRoute {
   const profile = facts.dvProfile;
   if (profile === undefined || profile === null) return { kind: 'none' };
@@ -38,6 +38,15 @@ export function dolbyVisionRoute(facts: DolbyVisionFacts): DolbyVisionRoute {
     if (declared && ((base === 'hdr10' && !pq.has(declared)) || (base === 'hlg' && !hlg.has(declared))))
       return { kind: 'refuse', reason: `Dolby Vision ${name} base layer declares ${declared}` };
     return { kind: 'base-layer', profile: name, base };
+  }
+  // Profile 7 (UHD Blu-ray) carries an HDR10 base layer (compatibility id 6) under its enhancement
+  // layer; the decoder is given the base layer alone.
+  if (profile === 7) {
+    if (facts.dvBlSignalCompatibilityId !== 6)
+      return { kind: 'refuse', reason: `Dolby Vision ${name} has no HDR10 base layer` };
+    if (transfer && transfer !== 'unknown' && !pq.has(transfer))
+      return { kind: 'refuse', reason: `Dolby Vision ${name} base layer declares ${transfer}` };
+    return { kind: 'base-layer', profile: name, base: 'hdr10', dualLayer: true };
   }
   if (profile === 5) return { kind: 'refuse', reason: 'Dolby Vision 5 needs its RPU applied; this browser cannot' };
   return { kind: 'refuse', reason: `Dolby Vision ${name} is not qualified in the browser` };

@@ -3,6 +3,7 @@ import type { GPUDecoderOutputFormat } from 'webgpu-player/src/decode/video/gpu/
 import { VideoPackages } from '../../universal/video/packages';
 import { abortable } from '../async';
 import type { EncodedPacket, VideoTrack } from '../types';
+import { baseLayerFilter } from './base-layer';
 import { NativeVideoDecoder, type NativeVideoFrame } from './native-video';
 import { PackageVideoDecoder, type PackageVideoFrame } from './package-video';
 
@@ -44,7 +45,10 @@ export class VideoDecoderRouter implements VideoBackend {
     private readonly packages: VideoPackages,
     private readonly callbacks: VideoCallbacks,
     private readonly forcePackage = false,
+    /** Decode only a dual-layer Dolby Vision stream's base layer. */
+    private readonly baseLayerOnly = false,
   ) {}
+  private filter: ((data: Uint8Array) => Uint8Array | null) | null = null;
   get metrics() {
     return this.backend?.metrics ?? { decoded: 0 };
   }
@@ -53,6 +57,7 @@ export class VideoDecoderRouter implements VideoBackend {
   }
   async configure(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void> {
     if (this.closed) throw new Error('Video route is disposed');
+    this.filter = this.baseLayerOnly ? baseLayerFilter(track) : null;
     if (!this.forcePackage) {
       const phase = new AbortController(),
         operation = AbortSignal.any([signal, phase.signal]);
@@ -131,6 +136,11 @@ export class VideoDecoderRouter implements VideoBackend {
   }
   decode(packet: EncodedPacket, signal: AbortSignal) {
     if (!this.backend) return Promise.reject(new Error('Video route is not configured'));
+    if (this.filter) {
+      const data = this.filter(packet.data);
+      if (!data) return Promise.resolve();
+      packet = { ...packet, data };
+    }
     return this.backend.decode(packet, signal);
   }
   drain(signal: AbortSignal) {

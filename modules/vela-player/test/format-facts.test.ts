@@ -38,7 +38,7 @@ function video(overrides: Partial<VideoTrack> = {}): VideoTrack {
   };
 }
 
-test('Dolby Vision 8.1, 8.4 and 8.2 play their compatible base layer; 5 and 7 are refused', () => {
+test('Dolby Vision 7, 8.1, 8.4 and 8.2 play their compatible base layer; 5 is refused', () => {
   expect(dolbyVisionRoute({})).toEqual({ kind: 'none' });
   expect(dolbyVisionRoute({ dvProfile: 8, dvBlSignalCompatibilityId: 1, colorTransfer: 'smpte2084' })).toEqual({
     kind: 'base-layer',
@@ -54,7 +54,14 @@ test('Dolby Vision 8.1, 8.4 and 8.2 play their compatible base layer; 5 and 7 ar
   // AV1 profile 10 carries the same compatibility ids.
   expect(dolbyVisionRoute({ dvProfile: 10, dvBlSignalCompatibilityId: 1 })).toMatchObject({ profile: '10.1' });
   expect(dolbyVisionRoute({ dvProfile: 5, dvBlSignalCompatibilityId: 0 }).kind).toBe('refuse');
-  expect(dolbyVisionRoute({ dvProfile: 7, dvBlSignalCompatibilityId: 6 }).kind).toBe('refuse');
+  // Profile 7 plays its HDR10 base layer alone.
+  expect(dolbyVisionRoute({ dvProfile: 7, dvBlSignalCompatibilityId: 6, colorTransfer: 'smpte2084' })).toEqual({
+    kind: 'base-layer',
+    profile: '7',
+    base: 'hdr10',
+    dualLayer: true,
+  });
+  expect(dolbyVisionRoute({ dvProfile: 7, dvBlSignalCompatibilityId: 0 }).kind).toBe('refuse');
   expect(dolbyVisionRoute({ dvProfile: 8, dvBlSignalCompatibilityId: 0 }).kind).toBe('refuse');
   // A base that declares another transfer than its compatibility id would be shown wrongly.
   expect(dolbyVisionRoute({ dvProfile: 8, dvBlSignalCompatibilityId: 1, colorTransfer: 'bt709' }).kind).toBe('refuse');

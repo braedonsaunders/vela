@@ -104,7 +104,13 @@ export class UniversalRuntime implements OriginalBackend {
           options.onFailure(error.message, position / 1e6, { httpStatus: mediaHTTPStatus(error) });
       },
       (callbacks) =>
-        (this.videoRouter = new VideoDecoderRouter(presentation, packages, callbacks, options.retry?.video)),
+        (this.videoRouter = new VideoDecoderRouter(
+          presentation,
+          packages,
+          callbacks,
+          options.retry?.video,
+          this.dolbyVision.kind === 'base-layer' && this.dolbyVision.dualLayer === true,
+        )),
       options.mediaRequests,
     );
     this.core.setVolume(this.volume, this.muted);
