@@ -162,3 +162,88 @@ Emby or Plex server the viewer adds. They update from Vela's GitHub releases, no
 `v<version>` GitHub release after `publish.ts`, for example
 `gh release upload v<version> Vela-Setup-*.exe Vela-*.dmg Vela-*.zip Vela-*.AppImage Vela-*.deb`.
 The apps look for a `Vela-Setup-*-x64.exe` asset (Windows) and the release page (macOS, Linux).
+
+## TestFlight (Apple TV, iPhone and iPad)
+
+`tools/testflight.sh` archives the native app for tvOS and then for iOS (iPhone and iPad), signs it
+for the App Store, uploads both builds to App Store Connect and hands them to TestFlight:
+
+```sh
+tools/testflight.sh                      # both platforms; prints "Vela <version> build <n>"
+tools/testflight.sh --platform ios       # one platform
+tools/testflight.sh --internal-only      # internal group only, no Beta App Review submission
+tools/testflight.sh --whats-new notes.txt
+tools/testflight.sh --no-upload          # archive and export an .ipa locally (no key needed to archive)
+bun tools/release/asc.ts status          # processing and review state, and the public link
+```
+
+The app ships as one App Store Connect app, `app.ether.vela`, with iOS and tvOS platforms. Each
+platform is a clean `expo prebuild` (with `EXPO_TV=1` for tvOS), so `apps/vela/ios` is left
+generated for the last platform built. `tools/apple-tv.sh` and `tools/ios.sh` regenerate it when
+they need the other platform. The version is `app.json`'s `version`. The build number
+(`CFBundleVersion`, shared by both platforms) is Android's `versionCode` for the first upload of a
+version, then `<versionCode>.1`, `.2` and so on. `asc.ts next-build` reads the uploads already in
+App Store Connect, so the number always goes up. `--build-number` overrides it. Store builds
+run standalone: `EXPO_PUBLIC_VELA_*` lab settings and `.env` files are ignored.
+
+Signing is automatic and cloud managed. `xcodebuild` archives with the team's development
+identity, then `-exportArchive` (`method` `app-store-connect`, `destination` `upload`,
+`uploadSymbols`) re-signs with a cloud-managed Apple Distribution certificate and uploads. Both
+steps authenticate with the App Store Connect API key, so the Mac needs no distribution
+certificate, profile or Xcode account. Upload validation runs as part of the export, and its
+errors (ITMS-*) are in `<build dir>/<platform>-export.log`.
+
+After the uploads, `asc.ts distribute` waits for Apple to process each build. It then adds the
+"What to Test" notes, gives the builds to the internal group **Vela team** (which has every
+build), adds them to the external group **Public**, submits them for Beta App Review and turns on
+the group's public link. The first build of a version waits for Beta App Review, usually a day;
+later builds of that version are normally approved automatically. Internal testers can install
+as soon as processing finishes (5–30 minutes). Builds expire after 90 days.
+
+### One-time setup
+
+1. **API key.** App Store Connect > Users and Access > Integrations > App Store Connect API >
+   Team Keys > +, access **Admin**. Cloud-managed distribution signing needs Admin; App Manager
+   keys fail at export. Put the issuer ID, key ID and the `.p8` text in
+   `~/.config/vela-release/asc.env` (mode 0600) as `ASC_ISSUER_ID`, `ASC_KEY_ID` and
+   `ASC_PRIVATE_KEY`. `asc.ts key-file` writes the `.p8` beside it for `xcodebuild`. Never commit
+   either file.
+2. **App record.** The API cannot create apps. `asc.ts setup` registers the bundle ID. Then:
+   App Store Connect > Apps > + > New App, platforms iOS and tvOS, bundle ID `app.ether.vela`,
+   SKU `vela`.
+3. **Test information.** `tools/testflight/beta.json` holds the public text: beta description,
+   default "What to Test", privacy policy ([privacy.md](privacy.md)) and reviewer notes. Personal
+   details live in `~/.config/vela-release/testflight.env`:
+
+   ```sh
+   VELA_TESTFLIGHT_FEEDBACK_EMAIL=...
+   VELA_TESTFLIGHT_INTERNAL_TESTERS=owner@example.com   # App Store Connect users, comma separated
+   VELA_REVIEW_CONTACT_FIRST_NAME=...
+   VELA_REVIEW_CONTACT_LAST_NAME=...
+   VELA_REVIEW_CONTACT_PHONE=...
+   VELA_REVIEW_CONTACT_EMAIL=...
+   VELA_REVIEW_DEMO_SERVER=https://...                  # a server Beta App Review can sign in to
+   VELA_REVIEW_DEMO_KIND=Jellyfin
+   VELA_REVIEW_DEMO_USER=...
+   VELA_REVIEW_DEMO_PASSWORD=...
+   ```
+
+   `asc.ts setup` (run by every upload) creates the two groups and writes this information.
+   Without the contact details and feedback email, builds reach the internal group only.
+
+Export compliance is answered by `ITSAppUsesNonExemptEncryption = false` in `app.json`: Vela
+uses only the system's TLS. The privacy manifest (`PrivacyInfo.xcprivacy`, from the Expo
+template) declares the required-reason APIs: UserDefaults (CA92.1), file timestamps (0A2A.1,
+3B52.1, C617.1), disk space (E174.1, 85F4.1; AetherEngine's cache budget) and system boot time
+(35F9.1). It also declares no tracking and no collected data. React Native, Expo and the pods add
+their own manifests. `NSLocalNetworkUsageDescription` covers servers on the local network. Vela
+does no Bonjour or broadcast discovery, so it declares no Bonjour services.
+
+**LGPL components.** FFmpeg (FFmpegBuild 3.15.0's AetherLib frameworks) and FriBidi 1.0.18
+(`Fribidi.framework`, from `modules/vela-player/ios/ass/build.sh`) ship as separate dynamic
+frameworks inside `Vela.app/Frameworks`, so they stay replaceable. Their licence texts and source
+pointers travel in the `VelaPlayerLicenses` bundle. AetherEngine is LGPL-3.0 with an App Store
+exception, built from unmodified 7.70.0 source; see
+`modules/vela-player/ios/AETHER.md`, "Distribution notices". libass, HarfBuzz and FreeType are
+permissive and linked into `Libass.framework`. An App Store release should also show these
+notices in the app.

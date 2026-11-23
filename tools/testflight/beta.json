@@ -1,0 +1,8 @@
+{
+  "locale": "en-US",
+  "description": "Vela is a player for your own media server. Add an Ether, Jellyfin, Emby or Plex server and browse your movies, shows, music, live TV and guide from one home screen, with Dolby Vision, HDR10, lossless and Atmos audio, and subtitles as authored. Vela has no content of its own and no account: everything comes from the servers you add.",
+  "whatToTest": "Add your server (Ether, Jellyfin, Emby or Plex), browse Home, open a title and play it. Try live TV and the guide if your server has them, and audio and subtitle track changes. Send feedback with a screenshot from TestFlight.",
+  "privacyPolicyUrl": "https://github.com/braedonsaunders/vela/blob/main/docs/privacy.md",
+  "marketingUrl": "https://github.com/braedonsaunders/vela",
+  "reviewNotes": "Vela is a client for media servers the user already runs (Ether, Jellyfin, Emby, Plex); it ships no content and has no account or sign-up of its own. To try it, choose Add server and enter the server address and sign-in below. Vela stores the server address and its session on the device only."
+}
