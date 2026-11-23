@@ -1,0 +1,17 @@
+diff --git a/android/src/main/java/org/reactnative/maskedview/RNCMaskedView.java b/android/src/main/java/org/reactnative/maskedview/RNCMaskedView.java
+index b6af9c4b242b4d41a685d74103df377b91db9315..a25886bb28f3e9d21b1f7111a43db5d241babdfd 100644
+--- a/android/src/main/java/org/reactnative/maskedview/RNCMaskedView.java
++++ b/android/src/main/java/org/reactnative/maskedview/RNCMaskedView.java
+@@ -103,7 +103,11 @@ public class RNCMaskedView extends ReactViewGroup {
+ 
+     view.draw(canvas);
+ 
+-    return bitmap;
++    // Android uploads a mutable bitmap to the GPU on every frame that draws it, and a masked view
++    // draws its mask on every frame; an immutable copy is uploaded once.
++    final Bitmap mask = bitmap.copy(Bitmap.Config.ARGB_8888, false);
++    bitmap.recycle();
++    return mask;
+   }
+ 
+   public void setRenderingMode(String renderingMode) {

@@ -10,5 +10,8 @@
     "test": "bun test ./packages ./modules ./mock-server ./apps/vela-desktop/test",
     "typecheck": "bun tools/typecheck.ts",
     "check:skins": "for document in packages/protocol/fixtures/skins/cinematic.ts packages/protocol/fixtures/skins/*/document.ts; do bun tools/skin.ts check \"$document\" || exit 1; done"
+  },
+  "patchedDependencies": {
+    "@react-native-masked-view/masked-view@0.3.2": "patches/@react-native-masked-view%2Fmasked-view@0.3.2.patch"
   }
 }
