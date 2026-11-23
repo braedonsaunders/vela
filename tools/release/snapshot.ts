@@ -31,7 +31,7 @@ export async function capture(root: string, work: string, committed: boolean) {
   await mkdir(env.HOME);
   await mkdir(env.TMPDIR);
   const revision = (await run(['git', 'rev-parse', 'HEAD'], root, env)).trim();
-  const roots = ['apps', 'packages', 'modules', 'tools', 'brand', 'package.json', 'bun.lock',
+  const roots = ['apps', 'packages', 'modules', 'tools', 'brand', 'patches', 'package.json', 'bun.lock',
     'bunfig.toml', 'THIRD_PARTY_NOTICES'];
   const dirty = (await run(['git', 'status', '--porcelain', '--', ...roots], root, env)).trim();
   const toolDirty = (await run(['git', 'status', '--porcelain', '--', 'tools/release'], root, env)).trim();
