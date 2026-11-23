@@ -848,7 +848,7 @@
   "media.player.close": "Close Now Playing",
   "media.player.open": "Open Now Playing",
   "media.player.stop": "Stop and clear",
-  "media.player.unsupported": "Audio playback on this device needs the native player (coming soon).",
+  "media.player.unsupported": "Audio can’t play on this device.",
   "media.player.failed": "Couldn't play this item",
   "media.player.chapters": "Chapters",
   "media.player.seek": "Seek",

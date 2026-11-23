@@ -3,7 +3,7 @@
 // for music, speed, 15/30-second skips, chapters and a sleep timer for audiobooks, and the queue.
 // Both take the active document's `ui` look.
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import { AUDIO_RATES, chapterEnd, clock, currentInQueue, durationLabel, msg, number, upNext, type AudioState, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -39,6 +39,8 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
   const audio = useAudio();
   const item = useLast(currentInQueue(audio.queue));
   const open = useInteraction();
+  const [preview, setPreview] = useState<number | null>(null);
+  const seek = useCallback((seconds: number) => store.audio.seek(seconds), [store]);
   if (!item) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
   const fraction = audio.durationSeconds > 0 ? Math.min(1, audio.positionSeconds / audio.durationSeconds) : 0;
@@ -56,7 +58,7 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={m.text({ 'font-size': '15px', 'font-weight': '650' })}>{item.name}</Text>
             <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>
-              {audio.phase === 'failed' ? msg('media.player.failed') : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
+              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? msg('media.player.failed') : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
             </Text>
           </View>
         </Pressable>
@@ -67,8 +69,53 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
           : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={40} testID="mini-next" iconSize={16} />}
         {!m.small ? <RoundButton icon="close" label={msg('media.player.stop')} onPress={() => void store.audio.stop()} size={36} testID="mini-stop" iconSize={14} /> : null}
       </View>
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, backgroundColor: m.ui.track }}>
-        <View style={{ width: `${fraction * 100}%`, height: 3, backgroundColor: m.ui.accent }} />
+      {Platform.isTV ? (
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, backgroundColor: m.ui.track }}>
+          <View style={{ width: `${fraction * 100}%`, height: 3, backgroundColor: m.ui.accent }} />
+        </View>
+      ) : <MiniScrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={seek} onPreview={setPreview} />}
+    </View>
+  );
+}
+
+/** The mini player's bottom edge is its seek bar: hovering or dragging thickens it and the byline shows
+ * the time under the pointer; press or drag anywhere along it to seek. */
+function MiniScrubber({ position, duration, onSeek, onPreview }: { position: number; duration: number; onSeek(seconds: number): void; onPreview(seconds: number | null): void }) {
+  const m = useMediaLook();
+  const ref = useRef<ComponentRef<typeof View>>(null);
+  const bounds = useRef({ x: 0, width: 1 });
+  const [drag, setDrag] = useState<number | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const live = duration > 0;
+  const shown = drag ?? position;
+  const fraction = live ? Math.min(1, Math.max(0, shown / duration)) : 0;
+  const at = (pageX: number) => Math.min(1, Math.max(0, (pageX - bounds.current.x) / Math.max(1, bounds.current.width))) * duration;
+  const measure = (then: () => void) => ref.current?.measureInWindow((x: number, _y: number, width: number) => { bounds.current = { x, width }; then(); });
+  const active = drag !== null || hover !== null;
+  const preview = drag ?? hover;
+  useEffect(() => { onPreview(preview); }, [preview, onPreview]);
+  const pointer = web ? {
+    onMouseEnter: (event: { nativeEvent: { pageX: number } }) => { const x = event.nativeEvent.pageX; measure(() => setHover(at(x))); },
+    onMouseMove: (event: { nativeEvent: { pageX: number } }) => setHover(at(event.nativeEvent.pageX)),
+    onMouseLeave: () => setHover(null),
+  } : {};
+  if (!live) return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, backgroundColor: m.ui.track }} />
+  );
+  return (
+    <View ref={ref} testID="mini-player-scrubber" accessible accessibilityRole="adjustable" accessibilityLabel={msg('media.player.seek')}
+      accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(shown), text: `${clock(shown)} / ${clock(duration)}` }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={event => onSeek(position + (event.nativeEvent.actionName === 'increment' ? 10 : -10))}
+      onStartShouldSetResponder={() => true} onMoveShouldSetResponder={() => true}
+      onResponderGrant={event => { const x = event.nativeEvent.pageX; measure(() => setDrag(at(x))); }}
+      onResponderMove={event => setDrag(at(event.nativeEvent.pageX))}
+      onResponderRelease={event => { const to = at(event.nativeEvent.pageX); setDrag(null); onSeek(to); }}
+      onResponderTerminate={() => setDrag(null)}
+      {...(pointer as object)}
+      style={[{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 10, justifyContent: 'flex-end' }, web ? ({ cursor: 'pointer' } as ViewStyle) : {}]}>
+      <View style={{ height: active ? 6 : 3, backgroundColor: m.ui.track }}>
+        <View style={{ width: `${fraction * 100}%`, height: '100%', backgroundColor: m.ui.accent }} />
       </View>
     </View>
   );
