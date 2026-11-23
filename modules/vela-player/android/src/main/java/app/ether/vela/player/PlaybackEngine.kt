@@ -34,6 +34,8 @@ internal interface PlaybackEngine {
   /** Draws the selected ASS/SSA track at the playing position: -1 none selected, 0 unchanged, 1 drawn, 2 blank. */
   fun renderAss(bitmap: android.graphics.Bitmap, force: Boolean): Int
   fun release()
+  /** Stops now and releases once the decoder has wound down, without holding the caller meanwhile. */
+  fun releaseSoon() = release()
 }
 
 /** `shared`: a multiview tile playing beside others. It never takes audio focus or a tunneled decoder
@@ -328,4 +330,19 @@ internal class Media3Engine(context: Context, private val preview: Boolean, live
     return ass?.render(track, time, bitmap, width, height, force) ?: -1
   }
   override fun release() { main.removeCallbacks(tick); player.release(); fontLoader?.shutdownNow(); ass?.release() }
+
+  // ExoPlayer.release() waits for its playback thread to release the decoder, tens of milliseconds
+  // that held the main thread whenever a trailer preview stopped (its hero scrolled away while the
+  // viewer was scrolling). stop() hands the decoder's release to that thread instead; the player
+  // itself is released once that is done, when release() no longer waits.
+  override fun releaseSoon() {
+    onChange = {}
+    onFailure = { _, _ -> }
+    onSubtitleCues = {}
+    main.removeCallbacks(tick)
+    player.stop()
+    main.postDelayed({ release() }, RELEASE_AFTER_STOP_MS)
+  }
 }
+
+private const val RELEASE_AFTER_STOP_MS = 1_000L

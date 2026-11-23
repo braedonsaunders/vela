@@ -146,7 +146,7 @@ internal class PreviewPlayback(
     main.removeCallbacks(expire)
     val client = engine ?: return
     engine = null
-    client.release()
+    client.releaseSoon()
   }
 
   /** The viewer turned on Data Saver and the network is metered. */
