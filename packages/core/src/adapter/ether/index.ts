@@ -420,6 +420,11 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.SearchResponse>('POST', '/search', { ...request, mode: 'fast' }, { signal });
   }
 
+  /** Only with features.unifiedSearch: one ranked list, the server deciding when description matches lead. */
+  searchAuto(request: CatalogueSearch, signal?: AbortSignal) {
+    return this.http.request<V.SearchResponse>('POST', '/search', { ...request, mode: 'auto' }, { signal });
+  }
+
   searchByDescription(request: CatalogueSearch, signal?: AbortSignal) {
     return this.http.request<V.SearchResponse>('POST', '/search', { ...request, mode: 'descriptive' }, { signal });
   }

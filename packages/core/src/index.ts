@@ -23,6 +23,7 @@ export type { PlexChoiceOption, PlexLinkView, ProbeResult, ServerOption, ServerR
 export type { HomeRetry, HomeState } from './store/home';
 export { personSectionLabels, libraryKey, type CollectionPage, type LibraryQuery, type LibraryScope } from './store/catalogue';
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
+export { namesTitle, readsAsDescription, searchList, wantsDescription, type SearchList } from './store/search-list';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
 export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protocol/trickplay';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';

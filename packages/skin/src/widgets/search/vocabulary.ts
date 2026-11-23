@@ -1,5 +1,7 @@
-// Search's vocabulary (docs/skin-schema.md): the lanes' states and sizes, a live hit's fields,
-// and the collections routes.search repeats over. The semantics are those of the Contract
+// Search's vocabulary (docs/skin-schema.md): the one list's state and size, a live hit's fields,
+// and the collections routes.search repeats over. `search.titles` is the one list (titles by name,
+// or by description as a fallback); `search.descriptive` stays empty, so a document drawing the
+// two lanes it once had draws one list. The semantics are those of the Contract
 // renderer's table (tools/renderer.ts at afc4578), key for key.
 import { msg } from '@vela/core';
 import type { Accessor, Ctx, Env } from '../../vocabulary';
@@ -30,14 +32,11 @@ const airing = (s: SearchView) => (ready(s) ? s.titles.programmes.filter(p => p.
 const upcoming = (s: SearchView) => (ready(s) ? s.titles.programmes.filter(p => !p.airing) : []);
 const channels = (s: SearchView) => (ready(s) ? s.titles.channels : []);
 const titles = (s: SearchView) => (ready(s) ? s.titles.items : []);
-/** A failed descriptive answer keeps whatever candidates it found. */
-const descriptive = (s: SearchView) =>
-  s.descriptive.state === 'ready' || s.descriptive.state === 'failed' ? s.descriptive.items : [];
+const descriptive = (s: SearchView) => s.descriptive.items;
 const discovered = (s: SearchView) => (s.ai.state === 'off' ? [] : s.ai.items);
 
-/** Several words read as a description, not a name: an empty answer is then about the mood. */
-const describing = (s: SearchView) =>
-  s.query.trim().split(' ').filter(w => w !== '').length > 1 && s.descriptive.state !== 'off';
+/** The list matches a description; when empty, the query asked for one, so the answer is about the mood. */
+const describing = (s: SearchView) => !!s.byDescription;
 
 export function searchResultAnnouncement(s: SearchView): string {
   if (s.titles.state === 'loading') return `Searching for ${s.query}`;

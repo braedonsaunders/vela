@@ -378,6 +378,35 @@ describe('mock server: catalogue and live', () => {
     expect(await errorCode(invalid)).toBe('invalid_search');
   });
 
+  test('auto search is refused unless unified search is advertised', async () => {
+    const response = await post('/search', { query: 'x', generation: 1, mode: 'auto', idempotencyKey: key() }, authed(tokens));
+    expect(await errorCode(response)).toBe('invalid_search');
+  });
+
+  test('unified search ranks titles by name, falling back to description matches', async () => {
+    const unified = await launchMock({ VELA_MOCK_UNIFIED_SEARCH: '1' });
+    try {
+      const signed = await fetch(`${unified.url}/vela/v0/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        idempotencyKey: 'unified', username: 'demo', password: 'vela', device: { id: 'unified', name: 'Test', platform: 'web', appVersion: '0.1' },
+      }) }).then(response => response.json()) as { accessToken: string };
+      const headers = { Authorization: `Bearer ${signed.accessToken}`, 'X-Vela-Device-Id': 'unified', 'Content-Type': 'application/json' };
+      const caps = await fetch(`${unified.url}/vela/v0/capabilities`).then(r => r.json()) as V.ServerCapabilities;
+      expect(caps.features.unifiedSearch?.available).toBe(true);
+      const ask = async (query: string, generation: number) => fetch(`${unified.url}/vela/v0/search`, { method: 'POST', headers,
+        body: JSON.stringify({ query, generation, mode: 'auto', idempotencyKey: `unified-${generation}` }) }).then(r => r.json()) as Promise<V.SearchResponse>;
+      const channel = await ask('world news', 1);
+      expect(channel).toMatchObject({ match: 'none', state: 'complete', generation: 1 });
+      expect(channel.live?.channels.map(c => c.id)).toEqual(['channel-1']);
+      const some = (await ask('e', 3)).items[0]!;
+      const named = await ask(some.name, 4);
+      expect(named).toMatchObject({ match: 'title', state: 'complete' });
+      expect(named.items.map(t => t.id)).toContain(some.id);
+      expect(await ask('zzqx nothing at all', 2)).toMatchObject({ match: 'none', items: [] });
+    } finally {
+      await unified.stop();
+    }
+  });
+
   test('AI search is not offered', async () => {
     const response = await post('/search/ai', { query: 'x', generation: 1, idempotencyKey: key() }, authed(tokens));
     expect(response.status).toBe(403);

@@ -149,7 +149,8 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'searchSort': return store.search.setOptions({ sort: (arg || undefined) as import('../../../packages/protocol/types').SearchSort | undefined });
       case 'searchDirection': return store.search.setOptions({ direction: arg as import('../../../packages/protocol/types').SearchDirection });
       case 'searchKind': return store.search.setOptions({ kind: (arg || undefined) as import('../../../packages/protocol/types').SearchKind | undefined });
-      case 'searchMore': return store.search.more(arg === 'descriptive' ? 'descriptive' : 'fast');
+      // One list: its next page comes from the lane it shows, whichever lane an older document names.
+      case 'searchMore': return store.search.more();
       case 'retryDescriptive':
         return store.search.retryDescriptive();
       case 'pageNext':

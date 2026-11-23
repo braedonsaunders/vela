@@ -45,7 +45,7 @@ const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevisio
   avatar: { id: 'viewer-demo', kind: 'person', tag: '1', sizes: [{ width: 240, height: 240, url: '/vela/v0/images/plexavatar-viewer-demo' }] } };
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, ...(process.env.VELA_MOCK_UNIFIED_SEARCH === '1' ? { unifiedSearch: yes } : {}), aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 // Music, books and audiobooks (docs/media-kinds.md). VELA_MOCK_OLD=1 is a server from before them,
 // and the VELA_MOCK_LAB=1 preset mirrors a lab server's video-only libraries.
 const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
@@ -785,7 +785,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (method === 'GET') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
   }
   if (method === 'POST' && path === '/search') {
-    if (typeof body.query !== 'string' || !Number.isInteger(body.generation) || !['fast', 'descriptive'].includes(body.mode)) fail('request', 'invalid_search', 'Query, generation and mode required');
+    if (typeof body.query !== 'string' || !Number.isInteger(body.generation) || !['fast', 'descriptive', ...(capabilities.features.unifiedSearch ? ['auto'] : [])].includes(body.mode)) fail('request', 'invalid_search', 'Query, generation and mode required');
     if (body.sort && !capabilities.searchSorts!.some(s => s.id === body.sort)) fail('request', 'invalid_sort', 'Invalid sort');
     if (body.direction !== undefined && !['asc', 'desc'].includes(body.direction)) fail('request', 'invalid_direction', 'Invalid direction');
     if (body.kind !== undefined && !capabilities.searchKinds!.some(k => (typeof k === 'string' ? k : k.id) === body.kind)) fail('request', 'invalid_kind', 'Invalid kind');
@@ -793,21 +793,25 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const libraryIds = body.library ? new Set(libraryEntries(body.library).flatMap(e => e.kind === 'title' ? [e.title.id] : [])) : undefined;
     const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
     const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks].map(t => present(g, t)) : [])];
-    const items = searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (body.mode === 'fast' ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
+    const found = (byName: boolean) => searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (byName ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
+    // Auto (unified search): titles by name; description matches only when no name matches.
+    const named = body.mode === 'descriptive' ? [] : found(true);
+    const items = body.mode === 'fast' || named.length ? named : found(false);
+    const match = body.mode !== 'auto' ? undefined : named.length ? 'title' : items.length ? 'description' : 'none';
     if (body.sort && body.sort !== 'relevance') items.sort((a, b) => (body.direction === 'desc' ? -1 : 1) * (body.sort === 'title' ? a.name.localeCompare(b.name) : (a.year ?? 0) - (b.year ?? 0)));
     const paging = new URL(url); if (body.cursor) paging.searchParams.set('cursor', body.cursor); if (body.limit) paging.searchParams.set('limit', String(body.limit));
     const titlePage = page(items, paging, g, `search:${body.mode}:${body.query}:${body.sort ?? ""}:${body.direction ?? ""}:${body.kind ?? ""}:${body.library ?? ""}`);
     const limit = Number(paging.searchParams.get('limit') ?? 50);
     const matches = (text: string) => terms.length > 0 && terms.every((term: string) => text.toLowerCase().includes(term));
     const now = Date.now();
-    const programmes = body.mode === 'fast' && !body.library ? guide(now, now + 86400000, []).filter(p => matches(`${p.name} ${p.episodeTitle ?? ''} ${p.summary ?? ''} ${(p.genres ?? []).join(' ')}`)).slice(0, limit) : [];
+    const programmes = body.mode !== 'descriptive' && !body.library ? guide(now, now + 86400000, []).filter(p => matches(`${p.name} ${p.episodeTitle ?? ''} ${p.summary ?? ''} ${(p.genres ?? []).join(' ')}`)).slice(0, limit) : [];
     const parentIds = new Set(programmes.map(p => p.channelId));
-    const live = body.mode === 'fast' && !body.library ? {
+    const live = body.mode !== 'descriptive' && !body.library ? {
       channels: channels.filter(c => matches(`${c.number} ${c.name} ${c.group ?? ''} ${(c.guides ?? []).map(g => g.name).join(' ')}`)).slice(0, limit),
       programmes,
       programmeChannels: channels.filter(c => parentIds.has(c.id)),
     } : undefined;
-    return json({ ...titlePage, query: body.query, generation: body.generation, ...(live ? { live } : {}) } satisfies V.SearchResponse);
+    return json({ ...titlePage, query: body.query, generation: body.generation, ...(live ? { live } : {}), ...(match ? { match, state: 'complete' as const } : {}) } satisfies V.SearchResponse);
   }
   if (path.startsWith('/search/ai')) fail('policy', 'feature_unavailable', 'AI search unavailable');
   if (method === 'POST' && path === '/interactions') {

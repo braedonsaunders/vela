@@ -62,7 +62,9 @@ export interface ServerCapabilities {
   /** Ether can turn an approved Plex account into a bounded Plex Home profile selection. */
   plexHomeProfiles?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
+    descriptiveSearch: Feature; aiSearch: Feature;
+    /** One ranked search list (`mode: 'auto'`): titles first, description matches as the server's fallback. */
+    unifiedSearch?: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
     playlists?: Feature & { maxEntries: number };
     /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
     mediaClasses?: Feature & { classes: MediaClass[] };
@@ -187,10 +189,16 @@ export interface Hero { title: Title; receiptToken: string; reason: HeroReason; 
 export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor;
   /** Plugin screens the viewer may open, as top-level sections after Live TV. */ navigation?: NavigationEntry[] }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }
-export interface SearchRequest extends Mutation, SearchOptions { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
+/** `auto` (only with features.unifiedSearch): one ranked list; the server decides when description matches lead. */
+export interface SearchRequest extends Mutation, SearchOptions { query: string; generation: number; mode: 'fast' | 'descriptive' | 'auto'; cursor?: Cursor; limit?: number }
 export interface LiveSearchResults { channels: Channel[]; programmes: Programme[]; programmeChannels?: Channel[] }
 export interface DescriptiveSearchState { state: 'ready' | 'pending' | 'partial' | 'busy' | 'failed'; retry?: { allowed: boolean; afterSeconds?: number } }
-export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string; live?: LiveSearchResults; descriptive?: DescriptiveSearchState }
+export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string; live?: LiveSearchResults; descriptive?: DescriptiveSearchState;
+  /** `auto` mode: what the one list matched. */
+  match?: 'title' | 'description' | 'mixed' | 'none';
+  /** `auto` mode: `pending` while slower lookups (remote catalogues, description matching) still run;
+   * ask again with the same query and generation, after `retry.afterSeconds`, and replace the list. */
+  state?: 'complete' | 'pending'; retry?: { allowed: boolean; afterSeconds?: number } }
 export interface AISearchRequest extends Mutation { query: string; generation: number; previousJobId?: ID }
 export interface AISearchJob { id: ID; generation: number; status: 'queued' | 'running' | 'partial' | 'complete' | 'cancelled' | 'failed';
   /** Required for partial: provisional results replaced by the final response. */
