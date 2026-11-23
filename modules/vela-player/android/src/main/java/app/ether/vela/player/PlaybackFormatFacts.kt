@@ -34,6 +34,10 @@ internal class PlaybackFormatFacts {
   private val sourceDolbyVision: Pair<Int, DolbyVisionAction>?
     get() = dolbyVision[video?.id.orEmpty()] ?: dolbyVision.values.singleOrNull()
 
+  /** Audio leaves undecoded for the receiver (a bitstream AudioTrack). */
+  val passthrough: Boolean
+    get() = audioTrack?.let { !Util.isEncodingLinearPcm(it.encoding) } ?: false
+
   /** The server's probed frame rate of an original: Matroska often gives Media3 none. */
   var declaredFrameRate: Double? = null
 

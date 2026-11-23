@@ -47,8 +47,19 @@ class VelaPlayerModule : Module() {
       VelaPlayerView.live.forEach { it.enterForeground() }
     }
 
+    // Home while a full-screen video plays: Android before 12 has no auto-enter, so the player opens the window.
+    OnUserLeavesActivity {
+      PictureInPicture.userLeaving(appContext.currentActivity)
+    }
+
+    // Whether the activity shows the player in picture-in-picture now: the app is paused yet still on screen,
+    // so its watch session goes on (read as the app leaves the foreground).
+    Function("pictureInPicture") {
+      PictureInPicture.active(appContext.currentActivity)
+    }
+
     View(VelaPlayerView::class) {
-      Events("onSnapshot", "onError", "onObservation", "onCommand", "onSessionCommand", "onSessionRefresh")
+      Events("onSnapshot", "onError", "onObservation", "onCommand", "onSessionCommand", "onSessionRefresh", "onPictureInPicture")
 
       Prop("ambient") { view: VelaPlayerView, ambient: Boolean? ->
         view.setAmbient(ambient ?: false)

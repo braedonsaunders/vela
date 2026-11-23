@@ -7,20 +7,58 @@ import android.content.Context
 import android.media.MediaFormat
 import android.os.Build
 import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.AudioOutputProvider
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 
-/** DefaultRenderersFactory whose MediaCodec video renderer asks for SDR output when `wantsSdr` says so. */
+/** DefaultRenderersFactory whose MediaCodec video renderer asks for SDR output when `wantsSdr` says so, whose
+ * text renderer runs `subtitleDelay` behind the clock (SubtitleDelay.kt), and whose audio sink decodes every
+ * encoded track to PCM when `decodeAll` (OutputPreferences) and applies speed to PCM at the AudioTrack, which
+ * time-stretches float output too (Media3's own speed processor takes 16-bit PCM only). */
 internal class VelaRenderersFactory(
   context: Context,
   private val wantsSdr: (Format) -> Boolean,
   private val onToneMapped: (Boolean) -> Unit,
+  private val subtitleDelay: SubtitleDelay? = null,
+  private val decodeAll: Boolean = false,
 ) : DefaultRenderersFactory(context) {
+  override fun buildTextRenderers(context: Context, output: TextOutput, outputLooper: Looper, extensionRendererMode: Int, out: ArrayList<Renderer>) {
+    val first = out.size
+    super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
+    val delay = subtitleDelay ?: return
+    for (index in first until out.size) out[index] = DelayedTextRenderer(out[index], delay)
+  }
+
+  override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
+    val tracks = AudioTrackAudioOutputProvider.Builder(context).setMaxPlaybackSpeed(2f).build()
+    val provider = object : ForwardingAudioOutputProvider(tracks) {
+      override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.FormatSupport =
+        if (decodeAll && formatConfig.format.sampleMimeType != MimeTypes.AUDIO_RAW) AudioOutputProvider.FormatSupport.UNSUPPORTED
+        else super.getFormatSupport(formatConfig)
+
+      // A bitstream for the receiver plays at 1×: never ask its AudioTrack for another speed.
+      override fun getOutputConfig(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.OutputConfig =
+        super.getOutputConfig(if (formatConfig.format.sampleMimeType == MimeTypes.AUDIO_RAW) formatConfig
+          else formatConfig.buildUpon().setEnablePlaybackParameters(false).build())
+    }
+    return DefaultAudioSink.Builder(context)
+      .setEnableFloatOutput(enableFloatOutput)
+      .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+      .setAudioOutputProvider(provider)
+      .build()
+  }
+
   override fun buildVideoRenderers(
     context: Context,
     extensionRendererMode: Int,

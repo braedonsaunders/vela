@@ -65,6 +65,7 @@
       "./plugins/android-signing",
       "./plugins/android-tv-keys",
       "./plugins/android-hardware-bitmaps",
+      "./plugins/android-picture-in-picture",
       "./plugins/apple-player"
     ]
   }

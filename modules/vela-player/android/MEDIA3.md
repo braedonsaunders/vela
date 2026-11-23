@@ -73,8 +73,19 @@ shared app controller.
 Full-screen playback enables Media3's float output. Without it DefaultAudioSink
 converted every high-resolution PCM stream to 16 bits (ToInt16PcmAudioProcessor),
 so 24-bit FLAC/ALAC and FFmpeg-decoded TrueHD and DTS-HD MA were not lossless.
-Float PCM carries 24-bit samples exactly; speed control (unused, fixed at 1) is
-what float output gives up.
+Float PCM carries 24-bit samples exactly. Media3's own speed processor (Sonic)
+takes 16-bit PCM only, so playback speed (0.5–2×, pitch kept) is applied at the
+AudioTrack (`setEnableAudioOutputPlaybackParameters`), which time-stretches float
+PCM too. A bitstream for the receiver plays at 1×: its AudioTrack is never asked
+for another speed, and the player offers no speeds while one is out. A TV turns
+tunneling off while the speed is not 1×. Live plays at 1×.
+
+The viewer's `outputPreference` choices (OutputPreferences.kt, kept per device)
+are `passthrough` (`auto`, or `off`: the audio sink's output provider reports no
+encoded format, so every track is decoded on the device) and `dolbyVision`
+(`base-layer` plays the HDR10/HLG base of Profiles 7 and 8). A change reloads the
+playing title where it is. Android renders no Atmos objects itself, so it offers
+no immersive or speaker-layout choice.
 
 Bitstream passthrough is Media3's own: MediaCodecAudioRenderer sends AC-3,
 E-AC-3, E-AC-3 JOC (Atmos), TrueHD (Atmos objects intact), DTS, DTS-HD and DTS:X
@@ -95,6 +106,23 @@ routed device at negotiation time: passthrough tokens, the device's channel
 count (EDID for HDMI), its highest rate, and `lossless` when TrueHD passes
 through or float PCM reaches 8 channels. A mid-title route change falls back to
 decoding.
+
+## Subtitle delay and picture-in-picture
+
+`subtitleOffset` (the CC menu's delay, ±600 s, never stored) runs Media3's text
+renderer behind the playback clock (SubtitleDelay.kt), so text and bitmap cues
+(PGS, VobSub, DVB) move alike; libass draws ASS/SSA at the shifted time. The
+renderer drops cues once they pass, so its stream keeps the cue samples it handed
+over (ten minutes, 32 MB) and a change of delay replays the ones still on at the
+new position: the cue moves at once, paused or playing, without a seek.
+
+Phones and tablets show the full-screen player in the activity's own
+picture-in-picture window (PictureInPicture.kt; the manifest comes from
+apps/vela/plugins/android-picture-in-picture.js): the player's button, or Home
+while playing (auto-enter on Android 12+, the user-leave hint before). The
+picture moves above the app for the window, which takes the video's ratio and a
+play/pause action. Closing the window pauses, and the watch route stops the
+session as it does when the app leaves the foreground. Android TV never offers it.
 
 ### IEC 61937 (not built)
 

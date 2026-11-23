@@ -6,6 +6,7 @@ package app.ether.vela.player
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -25,8 +26,16 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val onCommand by EventDispatcher<Map<String, Any?>>()
   private val onSessionCommand by EventDispatcher<Map<String, Any?>>()
   private val onSessionRefresh by EventDispatcher<Map<String, Any?>>()
+  private val onPictureInPicture by EventDispatcher<Map<String, Any?>>()
 
-  private val content = FrameLayout(context)
+  /** The picture: the video letterboxed with its subtitle layers. It leaves the view for the activity's window
+   * while picture-in-picture shows it alone. */
+  private val content = object : FrameLayout(context) {
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+      super.onLayout(changed, left, top, right, bottom)
+      placeVideo(right - left, bottom - top)
+    }
+  }
   private val video = SurfaceView(context)
   private val subtitleLayer = androidx.media3.ui.SubtitleView(context)
   private val assLayer = AssOverlay(context)
@@ -36,6 +45,12 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private var videoSurface: Surface? = null
   private var previewMode = false
   private var videoRatio = 0f
+  private var videoWidth = 0
+  private var videoHeight = 0
+  /** Picture-in-picture: whether this view's video plays (null: it has none to show), and the window's stage. */
+  private var pipPlaying: Boolean? = null
+  private var pipShape = 0 to 0
+  private var pipStage: FrameLayout? = null
   private var pendingAmbient = false
   private var pendingTile: Int? = null
   private var pendingCommand: Map<String, Any?>? = null
@@ -199,13 +214,16 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
 
   fun enterBackground() {
     preview.setOnScreen(false)
-    controller.enterBackground()
+    // The activity pauses as it enters picture-in-picture: the window goes on playing.
+    if (!PictureInPicture.showing(this, appContext.currentActivity)) controller.enterBackground()
   }
 
   fun enterForeground() = preview.setOnScreen(windowVisibility == View.VISIBLE && isAttachedToWindow)
 
   fun release() {
     live.remove(this)
+    leavePictureInPicture()
+    PictureInPicture.release(this, appContext.currentActivity)
     preview.release()
     controller.release()
     content.removeView(if (previewMode) previewVideo else video)
@@ -243,12 +261,14 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     }
 
   override fun videoSize(width: Int, height: Int) {
+    videoWidth = width
+    videoHeight = height
     val ratio = width.toFloat() / height
-    if (videoRatio != ratio) { videoRatio = ratio; requestLayout() }
+    if (videoRatio != ratio) { videoRatio = ratio; content.requestLayout(); requestLayout() }
   }
 
-  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-    super.onLayout(changed, left, top, right, bottom)
+  /** Letterboxes the video, and the subtitle layers over it, in the picture's `width`×`height`. */
+  private fun placeVideo(width: Int, height: Int) {
     if (!previewMode && videoRatio > 0 && width > 0 && height > 0) {
       val videoWidth = minOf(width, (height * videoRatio).toInt())
       val videoHeight = minOf(height, (width / videoRatio).toInt())
@@ -263,6 +283,64 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       subtitleLayer.layout(0, 0, width, height)
       assLayer.layout(0, 0, width, height)
     }
+  }
+
+  // Picture-in-picture (PictureInPicture)
+
+  override val pictureInPictureSupported: Boolean
+    get() = !previewMode && PictureInPicture.supported(appContext.currentActivity)
+
+  override fun pictureInPicture(playing: Boolean?) {
+    val activity = appContext.currentActivity
+    if (playing == null) {
+      if (pipPlaying != null) { pipPlaying = null; PictureInPicture.release(this, activity) }
+      return
+    }
+    if (pipPlaying == null) PictureInPicture.claim(this, activity)
+    val shape = videoWidth to videoHeight
+    if (pipPlaying == playing && pipShape == shape) return
+    pipPlaying = playing
+    pipShape = shape
+    PictureInPicture.update(this, activity, playing, videoWidth, videoHeight, videoRect())
+  }
+
+  override fun enterPictureInPicture(): String? =
+    PictureInPicture.enter(this, appContext.currentActivity, videoWidth, videoHeight, videoRect())
+
+  /** The window's play/pause action. */
+  fun pictureInPictureControl(control: String) = controller.pictureInPictureControl(control)
+
+  /** The activity entered or left picture-in-picture; `closed` when the viewer dismissed the window. */
+  fun pictureInPictureChanged(active: Boolean, closed: Boolean) {
+    if (active) showAlone() else leavePictureInPicture()
+    // A dismissed window stops the watch as leaving the app does.
+    if (closed) controller.enterBackground()
+    onPictureInPicture(mapOf("active" to active, "closed" to closed))
+  }
+
+  /** The video's rectangle in the window, where the picture-in-picture window grows from. */
+  private fun videoRect(): Rect? = Rect().takeIf { video.isAttachedToWindow && video.getGlobalVisibleRect(it) }
+
+  /** The picture moves above the app (the player's chrome and everything else) for the window. */
+  private fun showAlone() {
+    if (pipStage != null || previewMode) return
+    val decor = appContext.currentActivity?.window?.decorView as? ViewGroup ?: return
+    val stage = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
+    removeView(content)
+    stage.addView(content, videoLayout())
+    decor.addView(stage, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    pipStage = stage
+    assLayer.start()
+  }
+
+  private fun leavePictureInPicture() {
+    val stage = pipStage ?: return
+    pipStage = null
+    stage.removeView(content)
+    (stage.parent as? ViewGroup)?.removeView(stage)
+    addView(content, videoLayout())
+    if (isAttachedToWindow) assLayer.start()
+    requestLayout()
   }
 
   override fun subtitles(cues: androidx.media3.common.text.CueGroup) {
@@ -287,7 +365,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     subtitleLayer.setApplyEmbeddedFontSizes(false)
     subtitleLayer.setFractionalTextSize(look.textFraction)
     subtitleLayer.setBottomPaddingFraction(look.bottomFraction)
-    if (persist) lookStore.edit().apply { look.snapshot.forEach { (key, value) -> if (value is String) putString(key, value) } }.apply()
+    if (persist) lookStore.edit().apply { look.stored.forEach { (key, value) -> putString(key, value) } }.apply()
   }
 
   override fun keepScreenOn(on: Boolean) {

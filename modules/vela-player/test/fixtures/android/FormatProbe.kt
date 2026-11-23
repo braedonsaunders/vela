@@ -92,7 +92,44 @@ fun main() {
   check(SubtitleLook().updated("subtitleColor") == null)
   val stored = mapOf("subtitleColor" to "yellow", "subtitleBackground" to "nonsense")
   check(SubtitleLook.from { stored[it] } == SubtitleLook(color = "yellow"))
-  check(SubtitleLook().snapshot["offsetSeconds"] == 0)
+  check(SubtitleLook().snapshot["offsetSeconds"] == 0.0)
+  // Subtitle delay: the web's subtitleOffset grammar, ten minutes either way, never stored.
+  val later = SubtitleLook(color = "yellow").updated("subtitleOffset=1.5")!!
+  check(later.offsetSeconds == 1.5 && later.color == "yellow" && later.snapshot["offsetSeconds"] == 1.5)
+  check(later.updated("subtitleOffset=-0.25")!!.offsetSeconds == -0.25)
+  check(later.updated("subtitleOffset=-0")!!.offsetSeconds == 0.0)
+  check(later.updated("subtitleOffset=600")!!.offsetSeconds == 600.0)
+  check(later.updated("subtitleOffset=601") == null && later.updated("subtitleOffset=1e3") == null)
+  check(later.updated("subtitleOffset=") == null && later.updated("subtitleOffset=0.1234") == null)
+  check(later.updated("subtitleSize=large")!!.offsetSeconds == 1.5) // appearance keeps the delay
+  check("offsetSeconds" !in later.stored && later.stored["subtitleColor"] == "yellow")
+  // Output preferences: the Apple player's command and report shape, Android's choices.
+  val output = OutputPreferences()
+  check(output.values == mapOf("passthrough" to "auto", "dolbyVision" to "auto") && !output.decodeAll && !output.baseLayer)
+  val decoded = output.updated("passthrough=off")!!
+  check(decoded.decodeAll && decoded.values["passthrough"] == "off")
+  check(output.updated("dolbyVision=base-layer")!!.baseLayer)
+  check(output.updated("surround=lossless") == null && output.updated("passthrough=on") == null && output.updated("passthrough") == null)
+  check(output.available(routePassthrough = true) == listOf("passthrough", "dolbyVision"))
+  check(output.available(routePassthrough = false) == listOf("dolbyVision"))
+  check(output.available(routePassthrough = false, television = true) == listOf("passthrough", "dolbyVision"))
+  check(decoded.available(routePassthrough = false) == listOf("passthrough", "dolbyVision")) // can be turned back on
+  val storedOutput = mapOf("passthrough" to "off", "dolbyVision" to "nonsense")
+  check(OutputPreferences.from { storedOutput[it] } == OutputPreferences(passthrough = "off"))
+  // Playback speed: the web's choices; live and undecoded audio stay at 1×.
+  check(PlaybackSpeed.offered(live = false, passthrough = false) == listOf(0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0))
+  check(PlaybackSpeed.offered(live = true, passthrough = false).isEmpty() && PlaybackSpeed.offered(live = false, passthrough = true).isEmpty())
+  check(PlaybackSpeed.refusal(1.5, live = false, passthrough = false) == null)
+  check(PlaybackSpeed.refusal(1.5, live = true, passthrough = false) != null)
+  check(PlaybackSpeed.refusal(2.5, live = false, passthrough = false) != null && PlaybackSpeed.refusal(0.25, live = false, passthrough = false) != null)
+  check(PlaybackSpeed.refusal(null, live = false, passthrough = false) != null && PlaybackSpeed.refusal(Double.NaN, live = false, passthrough = false) != null)
+  check(PlaybackSpeed.refusal(1.25, live = false, passthrough = true) != null && PlaybackSpeed.refusal(1.0, live = false, passthrough = true) == null)
+  // The picture-in-picture window takes the video's shape within Android's 2.39:1 either way.
+  check(PictureInPictureShape.ratio(1920, 1080) == (1920 to 1080))
+  check(PictureInPictureShape.ratio(1920, 804) == (1920 to 804)) // scope, just inside
+  check(PictureInPictureShape.ratio(1920, 800) == (239 to 100)) // 2.4:1, just outside
+  check(PictureInPictureShape.ratio(3840, 1200) == (239 to 100) && PictureInPictureShape.ratio(500, 1300) == (100 to 239))
+  check(PictureInPictureShape.ratio(0, 1080) == null && PictureInPictureShape.ratio(1920, 0) == null)
   // Dolby Vision Profile 7: native where a decoder takes it, 8.1 where one takes Profile 8, else HDR10.
   check(DolbyVision.plan(7, setOf(DolbyVision.PROFILE_7, DolbyVision.PROFILE_8), canConvert = true) == DolbyVisionAction.KEEP)
   check(DolbyVision.plan(7, setOf(DolbyVision.PROFILE_8), canConvert = true) == DolbyVisionAction.CONVERT_TO_81)
@@ -100,6 +137,10 @@ fun main() {
   check(DolbyVision.plan(7, emptySet(), canConvert = true) == DolbyVisionAction.BASE_LAYER)
   check(DolbyVision.plan(8, emptySet(), canConvert = true) == DolbyVisionAction.KEEP) // Media3 falls back to HEVC itself
   check(DolbyVision.plan(5, emptySet(), canConvert = true) == DolbyVisionAction.KEEP)
+  // The viewer's base-layer choice: the HDR10/HLG base of Profiles 7 and 8; Profile 5 has none.
+  check(DolbyVision.plan(7, setOf(DolbyVision.PROFILE_7), canConvert = true, baseLayer = true) == DolbyVisionAction.BASE_LAYER)
+  check(DolbyVision.plan(8, setOf(DolbyVision.PROFILE_8), canConvert = true, baseLayer = true) == DolbyVisionAction.BASE_LAYER)
+  check(DolbyVision.plan(5, setOf(DolbyVision.PROFILE_8), canConvert = true, baseLayer = true) == DolbyVisionAction.KEEP)
   check(DolbyVision.profile("dvhe.07.06") == 7 && DolbyVision.profile8Codecs("dvhe.07.06") == "dvhe.08.06")
   check(!DoviNative.available)
   fun nal(vararg bytes: Int) = bytes.map { it.toByte() }.toByteArray()
@@ -150,5 +191,5 @@ fun main() {
   check(MatroskaAttachments.fonts(reader(afterCluster)).isEmpty()) // without a SeekHead, nothing past the first Cluster
   check(MatroskaAttachments.fonts(reader(ByteArray(64))).isEmpty())
   check(MatroskaAttachments.isFont(MatroskaAttachment("a.bin", "font/otf", ByteArray(0))))
-  println("Android formats, display matching and subtitle appearance passed")
+  println("Android formats, display matching, subtitle appearance and output preferences passed")
 }

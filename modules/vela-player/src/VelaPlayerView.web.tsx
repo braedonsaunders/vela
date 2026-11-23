@@ -126,4 +126,7 @@ export type { VelaPlayerViewProps, MediaAccess };
 /** The web player owns no system media key; the page hears its keys itself. */
 export const claimPlayPause = (_onPress: () => void): (() => void) => () => {};
 
+/** A browser's picture-in-picture keeps the page in the foreground: nothing to report. */
+export const pictureInPicture = (): boolean => false;
+
 export const sampleUIFrames = async (_enabled: boolean): Promise<Record<string, number> | undefined> => undefined;

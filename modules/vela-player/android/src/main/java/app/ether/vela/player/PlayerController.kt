@@ -23,6 +23,12 @@ internal interface PlayerHost {
   fun keepScreenOn(on: Boolean)
   /** Draws text subtitles in the viewer's appearance, and keeps it for the next title. */
   fun subtitleLook(look: SubtitleLook, persist: Boolean)
+  /** Picture-in-picture (phones and tablets): whether this full-screen view's video plays, null when it shows
+   * none (stopped, a preview or a tile). */
+  fun pictureInPicture(playing: Boolean?)
+  /** Opens the picture-in-picture window: null when it opened, else why not. */
+  fun enterPictureInPicture(): String?
+  val pictureInPictureSupported: Boolean
 }
 
 internal class PlayerController(
@@ -31,7 +37,18 @@ internal class PlayerController(
   private val report: PlayerReport,
 ) {
   private val main = Handler(Looper.getMainLooper())
-  init { report.display = { if (ownsDisplay) host.displayOutput(it) else emptyMap() } }
+  private val preferences = context.getSharedPreferences("vela.player", Context.MODE_PRIVATE)
+  /** The viewer's delivery choices, kept per device (OutputPreferences). */
+  private var output = OutputPreferences.from { preferences.getString("output.$it", null) }
+  /** The viewer's playback speed for this view, applied to every engine it starts (live plays at 1×). */
+  private var speed = 1.0
+  init {
+    report.display = { if (ownsDisplay) host.displayOutput(it) else emptyMap() }
+    report.output = output
+    report.television = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
+      android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    report.pictureInPicture = { ownsDisplay && engine != null && state.loaded && host.pictureInPictureSupported }
+  }
   private var engine: PlaybackEngine? = null
   private val recovery = PathRecovery()
   private var recovering = false
@@ -207,9 +224,12 @@ internal class PlayerController(
     loggedOutput = false
     report.pathId = path.id
     report.backend = if (path.isOriginalFile) "media3-original" else "media3-${path.transport}"
-    val client = Media3Engine(context, ambient, plan.live, tile != null)
+    val client = Media3Engine(context, ambient, plan.live, tile != null, output)
     engine = client
     state = client.state
+    client.subtitleOffset(report.subtitleLook.offsetSeconds)
+    if (!plan.live && speed != 1.0) client.speed(speed)
+    if (ownsDisplay) report.routePassthrough = runCatching { AudioRoute.probe(context).passthrough.isNotEmpty() }.getOrDefault(false)
     recovering = false
     client.onSubtitleCues = { host.subtitles(it) }
     client.onChange = {
@@ -218,6 +238,7 @@ internal class PlayerController(
         applyTracks()
         videoChanged()
         host.keepScreenOn(!ambient && state.phase == PlayerState.Phase.PLAYING)
+        if (ownsDisplay) host.pictureInPicture(!state.paused && state.failure == null)
         pendingSeek?.let { if (abs(state.position - it) < 2) pendingSeek = null }
         // A live window slides under a seek; once playback settles again the seek has landed.
         if (this.plan?.live == true && state.loaded && !state.pausedForCache) pendingSeek = null
@@ -297,6 +318,7 @@ internal class PlayerController(
     engine = null
     client.release()
     host.keepScreenOn(false)
+    host.pictureInPicture(null)
     host.subtitles(androidx.media3.common.text.CueGroup.EMPTY_TIME_ZERO)
     if (ownsDisplay) {
       host.preferDisplay(null)
@@ -454,9 +476,23 @@ internal class PlayerController(
       "audio" -> return selectAudio(command.text("trackId"))
       "subtitle" -> return selectSubtitle(command.text("trackId"))
       "subtitleStyle" -> {
-        val look = report.subtitleLook.updated(command.text("value") ?: "") ?: return "Invalid subtitle appearance preference"
+        val value = command.text("value") ?: ""
+        val look = report.subtitleLook.updated(value)
+          ?: return if (value.startsWith("subtitleOffset=")) "Invalid subtitle time offset" else "Invalid subtitle appearance preference"
         report.subtitleLook = look
+        engine?.subtitleOffset(look.offsetSeconds)
         host.subtitleLook(look, persist = true)
+      }
+      "speed" -> {
+        val value = command.number("value")
+        PlaybackSpeed.refusal(value, plan?.live == true, state.format.passthrough)?.let { return it }
+        speed = value!!
+        engine?.speed(speed)
+      }
+      "outputPreference" -> return outputPreference(command.text("value") ?: "")
+      "pip" -> {
+        if (!ownsDisplay || engine == null) return "Picture-in-picture is unavailable"
+        return host.enterPictureInPicture()
       }
       "retry" -> retry()
       else -> return "$type is not available in this player yet"
@@ -565,6 +601,27 @@ internal class PlayerController(
     report.subtitleClientOnly = true
     engine?.select("sub", engineId)
     return null
+  }
+
+  /** A delivery choice: kept for the device, and the playing title reloads where it is to take it. */
+  private fun outputPreference(value: String): String? {
+    val next = output.updated(value) ?: return "Unknown output preference"
+    if (next == output) return null
+    output = next
+    report.output = next
+    preferences.edit().apply { next.values.forEach { (name, choice) -> putString("output.$name", choice) } }.apply()
+    val plan = plan ?: return null
+    val path = plan.selectedPath ?: return null
+    val url = path.url?.let(MediaAccessStore::resolve) ?: return null
+    if (engine != null && ownsDisplay && state.failure == null) start(plan, path, url, activeSource, pendingSeek ?: state.position)
+    return null
+  }
+
+  /** The picture-in-picture window's play/pause action, through the command paths. */
+  fun pictureInPictureControl(control: String) {
+    if (control != "play" && control != "pause") return
+    perform(mapOf("type" to control))
+    report.publish(state, pendingSeek, force = true)
   }
 
   /** The selected ASS/SSA track drawn by libass at the playing position (PlaybackEngine.renderAss). */

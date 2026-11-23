@@ -1,6 +1,7 @@
 // Extractor-level taps on original files: every track passes through untouched except
 //   - TrueHD, whose first access units are read (not changed) for the Atmos presentation flag, and
-//   - Dolby Vision Profile 7, converted to 8.1 or reduced to its HDR10 base layer (DolbyVision.plan), and
+//   - Dolby Vision Profile 7, converted to 8.1 or reduced to its HDR10 base layer (DolbyVision.plan; Profile 8
+//     too where the viewer chose the base layer), and
 //   - ASS/SSA, whose raw events (with their absolute times) also go to libass (AssSubtitles).
 // Subtitle transcoding (Media3's parse-during-extraction) is applied here, after the tap, instead of inside
 // each extractor, so the tap sees raw subtitle samples; Media3's cues are unchanged.
@@ -29,6 +30,8 @@ import java.io.EOFException
 internal class TapPolicy(
   val dolbyVisionDecoderProfiles: Set<Int>,
   val convertsDolbyVision: Boolean,
+  /** The viewer chose the base layer of every Dolby Vision title (OutputPreferences). */
+  val dolbyVisionBaseLayer: Boolean = false,
   val onTrueHd: (formatId: String?, atmos: Boolean) -> Unit,
   val onDolbyVision: (formatId: String?, profile: Int, action: DolbyVisionAction) -> Unit,
   /** Raw ASS/SSA tracks and events go to libass when set. */
@@ -113,7 +116,7 @@ private class TrackTap(private val track: TrackOutput, private val policy: TapPo
       return
     }
     val profile = if (mime == MimeTypes.VIDEO_DOLBY_VISION) DolbyVision.profile(format.codecs) else null
-    action = DolbyVision.plan(profile, policy.dolbyVisionDecoderProfiles, policy.convertsDolbyVision)
+    action = DolbyVision.plan(profile, policy.dolbyVisionDecoderProfiles, policy.convertsDolbyVision, policy.dolbyVisionBaseLayer)
     if (profile == null || action == DolbyVisionAction.KEEP) {
       mode = Mode.PASS
       track.format(format)

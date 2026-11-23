@@ -36,7 +36,9 @@ export interface LiveSessionOwner {
   updatePlan(plan: PlaybackPlan): void;
 }
 
-export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner): PlaybackSession {
+/** `shownAway`: whether the player's picture stays on screen while the app is in the background (Android's
+ * picture-in-picture window), read as the app leaves the foreground; the watch then goes on. */
+export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean): PlaybackSession {
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -95,12 +97,15 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   // A backgrounded app may be suspended and ended there without running JavaScript (the Apple TV's TV
   // button): the session is stopped as the app leaves the foreground, and started again where it was when
   // it returns (stopsInBackground: not a playing iPhone or iPad watch, nor the web). The transient
-  // 'inactive' state (Control Center, a system alert) keeps it.
+  // 'inactive' state (Control Center, a system alert) keeps it. A picture-in-picture window keeps the
+  // watch while the app is away, until the viewer closes it.
   const away = useRef(false);
+  const shownAwayRef = useRef(shownAway);
+  shownAwayRef.current = shownAway;
   useEffect(() => {
     if (!id || external || Platform.OS === 'web') return;
     const subscription = AppState.addEventListener('change', state => {
-      if (state === 'background' && !away.current && stopsInBackground({ os: Platform.OS, tv: Platform.isTV }, paused.current)) {
+      if (state === 'background' && !away.current && !shownAwayRef.current?.() && stopsInBackground({ os: Platform.OS, tv: Platform.isTV }, paused.current)) {
         away.current = true;
         void vela.playback.stop();
       } else if (state === 'active' && away.current) {
@@ -241,6 +246,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       // A switch the engine chose on its own (automatic quality, recovery) is dropped if it goes
       // stale; the viewer's pending quality pick is sent again at the newer generations.
       if (event.sessionId === sessionId) void vela.playback.command(event.sessionId, event.command, commandOrigin(event.command, qualityPick.current));
+    },
+    // The viewer closed the picture-in-picture window of an app in the background: the watch stops as it does
+    // when the app leaves the foreground, and starts again where it was when the app returns.
+    onPictureInPicture: event => {
+      if (!event.closed || external || away.current || AppState.currentState === 'active') return;
+      away.current = true;
+      void vela.playback.stop();
     },
     // An expired grant or a stale reply: core re-reads the session's authoritative plan; a gone session starts over.
     onSessionRefresh: event => {

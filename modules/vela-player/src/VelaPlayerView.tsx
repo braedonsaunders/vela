@@ -36,6 +36,7 @@ interface NativeModule {
   detachPlaybackURL(plan: string, generation: number): void;
   setMediaAccess(access: NativeMediaAccess | null): void;
   claimPlayPause?(claimed: boolean): void;
+  pictureInPicture?(): boolean;
   addListener?(event: 'onClaimedPlayPause', listener: () => void): { remove(): void };
 }
 
@@ -56,6 +57,7 @@ interface NativeViewProps {
   onCommand?: (event: NativeSyntheticEvent<{ id: number; ok: boolean; failure?: Failure }>) => void;
   onSessionCommand?: (event: NativeSyntheticEvent<{ sessionId: string; command: SessionCommand }>) => void;
   onSessionRefresh?: (event: NativeSyntheticEvent<{ sessionId: string }>) => void;
+  onPictureInPicture?: (event: NativeSyntheticEvent<{ active: boolean; closed: boolean }>) => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -78,6 +80,11 @@ export function claimPlayPause(onPress: () => void): () => void {
     nativeModule.claimPlayPause?.(false);
   };
 }
+
+/** Whether the player shows in the activity's picture-in-picture window now (Android): the app has left the
+ * foreground but its picture is still on screen, so a watch goes on. Read as the app leaves the foreground. */
+export const pictureInPicture = (): boolean =>
+  Platform.OS === 'android' && (nativeModule.pictureInPicture?.() ?? false);
 
 let accessGeneration = 0;
 let preparationSequence = 0;
@@ -182,6 +189,7 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     onCommand: forward(props.onCommand),
     onSessionCommand: forward(props.onSessionCommand),
     onSessionRefresh: forward(props.onSessionRefresh),
+    onPictureInPicture: forward(props.onPictureInPicture),
     style: props.style,
   });
 }

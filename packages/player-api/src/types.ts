@@ -91,6 +91,9 @@ export interface VelaPlayerProps {
   onSessionCommand?: (event: { sessionId: string; command: SessionCommand }) => void;
   /** The engine needs a fresh authoritative plan (a stale generation or an expired grant). */
   onSessionRefresh?: (event: { sessionId: string }) => void;
+  /** The activity's picture-in-picture window (Android phones and tablets) opened or closed; `closed` when the
+   * viewer dismissed it, which pauses playback as leaving the app does. */
+  onPictureInPicture?: (event: { active: boolean; closed: boolean }) => void;
 }
 
 /** Media credentials for one server. Only the trusted playback controller holds this; it never

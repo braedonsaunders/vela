@@ -24,11 +24,11 @@ const scratchRoot = existsSync(join(homedir(), '.scratch/tmp')) ? join(homedir()
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }, 60_000);
 
-(compiler ? test : test.skip)('Android display matching, format facts and subtitle appearance run on the JVM', async () => {
+(compiler ? test : test.skip)('Android display matching, format facts, subtitle appearance and output preferences run on the JVM', async () => {
   const scratch = await mkdtemp(join(scratchRoot, 'vela-android-formats-'));
   const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');
   try {
-    const sources = ['DisplayModes', 'AvFormats', 'SubtitleLook', 'DolbyVision', 'AssSample', 'MatroskaAttachments'].map(f => join(source, f + '.kt'));
+    const sources = ['DisplayModes', 'AvFormats', 'SubtitleLook', 'DolbyVision', 'AssSample', 'MatroskaAttachments', 'OutputPreferences', 'PictureInPictureShape'].map(f => join(source, f + '.kt'));
     const probe = join(import.meta.dir, 'fixtures/android/FormatProbe.kt');
     const compile = Bun.spawn([compiler!, ...sources, probe, '-include-runtime', '-d', join(scratch, 'formats.jar')], { stdout: 'pipe', stderr: 'pipe' });
     const output = await new Response(compile.stderr).text();
