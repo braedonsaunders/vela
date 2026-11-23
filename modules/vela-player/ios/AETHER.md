@@ -391,6 +391,18 @@ live AVPlayer rate at 1.0. No live cushion is configured. Explicit Live remains
 a viewer command. Live loads also disable clampsLiveResumeToWindow, which otherwise
 snaps a live-only resume to the edge when sufficiently far behind.
 
+Live timeshift (pause, rewind, back to live) is local. On the remote HLS route
+the snapshot's `live` block reads the current item's seekableTimeRanges (first
+start, last end) on AVPlayer's item time, which is also `position`; latency is
+the item's recommendedTimeOffsetFromLive (else 6 s). Loopback and software
+routes report Aether's published `liveEdgeTime` and `seekableLiveRange` on its
+session axis; without a DVR window they have an edge and no start, so seeks
+are refused and `catchUp` uses `seekToLiveEdge`. Live seeks clamp into
+[start, edge - 1 s] and never become a server session command; resuming a
+pause the window slid past lands 5 s inside its start. A start-over plan
+(`live.mode == "startOver"`) is placed at its plan position once the window is
+known, since live HLS joins at the edge.
+
 Upstream request for AetherEngine: expose a LoadOptions opt-out for automatic
 live resume re-placement and live edge recovery. In 7.70.0 SoftwarePlaybackHost
 arms resumePlacement after an edge rebuffer and publishes liveResumeCatchUp;

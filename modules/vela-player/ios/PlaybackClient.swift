@@ -43,6 +43,8 @@ final class PlaybackClient {
     private var displayCriteriaObservation: NSKeyValueObservation?
     private var displayObservers: [NSObjectProtocol] = []
     private var lastLiveDiagnostic = Date.distantPast
+    /// The live window last emitted as `live-window`.
+    private var liveWindow: LiveWindowReading?
     private var lastCacheDiagnostic = Date.distantPast
     private var lastFormatDiagnostic = Date.distantPast
     /// Halved each time the volume still ran out under the budget (storageExhausted), at most twice.
@@ -142,6 +144,10 @@ final class PlaybackClient {
         case "seek":
             guard args.count > 1, let target = Double(args[1]), let engine else { return }
             Task { @MainActor in await engine.seek(to: target) }
+        case "live-edge":
+            // A live stream without a rewind window: Aether places the playhead behind the edge itself.
+            guard args.count > 1, let offset = Double(args[1]), let engine else { return }
+            Task { @MainActor in await engine.seekToLiveEdge(offsetSeconds: offset) }
         case "sub-add":
             guard args.count > 1, let url = URL(string: args[1]), let engine else { return }
             let track = engine.addExternalSubtitleTrack(ExternalSubtitleTrack(url: url))
@@ -212,7 +218,9 @@ final class PlaybackClient {
                         self.lastLiveDiagnostic = Date()
                         let edge = player.currentItem?.seekableTimeRanges.last?.timeRangeValue
                         let offset = edge.map { CMTimeGetSeconds(CMTimeRangeGetEnd($0)) - player.currentTime().seconds } ?? .nan
-                        print("[vela-live] rate=\(player.rate) position=\(player.currentTime().seconds) offset=\(offset) status=\(player.timeControlStatus.rawValue)")
+                        let window = self.liveWindow
+                        print("[vela-live] rate=\(player.rate) position=\(player.currentTime().seconds) offset=\(offset) status=\(player.timeControlStatus.rawValue)"
+                              + " route=\(self.engine?.videoRoute.rawValue ?? "none") window=\(window?.start ?? .nan)...\(window?.edge ?? .nan) latency=\(window?.latency ?? .nan)")
                     }
                 }.store(in: &self.subscriptions)
                 engine.$audioDelivery.dropFirst().sink { [weak self] delivery in
@@ -229,6 +237,11 @@ final class PlaybackClient {
                 }.store(in: &self.subscriptions)
                 engine.$duration.sink { [weak self] in self?.emit("duration", $0) }.store(in: &self.subscriptions)
                 engine.$isBuffering.sink { [weak self] in self?.emit("paused-for-cache", $0) }.store(in: &self.subscriptions)
+                if self.isLive, !preview {
+                    // Aether publishes its live window on every clock tick, and once a second while paused;
+                    // `behindLiveSeconds` is assigned last, so the edge and range are current when it fires.
+                    engine.clock.$behindLiveSeconds.sink { [weak self] _ in self?.readLiveWindow() }.store(in: &self.subscriptions)
+                }
                 engine.seekEvents.sink { [weak self] event in
                     if case .landed = event.outcome { self?.onEvent?(.seekDone) }
                 }.store(in: &self.subscriptions)
@@ -285,6 +298,8 @@ final class PlaybackClient {
                         }
                     }
                 }
+                if self.properties["reconnecting"] as? Bool == true { self.emit("reconnecting", false) }
+                self.readLiveWindow()
                 self.emit("track-list", engine.audioTracks.map { self.track($0, type: "audio") } + engine.subtitleTracks.map { self.track($0, type: "sub") })
                 self.publishVideoParams(engine, format: engine.videoFormat)
                 self.onEvent?(.fileLoaded)
@@ -294,6 +309,36 @@ final class PlaybackClient {
             }
         }
     }
+    /// The live window on the axis of `time-pos`, emitted as `live-window` when it changes. On AVPlayer's
+    /// remote HLS route the clock is the item's own time, so the window is the item's seekable range and
+    /// its latency AVPlayer's recommended offset from live. Aether's loopback and software routes publish
+    /// their window on the session axis the clock uses; without a DVR window it has an edge and no start.
+    private func readLiveWindow() {
+        guard isLive, !preview, !dead, let engine else { return }
+        var reading: LiveWindowReading?
+        switch engine.videoRoute {
+        case .remoteBypass:
+            guard let item = engine.currentAVPlayer?.currentItem else { break }
+            let ranges = item.seekableTimeRanges.map(\.timeRangeValue).filter { $0.start.isNumeric && $0.duration.isNumeric }
+            guard let first = ranges.first, let last = ranges.last else { break }
+            let offset = item.recommendedTimeOffsetFromLive
+            let latency = offset.isNumeric && offset.seconds > 0 ? offset.seconds : 6
+            // AVPlayer's recommendation is three target durations.
+            reading = LiveWindowReading(start: first.start.seconds, edge: CMTimeRangeGetEnd(last).seconds,
+                                        latency: latency, segment: max(2, latency / 3), source: "seekable")
+        case .loopback, .software:
+            guard engine.liveEdgeTime > 0 else { break }
+            let target = engine.liveTargetDurationSeconds
+            reading = LiveWindowReading(start: engine.seekableLiveRange?.lowerBound, edge: engine.liveEdgeTime,
+                                        latency: target.map { 3 * $0 } ?? 6, segment: target ?? 2, source: "playlist")
+        default:
+            break
+        }
+        guard reading != liveWindow else { return }
+        liveWindow = reading
+        emit("live-window", reading)
+    }
+
     /// The segment cache's share of the device, from the space free now (PlaybackCacheBudget). Orphaned
     /// sessions are swept first so their bytes count as free. Previews and tiles take a quarter share.
     private func configureCache(_ options: inout LoadOptions) {
@@ -410,6 +455,7 @@ final class PlaybackClient {
                 if Date().timeIntervalSince(began) + wait <= 60 {
                     start = (properties["time-pos"] as? Double) ?? start
                     reconnecting = true
+                    emit("reconnecting", true)
                     liveRateObservation = nil
                     liveItemObservation = nil
                     subscriptions.removeAll()

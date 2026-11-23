@@ -4,7 +4,9 @@
 //   - `command`: { id, type, ... } (modules/vela-player/web/engine/model.ts Command); each id is consumed once.
 // On an original file (direct play) seeks and the file's own tracks change here; anything the server must
 // apply (a seek on its HLS, a track the file does not carry, a path switch) is an onSessionCommand, and the
-// view moves when the answering plan arrives. A refused media request asks for a fresh plan (onSessionRefresh).
+// view moves when the answering plan arrives. A live plan's seeks stay here too, inside the window its
+// HLS retains (pause, rewind, catch up), whatever path plays it. A refused media request asks for a fresh
+// plan (onSessionRefresh).
 // Before an original's first frame, the display is asked for its dynamic range and frame rate.
 import Foundation
 import QuartzCore
@@ -53,6 +55,8 @@ final class PlaybackSession {
     /// generation. Distinct from `pendingSeek`, which player is carrying out.
     private var awaitedSeek: Double?
     private var awaitedSeekLimit: Timer?
+    /// A start-over plan's position, taken once its live window is known: live HLS joins at the edge.
+    private var pendingLiveStart: Double?
 
     // A trailer preview (`preview`): it excludes the plan and plays while active and on screen.
     // Made on first use; `madePreview` is what exists, for teardown, which must never make one
@@ -286,7 +290,7 @@ final class PlaybackSession {
             title: title,
             subtitle: nowPlayingSubtitle,
             artworkURL: artwork,
-            duration: state.duration,
+            duration: plan?.isLive == true ? nil : state.duration,
             position: pendingSeek ?? state.position,
             playing: state.phase == .playing
         )
@@ -323,6 +327,7 @@ final class PlaybackSession {
         recoveryPosition = nil
         state = PlayerState()
         pendingSeek = nil
+        pendingLiveStart = plan.live?.mode == "startOver" ? plan.positionSeconds : nil
         report.pathId = path.id
         report.backend = path.isOriginalFile ? "aether-original" : "aether-hls"
         if !ambient {
@@ -446,6 +451,11 @@ final class PlaybackSession {
         if name == "time-pos", let target = pendingSeek, abs(state.position - target) < 2, !state.seeking {
             pendingSeek = nil
         }
+        if name == "live-window", let target = pendingLiveStart, state.live?.start != nil, state.live?.edge != nil {
+            // Start over: the playlist begins at the programme's start, and the player joined at its edge.
+            pendingLiveStart = nil
+            if pendingSeek == nil, abs(state.position - target) > 5 { seek(to: target) }
+        }
         report.publish(state, seekTarget: pendingSeek)
         updateNowPlaying()
     }
@@ -482,6 +492,7 @@ final class PlaybackSession {
         recoveryPosition = position
         state.loaded = false
         state.pausedForCache = true
+        state.reconnecting = true
         recoveryLimit?.invalidate()
         recoveryLimit = Timer.scheduledTimer(withTimeInterval: 45, repeats: false) { [weak self] _ in
             guard let self else { return }
@@ -576,8 +587,15 @@ final class PlaybackSession {
     }
 
     private func seek(to seconds: Double) {
-        let end = (state.duration ?? .infinity) - 1
-        let target = max(0, min(seconds, end))
+        let target: Double
+        if plan?.isLive == true {
+            // A live stream has no duration; it seeks inside the window its HLS retains.
+            guard let window = state.live, let clamped = LiveTimeline.clamp(seconds, in: window) else { return }
+            target = clamped
+        } else {
+            let end = (state.duration ?? .infinity) - 1
+            target = max(0, min(seconds, end))
+        }
         pendingSeek = target
         player?.command(["seek", String(target), "absolute+keyframes"])
     }
@@ -603,6 +621,12 @@ final class PlaybackSession {
         switch type {
         case "play":
             wantsPlay = true
+            // A long pause on live: the window may have slid past the position. Resume at its start then,
+            // never at the edge (AVPlayer's time-offset preservation and Aether's resume clamp are off).
+            if plan?.isLive == true, pendingSeek == nil, let window = state.live,
+               let target = LiveTimeline.resumeTarget(window, position: state.position) {
+                seek(to: target)
+            }
             player?.set("pause", flag: false)
         case "pause":
             wantsPlay = false
@@ -611,12 +635,14 @@ final class PlaybackSession {
             guard let seconds = number(command["seconds"]) else {
                 return "seek needs seconds"
             }
-            requestSeek(to: seconds)
+            return requestSeek(to: seconds)
         case "seekBy":
             guard let seconds = number(command["seconds"]) else {
                 return "seekBy needs seconds"
             }
-            requestSeek(to: (pendingSeek ?? state.position) + seconds)
+            return requestSeek(to: (pendingSeek ?? state.position) + seconds)
+        case "catchUp":
+            return catchUp()
         case "quality", "switchPath":
             let value = (command["renditionId"] as? String) ?? (command["pathId"] as? String) ?? ""
             let pathId = value.hasPrefix("path:") ? String(value.dropFirst(5)) : value
@@ -670,16 +696,42 @@ final class PlaybackSession {
         return nil
     }
 
-    /// A seek: local on an original file; on the server's HLS, a session command whose plan moves the clock.
-    private func requestSeek(to seconds: Double) {
+    /// A seek: local on an original file and inside a live window; on the server's HLS, a session command
+    /// whose plan moves the clock.
+    private func requestSeek(to seconds: Double) -> String? {
+        if plan?.isLive == true {
+            guard let window = state.live, LiveTimeline.clamp(seconds, in: window) != nil else {
+                return state.live?.edge == nil ? "The live window is not known yet" : "This live stream keeps no history to rewind"
+            }
+            seek(to: seconds)
+            return nil
+        }
         let end = (state.duration ?? .infinity) - 1
         let target = max(0, min(seconds, end))
         if playsOriginal {
             seek(to: target)
-            return
+            return nil
         }
         awaitSeek(target)
         report.sessionCommand(["kind": "seek", "positionSeconds": target])
+        return nil
+    }
+
+    /// Back to live: the edge less the player's usual latency. Playing or paused stays as it was.
+    private func catchUp() -> String? {
+        guard plan?.isLive == true else {
+            return "Only a live stream can catch up to live"
+        }
+        guard let window = state.live, let target = LiveTimeline.catchUpTarget(window, position: pendingSeek ?? state.position) else {
+            return "No newer live media to catch up to"
+        }
+        if window.start == nil {
+            pendingSeek = target
+            player?.command(["live-edge", String(window.latency)])
+        } else {
+            seek(to: target)
+        }
+        return nil
     }
 
     private func selectAudio(_ id: String?) -> String? {

@@ -24,6 +24,8 @@ final class PlayerReport {
     private var lastObservation = Date.distantPast
     private var endedReported = ""
     private var failureReported = ""
+    /// Playback is behind live enough to tell the viewer (LiveTimeline.behind), held between snapshots.
+    private var liveBehind = false
 
     init(
         snapshot: @escaping ([String: Any]) -> Void,
@@ -57,6 +59,7 @@ final class PlayerReport {
             audioClientOnly = false
             subtitleClientOnly = false
             sequence = 0
+            liveBehind = false
         }
         if !audioClientOnly {
             audioTrackId = plan.selectedAudioTrackId
@@ -150,10 +153,10 @@ final class PlayerReport {
             "pendingSubtitleTrackId": nil,
             "subtitleError": nil,
             "subtitleStyle": SubtitleAppearance.current.snapshot.merging(["offsetSeconds": state.subtitleOffset]) { $1 },
-            "live": nil,
+            "live": plan.isLive ? live(state, seekTarget: seekTarget) : nil,
             "seekTarget": seekTarget,
             "preparation": phase == "loading" ? (state.tracks.isEmpty ? "media-metadata" : "initial-buffer") : nil,
-            "duration": state.duration,
+            "duration": plan.isLive ? nil : state.duration,
             "throughputBps": state.cacheSpeed.map { Double($0 * 8) },
             "droppedFrames": state.droppedFrames,
             "totalFrames": nil,
@@ -166,6 +169,30 @@ final class PlayerReport {
             out[key] = value ?? NSNull()
         }
         return out
+    }
+
+    /// The model.ts LiveSnapshot: the window on the axis of `position`, and how far behind live that is.
+    private func live(_ state: PlayerState, seekTarget: Double?) -> [String: Any] {
+        let position = seekTarget ?? state.position
+        let window = state.live
+        let lag = window.flatMap { LiveTimeline.lag($0, position: position) }
+        liveBehind = window.map {
+            LiveTimeline.behind(lag: lag, wasBehind: liveBehind, segment: $0.segment)
+                && LiveTimeline.catchUpTarget($0, position: position) != nil
+        } ?? false
+        // A stall while playing is the connection, not a seek or a pause.
+        let reconnecting = state.reconnecting
+            || (state.loaded && state.pausedForCache && !state.paused && !state.seeking && seekTarget == nil)
+        let out: [String: Any?] = [
+            "edgeSeconds": window?.edge,
+            "windowStartSeconds": window?.start,
+            "driftSeconds": liveBehind ? lag : 0,
+            "edgeSource": window?.source,
+            "reconnecting": reconnecting,
+            "delivery": window?.edge != nil && !reconnecting ? "available" : "unknown",
+            "canCatchUp": liveBehind,
+        ]
+        return out.mapValues { $0 ?? NSNull() }
     }
 
     private func video(_ state: PlayerState) -> [String: Any]? {

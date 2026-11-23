@@ -29,6 +29,10 @@ struct PlayerState {
     /// Source → output facts (Snapshot.format).
     var format: [String: Any]?
     var subtitleOffset = 0.0
+    /// A live stream's retained window (`live-window`), on the same axis as `position`.
+    var live: LiveWindowReading?
+    /// The connection to a live stream was lost and is being re-established (`reconnecting`).
+    var reconnecting = false
     var failure: String?
     var failureKind = "source"
 
@@ -79,6 +83,8 @@ struct PlayerState {
         case "audio-codec-name": audioCodec = value as? String
         case "format": format = value as? [String: Any]
         case "sub-delay": subtitleOffset = value as? Double ?? 0
+        case "live-window": live = value as? LiveWindowReading
+        case "reconnecting": reconnecting = value as? Bool ?? false
         default: break
         }
     }
@@ -115,4 +121,62 @@ struct PlayerState {
         }
     }
 
+}
+
+/// A live stream's retained window as the engine reports it, on the same axis as `time-pos`.
+struct LiveWindowReading: Equatable {
+    /// The oldest position that can be played; nil when the stream keeps no history (live only).
+    var start: Double?
+    /// The newest position that can be played: the end of the seekable range.
+    var edge: Double?
+    /// How far behind the edge playback normally sits (the player's live latency target).
+    var latency: Double
+    /// The segment duration: the edge advances by about this much at a time.
+    var segment: Double
+    /// LiveSnapshot.edgeSource: `seekable` (AVPlayer's seekable ranges) or `playlist` (Aether's own window).
+    var source: String
+}
+
+/// Live timeshift arithmetic for the snapshot and the commands. The same rules as the web player
+/// (modules/vela-player/web/engine/live-behind.ts and host/live.ts).
+enum LiveTimeline {
+    /// Seconds playback trails its usual live position (the edge less the latency target), or nil when
+    /// that cannot be told: no edge, or a position before the window (where the player is about to be put).
+    static func lag(_ window: LiveWindowReading, position: Double) -> Double? {
+        guard let edge = window.edge, position.isFinite else { return nil }
+        if let start = window.start, position < start - 1 { return nil }
+        return max(0, edge - window.latency - position)
+    }
+
+    /// Whether playback is behind live in a way the viewer should be told about: at least 10 s (or two
+    /// segments when segments are longer), and once behind, until back within 3 s, so it cannot flicker.
+    static func behind(lag: Double?, wasBehind: Bool, segment: Double) -> Bool {
+        guard let lag else { return false }
+        return wasBehind ? lag > 3 : lag >= max(10, 2 * segment)
+    }
+
+    /// Where catching up to live lands: the edge less the latency target, inside the window. Nil when
+    /// that is not ahead of `position`, so there is nothing newer to go to.
+    static func catchUpTarget(_ window: LiveWindowReading, position: Double) -> Double? {
+        guard let edge = window.edge else { return nil }
+        var target = edge - window.latency
+        if let start = window.start {
+            guard edge - start >= 0.25 else { return nil }
+            target = max(start + 0.05, target)
+        }
+        return target > position + 0.25 ? min(target, edge - 0.1) : nil
+    }
+
+    /// A seek target held inside the window, short of the edge by a second; nil without a window to seek in.
+    static func clamp(_ seconds: Double, in window: LiveWindowReading) -> Double? {
+        guard seconds.isFinite, let start = window.start, let edge = window.edge, edge >= start else { return nil }
+        return min(max(seconds, start), max(start, edge - 1))
+    }
+
+    /// Where a paused live stream resumes when the window slid past its position meanwhile: a little
+    /// inside the window's start, so the next slide does not take it again at once. Nil when still inside.
+    static func resumeTarget(_ window: LiveWindowReading, position: Double) -> Double? {
+        guard let start = window.start, let edge = window.edge, position < start else { return nil }
+        return start + min(5, max(0, edge - 1 - start))
+    }
 }
