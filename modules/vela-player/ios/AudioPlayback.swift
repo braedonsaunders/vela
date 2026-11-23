@@ -32,6 +32,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     private var loadID = 0
     /// Where the item starts once it is ready (or a seek asked for before then).
     private var pendingStart: Double?
+    /// A seek on its way: the position until it lands.
+    private var seekTarget: Double?
     private var wantsPlay = false
     private var rate: Float = 1
     private var ready = false
@@ -127,10 +129,18 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
             pendingStart = max(0, seconds)
             return
         }
-        player.seek(to: CMTime(seconds: max(0, seconds), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.publish(tick: true) } }
+        // AVPlayer's currentTime stays at the old place until the seek lands: report the target meanwhile.
+        let target = max(0, seconds)
+        seekTarget = target
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, self.seekTarget == target else { return }
+                    self.seekTarget = nil
+                    self.publish(tick: true)
+                }
+            }
         }
-        publish(tick: true)
     }
 
     func setRate(_ value: Double) {
@@ -182,10 +192,12 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
             ready = true
             if let start = pendingStart {
                 pendingStart = nil
+                seekTarget = start
                 changed.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
                             guard let self, self.item === changed else { return }
+                            if self.seekTarget == start { self.seekTarget = nil }
                             if self.wantsPlay { self.player.playImmediately(atRate: self.rate) }
                             self.publish(tick: true)
                         }
@@ -243,6 +255,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
 
     private var position: Double {
         if let start = pendingStart { return start }
+        if let target = seekTarget { return target }
         let seconds = player.currentTime().seconds
         return seconds.isFinite ? max(0, seconds) : 0
     }
@@ -298,6 +311,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     }
 
     private func detachItem() {
+        seekTarget = nil
         itemObservers.forEach { $0.invalidate() }
         itemObservers = []
         itemNotifications.forEach { NotificationCenter.default.removeObserver($0) }

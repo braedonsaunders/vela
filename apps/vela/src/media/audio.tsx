@@ -1,8 +1,9 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
+import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HostContext } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/widgets/media';
@@ -16,6 +17,10 @@ import { useMediaPlayerActions } from './player-actions';
 import { useReaderActions } from './reader-actions';
 
 const fill = StyleSheet.absoluteFill;
+/** On iPhone and iPad a title page is a native modal, presented above the root view: the dock rides in
+ * a window of its own above it, so the mini player and Now Playing stay on top of an album's page. A TV
+ * presents pages inside the root view, and Android draws the dock above its stack already. */
+const Above = Platform.OS === 'ios' && !Platform.isTV ? FullWindowOverlay : Fragment;
 /** Now Playing's rise is a long move, so a little longer than a section; its fall is quicker. */
 const NOW_PLAYING_ENTER = 420;
 const NOW_PLAYING_EXIT = 280;
@@ -52,14 +57,16 @@ export function AudioDock() {
   return (
     <HostContext.Provider value={host}>
       <MediaActionsContext.Provider value={actions}>
-        <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-          <Presence shown={playing && !open} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
-            <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
-          </Presence>
-          <Presence shown={playing && open} still={still} offstage={{ y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
-            <NowPlaying onClose={close} />
-          </Presence>
-        </View>
+        <Above>
+          <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+            <Presence shown={playing && !open} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
+              <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
+            </Presence>
+            <Presence shown={playing && open} still={still} offstage={{ y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
+              <NowPlaying onClose={close} />
+            </Presence>
+          </View>
+        </Above>
       </MediaActionsContext.Provider>
     </HostContext.Provider>
   );
