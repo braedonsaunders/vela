@@ -28,7 +28,7 @@ describe('Plex media classes', () => {
   });
 
   test('a photo with media is a photo title; an album of photos is not a title', () => {
-    expect(plexProjection({ type: 'photo', title: 'IMG_0001', Media: [{ Part: [{}] }] })).toEqual({ kind: 'movie', media: { class: 'photo', role: 'item' } });
+    expect(plexProjection({ type: 'photo', title: 'IMG_0001', Media: [{ width: 1600, height: 1066, Part: [{}] }] })).toEqual({ kind: 'movie', media: { class: 'photo', role: 'item', facts: [{ label: 'Size', value: '1600 × 1066' }] } });
     expect(plexProjection({ type: 'photo', title: 'Lake Weekend' })).toBeUndefined();
     expect(plexProjection({ type: 'clip', title: 'VID_0001' })).toEqual({ kind: 'movie' });
   });
@@ -126,5 +126,56 @@ describe('Plex audio and stacked titles', () => {
   test('a stacked title needs the server\'s stream', async () => {
     routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [twofold] } } });
     await expect(plex().startPlayback({ titleId: '1', client, idempotencyKey: 'x', allowTranscode: false } as never)).rejects.toThrow('several parts');
+  });
+});
+
+describe('Plex watchlist', () => {
+  const DISCOVER = 'https://discover.provider.plex.tv';
+  const heat = { ratingKey: '10', type: 'movie', title: 'Heat', guid: 'plex://movie/5d776b59ad5437001f79c6f8', Media: [{ id: 1, Part: [{ id: 1 }] }] };
+  /** Plex's own and plex.tv's discover answers on one routed fetch (paths are distinct). */
+  function route(account: boolean, onWatchlist: boolean) {
+    const seen: { method: string; url: URL }[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input instanceof Request ? input.url : input));
+      const method = init?.method ?? 'GET';
+      seen.push({ method, url });
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+      if (url.origin === DISCOVER) {
+        if (!account) return json({}, 401);
+        if (url.pathname === '/library/sections/watchlist/all') return json({ MediaContainer: { Metadata: [{ guid: heat.guid, type: 'movie', title: 'Heat' }, { guid: 'plex://movie/elsewhere', type: 'movie' }] } });
+        if (url.pathname.endsWith('/userState')) return json({ MediaContainer: { UserState: onWatchlist ? [{ watchlistedAt: 1700000000 }] : [{}] } });
+        if (url.pathname.startsWith('/actions/')) return json({});
+      }
+      if (url.pathname === '/library/metadata/10') return json({ MediaContainer: { Metadata: [heat] } });
+      if (url.pathname === '/hubs') return json({ MediaContainer: { Hub: [] } });
+      if (url.pathname === '/library/all') return json({ MediaContainer: { Metadata: url.searchParams.get('guid') === heat.guid ? [heat] : [] } });
+      return json({}, 404);
+    }) as typeof fetch;
+    return { seen, restore: () => { globalThis.fetch = real; } };
+  }
+
+  test('the server\'s owner (whose token is the account\'s) sees, adds to and removes from the watchlist', async () => {
+    const r = route(true, true);
+    try {
+      const adapter = plex();
+      const actions = await adapter.titleActions('10');
+      expect([actions.watchlist, actions.favorite, actions.watch.watchlisted]).toEqual([true, false, true]);
+      await adapter.setTitleWatch('10', { idempotencyKey: 'w', watchlisted: false });
+      expect(r.seen.at(-1)).toMatchObject({ method: 'PUT', url: new URL(`${DISCOVER}/actions/removeFromWatchlist?ratingKey=5d776b59ad5437001f79c6f8`) });
+      // Home carries the watchlist as far as this server holds it.
+      const rows = await adapter.rows({});
+      expect(rows.items.map(row => [row.name, row.items.map(e => e.id)])).toEqual([['Watchlist', ['10']]]);
+    } finally { r.restore(); }
+  });
+
+  test('anyone else\'s token is refused by plex.tv and the watchlist stays hidden', async () => {
+    const r = route(false, false);
+    try {
+      const adapter = plex();
+      expect((await adapter.titleActions('10')).watchlist).toBe(false);
+      await expect(adapter.setTitleWatch('10', { idempotencyKey: 'w', watchlisted: true })).rejects.toThrow('watchlist is unavailable');
+      expect((await adapter.rows({})).items).toEqual([]);
+    } finally { r.restore(); }
   });
 });

@@ -57,12 +57,17 @@ export function titleProjection(i: Item, hint: MediaHint = {}): { kind: V.TitleK
       const format = readingFormat(i);
       return { kind: 'movie', media: { class: 'book', role: 'book', credits: authors(i), ...(format ? { reading: { format } } : {}) } };
     }
-    case 'Photo': return { kind: 'movie', media: { class: 'photo', role: 'item' } };
+    case 'Photo': return { kind: 'movie', media: { class: 'photo', role: 'item', ...photoFacts(i.Width, i.Height) } };
     case 'Folder': return hint.group ? { kind: 'show', media: { class: 'audiobook', role: 'audiobook', ...count(i.ChildCount), credits: authors(i) } } : undefined;
     default: return undefined;
   }
 }
 
+/** A photo's size, shown as written. */
+export function photoFacts(width: unknown, height: unknown): Partial<V.TitleMedia> {
+  const w = Number(width), h = Number(height);
+  return w > 0 && h > 0 ? { facts: [{ label: 'Size', value: `${w} × ${h}` }] } : {};
+}
 function count(n: number | undefined) { return n && n > 0 ? { childCount: n } : {}; }
 function index(n: number | undefined) { return n && n > 0 ? { index: n } : {}; }
 function albumArtist(i: Item): { id: string; name: string } | undefined {

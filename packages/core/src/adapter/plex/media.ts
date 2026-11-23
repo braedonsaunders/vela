@@ -2,6 +2,7 @@
 // photos (albums of photos and clips) and the multi-part movies Plex stacks from several files.
 // Pure functions over Plex's own metadata shapes.
 import type * as V from '../../wire';
+import { photoFacts } from '../jellyfin/media';
 
 type Node = Record<string, any>;
 
@@ -33,7 +34,7 @@ export function plexProjection(n: Node, audiobooks = false): { kind: V.TitleKind
         parents: [...(album ? [{ id: album, name: n.parentTitle ?? '', role: 'album' as const }] : []), ...(artist ? [{ id: artist, name: n.grandparentTitle ?? '', role: 'artist' as const }] : [])],
         credits: [{ name: n.originalTitle || n.grandparentTitle || '', role: 'artist' }].filter(c => c.name) } };
     }
-    case 'photo': return isPhotoAlbum(n) ? undefined : { kind: 'movie', media: { class: 'photo', role: 'item' } };
+    case 'photo': return isPhotoAlbum(n) ? undefined : { kind: 'movie', media: { class: 'photo', role: 'item', ...photoFacts(n.Media?.[0]?.width, n.Media?.[0]?.height) } };
     default: return undefined;
   }
 }

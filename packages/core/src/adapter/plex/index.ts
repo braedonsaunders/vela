@@ -43,6 +43,11 @@ function page<T>(items: T[], start = 0, total?: number): V.Page<T> {
   const more = total !== undefined && start + items.length < total;
   return { items, continuation: more ? 'more' : total === undefined ? 'unknown' : 'exhausted', ...(more && items.length ? { nextCursor: String(start + items.length) } : {}) };
 }
+const DISCOVER = 'https://discover.provider.plex.tv';
+/** A movie's or show's plex.tv key (its plex:// guid's id), what the watchlist is keyed by. */
+export function discoverKey(n: Node): string | undefined {
+  return typeof n.guid === 'string' ? /^plex:\/\/(movie|show)\/([A-Za-z0-9]+)$/.exec(n.guid)?.[2] : undefined;
+}
 /** Node types rows show: titles, and directories (collections, playlists, albums of photos). */
 const SHOWN = ['movie', 'show', 'season', 'episode', 'collection', 'playlist', 'artist', 'album', 'track', 'photo', 'clip'];
 const SEARCHED = ['movie', 'show', 'season', 'episode', 'artist', 'album', 'track'];
@@ -58,6 +63,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
   private sections = new Map<string, Node>();
+  private watchlistProbe?: Promise<boolean>;
   private liveConfig?: { dvr: string; grid: string; channels: string };
   private delegation?: Promise<string>;
   constructor(private config: PlexConfig) {
@@ -233,7 +239,43 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const c = await this.request(path, { count: q.limit || 20 });
     // PMS lists every hub type, including ones with nothing in them; an empty, finished hub is not a row.
     const hubs = (c.Hub || []).map((h: Node) => this.hub(h)).filter((row: V.Row) => row.items.length > 0 || row.continuation === 'more');
+    // Home: the account's plex.tv watchlist, as far as this server holds it, after Continue Watching.
+    if (path === '/hubs') {
+      const watchlist = await this.watchlistRow().catch(() => undefined);
+      if (watchlist?.items.length) hubs.splice(hubs.findIndex((row: V.Row) => row.purpose !== 'continue') < 0 ? hubs.length : hubs.findIndex((row: V.Row) => row.purpose !== 'continue'), 0, watchlist);
+    }
     return page(hubs, 0, hubs.length);
+  }
+  /** A request to plex.tv's discover service (the account's watchlist) with this server's token. */
+  private async discover(path: string, query: Record<string, unknown> = {}, method = 'GET'): Promise<Node> {
+    const u = new URL(path, DISCOVER);
+    if (u.origin !== DISCOVER) fail('Plex request outside plex.tv');
+    for (const [k, v] of Object.entries(query)) if (v !== undefined) u.searchParams.set(k, String(v));
+    const tokens = await this.config.credentials.get();
+    if (!tokens) fail('Sign in required', 'auth');
+    const response = await fetch(u.href, { method, redirect: 'error', credentials: 'omit', headers: { ...plexHeaders(this.config.clientIdentifier), 'X-Plex-Token': tokens.accessToken } });
+    if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : 'source', code: 'plex_discover', message: `Plex watchlist request failed (${response.status})`, retry: { allowed: false } }, response.status);
+    const text = await response.text();
+    const body = text.trim() ? JSON.parse(text) : {};
+    return body.MediaContainer ?? body;
+  }
+  /**
+   * The watchlist belongs to the plex.tv account. Only the chosen server's token is kept (./link),
+   * and it is the account's own when the viewer owns the server: then plex.tv answers with it.
+   * For anyone else it refuses, and the watchlist stays hidden.
+   */
+  private watchlistAvailable(): Promise<boolean> {
+    this.watchlistProbe ??= this.discover('/library/sections/watchlist/all', { 'X-Plex-Container-Start': 0, 'X-Plex-Container-Size': 1 }).then(() => true, () => false);
+    return this.watchlistProbe;
+  }
+  private async watchlistRow(): Promise<V.Row | undefined> {
+    if (!(await this.watchlistAvailable())) return undefined;
+    const c = await this.discover('/library/sections/watchlist/all', { 'X-Plex-Container-Start': 0, 'X-Plex-Container-Size': 40, sort: 'watchlistedAt:desc' });
+    // Each watchlisted title as this server holds it (by its plex:// guid); titles it lacks are left out.
+    const local = await Promise.all(this.nodes(c).filter(n => typeof n.guid === 'string' && /^plex:\/\/(movie|show)\//.test(n.guid)).map(n =>
+      this.request('/library/all', { guid: n.guid }).then(found => this.nodes(found)[0]).catch(() => undefined)));
+    const items = local.filter((n): n is Node => !!n && SHOWN.includes(n.type)).map(n => this.entry(n));
+    return { id: 'plex:watchlist', name: 'Watchlist', purpose: 'recommendation', receiptToken: '', items, continuation: 'exhausted' };
   }
   async libraryRows(id: string, _kind: V.Library['kind']): Promise<V.Row[]> {
     const c = await this.request(`/hubs/sections/${enc(id)}`, { count: 20 });
@@ -405,11 +447,23 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const audio = (m.Part || []).flatMap((p: Node) => (p.Stream || []).filter((t: Node) => Number(t.streamType) === 2));
       return audio.length > 1 ? audio.map((t: Node) => ({ id: String(m.id ?? index), audioTrackId: String(t.id), name: `${release} · ${t.displayTitle || t.language || t.languageCode || t.codec}` })) : [{ id: String(m.id ?? index), name: release }];
     });
-    return { watched: true, favorite: false, watchlist: false, removeFromContinue: true, watch: this.title(n).watch!, versions };
+    const key = discoverKey(n);
+    const watchlist = !!key && await this.watchlistAvailable();
+    const watchlisted = watchlist ? await this.discover(`/library/metadata/${enc(key)}/userState`).then(c => {
+      const state = Array.isArray(c.UserState) ? c.UserState[0] : c.UserState;
+      return !!state?.watchlistedAt;
+    }).catch(() => false) : false;
+    // Plex keeps no favourites: only watched state, Continue Watching and the account's watchlist.
+    return { watched: true, favorite: false, watchlist, removeFromContinue: true, watch: { ...this.title(n).watch!, watchlisted }, versions };
   }
 
   async setTitleWatch(id: string, change: V.WatchRequest) {
-    if (change.favorite !== undefined || change.watchlisted !== undefined) fail('Plex list management is unavailable');
+    if (change.favorite !== undefined) fail('Plex keeps no favourites');
+    if (change.watchlisted !== undefined) {
+      const key = discoverKey(await this.metadata(id));
+      if (!key || !(await this.watchlistAvailable())) fail('The Plex watchlist is unavailable for this account');
+      await this.discover(`/actions/${change.watchlisted ? 'addToWatchlist' : 'removeFromWatchlist'}`, { ratingKey: key }, 'PUT');
+    }
     if (change.played !== undefined) await this.request(change.played ? '/:/scrobble' : '/:/unscrobble', { key: id, identifier: 'com.plexapp.plugins.library' }, 'PUT');
     if (change.continueWatching === false) await this.request('/actions/removeFromContinueWatching', { ratingKey: id }, 'PUT');
   }

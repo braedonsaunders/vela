@@ -45,7 +45,7 @@ describe('Jellyfin and Emby media classes', () => {
   });
 
   test('photos are photo titles; folders and albums of photos are not titles', () => {
-    expect(titleProjection({ Id: 'ph', Name: 'IMG_0001', Type: 'Photo' })).toEqual({ kind: 'movie', media: { class: 'photo', role: 'item' } });
+    expect(titleProjection({ Id: 'ph', Name: 'IMG_0001', Type: 'Photo', Width: 1600, Height: 1066 })).toEqual({ kind: 'movie', media: { class: 'photo', role: 'item', facts: [{ label: 'Size', value: '1600 × 1066' }] } });
     expect(titleProjection({ Id: 'pa', Name: 'Lake', Type: 'PhotoAlbum' })).toBeUndefined();
     expect(titleProjection({ Id: 'f', Name: 'Author', Type: 'Folder' })).toBeUndefined();
     expect(titleProjection({ Id: 'v', Name: 'Cake', Type: 'Video' })).toEqual({ kind: 'movie' });
