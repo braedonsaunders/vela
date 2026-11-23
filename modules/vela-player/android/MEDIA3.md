@@ -22,7 +22,10 @@ live under ~/.scratch. The script disables GPL, nonfree and version3 components,
 selects audio decoders only and builds the JNI wrapper from upstream source.
 The APK includes the Apache-2.0 and LGPL-2.1 texts under assets/vela-licenses.
 The build script and pinned upstream source permit rebuilding/relinking the
-extension; no third-party prebuilt FFmpeg artifact or libmpv is used.
+extension; no third-party prebuilt FFmpeg artifact or libmpv is used. Gradle
+also requires `dovi/build.sh` (libdovi, Rust, private toolchain) and
+`ass/build.sh` (libass and its dependencies, meson/ninja) to have run for each
+requested ABI; both keep their pinned source and output under ~/.scratch.
 
 The scoped DataSource captures a grant per engine. Every request (including
 manifest, segment, subtitle and seek requests) checks its origin and normalized
