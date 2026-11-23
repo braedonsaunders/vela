@@ -171,3 +171,15 @@ test('decoded audio is lossless only when nothing was folded or resampled', () =
   expect(audioOutputFacts({ ...route, codec: 'eac3', decoder: 'eac3' }).lossless).toBeUndefined();
   expect(audioOutputFacts({ ...route, codec: 'dts', decoder: 'dts' }).lossless).toBeUndefined();
 });
+
+test('the browser video element reports only what the rendition declared', async () => {
+  const { browserFormat } = await import('../web/engine/host/telemetry');
+  expect(browserFormat({ codec: 'h264', width: 1920, height: 1080, dynamicRange: 'sdr' }, { id: 'a', label: 'English', codec: 'aac', channels: 2, language: 'en' })).toEqual({
+    video: { codec: 'h264', width: 1920, height: 1080, range: 'sdr' },
+    videoOut: { frameRateMatch: 'unsupported', rangeMatch: 'unsupported' },
+    audio: { codec: 'aac', channels: 2, language: 'en' },
+    audioOut: { delivery: 'system' },
+  });
+  expect(browserFormat(null, undefined)).toBeNull();
+  expect(browserFormat({ codec: '', width: 1, height: 1, dynamicRange: null }, undefined)).toBeNull();
+});
