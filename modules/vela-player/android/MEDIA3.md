@@ -85,6 +85,19 @@ count (EDID for HDMI), its highest rate, and `lossless` when TrueHD passes
 through or float PCM reaches 8 channels. A mid-title route change falls back to
 decoding.
 
+### IEC 61937 (not built)
+
+Some Android TV HALs (Fire TV, many Amlogic boxes) list TrueHD or DTS-HD only as
+IEC 61937 encapsulated profiles (Android 13+ `AudioProfile.getEncapsulationType()`
+`AUDIO_ENCAPSULATION_TYPE_IEC61937`), which Media3's AudioCapabilities skips, so
+those devices decode TrueHD to PCM (bed only) today. The missing piece is an
+AudioSink beside DefaultAudioSink that, for such a profile, packs the bitstream
+the way FFmpeg's spdif muxer (libavformat/spdifenc.c, LGPL) does: TrueHD into
+MAT frames (24 access units per 61,440-byte burst, Pc 22) and DTS-HD MA into type
+IV bursts (Pc 17), written to an `ENCODING_IEC61937` AudioTrack at 8 channels,
+192 kHz, with position and pause/flush handling. It needs such a device and an
+AV receiver to verify, so it is not built blind.
+
 ## Dolby Vision
 
 Media3 gives Dolby Vision Profile 7 (UHD Blu-ray: an HDR10 base layer plus an
