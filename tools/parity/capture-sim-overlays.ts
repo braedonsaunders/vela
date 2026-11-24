@@ -41,11 +41,13 @@ if (values.pick) {
   // name=run/NN pairs: the shot and the one after it (the moving-region mask) become the view's capture.
   const captures = values.pick.split(',').map(pair => {
     const [view, at] = pair.split('=') as [string, string];
-    const [run, n] = at.split('/') as [string, string];
+    // `run/NN!`: the shot alone (the next one shows another state), so only the other set masks its motion.
+    const alone = at.endsWith('!');
+    const [run, n] = at.replace(/!$/, '').split('/') as [string, string];
     const file = `${viewport}--${view}.png`, frame = join('frames', file.replace(/\.png$/, '.b.png'));
     const next = String(Number(n) + 1).padStart(2, '0');
     copyFileSync(join(out, 'burst', run, `${n}.png`), join(out, file));
-    copyFileSync(join(out, 'burst', run, `${existsSync(join(out, 'burst', run, `${next}.png`)) ? next : n}.png`), join(out, frame));
+    copyFileSync(join(out, 'burst', run, `${!alone && existsSync(join(out, 'burst', run, `${next}.png`)) ? next : n}.png`), join(out, frame));
     const described = OVERLAY_VIEWS.find(v => v.name === view);
     return { viewport, view, file, frame, url: RUNS.find(r => r.name === run)?.route ?? '', description: described?.description ?? view, ok: true, shot: at };
   });
