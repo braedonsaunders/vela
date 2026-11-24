@@ -16,11 +16,13 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
 internal object AudioPlayback : SessionOwner {
@@ -53,8 +55,14 @@ internal object AudioPlayback : SessionOwner {
     val sources = DataSource.Factory { ScopedMediaDataSource(grant) }
     // Platform decoders first, the LGPL FFmpeg extension for the rest (ALAC; Opus, Vorbis and FLAC where
     // MediaCodec lacks them). No float output: it bypasses Sonic, which is what keeps pitch at speed.
+    // MP3 always decodes in FFmpeg: Media3 trims the LAME delay plus the 529-sample decoder delay FFmpeg's
+    // decoder has, but Android's MP3 decoder already drops those 529 samples itself, so with it each track
+    // lost its first 12 ms and ended on 12 ms of padding (a dropout at every gapless join).
     val renderers = DefaultRenderersFactory(context)
       .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+      .setMediaCodecSelector { mimeType, secure, tunneling ->
+        if (mimeType == MimeTypes.AUDIO_MPEG) emptyList() else MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
+      }
       .setEnableDecoderFallback(true)
     val player = ExoPlayer.Builder(context, renderers)
       .setMediaSourceFactory(DefaultMediaSourceFactory(sources))
