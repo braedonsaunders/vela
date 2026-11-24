@@ -154,9 +154,20 @@ The full contract is in the protocol README, "Loudness and AutoMix markers".
 - **No measured beat grid**: ffmpeg has none, and Ether won't add a second decode.
 - **When measurement runs**: after a track's first complete play, from its cached copy, so a new album levels by Deezer's hint or not at all until played once. The panel says which applies to the song playing.
 
-## Verification plan (stage 2)
+## Measured
 
-- **Unit tests**: biquad coefficients (DC and Nyquist response and band-centre gain per preset), envelope curves and the handover timing, as pure functions beside `sound.ts`.
-- **Web**: an OfflineAudioContext render in headless Chrome (muted). Check the measured band gains of a swept sine through the chain, and the crossfade's overlap and equal-power sum, on the mock's tone fixtures.
-- **Lab** (muted, validation account): a shuffled playlist across albums with very different loudness, an album straight through (gapless, album gain), and an audiobook (no AutoMix, Spoken word preset).
-- **Native**: device checks on Android (worker emulator, then a phone) and Apple. Measure the per-item gain boundary on Android and whether crossfades land on time when locked.
+Every engine was measured from its own processed output (after levelling, EQ and fades, before the device: nothing is played aloud) with `tools/sound-measure` (signals, a muted Chrome harness for the web, capture modes in debug native builds, one analyser). 2026-11-24: web in headless Chrome; Android on an API 34 emulator (harness APK compiling the module's sources); iOS 27.1 and tvOS 27 simulators (harness compiling the module's sources).
+
+| Measurement | Spec | Web | Android | iOS / tvOS |
+| --- | --- | --- | --- | --- |
+| Levelling gain (0.5, 1, 2) | ±0.05 dB | 0.000 dB | 0.000 dB | 0.000 dB |
+| Gain switch at a gapless join | the boundary sample | on it | on it | on it |
+| EQ response, 3 presets, 31 Hz–16 kHz | ±0.5 dB (16 kHz ±1) | ≤ 0.001 dB | ≤ 0.003 dB | ≤ 0.004 dB |
+| Crossfade start (6 s at 20 s) | ±20 ms | +10 ms* | −8 to +15 ms (5 runs) | +10 ms* (clock: 1–3 samples) |
+| Crossfade overlap | ±50 ms | −20 ms* | −10 ms | −20 ms* |
+| Equal power across the fade | ±0.5 dB | 0.00 dB | 0.01 dB | 0.0006 dB |
+| Beat alignment (120 BPM clicks) | ±12 ms | 0 ms (moved 83 ms) | n/a (no PCM ahead) | n/a |
+
+\* The analyser's 10 ms window steps and −60 dB thresholds account for these; the engines' own clocks put the start within samples.
+
+In the apps: on the web and on an Android emulator against the mock, AutoMix crossfaded consecutive tracks of a shuffled queue at the fade markers, an album played in order stayed gapless with AutoMix on, and levelling and the EQ reached the players. Not yet checked: real phones and TVs, crossfades with the screen locked, and anything by ear.
