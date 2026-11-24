@@ -796,11 +796,12 @@ final class PlaybackSession {
         }
         let index = track.streamIndex
         guard playsOriginal, let index, let trackId = state.trackId(type: "audio", streamIndex: index) else {
+            // The server applies it; its answer is adopted even after an earlier choice made in the player.
+            report.requestAudio(id)
             report.sessionCommand(["kind": "tracks", "audioTrackId": id])
             return nil
         }
-        report.audioTrackId = id
-        report.audioClientOnly = true
+        report.chooseAudio(id)
         player?.set("aid", String(trackId))
         return nil
     }

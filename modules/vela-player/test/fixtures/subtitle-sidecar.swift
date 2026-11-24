@@ -8,12 +8,14 @@ struct PlaybackPreferences {
     let values: [String: String] = [:]
 }
 
-func plan(session: String = "s", revision: Int = 1, selected: String? = "sidecar") -> VelaPlan {
+func plan(session: String = "s", revision: Int = 1, selected: String? = "sidecar", audio: String = "english") -> VelaPlan {
     VelaPlan.decode([
         "sessionId": session, "revision": revision, "sourceGeneration": 1, "seekGeneration": 1,
         "positionSeconds": 0, "selectedPathId": "hls",
         "paths": [["id": "hls", "kind": "transcode", "transport": "hls", "readiness": "ready"]],
-        "audioTracks": [],
+        "audioTracks": [["id": "english", "name": "English", "streamIndex": 1], ["id": "spanish", "name": "Spanish", "streamIndex": 2],
+                        ["id": "commentary", "name": "Commentary"]],
+        "selectedAudioTrackId": audio,
         "subtitleTracks": [
             ["id": "sidecar", "name": "English", "delivery": ["kind": "external", "url": "https://media.example/en.vtt"]],
             ["id": "found", "name": "Dutch", "delivery": ["kind": "external", "url": "https://media.example/nl.vtt"]],
@@ -109,11 +111,30 @@ func embeddedAfterSidecar() {
     precondition(report.subtitleTrackId == "embedded")
 }
 
+/// Audio the same way: after the viewer's own pick in the original file, a track the server applies hands the choice
+/// back to the server, whose answer is shown, while a choice made in the player stays across plans.
+func audioAfterLocalPick() {
+    let report = PlayerReport(snapshot: { _ in }, observation: { _ in }, error: { _ in }, sessionCommand: { _ in })
+    report.adopt(plan(), newSession: true)
+    precondition(report.audioTrackId == "english" && !report.audioClientOnly)
+    report.chooseAudio("spanish")
+    report.adopt(plan(revision: 2), newSession: false)
+    precondition(report.audioTrackId == "spanish" && report.audioClientOnly)
+    report.requestAudio("commentary")
+    precondition(report.audioTrackId == "commentary" && !report.audioClientOnly)
+    report.adopt(plan(revision: 3, audio: "commentary"), newSession: false)
+    precondition(report.audioTrackId == "commentary")
+    // A refusal leaves the server's own choice, which is then shown.
+    report.adopt(plan(revision: 4, audio: "english"), newSession: false)
+    precondition(report.audioTrackId == "english")
+}
+
 @main struct Probe {
     static func main() {
         sidecarSteps()
         adoption()
         embeddedAfterSidecar()
+        audioAfterLocalPick()
         print("subtitle sidecar passed")
     }
 }

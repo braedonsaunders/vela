@@ -75,6 +75,20 @@ final class PlayerReport {
         }
     }
 
+    /// The viewer's own audio choice, applied in the player (the original file's streams): later plans keep it.
+    func chooseAudio(_ id: String) {
+        audioTrackId = id
+        audioClientOnly = true
+    }
+
+    /// An audio choice the server applies (a track the original file does not carry, or any over its HLS): shown
+    /// as chosen meanwhile, and from here on the report follows the server's selection again, not an earlier
+    /// choice the viewer made on the device.
+    func requestAudio(_ id: String) {
+        audioTrackId = id
+        audioClientOnly = false
+    }
+
     /// The viewer's own subtitle choice, applied in the player: later plans of this session keep it.
     func chooseSubtitle(_ id: String?) {
         subtitleTrackId = id
