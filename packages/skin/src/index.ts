@@ -12,3 +12,6 @@ export type { Hit, SearchView } from './widgets/search/model';
 export { LiveProvider, useLiveContext, useLiveSurface, useLiveView } from './widgets/guide';
 export { focusElement, useReturnFocus } from './escape';
 export { SkipToContent } from './widgets/skip-to-content';
+export { RecapBlock, RecapDailyChart, RecapPeriodChip, RecapRankedSection, RecapStatsGrid, RewindCover, RewindShareModal, useHistoryRecap, type RecapBlockProps } from './blocks/recap';
+export { ImportCover, ImportResultView, PlaylistImportBlock, SAMPLE_DEEZER_URL, SAMPLE_M3U, SAMPLE_SPOTIFY_URL, usePlaylistImport, type PlaylistImportBlockProps } from './blocks/import';
+export { DuplicateGroupCard, DuplicatesBlock, DuplicatesCover, useLibraryDuplicates, useTitleRecording, type DuplicatesBlockProps } from './blocks/duplicates';

@@ -4,7 +4,7 @@
 import { useRef, type ComponentRef } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import { clock, msg, number, type Card } from '@vela/core';
-import { useVelaState } from '@vela/core/react';
+import { useVela, useVelaState } from '@vela/core/react';
 import { currentInQueue } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, Glyph } from '../common/controls';
@@ -53,9 +53,11 @@ function head(m: ReturnType<typeof useMediaLook>) {
 
 function TrackRow({ track, index, tracks, options, wide }: { track: Card; index: number; tracks: Card[]; options: TrackListOptions; wide: boolean }) {
   const app = useMusic();
+  const store = useVela();
   const m = useMediaLook();
   const nowId = useVelaState(s => currentInQueue(s.audio.queue)?.id);
   const phase = useVelaState(s => s.audio.phase);
+  const duplicatesAvailable = store.music.duplicatesAvailable;
   const current = nowId === track.id;
   const playing = current && (phase === 'playing' || phase === 'buffering' || phase === 'loading');
   const more = useRef<ComponentRef<typeof View>>(null);
@@ -67,6 +69,7 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
     app.menu({ card: track, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } }, mode: 'pointer', entry }));
   const album = track.media?.parents.find(p => p.role === 'album');
   const artist = track.media?.byline;
+  const recordingId = track.media?.recordingId;
   const numberLabel = options.position || !track.media?.index ? number(index + 1) : number(track.media.index);
   const liked = app.liked(track.id);
   // A touch layout plays on a tap and keeps ⋯ in reach; a pointer plays on a double click. On a TV
@@ -96,10 +99,13 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
             {options.covers ? <Cover uri={track.poster} shape="square" size={42} title={track.name} accent={track.accent} lift={0.3} /> : null}
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' })}>{track.name}</Text>
-              {artist ? (
+              {artist || (duplicatesAvailable && recordingId && !m.small) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   {track.media?.facts.some(f => f.label === 'Explicit' && f.value !== 'false') ? <Explicit /> : null}
-                  <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' })}>{artist}</Text>
+                  {artist ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' })}>{artist}</Text> : null}
+                  {duplicatesAvailable && recordingId && lit && !m.small ? (
+                    <Text numberOfLines={1} style={m.text({ 'font-size': '11px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>· {recordingId}</Text>
+                  ) : null}
                 </View>
               ) : null}
             </View>

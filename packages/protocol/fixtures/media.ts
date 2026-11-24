@@ -88,6 +88,18 @@ interface AlbumSpec { slug: string; name: string; year: number; month: number; t
 interface ArtistSpec { slug: string; name: string; genres: string[]; label: string; bio: string; composer?: string; albums: AlbumSpec[] }
 /** A filmed concert: a plugin's video level under the artist (features.pluginLevels), role 'concert'. */
 interface ConcertSpec { slug: string; name: string; venue: string; year: number; month: number; minutes: number; summary: string; positionSeconds?: number }
+/** Duplicate recordings across studio albums, deluxe editions and label anthologies (features.duplicates). */
+const canonicalRecordingIds: Record<string, string> = {
+  'Paper Boats': 'US-DRW-19-00101',
+  'Paper Boats (2024 Remaster)': 'US-DRW-19-00101',
+  'Salt in the Lamplight': 'US-DRW-19-00102',
+  'Salt in the Lamplight (2024 Remaster)': 'US-DRW-19-00102',
+  'Harbour Lights': 'US-DRW-19-00106',
+  'Harbour Lights (2024 Remaster)': 'US-DRW-19-00106',
+  'Glasshouse': 'US-NLR-20-00202',
+  'Late Tram Home': 'US-KTS-18-00301',
+  'Neon Orchard': 'US-LTA-17-00401',
+};
 const artistSpecs: ArtistSpec[] = [
   { slug: 'hollow-lanterns', name: 'The Hollow Lanterns', genres: ['Indie Folk', 'Folk'], label: 'Driftwood Records',
     bio: 'A four-piece from a fictional fishing town who write warm, harmony-heavy songs about weather, kitchens and the long way home.',
@@ -143,6 +155,17 @@ const artistSpecs: ArtistSpec[] = [
   // Concerts only: a live band with no studio albums in the library.
   { slug: 'harbour-brass-collective', name: 'Harbour Brass Collective', genres: ['Brass', 'Jazz'], label: 'Quayside Live',
     bio: 'An imaginary twelve-piece street brass band who only ever play live, from harbour walls to festival tents.', albums: [] },
+  // Label anthologies and deluxe reissues that carry duplicate recordings of studio tracks.
+  { slug: 'driftwood-anthology', name: 'Driftwood Records', genres: ['Indie Folk', 'Ambient', 'Jazz', 'Synth-pop'], label: 'Driftwood Records',
+    bio: 'Label anthologies, coastal compilations and anniversary reissues from the Driftwood and Northlight rosters.',
+    albums: [
+      { slug: 'coastal-anthology', name: 'Coastal Anthology: Five Years of Driftwood', year: 2023, month: 8, type: 'Album',
+        summary: 'A label compilation gathering the flagship recordings from the first five years along the coast.',
+        discs: ['Paper Boats|Salt in the Lamplight|Harbour Lights|Glasshouse|Late Tram Home|Neon Orchard'] },
+      { slug: 'harbour-sessions-deluxe', name: 'Paper Boats (Anniversary Deluxe Edition)', year: 2024, month: 5, type: 'Album',
+        summary: 'Remastered anniversary reissue of the boathouse debut, packaged with the original master transfers.',
+        discs: ['Paper Boats (2024 Remaster)|Salt in the Lamplight (2024 Remaster)|Harbour Lights (2024 Remaster)'] },
+    ] },
 ];
 /** Artists with albums only, concerts only (Harbour Brass Collective) and both (The Hollow Lanterns, Velvet Comet). */
 const concertSpecs: Record<string, ConcertSpec[]> = {
@@ -195,12 +218,14 @@ for (const spec of artistSpecs) {
     album.discs.forEach((disc, discIndex) => disc.split('|').forEach((name, index) => {
       const clip = album.gapless ? gaplessSources.find(source => source.format === album.gapless && source.part === index + 1)! : musicClips[trackOrdinal++ % musicClips.length]!;
       const id = `track-${album.slug}-${discIndex + 1}-${String(index + 1).padStart(2, '0')}`;
+      const recordingId = canonicalRecordingIds[name] ?? `US-VLA-${String(album.year).slice(-2)}-${String(tracks.length + albumTracks.length + 1).padStart(5, '0')}`;
       audioSources.set(id, clip);
       albumTracks.push({ id, kind: 'episode', name, summary: '', year: album.year, airDate, genres: spec.genres, durationSeconds: clip.durationSeconds,
         artwork: [cover], showId: artistId, showName: spec.name, seasonId: albumId, seasonNumber: albumIndex + 1, episodeNumber: albumTracks.length + 1,
-        media: { class: 'music', role: 'track', index: index + 1, disc: discIndex + 1,
+        media: { class: 'music', role: 'track', index: index + 1, disc: discIndex + 1, recordingId,
           parents: [{ id: albumId, name: album.name, role: 'album' }, { id: artistId, name: spec.name, role: 'artist' }],
-          credits: [{ name: spec.name, role: 'artist', personId }, ...(spec.composer ? [{ name: spec.composer, role: 'composer', personId: composerId }] : [])] } });
+          credits: [{ name: spec.name, role: 'artist', personId }, ...(spec.composer ? [{ name: spec.composer, role: 'composer', personId: composerId }] : [])],
+          facts: [{ label: 'ISRC', value: recordingId }, { label: 'Format', value: clip.codec.toUpperCase() }] } });
     }));
     const albumTitle: Title = { id: albumId, kind: 'season', name: album.name, summary: album.summary, year: album.year, airDate, genres: spec.genres,
       durationSeconds: albumTracks.reduce((total, track) => total + (track.durationSeconds ?? 0), 0), artwork: [cover],

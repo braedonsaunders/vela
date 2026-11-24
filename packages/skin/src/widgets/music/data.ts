@@ -1,8 +1,13 @@
 // The music app's reads, over the store's existing loaders (titles, children, detail rows,
-// library rows, playlists). Each is bounded by the server's page size.
+// library rows, playlists, listening recap, playlist import, duplicates). Each is bounded by the
+// server's page size.
 import { useEffect, useMemo, useState } from 'react';
 import { childrenKey, libraryKey, type Card, type ChildrenModel, type CollectionModel, type DetailModel, type Loadable, type PlaylistModel, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
+
+export { useHistoryRecap } from '../../blocks/recap';
+export { usePlaylistImport } from '../../blocks/import';
+export { useLibraryDuplicates, useTitleRecording } from '../../blocks/duplicates';
 
 export function useTitle(id: string | undefined): Loadable<DetailModel> | undefined {
   const store = useVela();

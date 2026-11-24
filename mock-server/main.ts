@@ -10,8 +10,9 @@ import { serveLive, liveFaults } from './live';
 import { trickplaySheet } from './trickplay';
 import { applyCommand, createSession, events, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
-import { audioSourceFor, isMediaLibrary, isVideoChild, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
+import { audioSourceFor, isMediaLibrary, isVideoChild, mediaArtwork, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
+import { buildHistoryRecap, getPlaylistImport, isHiddenDuplicateTitle, isRecapPeriod, libraryDuplicateGroups, recordingReleasesForTitle, resolvePlaylistImportSave, setDuplicatePreference, startPlaylistImport } from './music-library';
 import { renderCover } from './covers';
 import { downloadSubtitle, foundSubtitleVtt, searchSubtitles, subtitleLanguages } from './subtitle-search';
 
@@ -58,6 +59,9 @@ if (mediaEnabled) Object.assign(capabilities.features, {
   mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast'] },
   reading: { available: true, formats: ['epub', 'pdf', 'cbz'] },
   audioPlayback: yes,
+  historyRecap: { available: true, periods: ['week', 'month', 'year', 'all'] },
+  playlistImport: { available: true, links: ['deezer', 'spotify'], files: ['m3u', 'csv'], maxTracks: 500 },
+  duplicates: yes,
 } satisfies Partial<V.ServerCapabilities['features']>);
 // Every media library says how it opens (protocol README, Library experience): the audiobook and
 // podcast libraries ask for the audio app. VELA_MOCK_NO_EXPERIENCES=1 is a server from before it.
@@ -327,7 +331,7 @@ function versionsFor(titleId: string, owner: string): V.TitleVersions {
   const selected = remembered || pinned ? full[1]!.id : auto.id;
   return { titleId, selectedVersionId: selected, ...(remembered ? { rememberedChoice: { scope: title.kind === 'episode' ? 'show' as const : 'title' as const, active: true, label: full[1]!.label } } : {}), versions: full };
 }
-interface MockPlaylist { id: string; name: string; smart: boolean; updatedAt: string; entries: { entryId: string; titleId: string }[] }
+interface MockPlaylist { id: string; name: string; summary?: string; smart: boolean; updatedAt: string; entries: { entryId: string; titleId: string }[] }
 const playlists: MockPlaylist[] = [
   { id: 'playlist-weekend', name: 'Weekend watch', smart: false, updatedAt: new Date().toISOString(), entries: [
     { entryId: 'entry-weekend-1', titleId: titles[0]!.id }, { entryId: 'entry-weekend-2', titleId: titles[1]!.id },
@@ -336,8 +340,14 @@ const playlists: MockPlaylist[] = [
     { entryId: 'entry-smart-1', titleId: titles[2]!.id },
   ] },
 ];
+function playlistArtwork(g: Grant, titleId: string): V.ArtworkRef {
+  const media = findMediaTitle(titleId);
+  if (media) return media.artwork[0] ?? mediaArtwork(media.id, 'square');
+  return signedArtwork(g, titleId, 'poster');
+}
 const playlistCard = (g: Grant, value: MockPlaylist): V.PlaylistCard => ({ id: value.id, kind: 'playlist', name: value.name,
-  artwork: value.entries[0] ? [signedArtwork(g, value.entries[0].titleId, 'poster')] : [], itemCount: value.entries.length,
+  ...(value.summary ? { summary: value.summary } : {}),
+  artwork: value.entries[0] ? [playlistArtwork(g, value.entries[0].titleId)] : [], itemCount: value.entries.length,
   smart: value.smart, updatedAt: value.updatedAt });
 function playlistTitles(ids: string[]): V.Title[] {
   const result: V.Title[] = [];
@@ -434,6 +444,71 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return json({ capabilities, client: body.client });
   }
   const g = authenticate(req);
+  if (capabilities.features.historyRecap?.available && method === 'GET' && path === '/history/recap') {
+    const periodParam = url.searchParams.get('period') ?? 'month';
+    if (!isRecapPeriod(periodParam)) fail('request', 'invalid_period', 'Period must be week, month, year or all');
+    const result = buildHistoryRecap(periodParam, url.searchParams.get('at'), url.searchParams.get('library'), t => present(g, t));
+    if (result === 'invalid_date') fail('request', 'invalid_date', 'at must be YYYY-MM-DD');
+    if (result === 'invalid_library') fail('not-found', 'library_not_found', 'Library not found');
+    return json(result);
+  }
+  if (capabilities.features.playlistImport?.available) {
+    if (method === 'POST' && path === '/playlists/import') {
+      if (body.library && !visibleLibraries.some(l => l.id === body.library)) fail('not-found', 'library_not_found', 'Library not found');
+      const result = startPlaylistImport(body, t => present(g, t));
+      if (result.status === 400) fail('request', result.code, result.message);
+      return Response.json(result.job, { status: 202, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const importMatch = /^\/playlists\/import\/([^/]+)(\/save)?$/.exec(path);
+    if (importMatch) {
+      const importId = decodeURIComponent(importMatch[1]!);
+      if (method === 'GET' && !importMatch[2]) {
+        const state = getPlaylistImport(importId, url.searchParams.get('state'));
+        if (!state) fail('not-found', 'import_not_found', 'Playlist import job not found');
+        return json(state);
+      }
+      if (method === 'POST' && importMatch[2] === '/save') {
+        const resolved = resolvePlaylistImportSave(importId, body);
+        if (!resolved) fail('not-found', 'import_not_found', 'Playlist import job not found');
+        const expanded = playlistTitles(resolved.titleIds);
+        const value: MockPlaylist = {
+          id: `playlist-${crypto.randomUUID()}`,
+          name: resolved.name,
+          ...(resolved.description ? { summary: resolved.description } : {}),
+          smart: false,
+          updatedAt: new Date().toISOString(),
+          entries: expanded.map(title => ({ entryId: crypto.randomUUID(), titleId: title.id })),
+        };
+        playlists.push(value);
+        return json(playlistCard(g, value));
+      }
+    }
+  }
+  if (capabilities.features.duplicates?.available) {
+    const libDuplicatesMatch = /^\/libraries\/([^/]+)\/duplicates(?:\/([^/]+))?$/.exec(path);
+    if (libDuplicatesMatch) {
+      const libraryId = decodeURIComponent(libDuplicatesMatch[1]!);
+      if (!visibleLibraries.some(l => l.id === libraryId)) fail('not-found', 'library_not_found', 'Library not found');
+      if (method === 'GET' && !libDuplicatesMatch[2]) {
+        const groups = libraryDuplicateGroups(libraryId, g.viewer.id, t => present(g, t));
+        return cached(req, page(groups, url, g, `duplicates:${libraryId}:${viewer.policyRevision}:${mac(JSON.stringify(groups))}`), g.id);
+      }
+      if (method === 'POST' && libDuplicatesMatch[2]) {
+        const recordingId = decodeURIComponent(libDuplicatesMatch[2]);
+        const updated = setDuplicatePreference(libraryId, recordingId, g.viewer.id, body, t => present(g, t));
+        if (updated === 'not_found') fail('not-found', 'recording_not_found', 'Duplicate recording group not found');
+        if (updated === 'invalid') fail('request', 'invalid_duplicate_preference', 'preferredTitleId must belong to the recording group');
+        viewer.policyRevision = `mock-${++viewerRevision}`;
+        return json(updated);
+      }
+    }
+    const recordingMatch = /^\/titles\/([^/]+)\/recording$/.exec(path);
+    if (method === 'GET' && recordingMatch) {
+      const title = findTitle(decodeURIComponent(recordingMatch[1]!));
+      if (!title) fail('not-found', 'title_not_found', 'Title not found');
+      return cached(req, recordingReleasesForTitle(title, g.viewer.id, t => present(g, t)), g.id);
+    }
+  }
   if (capabilities.features.playlists?.available) {
     if (method === 'GET' && path === '/playlists') return cached(req, page(playlists.map(value => playlistCard(g, value)), url, g, `playlists:${playlists.map(value => `${value.id}:${value.updatedAt}`).join('|')}`), g.id);
     if (method === 'POST' && path === '/playlists') {
@@ -460,11 +535,17 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
           const title = findTitle(member.titleId); return title ? [{ id: title.id, entryId: member.entryId, kind: 'title' as const,
             title: title.media ? present(g, title) : { ...title, artwork: title.artwork.map(ref => signedArtwork(g, title.id, ref.kind)) }, receiptToken: '' }] : [];
         });
-        return cached(req, { collection: { id: value.id, kind: 'playlist', name: value.name, artwork: playlistCard(g, value).artwork,
+        return cached(req, { collection: { id: value.id, kind: 'playlist', name: value.name, ...(value.summary ? { summary: value.summary } : {}), artwork: playlistCard(g, value).artwork,
           smart: value.smart, entryCount: value.entries.length, updatedAt: value.updatedAt }, ...page(items, url, g, `playlist:${id}:${value.updatedAt}`) } satisfies V.CollectionContents, g.id);
       }
       if (value.smart) fail('conflict', 'playlist_read_only', 'Smart playlists are read only');
-      if (method === 'PATCH') { if (typeof body.name !== 'string' || !body.name.trim()) fail('request', 'invalid_request', 'Playlist name required'); value.name = body.name.trim(); value.updatedAt = new Date().toISOString(); return json(playlistCard(g, value)); }
+      if (method === 'PATCH') {
+        if (body.name !== undefined && (typeof body.name !== 'string' || !body.name.trim())) fail('request', 'invalid_request', 'Playlist name required');
+        if (typeof body.name === 'string') value.name = body.name.trim();
+        if (typeof body.summary === 'string') value.summary = body.summary.trim() || undefined;
+        value.updatedAt = new Date().toISOString();
+        return json(playlistCard(g, value));
+      }
       if (method === 'DELETE') { playlists.splice(playlists.indexOf(value), 1); return json({ accepted: true }); }
     }
     const entriesMatch = /^\/playlists\/([^/]+)\/entries$/.exec(path);
@@ -636,6 +717,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     let items = libraryEntries(library.id, tab?.level).map(e => presentEntry(g, e)).filter(e => {
       if (e.kind !== 'title') return true;
       const t = e.title;
+      if (isHiddenDuplicateTitle(g.viewer.id, t.id)) return false;
       if (q.get('query') && !t.name.toLowerCase().includes(q.get('query')!.toLowerCase())) return false;
       for (const facet of options.filters.facets ?? []) { const wanted = q.getAll(`facet.${facet.id}`); if (wanted.length && !facetValues(e, facet.id).some(value => wanted.includes(value))) return false; }
       return (!collectionId || t.id === titles[0]!.id) && (!kind || kind === t.kind) && (!genre || t.genres.some(g => g.toLowerCase() === genre.trim().toLowerCase()))
@@ -819,7 +901,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (body.library !== undefined && !visibleLibraries.some(l => l.id === body.library)) fail('request', 'invalid_library', 'Invalid library');
     const libraryIds = body.library ? new Set(libraryEntries(body.library).flatMap(e => e.kind === 'title' ? [e.title.id] : [])) : undefined;
     const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
-    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks, ...mediaGroups.shows].map(t => present(g, t)) : [])];
+    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...mediaGroups.tracks, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks, ...mediaGroups.shows].filter(t => !isHiddenDuplicateTitle(g.viewer.id, t.id)).map(t => present(g, t)) : [])];
     const found = (byName: boolean) => searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (byName ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
     // Auto (unified search): titles by name; description matches only when no name matches.
     const named = body.mode === 'descriptive' ? [] : found(true);
