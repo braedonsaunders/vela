@@ -5,7 +5,7 @@ import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
 import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand } from '../capabilities';
 import { VelaError } from '../errors';
-import { plexHeaders, type PlexDevice } from './auth';
+import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 import { directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
@@ -79,15 +79,23 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   }
   /** Credential-free media URL; the private host bridge attaches mediaHeaders only at this origin. */
   mediaURL(path: string): string {
-    const u = new URL(path, this.origin);
-    if (u.origin !== this.origin || u.username || u.password || u.hash || !/^\/(library|video|audio|music|subtitles|photo|livetv)\//.test(u.pathname)) fail('Plex media outside selected server');
+    const u = this.mediaTarget(path);
     for (const key of u.searchParams.keys()) if (/token|api_key/i.test(key)) fail('Persistent Plex token in media URL');
     return u.href;
   }
+  private mediaTarget(path: string): URL {
+    const u = new URL(path, this.origin);
+    if (u.origin !== this.origin || u.username || u.password || u.hash || !/^\/(library|video|audio|music|subtitles|photo|livetv)\//.test(u.pathname)) fail('Plex media outside selected server');
+    return u;
+  }
+  /** What the player sends with media reads at this origin: the header set every player host accepts. */
   async mediaHeaders(): Promise<Record<string, string>> {
+    return { ...plexMediaHeaders(this.device), 'X-Plex-Token': await this.token() };
+  }
+  private async token(): Promise<string> {
     const tokens = await this.config.credentials.get();
     if (!tokens) fail('Sign in required', 'auth');
-    return { ...plexHeaders(this.device), 'X-Plex-Token': tokens.accessToken };
+    return tokens.accessToken;
   }
   /** Delegation lifetime is set by PMS; never persist it or infer an expiry. */
   transientToken(): Promise<string> {
@@ -103,8 +111,15 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return this.delegation;
   }
   rotateTransientToken(): void { this.delegation = undefined; }
+  /**
+   * A URL for a player that cannot send headers (the browser's own HLS, native players): the
+   * delegation token in its query. `path` may be a URL the server itself wrote into a playlist,
+   * whose own per-stream read parameters (Ether's X-Ether-Stream-Token and X-Ether-Read-Token)
+   * stay; a Plex token it carries is replaced, so only the transient one ever leaves here.
+   */
   async transientMediaURL(path: string): Promise<string> {
-    const url = new URL(this.mediaURL(path));
+    const url = this.mediaTarget(path);
+    for (const key of [...url.searchParams.keys()]) if (/^x-plex-token$/i.test(key)) url.searchParams.delete(key);
     url.searchParams.set('X-Plex-Token', await this.transientToken());
     return url.href;
   }
@@ -112,7 +127,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const u = new URL(path, this.origin);
     if (u.origin !== this.origin || u.username || u.password) fail('Plex request outside selected server');
     for (const [k, v] of Object.entries(query)) if (v !== undefined) u.searchParams.set(k, String(v));
-    const headers = auth ? await this.mediaHeaders() : plexHeaders(this.device);
+    const headers = auth ? { ...plexHeaders(this.device), 'X-Plex-Token': await this.token() } : plexHeaders(this.device);
     const response = await fetch(u.href, { method, headers, signal, redirect: 'error', credentials: 'omit' });
     if (response.status === 401) this.rotateTransientToken();
     if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : response.status === 404 ? 'not-found' : 'source',
@@ -554,7 +569,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`,
         subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
       for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
-      paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
+      if (await this.decide(u, !!direct)) paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
         sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, qualities: [], boundaries: [] });
     }
     if (!paths.length) fail('No compatible Plex playback path', 'playback');
@@ -593,6 +608,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const transcodeId = `${s.plan.sessionId}-${s.plan.sourceGeneration + 1}`;
     const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
     for (const [key, value] of Object.entries({ ...stack.query, ...overrides, partIndex: String(index), offset: String(inPart), session: transcodeId })) u.searchParams.set(key, value);
+    await this.decide(u);
     stack.query = { ...stack.query, ...overrides };
     stack.index = index;
     s.part = stack.parts[index]!;
@@ -615,6 +631,17 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private async stopTranscode(id: string, audio = false) {
     try { await this.request(`/${audio ? 'music' : 'video'}/:/transcode/universal/stop`, { session: id }); }
     catch (error) { if (!(error instanceof VelaError) || error.status !== 404) throw error; }
+  }
+  /**
+   * Ask for the playback decision for a video transcode URL before handing it to the player, as Plex's
+   * own clients do: Ether refuses a video start.m3u8 its client has not asked a decision for (400).
+   * `optional`: another path can play, so a refused decision drops this one instead of the start.
+   */
+  private async decide(start: URL, optional = false): Promise<boolean> {
+    const decision = new URL('/video/:/transcode/universal/decision', this.origin);
+    decision.search = start.search;
+    try { await this.request(decision.pathname, Object.fromEntries(decision.searchParams)); return true; }
+    catch (error) { if (optional) return false; throw error; }
   }
   private async timeline(s: PlexSession, state: string) {
     if (s.plan.channelId) return;
@@ -702,6 +729,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         url.searchParams.set('subtitleStreamID', subtitle ?? '0');
         url.searchParams.set('subtitles', burn ? 'burn' : 'auto');
         if (audio !== undefined) url.searchParams.set('audioStreamID', audio);
+        await this.decide(url);
         s.plan.paths = s.plan.paths.map(p => p.id === hls.id ? { ...p, readiness: 'ready' as const, url: url.href, timelineOriginSeconds: s.plan.positionSeconds } : p);
         s.plan.selectedPathId = hls.id;
         s.plan.sourceGeneration++;
