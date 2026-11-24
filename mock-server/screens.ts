@@ -5,7 +5,7 @@
 // (`records`, `source`, `alert` frames). The records are derived from the Sports simulation in
 // sports.ts, so a goal there is a record push here.
 //
-// Knobs: VELA_MOCK_NO_FROM_START=1 serves watch targets without programme/fromStart (Ether v1);
+// Knobs: VELA_MOCK_FROM_START=1 adds programme/fromStart to watch targets (not in Ether E1/E2);
 // VELA_MOCK_SCREEN_FIXTURES=<dir> reads the documents from another directory (same layout).
 // A client that sends no X-Vela-Screen-Renderer gets no screens and no surfaces (hard cut).
 import { createHash } from 'node:crypto';
@@ -18,7 +18,7 @@ type Fail = (cls: V.ProtocolError['class'], code: string, message: string, extra
 type Json = Record<string, unknown>;
 
 const FIXTURES = process.env.VELA_MOCK_SCREEN_FIXTURES || join(import.meta.dir, '../packages/protocol/fixtures/screens');
-const noFromStart = process.env.VELA_MOCK_NO_FROM_START === '1';
+const noFromStart = process.env.VELA_MOCK_FROM_START !== '1';
 const H = 3600_000;
 
 // Documents
@@ -44,6 +44,15 @@ const SURFACES: SurfaceSpec[] = [
 interface Compiled { document: V.ScreenDocument; hash: string; mtime: number }
 const compiled = new Map<string, Compiled>();
 
+/** As Ether serves it: a screen's index is a section and its other pages are pages; a surface's
+ * document is page "main" with its kind as presentation. */
+function served(file: string): Partial<V.ScreenDocument> {
+  const page = PAGES.find(p => p.file === file);
+  if (page) return { screen: page.screen, page: page.page, presentation: page.page === 'index' ? 'section' : 'page' };
+  const surface = SURFACES.find(spec => spec.file === file);
+  return surface ? { screen: surface.id, page: 'main', presentation: surface.contribution.presentation } : {};
+}
+
 /** A fixture with `deps` added to each source (its {param.x} holes), hashed; read again when the file changes. */
 function load(file: string): Compiled | undefined {
   const path = join(FIXTURES, file);
@@ -51,7 +60,7 @@ function load(file: string): Compiled | undefined {
   try { mtime = statSync(path).mtimeMs; } catch { return undefined; }
   const known = compiled.get(file);
   if (known && known.mtime === mtime) return known;
-  const document = JSON.parse(readFileSync(path, 'utf8')) as V.ScreenDocument;
+  const document = { ...JSON.parse(readFileSync(path, 'utf8')), ...served(file) } as V.ScreenDocument;
   for (const spec of Object.values(document.sources ?? {})) spec.deps = holes(spec, 'param');
   const hash = createHash('sha256').update(JSON.stringify(document)).digest('hex').slice(0, 16);
   const entry = { document, hash, mtime };
@@ -67,8 +76,17 @@ function holes(spec: V.SourceSpec, scope: 'param' | 'context'): string[] {
 }
 
 const rendererOf = (req: Request) => { const n = Number(req.headers.get('x-vela-screen-renderer')); return Number.isInteger(n) && n > 0 ? n : 0; };
-const pageHref = (page: Page, doc: Compiled) => `/vela/v0/screens/${page.screen}/pages/${page.page}/document?v=${doc.hash}&r=${doc.document.renderer}&l=en`;
-const surfaceHref = (spec: SurfaceSpec, doc: Compiled) => `/vela/v0/surfaces/${spec.id}/document?v=${doc.hash}&r=${doc.document.renderer}&l=en`;
+/** The display language: X-Vela-Language, else Accept-Language; the first tag. */
+export function languageOf(req: Request): string {
+  const header = req.headers.get('x-vela-language') || req.headers.get('accept-language') || '';
+  const tag = header.split(',')[0]!.split(';')[0]!.trim();
+  return /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/.test(tag) ? tag : 'en';
+}
+const pageHref = (page: Page, doc: Compiled, l = 'en') => `/vela/v0/screens/${page.screen}/pages/${page.page}/document?v=${doc.hash}&r=${doc.document.renderer}&l=${encodeURIComponent(l)}`;
+const surfaceHref = (spec: SurfaceSpec, doc: Compiled, l = 'en') => `/vela/v0/surfaces/${spec.id}/document?v=${doc.hash}&r=${doc.document.renderer}&l=${encodeURIComponent(l)}`;
+
+/** Screens and surfaces the owner has hidden from viewers (POST /__admin/screens): 404, and their streams end. */
+const hidden = new Set<string>();
 
 // Viewer state that is the screens' own: surface switches.
 const surfaceSettings = new Map<string, Map<string, boolean>>();
@@ -78,16 +96,17 @@ const settingOf = (viewerId: string, spec: SurfaceSpec) => surfaceSettings.get(v
 export function screensBootstrap(req: Request, viewerId: string): { navigation?: V.ScreenNavigationEntry[]; surfaces?: V.SurfaceContribution[]; homeRow?: V.SurfaceRow } {
   const renderer = rendererOf(req);
   if (!sportsEnabled || !renderer) return {};
+  const language = languageOf(req);
   const navigation = NAVIGATION.flatMap(entry => {
     const page = PAGES.find(p => p.screen === entry.id && p.page === entry.page)!;
     const doc = load(page.file);
-    return doc && doc.document.renderer <= renderer ? [{ kind: 'screen' as const, ...entry, document: { href: pageHref(page, doc), renderer: doc.document.renderer } }] : [];
+    return doc && !hidden.has(entry.id) && doc.document.renderer <= renderer ? [{ kind: 'screen' as const, ...entry, document: { href: pageHref(page, doc, language), renderer: doc.document.renderer } }] : [];
   });
   const surfaces = SURFACES.flatMap(spec => {
     const doc = load(spec.file);
-    if (!doc || doc.document.renderer > renderer) return [];
+    if (!doc || hidden.has(spec.id) || doc.document.renderer > renderer) return [];
     const setting = spec.contribution.setting ? { ...spec.contribution.setting, enabled: settingOf(viewerId, spec) } : undefined;
-    return [{ id: spec.id, ...spec.contribution, ...(setting ? { setting } : {}), document: { href: surfaceHref(spec, doc), renderer: doc.document.renderer } } as V.SurfaceContribution];
+    return [{ id: spec.id, ...spec.contribution, ...(setting ? { setting } : {}), document: { href: surfaceHref(spec, doc, language), renderer: doc.document.renderer } } as V.SurfaceContribution];
   });
   const row = surfaces.find(surface => surface.presentation === 'homeRow');
   return { ...(navigation.length ? { navigation } : {}), ...(surfaces.length ? { surfaces } : {}),
@@ -95,11 +114,12 @@ export function screensBootstrap(req: Request, viewerId: string): { navigation?:
 }
 
 function serveDocument(req: Request, url: URL, doc: Compiled, fresh: string, fail: Fail): Response {
-  if (doc.document.renderer > rendererOf(req)) fail('not-found', 'screen_not_found', 'No variant of this page fits this client');
+  if (doc.document.renderer > rendererOf(req)) fail('not-found', 'update_required', 'No variant of this page fits this client');
   const v = url.searchParams.get('v');
   if (v && v !== doc.hash) return new Response(null, { status: 301, headers: { Location: fresh, 'Cache-Control': 'no-store' } });
   const etag = `"${doc.hash}"`;
-  const headers = { ETag: etag, 'Cache-Control': 'private, max-age=31536000, immutable', 'Content-Type': 'application/json' };
+  // Immutable when v names this version; read without one, it may change.
+  const headers = { ETag: etag, 'Cache-Control': v ? 'private, max-age=31536000, immutable' : 'private, no-cache', 'Content-Type': 'application/json' };
   if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers });
   return new Response(JSON.stringify(doc.document), { headers });
 }
@@ -153,7 +173,20 @@ export function leagueLabel(league: { name: string; abbr?: string }): string {
   if (name.length <= 12) return name;
   return abbr;
 }
-const leagueOf = (league: V.LiveLeague) => ({ id: league.id, name: league.name, ...(league.abbr ? { abbr: league.abbr } : {}), label: leagueLabel(league) });
+const leagueOf = (league: V.LiveLeague) => ({ id: league.id, name: league.name, ...(league.abbr ? { abbr: league.abbr } : {}), label: leagueLabel(league), ...(league.logo ? { logo: relative(league.logo) } : {}) });
+
+const POSSESSION = /^(possession|ball|serving|serve|batting|at bat)$/i;
+const same = (a: string | undefined, b: string) => !!a && a.trim().toLowerCase() === b.trim().toLowerCase();
+/** The situation entry that names which side has the ball (legacy possessor()): a possession key
+ * whose value is exactly a side's abbr, short name, name or id. "NYG 38" only mentions a side. */
+export function possessor(situation: Record<string, string> | undefined, pair: readonly V.LiveCompetitor[]): { id?: string; key?: string } {
+  for (const [key, value] of Object.entries(situation ?? {})) {
+    if (!POSSESSION.test(key.trim()) || typeof value !== 'string') continue;
+    const side = pair.find(c => [c.abbr, c.short, c.name, c.id].some(name => same(name, value)));
+    if (side) return { id: side.id, key };
+  }
+  return {};
+}
 
 export function phaseOf(state: V.LiveEventState): 'live' | 'upcoming' | 'final' | 'off' {
   return state === 'in' ? 'live' : state === 'pre' || state === 'delayed' ? 'upcoming' : state === 'post' ? 'final' : 'off';
@@ -210,6 +243,7 @@ export function eventView(event: V.LiveEvent, favourites: ReadonlySet<string>): 
   const value = p ? Math.min(1, Math.max(0, p.value)) : 0;
   const home = p ? (subject === 1 ? value : 1 - value) : undefined;
   const homeShare = home !== undefined ? Math.round(home * 100) : undefined;
+  const ball = !spoiler && pair ? possessor(event.situation, pair) : {};
   const sides = pair?.map((c, n) => {
     const other = pair[n ? 0 : 1]!;
     const score = c.score ?? '';
@@ -218,14 +252,14 @@ export function eventView(event: V.LiveEvent, favourites: ReadonlySet<string>): 
     return {
       id: c.id, name: c.name, short: c.short || c.name, abbr: c.abbr || initials(c.short || c.name), ...(c.logo ? { logo: relative(c.logo) } : {}),
       ...(hex(c.color) ? { color: hex(c.color) } : {}), ...(hex(c.altColor) ? { altColor: hex(c.altColor) } : {}),
-      score, record: c.record ?? '', ...(c.entityId ? { entityId: c.entityId } : {}), favourite: isFav(c),
+      score, record: c.record ?? '', ...(c.entityId ? { entityId: c.entityId } : {}), favourite: isFav(c), possession: ball.id === c.id,
       winner: final && (c.winner === true || !lost && Number(score) > Number(other.score ?? '')), loser: lost,
       ...(share !== undefined ? { share, leads: n === 1 ? home! >= 0.5 : home! < 0.5 } : {}),
     };
   });
   const scored = !!sides && !spoiler && phase !== 'upcoming' && sides.every(s => s.score !== '');
   const shown = new Set([event.status.detail, event.status.clock].filter(Boolean).map(text => String(text).trim()));
-  const situation = spoiler ? [] : Object.entries(event.situation ?? {}).filter(([, v]) => typeof v === 'string' && v.trim() !== '' && !shown.has(v.trim())).map(([label, v]) => ({ label, value: v }));
+  const situation = spoiler ? [] : Object.entries(event.situation ?? {}).filter(([label]) => label !== ball.key).filter(([, v]) => typeof v === 'string' && v.trim() !== '' && !shown.has(v.trim())).map(([label, v]) => ({ label, value: v }));
   const counts = new Map<number, number>();
   for (const row of event.ranking ?? []) counts.set(row.pos, (counts.get(row.pos) ?? 0) + 1);
   const venue = !event.venue ? '' : typeof event.venue === 'string' ? event.venue : [event.venue.name, event.venue.city].filter(Boolean).join(', ');
@@ -281,7 +315,7 @@ function relative(url: string): string {
 
 // Sources
 
-interface Read { viewerId: string; tz: string; records: Record<string, V.RecordEntry>; scope: string }
+interface Read { viewerId: string; tz: string; records: Record<string, V.RecordEntry>; scope: string; locale?: string }
 
 const viewerScope = (viewerId: string, key: string) => `${viewerId}|${key}`;
 function putRecord(read: Read, key: string, value: unknown): void {
@@ -326,10 +360,10 @@ function resolveSource(spec: V.SourceSpec, args: Json, read: Read): unknown {
   switch (spec.from) {
     case 'viewer': {
       const favourites = sportsModel.favourites(read.viewerId);
-      return { spoilerFree: sportsModel.spoilerFree(read.viewerId), canSetSpoilerFree: true, locale: 'en', favouriteCount: favourites.size };
+      return { spoilerFree: sportsModel.spoilerFree(read.viewerId), canSetSpoilerFree: true, locale: read.locale ?? 'en', favouriteCount: favourites.size };
     }
     case 'liveLeagues':
-      return { leagues: sportsModel.leagues().map(({ category: _c, ...league }) => ({ ...leagueOf(league), ...(league.logo ? { logo: league.logo } : {}) })), selected: typeof args.league === 'string' ? args.league : '' };
+      return { leagues: sportsModel.leagues().map(({ category: _c, ...league }) => ({ ...leagueOf(league), ...(league.logo ? { logo: league.logo } : {}) })), selected: '' };
     case 'liveEvents': {
       const query = (args.query && typeof args.query === 'object' ? args.query : {}) as Json;
       const states = list(query.state), ids = list(query.ids).map(simId);
@@ -341,6 +375,8 @@ function resolveSource(spec: V.SourceSpec, args: Json, read: Read): unknown {
       if (query.window === 'today') sims = sims.filter(sim => sim.state === 'in' || localDay(sim.start, read.tz) === today);
       if (query.window === 'week') sims = sims.filter(sim => Math.abs(sim.start - now) < 7 * 24 * H);
       if (query.window === 'recent') sims = sims.filter(sim => sim.state === 'post' && now - sim.start < 48 * H);
+      // The ticker (legacy /live/ticker): in progress, finals started under 30 h ago, upcoming within 6 h.
+      if (query.window === 'ticker') sims = sims.filter(sim => sim.state === 'in' || (sim.state === 'post' && now - sim.start < 30 * H) || ((sim.state === 'pre' || sim.state === 'delayed') && sim.start - now < 6 * H));
       sims.sort(args.sort === 'start' ? (a, b) => a.start - b.start : featured(read.viewerId));
       const limit = Math.max(1, Math.min(100, Number(args.limit) || 100));
       return { events: sims.slice(0, limit).map(sim => eventRef(read, sim)) };
@@ -416,7 +452,7 @@ interface SurfaceOwner { kind: 'surface'; surface: string; doc: Compiled }
 type Target = Owner | SurfaceOwner;
 
 /** What a sealed topic binds: viewer, page or surface, canonical params and context, time zone, live sources. */
-interface Topic { v: string; t: { kind: 'screen'; screen: string; page: string } | { kind: 'surface'; surface: string }; p: Record<string, string>; tz: string; s: string[] }
+interface Topic { v: string; t: { kind: 'screen'; screen: string; page: string } | { kind: 'surface'; surface: string }; p: Record<string, string>; tz: string; s: string[]; l?: string }
 
 function targetOf(t: Topic['t']): Target | undefined {
   if (t.kind === 'screen') {
@@ -436,39 +472,35 @@ function openTopic(token: string): Topic | undefined {
 
 const CONTEXT = ['event', 'channel', 'title', 'kind', 'alert.ref'];
 
-/** Validated page params (declared, typed, defaults applied) and the surface's context, as `param.x` / `context.x`. */
-function inputs(target: Target, url: URL, fail: Fail): Record<string, string> {
+/** Validated page params (declared, typed, defaults applied) and the surface's context, as
+ * `param.x` / `context.x`. An unknown name or a bad value is 400 invalid_request. A ref naming an
+ * event the viewer cannot read is not refused here: its source answers errors.<id> = not_found. */
+function inputs(target: Target, given: Iterable<[string, string]>, fail: Fail): Record<string, string> {
   const declared = target.doc.document.params ?? {};
   const values: Record<string, string> = {};
-  for (const [name, value] of url.searchParams) {
-    if (!name.startsWith('p.')) continue;
-    const key = name.slice(2);
+  for (const [key, value] of given) {
+    if (typeof value !== 'string') fail('request', 'invalid_request', `Invalid value for ${key}`);
     if (target.kind === 'surface' && CONTEXT.includes(key)) { values[`context.${key}`] = value; continue; }
     const spec = declared[key];
-    if (!spec) fail('request', 'invalid_param', `Unknown param ${key}`);
+    if (!spec) fail('request', 'invalid_request', `Unknown param ${key}`);
     if (value === '') continue;
     const bad = (spec.max !== undefined && value.length > spec.max) || value.length > 512
       || (spec.enum && !spec.enum.includes(value)) || (spec.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value))
       || (spec.type === 'int' && !/^-?\d+$/.test(value)) || (spec.type === 'bool' && value !== 'true' && value !== 'false');
-    if (bad) fail('request', 'invalid_param', `Invalid value for ${key}`);
+    if (bad) fail('request', 'invalid_request', `Invalid value for ${key}`);
     values[`param.${key}`] = value;
   }
   for (const [name, spec] of Object.entries(declared)) if (values[`param.${name}`] === undefined && spec.default) values[`param.${name}`] = spec.default;
-  // Refs are re-checked against what the viewer may see: an unknown event is a 404 for the whole read.
-  for (const [name, value] of Object.entries(values)) {
-    const isRef = (name.startsWith('param.') && declared[name.slice(6)]?.type === 'ref') || name === 'context.event' || name === 'context.alert.ref';
-    if (isRef && value && !sportsModel.sim(simId(value))) fail('not-found', 'screen_not_found', 'Not found');
-  }
   return values;
 }
 
 /** Resolve the asked sources (every one that is not lazy when none is named) into a data answer. */
-function resolve(target: Target, values: Record<string, string>, viewerId: string, tz: string, asked: string[] | undefined): V.ScreenData & { names: string[] } {
+function resolve(target: Target, values: Record<string, string>, viewerId: string, tz: string, asked: string[] | undefined, locale = 'en'): V.ScreenData & { names: string[] } {
   const specs = target.doc.document.sources ?? {};
   const names = asked ?? Object.entries(specs).filter(([, spec]) => !spec.lazy).map(([name]) => name);
   const pageScope = target.kind === 'screen' ? `screen:${target.screen}/${target.page}` : `surface:${target.surface}`;
   const canonical = Object.entries(values).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => `${k}=${v}`).join('&');
-  const read: Read = { viewerId, tz, records: {}, scope: `${pageScope}?${canonical}|${tz}` };
+  const read: Read = { viewerId, tz, records: {}, scope: `${pageScope}?${canonical}|${tz}|${locale}`, locale };
   const sources: Record<string, unknown> = {};
   const errors: Record<string, V.SourceError> = {};
   let rev = 0;
@@ -487,24 +519,28 @@ function resolve(target: Target, values: Record<string, string>, viewerId: strin
   return { rev, sources, records: read.records, ...(Object.keys(errors).length ? { errors } : {}), names };
 }
 
-function sourceRev(target: Target, values: Record<string, string>, viewerId: string, tz: string, name: string): number {
+function sourceRev(target: Target, values: Record<string, string>, viewerId: string, tz: string, name: string, locale = 'en'): number {
   const pageScope = target.kind === 'screen' ? `screen:${target.screen}/${target.page}` : `surface:${target.surface}`;
   const canonical = Object.entries(values).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => `${k}=${v}`).join('&');
-  return revs.get(viewerScope(viewerId, `${pageScope}?${canonical}|${tz}|${name}`))?.rev ?? 0;
+  return revs.get(viewerScope(viewerId, `${pageScope}?${canonical}|${tz}|${locale}|${name}`))?.rev ?? 0;
 }
 
 async function serveData(req: Request, url: URL, target: Target, viewerId: string, fail: Fail): Promise<Response> {
+  if (target.doc.document.renderer > rendererOf(req)) fail('not-found', 'update_required', 'No variant of this page fits this client');
   await sportsGate(fail);
+  for (const name of url.searchParams.keys()) if (name !== 'sources' && name !== 'tz' && !name.startsWith('p.')) fail('request', 'invalid_request', `Unknown query ${name}`);
   const tz = zone(url.searchParams.get('tz'));
-  const values = inputs(target, url, fail);
+  const values = inputs(target, [...url.searchParams].filter(([name]) => name.startsWith('p.')).map(([name, value]) => [name.slice(2), value] as [string, string]), fail);
   const specs = target.doc.document.sources ?? {};
   const asked = url.searchParams.has('sources') ? (url.searchParams.get('sources') ?? '').split(',').filter(Boolean) : undefined;
-  for (const name of asked ?? []) if (!specs[name]) fail('request', 'invalid_sources', `Unknown source ${name}`);
-  const { names, ...data } = resolve(target, values, viewerId, tz, asked);
+  if (asked && asked.length > 16) fail('request', 'invalid_request', 'At most 16 sources');
+  for (const name of asked ?? []) if (!specs[name]) fail('request', 'invalid_request', `Unknown source ${name}`);
+  const locale = languageOf(req);
+  const { names, ...data } = resolve(target, values, viewerId, tz, asked, locale);
   // The topic covers what the page shows: its eager sources and any lazy one read now.
   const live = [...new Set([...Object.entries(specs).filter(([, spec]) => !spec.lazy).map(([name]) => name), ...names])].sort();
   const t = target.kind === 'screen' ? { kind: 'screen' as const, screen: target.screen, page: target.page } : { kind: 'surface' as const, surface: target.surface };
-  const answer: V.ScreenData = { ...data, live: { topic: sealTopic({ v: viewerId, t, p: values, tz, s: live }) } };
+  const answer: V.ScreenData = { ...data, live: { topic: sealTopic({ v: viewerId, t, p: values, tz, s: live, l: locale }) } };
   const body = JSON.stringify(answer);
   const etag = `"${createHash('sha1').update(body).digest('base64url')}"`;
   const headers = { ETag: etag, 'Cache-Control': 'private, no-cache', 'Content-Type': 'application/json' };
@@ -514,20 +550,20 @@ async function serveData(req: Request, url: URL, target: Target, viewerId: strin
 
 // Actions
 
-const ACTION_FIELDS = new Set(['page', 'params', 'args', 'context', 'idempotencyKey']);
+const ACTION_FIELDS = new Set(['page', 'params', 'args', 'context', 'idempotencyKey', 'tz']);
 const truthy = (value: unknown) => value === true || value === 'true';
 
 function serveAction(req: Request, target: Target, action: string, body: unknown, viewerId: string, fail: Fail): Response {
-  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(name => !ACTION_FIELDS.has(name))) fail('request', 'invalid_request', 'Only page, params, args, context and idempotencyKey');
-  const request = body as { page?: unknown; params?: unknown; args?: unknown; context?: unknown };
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(name => !ACTION_FIELDS.has(name))) fail('request', 'invalid_request', 'Only page, params, args, context, tz and idempotencyKey');
+  const request = body as { page?: unknown; params?: unknown; args?: unknown; context?: unknown; tz?: unknown };
   if (!req.headers.get('idempotency-key') && !(body as { idempotencyKey?: unknown }).idempotencyKey) fail('request', 'idempotency_required', 'Idempotency-Key required');
   const args = (request.args && typeof request.args === 'object' ? request.args : {}) as Json;
   if (Object.keys(args).length > 8 || JSON.stringify(args).length > 8192) fail('request', 'invalid_args', 'Too many or too large arguments');
-  const specs = target.doc.document.sources ?? {};
-  const read: Read = { viewerId, tz: zone(null), records: {}, scope: '' };
+  const object = (value: unknown) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as Record<string, string>;
+  const values = inputs(target, [...Object.entries(object(request.params)), ...Object.entries(object(request.context))], fail);
+  const tz = zone(typeof request.tz === 'string' ? request.tz : null);
+  const read: Read = { viewerId, tz, records: {}, scope: '' };
   const answer: V.ScreenActionAnswer = {};
-  // Sources that read favourites or spoilers: Ether has re-resolved them; the client reads them again.
-  const dependent = (test: (spec: V.SourceSpec) => boolean) => Object.entries(specs).filter(([, spec]) => test(spec)).map(([name]) => name);
   if (action === 'ether.favorite') {
     const key = typeof args.ref === 'string' ? args.ref.replace(/^entity:/, '') : '';
     const team = sportsModel.teams().find(t => entityKey(t.id) === key);
@@ -536,25 +572,24 @@ function serveAction(req: Request, target: Target, action: string, body: unknown
     if (truthy(args.on)) favourites.add(key); else favourites.delete(key);
     entityRef(read, team);
     for (const sim of sportsModel.sims()) if (sim.home === team.id || sim.away === team.id) eventRef(read, sim);
-    answer.records = read.records;
-    answer.refresh = dependent(spec => spec.from === 'viewer' || spec.from === 'liveTables' || (spec.from === 'liveEvents' && (spec.sort === 'featured' || (spec.query as Json | undefined)?.favorites === true)));
   } else if (action === 'ether.reveal') {
     const sim = typeof args.event === 'string' ? sportsModel.sim(simId(args.event)) : undefined;
     if (!sim) fail('not-found', 'event_not_found', 'Live event not found');
     sportsModel.reveal(viewerId, sim.id);
     eventRef(read, sim);
     detailRef(read, sim);
-    answer.records = read.records;
   } else if (action === 'ether.spoilerFree') {
     sportsModel.setSpoilerFree(viewerId, truthy(args.on));
     for (const sim of sportsModel.sims()) eventRef(read, sim);
-    answer.records = read.records;
-    answer.refresh = dependent(spec => spec.from === 'viewer');
-  } else if (target.doc.document.actions?.[action]) {
-    answer.toast = 'Done';
   } else {
+    // Plugin actions are not in Ether E1/E2.
     fail('not-found', 'action_not_found', 'Action not found');
   }
+  // Built-in answers: the changed records, and every source of the page re-read (lazy ones too).
+  const all = Object.keys(target.doc.document.sources ?? {});
+  const data = resolve(target, values, viewerId, tz, all, languageOf(req));
+  answer.records = { ...data.records, ...read.records };
+  answer.sources = data.sources;
   pump(viewerId);
   return Response.json(answer, { headers: { 'Cache-Control': 'no-store' } });
 }
@@ -569,10 +604,10 @@ function push(listener: Listener): void {
   const records: Record<string, V.RecordEntry> = {};
   const sources: V.StreamSource[] = [];
   for (const { topic, target } of listener.topics) {
-    const data = resolve(target, topic.p, listener.viewerId, topic.tz, topic.s);
+    const data = resolve(target, topic.p, listener.viewerId, topic.tz, topic.s, topic.l);
     for (const [key, entry] of Object.entries(data.records)) if (entry.rev > (listener.sent.get(key) ?? 0)) { records[key] = entry; listener.sent.set(key, entry.rev); }
     for (const [name, value] of Object.entries(data.sources)) {
-      const rev = sourceRev(target, topic.p, listener.viewerId, topic.tz, name);
+      const rev = sourceRev(target, topic.p, listener.viewerId, topic.tz, name, topic.l);
       const id = `${topic.t.kind === 'screen' ? `${topic.t.screen}/${topic.t.page}` : topic.t.surface}|${JSON.stringify(topic.p)}|${name}`;
       if (rev <= (listener.sent.get(id) ?? 0)) continue;
       listener.sent.set(id, rev);
@@ -636,7 +671,7 @@ function stream(req: Request, url: URL, viewerId: string, authorized: () => bool
     // Replay: everything of these topics above since (what changed between the data read and now).
     const seed = new Map<string, number>();
     for (const { topic, target } of topics) {
-      const data = resolve(target, topic.p, viewerId, topic.tz, topic.s);
+      const data = resolve(target, topic.p, viewerId, topic.tz, topic.s, topic.l);
       for (const key of Object.keys(data.records)) seed.set(key, since);
       for (const name of Object.keys(data.sources)) seed.set(`${topic.t.kind === 'screen' ? `${topic.t.screen}/${topic.t.page}` : topic.t.surface}|${JSON.stringify(topic.p)}|${name}`, since);
     }
@@ -659,6 +694,7 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
   const screen = /^\/screens\/([^/]+)\/(?:pages\/([^/]+)\/(document|data)|actions\/([^/]+))$/.exec(path);
   if (screen) {
     const id = decodeURIComponent(screen[1]!);
+    if (hidden.has(id)) fail('not-found', 'screen_not_found', 'Screen not found');
     if (screen[4]) {
       if (method !== 'POST') fail('request', 'method_not_allowed', 'POST only', {}, 405);
       const pageName = typeof (body as { page?: unknown })?.page === 'string' ? (body as { page: string }).page : 'index';
@@ -671,7 +707,7 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
     const page = PAGES.find(p => p.screen === id && p.page === pageName);
     const doc = page && load(page.file);
     if (!page || !doc || method !== 'GET') fail('not-found', 'screen_not_found', 'Screen not found');
-    if (screen[3] === 'document') return serveDocument(req, url, doc, pageHref(page, doc), fail);
+    if (screen[3] === 'document') return serveDocument(req, url, doc, pageHref(page, doc, url.searchParams.get('l') ?? 'en'), fail);
     return serveData(req, url, { kind: 'screen', screen: id, page: pageName, doc }, viewerId, fail);
   }
   const surface = /^\/surfaces\/([^/]+)\/(document|data|setting|actions\/([^/]+))$/.exec(path);
@@ -679,9 +715,9 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
     const id = decodeURIComponent(surface[1]!);
     const spec = SURFACES.find(s => s.id === id);
     const doc = spec && load(spec.file);
-    if (!spec || !doc) fail('not-found', 'surface_not_found', 'Surface not found');
+    if (!spec || !doc || hidden.has(id)) fail('not-found', 'surface_not_found', 'Surface not found');
     const target: SurfaceOwner = { kind: 'surface', surface: id, doc };
-    if (surface[2] === 'document' && method === 'GET') return serveDocument(req, url, doc, surfaceHref(spec, doc), fail);
+    if (surface[2] === 'document' && method === 'GET') return serveDocument(req, url, doc, surfaceHref(spec, doc, url.searchParams.get('l') ?? 'en'), fail);
     if (surface[2] === 'data' && method === 'GET') return serveData(req, url, target, viewerId, fail);
     if (surface[2] === 'setting' && method === 'PUT') {
       const enabled = (body as { enabled?: unknown } | undefined)?.enabled;
@@ -695,6 +731,18 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
     fail('not-found', 'surface_not_found', 'Surface not found');
   }
   return undefined;
+}
+
+/** Admin (POST /__admin/screens {hide?: id[], show?: id[]}): the owner hides a screen or surface from
+ * viewers. It leaves bootstrap, its reads answer 404, and every stream following one of its topics
+ * ends (Ether ends a stream when a topic's page is no longer visible). */
+export function screensAdmin(body: { hide?: unknown; show?: unknown }): { hidden: string[] } {
+  for (const id of Array.isArray(body.show) ? body.show : []) if (typeof id === 'string') hidden.delete(id);
+  for (const id of Array.isArray(body.hide) ? body.hide : []) if (typeof id === 'string') hidden.add(id);
+  for (const listener of [...listeners]) {
+    if (listener.topics.some(({ topic }) => hidden.has(topic.t.kind === 'screen' ? topic.t.screen : topic.t.surface))) listener.close();
+  }
+  return { hidden: [...hidden] };
 }
 
 /** For tests: the topic a data read sealed, opened. */
