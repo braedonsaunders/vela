@@ -38,8 +38,11 @@ export function plexTokens(value: PlexAccountSignIn): Tokens {
 }
 
 async function plexRequest(origin: string, path: string, body: object, allowSelection: boolean): Promise<PlexAccountSignIn> {
+  // same-origin, not omit: an auth proxy or tunnel in front of a same-origin Ether (Cloudflare Access,
+  // oauth2-proxy, a share link) admits requests by its own cookie and answers 401 without it. Ether
+  // sets no cookie of its own and a cross-origin server still receives none.
   const response = await fetch(`${origin}/vela/v0${path}`, {
-    method: 'POST', credentials: 'omit', redirect: 'error', signal: timeoutSignal(15000),
+    method: 'POST', credentials: 'same-origin', redirect: 'error', signal: timeoutSignal(15000),
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
