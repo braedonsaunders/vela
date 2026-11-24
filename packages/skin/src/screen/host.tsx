@@ -17,10 +17,8 @@ import type { ScreenPress, SkinHost } from '../host';
 import { fill, type RNode } from '../resolve';
 import { resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
 import { resolveUi } from '../resolve/ui';
-import { hasFlowHeader, overlayHeaderOffset } from '../resolve/inherit';
-import type { Node } from '../../../protocol/skin';
 import { SkinNodeFor, SkinRoot, SkinRoute } from '../render';
-import { ScreenRuntimeContext, type ScreenRuntime } from './block-view';
+import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, type ScreenBlockRuntime } from '../blocks';
 import { screenRoot } from './items';
 
 /** Where a `navigate` goes: a page of a plugin screen, or one of the app's built-in routes. */
@@ -190,13 +188,15 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true },
     screenPress: press,
   }), [host, actions.multiview, press]);
-  const runtime = useMemo<ScreenRuntime>(() => ({
-    renderNode: (node: RNode, at) => <SkinNodeFor node={node} ctx={at} />,
-    need: sources => { if (pageKey) void vela.screens.need(pageKey, sources); },
-    title: resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '',
-    presentation: doc?.presentation ?? 'section',
-    insetTop: route && doc?.presentation === 'section' ? barOffset(host.doc.document.slots?.shell, host.viewport.width < 640, host.viewport.insets.top) * PX : 0,
-  }), [pageKey, vela, resolved, ctx, screenHost.env, doc?.presentation, route, host.doc, host.viewport]);
+  const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
+  const runtime = useMemo<ScreenBlockRuntime>(() => createScreenBlockRuntime(
+    (node, at) => <SkinNodeFor node={node as RNode} ctx={at} />,
+    {
+      requestNeeds: sources => { if (pageKey) void vela.screens.need(pageKey, sources); },
+      pageTitle: title,
+      presentation: doc?.presentation === 'page' ? 'page' : 'section',
+    },
+  ), [pageKey, vela, title, doc?.presentation]);
 
   const reason = problem || (document.load === 'failed' ? document.error : '');
   if (reason) return <>{refused ? refused(reason) : <Refused host={host} reason={reason} />}</>;
@@ -219,23 +219,13 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   );
 }
 
-/** How far below the top a section starts when the shell's navigation floats over it (as library
- * pages start): the bar's declared height, else none for a shell whose header is in flow. */
-function barOffset(shell: Node | undefined, small: boolean, insetTop: number): number {
-  if (!shell || hasFlowHeader(shell)) return 0;
-  const offset = overlayHeaderOffset(shell);
-  const text = small ? offset.small : offset.wide;
-  const px = Number(/(-?\d+(?:\.\d+)?)px/.exec(text)?.[1] ?? 0);
-  return px + (text.includes('safe-area-inset-top') ? insetTop / PX : 0);
-}
-
 const LOADING: ScreenPageState = { href: '', key: '', params: {}, sources: {}, pending: {}, errors: {}, load: 'loading', rev: 0 };
 
-function Draw({ host, node, ctx, runtime, route }: { host: SkinHost; node: RNode; ctx: ReturnType<typeof screenRoot>; runtime: ScreenRuntime; route: boolean }) {
+function Draw({ host, node, ctx, runtime, route }: { host: SkinHost; node: RNode; ctx: ReturnType<typeof screenRoot>; runtime: ScreenBlockRuntime; route: boolean }) {
   return (
-    <ScreenRuntimeContext.Provider value={runtime}>
+    <ScreenBlockRuntimeProvider value={runtime}>
       {route ? <SkinRoute host={host} node={node} ctx={ctx} /> : <SkinRoot host={host} node={node} ctx={ctx} />}
-    </ScreenRuntimeContext.Provider>
+    </ScreenBlockRuntimeProvider>
   );
 }
 
