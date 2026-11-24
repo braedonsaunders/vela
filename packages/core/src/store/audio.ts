@@ -525,12 +525,13 @@ export class Audio {
       });
       return;
     }
-    // Another session took over.
+    // Another session took over. Let go of ours first: an engine that reports its pause at once
+    // must not find it still here, or the paused state's patch follows again, without end.
     if (playback.sessionId !== this.sessionId && playback.phase !== 'preparing') {
+      this.sessionId = ''; this.url = '';
       this.forget();
       this.engine?.pause();
       this.engine?.unload();
-      this.sessionId = ''; this.url = '';
       if (this.state.phase !== 'idle' && this.state.phase !== 'ended') this.patch({ phase: 'paused' });
     }
   }
