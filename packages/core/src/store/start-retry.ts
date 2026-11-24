@@ -38,6 +38,16 @@ export function finalRefusal(error: unknown): boolean {
   return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
 }
 
+/**
+ * The server itself answered and refused, in its own words (a v0 error class other than
+ * `transient`): Ether's 503 `source`/`timeout` when a channel's provider does not respond, for
+ * example. A restart is not kept waiting behind a spinner for that, though it waits out no answer,
+ * a gateway in the way or a server restarting (Ether reports those bodiless 5xx as `transient`).
+ */
+export function serverRefused(error: unknown): boolean {
+  return error instanceof VelaError && error.detail.class !== 'transient';
+}
+
 /** A refused start in the words the server gave, for the viewer. */
 export interface StartRefusal {
   message: string;

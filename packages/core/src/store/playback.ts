@@ -9,7 +9,7 @@ import { sendCommand } from '../adapter/commands';
 import { hasEventStream, hasLibraryLive, hasTrickplaySheets, hasVersions } from '../adapter/capabilities';
 import type { TrickplayFrame } from '../protocol/trickplay';
 import { TrickplayCache } from './trickplay';
-import { finalRefusal, startRefusal, startRetry } from './start-retry';
+import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-retry';
 import { heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
@@ -117,8 +117,12 @@ export class Playback {
   private recoveryAttempt = 0;
   /** Progress of the current session (stall.ts): when it is stalled, and how many restarts it has had. */
   private stall: StallWatch | undefined;
-  /** The attempt number the next session starts at: 0 for a viewer's start, one more for each restart. */
-  private restarts = 0;
+  /**
+   * The viewer's watch its restarts count against: its target and the session its last restart
+   * started. A live channel's owner hands each restarted session back (detach, then attach), so the
+   * count outlives `end()`; only the viewer (a start, Stop, Try again after giving up) begins afresh.
+   */
+  private watch: { target: string; session: string; restarts: number } | undefined;
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   private watchdogAt = 0;
   private cursor = 0;
@@ -159,6 +163,7 @@ export class Playback {
     this.trickplay.subscribe(() => this.trickplayChanged());
     session.onReset(() => {
       this.end();
+      this.watch = undefined;
       this.media = undefined;
       this.box.update('playback', () => initialPlayback);
     });
@@ -181,6 +186,7 @@ export class Playback {
     const stopping = this.stop();
     const run = {};
     this.run = run;
+    this.watch = { target: watchOf(target), session: '', restarts: 0 };
     this.patch({ ...initialPlayback, phase: 'starting', target });
     await stopping;
     if (this.run !== run) return;
@@ -197,7 +203,10 @@ export class Playback {
     if (this.run !== run) return;
     const plan = connection.plan(existing);
     this.established = true;
-    this.stall = stallWatch(Date.now());
+    // The session this watch's own restart started (the owner handing it back) goes on counting.
+    const watch = this.watch;
+    if (watch?.target !== watchOf(target) || watch.session !== plan.sessionId) this.watch = { target: watchOf(target), session: plan.sessionId, restarts: 0 };
+    this.stall = stallWatch(Date.now(), this.watch!.restarts);
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
@@ -292,7 +301,9 @@ export class Playback {
     this.recovering = false;
     this.established = true;
     this.recoveryAttempt = 0;
-    this.stall = stallWatch(Date.now(), this.restarts);
+    if (this.watch?.target !== watchOf(target)) this.watch = { target: watchOf(target), session: '', restarts: 0 };
+    this.watch.session = plan.sessionId;
+    this.stall = stallWatch(Date.now(), this.watch.restarts);
     this.cursor = plan.positionSeconds ?? 0;
     this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
@@ -312,11 +323,11 @@ export class Playback {
    * A refused start. A failure the server allows retrying is asked again on its terms
    * (startRetry); anything else ends in the failed state with the server's words. Only a session
    * that was already established keeps recovery's patient backoff, and only through failures
-   * that may pass (no answer, a 5xx): a final refusal ends recovery too, and the session is no
-   * longer recovered, so a late engine report cannot ask again.
+   * that may pass (no answer, a gateway or a server restarting): the server's own refusal ends
+   * recovery too, and the session is no longer recovered, so a late engine report cannot ask again.
    */
   private failed(intent: Intent, error: unknown, attempt: number, preparation: number): void {
-    if (this.recovering && this.established && !finalRefusal(error)) { this.scheduleRecovery(intent); return; }
+    if (this.recovering && this.established && !finalRefusal(error) && !serverRefused(error)) { this.scheduleRecovery(intent); return; }
     if (this.recovering) this.established = false;
     this.recovering = false;
     const refusal = startRefusal(error, 'Playback failed');
@@ -397,14 +408,14 @@ export class Playback {
     // Only an established session is recovered: a start that never reached one (no session id)
     // already ended in its own failed or retrying state.
     if (!this.run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
-    const attempt = this.stall?.attempt ?? this.restarts;
+    const attempt = this.stall?.attempt ?? this.watch?.restarts ?? 0;
     if (stallVerdict({ attempt }) === 'give-up') {
       console.warn(`Vela playback: session ${sessionId} ${reason} after ${attempt} restart(s); giving up`);
       this.giveUp();
       return;
     }
     console.warn(`Vela playback: session ${sessionId} ${reason}; restart ${attempt + 1} of ${QUIET_SECONDS.length - 1}`);
-    this.restarts = attempt + 1;
+    this.watch = { target: watchOf(current.target), session: '', restarts: attempt + 1 };
     this.stall = undefined;
     this.recovering = true;
     this.follow?.abort();
@@ -681,6 +692,7 @@ export class Playback {
     const run = {};
     this.run = run;
     this.established = true;
+    this.watch = { target: watchOf(target), session: plan.sessionId, restarts: 0 };
     this.cursor = plan.positionSeconds ?? 0;
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
@@ -694,6 +706,7 @@ export class Playback {
     const plan = this.box.get().playback.plan ?? this.abandoned;
     const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
     this.end();
+    this.watch = undefined;
     this.box.update('playback', () => initialPlayback);
     if (!plan || plan.state === 'ended') return;
     await this.finish(plan, target, phase, last, this.reporting);
@@ -732,7 +745,7 @@ export class Playback {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     this.stall = undefined;
-    this.restarts = 0;
+    this.watch = undefined;
     this.recovering = false;
     this.established = false;
     this.abandoned = null;
@@ -791,7 +804,6 @@ export class Playback {
     this.established = false;
     this.recoveryAttempt = 0;
     this.stall = undefined;
-    this.restarts = 0;
     this.cursor = 0;
     this.localTracks = false;
     this.audio = undefined;
@@ -894,6 +906,12 @@ export class Playback {
   private patch(change: Partial<PlaybackState>): void {
     this.box.update('playback', playback => ({ ...playback, ...change }));
   }
+}
+
+/** What a watch is of, whatever position or track a restart asks it again at. */
+function watchOf(target: PlaybackTarget): string {
+  return JSON.stringify([target.kind, target.id,
+    target.kind === 'programme' ? [target.channelId, target.from ?? ''] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
 }
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {
