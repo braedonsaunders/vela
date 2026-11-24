@@ -62,6 +62,8 @@ export const VIEWS: View[] = [
 export const REVIEWED_VIEWS: { viewports: RegExp; views: string[]; reason: string }[] = [
   { viewports: /^web-390$/, views: ['index-top', 'index-spoiler-free', 'index-no-favourites'],
     reason: 'Phone hero: names wrap under the crests (legacy truncated them), and without Watch from start (Ether v1) the hero is one button shorter, so the page below moves up' },
+  { viewports: /^web-(1024|390)$/, views: ['index-schedule', 'index-teams'],
+    reason: 'Standings light the viewer\'s team row (legacy meant to but compared full names with short cells); on the phone the schedule row sizes to all its cards (legacy\'s virtualised row left out the taller F1 card), so what follows sits 2.5 px lower' },
   { viewports: /^tvos$/, views: ['index-top', 'index-spoiler-free', 'index-no-favourites'],
     reason: 'TV index: the day strip shows 7 days (Ether) where legacy showed 8; the shell navigation (not Sports) changed between the legacy capture and now; legacy\'s first TV focus fell on Watch or Game details by the focus engine, the document focuses Game details' },
   { viewports: /^(tvos|androidtv)$/, views: ['game-final', 'game-spoiler'],
