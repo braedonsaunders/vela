@@ -62,6 +62,10 @@ export const VIEWS: View[] = [
 export const REVIEWED_VIEWS: { viewports: RegExp; views: string[]; reason: string }[] = [
   { viewports: /^web-390$/, views: ['index-top', 'index-spoiler-free', 'index-no-favourites'],
     reason: 'Phone hero: names wrap under the crests (legacy truncated them), and without Watch from start (Ether v1) the hero is one button shorter, so the page below moves up' },
+  { viewports: /^tvos$/, views: ['index-top', 'index-spoiler-free', 'index-no-favourites'],
+    reason: 'TV index: the day strip shows 7 days (Ether) where legacy showed 8; the shell navigation (not Sports) changed between the legacy capture and now; legacy\'s first TV focus fell on Watch or Game details by the focus engine, the document focuses Game details' },
+  { viewports: /^(tvos|androidtv)$/, views: ['game-final', 'game-spoiler'],
+    reason: 'Watch from start is absent (Ether v1 sends no catch-up targets); legacy showed it for this archived final, so the pills after it sit one button to the left' },
   { viewports: /^ios-phone$/, views: ['game-spoiler'],
     reason: 'Watch from start is absent (Ether v1 sends no catch-up targets); legacy showed it for this archived final, so the pills after it sit one button to the left' },
 ];

@@ -43,13 +43,16 @@ for (const before of legacy.captures) {
   writeFileSync(join(out, diffFile), encodePng(result.image));
   // Moves are judged in points: a 2x screenshot's 2 px is 1 point.
   const scale = CAPTURE_SCALE[before.viewport] ?? 1;
-  result.maxDisplacement = Math.round((result.maxDisplacement / scale) * 100) / 100;
+  // A move is an element's: regions under 10 square points (a glyph's dot, anti-aliasing) cannot be
+  // told apart from noise by translation, so they count in the percentage only.
+  const counted = result.regions.filter(r => r.displacement !== null && r.pixels >= 10 * scale * scale);
+  result.maxDisplacement = counted.length ? Math.round((Math.max(...counted.map(r => r.displacement!)) / scale) * 100) / 100 : 0;
   const judged = verdict(result);
   Object.assign(row, {
     status: row.review ? 'review' : judged.pass ? 'pass' : 'fail', percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
     masked: mask.length, reasons: judged.reasons, ...(reviewedNotes.length ? { reviewedNotes } : {}),
     // The regions that moved too far, for finding them on the diff picture.
-    moved: result.regions.filter(r => (r.displacement ?? 0) / scale > RULE.maxDisplacement).slice(0, 12).map(({ x, y, width, height, shift }) => ({ x, y, width, height, shift })),
+    moved: counted.filter(r => r.displacement! / scale > RULE.maxDisplacement).slice(0, 12).map(({ x, y, width, height, shift }) => ({ x, y, width, height, shift })),
     legacy: relative(out, join(legacyDir, before.file)), document: relative(out, join(documentDir, after.file)), diff: diffFile,
   });
 }
