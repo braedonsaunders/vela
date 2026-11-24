@@ -69,10 +69,22 @@ export interface Row {
   nextCursor: string;
   continuation: V.Row['continuation'];
   previewOnFocus: boolean;
-  /** A Home row a plugin surface draws (its id in `HomeModel.surfaces`); the row has no items of its own. */
+  /** A row a plugin surface draws (its id in `HomeModel.surfaces`) and that plugin; the row has no items of its own. */
   surface?: string;
-  cardStyle?: 'poster' | 'landscape' | 'square';
+  plugin?: string;
+  /** `ranked` (Top 10), else ''. */
   presentation: string;
+  /** How the row draws: `standard` when the server said nothing or something unknown. */
+  layout: V.RowLayout;
+  /** The items' card, when the server chose one (library pages: the library's). */
+  card?: V.RowCard;
+  /** The items' media role (album, track, movie, …), when known. */
+  role?: string;
+  /** The titles differ per viewer. */
+  personal: boolean;
+  /** The library a one-row-per-library row (or a library's surface row) belongs to. */
+  library?: string;
+  experience?: V.RowExperience;
 }
 
 /** What a hero's button does, and how it is labelled. */

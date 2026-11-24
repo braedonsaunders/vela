@@ -175,8 +175,27 @@ describe('media kinds', () => {
 
   test('home places the media rows after the first two rows', async () => {
     const rows = (await get<V.Page<V.Row>>('/rows?placement=home&limit=10')).items;
-    expect(rows.slice(2, 5).map(row => [row.id, row.style])).toEqual([['media-recent-albums', 'square'], ['media-continue-reading', 'poster'], ['media-continue-listening', 'square']]);
+    expect(rows.slice(2, 5).map(row => [row.id, row.card, row.role])).toEqual([['media-recent-albums', 'square', 'album'], ['media-continue-reading', 'poster', 'book'], ['media-continue-listening', 'square', 'episode']]);
+    // The retired style is never sent.
+    expect(rows.every(row => !('style' in row))).toBe(true);
     expect((await get<V.Bootstrap>('/bootstrap')).rows.map(row => row.id)).toEqual(rows.slice(0, 2).map(row => row.id));
+  });
+
+  test('a listen library page: its own Jump back in and liked rows, a track list of leaves, round artists', async () => {
+    const shelves = (await get<V.Page<V.Row>>('/libraries/music/rows')).items;
+    expect(shelves.map(row => [row.id, row.purpose, row.layout ?? 'standard', row.card])).toEqual([
+      ['music-jump-back-in', 'recentContexts', 'standard', 'square'], ['music-recent-albums', 'recentlyAdded', 'standard', 'square'],
+      ['music-quick-picks', 'recommendation', 'tracks', 'square'], ['music-liked', 'liked', 'standard', 'square'], ['music-artists', 'recommendation', 'standard', 'round']]);
+    expect(shelves.every(row => row.experience === 'listen')).toBe(true);
+    const tracks = shelves.find(row => row.layout === 'tracks')!;
+    expect(tracks.role).toBe('track');
+    expect(tracks.personal).toBe(true);
+    expect(tracks.items.length).toBeGreaterThan(0);
+    for (const entry of tracks.items) {
+      if (entry.kind !== 'title') throw new Error('a track list holds titles');
+      expect(entry.title.durationSeconds).toBeGreaterThan(0);
+      expect(entry.title.media?.parents?.some(parent => parent.role === 'album' || parent.role === 'artist')).toBe(true);
+    }
   });
 
   test("a concert's tab, children and playback (plugin levels)", async () => {

@@ -191,8 +191,11 @@ function childrenFor(id: string, url: URL): V.Title[] {
   return mediaChildren(id, role || undefined);
 }
 const presentEntry = (g: Grant, entry: V.RowEntry): V.RowEntry => entry.kind === 'title' && entry.title.media ? { ...entry, title: present(g, entry.title) } : entry;
-const titleRow = (id: string, name: string, purpose: V.Row['purpose'], style: string, items: V.Title[]): V.Row[] => items.length ? [{
-  id, name, purpose, style, receiptToken: '', continuation: 'exhausted', items: items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title, receiptToken: '' })) }] : [];
+/** A row's items' media role, as Ether reads it: the declared role, else the title's kind. */
+const roleOf = (title: V.Title) => title.media?.role && title.media.role !== 'item' ? title.media.role : title.kind;
+/** A row of titles with Ether's Recommendations presentation (card, role, and any layout, personal, library, experience). */
+const titleRow = (id: string, name: string, purpose: V.Row['purpose'], card: V.RowCard, items: V.Title[], more: Pick<V.Row, 'layout' | 'personal' | 'library' | 'experience'> = {}): V.Row[] => items.length ? [{
+  id, name, purpose, card, role: roleOf(items[0]!), ...more, receiptToken: '', continuation: 'exhausted', items: items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title, receiptToken: '' })) }] : [];
 const recentFirst = (a: V.Title, b: V.Title) => (b.watch?.lastViewedAt ?? '').localeCompare(a.watch?.lastViewedAt ?? '');
 const continueReading = (g: Grant) => mediaGroups.books.map(title => present(g, title))
   .filter(title => !!title.watch?.reading && !title.watch.played && !removedContinue.has(title.id)).sort(recentFirst);
@@ -223,9 +226,16 @@ function concertRows(g: Grant): V.Row[] {
 }
 function mediaLibraryRows(g: Grant, libraryId: string, tab?: string): V.Row[] {
   if (libraryId === 'music' && tab === 'concerts') return concertRows(g);
-  if (libraryId === 'music') return [...titleRow('music-recent-albums', 'Recently added albums', 'recentlyAdded', 'square', recentAlbums()),
-    ...titleRow('music-artists', 'Artists to explore', 'recommendation', 'square', mediaGroups.artists),
-    ...titleRow('music-quick-picks', 'Quick picks', 'recommendation', 'square', mediaGroups.tracks.filter((_, index) => index % 7 === 2))];
+  if (libraryId === 'music') {
+    const listen = { experience: 'listen' as const };
+    // A track list carries only track leaves with a duration and an album or artist parent.
+    const leaf = (track: V.Title) => (track.durationSeconds ?? 0) > 0 && !!track.media?.parents?.some(parent => parent.role === 'album' || parent.role === 'artist');
+    return [...titleRow('music-jump-back-in', 'Jump back in', 'recentContexts', 'square', recentAlbums().slice(0, 6), { ...listen, personal: true }),
+      ...titleRow('music-recent-albums', 'Recently added albums', 'recentlyAdded', 'square', recentAlbums(), listen),
+      ...titleRow('music-quick-picks', 'Quick picks', 'recommendation', 'square', mediaGroups.tracks.filter((track, index) => index % 7 === 2 && leaf(track)).slice(0, 8), { ...listen, layout: 'tracks', personal: true }),
+      ...titleRow('music-liked', 'Liked albums', 'liked', 'square', recentAlbums().slice(6, 12), { ...listen, personal: true }),
+      ...titleRow('music-artists', 'Artists to explore', 'recommendation', 'round', mediaGroups.artists, listen)];
+  }
   if (libraryId === 'books') return [...titleRow('books-continue', 'Continue reading', 'continue', 'poster', continueReading(g)),
     ...titleRow('books-series', 'Series to start', 'recommendation', 'poster', mediaGroups.series),
     ...titleRow('books-standalone', 'Standalone reads', 'collection', 'poster', mediaGroups.books.filter(book => !book.media?.parents?.length).map(book => present(g, book)))];
@@ -282,13 +292,15 @@ const labHomeRows: V.Row[] = [
   { ...labRows[3]!, id: 'lab-home-because', name: 'Because You Watched…', items: labRows[3]!.items.slice(0, 12) },
   { ...labRows[0]!, id: 'lab-home-trending', items: labRows[0]!.items.slice(0, 20) },
 ];
-function homeRows(g: Grant, url: URL): V.Page<V.Row> {
-  // Media rows follow the first couple of rows (Continue Watching, Next Up).
-  const ordered = [...progressRows(), ...rows];
-  ordered.splice(2, 0, ...mediaHomeRows(g));
-  const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}`, labPreset ? 5 : 2);
+/** Home's page in order: progress rows, media rows, the catalogue's rows, and a plugin's surface
+ * row where the page places it (after Top 10), as Ether lists them. */
+function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = []): V.Page<V.Row | V.SurfaceRow> {
+  const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows];
+  const top = ordered.findIndex(row => row.id === 'row-top10');
+  ordered.splice(top + 1, 0, ...surfaces);
+  const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
-  return { ...result, items: result.items.map(row => homeRow(g, row, firstItems)) };
+  return { ...result, items: result.items.map(row => 'kind' in row ? row : homeRow(g, row, firstItems)) };
 }
 function cached(req: Request, data: unknown, scope: string): Response {
   const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
@@ -747,11 +759,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (bootstrapDelayMs) await Bun.sleep(bootstrapDelayMs);
     const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, ...(longHeroes ? { title: { ...hero.title, name: `${hero.title.name}: The Long Way Round to the Edge of Everything` } } : {}), receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
-    const home = homeRows(g, firstPage);
     // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
-    const { navigation, surfaces, homeRow } = screensBootstrap(req, g.viewer.id);
-    const homeItems: V.Bootstrap['rows'] = homeRow ? [...home.items.slice(0, 1), homeRow, ...home.items.slice(1)] : home.items;
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: homeItems, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
+    const { navigation, surfaces, homeRows: surfaceRows } = screensBootstrap(req, g.viewer.id);
+    const home = homeRows(g, firstPage, surfaceRows);
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
@@ -779,7 +790,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (!detail(url.searchParams.get('titleId') ?? '')) fail('not-found', 'title_not_found', 'Detail title not found');
       return cached(req, { items: [], continuation: 'exhausted' }, g.id);
     }
-    return cached(req, placement === 'home' ? homeRows(g, url) : page([], url, g, `rows:${placement}`), g.id);
+    return cached(req, placement === 'home' ? homeRows(g, url, screensBootstrap(req, g.viewer.id).homeRows) : page([], url, g, `rows:${placement}`), `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}`);
   }
   const collectionMatch = /^\/collections\/([^/]+)$/.exec(path);
   if (method === 'GET' && collectionMatch) {

@@ -4,7 +4,7 @@ import type { Card, HeroAction, HomeModel, Row } from '../src/models';
 
 const card = (id: string, progressSeconds = 0) => ({ id, progressSeconds, progressLabel: `${progressSeconds}`, played: false } as Card);
 const row = (id: string, purpose: Row['purpose'], item = id): Row => ({
-  id, purpose, name: id, receipt: '', items: [card(item)], nextCursor: '', continuation: 'exhausted', previewOnFocus: false, presentation: '',
+  id, purpose, name: id, receipt: '', items: [card(item)], nextCursor: '', continuation: 'exhausted', previewOnFocus: false, presentation: '', layout: 'standard', personal: false,
 });
 const action = (heroId: string, kind: HeroAction['action'], progress = 0) => ({ heroId, action: kind, progress } as HeroAction);
 const home = (rows: Row[], hero: Card[] = [], heroActions: HeroAction[] = []) => ({ rows, hero, heroActions } as HomeModel);
@@ -79,7 +79,7 @@ describe('Progress shelves update in place (no visible refresh)', () => {
   const book = (id: string, fraction: number, poster = `/art/${id}?sig=1`) =>
     ({ id, progressSeconds: 0, progressLabel: '', played: false, poster, backdrop: '', logo: '', media: { readingFraction: fraction, readingLocator: `cfi-${fraction}` } } as unknown as Card);
   const shelf = (id: string, purpose: Row['purpose'], items: Card[]): Row => ({
-    id, purpose, name: id, receipt: '', items, nextCursor: '', continuation: 'exhausted', previewOnFocus: false, presentation: '',
+    id, purpose, name: id, receipt: '', items, nextCursor: '', continuation: 'exhausted', previewOnFocus: false, presentation: '', layout: 'standard', personal: false,
   });
 
   test('a library\'s Continue reading row takes the new place; every other shelf keeps its objects', () => {

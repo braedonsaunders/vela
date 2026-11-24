@@ -269,6 +269,15 @@ export const VOCABULARY: Record<string, Accessor> = {
   'row.landscape': c => (c.row ? yes(c.row.items.length > 0 && c.row.items.every(i => i.kind === 'episode' || (i.progressSeconds > 0 && !i.played))) : ''),
   'row.resume': c => (c.row ? yes(c.row.items.length > 0 && c.row.items.every(i => i.progressSeconds > 0 && !i.played)) : ''),
   'row.previewOnFocus': c => (c.row ? yes(c.row.previewOnFocus) : ''),
+  // Recommendations presentation (Ether): how the row draws (standard|hero|wide|tiles|tracks; unknown
+  // values read standard), its card (poster|landscape|square|round, or ''), the items' media role,
+  // whether its titles are the viewer's own, its library and experience (watch|listen|read|gallery|live).
+  'row.layout': c => c.row?.layout ?? '',
+  'row.card': c => c.row?.card ?? '',
+  'row.role': c => c.row?.role ?? '',
+  'row.personal': c => (c.row ? yes(c.row.personal) : ''),
+  'row.library': c => c.row?.library ?? '',
+  'row.experience': c => c.row?.experience ?? '',
   'row.loadingMore': (c, e) => (c.row ? yes(e.rowLoading.includes(c.row.id)) : ''),
   'pager.overflows': pagerBinding((c: Ctx) => (c.row ? yes(!(pagerState(c.row.id)?.atStart ?? true) || !(pagerState(c.row.id)?.atEnd ?? true)) : '')),
   'pager.atStart': pagerBinding((c: Ctx) => (c.row ? yes(pagerState(c.row.id)?.atStart ?? true) : '')),

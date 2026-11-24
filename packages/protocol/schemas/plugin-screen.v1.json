@@ -4696,13 +4696,25 @@
     },
     "SurfaceRow": {
       "additionalProperties": false,
-      "description": "A Home row that is a surface (bootstrap and home rows), placed after the first row: id `surface:<pluginID>:<id>` (`surface:org.ether.sports:tonight`), surface the surface id (`sports.tonight`).",
+      "description": "A row a plugin's homeRow surface fills, a stub in page order among the rows (bootstrap, /rows,\na library's rows tab): no items, receiptToken or continuation. The id is opaque (never parse it):\n`plugin`, `surface` (the wire id, as bootstrap `surfaces` lists it) and `library` say what it is.\nSent only to a client with X-Vela-Screen-Renderer, for a surface published for the viewer.",
       "properties": {
         "id": {
           "type": "string"
         },
         "kind": {
           "const": "surface"
+        },
+        "library": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
         },
         "surface": {
           "type": "string"
@@ -4711,6 +4723,8 @@
       "required": [
         "id",
         "kind",
+        "name",
+        "plugin",
         "surface"
       ],
       "type": "object"

@@ -14,7 +14,8 @@ export default function RowPage() {
     if (id && (!current || (current.load === 'ready' && current.value?.continuation === 'more' && !current.value.nextCursor))) void store.rows.load(id);
   }, [id, current, store]);
   const row = current?.value;
-  const shape = row?.cardStyle ?? (row?.items.length && row.items.every(item => item.kind === 'episode' || (item.progressSeconds > 0 && !item.played)) ? 'landscape' : 'poster');
+  // The row's card (round draws square here), else landscape for episodes and resumes, else poster.
+  const shape = (row?.card === 'round' ? 'square' : row?.card) ?? (row?.items.length && row.items.every(item => item.kind === 'episode' || (item.progressSeconds > 0 && !item.played)) ? 'landscape' : 'poster');
   const page = (host: SkinHost): SkinHost => ({ ...host,
     env: { ...host.env, load: current?.load === 'failed' ? 'failed' : row ? 'ready' : 'loading',
       collection: { kind: 'row', model: row ? { name: row.name, items: row.items.map(card => libraryCardArtwork(card, shape)), more: !!row.nextCursor, complete: row.continuation === 'exhausted' } : undefined, moreLoading: current?.load === 'loading', card: shape },

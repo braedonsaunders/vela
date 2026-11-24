@@ -5,7 +5,7 @@ import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
 const card = (id: string) => ({ id, kind: 'movie' } as Card);
-const row = (items = [card('1')]): Row => ({ id: 'r', name: 'Shelf', purpose: 'recommendation', items, nextCursor: '', continuation: 'exhausted', receipt: '', previewOnFocus: false, presentation: '' });
+const row = (items = [card('1')]): Row => ({ id: 'r', name: 'Shelf', purpose: 'recommendation', items, nextCursor: '', continuation: 'exhausted', receipt: '', previewOnFocus: false, presentation: '', layout: 'standard', personal: false });
 describe('row See all', () => {
   test('offers only a continuation or a locally truncated list', () => {
     expect(canSeeAll(row())).toBe(false);

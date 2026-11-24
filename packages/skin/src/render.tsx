@@ -508,12 +508,12 @@ function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node:
     // focus to the pager, where Select picked the first title).
     let shown = 0;
     const steadyHero = node.over === 'home.hero' && Platform.isTV;
-    const SurfaceRow = node.over === 'home.rows' ? surfaceSlots?.row : undefined;
+    const SurfaceRow = node.over === 'home.rows' || node.over === 'library.rows' ? surfaceSlots?.row : undefined;
     const drawn = items(node, ctx, env).flatMap(c => {
       const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
       if (!holds(node.when, c, env)) return [];
       const key = steadyHero ? `hero-shown-${shown++}` : itemKey(node, c, env);
-      // A plugin's Home row draws its surface in the row's place.
+      // A plugin's surface row draws its surface in the row's place (Home or a library's rows), or nothing.
       if (c.row?.surface) return SurfaceRow ? [<SurfaceRow key={key} id={c.row.id} surface={c.row.surface} />] : [];
       return [<SkinNode key={key} node={node.item} ctx={context} hero={node.over === 'home.hero'} />];
     });

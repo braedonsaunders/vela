@@ -41,3 +41,23 @@ skin. The JSON Schema Ether validates plugin documents with,
 `bun tools/screen-schema.ts write`; its digest is recorded beside `RENDERER_VERSION`
 (`SCREEN_SCHEMA_DIGEST`), and `bun tools/screen-schema.ts check` (run by the tests)
 fails when the types and the schema drift.
+
+## Rows (Recommendations)
+
+A row in `home.rows`, `library.rows` or `detail.related` binds these keys beside `row.id`,
+`row.name`, `row.presentation` (`ranked` for a Top 10) and the others in
+`packages/skin/src/vocabulary.ts`. They follow Ether's Recommendations pages; each is `''` (or
+`false`) when the server did not set it:
+
+| Key | Values |
+| --- | --- |
+| `row.layout` | `standard`, `hero`, `wide`, `tiles`, `tracks`. Any value Vela does not know reads `standard`. On Home, hero rows feed the hero band first; on a library page a `hero` row draws large art in place. A `tracks` row holds track leaves (each with a duration and an album or artist parent) and draws as a track list. |
+| `row.card` | `poster`, `landscape`, `square`, `round`, or `''` (the skin's choice). On library pages the server falls back to the library's card. Unknown values read `''`. |
+| `row.role` | The items' media role (`movie`, `show`, `episode`, `album`, `artist`, `track`, `playlist`, `audiobook`, `book`, `collection`, `channel`, …). Information only: an unknown role draws as a standard shelf. |
+| `row.personal` | `true` when the titles differ per viewer. |
+| `row.library` | The library of a one-row-per-library row. |
+| `row.experience` | `watch`, `listen`, `read`, `gallery` or `live`. |
+
+The retired wire field `style` is not read. A plugin's surface row (a `homeRow` surface) sits in
+the list where the page put it, with no items; the renderer draws the surface's document in its
+place on Home and library pages (or nothing when this client may not draw it).

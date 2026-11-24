@@ -99,7 +99,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
   /** Every shelf of a library, page by page. A cursor the server has expired mid-read restarts
    * the read once from the first page, uncached, so no shelf is skipped or repeated. */
-  async libraryRows(id: string, kind: V.Library['kind'], fresh = false, tab?: string): Promise<V.Row[]> {
+  async libraryRows(id: string, kind: V.Library['kind'], fresh = false, tab?: string): Promise<(V.Row | V.SurfaceRow)[]> {
     try { return await this.readLibraryRows(id, kind, fresh, tab); }
     catch (error) {
       if (!(error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired')) throw error;
@@ -107,15 +107,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     }
   }
   /** `tab` names a recommended tab's own shelves (features.pluginLevels.tabRows); the caller sends it only then. */
-  private async readLibraryRows(id: string, _kind: V.Library['kind'], fresh: boolean, tab?: string): Promise<V.Row[]> {
+  private async readLibraryRows(id: string, _kind: V.Library['kind'], fresh: boolean, tab?: string): Promise<(V.Row | V.SurfaceRow)[]> {
     const tabs = this.declaredLibraries.get(id)?.tabs;
     if (tabs && !tabs.some(tab => tab.kind === 'recommended')) return [];
-    const result: V.Row[] = [];
+    const result: (V.Row | V.SurfaceRow)[] = [];
     const seen = new Set<string>();
     let cursor: string | undefined;
     for (let n = 0; n < 100; n++) {
       const page = this.declaredLibraries.get(id)?.tabs
-        ? await this.http.request<V.Page<V.Row>>('GET', `/libraries/${segment(id)}/rows${query({ tab, cursor, limit: 100 })}`, undefined, fresh ? undefined : CACHED)
+        ? await this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/libraries/${segment(id)}/rows${query({ tab, cursor, limit: 100 })}`, undefined, { ...(fresh ? {} : CACHED), headers: this.screenHeaders })
         : await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 }, fresh);
       result.push(...page.items);
       if (page.continuation !== 'more') return result;
@@ -298,8 +298,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     }
   }
 
+  /** Rows lists may hold plugin surface rows, which Ether sends only to a client that says its renderer. */
   rows(rowsQuery: V.RowsQuery, fresh = false) {
-    return this.http.request<V.Page<V.Row>>('GET', `/rows${query(rowsQuery)}`, undefined, fresh ? undefined : CACHED);
+    return this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/rows${query(rowsQuery)}`, undefined, { ...(fresh ? {} : CACHED), headers: this.screenHeaders });
   }
 
   row(id: string, cursor?: string, limit?: number) {

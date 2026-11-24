@@ -92,6 +92,15 @@ describe('on a frozen clock', () => {
       setting: { id: 'scorebug', label: 'Score', default: true, enabled: true }, document: { href: expect.stringContaining('/vela/v0/surfaces/sports.scorebug/document?v='), renderer: 19 } }]);
   });
 
+  test('a published homeRow surface is a row stub in page order (after Top 10), only for a client that draws screens', async () => {
+    const all = (await c.json('/rows?placement=home&limit=100')).items as (V.Row | V.SurfaceRow)[];
+    const at = all.findIndex(row => 'kind' in row && row.kind === 'surface');
+    expect(all[at - 1]!.id).toBe('row-top10');
+    expect(all[at]).toEqual({ kind: 'surface', id: 'surface:sports:sports.tonight', name: 'Sports Tonight', plugin: 'sports', surface: 'sports.tonight' });
+    const plain = (await (await c.get('/rows?placement=home&limit=100', null)).json() as V.Page<V.Row | V.SurfaceRow>).items;
+    expect(plain.some(row => 'kind' in row)).toBe(false);
+  });
+
   test('documents are immutable, carry deps, answer a stale v with the current document and a too-old client with 404', async () => {
     const href = (((await c.json('/bootstrap')) as V.Bootstrap).navigation![0] as V.ScreenNavigationEntry).document.href;
     const response = await c.get(href);
