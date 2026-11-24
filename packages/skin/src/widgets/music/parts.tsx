@@ -214,17 +214,48 @@ export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card
 const SHELF_TV_ROOM: ViewStyle = { padding: 12 };
 const SHELF_TV_BLEED: ViewStyle = { margin: -12 };
 
+/** On a pointer device a shelf pages with arrows beside its title (a mouse wheel scrolls the page,
+ * not the row); touch swipes and TV focus move it as before. */
+const POINTER = Platform.OS === 'web' && typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
+
 export function Shelf({ title, detail, children, onMore }: { title: string; detail?: string; children: ReactNode; onMore?(): void }) {
   const m = useMediaLook();
+  const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [span, setSpan] = useState({ x: 0, width: 0, content: 0 });
+  const arrows = POINTER && !musicTV() && span.content > span.width + 4;
+  const page = (direction: -1 | 1) => {
+    const step = Math.max(200, span.width * 0.85);
+    const x = Math.min(Math.max(0, span.content - span.width), Math.max(0, span.x + direction * step));
+    scroller.current?.scrollTo({ x, animated: true });
+  };
   return (
     <View style={{ marginBottom: 28 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 4 }}>
-        <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' })}>{title}</Text>
-        {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 4, gap: 12 }}>
+        <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { flexShrink: 1 }]}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
+          {arrows ? <ShelfArrow flip={false} label={msg('ui.scrollBack')} disabled={span.x <= 2} onPress={() => page(-1)} /> : null}
+          {arrows ? <ShelfArrow flip label={msg('ui.scrollOn')} disabled={span.x >= span.content - span.width - 2} onPress={() => page(1)} /> : null}
+        </View>
       </View>
       {detail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginBottom: 4 }]}>{detail}</Text> : null}
-      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView horizontal showsHorizontalScrollIndicator={false} style={musicTV() ? SHELF_TV_BLEED : undefined} contentContainerStyle={musicTV() ? SHELF_TV_ROOM : { gap: 0 }}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
+      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} style={musicTV() ? SHELF_TV_BLEED : undefined} contentContainerStyle={musicTV() ? SHELF_TV_ROOM : { gap: 0 }}
+        scrollEventThrottle={64}
+        onScroll={event => { const x = event.nativeEvent.contentOffset.x; setSpan(old => Math.abs(old.x - x) < 1 ? old : { ...old, x }); }}
+        onLayout={event => { const width = event.nativeEvent.layout.width; setSpan(old => old.width === width ? old : { ...old, width }); }}
+        onContentSizeChange={content => setSpan(old => old.content === content ? old : { ...old, content })}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
     </View>
+  );
+}
+
+function ShelfArrow({ flip, label, disabled, onPress }: { flip: boolean; label: string; disabled: boolean; onPress(): void }) {
+  const m = useMediaLook();
+  const { state, handlers } = useInteraction();
+  return (
+    <Pressable {...handlers} onPress={disabled ? undefined : onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }}
+      style={[NO_RING, { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: state.hover || state.focus ? m.ui.control : alpha(m.ui.ink, 0.06), opacity: disabled ? 0.35 : 1 }]}>
+      <View style={flip ? { transform: [{ scaleX: -1 }] } : undefined}><Glyph symbol="back" size={18} color={m.ui.ink} /></View>
+    </Pressable>
   );
 }
 
