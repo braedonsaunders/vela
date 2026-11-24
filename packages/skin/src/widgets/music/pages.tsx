@@ -15,12 +15,12 @@ import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, useP
 type FacetValue = { id: string; label: string; count: number };
 import { Byline, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
 import { TrackList } from './tracks';
+import { compactMusic, musicTV } from './layout';
+export { compactMusic };
 
 /** A page's side margin: tighter on a phone. */
 const coverSize = (m: MediaLook) => (compactMusic(m) ? Math.min(240, m.width - 120) : m.width >= 1300 ? 232 : 192);
 const pad = (m: MediaLook) => (m.small ? 16 : 28);
-/** Compact layouts (phones, tablets upright) stack headers and drop the album column. */
-export const compactMusic = (m: MediaLook) => m.width < 980;
 
 function totalLabel(tracks: Card[]): string {
   const seconds = tracks.reduce((sum, t) => sum + (t.durationSeconds || 0), 0);
@@ -140,7 +140,7 @@ function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; tit
   const columns = m.width >= 1000 ? 4 : 2;
   const width = `calc(${100 / columns}% - ${(10 * (columns - 1)) / columns}px)`;
   return (
-    <Surface onPress={onPress} onMenu={card ? point => app.menu({ card, anchor: { kind: 'point', point } }) : undefined} label={title}
+    <Surface onPress={onPress} onMenu={card ? (anchor, mode, opener) => app.menu({ card, anchor, mode, opener }) : undefined} focusId={card?.id ?? 'liked'} label={title}
       style={lit => [{ width: width as never, height: m.small ? 52 : 64, borderRadius: 8, overflow: 'hidden', backgroundColor: lit ? m.ui.controlHover : alpha(m.ui.ink, 0.07) }, transition('background-color', 140)]}
       contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: m.small ? 10 : 14, paddingRight: m.small ? 8 : 0 }}>
       {lit => (
@@ -150,7 +150,7 @@ function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; tit
             <Text numberOfLines={2} style={m.text({ 'font-size': m.small ? '13px' : '15px', 'font-weight': '700', color: '$ui.ink' })}>{title}</Text>
             {subtitle ? <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet' })}>{subtitle}</Text> : null}
           </View>
-          {m.small ? null : <View pointerEvents={lit ? 'auto' : 'none'} style={[{ marginRight: 10, opacity: lit ? 1 : 0 }, transition('opacity', 160)]}>
+          {m.small || musicTV() ? null : <View pointerEvents={lit ? 'auto' : 'none'} style={[{ marginRight: 10, opacity: lit ? 1 : 0 }, transition('opacity', 160)]}>
             <PlayFab playing={false} size={38} onPress={card ? () => app.playCard(card) : onPress} />
           </View>}
         </>

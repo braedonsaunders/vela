@@ -14,7 +14,7 @@ import { useVelaState } from '@vela/core/react';
 import { useVela } from '../vela';
 import { createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
 import { useMediaPageActions } from './actions';
-import { onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
+import { musicTV, onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
 import { useMediaPlayerActions } from './player-actions';
 import { useReaderActions } from './reader-actions';
 
@@ -76,7 +76,7 @@ export function AudioDock() {
   const covered = pathname.startsWith('/watch') || pathname.startsWith('/read') || pathname.startsWith('/sign-in') || pathname.startsWith('/connect');
   // The music app draws its own now-playing bar along the bottom; the floating one stands aside.
   const musicLibrary = useVelaState(state => state.libraries.value?.some(library => library.media === 'music' && pathname === `/library/${library.id}`));
-  const inMusicShell = !!musicLibrary && !Platform.isTV && (host?.viewport.width ?? 0) >= 980;
+  const inMusicShell = !!musicLibrary && !musicTV() && (host?.viewport.width ?? 0) >= 980;
   const playing = !!audio.queue && !covered;
   if (!host) return null;
   const bottom = Math.max(14, insets.bottom + 10);

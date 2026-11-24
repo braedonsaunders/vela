@@ -11,7 +11,8 @@ import { NO_RING, Glyph } from '../common/controls';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { MediaGlyph } from '../media/icons';
 import { useMusic } from './context';
-import { Heart, IconButton, Surface, transition } from './parts';
+import { FocusGroup, Heart, IconButton, Surface, transition, type MenuOpen } from './parts';
+import { musicTV } from './layout';
 
 const web = Platform.OS === 'web';
 
@@ -41,7 +42,7 @@ export function TrackList({ tracks, options = {} }: { tracks: Card[]; options?: 
         <View style={{ width: 52, alignItems: 'flex-end' }}><Glyph symbol="clock" size={16} color={m.ui.inkQuiet} /></View>
         <View style={{ width: 32 }} />
       </View>}
-      {tracks.map((track, i) => <TrackRow key={`${track.id}-${i}`} track={track} index={i} tracks={tracks} options={options} wide={wide} />)}
+      <FocusGroup>{tracks.map((track, i) => <TrackRow key={`${track.id}-${i}`} track={track} index={i} tracks={tracks} options={options} wide={wide} />)}</FocusGroup>
     </View>
   );
 }
@@ -61,26 +62,29 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
   const entry = options.playlist?.entryIds[index] ? { playlistId: options.playlist.id, entryId: options.playlist.entryIds[index]! } : undefined;
   const audio = tracks.filter(t => t.media?.audio);
   const play = () => app.play(audio, audio.indexOf(track), options.source);
-  const openMenu = (point?: { x: number; y: number }) => {
-    if (point) { app.menu({ card: track, anchor: { kind: 'point', point }, entry }); return; }
-    more.current?.measureInWindow((x: number, y: number, width: number, height: number) => app.menu({ card: track, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } }, entry }));
-  };
+  const openMenu: MenuOpen = (anchor, mode, opener) => app.menu({ card: track, anchor, mode, opener, entry });
+  const openFromMore = () => more.current?.measureInWindow((x: number, y: number, width: number, height: number) =>
+    app.menu({ card: track, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } }, mode: 'pointer', entry }));
   const album = track.media?.parents.find(p => p.role === 'album');
   const artist = track.media?.byline;
   const numberLabel = options.position || !track.media?.index ? number(index + 1) : number(track.media.index);
   const liked = app.liked(track.id);
-  // A touch layout plays on a tap and keeps ⋯ in reach; a pointer plays on a double click.
-  const touch = !web || m.width < 980;
+  // A touch layout plays on a tap and keeps ⋯ in reach; a pointer plays on a double click. On a TV
+  // the row is one focus target: select plays, a long select opens its menu, nothing inside it
+  // takes focus.
+  const tv = musicTV();
+  const touch = !tv && (!web || m.width < 980);
   return (
-    <Surface onPress={touch ? play : undefined} onDoubleClick={touch ? undefined : play} onMenu={openMenu} testID={`music-track-${track.id}`} selected={current}
+    <Surface onPress={touch || tv ? play : undefined} onDoubleClick={touch || tv ? undefined : play} onMenu={openMenu} focusId={track.id} testID={`music-track-${track.id}`} selected={current}
       label={[track.name, artist, track.media?.clockLabel].filter(Boolean).join(', ')}
-      style={(lit, focus) => [{ height: options.covers ? 60 : 52, borderRadius: 8, backgroundColor: lit ? m.ui.control : current ? alpha(m.ui.accent, 0.1) : 'transparent' },
-        focus ? m.box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${m.ui.ink}` }) : {}, transition('background-color', 120)]}
+      style={(lit, focus) => [{ height: tv ? 72 : options.covers ? 60 : 52, borderRadius: tv ? 12 : 8, backgroundColor: lit ? m.ui.control : current ? alpha(m.ui.accent, 0.1) : 'transparent',
+        transform: [{ scale: tv && focus ? 1.02 : 1 }] },
+        focus ? (tv ? { borderWidth: 2, borderColor: m.ui.ink } : m.box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${m.ui.ink}` })) : tv ? { borderWidth: 2, borderColor: 'transparent' } : {}, transition('background-color, transform', 120)]}
       contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: touch ? 12 : 16, paddingHorizontal: touch ? 8 : 16 }}>
       {lit => (
         <>
           <View style={{ width: 28, alignItems: 'center' }} pointerEvents="box-none">
-            {lit ? (
+            {lit && !tv ? (
               <Pressable onPress={() => (current ? app.toggle() : play())} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : `${msg('media.ui.play')} ${track.name}`} style={NO_RING}>
                 <MediaGlyph name={playing ? 'pause' : 'play'} size={16} color={m.ui.ink} />
               </Pressable>
@@ -91,7 +95,7 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
           <View pointerEvents="none" style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             {options.covers ? <Cover uri={track.poster} shape="square" size={42} title={track.name} accent={track.accent} lift={0.3} /> : null}
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={m.text({ 'font-size': '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' })}>{track.name}</Text>
+              <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' })}>{track.name}</Text>
               {artist ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   {track.media?.facts.some(f => f.label === 'Explicit' && f.value !== 'false') ? <Explicit /> : null}
@@ -100,20 +104,20 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
               ) : null}
             </View>
           </View>
-          {options.album && wide ? (
+          {options.album && wide && !tv ? (
             <View style={{ flex: 0.8, minWidth: 0 }} pointerEvents="box-none">
               <Pressable onPress={() => album && app.go({ kind: 'title', id: album.id })} accessibilityRole="link" style={[NO_RING, { alignSelf: 'flex-start', maxWidth: '100%' }]}>
                 <Text numberOfLines={1} style={m.text({ 'font-size': '14px', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' })}>{album?.name ?? ''}</Text>
               </Pressable>
             </View>
           ) : null}
-          {m.small && !liked ? null : <View style={{ width: 32, alignItems: 'center', opacity: lit || liked ? 1 : 0 }} pointerEvents={lit || liked ? 'box-none' : 'none'}><Heart card={track} size={32} iconSize={17} /></View>}
+          {(m.small || tv) && !liked ? null : tv ? <View style={{ width: 32, alignItems: 'center' }} pointerEvents="none"><Glyph symbol="heart-fill" size={20} color={m.ui.accent} /></View> : <View style={{ width: 32, alignItems: 'center', opacity: lit || liked ? 1 : 0 }} pointerEvents={lit || liked ? 'box-none' : 'none'}><Heart card={track} size={32} iconSize={17} /></View>}
           <View pointerEvents="none" style={{ width: m.small ? 40 : 52, alignItems: 'flex-end' }}>
             <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>{track.media?.clockLabel || (track.durationSeconds ? clock(track.durationSeconds) : '')}</Text>
           </View>
-          <View ref={more} style={{ width: 32, alignItems: 'center', opacity: lit || touch ? 1 : 0 }} pointerEvents={lit || touch ? 'box-none' : 'none'}>
-            <IconButton symbol="more" label={msg('cardMenu.actionsFor', { title: track.name })} onPress={() => openMenu()} size={32} iconSize={18} testID={`music-track-more-${track.id}`} />
-          </View>
+          {tv ? null : <View ref={more} style={{ width: 32, alignItems: 'center', opacity: lit || touch ? 1 : 0 }} pointerEvents={lit || touch ? 'box-none' : 'none'}>
+            <IconButton symbol="more" label={msg('cardMenu.actionsFor', { title: track.name })} onPress={openFromMore} size={32} iconSize={18} testID={`music-track-more-${track.id}`} />
+          </View>}
         </>
       )}
     </Surface>

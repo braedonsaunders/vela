@@ -12,10 +12,11 @@ import { headerInsetOf } from '../../resolve/inherit';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { useLiked, usePlaylists } from './data';
-import { compactMusic, LikedCover, MusicHome, MusicLiked, MusicPlaylist, MusicTitle, playlistCard, Chip } from './pages';
+import { LikedCover, MusicHome, MusicLiked, MusicPlaylist, MusicTitle, playlistCard, Chip } from './pages';
 import { MINI_PLAYER_HEIGHT } from '../media/player';
+import { compactMusic, musicTV } from './layout';
 import { samePlace, type MusicPlace } from './place';
-import { IconButton, menuHandlers, transition } from './parts';
+import { FocusGroup, IconButton, Surface, transition } from './parts';
 import { NowPlayingBar, NOW_PLAYING_BAR_HEIGHT } from './bar';
 import { QueuePanel } from './queue';
 
@@ -30,6 +31,7 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   const rail = collapsed || narrow;
   const page = app.place;
   const top = `calc(${m.small ? inset.small : inset.wide} + 6px)`;
+  if (musicTV()) return <TVShell top={top} />;
   if (compactMusic(m)) return <CompactShell top={top} />;
   const panel = (children: ReactNode, style: object = {}) => (
     <View style={[{ backgroundColor: m.ui.raised, borderRadius: Number(m.ui.radiusPanel) || 14, overflow: 'hidden' }, m.box({ border: '1px solid $ui.glassEdge' }), style]}>{children}</View>
@@ -71,6 +73,33 @@ function CompactShell({ top }: { top: string }) {
         {tabs.map(tab => <Chip key={tab.label} label={tab.label} on={samePlace(page, tab.place)} onPress={() => app.go(tab.place)} />)}
       </View>
       <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main">
+        {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
+          : page.kind === 'liked' ? <MusicLiked />
+          : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
+          : page.kind === 'title' ? <MusicTitle id={page.id} />
+          : <MusicHome />}
+      </ScrollView>
+    </View>
+  );
+}
+
+/** A TV: an icon rail (Home, Search, Your Library, Liked Songs) beside a full-width page; the
+ * focusable mini player floats over it and opens Now Playing. Everything is one focus target at a
+ * time; Back walks Now Playing → page → music Home → the app. */
+function TVShell({ top }: { top: string }) {
+  const app = useMusic();
+  const m = useMediaLook();
+  const page = app.place;
+  const queued = useVelaState(state => !!state.audio.queue);
+  return (
+    <View pointerEvents="box-none" style={[{ flex: 1, flexDirection: 'row' }, m.box({ 'padding-top': top })]} testID="music-shell">
+      <FocusGroup style={{ width: 96, paddingTop: 24, alignItems: 'center', gap: 10 }}>
+        <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail />
+        <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail />
+        <NavItem symbol="library" label={msg('music.yourLibrary')} place={{ kind: 'library' }} rail />
+        <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail />
+      </FocusGroup>
+      <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 64 : 48, paddingRight: 32 }} testID="music-main">
         {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
           : page.kind === 'liked' ? <MusicLiked />
           : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
@@ -149,13 +178,15 @@ function PlaylistThumb({ playlist }: { playlist?: PlaylistModel }) {
 function NavItem({ symbol, label, place, rail }: { symbol: string; label: string; place: MusicPlace; rail: boolean }) {
   const app = useMusic();
   const m = useMediaLook();
+  const tv = musicTV();
   const { state, handlers } = useInteraction();
   const on = samePlace(app.place, place);
   const lit = state.hover || state.focus;
   return (
     <Pressable {...handlers} onPress={() => app.go(place)} accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={label}
-      style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 16, height: 44, paddingHorizontal: rail ? 0 : 12, justifyContent: rail ? 'center' : 'flex-start', borderRadius: 10, backgroundColor: lit ? m.ui.control : 'transparent' }, transition('background-color', 120)]}>
-      <Glyph symbol={symbol} size={24} color={on || lit ? m.ui.ink : m.ui.inkSecondary} />
+      style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 16, height: tv ? 60 : 44, width: tv ? 60 : undefined, paddingHorizontal: rail ? 0 : 12, justifyContent: rail ? 'center' : 'flex-start', borderRadius: tv ? 30 : 10,
+        backgroundColor: tv && state.focus ? m.ui.ink : lit ? m.ui.control : on && tv ? m.ui.control : 'transparent', transform: [{ scale: tv && state.focus ? 1.08 : 1 }] }, transition('background-color, transform', 120)]}>
+      <Glyph symbol={symbol} size={tv ? 28 : 24} color={tv && state.focus ? m.ui.inkInverse : on || lit ? m.ui.ink : m.ui.inkSecondary} />
       {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '700', color: on || lit ? '$ui.ink' : '$ui.inkSecondary' })}>{label}</Text> : null}
     </Pressable>
   );
@@ -164,24 +195,28 @@ function NavItem({ symbol, label, place, rail }: { symbol: string; label: string
 function LibraryRow({ place, card, title, subtitle, cover, rail, pinned = false }: { place: MusicPlace; card?: Card; title: string; subtitle: string; cover: ReactNode; rail: boolean; pinned?: boolean }) {
   const app = useMusic();
   const m = useMediaLook();
-  const { state, handlers } = useInteraction();
-  const lit = state.hover || state.focus;
   const on = samePlace(app.place, place);
+  const tv = musicTV();
   return (
-    <Pressable {...handlers} {...(card ? menuHandlers(point => app.menu({ card, anchor: { kind: 'point', point } })) : {})} onPress={() => app.go(place)}
-      accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={`${title}, ${subtitle}`} testID={`music-library-${card?.id ?? place.kind}`}
-      style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 6, borderRadius: 8, justifyContent: rail ? 'center' : 'flex-start',
-        backgroundColor: on ? alpha(m.ui.ink, 0.1) : lit ? m.ui.control : 'transparent' }, transition('background-color', 120)]}>
-      {cover}
-      {!rail ? (
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={1} style={m.text({ 'font-size': '15px', 'font-weight': '600', color: on ? m.ui.accent : '$ui.ink' })}>{title}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {pinned ? <Glyph symbol="star-fill" size={12} color={m.ui.accent} /> : null}
-            <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{subtitle}</Text>
-          </View>
-        </View>
-      ) : null}
-    </Pressable>
+    <Surface onPress={() => app.go(place)} onMenu={card ? (anchor, mode, opener) => app.menu({ card, anchor, mode, opener }) : undefined}
+      focusId={card?.id ?? place.kind} selected={on} label={`${title}, ${subtitle}`} testID={`music-library-${card?.id ?? place.kind}`}
+      style={(lit, focus) => [{ borderRadius: 8, backgroundColor: on ? alpha(m.ui.ink, 0.1) : lit ? m.ui.control : 'transparent' },
+        tv ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent' } : {}, transition('background-color', 120)]}
+      contentStyle={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: tv ? 10 : 6, justifyContent: rail ? 'center' : 'flex-start' }}>
+      {() => (
+        <>
+          <View pointerEvents="none">{cover}</View>
+          {!rail ? (
+            <View pointerEvents="none" style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '600', color: on ? m.ui.accent : '$ui.ink' })}>{title}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {pinned ? <Glyph symbol="star-fill" size={12} color={m.ui.accent} /> : null}
+                <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '16px' : '13px', color: '$ui.inkQuiet' })}>{subtitle}</Text>
+              </View>
+            </View>
+          ) : null}
+        </>
+      )}
+    </Surface>
   );
 }

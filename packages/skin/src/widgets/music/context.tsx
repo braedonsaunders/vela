@@ -1,12 +1,17 @@
 // What every music view asks of the app shell: where to go, what to play, and the menu for a card.
 import { createContext, useContext } from 'react';
 import type { Card } from '@vela/core';
-import type { CardMenuAnchor } from '../card-context-menu';
+import type { CardMenuAnchor, CardMenuOpenMode } from '../card-context-menu';
+import type { Focusable } from '../../escape';
 import type { MusicPlace } from './place';
 
 export interface MusicMenuRequest {
   card: Card;
   anchor: CardMenuAnchor;
+  /** pointer, touch, keyboard or tv: how it was asked for (a TV menu takes focus). */
+  mode?: CardMenuOpenMode;
+  /** Where focus returns when it closes. */
+  opener?: Focusable | null;
   /** Listed as this playlist entry (Remove from this playlist). */
   entry?: { playlistId: string; entryId: string };
 }

@@ -2,7 +2,11 @@
 // hover, shelves, the heart, the big play button, a byline whose names open their pages.
 import { Image } from 'expo-image';
 import { useRef, useState, type ReactNode, type ComponentRef } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import type { CardMenuAnchor, CardMenuOpenMode } from '../card-context-menu';
+import type { Focusable } from '../../escape';
+import { placeParam } from './place';
+import { musicTV } from './layout';
 import { msg, type Card } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { useHost } from '../../host';
@@ -20,13 +24,24 @@ export function Icon({ name, size, color }: { name: string; size: number; color:
 const web = Platform.OS === 'web';
 export const transition = (properties: string, ms = 200): ViewStyle => (web ? ({ transitionProperty: properties, transitionDuration: `${ms}ms`, transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)' } as ViewStyle) : {});
 
-/** Right-click (web) or long-press opens the card's menu at the pointer. */
+/** How a card's menu was asked for and where it opens: at the pointer, under a finger, or beside
+ * the focused card on a TV (long select or the remote's menu event, as Vela's cards do). */
+export type MenuOpen = (anchor: CardMenuAnchor, mode: CardMenuOpenMode, opener: Focusable | null) => void;
+
+const useTVMenuEvent: (handler: (event: { eventType: string }) => void) => void = typeof useTVEventHandler === 'function'
+  ? useTVEventHandler as never
+  : () => undefined;
+
+/** Right-click (web) or long-press opens a menu at the pointer (kept for plain pressables). */
 export function menuHandlers(open: (point: { x: number; y: number }) => void) {
   return {
     onLongPress: (event: GestureResponderEvent) => open({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY }),
     ...(web ? { onContextMenu: (event: { preventDefault(): void; nativeEvent: { pageX: number; pageY: number } }) => { event.preventDefault(); open({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY }); } } : {}),
   };
 }
+
+/** Where focus was last on each music page, so coming back to a page lands where you left it. */
+const remembered = new Map<string, string>();
 
 export function useHover(): [boolean, object] {
   const [hover, setHover] = useState(false);
@@ -38,21 +53,49 @@ export function useHover(): [boolean, object] {
  * the press target lies under the content, so no button sits inside another. Text in `children`
  * passes presses through to it; buttons on top take their own.
  */
-export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, contentStyle, children, selected }: {
-  onPress?(): void; onMenu?(point: { x: number; y: number }): void; onDoubleClick?(): void; label: string; testID?: string; selected?: boolean;
+export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, contentStyle, children, selected, focusId }: {
+  onPress?(): void; onMenu?: MenuOpen; onDoubleClick?(): void; label: string; testID?: string; selected?: boolean;
+  /** Stable id for focus memory on a TV (a card or track id). */
+  focusId?: string;
   style(lit: boolean, focus: boolean): StyleProp<ViewStyle>; contentStyle?: StyleProp<ViewStyle>; children(lit: boolean): ReactNode;
 }) {
+  const app = useMusic();
   const [hover, hoverProps] = useHover();
   const { state, handlers } = useInteraction();
   const lit = hover || state.focus;
+  const ref = useRef<ComponentRef<typeof Pressable>>(null);
+  const focused = useRef(false);
+  const page = placeParam(app.place);
+  const opener = () => ref.current as unknown as Focusable | null;
+  const atCard = (mode: CardMenuOpenMode) => (ref.current as unknown as { measureInWindow?(cb: (x: number, y: number, w: number, h: number) => void): void } | null)
+    ?.measureInWindow?.((x, y, w, h) => onMenu?.({ kind: 'card', rect: { left: x, top: y, right: x + w, bottom: y + h } }, mode, opener()));
+  useTVMenuEvent(event => {
+    if (!Platform.isTV || !focused.current || !onMenu) return;
+    if (event.eventType === 'longSelect' || event.eventType === 'menu') atCard('tv');
+  });
+  const menu = onMenu ? {
+    onLongPress: (event: GestureResponderEvent) => (Platform.isTV ? atCard('tv') : onMenu({ kind: 'point', point: { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY } }, 'touch', opener())),
+    ...(web ? { onContextMenu: (event: { preventDefault(): void; nativeEvent: { pageX: number; pageY: number } }) => { event.preventDefault(); onMenu({ kind: 'point', point: { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY } }, 'pointer', opener()); } } : {}),
+  } : {};
+  const h = handlers as { onFocus?(e: unknown): void; onBlur?(e: unknown): void };
   return (
     <View {...hoverProps} style={style(lit, state.focus)}>
-      <Pressable {...handlers} {...(onMenu ? menuHandlers(onMenu) : {})} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }}
+      <Pressable ref={ref} {...handlers} {...menu} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }}
+        onFocus={(e: unknown) => { focused.current = true; if (focusId) remembered.set(page, focusId); h.onFocus?.(e); }}
+        onBlur={(e: unknown) => { focused.current = false; h.onBlur?.(e); }}
+        {...(Platform.isTV && focusId && remembered.get(page) === focusId ? { hasTVPreferredFocus: true } : {})}
         {...(web && onDoubleClick ? { onDoubleClick, onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') onDoubleClick(); } } as object : {})}
         style={[NO_RING, StyleSheet.absoluteFill]} />
       <View pointerEvents="box-none" style={contentStyle}>{children(lit)}</View>
     </View>
   );
+}
+
+/** A TV focus guide that remembers its last focused child (a shelf, a tracklist, the rail);
+ * a plain view elsewhere. */
+export function FocusGroup({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  if (!Platform.isTV) return <View style={style}>{children}</View>;
+  return <TVFocusGuideView autoFocus style={style}>{children}</TVFocusGuideView>;
 }
 
 export function PlayFab({ playing, onPress, size = 56, label, testID }: { playing: boolean; onPress(): void; size?: number; label?: string; testID?: string }) {
@@ -105,14 +148,15 @@ export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card
   const playable = card.media?.role === 'album' || card.media?.role === 'track' || card.kind === 'playlist';
   const line = subtitle ?? (round ? msg('media.ui.artist') : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · '));
   return (
-    <Surface onPress={() => app.go(placeOf(card))} onMenu={point => app.menu({ card, anchor: { kind: 'point', point } })} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}
-      style={lit => [{ width: size + (m.small ? 16 : 24), borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.control : 'transparent' }, transition('background-color', 160)]}
+    <Surface onPress={() => app.go(placeOf(card))} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={card.id} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}
+      style={(lit, focus) => [{ width: size + (m.small ? 16 : 24), borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.control : 'transparent' },
+        musicTV() ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.04 : 1 }] } : {}, transition('background-color, transform', 160)]}
       contentStyle={{ padding: m.small ? 8 : 12, gap: 10 }}>
       {lit => (
         <>
           <View pointerEvents="box-none" style={{ width: size, height: size }}>
             <View pointerEvents="none"><Cover uri={card.poster} shape={round ? 'round' : 'square'} size={size} title={card.name} byline={card.media?.byline} accent={card.accent} lift={lit ? 1.5 : 1} /></View>
-            {playable && !Platform.isTV ? (
+            {playable && !musicTV() ? (
               <View pointerEvents={lit ? 'auto' : 'none'} style={[{ position: 'absolute', right: 8, bottom: 8, opacity: lit ? 1 : 0, transform: [{ translateY: lit ? 0 : 10 }] }, transition('opacity, transform', 240)]}>
                 <PlayFab playing={false} size={46} onPress={() => app.playCard(card)} label={`${msg('media.ui.play')} ${card.name}`} />
               </View>
@@ -137,7 +181,7 @@ export function Shelf({ title, detail, children, onMore }: { title: string; deta
         {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
       </View>
       {detail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginBottom: 4 }]}>{detail}</Text> : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 0 }}>{children}</ScrollView>
+      <FocusGroup><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 0 }}>{children}</ScrollView></FocusGroup>
     </View>
   );
 }

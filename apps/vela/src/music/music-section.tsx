@@ -11,11 +11,11 @@ import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
 import { MusicContext, MusicShell, parsePlace, placeOf, placeParam, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
 import { useVela } from '../vela';
 
-/** Whether this library draws as the music app: a music library on a phone, tablet or wider
- * screen (the shell takes its compact form below 980px). TVs keep their focus layout for now. */
+/** Whether this library draws as the music app: every music library, in the shell's wide,
+ * compact (below 980px) or TV form. */
 export function useMusicShell(libraryId: string): boolean {
   const media = useVelaState(state => state.libraries.value?.find(library => library.id === libraryId)?.media);
-  return media === 'music' && !Platform.isTV;
+  return media === 'music';
 }
 
 export function MusicSection({ libraryId, at }: { libraryId: string; at: string | undefined }) {
@@ -86,7 +86,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
           <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />
           {menu ? (
             <CardContextMenu card={menu.card} primary={{ action: 'select', arg: `${menu.card.id}|${menu.card.media?.role ?? menu.card.kind}|` }}
-              anchor={menu.anchor} mode="pointer" opener={null} playlistEntry={menu.entry} close={() => setMenu(null)}
+              anchor={menu.anchor} mode={menu.mode ?? 'pointer'} opener={menu.opener ?? null} playlistEntry={menu.entry} close={() => setMenu(null)}
               href={`/library/${libraryId}?m=${encodeURIComponent(placeParam(placeOf(menu.card)))}`} />
           ) : null}
         </View>
