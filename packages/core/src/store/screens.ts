@@ -47,6 +47,7 @@ const KEEP_HIDDEN = 6;
 const SETTLE_MS = 120;
 const MAX_ALERTS = 5;
 const MIN_REFRESH_S = 60;
+const MAX_SOURCES = 16;
 
 interface Entry {
   request: Required<Pick<PageRequest, 'target' | 'href'>> & { params: Record<string, string>; context?: V.SurfaceContext };
@@ -291,6 +292,14 @@ export class Screens {
   private async read(key: string, sources?: readonly string[]): Promise<void> {
     const entry = this.entries.get(key);
     if (!entry) return;
+    // Ether reads at most 16 sources at once.
+    if (sources && sources.length > MAX_SOURCES) {
+      const names = [...new Set(sources)];
+      const reads: Promise<void>[] = [];
+      for (let at = 0; at < names.length; at += MAX_SOURCES) reads.push(this.read(key, names.slice(at, at + MAX_SOURCES)));
+      await Promise.all(reads);
+      return;
+    }
     const epoch = this.session.epoch;
     const seq = ++this.seq;
     const named = sources ? [...new Set(sources)] : undefined;
@@ -333,8 +342,10 @@ export class Screens {
       this.setPage(key, page => {
         const pending = { ...page.pending }, failures = { ...page.errors };
         for (const name of marked) if (current(name)) { delete pending[name]; failures[name] = code; }
-        // The first read failing fails the page (its `failure` node draws); later ones fail their sources.
-        if (page.load !== 'ready' && !named) return { ...page, pending, load: 'failed', error: message(error), failure: code };
+        // The first read failing fails the page (its `failure` node draws); later ones fail their
+        // sources. A 404 (the page no longer visible to the viewer, or no variant for this
+        // renderer) fails the page whenever it comes.
+        if ((page.load !== 'ready' && !named) || code === 'not_found' || code === 'update_required') return { ...page, pending, load: 'failed', error: message(error), failure: code };
         return { ...page, pending, errors: failures };
       });
     }
@@ -389,8 +400,8 @@ export class Screens {
       const target = entry.request.target;
       const context = serverContext(entry.request.context);
       const answer = await (await this.api()).screenAction(target, call.name, {
-        page: target.kind === 'screen' ? target.page : '', params: entry.request.params, args: call.args ?? {},
-        ...(Object.keys(context).length ? { context } : {}),
+        page: target.kind === 'screen' ? target.page : 'main', params: entry.request.params, args: call.args ?? {},
+        ...(Object.keys(context).length ? { context } : {}), tz: localeContext().timeZone,
       }, { idempotencyKey: this.session.key() });
       undo?.();
       if (epoch !== this.session.epoch) return answer ?? {};
@@ -430,6 +441,9 @@ export class Screens {
     this.records.merge(answer.records);
     const sources = answer.sources && typeof answer.sources === 'object' ? answer.sources : {};
     if (Object.keys(sources).length) {
+      // Ether answers every source of the page, lazy ones too: those are now read and followed.
+      const entry = this.entries.get(key);
+      if (entry) for (const name of Object.keys(sources)) entry.lazy.add(name);
       this.setPage(key, page => ({ ...page, sources: { ...page.sources, ...sources } }));
       this.track(key);
     }
@@ -527,6 +541,10 @@ export class Screens {
           this.failures = 0;
           this.receive(event.event, event.data);
         }, controller.signal);
+        // Ether ends the stream when a topic's page is no longer visible to the viewer: read the
+        // open pages again (fresh topics, or their failure) and reopen.
+        if (controller.signal.aborted) return;
+        for (const [key, entry] of this.entries) if (entry.opened) this.refresh(key);
         this.failures = Math.max(this.failures, 1);
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -611,9 +629,12 @@ export function documentProblem(document: unknown, rendererVersion: number): str
   return '';
 }
 
+/** Ether's code for a failed read: `update_required` (no variant for this renderer: "update the
+ * app"), `not_found` for any other 404 (a surface the viewer may not see), else its code. */
 function failureCode(error: unknown): string {
   const status = (error as { status?: number })?.status;
   const code = (error as { detail?: { code?: string } })?.detail?.code;
+  if (code === 'update_required') return code;
   if (status === 404) return 'not_found';
   return typeof code === 'string' && code ? code : 'unavailable';
 }

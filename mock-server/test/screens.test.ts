@@ -69,6 +69,8 @@ describe('on a frozen clock', () => {
     fixtures = mkdtempSync(join(tmpdir(), 'vela-screens-'));
     cpSync(join(import.meta.dir, '../../packages/protocol/fixtures/screens'), fixtures, { recursive: true });
     mkdirSync(join(fixtures, 'sports/surfaces'), { recursive: true });
+    writeFileSync(join(fixtures, 'sports/surfaces/ticker.json'), JSON.stringify({ schema: 1, kind: 'screen', renderer: 19, screen: 'x', page: 'x', version: '1', title: 'Ticker',
+      presentation: 'playerOverlay', sources: { live: { from: 'liveEvents', feed: 'sports', query: { window: 'ticker' }, sort: 'featured', exclude: '{context.event}' } }, tree: { type: 'box' } }));
     writeFileSync(join(fixtures, 'sports/surfaces/scorebug.json'), JSON.stringify({ schema: 1, kind: 'screen', renderer: 19, screen: 'sports.scorebug', page: '', version: '1', title: 'Score',
       presentation: 'playerOverlay', sources: { game: { from: 'liveEvent', feed: 'sports', id: '{context.event}' } }, tree: { type: 'box' } }));
     mock = await launchMock({ VELA_MOCK_SPORTS_FREEZE: '1', VELA_MOCK_SCREEN_FIXTURES: fixtures });
@@ -85,7 +87,8 @@ describe('on a frozen clock', () => {
     const boot = await c.json('/bootstrap') as V.Bootstrap;
     expect(boot.navigation).toEqual([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports', page: 'index',
       document: { href: expect.stringMatching(/^\/vela\/v0\/screens\/sports\/pages\/index\/document\?v=[0-9a-f]{16}&r=19&l=en$/), renderer: 19 } }]);
-    expect(boot.surfaces).toEqual([{ id: 'sports.scorebug', presentation: 'playerOverlay', anchor: 'topLeft', when: { event: { feed: 'sports' } }, visibility: 'always',
+    expect(boot.surfaces!.map(surface => surface.id)).toEqual(['sports.scorebug', 'sports.ticker']);
+    expect(boot.surfaces!.slice(0, 1)).toEqual([{ id: 'sports.scorebug', presentation: 'playerOverlay', anchor: 'topLeft', when: { event: { feed: 'sports' } }, visibility: 'always',
       setting: { id: 'scorebug', label: 'Score', default: true, enabled: true }, document: { href: expect.stringContaining('/vela/v0/surfaces/sports.scorebug/document?v='), renderer: 19 } }]);
   });
 
@@ -105,6 +108,11 @@ describe('on a frozen clock', () => {
     expect(stale.status).toBe(301);
     expect(stale.headers.get('location')).toBe(href);
     expect((await c.get(href, '18')).status).toBe(404);
+    // Served as Ether serves it: the index is a section; without v the document may change.
+    expect(doc).toMatchObject({ screen: 'sports', page: 'index', presentation: 'section' });
+    expect((await c.get('/screens/sports/pages/game/document')).headers.get('cache-control')).toBe('private, no-cache');
+    expect(((await (await c.get('/screens/sports/pages/game/document')).json()) as Json).presentation).toBe('page');
+    expect(((await (await c.get('/surfaces/sports.scorebug/document')).json()) as Json)).toMatchObject({ page: 'main', presentation: 'playerOverlay' });
     expect((await c.get('/screens/sports/pages/nope/document')).status).toBe(404);
   });
 
@@ -119,6 +127,9 @@ describe('on a frozen clock', () => {
     const refs = JSON.stringify(data.sources).match(/"\$record":"[^"]+"/g)!.map(m => m.slice(11, -1));
     for (const key of refs) expect(data.records[key]).toBeDefined();
     expect(data.sources.viewer).toEqual({ spoilerFree: false, canSetSpoilerFree: true, locale: 'en', favouriteCount: 5 });
+    expect((data.sources.leagues as Json).selected).toBe('');
+    const french = await (await c.get(`/screens/sports/pages/index/data${query({ sources: 'viewer' })}`, '19', { 'X-Vela-Language': 'fr-CA, en' })).json() as V.ScreenData;
+    expect((french.sources.viewer as Json).locale).toBe('fr-CA');
     expect((data.sources.leagues as Json).leagues).toContainEqual({ id: 'epl', name: 'Premier League', abbr: 'EPL', label: 'EPL' });
     // The same read again keeps every rev (nothing changed on a frozen clock).
     const again = await c.json(`/screens/sports/pages/index/data${query({})}`) as V.ScreenData;
@@ -126,6 +137,14 @@ describe('on a frozen clock', () => {
   });
 
   test('params are validated; sources= reads exactly those; lazy sources answer on request', async () => {
+    for (const bad of <Record<string, string>[]>[{ 'p.date': 'tomorrow' }, { 'p.nope': 'x' }, { sources: 'hero,nope' }, { extra: '1' }, { sources: Array.from({ length: 17 }, (_, n) => `s${n}`).join(',') }]) {
+      const response = await c.get(`/screens/sports/pages/index/data${query(bad)}`);
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as Json).error.code).toBe('invalid_request');
+    }
+    const old = await c.get(`/screens/sports/pages/index/data${query({})}`, '18');
+    expect(old.status).toBe(404);
+    expect(((await old.json()) as Json).error.code).toBe('update_required');
     expect((await c.get(`/screens/sports/pages/index/data${query({ 'p.date': 'tomorrow' })}`)).status).toBe(400);
     expect((await c.get(`/screens/sports/pages/index/data${query({ 'p.nope': 'x' })}`)).status).toBe(400);
     expect((await c.get(`/screens/sports/pages/index/data${query({ sources: 'hero,nope' })}`)).status).toBe(400);
@@ -153,7 +172,9 @@ describe('on a frozen clock', () => {
     expect(e.title).toBeUndefined(); // only when the plugin gave one
     expect(e.sides.map((s: Json) => [s.id, s.abbr, s.score, s.favourite, s.winner, s.loser])).toEqual([['nfl-nyg', 'NYG', '24', false, false, false], ['nfl-phi', 'PHI', '27', true, false, false]]);
     expect(e.sides[1]).toMatchObject({ name: expect.any(String), short: expect.any(String), logo: '/vela/v0/sports-mock/logos/nfl-phi.svg', color: expect.stringMatching(/^#[0-9a-f]{6}$/), altColor: expect.stringMatching(/^#[0-9a-f]{6}$/), record: expect.any(String), entityId: 'nfl-phi' });
-    expect(e.situation).toEqual([{ label: 'Down', value: '3rd & 6' }, { label: 'Ball', value: 'NYG 38' }, { label: 'Possession', value: 'PHI' }]);
+    // Possession names PHI exactly: it moves onto the side and out of the situation ("NYG 38" only mentions a side).
+    expect(e.situation).toEqual([{ label: 'Down', value: '3rd & 6' }, { label: 'Ball', value: 'NYG 38' }]);
+    expect(e.sides.map((s: Json) => s.possession)).toEqual([false, true]);
     const p = e.probability;
     expect(p.subjectSide).toBe(1);
     expect(p.away).toBeCloseTo(1 - p.home, 3);
@@ -218,7 +239,10 @@ describe('on a frozen clock', () => {
     expect(detail.links).toEqual([{ label: 'Game centre', url: { href: `https://example.invalid/sports/${encodeURIComponent(NFL)}`, host: 'example.invalid' } }]);
     // A record key works as the ref too; an unknown event is a 404 for the whole read.
     expect((await c.get(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`)).status).toBe(200);
-    expect((await c.get(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nope' })}`)).status).toBe(404);
+    // An event the viewer cannot read is that source's not_found, not a 404 (a 404 is only a page the viewer may not see).
+    const missing = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nope' })}`) as V.ScreenData;
+    expect(missing.errors).toEqual({ game: { code: 'not_found', retry: false } });
+    expect(missing.sources.viewer).toBeDefined();
   });
 
   test('schedule, leagues filter, the team picker and the hero', async () => {
@@ -249,6 +273,20 @@ describe('on a frozen clock', () => {
     expect((((await picker({ 'p.league': 'nba', 'p.teamsLeague': 'nhl' })).sources.teams) as Json).opening).toBe('nhl');
   });
 
+  test('the ticker window: in progress, finals started under 30 h ago, upcoming within 6 h, featured order', async () => {
+    const data = await c.json(`/surfaces/sports.ticker/data${query({ 'p.kind': 'channel' })}`) as V.ScreenData;
+    const events = ((data.sources.live as Json).events as { $record: string }[]).map(r => data.records[r.$record]!.value as Json);
+    const ids = events.map(e => e.id.replace('sports:sports:', ''));
+    expect([...ids].sort()).toEqual(['epl-ars-liv', 'epl-che-mci', 'f1-las-vegas', 'nba-bos-nyk', 'nba-gsw-lal', 'nba-mil-tor', 'nfl-buf-kc', 'nfl-dal-wsh', 'nfl-nyg-phi', 'nhl-nyr-bos', 'nhl-tor-mtl']);
+    const rank = { live: 0, upcoming: 1, final: 2 } as Record<string, number>;
+    expect(events.map(e => rank[e.phase])).toEqual(events.map(e => rank[e.phase]).sort());
+    expect(events[0]!.favourite).toBe(true);
+    // The playing game is left out (exclude: {context.event}).
+    const playing = await c.json(`/surfaces/sports.ticker/data${query({ 'p.kind': 'channel', 'p.event': `event:${NFL}` })}`) as V.ScreenData;
+    expect(((playing.sources.live as Json).events as { $record: string }[]).map(r => r.$record)).not.toContain(`event:${NFL}`);
+    expect(((playing.sources.live as Json).events as unknown[]).length).toBe(10);
+  });
+
   test('ether.favorite patches the entity and its events, names the sources to re-read, and refuses other body fields', async () => {
     const ref = 'entity:sports:sports:team:nfl-dal';
     const before = (await c.json(`/screens/sports/pages/index/data${query({ sources: 'viewer' })}`)).sources.viewer.favouriteCount;
@@ -257,10 +295,14 @@ describe('on a frozen clock', () => {
     const answer = await response.json() as V.ScreenActionAnswer;
     expect((answer.records![ref]!.value as Json).favourite).toBe(true);
     expect((answer.records!['event:sports:sports:nfl-dal-wsh']!.value as Json).favourite).toBe(true);
-    expect(answer.refresh).toEqual(expect.arrayContaining(['viewer', 'yours', 'hero', 'also', 'live', 'standings']));
+    // Built-in answers carry every source of the page re-read, lazy ones included.
+    expect(Object.keys(answer.sources!).sort()).toEqual(['also', 'hero', 'leagues', 'live', 'schedule', 'standings', 'teams', 'viewer', 'yours']);
+    expect(answer.refresh).toBeUndefined();
+    expect((answer.sources!.viewer as Json).favouriteCount).toBe(before + 1);
     expect((await c.json(`/screens/sports/pages/index/data${query({ sources: 'viewer' })}`)).sources.viewer.favouriteCount).toBe(before + 1);
     await c.action('/screens/sports/actions/ether.favorite', { page: 'index', params: {}, args: { ref, on: false } });
     expect((await c.json(`/screens/sports/pages/index/data${query({ sources: 'viewer' })}`)).sources.viewer.favouriteCount).toBe(before);
+    expect((await c.action('/screens/sports/actions/ether.favorite', { page: 'index', params: {}, args: { ref, on: 'false' }, tz: TZ })).status).toBe(200);
     const extra = await c.action('/screens/sports/actions/ether.favorite', { page: 'index', params: {}, args: { ref, on: 'true' }, optimistic: {} });
     expect(extra.status).toBe(400);
     expect(((await extra.json()) as Json).error.code).toBe('invalid_request');
@@ -273,17 +315,17 @@ describe('on a frozen clock', () => {
     expect(revealed.records![`event:${id}`]!.value).toMatchObject({ spoiler: false, scored: true });
     expect(revealed.records![`detail:${id}`]).toBeDefined();
     const on = await (await c.action('/screens/sports/actions/ether.spoilerFree', { page: 'index', params: {}, args: { on: 'true' } })).json() as V.ScreenActionAnswer;
-    expect(on.refresh).toEqual(['viewer']);
+    expect((on.sources!.viewer as Json).spoilerFree).toBe(true);
     expect((on.records![`event:${NFL}`]!.value as Json)).toMatchObject({ spoiler: true, scored: false });
     expect((on.records!['event:sports:sports:nba-bos-nyk']!.value as Json).spoiler).toBe(false); // not started
     await c.action('/screens/sports/actions/ether.spoilerFree', { page: 'index', params: {}, args: { on: false } });
     expect(((await c.json(`/screens/sports/pages/index/data${query({ sources: 'viewer' })}`)).sources.viewer).spoilerFree).toBe(false);
   });
 
-  test('surfaces: context reads as p.<name>, a hidden ref is a 404, the setting is remembered', async () => {
+  test('surfaces: context reads as p.<name>, an unknown ref fails its source, the setting is remembered', async () => {
     const data = await c.json(`/surfaces/sports.scorebug/data${query({ 'p.event': `event:${NFL}` })}`) as V.ScreenData;
     expect(data.sources.game).toEqual({ event: { $record: `event:${NFL}` }, detail: { $record: `detail:${NFL}` } });
-    expect((await c.get(`/surfaces/sports.scorebug/data${query({ 'p.event': 'event:sports:sports:nope' })}`)).status).toBe(404);
+    expect(((await c.json(`/surfaces/sports.scorebug/data${query({ 'p.event': 'event:sports:sports:nope' })}`)) as V.ScreenData).errors).toEqual({ game: { code: 'not_found', retry: false } });
     const put = await fetch(`${mock.url}/vela/v0/surfaces/sports.scorebug/setting`, { method: 'PUT', headers: { ...c.headers(), 'Idempotency-Key': 'set-1' }, body: JSON.stringify({ enabled: false, idempotencyKey: 'set-1' }) });
     expect(put.status).toBe(204);
     expect(((await c.json('/bootstrap')) as V.Bootstrap).surfaces![0]!.setting!.enabled).toBe(false);
@@ -308,6 +350,32 @@ describe('on a frozen clock', () => {
     expect(five.status).toBe(400);
     expect(five.body.error.code).toBe('too_many_topics');
     expect((await readStream(mock, '/live/stream?topic=lt1.bogus', c.headers(), () => true)).status).toBe(400);
+  });
+});
+
+describe('an owner hiding a screen', () => {
+  let mock: RunningMock;
+  let tokens: V.Tokens;
+  let c: ReturnType<typeof client>;
+  beforeAll(async () => {
+    mock = await launchMock({ VELA_MOCK_SPORTS_FREEZE: '1' });
+    tokens = await signIn(mock);
+    c = client(mock, () => tokens);
+  });
+  afterAll(async () => { await mock?.stop(); });
+
+  test('ends the streams following it; it leaves bootstrap and its reads answer 404', async () => {
+    const data = await c.json(`/screens/sports/pages/index/data${query({})}`) as V.ScreenData;
+    const ended = readStream(mock, `/live/stream?topic=${data.live!.topic}&since=${data.rev}`, c.headers(), () => false, 5000);
+    await Bun.sleep(300);
+    const started = Date.now();
+    await fetch(`${mock.url}/__admin/screens`, { method: 'POST', body: JSON.stringify({ hide: ['sports'] }) });
+    await ended;
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(((await c.json('/bootstrap')) as V.Bootstrap).navigation).toBeUndefined();
+    expect((await c.get(`/screens/sports/pages/index/data${query({})}`)).status).toBe(404);
+    await fetch(`${mock.url}/__admin/screens`, { method: 'POST', body: JSON.stringify({ show: ['sports'] }) });
+    expect((await c.get(`/screens/sports/pages/index/data${query({})}`)).status).toBe(200);
   });
 });
 
