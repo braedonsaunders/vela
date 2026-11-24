@@ -5,6 +5,7 @@ import type { NativeAudioBridge, NativeAudioEvent } from './audio';
 
 interface NativeAudioModule {
   audioLoad?(request: Record<string, unknown>): Promise<void>;
+  audioPreload?(request: Record<string, unknown> | null): Promise<void>;
   audioPlay?(): Promise<void>;
   audioPause?(): Promise<void>;
   audioSeek?(seconds: number): Promise<void>;
@@ -29,6 +30,11 @@ export function nativeAudioBridge(): NativeAudioBridge {
   };
   bridge = {
     load: request => call(native.audioLoad, () => native.audioLoad!({ ...request, access: request.access ?? null })),
+    // A build from before gapless playback has no preload: its player ends each item and the store loads the next.
+    ...(native.audioPreload ? {
+      preload: (request: Parameters<NonNullable<NativeAudioBridge['preload']>>[0]) =>
+        void native.audioPreload!(request ? { ...request, access: request.access ?? null } : null).catch(() => undefined),
+    } : {}),
     play: () => call(native.audioPlay, () => native.audioPlay!()),
     pause: () => call(native.audioPause, () => native.audioPause!()),
     seek: seconds => call(native.audioSeek, () => native.audioSeek!(seconds)),

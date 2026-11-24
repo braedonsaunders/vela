@@ -167,3 +167,90 @@ test('other platforms keep their declarations', () => {
   expect(withAudioPlayback(base, 'web')).toBe(base);
   expect(withAudioPlayback(base, 'windows')).toBe(base);
 });
+
+function gaplessBridge() {
+  const fake = fakeBridge();
+  const bridge: NativeAudioBridge = { ...fake.bridge, preload: request => fake.calls.push(['preload', request]) };
+  return { ...fake, bridge };
+}
+
+test('a preload reaches the native player after its load, with its own id and authorization', async () => {
+  const { bridge, calls } = gaplessBridge();
+  const engine = createNativeAudioEngine(bridge, { authorize: async url => (url.includes('jf') ? { origin: 'https://jf.example', pathPrefix: '/', headers: { 'X-Emby-Token': 't' } } : null) });
+  engine.load('https://jf.example/Audio/1/stream', 0, 1);
+  engine.preload({ url: 'https://jf.example/Audio/2/stream', startSeconds: 0 });
+  await flush();
+  expect(calls).toEqual([
+    ['load', { id: 1, url: 'https://jf.example/Audio/1/stream', access: { origin: 'https://jf.example', pathPrefix: '/', headers: { 'X-Emby-Token': 't' } }, start: 0, rate: 1 }],
+    ['preload', { id: 2, url: 'https://jf.example/Audio/2/stream', access: { origin: 'https://jf.example', pathPrefix: '/', headers: { 'X-Emby-Token': 't' } }, start: 0 }],
+  ]);
+  engine.preload(null);
+  await flush();
+  expect(calls.at(-1)).toEqual(['preload', null]);
+});
+
+test('an advance switches the engine to the preloaded item: its events reach the store, the old ones no longer', async () => {
+  const { bridge, send } = gaplessBridge();
+  let now = 0;
+  const engine = createNativeAudioEngine(bridge, { now: () => now });
+  const events: AudioEngineEvent[] = [];
+  engine.subscribe(event => events.push(event));
+  engine.load('https://ether.example/1.flac', 0, 1);
+  engine.preload({ url: 'https://ether.example/2.flac', startSeconds: 0 });
+  await flush();
+  send(status(1, 'playing', 199.5, 200));
+  events.length = 0;
+  send({ id: 2, type: 'advanced', position: 0.02, duration: 240 });
+  expect(events).toEqual(['advanced']);
+  expect(engine.duration()).toBe(240);
+  now = 1000;
+  expect(engine.position()).toBeCloseTo(1.02, 5);
+  // A late report from the finished item is not the new one's.
+  send(status(1, 'ended', 200, 200));
+  expect(events).toEqual(['advanced']);
+  send(status(2, 'playing', 1.5, 240));
+  expect(events).toEqual(['advanced', 'time']);
+});
+
+test("a status naming the preloaded item before its advance is the advance", async () => {
+  const { bridge, send } = gaplessBridge();
+  const engine = createNativeAudioEngine(bridge);
+  const events: AudioEngineEvent[] = [];
+  engine.subscribe(event => events.push(event));
+  engine.load('https://ether.example/1.flac', 0, 1);
+  engine.preload({ url: 'https://ether.example/2.flac', startSeconds: 0 });
+  await flush();
+  send(status(2, 'playing', 0.4, 180));
+  expect(events).toEqual(['advanced', 'time']);
+  expect(engine.duration()).toBe(180);
+  send({ id: 2, type: 'advanced' });
+  expect(events).toEqual(['advanced', 'time']);
+});
+
+test('a dropped or replaced preload never advances, and a load forgets it', async () => {
+  const { bridge, calls, send } = gaplessBridge();
+  const engine = createNativeAudioEngine(bridge);
+  const events: AudioEngineEvent[] = [];
+  engine.subscribe(event => events.push(event));
+  engine.load('https://ether.example/1.flac', 0, 1);
+  engine.preload({ url: 'https://ether.example/2.flac', startSeconds: 0 });
+  engine.preload({ url: 'https://ether.example/9.flac', startSeconds: 0 });
+  await flush();
+  // The replaced one never reached the native player.
+  expect(calls.filter(call => call[0] === 'preload').map(call => (call[1] as { id: number }).id)).toEqual([3]);
+  send({ id: 2, type: 'advanced' });
+  expect(events).toEqual([]);
+  engine.load('https://ether.example/5.flac', 0, 1);
+  await flush();
+  send({ id: 3, type: 'advanced' });
+  expect(events).toEqual([]);
+});
+
+test('a native player without preload takes none', async () => {
+  const { bridge, calls } = fakeBridge();
+  const engine = createNativeAudioEngine(bridge);
+  engine.load('https://ether.example/1.flac', 0, 1);
+  engine.preload({ url: 'https://ether.example/2.flac', startSeconds: 0 });
+  await flush();
+  expect(calls.map(call => call[0])).toEqual(['load']);
+});

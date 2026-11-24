@@ -3,7 +3,9 @@
 // while it plays, so playback continues in the background and with the screen off, with the media
 // notification, lock-screen and headset controls. The system's commands reach JavaScript, which drives
 // the queue exactly as the app's own buttons do; JavaScript's commands reach this player directly.
-// Speed keeps pitch (Media3's Sonic).
+// Speed keeps pitch (Media3's Sonic). Gapless: the next queue item waits behind the current one in the
+// player's playlist (`preload`), and ExoPlayer moves on to it with no gap, trimming the encoder delay and
+// padding the file declares (LAME/iTunes gapless metadata, MP4 edit lists); JavaScript hears `advanced`.
 package app.ether.vela.player
 
 import android.content.Context
@@ -14,11 +16,13 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
 internal object AudioPlayback : SessionOwner {
@@ -29,6 +33,7 @@ internal object AudioPlayback : SessionOwner {
   private var exo: ExoPlayer? = null
   /** The current item's media authorization; each request checks it (ScopedMediaDataSource). */
   @Volatile private var grant: MediaAccess? = null
+  /** The id of the item playing (JavaScript's load or preload), as its MediaItem's mediaId. */
   private var loadId = 0
   private var info: SessionInfo? = null
   private var spoken = false
@@ -50,8 +55,14 @@ internal object AudioPlayback : SessionOwner {
     val sources = DataSource.Factory { ScopedMediaDataSource(grant) }
     // Platform decoders first, the LGPL FFmpeg extension for the rest (ALAC; Opus, Vorbis and FLAC where
     // MediaCodec lacks them). No float output: it bypasses Sonic, which is what keeps pitch at speed.
+    // MP3 always decodes in FFmpeg: Media3 trims the LAME delay plus the 529-sample decoder delay FFmpeg's
+    // decoder has, but Android's MP3 decoder already drops those 529 samples itself, so with it each track
+    // lost its first 12 ms and ended on 12 ms of padding (a dropout at every gapless join).
     val renderers = DefaultRenderersFactory(context)
       .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+      .setMediaCodecSelector { mimeType, secure, tunneling ->
+        if (mimeType == MimeTypes.AUDIO_MPEG) emptyList() else MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
+      }
       .setEnableDecoderFallback(true)
     val player = ExoPlayer.Builder(context, renderers)
       .setMediaSourceFactory(DefaultMediaSourceFactory(sources))
@@ -69,6 +80,10 @@ internal object AudioPlayback : SessionOwner {
 
       override fun onPlayerError(error: PlaybackException) {
         failure = mediaFailureMessage((error.cause as? MediaHttpFailure)?.status ?: error.errorCode)
+      }
+
+      override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) advanced(player, mediaItem)
       }
     })
     return player
@@ -97,11 +112,51 @@ internal object AudioPlayback : SessionOwner {
     }
     player.setAudioAttributes(attributes(spoken), true)
     player.playWhenReady = false
-    player.setMediaItem(MediaItem.Builder().setUri(uri).setMediaMetadata(sessionMetadata).build(), (start.coerceAtLeast(0.0) * 1000).toLong())
+    player.setMediaItem(item(id, uri), (start.coerceAtLeast(0.0) * 1000).toLong())
     player.setPlaybackSpeed(rate.toFloat().coerceIn(0.25f, 4f))
     player.prepare()
     MediaSessionHub.claim(context, this)
     publish()
+  }
+
+  private fun item(id: Int, uri: Uri): MediaItem =
+    MediaItem.Builder().setMediaId(id.toString()).setUri(uri).setMediaMetadata(sessionMetadata).build()
+
+  /**
+   * Queues the next item behind the current one (null: drops it), so the player goes straight on to it.
+   * An item that starts part-way (an audiobook part's resume point) is not queued: the current one ends
+   * and JavaScript loads it.
+   */
+  fun preload(id: Int?, url: String?, access: Map<String, Any?>?, start: Double) {
+    val player = exo ?: return
+    if (player.mediaItemCount == 0) return
+    val after = player.currentMediaItemIndex + 1
+    if (player.mediaItemCount > after) player.removeMediaItems(after, player.mediaItemCount)
+    if (id == null || url == null || start > 0) return
+    val uri = Uri.parse(url)
+    if (uri.scheme !in listOf("http", "https")) return
+    // One queue plays from one server: the next item's grant (if it needs one) is the current one's.
+    if (access != null) grant = try { MediaAccess.from(access) } catch (_: IllegalArgumentException) { grant }
+    player.addMediaItem(item(id, uri))
+  }
+
+  /** The player went on to the queued item by itself: it is now the one JavaScript hears about. */
+  private fun advanced(player: Player, mediaItem: MediaItem?) {
+    val id = mediaItem?.mediaId?.toIntOrNull() ?: return
+    if (id == loadId) return
+    loadId = id
+    failure = null
+    lastState = ""
+    lastDuration = 0.0
+    // The finished item leaves the playlist; the one playing stays at its head.
+    if (player.currentMediaItemIndex > 0) player.removeMediaItems(0, player.currentMediaItemIndex)
+    emit?.invoke(buildMap {
+      put("id", id)
+      put("type", "advanced")
+      put("position", player.currentPosition.coerceAtLeast(0) / 1000.0)
+      put("duration", player.duration.takeIf { it != C.TIME_UNSET && it > 0 }?.div(1000.0) ?: 0.0)
+    })
+    publish(tick = true)
   }
 
   fun play() {
@@ -133,6 +188,7 @@ internal object AudioPlayback : SessionOwner {
     main.removeCallbacks(tick)
     failure = null
     player.pause()
+    if (player.mediaItemCount > 1) player.removeMediaItems(player.currentMediaItemIndex + 1, player.mediaItemCount)
     main.removeCallbacks(empty)
     main.postDelayed(empty, UNLOAD_GRACE_MS)
   }

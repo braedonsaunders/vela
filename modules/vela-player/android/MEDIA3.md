@@ -167,6 +167,29 @@ load after it empties the player, and the notification goes with it
 Console foreground-service declaration for media playback; media notifications
 need no POST_NOTIFICATIONS prompt.
 
+### Gapless
+
+The store hands the next queue item to the player before the current one ends
+(`audioPreload`): it waits behind the current MediaItem in ExoPlayer's playlist, so
+the player moves on with no gap, trimming the delay and padding the file declares
+(the LAME header, iTunSMPB, an MP4 edit list). `onMediaItemTransition` (auto) sends
+`advanced` with the new item's id and drops the finished item; an item that resumes
+part-way is not queued (JavaScript loads it). MP3 always decodes in the FFmpeg
+extension: Media3 trims the LAME delay plus the 529 samples of FFmpeg's decoder
+delay, but MediaCodec's MP3 decoder drops those itself, so with it every track lost
+its first 12 ms and ended on 12 ms of padding.
+
+Measured on the mock's gapless test albums with a temporary tee of the PCM fed to
+the AudioTrack (API 34 emulator, one AudioTrack across every join): FLAC bit-exact,
+MP3 0 samples at every join. AAC in an ffmpeg-muxed M4A ends on 630-1019 samples of
+padding per track: ffmpeg marks the end by shortening the last sample's duration and
+`BoxParser` computes the padding from the summed durations, so it finds none. Files
+with iTunSMPB or a padded edit list are trimmed; the ffmpeg case needs Media3 to
+derive padding from the last sample's duration, or a Vela-side trim to the edited
+duration. Media3's `WavFileAudioBufferSink` splits its file at every item change even
+when playback is seamless (the sink drains and reconfigures there); measure with a
+single-file tee.
+
 ## Dolby Vision
 
 Media3 gives Dolby Vision Profile 7 (UHD Blu-ray: an HDR10 base layer plus an

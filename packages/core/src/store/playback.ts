@@ -89,6 +89,9 @@ export interface MediaAccessGrant {
   nativeURL?(url: string): Promise<string>;
 }
 
+/** The last position the player reported for a session, and whether it said the item ended. */
+interface LastPosition { sessionId: string; seconds: number; ended: boolean }
+
 interface Intent {
   run: object;
   target: PlaybackTarget;
@@ -129,7 +132,7 @@ export class Playback {
   private reporting: Promise<unknown> = Promise.resolve();
 
   /** The last position the player reported for the current session. */
-  private lastPosition: { sessionId: string; seconds: number; ended: boolean } | undefined;
+  private lastPosition: LastPosition | undefined;
 
   /** The session's scrub thumbnail sheets, and an offer read apart from the plan (`trickplayOffer`). */
   private readonly trickplay = new TrickplayCache();
@@ -575,8 +578,8 @@ export class Playback {
   async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
-    const connection = await this.session.ready();
-    const sent = connection.adapter.reportObservation(sessionId, observation);
+    // Known as in flight at once, so a stop issued right after (an advance, Stop) waits for it.
+    const sent = this.session.ready().then(connection => connection.adapter.reportObservation(sessionId, observation));
     this.reporting = sent.catch(() => undefined);
     // A session may go on past the player's end (a multi-part title's next part): show its plan at once.
     if (ended) void sent.then(() => this.followNow?.(sessionId), () => undefined);
@@ -606,16 +609,80 @@ export class Playback {
     if (JSON.stringify(live) !== JSON.stringify(current)) this.patch({ live });
   }
 
+  /**
+   * Gapless audio: ask for `target`'s plan ahead of time while the current session plays on. Nothing
+   * in state changes and nothing follows it: the caller `adopt`s it when its engine moves on to it,
+   * or `release`s it. Null when the server prepares rather than plans or the sign-in changed meanwhile.
+   */
+  async prepare(target: Extract<PlaybackTarget, { kind: 'title' }>): Promise<V.PlaybackPlan | null> {
+    const epoch = this.session.epoch;
+    const connection = await this.session.ready();
+    await this.session.negotiate(connection.adapter);
+    const reply = await connection.adapter.startPlayback({
+      titleId: target.id,
+      ...(target.positionSeconds !== undefined ? { positionSeconds: target.positionSeconds } : {}),
+      ...(target.context && this.session.features?.playContexts?.available ? { context: target.context } : {}),
+      // A server with queued sessions keeps the playing one until this one is first observed playing.
+      ...(this.queuedPlayback ? { queued: true } : {}),
+      client: this.session.client,
+      idempotencyKey: `prepare-title-${target.id}-${randomId()}`,
+    });
+    if (!('sessionId' in reply)) return null;
+    const plan = connection.plan(reply as V.PlaybackPlan);
+    if (epoch !== this.session.epoch) { this.release(plan); return null; }
+    return plan;
+  }
+
+  /** The server opens a prepared plan beside the playing session (features.queuedPlayback): asking for
+   * it early ends nothing. Without it a server may end the device's playing session (Ether did). */
+  get queuedPlayback(): boolean { return !!this.session.features?.queuedPlayback?.available; }
+
+  /** Give back a prepared plan that will not play: the server releases its session. */
+  release(plan: V.PlaybackPlan): void {
+    void (async () => {
+      const connection = await this.session.ready();
+      await connection.adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, idempotencyKey: `release-${plan.sessionId}` });
+    })().catch(() => undefined);
+  }
+
+  /**
+   * Make a prepared plan the playing one (the engine moved on to it, or the viewer skipped to it).
+   * The session that was playing stops exactly as `stop` stops it, after its last report, and the
+   * prepared one is followed from here on.
+   */
+  adopt(target: PlaybackTarget, plan: V.PlaybackPlan): void {
+    const previous = this.box.get().playback;
+    const old = previous.plan ?? this.abandoned;
+    const last = old && this.lastPosition?.sessionId === old.sessionId ? this.lastPosition : undefined;
+    const reported = this.reporting;
+    this.end();
+    const run = {};
+    this.run = run;
+    this.established = true;
+    this.cursor = plan.positionSeconds ?? 0;
+    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
+    this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
+    void this.session.ready().then(connection => { if (this.run === run) this.followSession(run, connection, plan.sessionId); }, () => undefined);
+    if (old && old.state !== 'ended' && old.sessionId !== plan.sessionId) void this.finish(old, previous.target, previous.phase, last, reported);
+  }
+
   /** Stop playing: the server releases the session at the plan's generations. */
   async stop(): Promise<void> {
     const { target, phase } = this.box.get().playback;
     const plan = this.box.get().playback.plan ?? this.abandoned;
+    const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
     this.end();
     this.box.update('playback', () => initialPlayback);
     if (!plan || plan.state === 'ended') return;
+    await this.finish(plan, target, phase, last, this.reporting);
+  }
+
+  /** Release a session that played, then publish the resume state the server kept for it. */
+  private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<unknown>): Promise<void> {
     let confirmedPosition: number | undefined;
     try {
-      await this.reporting;
+      await reported;
       const connection = await this.session.ready();
       await connection.adapter.command(plan.sessionId, {
         kind: 'stop',
@@ -633,24 +700,24 @@ export class Playback {
     } catch {
       // Ended, expired or already stopped: the server holds nothing for it.
     }
-    if (phase !== 'ended') this.afterWatching(plan, target, confirmedPosition);
+    if (phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
   }
 
   /**
    * Publish persisted resume state only. The player's raw cursor can be below the server's
    * resume threshold; drawing it optimistically would make the title action flicker.
    */
-  private afterWatching(plan: V.PlaybackPlan, target: PlaybackTarget | null, confirmedPosition?: number): void {
+  private afterWatching(plan: V.PlaybackPlan, target: PlaybackTarget | null, confirmedPosition?: number,
+    last = this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined, reported = this.reporting): void {
     const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
     if (!titleId || plan.purpose === 'preview') return;
-    const last = this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
     const finished = plan.state === 'ended' || last?.ended === true;
     if (!last && !finished) return;
     const watched: Watched = { titleId, positionSeconds: confirmedPosition ?? last?.seconds ?? 0, finished };
     // Resume eligibility belongs to the server (Ether, for example, drops positions below
     // 5%). Publish only its answer, never a local position that will immediately disappear.
     if (confirmedPosition !== undefined) this.watched(watched);
-    void this.reporting.then(() => this.reconcile(watched));
+    void reported.then(() => this.reconcile(watched));
   }
 
   private end(): void {

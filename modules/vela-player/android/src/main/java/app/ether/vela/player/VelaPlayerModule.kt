@@ -55,6 +55,11 @@ class VelaPlayerModule : Module() {
         @Suppress("UNCHECKED_CAST") (request["access"] as? Map<String, Any?>),
         (request["start"] as? Number)?.toDouble() ?: 0.0, (request["rate"] as? Number)?.toDouble() ?: 1.0)
     }.runOnQueue(Queues.MAIN)
+    AsyncFunction("audioPreload") { request: Map<String, Any?>? ->
+      audio().preload((request?.get("id") as? Number)?.toInt(), request?.get("url") as? String,
+        @Suppress("UNCHECKED_CAST") (request?.get("access") as? Map<String, Any?>),
+        (request?.get("start") as? Number)?.toDouble() ?: 0.0)
+    }.runOnQueue(Queues.MAIN)
     AsyncFunction("audioPlay") { audio().play() }.runOnQueue(Queues.MAIN)
     AsyncFunction("audioPause") { audio().pause() }.runOnQueue(Queues.MAIN)
     AsyncFunction("audioSeek") { seconds: Double -> audio().seek(seconds) }.runOnQueue(Queues.MAIN)

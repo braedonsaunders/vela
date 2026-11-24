@@ -72,6 +72,9 @@ export interface ServerCapabilities {
     lyrics?: Feature;
     /** PlaybackRequest.context is remembered; GET /recent lists what the viewer played from. */
     playContexts?: Feature;
+    /** PlaybackRequest.queued: a gapless next track's session coexists with the playing one (its media
+     * may be read) and takes the device over on its first playing, paused or buffering observation. */
+    queuedPlayback?: Feature;
     /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
     mediaClasses?: Feature & { classes: MediaClass[] };
     /** POST /titles/:id/read and reading progress, for these formats. */
@@ -308,7 +311,10 @@ export type PlaybackTarget = { titleId: ID; channelId?: never; extraId?: never }
 export interface PlayContext { kind: 'title' | 'playlist' | 'favorites'; id: string }
 export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabilities; positionSeconds?: number; mediaSourceId?: ID; context?: PlayContext;
   versionId?: ID; audioTrackId?: ID; subtitleTrackId?: ID | null; allowTranscode?: boolean; liveMode?: 'adaptive' | 'low-delay';
-  /** A live-channel tile of a multiview group (features.multiview). */ multiview?: MultiviewTile };
+  /** A live-channel tile of a multiview group (features.multiview). */ multiview?: MultiviewTile;
+  /** features.queuedPlayback: the next queued track, opened ahead of time (gapless). It leaves the
+   * device's playing session alone until it is first observed playing; an ordinary request still
+   * supersedes it, and a newer queued one replaces an older unplayed one. */ queued?: boolean };
 export type SessionCommand = Mutation & Generations & (
   { kind: 'seek'; positionSeconds: number } | { kind: 'pause' | 'resume' | 'stop' } |
   /** A live session jumps to the live edge; a start-over session switches to the channel's live session. */

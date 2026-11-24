@@ -69,6 +69,8 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(hasMusicLibrary(adapter) && description.features.favoritesList ? { favoritesList: description.features.favoritesList } : {}),
       ...(hasMusicLibrary(adapter) && description.features.lyrics ? { lyrics: description.features.lyrics } : {}),
       ...(hasMusicLibrary(adapter) && description.features.playContexts ? { playContexts: description.features.playContexts } : {}),
+      // Queued (gapless next-track) sessions are a property of the server's playback: stated by it.
+      ...(description.features.queuedPlayback ? { queuedPlayback: description.features.queuedPlayback } : {}),
       // Plugin levels describe answers to existing reads (rows per tab, children per role): stated by the server.
       ...(description.features.pluginLevels ? { pluginLevels: description.features.pluginLevels } : {}),
     },

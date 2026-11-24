@@ -14,3 +14,9 @@ test('music features reach the app only when the adapter can call them', () => {
   const withheld = advertise(plain, description).features;
   expect([withheld.favoritesList, withheld.lyrics, withheld.playContexts]).toEqual([undefined, undefined, undefined]);
 });
+
+test('queued playback (gapless next-track sessions) reaches the app when the server states it', () => {
+  const stated = { features: { queuedPlayback: on } } as unknown as ServerDescription;
+  expect(advertise({} as unknown as ServerAdapter, stated).features.queuedPlayback).toEqual(on);
+  expect(advertise({} as unknown as ServerAdapter, description).features.queuedPlayback).toBeUndefined();
+});

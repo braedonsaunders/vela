@@ -4,6 +4,9 @@
 // lock screen, the Siri Remote, headsets and CarPlay); their commands go to JavaScript, which drives the
 // queue exactly as the app's own buttons do. AVPlayer plays MP3, AAC and ALAC (MP4/M4A/M4B, ADTS),
 // FLAC and WAV; the server transcodes anything else. Speed keeps pitch (spectral time-pitch).
+// Gapless: an AVQueuePlayer holds the next queue item behind the current one (`preload`) and moves on to
+// it with no gap, trimming the encoder delay and padding the file declares (iTunes gapless metadata, MP4
+// edit lists, the LAME header); JavaScript hears `advanced` and Now Playing follows.
 import AVFoundation
 import Foundation
 import MediaPlayer
@@ -24,9 +27,16 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         var spoken: Bool
     }
 
-    private let player = AVPlayer()
+    private let player = AVQueuePlayer()
     private var item: AVPlayerItem?
+    /// The next item, waiting behind `item` in the queue player, and JavaScript's id for it.
+    private var queued: (item: AVPlayerItem, id: Int)?
     private var playerObserver: NSKeyValueObservation?
+    private var currentItemObserver: NSKeyValueObservation?
+    /// After an advance Now Playing waits for JavaScript's title for the new item (a second at most),
+    /// rather than showing the finished item's title over the new item's position.
+    private var nowPlayingHeld = false
+    private var nowPlayingRelease: Timer?
     private var itemObservers: [NSKeyValueObservation] = []
     private var itemNotifications: [NSObjectProtocol] = []
     private var loadID = 0
@@ -55,6 +65,9 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         playerObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.publish() } }
         }
+        currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.currentItemChanged() } }
+        }
         player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.publish(tick: true) }
         }
@@ -75,11 +88,28 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         lastSent = nil
         pendingStart = start > 0 ? start : nil
         self.rate = Float(rate > 0 ? rate : 1)
+        let item = Self.item(url: url, access: access)
+        queued = nil
+        self.item = item
+        observe(item)
+        player.defaultRate = self.rate
+        player.actionAtItemEnd = .pause
+        player.removeAllItems()
+        player.insert(item, after: nil)
+        SystemMediaControls.shared.claim(self)
+        publish()
+    }
+
+    private static func item(url: URL, access: VelaMediaAuth?) -> AVPlayerItem {
         let headers = access?.headers(for: url) ?? [:]
         let asset = AVURLAsset(url: url, options: headers.isEmpty ? nil : ["AVURLAssetHTTPHeaderFieldsKey": headers])
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .spectral
-        self.item = item
+        return item
+    }
+
+    /// Follows the playing item's status, duration, end and failure.
+    private func observe(_ item: AVPlayerItem) {
         itemObservers = [
             item.observe(\.status, options: [.new]) { [weak self] item, _ in
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.statusChanged(item) } }
@@ -98,10 +128,40 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
                 MainActor.assumeIsolated { self?.fail(error) }
             },
         ]
-        player.defaultRate = self.rate
-        player.replaceCurrentItem(with: item)
-        SystemMediaControls.shared.claim(self)
-        publish()
+    }
+
+    /// Queues the next item behind the current one (nil drops it), so the player goes straight on to it.
+    /// An item that starts part-way (an audiobook part's resume point) is not queued: the current one ends
+    /// and JavaScript loads it.
+    func preload(id: Int?, url: URL?, access: VelaMediaAuth?, start: Double) {
+        if let waiting = queued?.item { player.remove(waiting) }
+        queued = nil
+        player.actionAtItemEnd = .pause
+        guard let id, let url, start <= 0, let current = item, player.currentItem === current, !ended else { return }
+        let next = Self.item(url: url, access: access)
+        guard player.canInsert(next, after: current) else { return }
+        player.insert(next, after: current)
+        queued = (next, id)
+        player.actionAtItemEnd = .advance
+    }
+
+    /// The queue player moved on to the queued item: it is now the one JavaScript hears about.
+    private func currentItemChanged() {
+        guard let next = queued, player.currentItem === next.item else { return }
+        detachItem()
+        queued = nil
+        player.actionAtItemEnd = .pause
+        item = next.item
+        loadID = next.id
+        ready = next.item.status == .readyToPlay
+        failure = nil
+        ended = false
+        pendingStart = nil
+        lastSent = nil
+        observe(next.item)
+        holdNowPlaying()
+        emit?(["id": next.id, "type": "advanced", "position": position, "duration": duration])
+        publish(tick: true)
     }
 
     func play() {
@@ -154,7 +214,9 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         wantsPlay = false
         player.pause()
         detachItem()
-        player.replaceCurrentItem(with: nil)
+        queued = nil
+        player.actionAtItemEnd = .pause
+        player.removeAllItems()
         endBridging()
         SystemMediaControls.shared.release(self)
     }
@@ -162,6 +224,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     func setNowPlaying(_ value: NowPlaying?) {
         let restyled = (value?.spoken == true) != (info?.spoken == true)
         info = value
+        releaseNowPlaying()
         guard item != nil else { return }
         if restyled { SystemMediaControls.shared.claim(self) }
         updateNowPlaying()
@@ -215,6 +278,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     }
 
     private func finished() {
+        // The queue player goes on to the queued item; that is an advance, not an end.
+        if let next = queued, player.items().contains(next.item) { return }
         ended = true
         wantsPlay = false
         // JavaScript loads the next item's plan; keep the app running in the background until it plays.
@@ -293,8 +358,26 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         }
     }
 
+    private func holdNowPlaying() {
+        nowPlayingHeld = true
+        nowPlayingRelease?.invalidate()
+        nowPlayingRelease = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.nowPlayingHeld else { return }
+                self.releaseNowPlaying()
+                self.updateNowPlaying()
+            }
+        }
+    }
+
+    private func releaseNowPlaying() {
+        nowPlayingHeld = false
+        nowPlayingRelease?.invalidate()
+        nowPlayingRelease = nil
+    }
+
     private func updateNowPlaying() {
-        guard item != nil else { return }
+        guard item != nil, !nowPlayingHeld else { return }
         let state = self.state
         let now = NowPlayingState(
             title: info?.title.isEmpty == false ? info!.title : "Vela",
