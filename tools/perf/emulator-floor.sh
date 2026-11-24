@@ -7,8 +7,7 @@
 # Safety invariants:
 # - Never runs on macOS (exits immediately if uname != Linux).
 # - Uses its own dedicated AVD (`vela-tv-floor`), console port (default 5584 -> `emulator-5584`),
-#   netsim instance (`--instance=84`), and ADB server port (default 5041) so it never collides
-#   with other workers.
+#   and ADB server port (default 5041) so it never collides with other workers.
 # - Records the exact PID it starts in `$PID_FILE` and stops ONLY that PID (never pkill/killall).
 # - Boots the emulator at normal host speed so Android system services initialize reliably, then
 #   applies the Cortex-A55 CPU quota (`systemctl --user set-property <unit> CPUQuota=...`, default
@@ -32,7 +31,7 @@ shift || true
 
 PORT="${VELA_TV_FLOOR_PORT:-5584}"
 CPU_QUOTA="${VELA_TV_FLOOR_CPU_QUOTA:-100%}"
-ALLOWED_CPUS="${VELA_TV_FLOOR_CPUS:-0-3}"
+ALLOWED_CPUS="${VELA_TV_FLOOR_CPUS:-8-11}"
 AVD_NAME="vela-tv-floor"
 
 while [[ $# -gt 0 ]]; do
@@ -53,7 +52,6 @@ EMULATOR="$ANDROID_SDK_ROOT/emulator/emulator"
 SERIAL="emulator-${PORT}"
 UNIT_NAME="vela-tv-floor-${PORT}"
 ADB_UNIT_NAME="vela-tv-floor-adb-${ANDROID_ADB_SERVER_PORT}"
-NETSIM_INSTANCE="$((PORT - 5500))"
 
 WORK_DIR="${VELA_TV_FLOOR_DIR:-$HOME/.scratch/tmp/vela-tv-floor}"
 mkdir -p "$WORK_DIR"
@@ -171,7 +169,7 @@ start_emulator() {
 
   rm -f "$ANDROID_AVD_HOME/${AVD_NAME}.avd/"*.lock 2>/dev/null || true
 
-  echo "Starting ${AVD_NAME} on ${SERIAL} (2048 MB RAM, 4 cores, AllowedCPUs=${ALLOWED_CPUS}, netsim=${NETSIM_INSTANCE}; throttling to CPUQuota=${CPU_QUOTA} after boot)..."
+  echo "Starting ${AVD_NAME} on ${SERIAL} (2048 MB RAM, 4 cores, AllowedCPUs=${ALLOWED_CPUS}; throttling to CPUQuota=${CPU_QUOTA} after boot)..."
 
   systemctl --user stop "$UNIT_NAME" >/dev/null 2>&1 || true
   systemctl --user reset-failed "$UNIT_NAME" >/dev/null 2>&1 || true
@@ -182,7 +180,7 @@ start_emulator() {
     --setenv="ANDROID_ADB_SERVER_PORT=${ANDROID_ADB_SERVER_PORT}" \
     -p "CPUQuota=400%" \
     -p "AllowedCPUs=${ALLOWED_CPUS}" \
-    /bin/bash -c "exec \"$EMULATOR\" -avd \"$AVD_NAME\" -port \"$PORT\" -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 -netsim-args --instance=${NETSIM_INSTANCE} >\"$LOG_FILE\" 2>&1"
+    /bin/bash -c "exec \"$EMULATOR\" -avd \"$AVD_NAME\" -port \"$PORT\" -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 >\"$LOG_FILE\" 2>&1"
 
   sleep 1
   local emu_pid
@@ -195,20 +193,21 @@ start_emulator() {
   echo "Launched ${SERIAL} with PID ${emu_pid}. Waiting for boot completion..."
 
   local elapsed=0
-  local timeout=180
+  local timeout=240
   while (( elapsed < timeout )); do
     if ! kill -0 "$emu_pid" 2>/dev/null; then
       echo "error: emulator process ${emu_pid} exited prematurely. Last log lines:" >&2
       tail -n 40 "$LOG_FILE" >&2 || true
       exit 1
     fi
+    timeout 5 "$ADB" reconnect offline < /dev/null >/dev/null 2>&1 || true
     local boot_completed
     boot_completed="$(timeout 5 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed < /dev/null 2>/dev/null | tr -d '\r\n' || true)"
     if [[ "$boot_completed" == "1" ]]; then
       break
     fi
-    sleep 2
-    (( elapsed += 2 ))
+    sleep 3
+    (( elapsed += 3 ))
   done
 
   if (( elapsed >= timeout )); then
@@ -216,12 +215,18 @@ start_emulator() {
     exit 1
   fi
 
+  # Wait until Android package & window services are ready before configuring display/settings.
+  local svc_elapsed=0
+  while (( svc_elapsed < 60 )); do
+    if timeout 5 "$ADB" -s "$SERIAL" shell pm path android < /dev/null >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+    (( svc_elapsed += 2 ))
+  done
+
   # Enforce 1920x1080 @ 320 dpi and disable system window animations for deterministic frame timings.
-  timeout 10 "$ADB" -s "$SERIAL" shell wm size 1920x1080 < /dev/null >/dev/null 2>&1 || true
-  timeout 10 "$ADB" -s "$SERIAL" shell wm density 320 < /dev/null >/dev/null 2>&1 || true
-  timeout 10 "$ADB" -s "$SERIAL" shell settings put global window_animation_scale 0 < /dev/null >/dev/null 2>&1 || true
-  timeout 10 "$ADB" -s "$SERIAL" shell settings put global transition_animation_scale 0 < /dev/null >/dev/null 2>&1 || true
-  timeout 10 "$ADB" -s "$SERIAL" shell settings put global animator_duration_scale 0 < /dev/null >/dev/null 2>&1 || true
+  timeout 15 "$ADB" -s "$SERIAL" shell "wm size 1920x1080; wm density 320; settings put global window_animation_scale 0; settings put global transition_animation_scale 0; settings put global animator_duration_scale 0" < /dev/null >/dev/null 2>&1 || true
 
   # Apply the Cortex-A55 CPU quota now that the guest OS is booted.
   echo "Applying Cortex-A55 CPU throttle: systemctl --user set-property ${UNIT_NAME}.service CPUQuota=${CPU_QUOTA}"
@@ -284,7 +289,7 @@ case "$ACTION" in
   status) status_emulator ;;
   stop) stop_emulator ;;
   *)
-    echo "Usage: $0 {setup|start|status|stop} [--port 5584] [--cpu-quota 100%] [--cpus 0-3]" >&2
+    echo "Usage: $0 {setup|start|status|stop} [--port 5584] [--cpu-quota 100%] [--cpus 8-11]" >&2
     exit 1
     ;;
 esac
