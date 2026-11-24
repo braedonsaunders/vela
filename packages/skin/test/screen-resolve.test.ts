@@ -282,3 +282,14 @@ describe('half points on TV', () => {
     expect(fill(r.tree.base.style.padding, root({}), env)).toBe('13.2px');
   });
 });
+
+describe('budgets', () => {
+  test("a block's items cost as a repeat's; a repeat of at most one item costs as the page", async () => {
+    const { treesReport } = await import('../../../tools/skin-budget');
+    const card: Node = { type: 'box', children: Array.from({ length: 30 }, () => ({ type: 'text', text: 'x' }) as Node) };
+    const shelf = resolve(doc({ type: 'shelf', over: 'src.x', as: 'e', item: card }));
+    expect(treesReport([['tree', shelf.tree]]).pages[0]!.perItem).toBe(31);
+    const hero = resolve(doc({ type: 'repeat', over: 'src.x', as: 'e', limit: 1, item: card }));
+    expect(treesReport([['tree', hero.tree]]).pages[0]).toMatchObject({ perItem: 0, nodes: 32 });
+  });
+});

@@ -67,6 +67,8 @@ function isBlurry(node: RNode): boolean {
 function children(node: RNode): RNode[] {
   switch (node.kind) {
     case 'box': case 'sections': return node.children;
+    // A repeat that draws one item at most (a screen's hero) costs as the page, not per item.
+    case 'repeat': return node.limit <= 1 ? [node.item] : [];
     case 'image': return node.fallback ? [node.fallback] : [];
     case 'shelf': return node.empty ? [node.empty] : [];
     case 'tabs': return node.after ?? [];
@@ -77,7 +79,7 @@ function children(node: RNode): RNode[] {
 /** A block's repeated item (shelf, grid, marquee, tabs' chip), which costs as a repeat's does. */
 function repeated(node: RNode): RNode | undefined {
   switch (node.kind) {
-    case 'repeat': return node.item;
+    case 'repeat': return node.limit <= 1 ? undefined : node.item;
     case 'shelf': case 'grid': case 'marquee': return node.item;
     case 'tabs': return node.chip;
     default: return undefined;
