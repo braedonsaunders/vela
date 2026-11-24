@@ -97,7 +97,7 @@ function ContinueListening({ row }: { row: Row }) {
     <View style={{ marginBottom: m.small ? 24 : 34 }} testID="spoken-continue">
       <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink' }), { marginBottom: 12 }]}>{row.name || msg('media.ui.continueListening')}</Text>
       <FocusScope.Provider value="continue"><FocusGroup style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {row.items.slice(0, tv ? 6 : 6).map(card => <ResumeCard key={card.id} card={card} width={`${100 / columns - (columns > 1 ? 1.4 : 0)}%`} />)}
+        {row.items.slice(0, 6).map(card => <ResumeCard key={card.id} card={card} width={`${100 / columns - (columns > 1 ? 1.4 : 0)}%`} />)}
       </FocusGroup></FocusScope.Provider>
     </View>
   );

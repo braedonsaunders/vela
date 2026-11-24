@@ -235,7 +235,9 @@ export function Wash({ accent, height = 420, image }: { accent: string; height?:
   const tint = accent || m.ui.accent;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height, overflow: 'hidden' }}>
-      {image ? <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} /> : null}
+      {/* Native image blur (expo-image on Android and iOS) stops far short of 80: the artwork's own
+          lettering showed through behind a page's title. There the wash is the colour alone. */}
+      {image && Platform.OS === 'web' ? <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} /> : null}
       <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.55)} 0%, ${alpha(tint, 0.18)} 55%, ${alpha(m.ui.page, 0)} 100%)` })]} />
     </View>
   );
