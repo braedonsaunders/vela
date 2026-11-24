@@ -12,6 +12,7 @@ import type { Ctx, Env } from '../vocabulary';
 import { FocusBand, hasFocusableChild } from './focus';
 import { marqueeScrolls, marqueeStep, parsePoints } from './layout-math';
 import { useBlockLook } from './look';
+import { ScopedRecordNode } from './record-scope';
 import { useScreenBlockRuntime, type MarqueeBlockNode } from './types';
 
 /** Reading speed in design points per second (matches legacy LiveTicker SPEED = 64). */
@@ -97,7 +98,9 @@ export function MarqueeBlock({ node, ctx }: { node: MarqueeBlockNode; ctx: Ctx }
       <Animated.View style={[{ flexDirection: 'row', alignItems: 'center' }, animatedStyle]}>
         <View style={rowStyle} onLayout={onCopyLayout}>
           {entries.map(entry => (
-            <View key={entry.key}>{runtime.renderNode(node.item, entry.ctx)}</View>
+            <View key={entry.key}>
+              <ScopedRecordNode node={node.item} ctx={entry.ctx} renderNode={runtime.renderNode} />
+            </View>
           ))}
         </View>
         {marqueeScrolls(measured.content, measured.viewport) && !look.still ? (
@@ -107,7 +110,9 @@ export function MarqueeBlock({ node, ctx }: { node: MarqueeBlockNode; ctx: Ctx }
             importantForAccessibility="no-hide-descendants"
           >
             {entries.map(entry => (
-              <View key={`dup-${entry.key}`}>{runtime.renderNode(node.item, entry.ctx)}</View>
+              <View key={`dup-${entry.key}`}>
+                <ScopedRecordNode node={node.item} ctx={entry.ctx} renderNode={runtime.renderNode} />
+              </View>
             ))}
           </View>
         ) : null}

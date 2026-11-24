@@ -1,5 +1,6 @@
 // The `grid` layout block (`docs/plugin-screens.md` §6): wrapping grid of `columns` per class,
-// chunked and virtualised by row, with each row wrapped in a TV `FocusBand`.
+// chunked and virtualised by row, with each row wrapped in a TV `FocusBand` and each item wrapped
+// in `ScopedRecordNode` so live record pushes only re-render the affected cell.
 import { useMemo } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { measure, useHost } from '../host';
@@ -9,6 +10,7 @@ import type { Ctx, Env } from '../vocabulary';
 import { FocusBand } from './focus';
 import { chunkGridRows, parsePoints } from './layout-math';
 import { useBlockLook } from './look';
+import { ScopedRecordNode } from './record-scope';
 import { useScreenBlockRuntime, type GridBlockNode } from './types';
 
 function translateOwnStyle(node: RNode, ctx: Ctx, env: Env, host: ReturnType<typeof useHost>): ViewStyle {
@@ -61,7 +63,7 @@ export function GridBlock({ node, ctx }: { node: GridBlockNode; ctx: Ctx }) {
           <View style={{ flexDirection: 'row', gap }}>
             {row.map(cell => (
               <View key={cell.key} style={{ flex: 1 }}>
-                {runtime.renderNode(node.item, cell.ctx)}
+                <ScopedRecordNode node={node.item} ctx={cell.ctx} renderNode={runtime.renderNode} />
               </View>
             ))}
             {row.length < columns

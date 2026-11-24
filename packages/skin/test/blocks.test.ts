@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { RecordStore } from '../../core/src/screens/records';
+import type { ScreenPageState } from '../../core/src/screens/types';
 import {
   stripRecordPrefix,
   validateOpenLinkHref,
@@ -24,6 +26,7 @@ import {
   resolveActiveTabValue,
   resolveShelfItemWidth,
 } from '../src/blocks/layout-math';
+import { samePageWithoutRev, sameScopedRecordProps } from '../src/blocks/record-scope';
 import {
   fitTable,
   fitTextMetrics,
@@ -33,6 +36,10 @@ import {
   textWidth,
   type RawTableData,
 } from '../src/blocks/table-fit';
+import { fill } from '../src/resolve';
+import { resolveScreenDocument } from '../src/resolve/screen';
+import { screenItems, screenRoot } from '../src/screen/items';
+import type { Env } from '../src/vocabulary';
 
 const idPx = (n: number) => n;
 
@@ -199,7 +206,7 @@ describe('table-fit (textWidth, numericColumn, fitTable, normalizeTableData)', (
 });
 
 describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding, grid chunks)', () => {
-  test('parseItemWidth and resolveShelfItemWidth handle auto, fixed, percent, and fit min..max', () => {
+  test('parseItemWidth and resolveShelfItemWidth handle auto, fixed, min/max/clamp, percent, and fit min..max', () => {
     expect(parseItemWidth(undefined, idPx)).toEqual({ kind: 'auto' });
     expect(parseItemWidth('auto', idPx)).toEqual({ kind: 'auto' });
     expect(resolveShelfItemWidth({ kind: 'auto' }, 1200)).toBeUndefined();
@@ -207,6 +214,13 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
     const fixed = parseItemWidth('286px', idPx);
     expect(fixed).toEqual({ kind: 'fixed', width: 286 });
     expect(resolveShelfItemWidth(fixed, 1200)).toBe(286);
+
+    const smallMin = parseItemWidth('min(272px, 74vw)', idPx, 354, 390);
+    expect(smallMin).toEqual({ kind: 'fixed', width: 272 });
+    expect(resolveShelfItemWidth(smallMin, 354)).toBe(272);
+
+    const narrowPhoneMin = parseItemWidth('min(272px, 74vw)', idPx, 284, 320);
+    expect(narrowPhoneMin).toEqual({ kind: 'fixed', width: 236.8 });
 
     const pct = parseItemWidth('100%', idPx, 800);
     expect(pct).toEqual({ kind: 'percent', percent: 100 });
@@ -454,5 +468,159 @@ describe('action-validation (navigate, setParam, play, multiview, plugin, openLi
 
     const withHttp = new Set(['http://www.espn.com/nfl']);
     expect(validateOpenLinkHref('http://www.espn.com/nfl', withHttp, false)).toBeNull();
+  });
+});
+
+describe('record-scope isolation (per-card re-render count on live record push vs legacy Sports)', () => {
+  test('pushing 1 event record out of 16 shelf/grid cards notifies and re-renders only 1 card (1 vs 16 in legacy Sports)', () => {
+    const store = new RecordStore();
+    const cardCount = 16;
+    const refs: { $record: string }[] = [];
+    const initialRecords: Record<string, { rev: number; value: unknown }> = {};
+
+    for (let i = 0; i < cardCount; i++) {
+      const key = `event:game-${i}`;
+      refs.push({ $record: key });
+      initialRecords[key] = {
+        rev: 1,
+        value: {
+          id: `game-${i}`,
+          status: 'live',
+          clock: 'Q3 08:42',
+          sides: [
+            { abbr: 'BUF', score: '21' },
+            { abbr: 'KC', score: '17' },
+          ],
+        },
+      };
+    }
+    store.merge(initialRecords);
+
+    const resolved = resolveScreenDocument(
+      {
+        schema: 1,
+        kind: 'screen',
+        renderer: 19,
+        screen: 'sports',
+        page: 'index',
+        version: '1',
+        title: 'Sports',
+        presentation: 'section',
+        sources: {},
+        tree: {
+          type: 'shelf',
+          over: 'src.live.events',
+          as: 'e',
+          key: '{e.$key}',
+          item: {
+            type: 'text',
+            text: '{e.sides.0.abbr} {e.sides.0.score} - {e.sides.1.abbr} {e.sides.1.score}',
+          },
+        },
+      },
+      { width: 1920, tv: true },
+      'en',
+      {},
+    );
+
+    const shelfNode = resolved.tree as Extract<typeof resolved.tree, { kind: 'shelf' }>;
+    const env = { small: false, tv: true, still: false, width: 1920 } as Env;
+    const renderNode = () => null;
+
+    const pageRev1: ScreenPageState = {
+      href: '/vela/v0/screens/sports/index',
+      key: 'screen:sports/index',
+      params: {},
+      sources: { live: { events: refs } },
+      pending: {},
+      errors: {},
+      load: 'ready',
+      rev: 1,
+    };
+
+    const rootCtx1 = screenRoot(pageRev1, store.get);
+    const itemsRev1 = screenItems(shelfNode.items, rootCtx1, env);
+    expect(itemsRev1).toHaveLength(cardCount);
+
+    // Simulate per-card ScopedRecordNode: each card has its own tracked record reader and subscription.
+    const cardRenders = new Array<number>(cardCount).fill(0);
+    const cardOutputs = new Array<string>(cardCount).fill('');
+    const unsubscribes: (() => void)[] = [];
+
+    const renderCard = (idx: number, itemCtx: (typeof itemsRev1)[number]) => {
+      cardRenders[idx]!++;
+      const seen = new Set<string>();
+      const scopedCtx = {
+        ...itemCtx,
+        screen: {
+          ...itemCtx.screen!,
+          record: (key: string) => {
+            seen.add(key);
+            return store.get(key);
+          },
+        },
+      };
+      const textNode = shelfNode.item as Extract<typeof shelfNode.item, { kind: 'text' }>;
+      cardOutputs[idx] = fill(textNode.text, scopedCtx, env);
+      return [...seen];
+    };
+
+    // Initial mount: all 16 cards render once and subscribe to the exact `$record` keys they read.
+    for (let i = 0; i < cardCount; i++) {
+      const keys = renderCard(i, itemsRev1[i]!);
+      expect(keys).toEqual([`event:game-${i}`]);
+      unsubscribes.push(
+        store.subscribeKeys(keys, () => {
+          renderCard(i, itemsRev1[i]!);
+        }),
+      );
+    }
+    expect(cardRenders.reduce((a, b) => a + b, 0)).toBe(16);
+
+    // Now simulate a live SSE `records` frame updating ONLY `event:game-5` (score 21-17 -> 28-17)
+    // and bumping `page.rev` from 1 to 2 while `page.sources` is unchanged by reference.
+    const pageRev2: ScreenPageState = {
+      ...pageRev1,
+      rev: 2,
+    };
+    expect(samePageWithoutRev(pageRev1, pageRev2)).toBe(true);
+
+    const rootCtx2 = screenRoot(pageRev2, store.get);
+    const itemsRev2 = screenItems(shelfNode.items, rootCtx2, env);
+
+    // Every ScopedRecordNode sees `sameScopedRecordProps === true` from its parent shelf/grid pass:
+    for (let i = 0; i < cardCount; i++) {
+      expect(
+        sameScopedRecordProps(
+          { node: shelfNode.item, ctx: itemsRev1[i]!, renderNode },
+          { node: shelfNode.item, ctx: itemsRev2[i]!, renderNode },
+        ),
+      ).toBe(true);
+    }
+
+    // Merge the single updated record into the pool:
+    const changed = store.merge({
+      'event:game-5': {
+        rev: 2,
+        value: {
+          id: 'game-5',
+          status: 'live',
+          clock: 'Q3 05:10',
+          sides: [
+            { abbr: 'BUF', score: '28' },
+            { abbr: 'KC', score: '17' },
+          ],
+        },
+      },
+    });
+    expect(changed).toEqual(['event:game-5']);
+
+    // ONLY card 5 re-rendered (render count 2); the other 15 cards stayed at render count 1!
+    expect(cardRenders[5]).toBe(2);
+    expect(cardOutputs[5]).toBe('BUF 28 - KC 17');
+    expect(cardRenders.filter((_, idx) => idx !== 5).every(count => count === 1)).toBe(true);
+    expect(cardRenders.reduce((a, b) => a + b, 0) - 16).toBe(1);
+
+    for (const unsub of unsubscribes) unsub();
   });
 });
