@@ -55,6 +55,9 @@ export async function streamingPGSDisplays(options: StreamingOptions): Promise<S
     acquired = false;
   const startupErrors: unknown[] = [];
   const seen = new Map<number, number>();
+  /** Packets that arrived over 4 s after their time (a subtitle advance beyond the demux's
+   * read-ahead). They still end whatever was showing, but are never painted late. */
+  const late = new WeakSet<SubtitleStreamPacket>();
   const bytes = (display: PGSDisplay) =>
     display.bitmaps.reduce((sum, bitmap) => sum + bitmap.rgba.byteLength, 0);
   const byTime = (a: SubtitleStreamPacket, b: SubtitleStreamPacket) => a.time - b.time || a.position - b.position;
@@ -82,7 +85,8 @@ export async function streamingPGSDisplays(options: StreamingOptions): Promise<S
     try {
       while (due(options.clock())) {
         lifetime.throwIfAborted();
-        const raw = queue.shift()!;
+        const raw = queue.shift()!,
+          stale = late.has(raw);
         queuedBytes -= raw.data.length;
         const attempt = epoch;
         if (raw.time < lastTime) continue;
@@ -102,7 +106,8 @@ export async function streamingPGSDisplays(options: StreamingOptions): Promise<S
           throw error;
         }
         lastTime = packet.time;
-        for (const display of output) {
+        for (const decoded of output) {
+          const display = stale ? { ...decoded, bitmaps: [] } : decoded;
           displayBytes += bytes(display);
           if (displayBytes > 64 * 1024 * 1024 || displays.length >= 256)
             throw new Error('Subtitle display look-ahead exceeds bound');
@@ -126,8 +131,9 @@ export async function streamingPGSDisplays(options: StreamingOptions): Promise<S
         }
         const now = options.clock();
         for (const packet of container.streamPackets(trackId, cluster.bytes, cluster.payloadStart)) {
-          if (cluster.endTime < now - 4 && packet.time < now - 4) continue;
           if (seen.has(packet.position)) continue;
+          // Skipping a late packet would leave the subtitle it clears on screen.
+          if (cluster.endTime < now - 4 && packet.time < now - 4) late.add(packet);
           seen.set(packet.position, packet.time);
           if (seen.size > 1024) {
             const floor = options.clock() - 30;

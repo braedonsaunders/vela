@@ -173,3 +173,41 @@ test('cues far ahead wait as packets, so a long delay does not exhaust the displ
   expect(failures).toEqual([]);
   displays.dispose();
 });
+
+test('a clear that arrives over 4 s late still takes the subtitle down', async () => {
+  // A subtitle advance beyond the demux's read-ahead: the show came in time, its clear late.
+  const clock = { now: 30 },
+    failures: unknown[] = [];
+  const stream = demux();
+  const displays = await start(stream, clock, failures);
+  stream.read(cluster(28, [[30, showSet()]]));
+  await settle();
+  expect(bitmaps(displays.at(30.5))).toBe(1);
+  clock.now = 39;
+  stream.read(cluster(29, [[33, clearSet()]]));
+  displays.at(39);
+  await settle();
+  expect(bitmaps(displays.at(39))).toBe(0);
+  expect(failures).toEqual([]);
+  displays.dispose();
+});
+
+test('a subtitle that arrives over 4 s late is not painted late; within 4 s it still is', async () => {
+  const clock = { now: 40 };
+  const stream = demux();
+  const displays = await start(stream, clock);
+  stream.read(cluster(30, cue(30, 45)));
+  displays.at(40);
+  await settle();
+  expect(bitmaps(displays.at(40)) ?? 0).toBe(0);
+
+  const near = { now: 33 };
+  const nearStream = demux();
+  const nearDisplays = await start(nearStream, near);
+  nearStream.read(cluster(30, cue(30, 45)));
+  nearDisplays.at(33);
+  await settle();
+  expect(bitmaps(nearDisplays.at(33))).toBe(1);
+  displays.dispose();
+  nearDisplays.dispose();
+});
