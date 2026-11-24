@@ -10,8 +10,10 @@ export const QUIET_SECONDS = [10, 20, 40] as const;
 /**
  * However much keeps trickling in, an attempt that has not played (or reached a viewer's new
  * position) for this long is a stall too: a stream that drips forever never shows a picture.
+ * Generous on purpose: a seek on an Android emulator fed at 100 kbit/s (a 2.5 Mbit/s film) took
+ * 113 s to play, and a slow start that is still loading must be allowed to finish.
  */
-export const PATIENCE_SECONDS = 120;
+export const PATIENCE_SECONDS = 180;
 /** Playing on this far (in title seconds) proves the session healthy: its attempts start over. */
 export const PLAYED_SECONDS = 10;
 
