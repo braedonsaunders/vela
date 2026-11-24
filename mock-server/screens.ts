@@ -287,8 +287,12 @@ export function eventView(event: V.LiveEvent, favourites: ReadonlySet<string>): 
 
 /** The `detail:` record: plays (oldest first, with at/score; and newest first), tables, the series and links. */
 export function detailView(detail: V.LiveEventDetail, abbrs: ReadonlySet<string>): Json {
+  // The two sides in reading order (away, home), for each timed play's `scores`.
+  const [a, b] = detail.competitors;
+  const pair = a && b && detail.competitors.length === 2 ? (a.home && !b.home ? [b, a] : [a, b]) : null;
   const plays = detail.plays.map(play => ({ ...(play.clock ? { clock: play.clock } : {}), ...(play.period !== undefined ? { period: play.period } : {}), text: play.text,
-    emphasis: play.emphasis, ...(play.competitorId ? { competitorId: play.competitorId } : {}), ...(play.at ? { at: play.at } : {}), ...(play.score ? { score: play.score } : {}) }));
+    emphasis: play.emphasis, ...(play.competitorId ? { competitorId: play.competitorId } : {}), ...(play.at ? { at: play.at } : {}), ...(play.score ? { score: play.score } : {}),
+    ...(play.score && pair ? { scores: pair.map(side => play.score![side.id] ?? '') } : {}) }));
   // Oldest first on the wire, unless the periods already run backwards.
   const first = plays[0]?.period, last = plays.at(-1)?.period;
   const oldest = plays.length > 1 && first !== undefined && last !== undefined && first > last ? [...plays].reverse() : plays;

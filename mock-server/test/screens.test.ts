@@ -229,11 +229,13 @@ describe('on a frozen clock', () => {
     expect(detail.plays.findIndex((p: Json) => p.clock === '11:02')).toBeLessThan(detail.plays.findIndex((p: Json) => p.clock === '2:14'));
     expect(detail.plays[0]).toMatchObject({ text: expect.any(String), emphasis: expect.stringMatching(/^(score|key|normal)$/) });
     // Timed plays (at, and the score after each) for asOf; times rise with the game.
-    expect(detail.plays.find((p: Json) => p.clock === '6:40')).toMatchObject({ at: expect.any(String), score: { 'nfl-nyg': '24', 'nfl-phi': '24' } });
+    expect(detail.plays.find((p: Json) => p.clock === '6:40')).toMatchObject({ at: expect.any(String), score: { 'nfl-nyg': '24', 'nfl-phi': '24' }, scores: ['24', '24'] });
+    // scores: the score map in sides order (away NYG, home PHI), on both lists.
+    expect(detail.playsNewest.find((p: Json) => p.clock === '3:30').scores).toEqual(['24', '27']);
     const ats = detail.plays.map((p: Json) => Date.parse(p.at));
     expect(ats).toEqual([...ats].sort((a, b) => a - b));
     const hockey = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nhl-tor-mtl' })}`) as V.ScreenData;
-    expect(((hockey.records['detail:sports:sports:nhl-tor-mtl']!.value as Json).plays as Json[]).every(p => p.at === undefined && p.score === undefined)).toBe(true);
+    expect(((hockey.records['detail:sports:sports:nhl-tor-mtl']!.value as Json).plays as Json[]).every(p => p.at === undefined && p.score === undefined && p.scores === undefined)).toBe(true);
     const scoring = detail.tables[0];
     expect(scoring.title).toBe('Scoring');
     expect(scoring.rows.find((r: Json) => r.cells[0] === 'PHI').highlight).toBe(true);
