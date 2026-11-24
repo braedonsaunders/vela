@@ -14,7 +14,7 @@ import { placeOf, useMusic } from './context';
 import { useChildren, useLibraryRows, useTitle } from './data';
 import { creditLines, listColumns, listenFrom, listenedFraction, roleLabel } from './listening';
 import { musicTV } from './layout';
-import { ActionBar, coverSize, Genres, greeting, Header, MoreButton, MusicHome, MusicTitle, pad, usePlayingFrom } from './pages';
+import { ActionBar, Chip, coverSize, Genres, greeting, Header, MoreButton, MusicHome, MusicTitle, pad, usePlayingFrom } from './pages';
 import { FocusGroup, FocusScope, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash, type MenuOpen } from './parts';
 import { Meter } from './tracks';
 
@@ -312,8 +312,8 @@ export function ShowView({ card }: { card: Card }) {
         {show ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginRight: 12 }]}>{msg('media.ui.episodes')}</Text>
-            <ChoiceChip label={msg('listening.allEpisodes')} on={filter === 'all'} onPress={() => setFilter('all')} />
-            <ChoiceChip label={msg('listening.new')} on={filter === 'unplayed'} onPress={() => setFilter('unplayed')} />
+            <Chip label={msg('listening.allEpisodes')} on={filter === 'all'} onPress={() => setFilter('all')} />
+            <Chip label={msg('listening.new')} on={filter === 'unplayed'} onPress={() => setFilter('unplayed')} />
           </View>
         ) : null}
         <ItemList role="episode" items={shown} source={source} />
@@ -356,16 +356,6 @@ export function CollectionView({ card }: { card: Card }) {
 }
 
 // ——— Lists ——————————————————————————————————————————————————————————————————————————
-
-function ChoiceChip({ label, on, onPress }: { label: string; on: boolean; onPress(): void }) {
-  const m = useMediaLook();
-  return (
-    <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ checked: on }}
-      style={[NO_RING, { height: 32, paddingHorizontal: 14, borderRadius: 16, justifyContent: 'center', backgroundColor: on ? m.ui.ink : m.ui.control }, transition('background-color', 120)]}>
-      <Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: on ? m.ui.inkInverse : m.ui.ink })}>{label}</Text>
-    </Pressable>
-  );
-}
 
 function ListHead({ title, time }: { title: string; time: string }) {
   const m = useMediaLook();

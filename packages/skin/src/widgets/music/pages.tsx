@@ -361,7 +361,9 @@ export function Chip({ label, on, onPress }: { label: string; on: boolean; onPre
   const lit = state.hover || state.focus;
   return (
     <Pressable {...handlers} onPress={onPress} accessibilityRole="radio" accessibilityState={{ checked: on }}
-      style={[NO_RING, { height: 32, paddingHorizontal: 14, borderRadius: 16, justifyContent: 'center', backgroundColor: on ? m.ui.ink : lit ? m.ui.controlHover : m.ui.control }, transition('background-color', 120)]}>
+      style={[NO_RING, { height: 32, paddingHorizontal: 14, borderRadius: 16, justifyContent: 'center', backgroundColor: on ? m.ui.ink : lit ? m.ui.controlHover : m.ui.control,
+        // A hairline keeps an unchosen chip visible where the control tone is the surface's own (a light document's white).
+        borderWidth: 1, borderColor: on ? m.ui.ink : m.ui.glassEdge }, transition('background-color', 120)]}>
       <Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: on ? m.ui.inkInverse : m.ui.ink })}>{label}</Text>
     </Pressable>
   );
