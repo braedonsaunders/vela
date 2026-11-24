@@ -7,14 +7,16 @@ import type { PlaybackPlan } from '../src/wire';
 
 // A deterministic clock, including asynchronous callbacks, without wall-clock sleeps.
 test('session recovery coalesces, backs off, resumes VOD, waits for auth and cancels on exit', async () => {
-  const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
+  const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout, originalNow = Date.now;
   const timers = new Map<number, { ms: number; fire: () => unknown }>();
-  let sequence = 0;
+  let sequence = 0, clock = 1_000_000;
   globalThis.setTimeout = ((fire: () => unknown, ms: number) => { const id = ++sequence; timers.set(id, { ms, fire }); return id; }) as never;
   globalThis.clearTimeout = ((id: number) => { timers.delete(id); }) as never;
+  Date.now = () => clock;
   const tick = async (ms: number) => {
     const entry = [...timers].find(([, t]) => t.ms === ms);
     expect(entry).toBeDefined();
+    clock += ms;
     timers.delete(entry![0]); await entry![1].fire();
     for (let i = 0; i < 20; i++) await Promise.resolve();
   };
@@ -52,7 +54,9 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
     expect(stops).toContain('s1');
     // Engines also restore local choices when the server does not implement track commands.
     adapter.changeTracks = async () => { throw new Error('Track commands unavailable'); };
+    // Playing on for a while proves the session healthy: its restarts start over.
     playback.snapshot({ sessionId: box.get().playback.sessionId, live: null, position: 125, state: 'playing' });
+    playback.snapshot({ sessionId: box.get().playback.sessionId, live: null, position: 136, state: 'playing' });
     playback.recover(box.get().playback.sessionId);
     await tick(1000);
     expect(box.get().playback.plan?.selectedAudioTrackId).toBe('fr');
@@ -63,16 +67,27 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
     await playback.start({ kind: 'channel', id: 'fox' });
     const id = box.get().playback.sessionId;
     playback.snapshot({ sessionId: id, live: null, position: 200, state: 'buffering' });
-    await tick(5500); await tick(1000);
+    await tick(10000); await tick(1000);
     expect(requests.at(-1).channelId).toBe('fox');
     expect(requests.at(-1).positionSeconds).toBeUndefined();
-    // A newly allocated session that never makes progress must also recover, at the next backoff.
-    await tick(5500); await tick(2000);
+    // A newly allocated session that never makes progress also recovers, with a longer budget.
+    await tick(20000); await tick(1000);
     const liveId = box.get().playback.sessionId;
     playback.snapshot({ sessionId: liveId, live: null, position: 0, state: 'paused' });
-    expect([...timers.values()].some(t => t.ms === 5500)).toBe(false);
+    // Paused: nothing is due (the remaining timer is the snapshot poll).
+    expect([...timers.values()].map(t => t.ms)).toEqual([5000]);
+    // Unpaused and still dead after its last restart: the viewer is told, the session released.
+    playback.snapshot({ sessionId: liveId, live: null, position: 0, state: 'loading' });
+    const before = requests.length;
+    await tick(40000);
+    expect(box.get().playback.phase).toBe('failed');
+    expect(box.get().playback.plan).toBeNull();
+    expect(box.get().playback.errorCode).toBe('playback_stalled');
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(stops).toContain(liveId);
+    expect(requests.length).toBe(before);
     await playback.stop();
-  } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; }
+  } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; Date.now = originalNow; }
 });
 
 test('event stream EOF and errors both enter session recovery, explicit ended does not', async () => {
