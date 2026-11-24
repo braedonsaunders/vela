@@ -127,6 +127,11 @@ interface PlaybackPlan { /* existing … */ media?: 'video' | 'audio' }   // omi
   position across them. One joined server timeline is a later improvement.
   Chapters inside one file still come through `chapters`.
 - Gapless: client-side (Vela prefetches the next queued track's plan). No field.
+  The next plan is asked for while the current track still plays, so a server must
+  not end a device's playing audio session when the same device opens the next
+  one. Ether does today (the first session's media answers 404 as soon as the
+  second exists); Vela works around it (see Gapless playback in section 3) at the
+  cost of the playing track's session ending up to ~20 s early.
 - Progress: observations update `WatchState.positionSeconds` exactly as today.
   Resume policy by class (data, not code): `music` never enters Continue and
   never stores a resume point for tracks; `audiobook` and `podcast` do.
@@ -234,6 +239,55 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   direct-play (lossless stays lossless) and everything else is transcoded. Starting a
   video takes the session: the audio engine unloads and its notification and Now
   Playing go with it.
+- Gapless playback: the store (`packages/core/src/store/audio.ts`) asks for the next
+  queue item's plan before the playing item ends (`Playback.prepare`, which touches no
+  state) and hands its URL to the engine (`AudioEngine.preload`); the engine plays it
+  straight on and says `advanced`, the finished item reports `ended` once and its
+  session stops, and the prepared plan becomes the playing session (`Playback.adopt`).
+  The lead is 20 s (half a short track, at least 4 s; 6 s for spoken word), and the
+  plan is only asked for once the engine's buffered range reaches the playing item's
+  end (or in its last 5 s), with its position reported first, because Ether ends a
+  device's playing session when the next one opens. Play next, remove, move,
+  shuffle, repeat and sleep-at-end re-plan the prepared item (the old one is
+  released), seeking far back gives it back, seeking near the end prepares at once,
+  repeat-one prepares the same title again, and Next while it is ready plays it on its
+  prepared session. Engines:
+  - Web and desktop (`modules/vela-player/web/gapless`): Mediabunny demuxes with HTTP
+    ranges, WebCodecs decodes (on a plain-http page, where WebCodecs is withheld, Web
+    Audio's `decodeAudioData` decodes FLAC, MP3 and AAC-LC in one-second batches with
+    warm-up packets), the PCM is trimmed to the track's real audio (the LAME header,
+    the MP4 edit list or iTunSMPB) and scheduled back to back on one AudioContext at
+    the track's rate. 1x only: speed, HLS and codecs the page cannot decode go to
+    `<audio>` elements (the next one buffered and started at the end). A silent looping
+    element keeps the browser's media session while Web Audio plays.
+  - Android: the next MediaItem waits behind the current one in ExoPlayer's playlist;
+    MP3 decodes in the FFmpeg extension (MediaCodec's MP3 decoder made Media3 trim its
+    decoder delay twice).
+  - Apple: AVQueuePlayer with the next AVPlayerItem queued behind the current one.
+
+  Measured on the mock's gapless test albums (`mock-server/scripts/make-gapless-media.ts`:
+  one sweep cut into four parts; `measure-gapless.ts` lines a recording up with it at
+  every join), samples gained or lost per join:
+
+  | | FLAC | MP3 (LAME) | AAC (FFmpeg M4A) |
+  | --- | --- | --- | --- |
+  | ffmpeg's own decode (the floor) | 0, bit-exact | 0 | 0 |
+  | Web, WebCodecs (Chrome, secure origin) | 0, bit-exact | 0 | 0 |
+  | Web, plain http (Web Audio decoder) | 0, bit-exact | 0 | 0 |
+  | Web, `<audio>` fallback | 1014-1403 of silence (23-32 ms) | same | not run |
+  | Android (PCM fed to the AudioTrack, API 34 emulator) | 0, bit-exact | 0 | 630-1019 of padding (14-23 ms) |
+
+  The lossy formats' own edge at a cut (each part was encoded alone) is in the files:
+  ffmpeg's decode shows it too. On Android, ffmpeg-muxed M4A files mark their end by
+  shortening the last sample's duration, which Media3 does not turn into padding to
+  trim, so each such track ends on up to 1023 samples of padding; files with iTunes'
+  iTunSMPB or a padded edit list are trimmed (Media3's own gapless support). Fixing the
+  former needs Media3 to derive padding from the last sample's duration (or a
+  Vela-side trim to the edited duration). Transcoded audio (the server's HLS or
+  progressive AAC) plays through the element on the web and is as tight as its
+  segments allow, not sample-exact. On the lab, Dark Side of the Moon (88.2 kHz FLAC,
+  direct) played Speak to Me → Breathe → On the Run → Time with no dropout from a
+  secure and a plain-http origin, the two recordings bit-identical across every join.
 - Reader: EPUB first (paginated, font size, light/sepia/dark, contents, progress
   sync, keyboard/touch/remote page turns), PDF/CBZ when `reading.formats` lists them.
   A book opens exactly at its saved locator; one the copy cannot resolve opens at the
@@ -270,7 +324,7 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
 | Area | Web | Native (needs device work) |
 | --- | --- | --- |
 | Cards and pages | Square, round and bound-book covers in every document; album, artist, book, series, audiobook pages | Same React tree; not yet looked at on a device or TV focus engine |
-| Audio | One HTMLAudioElement, Media Session (lock screen, media keys) | Apple: AVPlayer with Now Playing and the remote commands, background audio. Android: Media3 in a MediaSessionService with the media notification. See the Native audio item in section 3. |
+| Audio | Gapless Web Audio player (WebCodecs, or Web Audio's decoder on plain http), `<audio>` elements for speed, HLS and other codecs; Media Session (lock screen, media keys) | Apple: AVQueuePlayer with Now Playing and the remote commands, background audio. Android: a Media3 playlist in a MediaSessionService with the media notification. See the Native audio and Gapless playback items in section 3. |
 | Reader | foliate-js: EPUB (paginated/scrolled), CBZ, PDF (PDF.js on the main thread) | Phones and tablets: the same engine in an Expo DOM component (`@expo/dom-webview`). TV: no Read action, a line saying where reading is. |
 
 Server notes for Ether are in section 2 (URLs, file transport for audio, progress ordering).
