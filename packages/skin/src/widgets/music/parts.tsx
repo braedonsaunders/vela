@@ -260,6 +260,8 @@ function ShelfArrow({ flip, label, disabled, onPress }: { flip: boolean; label: 
 }
 
 /** A wash of the artwork's colour behind a page's header: the Vela touch. */
+const FADE_OUT = { maskImage: 'linear-gradient(180deg, #000 45%, transparent 100%)', WebkitMaskImage: 'linear-gradient(180deg, #000 45%, transparent 100%)' } as unknown as ViewStyle;
+
 export function Wash({ accent, height = 420, image }: { accent: string; height?: number; image?: string }) {
   const m = useMediaLook();
   const host = useHost();
@@ -268,7 +270,11 @@ export function Wash({ accent, height = 420, image }: { accent: string; height?:
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height, overflow: 'hidden' }}>
       {/* Native image blur (expo-image on Android and iOS) stops far short of 80: the artwork's own
           lettering showed through behind a page's title. There the wash is the colour alone. */}
-      {image && Platform.OS === 'web' ? <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} /> : null}
+      {/* The blurred cover fades out with the colour, so the wash never ends on a hard line above the
+          page's first row (the track list's column headings sat right on that line). */}
+      {image && Platform.OS === 'web' ? <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, FADE_OUT]}>
+        <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} />
+      </View> : null}
       <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.55)} 0%, ${alpha(tint, 0.18)} 55%, ${alpha(m.ui.page, 0)} 100%)` })]} />
     </View>
   );

@@ -62,7 +62,7 @@ export function Header({ cover, eyebrow, title, children }: { cover: ReactNode; 
 }
 
 export function ActionBar({ children }: { children: ReactNode }) {
-  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 18 }}>{children}</View>;
+  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingTop: 18, paddingBottom: 28 }}>{children}</View>;
 }
 
 export function MoreButton({ card }: { card: Card }) {
