@@ -6,7 +6,8 @@
 // sports.ts, so a goal there is a record push here.
 //
 // Knobs: VELA_MOCK_FROM_START=1 adds programme/fromStart to watch targets (not in Ether E1/E2);
-// VELA_MOCK_SCREEN_FIXTURES=<dir> reads the documents from another directory (same layout).
+// VELA_MOCK_SCREEN_FIXTURES=<dir> reads the documents from another directory (same layout);
+// VELA_MOCK_NEWS=1 adds the news-desk example (a plugin with plugin sources and a plugin action).
 // A client that sends no X-Vela-Screen-Renderer gets no screens and no surfaces (hard cut).
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
@@ -31,7 +32,9 @@ const PAGES: Page[] = [
   { screen: 'sports', page: 'index', file: 'sports/index.json' },
   { screen: 'sports', page: 'game', file: 'sports/game.json' },
 ];
-const NAVIGATION = [{ id: 'sports', title: 'Sports', icon: 'sports', page: 'index' }];
+const newsEnabled = process.env.VELA_MOCK_NEWS === '1';
+if (newsEnabled) PAGES.push({ screen: 'news', page: 'index', file: 'news/index.json' });
+const NAVIGATION = [{ id: 'sports', title: 'Sports', icon: 'sports', page: 'index' }, ...(newsEnabled ? [{ id: 'news', title: 'News', icon: 'news', page: 'index' }] : [])];
 const SURFACES: SurfaceSpec[] = [
   { id: 'sports.scorebug', file: 'sports/surfaces/scorebug.json', contribution: { presentation: 'playerOverlay', anchor: 'topLeft', when: { event: { feed: 'sports' } }, visibility: 'always',
     setting: { id: 'scorebug', label: 'Score', default: true } } },
@@ -315,7 +318,7 @@ function relative(url: string): string {
 
 // Sources
 
-interface Read { viewerId: string; tz: string; records: Record<string, V.RecordEntry>; scope: string; locale?: string }
+interface Read { viewerId: string; tz: string; records: Record<string, V.RecordEntry>; scope: string; locale?: string; plugin?: Plugin }
 
 const viewerScope = (viewerId: string, key: string) => `${viewerId}|${key}`;
 function putRecord(read: Read, key: string, value: unknown): void {
@@ -426,8 +429,17 @@ function resolveSource(spec: V.SourceSpec, args: Json, read: Read): unknown {
       if (!sim) throw new SourceFailure('not_found');
       return watchOf(sportsModel.event(sim, read.viewerId));
     }
+    case 'plugin': {
+      const plugin = read.plugin;
+      const route = typeof args.route === 'string' ? plugin?.routes[args.route] : undefined;
+      if (!plugin || !route) throw new SourceFailure('not_found');
+      const routeArgs = Object.fromEntries(Object.entries((args.args && typeof args.args === 'object' ? args.args : {}) as Json).filter(([, v]) => typeof v === 'string')) as Record<string, string>;
+      const answer = route(routeArgs, read);
+      return rewritePlugin(answer.value, answer.records ?? [], plugin, read);
+    }
     default:
-      throw new SourceFailure('unsupported_source');
+      // items, liveItems and channels are not in Ether E1/E2.
+      throw new SourceFailure('unsupported');
   }
 }
 
@@ -444,6 +456,172 @@ function fill(value: unknown, values: Record<string, string>): unknown {
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fill(v, values)]));
   return value;
 }
+
+// Plugins: the screens' owners, their feeds and image hosts, and (for the news-desk example) the
+// plugin's own source routes and actions, answering raw plugin answers that Ether rewrites.
+
+interface PluginAnswer { value: unknown; records?: { type: string; id: string; value: unknown }[]; nextRefreshSec?: number }
+interface PluginActionAnswer { records?: { type: string; id: string; value: unknown }[]; sources?: Record<string, unknown>; refresh?: string[]; toast?: string; navigate?: unknown }
+interface ArgSpec { type: 'string' | 'int' | 'bool' | 'date' | 'ref' | 'strings'; max?: number; enum?: string[] }
+interface Plugin {
+  pluginID: string; version: string; feeds: string[]; hosts: string[];
+  routes: Record<string, (args: Record<string, string>, read: Read) => PluginAnswer>;
+  actions: Record<string, { args: Record<string, ArgSpec>; run(args: Record<string, unknown>, viewerId: string): PluginActionAnswer }>;
+}
+
+const following = new Map<string, Set<string>>();
+const followsOf = (viewerId: string) => { let set = following.get(viewerId); if (!set) following.set(viewerId, set = new Set()); return set; };
+const TOPICS = [{ id: 'top', name: 'Top stories' }, { id: 'local', name: 'Local' }, { id: 'tech', name: 'Tech' }];
+const STORIES: Record<string, { id: string; title: string; section: string }[]> = {
+  top: [{ id: 'harbour', title: 'Harbour bridge reopens after a year of repairs', section: 'City' }, { id: 'budget', title: 'Budget vote set for Thursday', section: 'Politics' },
+    { id: 'storm', title: 'Early storm brings the first snow of the season', section: 'Weather' }, { id: 'library', title: 'Central library extends its hours', section: 'Culture' }],
+  local: [{ id: 'market', title: 'Night market returns to the waterfront', section: 'Community' }, { id: 'transit', title: 'New bus lanes open on King Street', section: 'Transit' }],
+  tech: [{ id: 'chips', title: 'A smaller, cooler chip for home servers', section: 'Hardware' }, { id: 'open', title: 'An open format for screen documents', section: 'Software' }],
+};
+
+const PLUGINS: Record<string, Plugin> = {
+  sports: { pluginID: 'sports', version: '2.0.0', feeds: ['sports'], hosts: [], routes: {}, actions: {} },
+  news: {
+    pluginID: 'org.example.news', version: '1.0.0', feeds: [], hosts: ['images.news.example'],
+    routes: {
+      front: args => {
+        const topic = TOPICS.some(t => t.id === args.topic) ? args.topic! : 'top';
+        const stories = STORIES[topic]!;
+        return {
+          value: {
+            breaking: topic === 'top' ? { title: 'Power restored across the east end' } : null,
+            topics: TOPICS, topicName: TOPICS.find(t => t.id === topic)!.name,
+            lead: [{ $record: { type: 'story', id: stories[0]!.id } }],
+            stories: stories.slice(1).map(story => ({ $record: { type: 'story', id: story.id } })),
+            source: { $link: 'https://news.example/front' },
+          },
+          records: stories.map((story, n) => ({ type: 'story', id: story.id, value: {
+            title: story.title, section: story.section, published: new Date(sportsNow() - (n + 1) * 47 * 60_000).toISOString(),
+            image: { $image: `https://images.news.example/${story.id}.jpg` }, link: { $link: `https://news.example/story/${story.id}` },
+          } })),
+          nextRefreshSec: 60,
+        };
+      },
+      following: (_args, read) => ({ value: { followsTopic: false, topics: [...followsOf(read.viewerId)].sort() } }),
+    },
+    actions: {
+      'follow-topic': {
+        args: { topic: { type: 'string', max: 64, enum: TOPICS.map(t => t.id) }, on: { type: 'bool' } },
+        run(args, viewerId) {
+          const topic = args.topic as string;
+          if (args.on) followsOf(viewerId).add(topic); else followsOf(viewerId).delete(topic);
+          const name = TOPICS.find(t => t.id === topic)!.name;
+          return { refresh: ['mine'], toast: args.on ? `Following ${name}` : `Stopped following ${name}` };
+        },
+      },
+    },
+  },
+};
+const pluginOf = (target: Target): Plugin | undefined => PLUGINS[target.kind === 'screen' ? target.screen : target.surface.split('.')[0]!];
+
+const BARE_URL = /^\s*((https?:)?\/\/|data:|javascript:)\S*\s*$/i;
+const RECORD_TYPE = /^[a-z][a-z0-9-]{0,31}$/;
+const RECORD_ID = /^[A-Za-z0-9._~:-]{1,128}$/;
+
+/**
+ * A plugin's answer as Ether rewrites it for the viewer: `$image` becomes a same-origin image
+ * (only on the plugin's own hosts; `asset:` paths become screen-assets URLs), `$link` an https
+ * {href, host}, `$record` a `p:<type>:<id>` reference to a record the answer carries, `$event` and
+ * `$entity` references to resolved records of the plugin's own feeds. Bare URLs, unknown envelopes
+ * and `$` keys are dropped; a dropped envelope closes its gap in a list (a field becomes null).
+ * `$item` and `$channel` are dropped (not in E1/E2).
+ */
+export function rewritePlugin(value: unknown, records: { type: string; id: string; value: unknown }[], plugin: Plugin, read: Read): unknown {
+  if (records.length > 500) throw new SourceFailure('too_large');
+  const known = new Set(records.filter(r => RECORD_TYPE.test(r.type) && RECORD_ID.test(r.id)).map(r => `p:${r.type}:${r.id}`));
+  const isEnvelope = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 1 && Object.keys(v)[0]!.startsWith('$');
+  const envelope = (kind: string, inner: unknown): unknown => {
+    const m = (inner && typeof inner === 'object' ? inner : {}) as Record<string, unknown>;
+    switch (kind) {
+      case '$image': {
+        const src = typeof inner === 'string' ? inner : '';
+        if (src.startsWith('asset:')) {
+          const path = src.slice(6).replace(/^\//, '');
+          return path && !path.includes('..') ? `/vela/v0/screen-assets/${encodeURIComponent(plugin.pluginID)}/${encodeURIComponent(plugin.version)}/${path}` : null;
+        }
+        try {
+          const url = new URL(src);
+          if (!/^https?:$/.test(url.protocol) || url.username || url.password || src.length > 2048 || !plugin.hosts.includes(url.hostname)) return null;
+          // The mock's "signed grant": a synthetic picture named by the URL.
+          return `/vela/v0/artwork/${createHash('sha1').update(src).digest('hex').slice(0, 12)}?kind=backdrop&width=640`;
+        } catch { return null; }
+      }
+      case '$link': {
+        const text = typeof inner === 'string' ? inner.trim() : '';
+        try {
+          const url = new URL(text);
+          return url.protocol === 'https:' && url.host && !url.username && !url.password && text.length <= 2048 ? { href: url.href, host: url.hostname } : null;
+        } catch { return null; }
+      }
+      case '$record': {
+        const key = `p:${m.type}:${m.id}`;
+        return known.has(key) ? { $record: key } : null;
+      }
+      case '$event': {
+        const feed = typeof m.feed === 'string' ? m.feed : '', id = typeof m.id === 'string' ? m.id : '';
+        const sim = plugin.feeds.includes(feed) && RECORD_ID.test(id) ? sportsModel.sim(`${plugin.pluginID}:${feed}:${id}`) : undefined;
+        return sim ? eventRef(read, sim) : null;
+      }
+      case '$entity': {
+        const feed = typeof m.feed === 'string' ? m.feed : '', id = typeof m.id === 'string' ? m.id : '';
+        const team = plugin.feeds.includes(feed) && m.kind === 'team' ? sportsModel.teams().find(t => t.id === id) : undefined;
+        return team ? entityRef(read, team) : null;
+      }
+      default:
+        return null;
+    }
+  };
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.flatMap(child => { const w = walk(child); return w === null && isEnvelope(child) ? [] : [w]; });
+    if (v && typeof v === 'object') {
+      const entries = Object.entries(v as Record<string, unknown>);
+      if (entries.length === 1 && entries[0]![0].startsWith('$')) return envelope(entries[0]![0], entries[0]![1]);
+      return Object.fromEntries(entries.filter(([k]) => !k.startsWith('$')).map(([k, child]) => [k, walk(child)]));
+    }
+    if (typeof v === 'string') return BARE_URL.test(v) || v.length > 4096 ? null : v;
+    return v;
+  };
+  const out = walk(value);
+  for (const record of records) {
+    const key = `p:${record.type}:${record.id}`;
+    if (known.has(key)) putRecord(read, key, walk(record.value));
+  }
+  return out;
+}
+
+/** Ether's check of a declared plugin action argument (types as the manifest declares them). */
+function checkArg(spec: ArgSpec, value: unknown): unknown {
+  switch (spec.type) {
+    case 'bool': if (typeof value !== 'boolean') throw new Error('must be true or false'); return value;
+    case 'int': if (typeof value !== 'number' || !Number.isInteger(value)) throw new Error('must be a whole number'); return value;
+    case 'strings': if (!Array.isArray(value) || value.length > 50 || value.some(v => typeof v !== 'string')) throw new Error('must be a list of at most 50 texts'); return value;
+    default:
+      if (typeof value !== 'string') throw new Error('must be text');
+      if (spec.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('must be a date');
+      if (value.length > (spec.max ?? 512) || (spec.enum && !spec.enum.includes(value))) throw new Error('is not allowed');
+      return value;
+  }
+}
+
+/** Ether's navigate check: {action: navigate, args: short text values, route from the fixed list}. */
+function validNavigate(value: unknown): V.NavigateAction | undefined {
+  const n = value as { action?: unknown; args?: unknown } | undefined;
+  if (!n || n.action !== 'navigate') return undefined;
+  const args = (n.args && typeof n.args === 'object' ? n.args : {}) as Record<string, unknown>;
+  if (Object.keys(args).length > 12) return undefined;
+  for (const [k, v] of Object.entries(args)) {
+    if (typeof v !== 'string' || k.length > 32 || v.length > 256 || BARE_URL.test(v)) return undefined;
+    if (k === 'route' && !['title', 'live', 'guide', 'search', 'home', 'library'].includes(v)) return undefined;
+  }
+  return { action: 'navigate', args: args as V.NavigateAction['args'] };
+}
+
+const forcedTimeouts = new Map<string, number>();
 
 // Pages (screens and surfaces) as one shape
 
@@ -500,7 +678,7 @@ function resolve(target: Target, values: Record<string, string>, viewerId: strin
   const names = asked ?? Object.entries(specs).filter(([, spec]) => !spec.lazy).map(([name]) => name);
   const pageScope = target.kind === 'screen' ? `screen:${target.screen}/${target.page}` : `surface:${target.surface}`;
   const canonical = Object.entries(values).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => `${k}=${v}`).join('&');
-  const read: Read = { viewerId, tz, records: {}, scope: `${pageScope}?${canonical}|${tz}|${locale}`, locale };
+  const read: Read = { viewerId, tz, records: {}, scope: `${pageScope}?${canonical}|${tz}|${locale}`, locale, plugin: pluginOf(target) };
   const sources: Record<string, unknown> = {};
   const errors: Record<string, V.SourceError> = {};
   let rev = 0;
@@ -508,11 +686,13 @@ function resolve(target: Target, values: Record<string, string>, viewerId: strin
     const spec = specs[name];
     if (!spec) continue;
     try {
+      const forced = forcedTimeouts.get(name) ?? 0;
+      if (forced > 0) { forcedTimeouts.set(name, forced - 1); throw new SourceFailure('timeout'); }
       const value = resolveSource(spec, fill(spec, values) as Json, read);
       sources[name] = value;
       rev = Math.max(rev, revOf(viewerScope(viewerId, `${read.scope}|${name}`), value));
     } catch (error) {
-      errors[name] = { code: error instanceof SourceFailure ? error.code : 'unavailable', retry: !(error instanceof SourceFailure) };
+      errors[name] = error instanceof SourceFailure ? { code: error.code, ...(error.code === 'timeout' ? { retry: true } : {}) } : { code: 'unavailable', retry: true };
     }
   }
   for (const entry of Object.values(read.records)) rev = Math.max(rev, entry.rev);
@@ -582,8 +762,7 @@ function serveAction(req: Request, target: Target, action: string, body: unknown
     sportsModel.setSpoilerFree(viewerId, truthy(args.on));
     for (const sim of sportsModel.sims()) eventRef(read, sim);
   } else {
-    // Plugin actions are not in Ether E1/E2.
-    fail('not-found', 'action_not_found', 'Action not found');
+    return pluginAction(target, action, args, values, viewerId, tz, read, fail);
   }
   // Built-in answers: the changed records, and every source of the page re-read (lazy ones too).
   const all = Object.keys(target.doc.document.sources ?? {});
@@ -592,6 +771,38 @@ function serveAction(req: Request, target: Target, action: string, body: unknown
   answer.sources = data.sources;
   pump(viewerId);
   return Response.json(answer, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+/** A plugin-declared action: arguments checked by their declared types, the plugin's answer
+ * rewritten like a source answer, its `refresh` sources read again into `sources`, toast and
+ * navigate validated. Undeclared actions are 404. */
+function pluginAction(target: Target, action: string, args: Json, values: Record<string, string>, viewerId: string, tz: string, read: Read, fail: Fail): Response {
+  const plugin = pluginOf(target);
+  const spec = plugin?.actions[action];
+  if (!plugin || !spec || !target.doc.document.actions?.[action]) fail('not-found', 'action_not_found', 'Action not found');
+  const checked: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(args)) {
+    const argSpec = spec.args[name];
+    if (!argSpec) fail('request', 'invalid_request', `Unknown argument ${name}`);
+    try { checked[name] = checkArg(argSpec, value); } catch (error) { fail('request', 'invalid_request', `${name} ${(error as Error).message}`); }
+  }
+  const raw = spec.run(checked, viewerId);
+  read.plugin = plugin;
+  rewritePlugin(null, raw.records ?? [], plugin, read);
+  const sources: Record<string, unknown> = {};
+  for (const [id, value] of Object.entries(raw.sources ?? {})) if (target.doc.document.sources[id]) sources[id] = rewritePlugin(value, [], plugin, read);
+  const refresh = (raw.refresh ?? []).filter(id => target.doc.document.sources[id]).slice(0, 16);
+  const records = { ...read.records };
+  if (refresh.length) {
+    const data = resolve(target, values, viewerId, tz, refresh, read.locale);
+    Object.assign(sources, data.sources);
+    Object.assign(records, data.records);
+  }
+  const toast = typeof raw.toast === 'string' ? raw.toast.trim() : '';
+  const navigate = validNavigate(raw.navigate);
+  pump(viewerId);
+  return Response.json({ ...(Object.keys(records).length ? { records } : {}), ...(Object.keys(sources).length ? { sources } : {}),
+    ...(toast && !BARE_URL.test(toast) ? { toast: [...toast].slice(0, 200).join('') } : {}), ...(navigate ? { navigate } : {}) } satisfies V.ScreenActionAnswer, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 // The stream: page topics
@@ -733,10 +944,13 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
   return undefined;
 }
 
-/** Admin (POST /__admin/screens {hide?: id[], show?: id[]}): the owner hides a screen or surface from
- * viewers. It leaves bootstrap, its reads answer 404, and every stream following one of its topics
- * ends (Ether ends a stream when a topic's page is no longer visible). */
-export function screensAdmin(body: { hide?: unknown; show?: unknown }): { hidden: string[] } {
+/** Admin (POST /__admin/screens {hide?: id[], show?: id[], timeout?: {source, times}}): the owner
+ * hides a screen or surface from viewers (it leaves bootstrap, its reads answer 404, and every
+ * stream following one of its topics ends, as Ether ends a stream when a topic's page is no longer
+ * visible); or a source times out for its next reads (the client's automatic re-read). */
+export function screensAdmin(body: { hide?: unknown; show?: unknown; timeout?: { source?: unknown; times?: unknown } }): { hidden: string[] } {
+  // The next `times` reads of a source (by id, on any page) answer errors.<id> = {code: timeout, retry: true}.
+  if (body.timeout && typeof body.timeout.source === 'string') forcedTimeouts.set(body.timeout.source, Math.max(0, Math.min(10, Number(body.timeout.times) || 1)));
   for (const id of Array.isArray(body.show) ? body.show : []) if (typeof id === 'string') hidden.delete(id);
   for (const id of Array.isArray(body.hide) ? body.hide : []) if (typeof id === 'string') hidden.add(id);
   for (const listener of [...listeners]) {

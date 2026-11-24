@@ -37,7 +37,9 @@ export const busyKey = (page: string, control: string) => `${page}#${control}`;
 
 /** One client-only patch while a plugin action is in flight: a record's or a source's value at `path`. */
 export interface OptimisticPatch { record?: string; source?: string; path: string; value: unknown }
-export interface ScreenActionCall { name: string; args?: Record<string, string>; optimistic?: OptimisticPatch; control?: string }
+/** `args` go to Ether as given: pass each in its declared type (a plugin action's `bool` must be
+ * true/false, an `int` a number; Ether's built-ins also take "true"/"false"). */
+export interface ScreenActionCall { name: string; args?: Record<string, V.ScreenActionArg>; optimistic?: OptimisticPatch; control?: string }
 export interface PageHandle { key: string; release(): void }
 
 /** A page released this recently and opened again is not read again (a remount, StrictMode). */
