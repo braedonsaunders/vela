@@ -1,8 +1,9 @@
 // Measured Android TV performance harness (`tools/perf/tv-route.ts`) for the budget Google TV floor
 // profile (`vela-tv-floor` on `gpu-workstation`: 2 GB RAM, 4 cores throttled to Cortex-A55 class, 1080p).
 //
-// For a given route (or `--compare-sports` comparing legacy `/screen/sports` vs document
-// `/screen/sports?screens=1`), measures:
+// For a given route (or `--compare-sports` comparing the pre-cut legacy Sports screen at
+// `plugin-screens/pre-cut` (`49522fc6`) vs the document Sports screen on `plugin-screens/main`),
+// measures:
 //   1. First-frame time (`firstFrameMs`, budget <= 400 ms):
 //      Time from the route entry (`router.push(route)` after the 1500 ms `useStartRoutes` launch gate)
 //      to the first rendered route frame (`FrameCompleted` in `dumpsys gfxinfo framestats`), plus the
@@ -22,8 +23,8 @@
 //   - Never starts an emulator on macOS; expects an `--udid` (`emulator-5584`) running on `gpu-workstation`.
 //
 // Usage:
-//   bun tools/perf/tv-route.ts --udid emulator-5584 --route "/screen/sports?screens=1"
-//   bun tools/perf/tv-route.ts --udid emulator-5584 --compare-sports [--out tools/perf/reports/sports-tv-floor.md]
+//   bun tools/perf/tv-route.ts --udid emulator-5584 --route "/screen/sports" --variant document
+//   bun tools/perf/tv-route.ts --udid emulator-5584 --compare-sports [--legacy-cwd /path/to/pre-cut-worktree] [--out tools/perf/reports/sports-tv-floor.md]
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -44,6 +45,7 @@ export const PERF_BUDGETS = {
 export interface RoutePerfResult {
   label: string;
   route: string;
+  gitRef?: string;
   udid: string;
   measuredAt: string;
   deviceProfile: {
@@ -116,6 +118,8 @@ export function formatComparisonMarkdown(
 ): string {
   const passBadge = (ok: boolean) => (ok ? 'PASS' : 'FAIL');
   const audit = document.recordPush.readerAudit;
+  const legacyRef = legacy.gitRef ? ` @ \`${legacy.gitRef}\`` : '';
+  const docRef = document.gitRef ? ` @ \`${document.gitRef}\`` : '';
 
   return `# Android TV Floor Performance Report — Sports Legacy vs Document
 
@@ -124,6 +128,9 @@ export function formatComparisonMarkdown(
   - **Display**: \`${document.deviceProfile.resolution}\` @ \`${document.deviceProfile.density}\`
   - **Memory**: \`${document.deviceProfile.ramMb} MB\` RAM
   - **CPU**: \`${document.deviceProfile.cores}\` vCPUs throttled via \`systemd-run --user -p CPUQuota=${document.deviceProfile.cpuQuota}\` (Cortex-A55 class)
+- **Compared Builds**:
+  - **Legacy**: \`${legacy.route}\`${legacyRef}
+  - **Document**: \`${document.route}\`${docRef}
 - **Budgets**:
   - First frame: \`<= ${PERF_BUDGETS.firstFrameMs} ms\`
   - Focus move \`p95\`: \`<= ${PERF_BUDGETS.focusMoveP95Ms} ms\`
@@ -131,7 +138,7 @@ export function formatComparisonMarkdown(
 
 ## Summary Comparison
 
-| Metric | Budget | Legacy (\`${legacy.route}\`) | Document (\`${document.route}\`) | Delta (Doc - Legacy) | Document Status |
+| Metric | Budget | Legacy (\`${legacy.route}\`${legacyRef}) | Document (\`${document.route}\`${docRef}) | Delta (Doc - Legacy) | Document Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **First-frame time** (route entry to first rendered frame) | \`<= ${PERF_BUDGETS.firstFrameMs} ms\` | **${legacy.firstFrame.routeToFirstFrameMs.toFixed(1)} ms** (peak mount frame: ${legacy.firstFrame.mountFrameMaxMs.toFixed(2)} ms, ${legacy.firstFrame.mountFrameCount} frames) | **${document.firstFrame.routeToFirstFrameMs.toFixed(1)} ms** (peak mount frame: ${document.firstFrame.mountFrameMaxMs.toFixed(2)} ms, ${document.firstFrame.mountFrameCount} frames) | ${(document.firstFrame.routeToFirstFrameMs - legacy.firstFrame.routeToFirstFrameMs >= 0 ? '+' : '') + (document.firstFrame.routeToFirstFrameMs - legacy.firstFrame.routeToFirstFrameMs).toFixed(1)} ms | **${passBadge(document.firstFrame.pass)}** |
 | **Focus-move frame time (\`p95\`)** (${document.focusMove.steps} D-pad moves) | \`<= ${PERF_BUDGETS.focusMoveP95Ms} ms\` | **${legacy.focusMove.stats.p95Ms.toFixed(2)} ms** (\`p50\`: ${legacy.focusMove.stats.p50Ms.toFixed(2)} ms, \`max\`: ${legacy.focusMove.stats.maxMs.toFixed(2)} ms, frames: ${legacy.focusMove.stats.count}, jank: ${legacy.focusMove.stats.jankCount}) | **${document.focusMove.stats.p95Ms.toFixed(2)} ms** (\`p50\`: ${document.focusMove.stats.p50Ms.toFixed(2)} ms, \`max\`: ${document.focusMove.stats.maxMs.toFixed(2)} ms, frames: ${document.focusMove.stats.count}, jank: ${document.focusMove.stats.jankCount}) | ${(document.focusMove.stats.p95Ms - legacy.focusMove.stats.p95Ms >= 0 ? '+' : '') + (document.focusMove.stats.p95Ms - legacy.focusMove.stats.p95Ms).toFixed(2)} ms | **${passBadge(document.focusMove.pass)}** |
@@ -152,11 +159,11 @@ ${
 }
 
 ### 2. Focus-Move Frame Distribution (${document.focusMove.steps} D-pad steps)
-- **Legacy (\`${legacy.route}\`)**:
+- **Legacy (\`${legacy.route}\`${legacyRef})**:
   - Frames rendered: \`${legacy.focusMove.stats.count}\`
   - \`p50 = ${legacy.focusMove.stats.p50Ms.toFixed(2)} ms\`, \`p95 = ${legacy.focusMove.stats.p95Ms.toFixed(2)} ms\`, \`max = ${legacy.focusMove.stats.maxMs.toFixed(2)} ms\`, \`mean = ${legacy.focusMove.stats.meanMs.toFixed(2)} ms\`
   - Jank frames (\`> 16.67 ms\`): \`${legacy.focusMove.stats.jankCount}\` (\`${(legacy.focusMove.stats.jankRatio * 100).toFixed(1)}%\`)
-- **Document (\`${document.route}\`)**:
+- **Document (\`${document.route}\`${docRef})**:
   - Frames rendered: \`${document.focusMove.stats.count}\`
   - \`p50 = ${document.focusMove.stats.p50Ms.toFixed(2)} ms\`, \`p95 = ${document.focusMove.stats.p95Ms.toFixed(2)} ms\`, \`max = ${document.focusMove.stats.maxMs.toFixed(2)} ms\`, \`mean = ${document.focusMove.stats.meanMs.toFixed(2)} ms\`
   - Jank frames (\`> 16.67 ms\`): \`${document.focusMove.stats.jankCount}\` (\`${(document.focusMove.stats.jankRatio * 100).toFixed(1)}%\`)
@@ -168,7 +175,10 @@ if (import.meta.main) {
     options: {
       udid: { type: 'string', default: 'emulator-5584' },
       route: { type: 'string' },
+      variant: { type: 'string', default: 'document' },
       'compare-sports': { type: 'boolean', default: false },
+      'legacy-cwd': { type: 'string' },
+      'document-cwd': { type: 'string' },
       mock: { type: 'string' },
       'mock-port': { type: 'string', default: '7849' },
       'metro-port': { type: 'string', default: '8149' },
@@ -185,6 +195,18 @@ if (import.meta.main) {
   const settleMs = Number(values.settle) || 9000;
   const cpuQuota = values['cpu-quota']!;
   const root = resolve(import.meta.dir, '../..');
+  const legacyRoot = values['legacy-cwd'] ? resolve(values['legacy-cwd']) : root;
+  const documentRoot = values['document-cwd'] ? resolve(values['document-cwd']) : root;
+
+  function gitShortHead(repoDir: string): string {
+    const res = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'], {
+      cwd: repoDir,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'ignore',
+    });
+    return res.exitCode === 0 ? res.stdout.toString().trim() : 'unknown';
+  }
 
   function runAdb(...args: string[]): string {
     const adbBin = process.env.ADB ?? (process.env.ANDROID_SDK_ROOT ? `${process.env.ANDROID_SDK_ROOT}/platform-tools/adb` : 'adb');
@@ -236,7 +258,7 @@ if (import.meta.main) {
     }
     const url = `http://127.0.0.1:${mockPort}`;
     const child = Bun.spawn(['bun', 'mock-server/main.ts'], {
-      cwd: root,
+      cwd: documentRoot,
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -279,13 +301,13 @@ if (import.meta.main) {
     };
   }
 
-  /** Start Metro for a single `EXPO_PUBLIC_VELA_START_ROUTES` target and pre-warm the Android bundle
-   *  so first-frame measurement reflects app + route execution rather than cold Metro JS bundling.
-   *  Returns a stop function that kills ONLY the spawned Metro child PID. */
-  async function startMetroForRoute(mockUrl: string, route: string): Promise<() => void> {
+  /** Start Metro in `repoDir/apps/vela` for a single `EXPO_PUBLIC_VELA_START_ROUTES` target and
+   *  pre-warm the Android bundle so first-frame measurement reflects app + route execution rather
+   *  than cold Metro JS bundling. Returns a stop function that kills ONLY the spawned Metro PID. */
+  async function startMetroForRoute(repoDir: string, mockUrl: string, route: string): Promise<() => void> {
     const log: string[] = [];
     const child = Bun.spawn(['bun', 'x', 'expo', 'start', '--port', metroPort, '--clear', '--no-dev'], {
-      cwd: join(root, 'apps/vela'),
+      cwd: join(repoDir, 'apps/vela'),
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -350,12 +372,12 @@ if (import.meta.main) {
   }
 
   /** Trigger a single live record push on the mock server while the Sports route is open.
-   *  For document routes (`?screens=1`), calls `POST /vela/v0/screens/sports/actions/ether.favorite`
+   *  For document routes, calls `POST /vela/v0/screens/sports/actions/ether.favorite`
    *  which pushes the updated `entity:sports:sports:team:nfl-phi` and `event:sports:sports:nfl-nyg-phi`
    *  records over `/vela/v0/live/stream`.
    *  For legacy routes, triggers an event update over `/vela/v0/live/stream`. */
-  async function triggerSingleRecordPush(mockUrl: string, isDocumentRoute: boolean): Promise<void> {
-    if (isDocumentRoute) {
+  async function triggerSingleRecordPush(mockUrl: string, isDocumentVariant: boolean): Promise<void> {
+    if (isDocumentVariant) {
       await fetch(`${mockUrl}/vela/v0/screens/sports/actions/ether.favorite`, {
         method: 'POST',
         headers: {
@@ -378,9 +400,10 @@ if (import.meta.main) {
   }
 
   async function measureRoute(
+    repoDir: string,
     mockUrl: string,
     route: string,
-    label: string,
+    label: 'legacy' | 'document',
     deviceProfile: RoutePerfResult['deviceProfile'],
   ): Promise<RoutePerfResult> {
     // Unthrottle emulator during Metro bundling & ADB setup so host Metro doesn't starve the guest adbd
@@ -393,7 +416,7 @@ if (import.meta.main) {
       body: JSON.stringify({ spoilerFree: false, screenDelayMs: 0, screenFail: false, favourites: null }),
     });
 
-    const stopMetro = await startMetroForRoute(mockUrl, route);
+    const stopMetro = await startMetroForRoute(repoDir, mockUrl, route);
 
     try {
       runAdb('reverse', `tcp:${metroPort}`, `tcp:${metroPort}`);
@@ -484,14 +507,14 @@ if (import.meta.main) {
       }
 
       // 3. Measure Single Live Record Push cost in frames + reader isolation audit
-      const isDocumentRoute = route.includes('screens=1');
+      const isDocumentVariant = label === 'document';
       runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'reset');
-      await triggerSingleRecordPush(mockUrl, isDocumentRoute);
+      await triggerSingleRecordPush(mockUrl, isDocumentVariant);
       await Bun.sleep(1200);
       const pushGfxRaw = runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'framestats');
       const pushSamples = parseGfxinfoFramestats(pushGfxRaw);
       const pushStats = summarizeFrames(pushSamples);
-      const readerAudit = isDocumentRoute
+      const readerAudit = isDocumentVariant
         ? await auditSportsIndexRecordPush(mockUrl, MOCK_AUTH_HEADERS)
         : undefined;
 
@@ -510,6 +533,7 @@ if (import.meta.main) {
       return {
         label,
         route,
+        gitRef: gitShortHead(repoDir),
         udid,
         measuredAt: new Date().toISOString(),
         deviceProfile,
@@ -528,7 +552,7 @@ if (import.meta.main) {
           pass: passFocusMove,
         },
         recordPush: {
-          kind: isDocumentRoute ? 'screen-record-stream' : 'legacy-sse',
+          kind: isDocumentVariant ? 'screen-record-stream' : 'legacy-sse',
           framesRendered: pushStats.count,
           stats: pushStats,
           readerAudit,
@@ -548,14 +572,15 @@ if (import.meta.main) {
     setEmulatorCpuQuota('400%');
     const deviceProfile = queryDeviceProfile();
     if (values['compare-sports']) {
-      console.log(`[tv-route] Measuring legacy Sports route (/screen/sports) on ${udid}...`);
-      const legacy = await measureRoute(mock.url, '/screen/sports', 'legacy', deviceProfile);
+      console.log(`[tv-route] Measuring legacy Sports route (/screen/sports) from ${legacyRoot} (${gitShortHead(legacyRoot)}) on ${udid}...`);
+      const legacy = await measureRoute(legacyRoot, mock.url, '/screen/sports', 'legacy', deviceProfile);
       console.log(
         `[tv-route] Legacy result: firstFrame=${legacy.firstFrame.routeToFirstFrameMs}ms, focusP95=${legacy.focusMove.stats.p95Ms}ms (${legacy.focusMove.stats.count} frames), recordPush=${legacy.recordPush.framesRendered} frames`,
       );
 
-      console.log(`[tv-route] Measuring document Sports route (/screen/sports?screens=1) on ${udid}...`);
-      const document = await measureRoute(mock.url, '/screen/sports?screens=1', 'document', deviceProfile);
+      // Post-cut document Sports is at /screen/sports (or /screen/sports?screens=1 pre-cut)
+      console.log(`[tv-route] Measuring document Sports route (/screen/sports) from ${documentRoot} (${gitShortHead(documentRoot)}) on ${udid}...`);
+      const document = await measureRoute(documentRoot, mock.url, '/screen/sports', 'document', deviceProfile);
       console.log(
         `[tv-route] Document result: firstFrame=${document.firstFrame.routeToFirstFrameMs}ms, focusP95=${document.focusMove.stats.p95Ms}ms (${document.focusMove.stats.count} frames), recordPush=${document.recordPush.framesRendered} frames (invalidated=${document.recordPush.readerAudit?.currentRootInvalidatedItems}/${document.recordPush.readerAudit?.totalCollectionItems})`,
       );
@@ -576,9 +601,11 @@ if (import.meta.main) {
         console.log(`[tv-route] Wrote JSON report to ${jsonPath}`);
       }
     } else {
-      const targetRoute = values.route ?? '/screen/sports?screens=1';
-      console.log(`[tv-route] Measuring ${targetRoute} on ${udid}...`);
-      const result = await measureRoute(mock.url, targetRoute, targetRoute.includes('screens=1') ? 'document' : 'legacy', deviceProfile);
+      const targetRoute = values.route ?? '/screen/sports';
+      const variant = (values.variant === 'legacy' ? 'legacy' : 'document') as 'legacy' | 'document';
+      const targetRepo = variant === 'legacy' ? legacyRoot : documentRoot;
+      console.log(`[tv-route] Measuring ${targetRoute} (${variant}) from ${targetRepo} (${gitShortHead(targetRepo)}) on ${udid}...`);
+      const result = await measureRoute(targetRepo, mock.url, targetRoute, variant, deviceProfile);
       console.log(JSON.stringify(result, null, 2));
       if (values.json) {
         const jsonPath = resolve(values.json);
