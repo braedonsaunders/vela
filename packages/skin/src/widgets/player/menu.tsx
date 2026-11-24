@@ -131,11 +131,13 @@ interface Choice {
   enabled: boolean;
   onChoose(): void;
   testID?: string;
+  /** Takes TV focus when shown though not selected (the first row of a menu's new page). */
+  focus?: boolean;
 }
 
 /** One choice: a check on the active item (a spinner while the engine switches), its name and one muted detail. */
-export function ChoiceRow({ look, name, detail, selected, pending, enabled, onChoose, testID }: Choice) {
-  const claim = useFocusClaim(selected);
+export function ChoiceRow({ look, name, detail, selected, pending, enabled, onChoose, testID, focus: preferred }: Choice) {
+  const claim = useFocusClaim(selected || preferred);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const lit = look.tv && focus;
@@ -201,8 +203,8 @@ interface VersionChoice extends Omit<Choice, 'detail'> {
 }
 
 /** A source version gets the horizontal room it deserves: name first, compact facts below. */
-export function VersionChoiceRow({ look, name, chips, status, selected, pending, enabled, unavailable, onChoose, testID }: VersionChoice) {
-  const claim = useFocusClaim(selected);
+export function VersionChoiceRow({ look, name, chips, status, selected, pending, enabled, unavailable, onChoose, testID, focus: preferred }: VersionChoice) {
+  const claim = useFocusClaim(selected || preferred);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const lit = look.tv && focus;

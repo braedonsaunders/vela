@@ -125,6 +125,9 @@ export interface User {
     Policy?: {
         EnableLiveTvAccess?: boolean;
     };
+    Configuration?: {
+        SubtitleLanguagePreference?: string;
+    };
 }
 export interface Auth {
     AccessToken: string;

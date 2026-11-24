@@ -3,7 +3,8 @@
 // commands and observations; and stopping. Media credentials never enter state: the trusted host
 // asks `mediaAccess()` and hands the result straight to the native player.
 import type * as V from '../wire';
-import { hasSubtitleSearch } from '../adapter/media-actions';
+import { hasSubtitleSearch, type SubtitleLanguages, type SubtitleSearchResult } from '../adapter/media-actions';
+import { deviceLanguages, type SubtitleLanguage } from '../subtitle-languages';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
 import { hasEventStream, hasLibraryLive, hasTrickplaySheets, hasVersions } from '../adapter/capabilities';
@@ -489,22 +490,52 @@ export class Playback {
     try { return hasSubtitleSearch(this.session.selected().adapter); } catch { return false; }
   }
 
-  async searchSubtitles(language: string) {
+  /** Languages the viewer searched in this run, most recent first: they lead the picker next time. */
+  private searchedLanguages: string[] = [];
+  /** One session's answer, asked once: the menu asks every time it opens. */
+  private languageAnswer?: { sessionId: string; answer: Promise<SubtitleLanguages | null> };
+
+  /** The languages a search takes, the viewer's first (the server's preference, recent searches,
+   * the device's languages); null when this server has no subtitle search. */
+  async subtitleLanguages(serverPreferred: readonly string[] = []): Promise<{ languages: SubtitleLanguage[]; preferred: string[] } | null> {
     const api = (await this.session.ready()).adapter;
-    if (!hasSubtitleSearch(api)) throw new Error('Subtitle search is unavailable on this server');
-    return api.searchSubtitles(this.box.get().playback.sessionId, language);
+    if (!hasSubtitleSearch(api)) return null;
+    const sessionId = this.box.get().playback.sessionId;
+    if (this.languageAnswer?.sessionId !== sessionId) {
+      const answer = api.subtitleLanguages(sessionId);
+      const entry = { sessionId, answer };
+      this.languageAnswer = entry;
+      answer.catch(() => { if (this.languageAnswer === entry) this.languageAnswer = undefined; });
+    }
+    const found = await this.languageAnswer.answer;
+    if (!found?.languages.length) return null;
+    return { languages: found.languages, preferred: [...serverPreferred, ...found.preferred, ...this.searchedLanguages, ...deviceLanguages()] };
   }
 
+  /** Without a language, the server's (or the device's) most preferred one. */
+  async searchSubtitles(language?: string): Promise<SubtitleSearchResult> {
+    const api = (await this.session.ready()).adapter;
+    if (!hasSubtitleSearch(api)) throw new Error('Subtitle search is unavailable on this server');
+    const result = await api.searchSubtitles(this.box.get().playback.sessionId, language);
+    if (language) this.searchedLanguages = [language, ...this.searchedLanguages.filter(code => code !== language)].slice(0, 4);
+    return result;
+  }
+
+  /** Adds a found subtitle to the running session; the new track's id, or null when the server
+   * added none (it is still indexing) or the session moved on meanwhile. */
   async downloadSubtitle(id: string): Promise<string | null> {
     const connection = await this.session.ready();
     const api = connection.adapter;
     if (!hasSubtitleSearch(api)) throw new Error('Subtitle search is unavailable on this server');
     const sessionId = this.box.get().playback.sessionId;
     const previous = this.box.get().playback.plan;
-    const plan = connection.plan(await api.downloadSubtitle(sessionId, id));
+    const plan = connection.plan(await api.downloadSubtitle(sessionId, id, this.session.key()));
     if (this.box.get().playback.sessionId !== sessionId) return null;
     this.patch({ plan });
-    return plan.subtitleTracks.find(t => !previous?.subtitleTracks.some(p => p.id === t.id))?.id ?? null;
+    // A new track, or (the same file chosen again) the one the server selected for it.
+    const added = plan.subtitleTracks.find(t => !previous?.subtitleTracks.some(p => p.id === t.id))?.id;
+    const chosen = plan.selectedSubtitleTrackId && plan.selectedSubtitleTrackId !== previous?.selectedSubtitleTrackId ? plan.selectedSubtitleTrackId : null;
+    return added ?? chosen;
   }
 
   /**

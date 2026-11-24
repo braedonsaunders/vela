@@ -161,6 +161,17 @@ internal class PlayerController(
       if (previous != null && next.seekGeneration != previous.seekGeneration) {
         seekConfirmed(next.positionSeconds)
       }
+      // A subtitle the server just added (searched for and downloaded): Media3 takes a sidecar only
+      // when the item is prepared, so the same media is prepared again where it plays, with it.
+      val client = engine
+      val reload = path.url?.let(MediaAccessStore::resolve)
+      if (previous != null && !next.live && client != null && reload != null && path.readiness == "ready" &&
+        (next.renderableSidecarIds() - previous.renderableSidecarIds()).isNotEmpty()) {
+        client.load(reload, next, state.position)
+        client.play(wantsPlay)
+        report.publish(state, pendingSeek, force = true)
+        return
+      }
       applyTracks()
       return
     }
@@ -619,10 +630,11 @@ internal class PlayerController(
     }
     if (external != null) {
       val localId = state.tracks.firstOrNull { it["plan-id"] == id }?.get("id") as? Long
-      if (localId == null) return "The external subtitle is not available yet"
       report.subtitleTrackId = id
       report.subtitleClientOnly = true
-      engine?.select("sub", localId)
+      // A sidecar the plan just added is still being prepared: applyTracks selects it when it appears.
+      if (localId != null) engine?.select("sub", localId)
+      else report.publish(state, pendingSeek, force = true)
       return null
     }
     val engineId = track.streamIndex?.takeIf { playsOriginal }?.let { state.trackId("sub", it) }

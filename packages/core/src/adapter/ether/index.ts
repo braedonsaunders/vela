@@ -32,10 +32,12 @@ import type {
   WebCodeSignIn,
 } from '../capabilities';
 import type { TitleActions } from '../capabilities';
+import type { SubtitleSearch } from '../media-actions';
 import { VelaError } from '../errors';
 import { normaliseDetail, normaliseEvents, normaliseScreen } from '../../live/events';
 import { EtherTransport } from './transport';
 import { plexHomeSelection, plexTokens } from './plex';
+import { etherSubtitleLanguages, etherSubtitleSearch, SUBTITLE_PREPARE_LIMIT_MS, subtitleRetryDelayMs } from './subtitles';
 
 const CACHED = { cacheable: true };
 const BOOTSTRAP_CACHED = { cacheable: true, persistent: true };
@@ -51,7 +53,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  LiveEvents, Multiview, TileReplan {
+  LiveEvents, Multiview, TileReplan, SubtitleSearch {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -536,6 +538,32 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   cancelAudioFallback(sessionId: string, audioId: string, request: V.Mutation, signal?: AbortSignal) {
     const path = `/sessions/${segment(sessionId)}/audio-fallback/${segment(audioId)}`;
     return this.http.request<V.Ack>('DELETE', path, request, { signal });
+  }
+
+  // Subtitle search (features.subtitleSearch): an older Ether, or one with the flag off, has none.
+
+  async subtitleLanguages(_sessionId: string) {
+    return etherSubtitleLanguages(await this.describe());
+  }
+
+  /** Without a language the server searches the viewer's most preferred one and says which. */
+  async searchSubtitles(sessionId: string, language?: string) {
+    const answer = await this.http.request<V.SubtitleSearchResponse>('GET', `/sessions/${segment(sessionId)}/subtitles/search${query({ language })}`);
+    return etherSubtitleSearch(answer, language);
+  }
+
+  /** A subtitle the server prepares first (an AI translation) answers 202 until it is ready. Each
+   * ask is its own mutation (a replayed 202 would never finish); the server makes an offer's track
+   * once per session, so asking again joins the same work. */
+  async downloadSubtitle(sessionId: string, offerId: string, idempotencyKey: string): Promise<V.PlaybackPlan> {
+    const path = `/sessions/${segment(sessionId)}/subtitles/${segment(offerId)}`;
+    const until = Date.now() + SUBTITLE_PREPARE_LIMIT_MS;
+    for (let attempt = 0; ; attempt++) {
+      const reply = await this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', path, { idempotencyKey: attempt ? `${idempotencyKey}:${attempt}` : idempotencyKey });
+      if (reply && 'sessionId' in reply) return reply;
+      if (!reply || reply.state !== 'preparing' || Date.now() >= until) throw new VelaError({ class: 'transient', code: 'subtitle_not_ready', message: 'The subtitle is still being prepared', retry: { allowed: true } }, 504);
+      await new Promise(resolve => setTimeout(resolve, subtitleRetryDelayMs(reply)));
+    }
   }
 
   /** Whether this server has person pages: credits link to them when it does. */

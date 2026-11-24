@@ -45,7 +45,7 @@ test('Plex downloads a searched subtitle into the existing plan without changing
   });
   const api = new PlexAdapter({ origin: 'https://test.example', credentials: new FakeCredentials(), clientIdentifier: 'c' });
   const plan = await api.startPlayback({ titleId: '10', client, idempotencyKey: 'start' });
-  expect(await api.searchSubtitles(plan.sessionId, 'en')).toEqual([{ id: 'provider-result', name: 'English SDH', language: 'en' }]);
+  expect(await api.searchSubtitles(plan.sessionId, 'en')).toEqual({ language: 'en', preferred: [], offers: [{ id: 'provider-result', name: 'English SDH', language: 'en' }] });
   const next = await api.downloadSubtitle(plan.sessionId, 'provider-result');
   expect(next.sessionId).toBe(plan.sessionId); expect(next.sourceGeneration).toBe(plan.sourceGeneration);
   expect(next.subtitleTracks[0]?.delivery?.kind).toBe('external');
@@ -61,7 +61,7 @@ test('Jellyfin subtitle search and download keep the running session and source'
   });
   const api = new JellyfinAdapter('https://test.example', new FakeCredentials());
   const plan = await api.startPlayback({ titleId: '10', client, idempotencyKey: 'start' });
-  expect((await api.searchSubtitles(plan.sessionId, 'en'))[0]?.language).toBe('eng');
+  expect((await api.searchSubtitles(plan.sessionId, 'en')).offers[0]?.language).toBe('eng');
   const next = await api.downloadSubtitle(plan.sessionId, 'provider');
   expect(next.sessionId).toBe(plan.sessionId); expect(next.sourceGeneration).toBe(0);
   expect(next.subtitleTracks[0]?.id).toBe('3');

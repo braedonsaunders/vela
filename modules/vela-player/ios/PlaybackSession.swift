@@ -41,6 +41,8 @@ final class PlaybackSession {
     private var recoveryLimit: Timer?
     private var plan: VelaPlan?
     private var activeSource = ""
+    /// The external subtitle (its plan track id) added to this load's engine and selected.
+    private var activeSidecar: String?
     private var lastCommand = -1
     private var pendingSeek: Double?
     private var wantsPlay = true
@@ -335,6 +337,7 @@ final class PlaybackSession {
         if !ambient {
             host.activateAudio()
         }
+        activeSidecar = nil
         let client = PlaybackClient(rendering: host.makeRendering(retainPausedPicture: ambient), preview: ambient, paused: !wantsPlay,
                                     muted: hasMuteCommand || tile != nil ? report.muted : ambient,
                                     isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient, tile: tile)
@@ -539,7 +542,17 @@ final class PlaybackSession {
 
     /// Selects the plan's chosen audio and subtitle streams by their source stream index.
     private func applyTracks() {
-        guard let plan, let path = plan.selectedPath, path.isOriginalFile, !state.tracks.isEmpty else {
+        guard let plan, let path = plan.selectedPath else {
+            return
+        }
+        // An external subtitle (a sidecar, or one the server added mid-session) is added to the
+        // engine once per load, on any path; a later plan revision must not turn it off.
+        let selected = plan.subtitleTrack(report.subtitleTrackId)
+        if let selected, let url = selected.externalURL.flatMap(resolve), state.loaded, activeSidecar != selected.id {
+            activeSidecar = selected.id
+            player?.command(["sub-add", url.absoluteString, "select"])
+        }
+        guard path.isOriginalFile, !state.tracks.isEmpty else {
             return
         }
         let audioIndex = plan.audioTrack(report.audioTrackId)?.streamIndex
@@ -552,9 +565,11 @@ final class PlaybackSession {
         let subtitleIndex = subtitle?.isExternal == false ? subtitle?.streamIndex : nil
         if let subtitleIndex, let id = state.trackId(type: "sub", streamIndex: subtitleIndex) {
             if state.subtitleId != id {
+                activeSidecar = nil
                 player?.set("sid", String(id))
             }
-        } else if (subtitle == nil && report.subtitleTrackId?.hasPrefix("mpv-sub-") != true) || subtitle?.isExternal == true {
+        } else if subtitle == nil && report.subtitleTrackId?.hasPrefix("mpv-sub-") != true {
+            activeSidecar = nil
             player?.set("sid", "no")
         }
     }
@@ -789,6 +804,7 @@ final class PlaybackSession {
            state.tracks.contains(where: { $0["type"] as? String == "sub" && $0["id"] as? Int64 == trackId }) {
             report.subtitleTrackId = id
             report.subtitleClientOnly = true
+            activeSidecar = nil
             player?.set("sid", String(trackId))
             report.publish(state, seekTarget: pendingSeek, force: true)
             return nil
@@ -800,6 +816,7 @@ final class PlaybackSession {
             }
             report.subtitleTrackId = nil
             report.subtitleClientOnly = true
+            activeSidecar = nil
             player?.set("sid", "no")
             return nil
         }
@@ -809,6 +826,7 @@ final class PlaybackSession {
         if let url = track.externalURL.flatMap(resolve) {
             report.subtitleTrackId = id
             report.subtitleClientOnly = true
+            activeSidecar = id
             player?.command(["sub-add", url.absoluteString, "select"])
             return nil
         }
@@ -819,6 +837,7 @@ final class PlaybackSession {
         }
         report.subtitleTrackId = id
         report.subtitleClientOnly = true
+        activeSidecar = nil
         player?.set("sid", String(trackId))
         return nil
     }

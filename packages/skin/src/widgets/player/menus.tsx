@@ -1,9 +1,9 @@
 // The four player menus: subtitles (with their appearance where the engine draws the text),
 // audio, quality (grouped by resolution, each by its bitrate and what it needs, with the info
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
-import { SubtitleSearch } from './subtitle-search';
+import { SubtitleSearch, SubtitleSearchEntry } from './subtitle-search';
 import { msg, number } from '@vela/core';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, MenuSection, SegmentRow, VersionChoiceRow } from './menu';
@@ -51,8 +51,10 @@ const SUBTITLE_SETTINGS = [
 ] as const;
 
 export function SubtitlesMenu({ look, view, blocked, send }: Props) {
+  const [searching, setSearching] = useState(false);
   const off = view.subtitleId === '' && view.pendingSubtitleId === '';
   const appearance = view.subtitleLook;
+  if (searching) return <SubtitleSearch look={look} blocked={blocked} send={send} onClose={() => setSearching(false)} />;
   return (
     <>
       <ChoiceRow
@@ -75,7 +77,7 @@ export function SubtitlesMenu({ look, view, blocked, send }: Props) {
           onChoose={() => { if (view.subtitleId !== track.id && view.pendingSubtitleId !== track.id) send({ type: 'subtitle', trackId: track.id }); }}
         />
       ))}
-      <SubtitleSearch look={look} send={send} />
+      <SubtitleSearchEntry look={look} enabled={!blocked} onOpen={() => setSearching(true)} />
       {view.subtitleError ? <MenuHeading look={look} text={view.subtitleError} /> : null}
       {view.subtitleOffset !== null && view.subtitleId !== '' ? (
         <SubtitleDelay look={look} offset={view.subtitleOffset} blocked={blocked} send={send} />

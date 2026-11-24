@@ -31,6 +31,10 @@ internal class PlaybackPlan(
 
   fun subtitleTrack(id: String?): PlanTrack? = subtitleTracks.firstOrNull { it.id == id }
 
+  /** The sidecars Media3 is given when the item is prepared (PlaybackEngine.load). */
+  fun renderableSidecarIds(): Set<String> =
+    subtitleTracks.filter { it.canRenderExternal && it.externalUrl != null }.mapTo(mutableSetOf()) { it.id }
+
   companion object {
     /** A plan, or null when a required field is missing. */
     fun from(value: Map<String, Any?>): PlaybackPlan? {

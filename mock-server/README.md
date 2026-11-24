@@ -21,6 +21,14 @@ Optional `VELA_MOCK_PLEX_HOME=1` advertises Plex Home selection; after signing o
 button opens mock profiles directly (the protected owner profile uses PIN `1234`).
 Optional `VELA_MOCK_COLD=1` makes each title's first detail read partial (`pending: ["extras"]`,
 `refreshAfterMs: 2000`, `Cache-Control: private, no-store`), as Ether answers a title it is still filling.
+Subtitle search (`features.subtitleSearch`) offers three fictional subtitle-site files per
+language (a release match with downloads and rating, an SDH one, a forced one) and, for
+languages other than English, an AI translation that answers 202 for
+`VELA_MOCK_TRANSLATE_MS` (default 3000) before joining the session. A chosen offer becomes an
+external WebVTT track whose cues name its language. The viewer's subtitle languages are
+`VELA_MOCK_SUBTITLE_LANGUAGES` (default `nl,en`); `VELA_MOCK_NO_SUBTITLE_SEARCH=1` (or
+`VELA_MOCK_OLD=1`) is an Ether without the feature.
+Optional `VELA_MOCK_MEDIA_ROOT` moves the generated media from `~/.scratch/tmp/vela/media/`.
 For device/quick-connect pairing, approve the displayed code using an already
 signed-in grant. Poll every three seconds; pairing expires after ten minutes.
 POST `/__admin/web-code` issues a single-use 43-character console handoff code, valid for sixty seconds.
