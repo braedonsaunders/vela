@@ -11,7 +11,7 @@
 // The app must reach the frozen mock (VELA_MOCK_SPORTS_FREEZE=1). Nothing here starts playback: the
 // views are browsing screens, and Debug builds keep playback quiet. Each view is captured twice,
 // 700 ms apart, for the moving-region mask, as on the web.
-import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { captureName, DEFAULT_KNOBS, VIEWS, type Knobs, type Variant, type View } from './views';
@@ -140,4 +140,8 @@ for (const view of views) {
   }
   captures.push(capture);
 }
-writeFileSync(join(out, 'manifest.json'), JSON.stringify({ variant, platform, now: state.now, capturedAt: new Date().toISOString(), udid, captures }, null, 2));
+// A run of some views adds to (or replaces) those views in an earlier run's manifest.
+const manifest = join(out, 'manifest.json');
+const earlier = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { captures: { view: string }[] }).captures : [];
+const merged = [...earlier.filter(c => !captures.some(n => (n as { view: string }).view === c.view)), ...captures];
+writeFileSync(manifest, JSON.stringify({ variant, platform, now: state.now, capturedAt: new Date().toISOString(), udid, captures: merged }, null, 2));

@@ -101,7 +101,7 @@
       "small": { "width": "min(272px, 74vw)" }, "above": { "1600": { "width": "300px" } },
       "hover": { "background-color": "$cardHover", "scale": "1.04" },
       "focus": { "background-color": "$cardHover", "scale": "1.04" },
-      "states": [{ "when": [{ "test": "e.close" }], "style": { "width": "286px", "min-height": "128px", "padding": "13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $closeEdge" } }],
+      "states": [{ "when": [{ "test": "e.close" }], "style": { "border": "1px solid $closeEdge" } }],
       "children": [
         { "type": "use", "template": "cardMeta" },
         { "type": "box", "when": [{ "test": "e.sides" }], "children": [

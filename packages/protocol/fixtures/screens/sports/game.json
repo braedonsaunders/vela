@@ -55,7 +55,7 @@
     "score": {
       "type": "text", "testId": "{arg.testId}", "text": "{arg.value}", "onChange": { "value": "{arg.value}", "motion": "scoreFlash" },
       "style": { "font-size": "72px", "line-height": "1.12", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "44px" },
-      "states": [{ "when": [{ "test": "arg.loser" }], "style": { "font-size": "72px", "line-height": "1.12", "font-weight": "800", "color": "#ffffff", "opacity": "0.55", "font-variant-numeric": "tabular-nums" } }]
+      "states": [{ "when": [{ "test": "arg.loser" }], "style": { "opacity": "0.55" } }]
     },
     "metaLine": {
       "type": "text", "text": "{arg.text}",
