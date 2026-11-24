@@ -116,11 +116,11 @@ describe('toasts', () => {
     expect(toastRemaining(12_000, 5_000)).toBe(7_000);
     expect(toastRemaining(12_000, 11_900)).toBe(1_200);
   });
-  test('the toast box: 360 wide, a quarter larger on TV, a phone spans its width', () => {
-    expect(toastBox(false, false, 1440, 40).width).toBe(360);
-    expect(toastBox(true, false, 1920, 56).width).toBe(450);
-    expect(toastBox(false, true, 390, 16).width).toBe(358);
-    expect(toastBox(false, false, 1440, 40).maxHeight).toBe(168);
+  test('the toast box: 360 wide in the player look (504 on a 1080-line TV), a phone spans its width', () => {
+    const web = (px: number) => px, tv = (px: number) => Math.round(px * 1.4);
+    expect(toastBox(web, false, 1440, 40)).toEqual({ width: 360, maxHeight: 168 });
+    expect(toastBox(tv, false, 1920, 56).width).toBe(504);
+    expect(toastBox(web, true, 390, 16)).toEqual({ width: 358, maxHeight: 220 });
   });
   test('an alert draws with the surface it names, else its plugin\'s toast', () => {
     const other: SurfaceContribution = { ...toast, id: 'news.alert', when: { alert: { plugin: 'org.ether.news' } } };

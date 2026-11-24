@@ -4,6 +4,7 @@
 // read answers, and one that is refused, fails, answers 404 or throws while drawing is left out
 // silently, so a plugin's surface can never break the player, a toast or Home.
 import { Component, createContext, useContext, useMemo, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 import type { SurfaceContext, SurfaceContribution } from '../../../protocol/screen';
 import { colour } from '../css';
 import type { SkinHost } from '../host';
@@ -42,6 +43,11 @@ export function playerDoc(doc: SkinHost['doc']): SkinHost['doc'] {
   return { ...doc, document: { ...document, ui: { ...document.ui, ...playerPalette(colours) } } };
 }
 
+/** The player look's design scale on TV (widgets/player/look.ts): 1.4 on a 1080-line screen. */
+export function playerScale(height: number): number {
+  return 1.4 * Math.min(1, height / 1080);
+}
+
 /** Drops a surface that throws while drawing: it is logged once and draws nothing from then on. */
 class Boundary extends Component<{ id: string; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -73,7 +79,14 @@ export function SurfaceView({ surface, context, host, active = true, overPicture
   const app = useSurfaceApp();
   // The document resolves once per look: the palette is derived from the skin's document, not per render.
   const doc = useMemo(() => (overPicture ? playerDoc(host.doc) : host.doc), [host.doc, overPicture]);
-  const drawn = useMemo(() => (doc === host.doc ? host : { ...host, doc }), [host, doc]);
+  // Over the picture a surface draws as the player's chrome does: the player look's scale on TV
+  // (1.4 at 1080 lines, not the pages' 1.25), and `env.tv` only on a television (a wide web window
+  // still has a pointer, so a toast keeps its Dismiss there).
+  const drawn = useMemo(() => {
+    if (!overPicture) return doc === host.doc ? host : { ...host, doc };
+    const viewport = Platform.isTV ? { ...host.viewport, pxScale: playerScale(host.viewport.height) } : host.viewport;
+    return { ...host, doc, viewport, env: { ...host.env, tv: Platform.isTV } };
+  }, [host, doc, overPicture]);
   const channel = context.server.channel ?? context.local?.channel;
   const actions = useMemo<ScreenAppActions>(() => {
     const base = app?.actions;

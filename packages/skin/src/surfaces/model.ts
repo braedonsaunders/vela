@@ -160,13 +160,13 @@ export const MAX_TOASTS = 3;
 export function toastSeconds(ttl: number | undefined): number {
   return Math.max(8, Math.min(30, typeof ttl === 'number' && Number.isFinite(ttl) ? ttl : 12));
 }
-/** Design size of one toast, a quarter larger on TV. The design's 120 px height is the toast's
- * usual size; its box allows 168 px, because a toast with Watch and Add to multiview stacked (today's
- * Sports alert) is 149 px tall, and a phone's, its buttons wrapped, may take 220. */
+/** Design size of one toast, in the player look's scale (a 1.4 on a TV, as the toasts always were).
+ * The design's 120 px height is the toast's usual size; its box allows 168 px, because a toast with
+ * Watch and Add to multiview stacked (today's Sports alert) is 149 px tall, and a phone's, its
+ * buttons wrapped, may take 220. */
 export const TOAST_BOX = { width: 360, height: 120, maxHeight: 168 } as const;
-export function toastBox(tv: boolean, small: boolean, width: number, gutter: number): { width: number; maxHeight: number } {
-  const scale = tv ? 1.25 : 1;
-  return small ? { width: width - gutter * 2, maxHeight: 220 } : { width: TOAST_BOX.width * scale, maxHeight: TOAST_BOX.maxHeight * scale };
+export function toastBox(size: (px: number) => number, small: boolean, width: number, gutter: number): { width: number; maxHeight: number } {
+  return small ? { width: width - gutter * 2, maxHeight: 220 } : { width: size(TOAST_BOX.width), maxHeight: size(TOAST_BOX.maxHeight) };
 }
 
 /** The toast surface an alert draws with: the one it names, else the toast its plugin contributes. */

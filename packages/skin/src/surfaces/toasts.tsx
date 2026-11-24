@@ -132,7 +132,7 @@ function Stack({ look, top, right, playingChannelId, inPlayer = false }: Placeme
   }, [keyed?.id, app, vela]);
 
   if (!shown.length) return null;
-  const box = toastBox(Platform.isTV, look.small, host.viewport.width, look.gutter);
+  const box = toastBox(look.size, look.small, host.viewport.width, look.gutter);
   return (
     <View pointerEvents="box-none" testID="live-alerts" style={{ position: 'absolute', top, right: right ?? look.gutter, width: box.width, gap: look.size(10) }}>
       {shown.map(alert => (

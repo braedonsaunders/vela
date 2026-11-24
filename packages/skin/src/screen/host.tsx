@@ -90,7 +90,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
     if (!doc) return { problem: '' };
     const id = `${doc.screen}/${doc.page}`;
     try {
-      const scale = Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX;
+      const scale = host.viewport.pxScale ?? (Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX);
       const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale }, 'en', resolveUi(ui));
       if (resolved.warnings.length) console.warn(`${id}: ${resolved.warnings.join('; ')}`);
       lastGood.current = { id, resolved };
@@ -103,7 +103,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
       }
       return { problem };
     }
-  }, [doc, width, height, ui]);
+  }, [doc, width, height, ui, host.viewport.pxScale]);
 }
 
 export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false }: ScreenViewProps) {
