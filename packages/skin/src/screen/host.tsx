@@ -94,10 +94,14 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   const vela = useVela();
   const document = useScreenDocument(href);
   const { resolved, problem } = useResolved(document.value, host);
-  const request = useMemo(() => (active ? { target, href, params, context } : undefined),
+  // Only the params the page declares are read (an address may carry other keys); before the
+  // document is known every given param goes, so the first read does not wait for it.
+  const declared = document.value?.params;
+  const pageParams = declared ? Object.fromEntries(Object.entries(params).filter(([name]) => name in declared)) : params;
+  const request = useMemo(() => (active ? { target, href, params: pageParams, context } : undefined),
     // Params and context by value: a new object with the same entries is the same page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [active, href, JSON.stringify(target), JSON.stringify(params), JSON.stringify(context ?? null)]);
+    [active, href, JSON.stringify(target), JSON.stringify(pageParams), JSON.stringify(context ?? null)]);
   const { key, page: shown } = useScreenPage(request);
   // Hidden, the page stops following its topic; what it last drew stays until it is shown again.
   const last = useRef<{ key: string; page: ScreenPageState } | null>(null);
