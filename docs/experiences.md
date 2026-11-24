@@ -340,3 +340,46 @@ The owner approved this design on 2026-11-24:
    - Apple TV 4K is the high end.
    - Measured budgets run on an Android TV emulator profile matched to that floor: 2 GB RAM, a
      quad-core A55-class CPU throttled to match, and 1080p output.
+
+## Build plan: shared groundwork and Listen (approved 2026-11-24)
+
+The owner approved this plan. Building starts once three things are done:
+
+1. 0.2.63 is on production.
+2. The native downloads are out.
+3. The iPhone Duo branch is merged (thr_s8fgkaujwe: the music wide shell, Now Playing side by side by width, and the fold module).
+
+Listen builds on those layouts. The rules are the same as for Sports:
+
+- Parity comes first (at most 1% of pixels differ, nothing moves more than 2 px, and every remaining difference is reviewed).
+- `widgets/music` is cut hard in the same release.
+- Everything is built on an integration branch, `experiences/main`, kept green and rebased on main.
+
+### Workers
+
+| Worker | Provider | Scope | Owns |
+| --- | --- | --- | --- |
+| G1, local sources | Claude | `vela.*` sources and records answered by core through the active adapter (Ether, Jellyfin, Plex), with `unsupported` per part, plus local actions (`vela.like`, `playNext`, `addToQueue`, `startRadio`, `playlistImport` and save, `duplicatePreference`) | `packages/core/src/screens/local*`, adapter glue |
+| G2, document system | Claude | Built-in documents (bundled; `owner: "vela"`), skin `experiences` overrides merged over them, `platforms` variants, the rich-block parts API, slot surfaces (`presentation: "slot"` and `$defs.Slots` in the generated schema, with the Sports aliases kept), and the schema renamed to `vela-document.v1.json` | `packages/skin/src/resolve*`, `screen/*`, `packages/protocol` |
+| G3, author tools | Gemini | `bun tools/skin.ts serve <document>` plus a preview mode for skins and built-in pages (the device frames: phone, tablet, desktop, TV), the validator's JSON report, and the TV perf harness (`tools/perf`) as a gate for built-in documents | `tools/*` |
+| L1, Listen blocks | Claude | The rich blocks `player`, `nowPlaying`, `queue`, `lyrics`, `trackTable`, `eq`, `rail` and `bar`, wrapping today's engines and the section-B blocks (`blocks/sound`, `recap`, `import`, `duplicates`) unchanged, with their parts lists | `packages/skin/src/blocks/listen/*` |
+| L2, Listen documents and parity | Claude | The `listen` shell documents (wide, phone, TV, fold) and the page documents (home, artist, album, playlist, liked, search, Now Playing, queue, import, Rewind, duplicates); legacy baselines first (web, phone, fold, Apple TV, Android TV), then parity, then the hard cut of `widgets/music` | `packages/protocol/fixtures/experiences/listen/*`, `tools/parity` |
+
+### Order
+
+1. **Contract:** G2 lands the document envelope changes and the slot list, and G1 lands the source list, before anything else builds on them.
+2. **Legacy baselines:** L2 captures them from the merged iPhone Duo build, before any change.
+3. **Blocks and documents:** L1 and L2 iterate against G1's sources.
+4. **Author tools:** G3 runs in parallel throughout.
+5. **Parity:** on every platform.
+6. **Release:** the hard cut, then the lab gate and the production gate, as for Sports.
+
+### Ether
+
+Ether needs no new design:
+
+- the slot list is vendored from the schema;
+- the music API and the Mornye contract are already agreed;
+- the music plugin's row purposes and layouts are already live.
+
+It re-vendors the renamed schema.
