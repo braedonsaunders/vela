@@ -41,8 +41,8 @@ final class PlaybackSession {
     private var recoveryLimit: Timer?
     private var plan: VelaPlan?
     private var activeSource = ""
-    /// The external subtitle (its plan track id) added to this load's engine and selected.
-    private var activeSidecar: String?
+    /// The external subtitle added to this load's engine and selected.
+    private var sidecar = SidecarSubtitle()
     private var lastCommand = -1
     private var pendingSeek: Double?
     private var wantsPlay = true
@@ -337,7 +337,7 @@ final class PlaybackSession {
         if !ambient {
             host.activateAudio()
         }
-        activeSidecar = nil
+        sidecar.forget()
         let client = PlaybackClient(rendering: host.makeRendering(retainPausedPicture: ambient), preview: ambient, paused: !wantsPlay,
                                     muted: hasMuteCommand || tile != nil ? report.muted : ambient,
                                     isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient, tile: tile)
@@ -545,13 +545,7 @@ final class PlaybackSession {
         guard let plan, let path = plan.selectedPath else {
             return
         }
-        // An external subtitle (a sidecar, or one the server added mid-session) is added to the
-        // engine once per load, on any path; a later plan revision must not turn it off.
-        let selected = plan.subtitleTrack(report.subtitleTrackId)
-        if let selected, let url = selected.externalURL.flatMap(resolve), state.loaded, activeSidecar != selected.id {
-            activeSidecar = selected.id
-            player?.command(["sub-add", url.absoluteString, "select"])
-        }
+        applySidecar()
         guard path.isOriginalFile, !state.tracks.isEmpty else {
             return
         }
@@ -565,12 +559,25 @@ final class PlaybackSession {
         let subtitleIndex = subtitle?.isExternal == false ? subtitle?.streamIndex : nil
         if let subtitleIndex, let id = state.trackId(type: "sub", streamIndex: subtitleIndex) {
             if state.subtitleId != id {
-                activeSidecar = nil
                 player?.set("sid", String(id))
             }
         } else if subtitle == nil && report.subtitleTrackId?.hasPrefix("mpv-sub-") != true {
-            activeSidecar = nil
             player?.set("sid", "no")
+        }
+    }
+
+    /// An external subtitle (a sidecar, or one the server added mid-session) is added to the engine once per
+    /// load, on any path, whether the plan selected it from the start or the viewer did; a later plan revision
+    /// leaves it on, and a selection that moves away from it turns it off.
+    private func applySidecar() {
+        let selected = plan?.subtitleTrack(report.subtitleTrackId)
+        switch sidecar.step(selected, url: selected?.externalURL.flatMap(resolve), loaded: state.loaded) {
+        case .add(let url):
+            player?.command(["sub-add", url.absoluteString, "select"])
+        case .clear:
+            player?.set("sid", "no")
+        case .keep:
+            break
         }
     }
 
@@ -801,36 +808,35 @@ final class PlaybackSession {
     private func selectSubtitle(_ id: String?) -> String? {
         // The server may have selected a sidecar it just added before this choice of it arrives:
         // that one is still to be added to the engine.
-        let unadded = id.flatMap { plan?.subtitleTrack($0) }.map { $0.isExternal && activeSidecar != $0.id } ?? false
+        let unadded = id.flatMap { plan?.subtitleTrack($0) }.map { $0.isExternal && sidecar.added != $0.id } ?? false
         if id == report.subtitleTrackId && !unadded { return nil }
         if playsOriginal, let id, id.hasPrefix("mpv-sub-"), let trackId = Int64(id.dropFirst(8)),
            state.tracks.contains(where: { $0["type"] as? String == "sub" && $0["id"] as? Int64 == trackId }) {
-            report.subtitleTrackId = id
-            report.subtitleClientOnly = true
-            activeSidecar = nil
+            report.chooseSubtitle(id)
+            sidecar.forget()
             player?.set("sid", String(trackId))
             report.publish(state, seekTarget: pendingSeek, force: true)
             return nil
         }
         guard let id else {
-            if !playsOriginal {
+            // Off for a sidecar is the player's own on any path: the server has nothing to change, and its
+            // answer on its HLS would be a new source, restarting playback.
+            guard SidecarSubtitle.offIsLocal(playsOriginal: playsOriginal, current: plan?.subtitleTrack(report.subtitleTrackId)) else {
                 report.sessionCommand(["kind": "tracks", "subtitleTrackId": NSNull()])
                 return nil
             }
-            report.subtitleTrackId = nil
-            report.subtitleClientOnly = true
-            activeSidecar = nil
+            report.chooseSubtitle(nil)
+            sidecar.forget()
             player?.set("sid", "no")
             return nil
         }
         guard let track = plan?.subtitleTrack(id) else {
             return "No such subtitle track"
         }
-        if let url = track.externalURL.flatMap(resolve) {
-            report.subtitleTrackId = id
-            report.subtitleClientOnly = true
-            activeSidecar = id
-            player?.command(["sub-add", url.absoluteString, "select"])
+        if track.externalURL.flatMap(resolve) != nil {
+            // Added now, or once the media has loaded (applyTracks).
+            report.chooseSubtitle(id)
+            applySidecar()
             return nil
         }
         let index = track.streamIndex
@@ -838,9 +844,8 @@ final class PlaybackSession {
             report.sessionCommand(["kind": "tracks", "subtitleTrackId": id])
             return nil
         }
-        report.subtitleTrackId = id
-        report.subtitleClientOnly = true
-        activeSidecar = nil
+        report.chooseSubtitle(id)
+        sidecar.forget()
         player?.set("sid", String(trackId))
         return nil
     }

@@ -75,6 +75,12 @@ final class PlayerReport {
         }
     }
 
+    /// The viewer's own subtitle choice, applied in the player: later plans of this session keep it.
+    func chooseSubtitle(_ id: String?) {
+        subtitleTrackId = id
+        subtitleClientOnly = true
+    }
+
     func failure(kind: String, message: String, recoverable: Bool) {
         emitError(["kind": kind, "message": message, "recoverable": recoverable])
     }
@@ -300,5 +306,43 @@ final class PlayerReport {
         case "network": return "transient"
         default: return "source"
         }
+    }
+}
+
+/// The external subtitle (a sidecar) handed to this load's engine, by plan track id. A sidecar exists only in the
+/// player, on any path: the engine draws it once it is added (`sub-add`). Remembering which one was added keeps it
+/// on across later plans of the same source; a new load, Off and any other track forget it, so choosing it again
+/// adds it again.
+struct SidecarSubtitle {
+    enum Step: Equatable {
+        case keep
+        /// Add this file to the engine and select it.
+        case add(URL)
+        /// Turn off the sidecar this load added: the selection moved away from it.
+        case clear
+    }
+
+    private(set) var added: String?
+
+    /// What the engine does for the selected subtitle (`url`: its file, resolved), once the media is loaded.
+    mutating func step(_ selected: VelaPlanTrack?, url: URL?, loaded: Bool) -> Step {
+        if let selected, selected.isExternal, let url {
+            guard loaded, added != selected.id else { return .keep }
+            added = selected.id
+            return .add(url)
+        }
+        guard added != nil else { return .keep }
+        added = nil
+        return .clear
+    }
+
+    mutating func forget() {
+        added = nil
+    }
+
+    /// Whether Off for the `current` subtitle is the player's own. An original file's tracks are, and so is a
+    /// sidecar on any path, which only the player draws: asking the server would only start a new source.
+    static func offIsLocal(playsOriginal: Bool, current: VelaPlanTrack?) -> Bool {
+        playsOriginal || current?.isExternal == true
     }
 }
