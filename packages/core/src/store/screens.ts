@@ -301,7 +301,12 @@ export class Screens {
     for (const [name, rev] of seed.revs) entry.revs.set(name, rev);
     const changed = changedParams(previous.params, entry.request.params);
     const document = this.documentOf(seed);
-    const reread = sourcesToReread(document, changed, [...Object.keys(previous.sources), ...Object.keys(previous.errors)], entry.lazy);
+    const byDeps = sourcesToReread(document, changed, [...Object.keys(previous.sources), ...Object.keys(previous.errors)], entry.lazy);
+    // What the previous page was still waiting for (a first read, a retry after a timeout) is
+    // answered to that page's key, not this one: read it here too, as is any eager source the
+    // previous page never got.
+    const missing = document ? eagerSources(document, entry.lazy).filter(name => !(name in previous.sources) && !(name in previous.errors)) : [];
+    const reread = [...new Set([...byDeps, ...Object.keys(previous.pending).filter(name => previous.pending[name]), ...missing])].sort();
     this.set('pages', pages => ({ ...pages, [key]: { ...previous, key, params: entry.request.params, pending: {}, ...(entry.request.context ? { context: entry.request.context } : {}) } }));
     // The topic is sealed for the old params; a param no source reads keeps it (same data).
     if (reread.length) void this.read(key, reread);
@@ -464,7 +469,9 @@ export class Screens {
     const attempt = Math.max(...names.map(name => entry.timeouts.get(name) ?? 1));
     const timer = setTimeout(() => {
       entry.retryTimers.delete(timer);
-      if (this.entries.get(key) !== entry) return;
+      // Only for the page on show: a page a param change replaced was seeded into the shown one,
+      // which reads what this was waiting for itself (a re-show reads it again anyway).
+      if (this.entries.get(key) !== entry || !entry.opened) return;
       // Only those still waiting: a read in between may have answered them.
       const still = names.filter(name => entry.timeouts.has(name));
       if (still.length) void this.read(key, still);

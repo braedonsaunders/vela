@@ -632,3 +632,25 @@ test('any source error that allows a retry (unavailable as well as timeout) is r
   expect(h.api.calls.length).toBe(reads + 1);
   expect(h.page(key).errors.schedule).toBe('not_found');
 });
+
+test('a param change while a source waits for its retry reads that source for the new page too (lab: schedule lost)', async () => {
+  const h = harness();
+  // The first read: schedule timed out (retry allowed), the rest answered.
+  h.api.auto = () => ({ rev: 1, sources: { viewer: 'v', hero: 'h' }, errors: { schedule: { code: 'timeout', retry: true } }, live: { topic: 't1' } });
+  await h.screens.loadDocument(HREF);
+  const first = open(h, { league: 'nfl' });
+  await flush(); await flush();
+  expect(h.page(first.key).pending.schedule).toBe(true);
+  // A param no loaded source reads (as the teams tabs' default does) opens the next page before the retry fires.
+  h.api.auto = read => ({ rev: 2, sources: Object.fromEntries((read.sources ?? []).map(name => [name, name === 'schedule' ? { events: [1] } : name])), live: { topic: 't2' } });
+  first.release();
+  const next = open(h, { league: 'nfl', teamsLeague: 'ncaam' }, first.key);
+  await flush(); await flush();
+  expect(h.api.calls.at(-1)!.read.sources).toContain('schedule');
+  expect(h.page(next.key).sources.schedule).toEqual({ events: [1] });
+  expect(h.page(next.key).pending).toEqual({});
+  // The hidden page's retry timer does not read for it.
+  const reads = h.api.calls.length;
+  await new Promise(resolve => setTimeout(resolve, 60));
+  expect(h.api.calls.length).toBe(reads);
+});
