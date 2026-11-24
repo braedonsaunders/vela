@@ -146,7 +146,7 @@ export function formatComparisonMarkdown(
 
 ## Detailed Findings for W3 (TV Focus & Perf Fixes)
 
-### 1. Single Record Push Reader Isolation (\`packages/skin/src/screen/host.tsx\`)
+### 1. Single Record Push Reader Isolation (\`packages/skin/src/screen/host.tsx\` & \`packages/skin/src/blocks/record-scope.tsx\`)
 ${
   audit
     ? `- **Pushed Record**: \`${audit.pushedRecordKey}\`
@@ -154,7 +154,7 @@ ${
 - **Actual Reader Items for \`${audit.pushedRecordKey}\`**: \`${audit.actualReaderItems}\` items
 - **Currently Invalidated Items on Single Record Push**: \`${audit.currentRootInvalidatedItems}/${audit.totalCollectionItems}\` items (\`rootReadsTotalRecords = ${audit.rootReadsTotalRecords}\`)
 - **With Per-Item \`useRecordReader()\`**: \`${audit.isolatedPerItemInvalidatedItems}/${audit.totalCollectionItems}\` items
-- **Root Cause**: ${audit.rootCause}`
+- **Summary**: ${audit.rootCause}`
     : '- Reader isolation audit not applicable.'
 }
 
@@ -250,15 +250,15 @@ if (import.meta.main) {
     });
   }
 
-  /** Start an isolated frozen mock server on `mockPort` if `--mock` was not externally supplied.
+  /** Start an isolated frozen mock server in `repoDir` on `mockPort` if `--mock` was not externally supplied.
    *  Returns the mock URL and a cleanup callback that kills ONLY its own child PID. */
-  async function ensureMockServer(): Promise<{ url: string; stop: () => void }> {
+  async function ensureMockServer(repoDir: string): Promise<{ url: string; stop: () => void }> {
     if (values.mock) {
       return { url: values.mock, stop: () => {} };
     }
     const url = `http://127.0.0.1:${mockPort}`;
     const child = Bun.spawn(['bun', 'mock-server/main.ts'], {
-      cwd: documentRoot,
+      cwd: repoDir,
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -289,7 +289,7 @@ if (import.meta.main) {
     }
     if (!ready) {
       child.kill();
-      throw new Error(`Timed out waiting for mock-server on ${url}`);
+      throw new Error(`Timed out waiting for mock-server on ${url} in ${repoDir}`);
     }
     return {
       url,
@@ -401,13 +401,15 @@ if (import.meta.main) {
 
   async function measureRoute(
     repoDir: string,
-    mockUrl: string,
     route: string,
     label: 'legacy' | 'document',
     deviceProfile: RoutePerfResult['deviceProfile'],
   ): Promise<RoutePerfResult> {
     // Unthrottle emulator during Metro bundling & ADB setup so host Metro doesn't starve the guest adbd
     setEmulatorCpuQuota('400%');
+
+    const mock = await ensureMockServer(repoDir);
+    const mockUrl = mock.url;
 
     // Reset mock state to deterministic defaults
     await fetch(`${mockUrl}/__admin/sports`, {
@@ -564,56 +566,52 @@ if (import.meta.main) {
       };
     } finally {
       stopMetro();
+      mock.stop();
     }
   }
 
-  const mock = await ensureMockServer();
-  try {
-    setEmulatorCpuQuota('400%');
-    const deviceProfile = queryDeviceProfile();
-    if (values['compare-sports']) {
-      console.log(`[tv-route] Measuring legacy Sports route (/screen/sports) from ${legacyRoot} (${gitShortHead(legacyRoot)}) on ${udid}...`);
-      const legacy = await measureRoute(legacyRoot, mock.url, '/screen/sports', 'legacy', deviceProfile);
-      console.log(
-        `[tv-route] Legacy result: firstFrame=${legacy.firstFrame.routeToFirstFrameMs}ms, focusP95=${legacy.focusMove.stats.p95Ms}ms (${legacy.focusMove.stats.count} frames), recordPush=${legacy.recordPush.framesRendered} frames`,
-      );
+  setEmulatorCpuQuota('400%');
+  const deviceProfile = queryDeviceProfile();
+  if (values['compare-sports']) {
+    console.log(`[tv-route] Measuring legacy Sports route (/screen/sports) from ${legacyRoot} (${gitShortHead(legacyRoot)}) on ${udid}...`);
+    const legacy = await measureRoute(legacyRoot, '/screen/sports', 'legacy', deviceProfile);
+    console.log(
+      `[tv-route] Legacy result: firstFrame=${legacy.firstFrame.routeToFirstFrameMs}ms, focusP95=${legacy.focusMove.stats.p95Ms}ms (${legacy.focusMove.stats.count} frames), recordPush=${legacy.recordPush.framesRendered} frames`,
+    );
 
-      // Post-cut document Sports is at /screen/sports (or /screen/sports?screens=1 pre-cut)
-      console.log(`[tv-route] Measuring document Sports route (/screen/sports) from ${documentRoot} (${gitShortHead(documentRoot)}) on ${udid}...`);
-      const document = await measureRoute(documentRoot, mock.url, '/screen/sports', 'document', deviceProfile);
-      console.log(
-        `[tv-route] Document result: firstFrame=${document.firstFrame.routeToFirstFrameMs}ms, focusP95=${document.focusMove.stats.p95Ms}ms (${document.focusMove.stats.count} frames), recordPush=${document.recordPush.framesRendered} frames (invalidated=${document.recordPush.readerAudit?.currentRootInvalidatedItems}/${document.recordPush.readerAudit?.totalCollectionItems})`,
-      );
+    // Post-cut document Sports is at /screen/sports (or /screen/sports?screens=1 pre-cut)
+    console.log(`[tv-route] Measuring document Sports route (/screen/sports) from ${documentRoot} (${gitShortHead(documentRoot)}) on ${udid}...`);
+    const document = await measureRoute(documentRoot, '/screen/sports', 'document', deviceProfile);
+    console.log(
+      `[tv-route] Document result: firstFrame=${document.firstFrame.routeToFirstFrameMs}ms, focusP95=${document.focusMove.stats.p95Ms}ms (${document.focusMove.stats.count} frames), recordPush=${document.recordPush.framesRendered} frames (invalidated=${document.recordPush.readerAudit?.currentRootInvalidatedItems}/${document.recordPush.readerAudit?.totalCollectionItems})`,
+    );
 
-      const markdown = formatComparisonMarkdown(legacy, document);
-      if (values.out) {
-        const outPath = resolve(values.out);
-        mkdirSync(dirname(outPath), { recursive: true });
-        writeFileSync(outPath, markdown);
-        console.log(`[tv-route] Wrote Markdown report to ${outPath}`);
-      } else {
-        console.log('\n' + markdown);
-      }
-      if (values.json) {
-        const jsonPath = resolve(values.json);
-        mkdirSync(dirname(jsonPath), { recursive: true });
-        writeFileSync(jsonPath, JSON.stringify({ budgets: PERF_BUDGETS, legacy, document }, null, 2));
-        console.log(`[tv-route] Wrote JSON report to ${jsonPath}`);
-      }
+    const markdown = formatComparisonMarkdown(legacy, document);
+    if (values.out) {
+      const outPath = resolve(values.out);
+      mkdirSync(dirname(outPath), { recursive: true });
+      writeFileSync(outPath, markdown);
+      console.log(`[tv-route] Wrote Markdown report to ${outPath}`);
     } else {
-      const targetRoute = values.route ?? '/screen/sports';
-      const variant = (values.variant === 'legacy' ? 'legacy' : 'document') as 'legacy' | 'document';
-      const targetRepo = variant === 'legacy' ? legacyRoot : documentRoot;
-      console.log(`[tv-route] Measuring ${targetRoute} (${variant}) from ${targetRepo} (${gitShortHead(targetRepo)}) on ${udid}...`);
-      const result = await measureRoute(targetRepo, mock.url, targetRoute, variant, deviceProfile);
-      console.log(JSON.stringify(result, null, 2));
-      if (values.json) {
-        const jsonPath = resolve(values.json);
-        mkdirSync(dirname(jsonPath), { recursive: true });
-        writeFileSync(jsonPath, JSON.stringify(result, null, 2));
-      }
+      console.log('\n' + markdown);
     }
-  } finally {
-    mock.stop();
+    if (values.json) {
+      const jsonPath = resolve(values.json);
+      mkdirSync(dirname(jsonPath), { recursive: true });
+      writeFileSync(jsonPath, JSON.stringify({ budgets: PERF_BUDGETS, legacy, document }, null, 2));
+      console.log(`[tv-route] Wrote JSON report to ${jsonPath}`);
+    }
+  } else {
+    const targetRoute = values.route ?? '/screen/sports';
+    const variant = (values.variant === 'legacy' ? 'legacy' : 'document') as 'legacy' | 'document';
+    const targetRepo = variant === 'legacy' ? legacyRoot : documentRoot;
+    console.log(`[tv-route] Measuring ${targetRoute} (${variant}) from ${targetRepo} (${gitShortHead(targetRepo)}) on ${udid}...`);
+    const result = await measureRoute(targetRepo, targetRoute, variant, deviceProfile);
+    console.log(JSON.stringify(result, null, 2));
+    if (values.json) {
+      const jsonPath = resolve(values.json);
+      mkdirSync(dirname(jsonPath), { recursive: true });
+      writeFileSync(jsonPath, JSON.stringify(result, null, 2));
+    }
   }
 }
