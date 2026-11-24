@@ -321,10 +321,11 @@
     "type": "sections", "testId": "sports-screen-sports", "gap": "30px", "style": { "font-family": "$ui.font" },
     "children": [
       { "type": "use", "template": "gutter", "when": [{ "test": "src.hero.events.0" }], "children": [
-        { "type": "box", "id": "hero", "style": { "flex-direction": "row", "gap": "16px", "min-height": "268px" }, "small": { "flex-direction": "column", "min-height": "auto" }, "children": [
-          { "type": "box", "style": { "flex": "1.65" }, "small": { "flex": "none" }, "children": [
+        { "type": "box", "id": "hero", "style": { "flex-direction": "row", "gap": "16px", "min-height": "268px" }, "below": { "1000": { "flex-direction": "column", "min-height": "auto" } },
+          "states": [{ "when": [{ "test": "env.tv" }], "style": { "flex-direction": "row", "min-height": "268px" } }], "children": [
+          { "type": "box", "style": { "flex": "1.65" }, "below": { "1000": { "flex": "none" } }, "states": [{ "when": [{ "test": "env.tv" }], "style": { "flex": "1.65" } }], "children": [
             { "type": "repeat", "over": "src.hero.events", "as": "e", "limit": 1, "key": "{e.id}", "item": { "type": "use", "template": "heroCard" } } ] },
-          { "type": "box", "when": [{ "test": "src.also.events.0" }], "style": { "flex": "1", "gap": "10px" }, "small": { "flex": "none" }, "children": [
+          { "type": "box", "when": [{ "test": "src.also.events.0" }], "style": { "flex": "1", "gap": "10px" }, "below": { "1000": { "flex": "none" } }, "states": [{ "when": [{ "test": "env.tv" }], "style": { "flex": "1" } }], "children": [
             { "type": "repeat", "over": "src.also.events", "as": "e", "exclude": "{src.hero.events.0.$key}", "limit": 3, "key": "{e.id}", "item": { "type": "use", "template": "miniCard" } } ] }
         ] } ] },
 

@@ -291,6 +291,45 @@ describe('fixtures', () => {
   });
 });
 
+describe('the Sports hero on foldable and tablet widths', () => {
+  const dir = join(import.meta.dir, '../../protocol/fixtures/screens');
+  /** The hero row's direction as drawn: its base, or the state that holds (a TV). */
+  const direction = async (width: number, tv: boolean) => {
+    const index = await Bun.file(join(dir, 'sports/index.json')).json() as ScreenDocument;
+    const r = resolveScreenDocument(index, { width, tv }, 'en', {});
+    let hero: RNode | undefined;
+    const find = (n: RNode) => { if (n.id === 'hero') hero = n; if (n.kind === 'box' || n.kind === 'sections') n.children.forEach(find); };
+    find(r.tree);
+    const at = { ...env, width, tv, small: width < 640 } as Env;
+    const held = hero!.states.find(s => holds(s.when, root({}), at));
+    return fill((held?.layer ?? hero!.base).style['flex-direction'], root({}), at);
+  };
+  test('an unfolded iPhone Duo (867 pt) or an upright tablet stacks the next games under the featured one', async () => {
+    expect(await direction(867, false)).toBe('column');
+    expect(await direction(834, false)).toBe('column');
+    expect(await direction(466, false)).toBe('column');
+  });
+  test('the game page stacks its panels on an upright unfolded Duo (669 pt), side by side from 760', async () => {
+    const game = await Bun.file(join(dir, 'sports/game.json')).json() as ScreenDocument;
+    const columns = (width: number) => {
+      let found: RNode | undefined;
+      const find = (n: RNode) => { if (n.id === 'columns') found = n; if (n.kind === 'box' || n.kind === 'sections') n.children.forEach(find); };
+      find(resolveScreenDocument(game, { width }, 'en', {}).tree);
+      return fill(found!.base.style['flex-direction'], root({}), { ...env, width } as Env);
+    };
+    expect(columns(669)).toBe('column');
+    expect(columns(466)).toBe('column');
+    expect(columns(867)).toBe('row');
+    expect(columns(1440)).toBe('row');
+  });
+  test('a landscape tablet or desktop keeps them beside it, and so does every TV', async () => {
+    expect(await direction(1194, false)).toBe('row');
+    expect(await direction(1440, false)).toBe('row');
+    expect(await direction(960, true)).toBe('row');
+    expect(await direction(1920, true)).toBe('row');
+  });
+});
+
 describe('border widths are points', () => {
   test('a document border is one point wherever px scale (TV); the kit tab keeps a scaled hairline', () => {
     const tv = resolveScreenDocument(doc({ type: 'box', style: { border: '1px solid $ui.ink', 'border-top-width': '1px', padding: '8px' } }), { width: 1920, tv: true, scale: 1.25 }, 'en', {});

@@ -27,7 +27,10 @@ export function PageFrame({ host, children, close, active }: { host: SkinHost; c
   const frameStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: (1 - shown.value) * 28 }, { scale: 0.97 + 0.03 * shown.value }] }));
   const scrimStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   if (!framed) return (
-    <FocusBoundary active={active} enterWhenReady style={{ flex: 1, backgroundColor: ui.page, paddingTop: Platform.isTV || Platform.OS === 'android' ? 0 : insets.top }} accessibilityViewIsModal>
+    // The whole screen, clear of the status bar and of the sides' cutouts (a phone's notch in
+    // landscape, a folded iPhone Duo's status strip down its right edge), over the page colour.
+    <FocusBoundary active={active} enterWhenReady style={{ flex: 1, backgroundColor: ui.page, paddingTop: Platform.isTV || Platform.OS === 'android' ? 0 : insets.top,
+      paddingLeft: sides.paddingLeft, paddingRight: sides.paddingRight }} accessibilityViewIsModal>
       <Animated.View style={[{ flex: 1 }, frameStyle]}>{children}</Animated.View>
     </FocusBoundary>
   );
