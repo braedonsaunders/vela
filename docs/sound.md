@@ -111,14 +111,15 @@ decoder → [VelaSoundProcessor: gain + 10 biquads] → Sonic (speed) → AudioT
 - **Gain and EQ**: a custom `AudioProcessor` added to `DefaultAudioSink`'s processor chain, built in `AudioPlayback.kt`'s renderers factory.
   - It processes 16-bit and float PCM at the file's own rate (hi-res stays hi-res) and runs before Sonic, so speed doesn't change the EQ.
   - I chose our own biquads over `android.media.audiofx.Equalizer`: that one has device-dependent band counts (often five) and curves, so the presets would sound different on every phone.
-- **Per-item gain across a gapless boundary**: within one playlist, ExoPlayer doesn't flush processors between same-format items.
-  - The new gain is delivered with a `PlayerMessage` at the next item's start, on the playback thread, and applied with a 30 ms ramp.
-  - The message fires at the renderer's read position, slightly ahead of output. Stage 2 measures that offset on a device; if it's audible between albums with very different gains, the processor counts frames from the stream's start offset instead.
-- **Crossfade**: one ExoPlayer plays one item at a time, so AutoMix uses a second ExoPlayer, prepared with the preloaded item.
-  - At `at` (a `PlayerMessage` on the outgoing item's position) the second player starts, and both players' processor gains ramp over `seconds`. Then the roles swap.
-  - Gapless album runs stay in one player's playlist, exactly as today.
-  - `MediaSessionHub` follows the active player through a forwarding player, so the notification and lock screen never flicker.
+- **Per-item gain across a gapless boundary**: Media3's renderer moves the sink to the next item's stream offset between the last buffer of one item and the first of the next, and the sink drains and flushes its processors there. `VelaSoundSink` passes that change on, and the processor switches gain at the flush, on the item's first sample, with no ramp and no timing guess (measured: on the boundary sample).
+- **Gain and EQ changes** glide over 10 ms.
+- **Crossfade**: one ExoPlayer plays one item at a time, so AutoMix uses a second player (a "deck"), prepared paused with the preloaded item.
+  - The outgoing deck's processor fades its own samples out from `at`, so the fade-out is sample-exact. The incoming deck's processor fades in from its item's first sample.
+  - The only timed step is the incoming deck's `play()`. It is posted on the main thread against the outgoing sink's heard position (ExoPlayer's `currentPosition` is only as fresh as the playback thread's last update), early by a start lead learned from each crossfade: a prepared player takes 70–90 ms to its first heard sample. Measured start error on the emulator: −8 to +15 ms.
+  - The incoming deck becomes the active player at once (`advanced`, status, the media session). The outgoing one keeps the audio focus while it fades, then stops as the spare deck.
+  - Gapless album runs stay in one player's playlist, exactly as before.
   - Everything happens in the service, without JavaScript, so it survives screen-off.
+- **Measurement**: a debuggable build's `audioCapture(path)` writes each deck's processed output to a WAV (and sends silence to the device), for `tools/sound-measure/analyse.ts`.
 
 ## Apple (iOS, iPadOS, tvOS: AVQueuePlayer)
 
