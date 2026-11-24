@@ -10,7 +10,7 @@ import { localeContext } from '../i18n';
 import { backoffMs } from '../live/events';
 import { eagerSources, isLazy, sourcesToReread } from '../screens/deps';
 import { changedParams, cleanParams, pageKey, sameTarget, serverContext, type PageRequest, type ScreenTarget } from '../screens/keys';
-import { linkHrefs, recordRefs, RecordStore, setPath } from '../screens/records';
+import { linkHrefs, recordRefs, RecordStore, sameJSON, setPath } from '../screens/records';
 import { chooseTopics, connectionKey, emptyQuery, readScreenMessage, streamQuery, type ScreenStreamQuery } from '../screens/stream';
 import type { ScreenPageState } from '../screens/types';
 import type { Session } from './session';
@@ -417,7 +417,8 @@ export class Screens {
         const values = { ...page.sources }, pending = { ...page.pending }, failures = { ...page.errors };
         for (const [name, value] of Object.entries(answered)) {
           if (!current(name)) continue;
-          values[name] = value;
+          // An unchanged answer keeps the value's identity, so nothing reading it draws again.
+          if (!sameJSON(values[name], value)) values[name] = value;
           delete failures[name];
           entry.revs.set(name, Math.max(entry.revs.get(name) ?? 0, rev));
         }
@@ -702,7 +703,7 @@ export class Screens {
       const [key, entry] = match;
       if (frame.rev <= (entry.revs.get(frame.source) ?? 0)) return;
       entry.revs.set(frame.source, frame.rev);
-      this.setPage(key, page => ({ ...page, sources: { ...page.sources, [frame.source]: frame.value }, rev: Math.max(page.rev, frame.rev) }));
+      this.setPage(key, page => ({ ...page, sources: sameJSON(page.sources[frame.source], frame.value) ? page.sources : { ...page.sources, [frame.source]: frame.value }, rev: Math.max(page.rev, frame.rev) }));
       this.track(key);
     } else if (message.kind === 'alert') {
       const alert = message.alert;

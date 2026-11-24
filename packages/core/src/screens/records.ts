@@ -30,7 +30,8 @@ export function mergeRecords(pool: RecordPool, incoming: unknown): { pool: Recor
   return { pool: next ?? pool, changed };
 }
 
-function sameJSON(a: unknown, b: unknown): boolean {
+/** Whether two values hold the same JSON (a re-read or replay that changed nothing keeps identity). */
+export function sameJSON(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
 }
