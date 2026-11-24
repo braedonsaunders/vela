@@ -446,6 +446,10 @@ export interface PlaylistImport {
   matched: PlaylistImportMatch[];
   unmatched: PlaylistImportUnmatched[];
   error?: string;
+  /** The source listed fewer tracks than the playlist holds (Spotify's public embed stops near 100;
+   * Ether keeps at most features.playlistImport.maxTracks). `sourceTotal` is the playlist's real
+   * count when the source says it (Deezer does, Spotify never). */
+  truncated?: boolean; sourceTotal?: number;
 }
 /** POST /playlists/import (features.playlistImport); returns 202 PlaylistImportJobRef. */
 export interface PlaylistImportRequest extends Mutation {

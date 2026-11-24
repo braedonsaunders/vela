@@ -1,4 +1,5 @@
 // Self-contained rich block for B7 Playlist import (`packages/skin/src/blocks/import.tsx`).
+import { importTruncatedNote } from './import-note';
 // Exposes the URL/file import form, reading/matching progress bar, matched tracks with plain match
 // badges ("Exact match" / "Matched by title & artist") and include/exclude toggles, unmatched tracks
 // with inline release picker for ambiguous songs, and playlist save action over `@vela/core`'s
@@ -304,6 +305,7 @@ export function PlaylistImportBlock({
   );
 }
 
+export { importTruncatedNote } from './import-note';
 export function ImportResultView({
   job,
   playlistName,
@@ -347,6 +349,12 @@ export function ImportResultView({
           </View>
           <Progress fraction={fraction} height={6} />
         </View>
+      ) : null}
+
+      {job.truncated && !inProgress ? (
+        <Text testID="music-import-truncated" accessibilityRole="alert" style={[m.text({ 'font-size': '14px', color: '$ui.inkSecondary' }), { maxWidth: 680 }]}>
+          {importTruncatedNote(job)}
+        </Text>
       ) : null}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, padding: m.small ? 14 : 18, borderRadius: 16, backgroundColor: alpha(m.ui.ink, 0.05), borderWidth: 1, borderColor: m.ui.glassEdge }}>

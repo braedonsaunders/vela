@@ -186,6 +186,9 @@ export interface PlaylistImportModel {
   matched: PlaylistImportMatchModel[];
   unmatched: PlaylistImportUnmatchedModel[];
   error?: string;
+  /** Only part of the source playlist was read; `sourceTotal` when the source said its size. */
+  truncated?: boolean;
+  sourceTotal?: number;
 }
 
 export interface DuplicateGroupModel {
@@ -433,6 +436,7 @@ export class Music {
           candidates: (u.candidates ?? []).map(t => card(t, '', images, width)),
         })),
         ...(answer.error ? { error: answer.error } : {}),
+        ...(answer.truncated ? { truncated: true, ...(typeof answer.sourceTotal === 'number' ? { sourceTotal: answer.sourceTotal } : {}) } : {}),
       };
       this.box.update('music', music => ({ ...music, playlistImport: ready<PlaylistImportModel | null>(model) }));
       return model;

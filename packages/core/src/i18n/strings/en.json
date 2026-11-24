@@ -1177,6 +1177,8 @@
   "music.import.start": "Match tracks",
   "music.import.reading": "Reading playlist…",
   "music.import.matching": "Matching against your library ({done} of {total})…",
+  "music.import.truncated": "Only the first {shared} tracks of this playlist could be read, so the rest are not included.",
+  "music.import.truncatedOf": "Only the first {shared} of {total} tracks of this playlist could be read, so the rest are not included.",
   "music.import.matchedHeading": "Matched in your library ({count})",
   "music.import.unmatchedHeading": "Not in your library ({count})",
   "music.import.matchBy.isrc": "Exact match",
