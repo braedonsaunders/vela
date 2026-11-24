@@ -548,6 +548,7 @@
   "liveOverlay.onNow": "On this channel now",
   "liveOverlay.dismiss": "Dismiss",
   "search.lookingForVibe": "Looking for that vibe…",
+  "search.matchingDescription": "Showing results that match the description",
   "search.noFilteredMatches": "Nothing matches these filters",
   "search.noFilteredMatchesMessage": "Try another type or library, or choose All.",
   "search.noMood": "Couldn't find that mood yet",

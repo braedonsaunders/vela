@@ -16,6 +16,7 @@ import {
   hasQuickConnectSignIn,
   hasTrackChanges,
   hasTrailerPreviews,
+  hasUnifiedSearch,
   hasVersions,
   hasViewerPlaylists,
 } from './capabilities';
@@ -40,6 +41,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       quickConnect: operation('quickConnect', hasQuickConnectSignIn(adapter)),
       descriptiveSearch: operation('descriptiveSearch', hasDescriptiveSearch(adapter)),
       aiSearch: operation('aiSearch', hasAiSearch(adapter)),
+      ...(hasUnifiedSearch(adapter) && description.features.unifiedSearch ? { unifiedSearch: description.features.unifiedSearch } : {}),
       proactiveFallback: operation('proactiveFallback', hasProactiveFallback(adapter)),
       liveTV: operation('liveTV', hasLiveTv(adapter)),
       ...(description.features.livePreview ? { livePreview: description.features.livePreview } : {}),

@@ -55,6 +55,11 @@ export interface ClientDeclaration {
   declareClient(request: V.NegotiateRequest): Promise<void>;
 }
 
+/** One ranked search list (`mode: 'auto'`): titles first, description matches as the server's fallback. */
+export interface UnifiedSearch {
+  searchAuto(request: Omit<V.SearchRequest, 'mode'>, signal?: AbortSignal): Promise<V.SearchResponse>;
+}
+
 export interface DescriptiveSearch {
   searchByDescription(request: Omit<V.SearchRequest, 'mode'>, signal?: AbortSignal): Promise<V.SearchResponse>;
 }
@@ -279,6 +284,10 @@ export function hasClientDeclaration(adapter: ServerAdapter): adapter is ServerA
 
 export function hasDescriptiveSearch(adapter: ServerAdapter): adapter is ServerAdapter & DescriptiveSearch {
   return 'searchByDescription' in adapter;
+}
+
+export function hasUnifiedSearch(adapter: ServerAdapter): adapter is ServerAdapter & UnifiedSearch {
+  return 'searchAuto' in adapter;
 }
 
 export function hasAiSearch(adapter: ServerAdapter): adapter is ServerAdapter & AiSearch {
