@@ -18,7 +18,7 @@ import { fill, type RNode } from '../resolve';
 import { resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
 import { resolveUi } from '../resolve/ui';
 import { SkinNodeFor, SkinRoot, SkinRoute } from '../render';
-import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, type ScreenBlockRuntime } from '../blocks';
+import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, useBlockLook, type ScreenBlockRuntime } from '../blocks';
 import { screenRoot } from './items';
 
 /** Where a `navigate` goes: a page of a plugin screen, or one of the app's built-in routes. */
@@ -120,6 +120,8 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   const page = shown ?? last.current?.page;
   const pageKey = key || last.current?.key || '';
   const record = useRecordReader();
+  // A section's loading and failure nodes start below a shell bar that floats over the page.
+  const look = useBlockLook();
   const [state, setState] = useState<Record<string, string>>({});
   // A plugin action's answer may carry a line to show (at most 200 characters), for a few seconds.
   const [toast, setToast] = useState('');
@@ -229,14 +231,16 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   // A Studio preview whose token is no longer live: one message for the whole tab (core's flag).
   if (previewExpired) return <Refused host={host} reason="" expired />;
   // A document that failed to read again keeps drawing the one it had (core keeps it ready).
+  const statusTop = route && document.value?.presentation === 'section' ? look.barTop : 0;
   const reason = problem || (document.load === 'failed' && !resolved ? document.error : '');
   if (reason) return <>{refused ? refused(reason) : <Refused host={host} reason={reason} />}</>;
   if (!resolved || !ctx || !page) {
     // Before the document or the first read: the document's own skeleton once it is resolved.
-    return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} /> : <View style={{ flex: 1 }} />;
+    return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} status={statusTop} /> : <View style={{ flex: 1 }} />;
   }
+  const status = page.load !== 'ready';
   const node = page.load === 'failed' ? resolved.failure : page.load === 'loading' ? resolved.loading : resolved.tree;
-  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} />;
+  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} {...(status ? { status: statusTop } : {})} />;
   if (!toast) return drawn;
   const ui = resolveUi(host.doc.document.ui);
   return (
@@ -252,10 +256,15 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
 
 const LOADING: ScreenPageState = { href: '', key: '', params: {}, sources: {}, pending: {}, errors: {}, load: 'loading', rev: 0 };
 
-function Draw({ host, node, ctx, runtime, route }: { host: SkinHost; node: RNode; ctx: ReturnType<typeof screenRoot>; runtime: ScreenBlockRuntime; route: boolean }) {
+/** The page's tree (its sections scroll and keep clear of the shell themselves); or, with `status`
+ * (the points to keep clear at the top), its loading or failure node filling the page below the
+ * shell's bar, as the hard-coded screens drew their skeleton and failure. */
+function Draw({ host, node, ctx, runtime, route, status }: { host: SkinHost; node: RNode; ctx: ReturnType<typeof screenRoot>; runtime: ScreenBlockRuntime; route: boolean; status?: number }) {
   return (
     <ScreenBlockRuntimeProvider value={runtime}>
-      {route ? <SkinRoute host={host} node={node} ctx={ctx} /> : <SkinRoot host={host} node={node} ctx={ctx} />}
+      {status !== undefined
+        ? <View style={{ flex: 1, paddingTop: status }}><SkinRoot host={host} node={node} ctx={ctx} /></View>
+        : route ? <SkinRoute host={host} node={node} ctx={ctx} /> : <SkinRoot host={host} node={node} ctx={ctx} />}
     </ScreenBlockRuntimeProvider>
   );
 }

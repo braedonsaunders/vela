@@ -201,6 +201,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
         { type: 'text', text: '{arg.text}', when: on('text'), style: text(18, 700, '$ui.ink', { 'text-align': 'center' }) },
         { type: 'text', text: msg('ui.tryAgain'), when: off('text'), style: text(18, 700, '$ui.ink', { 'text-align': 'center' }) },
         { type: 'text', text: '{arg.message}', when: on('message'), style: text(14, 500, '$ui.inkQuiet', { 'text-align': 'center' }) },
+        // Without a message of its own, the failed read's (Failure showed the error text).
+        { type: 'text', text: '{env.error}', when: [...off('message'), { test: 'env.error' }], style: text(14, 500, '$ui.inkQuiet', { 'text-align': 'center' }) },
         { type: 'use', template: 'vela:pill', when: [{ test: 'env.canRetry' }], with: { label: '{arg.retry}', glyph: 'restart', primary: 'true' }, press: { action: 'retry' } },
       ],
     },
