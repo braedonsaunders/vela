@@ -38,7 +38,7 @@ export interface Condition {
 
 export type Action =
   | 'select' | 'person' | 'play' | 'pickHero' | 'home' | 'search' | 'live' | 'library'
-  | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'switchProfile' | 'playlists' | 'hideScores' | 'addToPlaylist' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
+  | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'switchProfile' | 'playlists' | 'addToPlaylist' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
   /** A failed route asks again for what failed (`env.canRetry`). */
   | 'retry'
   /** Shell: open this flag alone, closing the others (keep- flags stay); pressed again it closes. */
