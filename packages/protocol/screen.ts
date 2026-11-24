@@ -110,7 +110,7 @@ export interface NavigateAction {
 }
 
 /** POST /screens/{id}/actions/{action} */
-export interface ScreenActionRequest { page: ID; params: Record<string, string>; args: Record<string, string>; context?: Record<string, string> }
+export interface ScreenActionRequest { page: ID; params: Record<string, string>; args: Record<string, string>; context?: Record<string, string>; /** The viewer's IANA zone. */ tz?: string }
 export interface ScreenActionAnswer {
   records?: Record<string, RecordEntry>;
   sources?: Record<string, unknown>;

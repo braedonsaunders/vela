@@ -195,7 +195,7 @@ test('an optimistic record patch shows at once and gives way to the answer; a fa
   expect(h.box.get().screens.busy[`${key}#chip-phi`]).toBe(true);
   const sent = h.api.actions[0]!;
   expect(sent.action).toBe('ether.favorite');
-  expect(sent.request).toEqual({ page: 'index', params: {}, args: { ref: 'entity:phi', on: 'true' } });
+  expect(sent.request).toEqual({ page: 'index', params: {}, args: { ref: 'entity:phi', on: 'true' }, tz: expect.any(String) });
   expect(sent.key).toBe('key-1');
   sent.resolve({ records: { 'entity:phi': { rev: 5, value: { name: 'Eagles', favourite: true } } }, refresh: ['yours'], toast: 'Saved' });
   expect((await pressed).toast).toBe('Saved');
@@ -360,4 +360,54 @@ test('links, settings and a session reset', async () => {
   expect(h.page(key).load).toBe('loading'); // still on show: read again under the new session
   await flush(); await flush();
   expect(h.page(key).load).toBe('ready');
+});
+
+test('when Ether ends the stream the open pages are read again, and a 404 then fails the page', async () => {
+  const h = harness();
+  h.api.auto = () => ({ rev: 10, sources: { hero: 'h' }, live: { topic: 't' } });
+  const { key } = open(h);
+  await settle();
+  const reads = h.api.calls.length;
+  h.api.auto = null;
+  h.api.streams[0]!.close();
+  await flush(); await flush();
+  expect(h.api.calls.length).toBeGreaterThan(reads);
+  h.api.calls.at(-1)!.reject(Object.assign(new Error('Not found'), { status: 404 }));
+  await flush();
+  expect(h.page(key)).toMatchObject({ load: 'failed', failure: 'not_found' });
+});
+
+test('no variant for this renderer reads as update_required', async () => {
+  const h = harness();
+  const { key } = open(h);
+  await flush();
+  h.api.calls[0]!.reject(Object.assign(new Error('Update the app'), { status: 404, detail: { code: 'update_required' } }));
+  await flush();
+  expect(h.page(key).failure).toBe('update_required');
+});
+
+test('more than 16 sources are read in batches of 16', async () => {
+  const h = harness();
+  h.api.auto = read => ({ rev: 1, sources: Object.fromEntries((read.sources ?? ['hero']).map(name => [name, name])) });
+  const { key } = open(h);
+  await flush(); await flush();
+  await h.screens.retry(key, Array.from({ length: 20 }, (_, n) => `s${n}`));
+  expect(h.api.calls.slice(1).map(call => call.read.sources!.length)).toEqual([16, 4]);
+  expect(h.page(key).sources.s19).toBe('s19');
+});
+
+test('an action answer with every source (lazy ones too) replaces them; lazy ones join refreshes', async () => {
+  const h = harness();
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' } });
+  const { key } = open(h);
+  await h.screens.loadDocument(HREF);
+  await flush(); await flush();
+  const pressed = h.screens.action(key, { name: 'ether.favorite', args: {} });
+  await flush();
+  h.api.actions[0]!.resolve({ records: {}, sources: { hero: 'h2', standings: 'st' } });
+  await pressed;
+  expect(h.page(key).sources).toMatchObject({ hero: 'h2', standings: 'st' });
+  h.screens.refresh(key);
+  await flush();
+  expect(h.api.calls.at(-1)!.read.sources).toContain('standings');
 });

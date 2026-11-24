@@ -38,6 +38,7 @@ import type { SubtitleSearch } from '../media-actions';
 import { VelaError } from '../errors';
 import { normaliseDetail, normaliseEvents, normaliseScreen } from '../../live/events';
 import { EtherTransport } from './transport';
+import { localeContext } from '../../i18n';
 import type { ScreenTarget } from '../../screens/keys';
 import { streamSearch, type ScreenStreamQuery } from '../../screens/stream';
 import { plexHomeSelection, plexTokens } from './plex';
@@ -157,8 +158,12 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     this.http = new EtherTransport(origin, credentials, capabilityContext, onSessionRejected);
   }
 
+  /** The renderer (Ether lists screens only to a client that says it) and the display language
+   * (Ether localises documents and data to its first tag). */
   private get screenHeaders(): Record<string, string> {
-    return this.rendererVersion ? { 'X-Vela-Screen-Renderer': String(this.rendererVersion) } : {};
+    if (!this.rendererVersion) return {};
+    const language = localeContext().locale;
+    return { 'X-Vela-Screen-Renderer': String(this.rendererVersion), ...(language ? { 'X-Vela-Language': language } : {}) };
   }
 
   setCapabilityContext(context: string): void {
