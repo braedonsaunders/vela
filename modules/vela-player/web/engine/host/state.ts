@@ -92,7 +92,10 @@ export interface HostTracksState {
   nativeTrack?: HTMLTrackElement;
 }
 export interface HostRecoveryState {
+  /** Routes whose packet runtime failed (they move to the segment pipeline or the browser's HLS). */
   readonly browserFallbacks: Set<string>;
+  /** Routes whose segment pipeline could not play the stream (they move to the browser's HLS). */
+  readonly segmentFallbacks: Set<string>;
   localDecoderRetries: Set<string>;
   readonly history: RecoveryHistory;
   attempted: Set<string>;

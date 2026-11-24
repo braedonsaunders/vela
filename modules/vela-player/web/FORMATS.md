@@ -96,6 +96,27 @@ a 5.1 device heard 7.1's back and side pairs folded together.
   are left to the server. Multichannel PCM whose container gives no speaker positions (MOV
   without a readable `chan`, Matroska `A_PCM`) is refused rather than guessed.
 
+## Plain-http pages (no secure context)
+
+A page opened by LAN address over plain http (`http://192.168.x.y:…/vela/`) is not a secure
+context: WebCodecs (`VideoDecoder`, `AudioDecoder`, `VideoFrame`) and WebGPU do not exist there, so
+the packet runtime above cannot run. MediaSource does, and HLS goes through Vela's segment pipeline
+(`engine/pipeline.ts`, routed by `engine/hls-route.ts`) instead of the browser's own `<video>`
+HLS. When a plan offers no quality ladder (Ether's live remux), the pipeline reads the stream's
+codecs from its init segment (`engine/init-codecs.ts`); a discontinuity is spliced onto the
+buffered timeline. The browser's own HLS is the last resort, tried once when the pipeline cannot
+start a stream (a master or TS playlist), and Safari keeps its own HLS where the pipeline adds nothing.
+
+On such a page, as on the secure path: live latency control and catch-up to the edge, the live
+window and its notices, quality ladders with automatic and pinned quality, separate audio
+renditions, WebVTT subtitles, read retries and source recovery. Only on a secure page (https,
+localhost): the original-file route (the client does not advertise `originalPlayback`, so the
+server sends a remux or transcode), the WebGPU decoder packages (HEVC where the browser's MSE lacks
+it, MPEG-2, MPEG-4 Part 2, VC-1), page-decoded TrueHD, DTS, FLAC and ALAC with the worklet's
+channel mapping, HDR tone mapping and deinterlacing on the WebGPU canvas, and embedded subtitle
+overlays (PGS, ASS, VobSub) from originals. Codecs follow `MediaSource.isTypeSupported`. Vela uses
+no EME, which would also need a secure context.
+
 ## Server capabilities
 
 `capabilities.ts` reports `originalPlayback` with the decoders that passed the matrix: H.264 and

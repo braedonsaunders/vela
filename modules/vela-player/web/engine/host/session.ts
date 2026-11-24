@@ -94,6 +94,7 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   if (session.id !== context.session.current?.id) {
     context.recovery.history.clear();
     context.recovery.browserFallbacks.clear();
+    context.recovery.segmentFallbacks.clear();
     context.tracks.subtitleFailures.clear();
     context.tracks.subtitleFailureNotes = [];
     context.tracks.subtitlePreference = undefined;

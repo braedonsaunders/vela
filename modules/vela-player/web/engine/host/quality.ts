@@ -2,6 +2,7 @@ import { canAttemptOriginal } from '../original-support';
 import { codecKnown } from '../model';
 import type { Source } from '../model';
 import { mediaSourceClass } from '../pipeline';
+import { hlsBackend, type HlsBackend, type HlsRouteFacts } from '../hls-route';
 import type { HostContext } from './state';
 import { activateSource } from './media';
 import { readPosition } from './position';
@@ -34,34 +35,41 @@ export function routeKey(context: HostContext, source: Source) {
     source.id,
   ].join(':');
 }
+/** The facts hlsBackend decides an HLS source's player from, on this page, for this route. */
+export function hlsRouteFacts(context: HostContext, source: Source): HlsRouteFacts {
+  const MS = mediaSourceClass();
+  const key = routeKey(context, source);
+  return {
+    packetOffered: context.session.current?.live ? context.runtimes.live : context.runtimes.hls,
+    packetCapable: canAttemptOriginal(),
+    packetFailed: context.recovery.browserFallbacks.has(key),
+    segmentsFailed: context.recovery.segmentFallbacks.has(key),
+    mediaSource: !!MS,
+    nativeHls: !!context.surface.video.canPlayType('application/vnd.apple.mpegurl'),
+    apple: navigator.vendor === 'Apple Computer, Inc.',
+    managedMediaSource: 'ManagedMediaSource' in globalThis,
+    renditions: (source.renditions ?? []).map((r) => ({
+      known: codecKnown(r),
+      supported: !!MS && codecKnown(r) && MS.isTypeSupported(r.mime),
+    })),
+  };
+}
+export function backendFor(context: HostContext, source: Source): HlsBackend | null {
+  if (source.delivery !== 'hls')
+    return source.original && canAttemptOriginal() && !context.recovery.browserFallbacks.has(routeKey(context, source))
+      ? 'packet'
+      : null;
+  return hlsBackend(hlsRouteFacts(context, source));
+}
 export function usesPacketRuntime(context: HostContext, source: Source) {
-  return (
-    !context.recovery.browserFallbacks.has(routeKey(context, source)) &&
-    ((source.original && canAttemptOriginal()) ||
-      (source.delivery === 'hls' &&
-        (context.session.current?.live ? context.runtimes.live : context.runtimes.hls)))
-  );
+  return backendFor(context, source) === 'packet';
 }
 export function supportsSource(context: HostContext, source: Source) {
   if (source.edition !== context.session.current?.edition) return false;
   if (source.delivery === 'file')
     return (source.original && canAttemptOriginal()) || !!context.surface.video.canPlayType(source.mime);
-  return (
-    (context.session.current?.live ? context.runtimes.live : context.runtimes.hls) ||
-    !!context.surface.video.canPlayType('application/vnd.apple.mpegurl') ||
-    !!source.renditions?.some(
-      (r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass()!.isTypeSupported(r.mime)),
-    )
-  );
-}
-export function useNativeHls(context: HostContext, source: Source) {
-  const native = !!context.surface.video.canPlayType('application/vnd.apple.mpegurl');
-  const segmented = !!source.renditions?.some(
-    (r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass()!.isTypeSupported(r.mime)),
-  );
-  const pending = !!source.renditions?.some((r) => !codecKnown(r));
-  const managed = 'ManagedMediaSource' in globalThis;
-  return native && (!segmented || (navigator.vendor === 'Apple Computer, Inc.' && !managed && !pending));
+  // Whether any player takes it, before a failure moved the route along.
+  return hlsBackend({ ...hlsRouteFacts(context, source), packetFailed: false, segmentsFailed: false }) !== null;
 }
 export function candidateSources(context: HostContext) {
   const priority = { direct: 0, remux: 1, transcode: 2 };

@@ -92,9 +92,10 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
 
 test('event stream EOF and errors both enter session recovery, explicit ended does not', async () => {
   for (const outcome of ['eof', 'error', 'ended']) {
+    let starts = 0;
     const plan = { sessionId: 'stream', state: 'playing', positionSeconds: 0, sourceGeneration: 0, seekGeneration: 0 } as PlaybackPlan;
     const adapter = {
-      startPlayback: async () => plan,
+      startPlayback: async () => { starts++; return plan; },
       sessionSnapshot: async () => ({ plan, revision: 1, cursor: '1' }),
       streamViewerEvents: async () => {},
       streamSession: async (_id: string, _cursor: string, emit: (event: any) => Promise<void>) => {
@@ -108,7 +109,9 @@ test('event stream EOF and errors both enter session recovery, explicit ended do
     const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
     await playback.start({ kind: 'channel', id: 'fox' });
     for (let i = 0; i < 15; i++) await Promise.resolve();
-    expect(box.get().playback.phase).toBe(outcome === 'ended' ? 'ended' : 'preparing');
+    // A channel the server ended is not restarted: the viewer is told it stopped (Try again), not "Finished".
+    expect(box.get().playback.phase).toBe(outcome === 'ended' ? 'failed' : 'preparing');
+    if (outcome === 'ended') expect(starts).toBe(1);
     await playback.stop();
   }
 });

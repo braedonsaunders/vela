@@ -108,6 +108,23 @@ export async function recoverPlayback(context: HostContext, error: unknown, toke
       await activateSource(context, context.media.source, position, true, true);
       return;
     }
+    // The segment pipeline could not start this stream (a playlist or codec it does not take):
+    // the browser's own HLS, where there is one, gets one try before the next source.
+    if (
+      !readFailure &&
+      context.media.backend === 'mse' &&
+      !context.watchdog.everPlayed &&
+      context.media.source?.delivery === 'hls' &&
+      !context.recovery.segmentFallbacks.has(routeKey(context, context.media.source)) &&
+      context.surface.video.canPlayType('application/vnd.apple.mpegurl')
+    ) {
+      context.recovery.segmentFallbacks.add(routeKey(context, context.media.source));
+      if (context.recovery.segmentFallbacks.size > 32)
+        context.recovery.segmentFallbacks.delete(context.recovery.segmentFallbacks.values().next().value!);
+      context.recovery.active = false;
+      await activateSource(context, context.media.source, position, true, true);
+      return;
+    }
     context.playback.resumePosition = position;
     releaseOriginal(context);
     // Requests already retry twice; source handoff is bounded by plan length.

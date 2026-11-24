@@ -7,6 +7,10 @@ import { parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
+import { fragmentStart, initFacts } from './init-codecs';
+
+/** The rendition id of a source's own media playlist, when its plan offers no quality ladder. */
+export const STREAM_RENDITION = 'stream';
 
 type MediaSourceClass = typeof MediaSource;
 export function mediaSourceClass(): MediaSourceClass | undefined {
@@ -26,8 +30,11 @@ export class SegmentPipeline {
   readonly bandwidth = new BandwidthEstimator();
   readonly abr = new AdaptiveBitrate();
   private ladder: Rendition[] = [];
+  /** The source's own media playlist, played when the plan offers no ladder: codecs come from its init. */
+  private stream?: Rendition;
+  private timescales = new Map<number, number>();
   updateRenditions(ladder: Rendition[]) {
-    this.ladder = [...ladder];
+    this.ladder = !ladder.length && this.stream ? [this.stream] : [...ladder];
   }
   private playable() {
     const MS = mediaSourceClass();
@@ -35,6 +42,7 @@ export class SegmentPipeline {
   }
   get qualityIds() {
     return this.playable()
+      .filter((r) => r !== this.stream)
       .filter(
         (r) =>
           !this.current || (r.mime === this.current.mime && r.audioGroupId === this.current.audioGroupId),
@@ -102,7 +110,9 @@ export class SegmentPipeline {
       (this.retrying || performance.now() - this.segmentStarted > Math.max(1000, this.segmentDuration * 1000))
     )
       return 'segment-delayed';
-    if (this.publicationPending) return 'waiting-for-publication';
+    // Waiting on the playlist is how live plays at the edge; it is news only once playback starves
+    // (as the packet runtime reports it: while buffering).
+    if (this.publicationPending && this.video.readyState < 3) return 'waiting-for-publication';
     return this.publishedEdge === null ? 'unknown' : 'available';
   }
   private published(list: Playlist) {
@@ -231,9 +241,23 @@ export class SegmentPipeline {
   private append(bytes: ArrayBuffer, signal: AbortSignal) {
     return appendBuffer(this.buffer!, bytes, this.video, signal);
   }
-  async run(ladder: Rendition[], position: number, live: boolean, signal: AbortSignal) {
+  /** The MIME type of a stream init, which MSE must take; the init's timescales are kept for its fragments. */
+  private streamMime(bytes: ArrayBuffer) {
+    const facts = initFacts(bytes);
+    if (!facts) throw new PlaybackFault('Stream initialization codecs are unreadable', 'source');
+    if (!mediaSourceClass()?.isTypeSupported(facts.mime))
+      throw new PlaybackFault(`Stream codecs are not supported by this browser (${facts.mime})`, 'source');
+    this.timescales = facts.timescales;
+    return facts.mime;
+  }
+  /** `streamUrl`: the source's media playlist, played as the only rendition when `ladder` is empty. */
+  async run(ladder: Rendition[], position: number, live: boolean, signal: AbortSignal, streamUrl?: string) {
     const MS = mediaSourceClass();
     if (!MS) throw new PlaybackFault('MediaSource unavailable', 'source');
+    if (!ladder.length && streamUrl) {
+      this.stream = { id: STREAM_RENDITION, url: streamUrl, bandwidth: 0, mime: 'video/mp4', codecStatus: 'pending' };
+      ladder = [this.stream];
+    }
     this.updateRenditions(ladder);
     const candidates = ladder.filter((r) => !codecKnown(r) || MS.isTypeSupported(r.mime));
     if (!candidates.length) throw new PlaybackFault('No supported segmented codec', 'source');
@@ -295,7 +319,10 @@ export class SegmentPipeline {
     if (!codecKnown(rendition)) {
       const url = list.segments.find((s) => s.start + s.duration > position)?.init ?? list.segments[0].init;
       preparedInit = { url, bytes: await this.fetchBytes(url, signal, undefined, 50000) };
-      rendition = await this.verified(rendition, signal);
+      if (rendition === this.stream) {
+        rendition = this.stream = { ...rendition, mime: this.streamMime(preparedInit.bytes), codecStatus: 'verified' };
+        this.ladder = [rendition];
+      } else rendition = await this.verified(rendition, signal);
     }
     this.current = rendition;
     this.onRendition(rendition);
@@ -408,10 +435,22 @@ export class SegmentPipeline {
         throw new PlaybackFault('Publisher marked segment unavailable (EXT-X-GAP)', 'source');
       }
       if (next.init !== init) {
-        await this.append(
-          preparedInit?.url === next.init ? preparedInit.bytes : await this.bytes(next.init, signal),
-          signal,
-        );
+        const bytes = preparedInit?.url === next.init ? preparedInit.bytes : await this.bytes(next.init, signal);
+        if (this.stream && init) {
+          // A stream's encoder can change under it (a new EXT-X-MAP): its codecs are read again.
+          const mime = this.streamMime(bytes);
+          if (mime !== rendition.mime) {
+            if (typeof this.buffer.changeType !== 'function')
+              throw new PlaybackFault('Stream codecs changed and this browser cannot switch them', 'source');
+            this.buffer.changeType(mime);
+            rendition = this.stream = { ...rendition, mime };
+            this.ladder = [rendition];
+            this.current = rendition;
+            this.onRendition(rendition);
+          }
+        }
+        if (!this.stream) this.timescales = initFacts(bytes)?.timescales ?? new Map();
+        await this.append(bytes, signal);
         init = next.init;
         preparedInit = undefined;
       }
@@ -471,6 +510,14 @@ export class SegmentPipeline {
         this.segmentStarted = null;
         clearTimeout(timeout);
         signal.removeEventListener('abort', abort);
+      }
+      // After a discontinuity the media's own clock may restart or jump: it is spliced onto the
+      // end of what is buffered, so the timeline goes on where the previous segment ended.
+      if (next.discontinuity && !first && this.buffer.buffered.length) {
+        if (this.audio) throw new PlaybackFault('Discontinuity across separate audio is unsupported', 'source');
+        const start = fragmentStart(bytes, this.timescales);
+        if (start === null) throw new PlaybackFault('Discontinuous segment has no readable start', 'source');
+        this.buffer.timestampOffset = this.buffer.buffered.end(this.buffer.buffered.length - 1) - start;
       }
       await this.append(bytes, signal);
       await this.audio?.fill(next.start, next.start + next.duration, list, signal);

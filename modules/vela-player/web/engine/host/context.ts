@@ -82,6 +82,7 @@ export function createHostContext(
     },
     recovery: {
       browserFallbacks: browserFallbacks,
+      segmentFallbacks: new Set<string>(),
       localDecoderRetries: localDecoderRetries,
       history: recoveryHistory,
       attempted: attempted,
