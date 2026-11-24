@@ -83,3 +83,19 @@ test('every prebuild gives the Pods project AetherEngine traits exactly once', a
   for (const trait of withApplePlayer.AETHER_TRAITS) expect(once).toContain(trait);
   expect(withApplePlayer.AETHER_TRAITS).toEqual(['TrueHDObjectAudio', 'DTSXObjectAudio', 'DolbyVisionFelCurves']);
 });
+
+test("Release builds log JavaScript's warnings (playback's stall and restart lines) to the device's console", () => {
+  const delegate = `class AppDelegate: ExpoAppDelegate {
+  public override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    let delegate = ReactNativeDelegate()
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}`;
+  const once = withApplePlayer.withReleaseWarnings(delegate);
+  expect(once).toContain('#if !DEBUG\n    RCTSetLogThreshold(.warning)\n#endif\n    let delegate = ReactNativeDelegate()');
+  expect(withApplePlayer.withReleaseWarnings(once)).toBe(once);
+  expect(() => withApplePlayer.withReleaseWarnings('class AppDelegate {}')).toThrow();
+});
