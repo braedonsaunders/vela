@@ -480,9 +480,29 @@ for (const spec of showSpecs) {
 }
 
 // ---------------------------------------------------------------------------------------------
-export const mediaGroups = { artists, albums, tracks, concerts, series, books, audiobooks, parts, shows, episodes };
+// Photos: one level of pictures (class photo), drawn as procedural scenes by the mock.
+const photoSpecs: { slug: string; name: string; daysAgo: number; place: string }[] = [
+  { slug: 'harbour-at-dawn', name: 'Harbour at dawn', daysAgo: 3, place: 'North Quay' },
+  { slug: 'orchard-in-fog', name: 'Orchard in fog', daysAgo: 9, place: 'Ashby' },
+  { slug: 'saltmarsh-evening', name: 'Saltmarsh, evening', daysAgo: 14, place: 'Saltmarsh' },
+  { slug: 'lighthouse-path', name: 'The lighthouse path', daysAgo: 21, place: 'Gull Point' },
+  { slug: 'first-snow', name: 'First snow on the hill', daysAgo: 40, place: 'Vell' },
+  { slug: 'summer-meadow', name: 'Summer meadow', daysAgo: 120, place: 'Long Field' },
+  { slug: 'night-ferry', name: 'From the night ferry', daysAgo: 160, place: 'The crossing' },
+  { slug: 'garden-wall', name: 'The walled garden', daysAgo: 200, place: 'Fieldfare House' },
+];
+const photos: Title[] = photoSpecs.map((spec, index) => {
+  const id = variant(`photo-${spec.slug}`, index * 5 + 2, 7);
+  const airDate = new Date(fixtureNow - spec.daysAgo * 86_400_000).toISOString().slice(0, 10);
+  return { id, kind: 'movie', name: spec.name, summary: '', year: Number(airDate.slice(0, 4)), airDate, genres: [],
+    artwork: [mediaArtwork(id, 'square'), mediaArtwork(id, 'wide', 'backdrop'), mediaArtwork(id, 'wide', 'thumb')],
+    media: { class: 'photo', role: 'item', facts: [{ label: 'Place', value: spec.place }, { label: 'Taken', value: airDate }] } };
+});
+
+// ---------------------------------------------------------------------------------------------
+export const mediaGroups = { artists, albums, tracks, concerts, series, books, audiobooks, parts, shows, episodes, photos };
 /** Shared, mutable fixture titles; the mock updates their watch state in place, like the video catalogue. */
-export const mediaTitles: Title[] = [...artists, ...albums, ...tracks, ...concerts, ...series, ...books, ...audiobooks, ...parts, ...shows, ...episodes];
+export const mediaTitles: Title[] = [...artists, ...albums, ...tracks, ...concerts, ...series, ...books, ...audiobooks, ...parts, ...shows, ...episodes, ...photos];
 const byId = new Map(mediaTitles.map(title => [title.id, title]));
 export const mediaTitle = (id: string): Title | undefined => byId.get(id);
 /** A title's children; `level` (a role, or the level key for a role-less level) keeps one child level. */
@@ -521,9 +541,9 @@ export function mediaDetail(id: string): TitleDetail | undefined {
 const sorts: LibraryBrowseOptions['sorts'] = [{ id: 'index', directions: ['asc'] }, { id: 'title', directions: ['asc', 'desc'] }, { id: 'year', directions: ['asc', 'desc'] }];
 const genresOf = (items: Title[]) => [...new Set(items.flatMap(title => title.genres))];
 export const mediaLibraries: Library[] = [
-  // Every library says how it opens (features.libraryExperiences): music and the spoken-word
-  // libraries as the audio app, books as the standard pages.
-  { id: 'music', name: 'Music', kind: 'shows', media: 'music', presentation: { card: 'square', experience: 'audio' }, artwork: [mediaArtwork(artists[0]!.id, 'wide')],
+  // Every library names how it opens (features.libraryExperiences): music and the spoken-word
+  // libraries listen, books read, photos are a gallery.
+  { id: 'music', name: 'Music', kind: 'shows', media: 'music', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(artists[0]!.id, 'wide')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
       // A second recommended tab with its own shelves and card (features.pluginLevels).
@@ -533,7 +553,7 @@ export const mediaLibraries: Library[] = [
       { id: 'tracks', label: 'Tracks', kind: 'library', level: 'track', layout: 'list' },
     ],
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc', filters: { genre: true, genres: genresOf(artists), year: true, favorite: true } } },
-  { id: 'books', name: 'Books', kind: 'mixed', media: 'book', presentation: { card: 'poster', experience: 'standard' }, artwork: [mediaArtwork(books[0]!.id, 'book')],
+  { id: 'books', name: 'Books', kind: 'mixed', media: 'book', experience: 'read', presentation: { card: 'poster' }, artwork: [mediaArtwork(books[0]!.id, 'book')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
       { id: 'library', label: 'Library', kind: 'library' },
@@ -543,7 +563,7 @@ export const mediaLibraries: Library[] = [
     ],
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'author', label: 'Author', type: 'people', multi: true }], genre: true, genres: genresOf(books), year: true, played: true, favorite: true } } },
-  { id: 'audiobooks', name: 'Audiobooks', kind: 'mixed', media: 'audiobook', presentation: { card: 'square', experience: 'audio' }, artwork: [mediaArtwork(audiobooks[0]!.id, 'square')],
+  { id: 'audiobooks', name: 'Audiobooks', kind: 'mixed', media: 'audiobook', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(audiobooks[0]!.id, 'square')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
       { id: 'library', label: 'Library', kind: 'library' },
@@ -553,7 +573,7 @@ export const mediaLibraries: Library[] = [
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'author', label: 'Author', type: 'people', multi: true }, { id: 'narrator', label: 'Narrator', type: 'people', multi: true }],
         genre: true, genres: genresOf(audiobooks), year: true, played: true, favorite: true } } },
-  { id: 'podcasts', name: 'Podcasts', kind: 'shows', media: 'podcast', presentation: { card: 'square', experience: 'audio' }, artwork: [mediaArtwork(shows[0]!.id, 'square')],
+  { id: 'podcasts', name: 'Podcasts', kind: 'shows', media: 'podcast', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(shows[0]!.id, 'square')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
       { id: 'shows', label: 'Shows', kind: 'library' },
@@ -562,6 +582,9 @@ export const mediaLibraries: Library[] = [
     ],
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'host', label: 'Host', type: 'people', multi: true }], genre: true, genres: genresOf(shows), year: true, played: true, favorite: true } } },
+  { id: 'photos', name: 'Photos', kind: 'mixed', media: 'photo', experience: 'gallery', presentation: { card: 'square' }, artwork: [mediaArtwork(photos[0]!.id, 'wide')],
+    tabs: [{ id: 'library', label: 'All photos', kind: 'library' }],
+    browse: { sorts: [{ id: 'released', directions: ['desc', 'asc'] }, { id: 'title', directions: ['asc', 'desc'] }], defaultSort: 'released', defaultDirection: 'desc', filters: { year: true, favorite: true } } },
 ];
 export const isMediaLibrary = (id: string): boolean => mediaLibraries.some(library => library.id === id);
 const levels: Record<string, Record<string, Title[]>> = {
@@ -569,6 +592,7 @@ const levels: Record<string, Record<string, Title[]>> = {
   books: { '': [...series, ...books.filter(book => !book.media?.parents?.length)], series, book: books },
   audiobooks: { '': audiobooks, audiobook: audiobooks, part: parts },
   podcasts: { '': shows, show: shows, episode: episodes },
+  photos: { '': photos },
 };
 /** Root level by default; a level key lists that level. Undefined for an unknown library or level. */
 export function mediaLibraryEntries(libraryId: string, level = ''): RowEntry[] | undefined {

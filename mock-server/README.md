@@ -264,10 +264,11 @@ Covers, book jackets and portraits are original SVG from `covers.ts`. `VELA_MOCK
 The `podcasts` library holds three shows (role `show`, hosts credited as `host`) and their
 episodes (role `episode`, newest first, some played, one under way, with chapters); episodes
 play the audiobook generator's spoken-word files, so they need no media of their own. Its rows
-are Continue listening, New episodes and Your shows. Every library says how it opens
-(`presentation.experience`, `features.libraryExperiences`): music, audiobooks and podcasts as
-the audio app, everything else standard. `VELA_MOCK_NO_EXPERIENCES=1` is a server from before
-the field (no flag, no field: Vela chooses by class, so only music opens as the audio app).
+are Continue listening, New episodes and Your shows. The `photos` library (class `photo`) holds
+eight procedural pictures. Every library names how it opens (`experience`,
+`features.libraryExperiences`): music, audiobooks and podcasts listen, books read, photos are a
+gallery, Live TV is live, everything else watches. `VELA_MOCK_NO_EXPERIENCES=1` is a server
+without the feature (no flag, no field: Vela chooses by media class, with the same result).
 
 Generate their media once (scratch, not committed; files are served 503 until present):
 `bun mock-server/scripts/make-music-media.ts` synthesizes six original clips (AAC, MP3,

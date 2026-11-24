@@ -1,6 +1,5 @@
-import { mediaClass } from './media';
 import type { Card } from './models';
-import type { Feature, Library, LibraryExperience, LibraryTab } from './wire';
+import type { Feature, Library, LibraryTab } from './wire';
 
 export function libraryCard(value: unknown): 'poster' | 'landscape' | 'square' {
   return value === 'landscape' || value === 'square' ? value : 'poster';
@@ -32,19 +31,36 @@ export function facetCollectionQuery(id: string, tab: LibraryTab) {
     : undefined;
 }
 
+/** The experiences Vela draws. Any other id a server sends is drawn as 'watch'. */
+export const VELA_EXPERIENCES = ['watch', 'listen', 'read', 'gallery', 'live'] as const;
+export type VelaExperience = typeof VELA_EXPERIENCES[number];
+
 /**
- * How a library opens (protocol README, Library experience): the audio app or the standard pages.
- * A server with features.libraryExperiences decides each library; without it, or for a library that
- * does not say, music opens as the audio app and every other class as the standard pages.
+ * How a library opens (protocol README, Library experience). A server with
+ * features.libraryExperiences names it per library; an id Vela does not know is 'watch'. A library
+ * without the field, and every server without the feature (older Ether, Jellyfin, Emby, Plex), is
+ * chosen by what it holds (classExperience), so a library keeps working across any upgrade.
  */
 export function libraryExperience(
-  library: { media?: unknown; presentation?: { experience?: unknown } },
-  feature: (Feature & { experiences?: readonly string[] }) | undefined,
-): LibraryExperience {
-  const asked = library.presentation?.experience;
-  if (feature?.available === true && (asked === 'audio' || asked === 'standard')
-    && (!Array.isArray(feature.experiences) || feature.experiences.includes(asked))) return asked;
-  return mediaClass(library.media) === 'music' ? 'audio' : 'standard';
+  library: { media?: unknown; kind?: unknown; experience?: unknown },
+  feature: Feature | undefined,
+): VelaExperience {
+  const named = library.experience;
+  if (feature?.available === true && typeof named === 'string' && named.trim()) {
+    return (VELA_EXPERIENCES as readonly string[]).includes(named) ? named as VelaExperience : 'watch';
+  }
+  return classExperience(library.media, library.kind);
+}
+
+/** The experience a library's media class (and a live library's kind) implies: music, audiobooks and
+ * podcasts listen; books and comics read; photos are a gallery; a live TV library is live; the rest
+ * watch. */
+export function classExperience(media: unknown, kind: unknown): VelaExperience {
+  if (kind === 'live') return 'live';
+  if (media === 'music' || media === 'audiobook' || media === 'podcast') return 'listen';
+  if (media === 'book' || media === 'comic' || media === 'comics') return 'read';
+  if (media === 'photo') return 'gallery';
+  return 'watch';
 }
 
 /** The recommended tab whose rows are a library's Home in the audio app: its `home` tab when it

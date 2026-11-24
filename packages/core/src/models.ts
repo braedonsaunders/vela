@@ -5,6 +5,7 @@
 import type * as V from './wire';
 import type { CardMedia, CardShape } from './media';
 import type { PluginLevels } from './plugin-levels';
+import type { VelaExperience } from './library-presentation';
 
 /** A labelled piece of a title's parent context and its select action, when known. */
 export interface ContextPart { label: string; select: string }
@@ -184,8 +185,10 @@ export interface Destination {
   media?: V.MediaClass;
   /** The library's declared card shape (a landscape library's thumbnails). */
   presentation?: V.Library['presentation'];
-  /** How it opens: the audio app or the standard pages (libraryExperience); absent reads as standard. */
-  experience?: V.LibraryExperience;
+  /** How it opens (libraryExperience): watch, listen, read, gallery or live; absent reads as watch. */
+  experience?: VelaExperience;
+  /** The experience the server named, as sent (chosen again once the server's features are known). */
+  declaredExperience?: string;
   /** The library's declared tabs (absent from a server that declares none). */
   tabs?: V.LibraryTab[];
   dateDisplay: 'year' | 'date';

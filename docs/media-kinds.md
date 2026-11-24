@@ -68,11 +68,12 @@ interface LibraryTab {
 }
 ```
 
-`presentation.experience` (`audio | standard`, agreed with Ether 2026-11-24, under
-`features.libraryExperiences`) says whether the library opens as Vela's audio app or its
-standard library pages; see [the protocol reference](../packages/protocol/README.md#library-experience).
-Ether sends it on every library: the plugin's `mediaKinds[].library.experience`, else `audio`
-for music. Without the feature Vela chooses by class (music only).
+`Library.experience` (agreed with Ether 2026-11-24, under `features.libraryExperiences`) names how
+the library opens: `watch`, `listen`, `read`, `gallery` or `live`, an open set (an unknown id is
+`watch`); see [the protocol reference](../packages/protocol/README.md#library-experience). Ether
+sends it on every library: the plugin's `mediaKinds[].library.experience`, else by class. Without
+the feature Vela chooses by class: music, audiobooks and podcasts listen, books read, photos are a
+gallery, live TV is live, the rest watch.
 
 `presentation.card` is unchanged (`poster | landscape | square`). Vela draws the
 cover treatment from the class and role: books get a 2:3 cover with a spine and
@@ -229,8 +230,8 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   its close control. A title page without that region gets a page of its own.
 - Player: persistent mini player + Now Playing (queue, shuffle, repeat), audiobook
   mode (chapters, speed, sleep timer), web Media Session.
-- The audio app (`packages/skin/src/widgets/music`): any library whose experience is `audio`
-  (core's `libraryExperience`) opens in it, in its wide, compact (phones) or TV form. Its words
+- The audio app (`packages/skin/src/widgets/music`): any library whose experience is `listen`
+  (core's `libraryExperience`; the routing seams per experience are `apps/vela/src/experiences`) opens in it, in its wide, compact (phones) or TV form. Its words
   and controls follow the library's class (`listening.ts`): music keeps playlists, Liked Songs,
   shuffle and repeat; audiobooks and podcasts get Continue listening on Home, Your Library as
   the library's books or shows (In progress, Saved or Following, Finished), an audiobook page

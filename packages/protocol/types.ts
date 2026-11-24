@@ -83,8 +83,8 @@ export interface ServerCapabilities {
     reading?: Feature & { formats: ReadingFormat[] };
     /** Audio-only plans (PlaybackPlan.media = 'audio'). */
     audioPlayback?: Feature;
-    /** Library.presentation.experience is sent on every library, and is final: a plugin can ask any
-     * library to open as the audio app, or a music library not to. `experiences` lists the values sent. */
+    /** Library.experience is sent on every library and is final (a plugin names how its library opens);
+     * `experiences` lists the ids the server sends. Without it a client chooses by media class. */
     libraryExperiences?: Feature & { experiences: LibraryExperience[] };
     /** Live events: /live/events, /live/stream, screens and entity favourites (live-events.ts). */
     liveEvents?: Feature;
@@ -413,13 +413,11 @@ export interface TitlePlaylists { items: TitlePlaylistMembership[] }
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated' | 'lastViewed';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-/** How a client presents a library: 'audio' is the client's audio app (Vela: library sidebar, now-playing
- * bar, queue, Now Playing), 'standard' its ordinary library pages. Unknown values read as absent. */
-export type LibraryExperience = 'audio' | 'standard';
-/** A library's presentation. `experience` (features.libraryExperiences) is per library; a server with the
- * feature sends it on every library, and without it (or the field) a client chooses by `Library.media`:
- * 'audio' for music, 'standard' otherwise. Unrelated to `LibraryTab.layout` (grid, list, timeline). */
-export interface LibraryPresentation { card: LibraryCard; experience?: LibraryExperience }
+/** How a client presents a whole library, by name. Vela's experiences: 'watch' (films and TV, the
+ * standard library), 'listen' (the audio app: music, audiobooks, podcasts), 'read' (books and comics),
+ * 'gallery' (photos and home videos), 'live' (guide, multiview, sports). The set is open: a client
+ * draws an id it does not know as 'watch'. Unrelated to `LibraryTab.layout` (grid, list, timeline). */
+export type LibraryExperience = 'watch' | 'listen' | 'read' | 'gallery' | 'live' | (string & {});
 export interface LibraryTab { /** A library or view tab listing one level (a level key) instead of the root. */ level?: string; search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; layout?: 'grid' | 'list' | 'timeline';
   /** The tab's own card shape for its rows and items, over the library's presentation.card (a recommended tab too, with features.pluginLevels). */ card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
@@ -431,7 +429,9 @@ export interface LibraryBrowseOptions {
   /** Boolean fields declare support; kind lists supported values. */
   filters: { facets?: LibraryFacet[]; kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean; collectionId?: boolean };
 }
-export interface Library { /** Omitted: 'video'. */ media?: MediaClass; presentation?: LibraryPresentation; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
+export interface Library { /** Omitted: 'video'. */ media?: MediaClass;
+  /** How the library opens (features.libraryExperiences); omitted: chosen by `media` and `kind`. */ experience?: LibraryExperience;
+  presentation?: { card: LibraryCard }; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }
 export interface LibraryBrowseQuery extends LibrariesQuery {
   tab?: string; query?: string; facets?: Record<string, string[]>;
