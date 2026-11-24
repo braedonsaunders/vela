@@ -287,8 +287,12 @@ export function eventView(event: V.LiveEvent, favourites: ReadonlySet<string>): 
 
 /** The `detail:` record: plays (oldest first, with at/score; and newest first), tables, the series and links. */
 export function detailView(detail: V.LiveEventDetail, abbrs: ReadonlySet<string>): Json {
+  // The two sides in reading order (away, home), for each timed play's `scores`.
+  const [a, b] = detail.competitors;
+  const pair = a && b && detail.competitors.length === 2 ? (a.home && !b.home ? [b, a] : [a, b]) : null;
   const plays = detail.plays.map(play => ({ ...(play.clock ? { clock: play.clock } : {}), ...(play.period !== undefined ? { period: play.period } : {}), text: play.text,
-    emphasis: play.emphasis, ...(play.competitorId ? { competitorId: play.competitorId } : {}), ...(play.at ? { at: play.at } : {}), ...(play.score ? { score: play.score } : {}) }));
+    emphasis: play.emphasis, ...(play.competitorId ? { competitorId: play.competitorId } : {}), ...(play.at ? { at: play.at } : {}), ...(play.score ? { score: play.score } : {}),
+    ...(play.score && pair ? { scores: pair.map(side => play.score![side.id] ?? '') } : {}) }));
   // Oldest first on the wire, unless the periods already run backwards.
   const first = plays[0]?.period, last = plays.at(-1)?.period;
   const oldest = plays.length > 1 && first !== undefined && last !== undefined && first > last ? [...plays].reverse() : plays;
@@ -594,12 +598,25 @@ export function rewritePlugin(value: unknown, records: { type: string; id: strin
   return out;
 }
 
-/** Ether's check of a declared plugin action argument (types as the manifest declares them). */
-function checkArg(spec: ArgSpec, value: unknown): unknown {
+/** Ether's check of a declared plugin action argument: raw JSON of the declared type, or text
+ * coerced to it ("true"/"false"/"1"/"0" a bool, "12" an int, "a,b" a list of texts). */
+export function checkArg(spec: ArgSpec, value: unknown): unknown {
   switch (spec.type) {
-    case 'bool': if (typeof value !== 'boolean') throw new Error('must be true or false'); return value;
-    case 'int': if (typeof value !== 'number' || !Number.isInteger(value)) throw new Error('must be a whole number'); return value;
-    case 'strings': if (!Array.isArray(value) || value.length > 50 || value.some(v => typeof v !== 'string')) throw new Error('must be a list of at most 50 texts'); return value;
+    case 'bool':
+      if (typeof value === 'boolean') return value;
+      if (value === 'true' || value === '1') return true;
+      if (value === 'false' || value === '0') return false;
+      throw new Error('must be true or false');
+    case 'int': {
+      const n = typeof value === 'number' ? value : typeof value === 'string' && /^\s*-?\d+\s*$/.test(value) ? Number(value) : NaN;
+      if (!Number.isInteger(n)) throw new Error('must be a whole number');
+      return n;
+    }
+    case 'strings': {
+      const list = typeof value === 'string' ? (value === '' ? [] : value.split(',')) : value;
+      if (!Array.isArray(list) || list.length > 50 || list.some(v => typeof v !== 'string' || v.length > (spec.max ?? 512))) throw new Error('must be a list of at most 50 texts');
+      return list;
+    }
     default:
       if (typeof value !== 'string') throw new Error('must be text');
       if (spec.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('must be a date');
