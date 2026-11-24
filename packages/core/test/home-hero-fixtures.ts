@@ -28,7 +28,7 @@ export async function featuredFixture(provider: 'plex' | 'jellyfin') {
         { key: '/hubs/home/recentlyAdded', Metadata: items.slice(2), size: items.length-2 },
       ] } },
     });
-    return { home: await new PlexAdapter({ origin: 'https://media.example', credentials: new FakeCredentials(), clientIdentifier: 'test' }).home(), ids };
+    return { home: feedRows(await new PlexAdapter({ origin: 'https://media.example', credentials: new FakeCredentials(), clientIdentifier: 'test' }).home()), ids };
   }
   const items = source.map(x => ({ Id: x.id, Name: x.name, Type: 'episode' in x ? 'Episode' : 'show' in x ? 'Series' : 'Movie',
     ImageTags: { Primary: `poster-${x.id}`, Logo: `logo-${x.id}` }, ...(!('missing' in x) ? { BackdropImageTags: [`backdrop-${x.id}`] } : {}),
@@ -41,5 +41,10 @@ export async function featuredFixture(provider: 'plex' | 'jellyfin') {
     'GET /jf/Shows/NextUp': { Items: [items[1]] },
     'GET /jf/Users/viewer-1/Items': { Items: items.slice(2) },
   });
-  return { home: await new JellyfinAdapter('https://media.example/jf', new FakeCredentials()).home(), ids };
+  return { home: feedRows(await new JellyfinAdapter('https://media.example/jf', new FakeCredentials()).home()), ids };
+}
+
+/** Plex and Jellyfin homes carry feed rows only (surface rows are Ether's). */
+function feedRows<T extends { rows: unknown[] }>(home: T): T & { rows: import('../src/wire').Row[] } {
+  return home as T & { rows: import('../src/wire').Row[] };
 }

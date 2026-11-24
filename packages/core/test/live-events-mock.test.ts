@@ -33,7 +33,7 @@ async function until(check: () => boolean, ms = 5000): Promise<void> {
 }
 
 test('home lists the sports screen from bootstrap navigation, and the store sees the feature', () => {
-  expect(store.getState().home.value?.screens).toEqual([{ id: 'sports', title: 'Sports', icon: 'sports' }]);
+  expect(store.getState().home.value?.screens).toMatchObject([{ id: 'sports', title: 'Sports', icon: 'sports', page: 'index', document: { renderer: 19 } }]);
   expect(store.liveEvents.available()).toBe(true);
 });
 

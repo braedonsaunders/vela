@@ -4,13 +4,14 @@ import { screenDestinationId, screenOf, screenPath, withScreens } from '../../..
 import { sectionPathVisible, sectionRoute } from '../../../apps/vela/src/section-route';
 
 const library = (id: string, kind = 'movies'): Destination => ({ id, name: id, kind, dateDisplay: 'year', backdrop: '' });
+const document = { href: '/vela/v0/screens/sports/pages/index/document?v=1&r=19&l=en', renderer: 19 };
 
 test('plugin screens join the navigation right after Live TV', () => {
   const libraries = [library('movies'), library('live', 'live'), library('music')];
-  const shown = withScreens(libraries, [{ id: 'sports', title: 'Sports', icon: 'sports' }]);
+  const shown = withScreens(libraries, [{ id: 'sports', title: 'Sports', icon: 'sports', page: 'index', document }]);
   expect(shown.map(d => d.id)).toEqual(['movies', 'live', 'screen:sports', 'music']);
   expect(shown[2]).toMatchObject({ name: 'Sports', kind: 'screen' });
-  expect(withScreens([library('movies')], [{ id: 'sports', title: 'Sports', icon: '' }]).map(d => d.id)).toEqual(['movies', 'screen:sports']);
+  expect(withScreens([library('movies')], [{ id: 'sports', title: 'Sports', icon: '', page: 'index', document }]).map(d => d.id)).toEqual(['movies', 'screen:sports']);
   expect(withScreens(libraries, [])).toBe(libraries);
 });
 

@@ -14,6 +14,7 @@ import { Home, initialHome, type HomeState } from './home';
 import { initialLive, Live, type LiveState } from './live';
 import { initialLiveEvents, LiveEvents, type LiveEventsState } from './live-events';
 import { initialPlayback, Playback, type PlaybackState } from './playback';
+import { initialScreens, Screens, type ScreensState } from './screens';
 import type { MediaCapabilities, VelaPlatform } from './platform';
 import { initialPreviews, Previews, type PreviewState } from './previews';
 import { initialPlaylists, Playlists, type PlaylistsState } from './playlists';
@@ -51,6 +52,8 @@ export interface VelaState {
   live: LiveState;
   /** Live events (Sports): screens, details, favourites, the ticker and alerts, kept current by one stream. */
   liveEvents: LiveEventsState;
+  /** Plugin screens and surfaces: documents, pages, actions in flight and alerts (records live in `screens.records`). */
+  screens: ScreensState;
   appearance: Loadable<AppearanceModel>;
   /** The trailer preview playing now. */
   previews: PreviewState;
@@ -84,6 +87,7 @@ export interface Vela {
   playback: Playback;
   live: Live;
   liveEvents: LiveEvents;
+  screens: Screens;
   appearance: Appearance;
   receipts: Receipts;
   previews: Previews;
@@ -111,6 +115,7 @@ const initialState: VelaState = {
   audio: initialAudio,
   live: initialLive,
   liveEvents: initialLiveEvents,
+  screens: initialScreens,
   appearance: idle(),
   previews: initialPreviews,
 };
@@ -180,6 +185,7 @@ export function createVela(options: VelaOptions): Vela {
     playback,
     live: new Live(box, session, playback),
     liveEvents: new LiveEvents(box, session),
+    screens: new Screens(box, session, options.rendererVersion),
     appearance,
     receipts: new Receipts(session),
     previews,
