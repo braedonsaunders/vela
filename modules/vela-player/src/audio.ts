@@ -12,7 +12,9 @@ export type NativeAudioEvent =
   | { id: number; type: 'status'; state: NativeAudioState; position: number; duration: number; rate?: number;
       buffered?: { startSeconds: number; endSeconds: number }[]; error?: string }
   /** The system's media controls (lock screen, notification, headset, Siri Remote, car). */
-  | { id: number; type: 'remote'; command: RemoteAudioCommand; seconds?: number };
+  | { id: number; type: 'remote'; command: RemoteAudioCommand; seconds?: number }
+  /** The player finished its item and went straight on to the preloaded one, whose id this is. */
+  | { id: number; type: 'advanced'; position?: number; duration?: number };
 
 /** A server's media authorization, resolved: headers for one origin and path prefix. */
 export interface NativeAudioAccess { origin: string; pathPrefix: string; headers: Record<string, string> }
@@ -24,8 +26,14 @@ export interface NativeNowPlaying {
   spoken: boolean;
 }
 
+/** The item the native player readies to play straight after its current one (gapless). */
+export interface NativeAudioPreload { id: number; url: string; access: NativeAudioAccess | null; start: number }
+
 export interface NativeAudioBridge {
   load(request: { id: number; url: string; access: NativeAudioAccess | null; start: number; rate: number }): void;
+  /** Gapless playback: queue the next item after the current one, or drop it (null). A native player
+   * without it ends each item. */
+  preload?(request: NativeAudioPreload | null): void;
   play(): void;
   pause(): void;
   seek(seconds: number): void;
@@ -36,7 +44,7 @@ export interface NativeAudioBridge {
 }
 
 /** The store's engine events (AudioEngineEvent), restated so this module needs no @vela/core. */
-export type AudioEngineEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration';
+export type AudioEngineEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration' | 'advanced';
 
 export interface NativeAudioEngine {
   load(url: string, startSeconds: number, rate: number): void;
@@ -50,6 +58,8 @@ export interface NativeAudioEngine {
   buffered(): { startSeconds: number; endSeconds: number }[];
   error(): string;
   subscribe(listener: (event: AudioEngineEvent) => void): () => void;
+  /** Gapless playback (the store's AudioEngine.preload). */
+  preload(next: { url: string; startSeconds: number } | null): void;
 }
 
 interface Status {
@@ -94,7 +104,11 @@ export function createNativeAudioEngine(
   const now = options.now ?? Date.now;
   const listeners = new Set<(event: AudioEngineEvent) => void>();
   const emit = (event: AudioEngineEvent) => { for (const listener of [...listeners]) listener(event); };
+  /** Ids for loads and preloads alike, so an event names exactly one of them. */
+  let serial = 0;
+  /** The load whose events reach the store, and the preloaded item the native player holds (0: none). */
   let id = 0;
+  let queued = 0;
   let loaded = false;
   let status: Status = { state: 'idle', position: 0, duration: 0, rate: 1, buffered: [], error: '', at: now() };
   let queue: Promise<void> = Promise.resolve();
@@ -107,7 +121,18 @@ export function createNativeAudioEngine(
   };
   bridge.subscribe(event => {
     if (event.type === 'remote') { options.onRemote?.(event.command, event.seconds); return; }
-    if (event.id !== id || !loaded) return;
+    // The preloaded item took over: from here on its events are the store's. A status that names it
+    // before the advance itself arrives is the advance.
+    if (loaded && queued && event.id === queued) {
+      id = queued;
+      queued = 0;
+      const { position, duration } = event;
+      status = { state: 'playing', position: position !== undefined && Number.isFinite(position) ? Math.max(0, position) : 0,
+        duration: duration !== undefined && Number.isFinite(duration) && duration > 0 ? duration : 0, rate: status.rate, buffered: [], error: '', at: now() };
+      emit('advanced');
+      if (event.type === 'advanced') return;
+    }
+    if (event.type === 'advanced' || event.id !== id || !loaded) return;
     const previous = status;
     status = {
       state: event.state,
@@ -122,7 +147,9 @@ export function createNativeAudioEngine(
   });
   return {
     load(url, startSeconds, rate) {
-      const load = ++id;
+      const load = ++serial;
+      id = load;
+      queued = 0;
       loaded = true;
       status = { state: 'loading', position: Math.max(0, startSeconds), duration: 0, rate, buffered: [], error: '', at: now() };
       send(async () => {
@@ -141,10 +168,23 @@ export function createNativeAudioEngine(
       status = { ...status, position: extrapolatedPosition(status, now()), rate, at: now() };
       send(() => bridge.setRate(rate));
     },
+    preload(next) {
+      const preload = bridge.preload?.bind(bridge);
+      if (!preload || !loaded) return;
+      const item = next ? ++serial : 0;
+      queued = item;
+      send(async () => {
+        if (!next) { preload(null); return; }
+        const access = options.authorize ? await options.authorize(next.url) : null;
+        if (queued !== item) return;
+        preload({ id: item, url: next.url, access, start: Math.max(0, next.startSeconds) });
+      });
+    },
     unload() {
       if (!loaded) return;
       loaded = false;
-      id++;
+      id = ++serial;
+      queued = 0;
       status = { state: 'idle', position: 0, duration: 0, rate: status.rate, buffered: [], error: '', at: now() };
       send(() => bridge.unload());
     },

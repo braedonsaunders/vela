@@ -89,6 +89,15 @@ public final class VelaPlayerModule: Module {
                            rate: (request["rate"] as? NSNumber)?.doubleValue ?? 1)
             }
         }.runOnQueue(.main)
+        AsyncFunction("audioPreload") { [weak self] (request: [String: Any]?) in
+            MainActor.assumeIsolated {
+                let audio = self?.audio() ?? AudioPlayback.shared
+                let url = (request?["url"] as? String).flatMap(URL.init(string:)).flatMap { $0.scheme == "http" || $0.scheme == "https" ? $0 : nil }
+                audio.preload(id: (request?["id"] as? NSNumber)?.intValue, url: url,
+                              access: (request?["access"] as? [String: Any]).flatMap { try? VelaMediaAuth($0) },
+                              start: (request?["start"] as? NSNumber)?.doubleValue ?? 0)
+            }
+        }.runOnQueue(.main)
         AsyncFunction("audioPlay") { [weak self] in
             MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).play() }
         }.runOnQueue(.main)
