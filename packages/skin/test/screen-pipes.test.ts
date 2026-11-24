@@ -5,7 +5,7 @@ import { compileTemplate, type HoleScope } from '../src/screen/holes';
 import { dayText, initials, setPipeClock, startText } from '../src/screen/pipes';
 import { crest, readable, tint } from '../src/screen/colour';
 import { screenRoot } from '../src/screen/items';
-import { text, walk } from '../src/screen/scope';
+import { screenImageSrc, text, walk } from '../src/screen/scope';
 import type { ScreenPageState } from '../../core/src/screens/types';
 import type { Ctx, Env } from '../src/vocabulary';
 
@@ -57,6 +57,10 @@ describe('paths', () => {
     expect(text(null)).toBe('');
     expect(walk({ a: [{ b: 1 }] }, ['a', '0', 'b'], () => undefined)).toBe(1);
     expect(walk({ a: 1 }, ['__proto__'], () => undefined)).toBeUndefined();
+  });
+  test('images: only same-origin /vela/v0/ URLs', () => {
+    expect(screenImageSrc('/vela/v0/images/p/abc')).toBe('/vela/v0/images/p/abc');
+    for (const bad of ['https://cdn.example.com/a.jpg', '//evil/x', '/vela/v0/../secret', 'javascript:alert(1)', '/other/x', '']) expect(screenImageSrc(bad)).toBe('');
   });
   test('an unknown root or pipe refuses the document', () => {
     expect(() => draw('{nope.x}')).toThrow('Unknown binding');

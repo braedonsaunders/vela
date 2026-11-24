@@ -14,7 +14,7 @@ export interface PortabilityFinding {
 
 /** Keys of a node whose value is one style (a set of rows). */
 const STYLE_KEYS = new Set([
-  'style', 'small', 'wide', 'hover', 'focus', 'groupHover', 'groupFocus', 'active', 'disabledStyle', 'inner',
+  'style', 'small', 'wide', 'tv', 'hover', 'focus', 'groupHover', 'groupFocus', 'active', 'disabledStyle', 'inner',
 ]);
 /** Keys of a node whose value maps viewport widths to styles. */
 const STYLE_MAP_KEYS = new Set(['below', 'above']);
@@ -125,9 +125,14 @@ function walkNode(
       value.forEach((child, i) => {
         if (isNode(child)) walkNode(child, `${path}[${i}]`, childPlace, out);
       });
-    } else if (key === 'item' && isNode(value)) {
-      // A repeat draws no box: its item sits where the repeat does.
+    } else if ((key === 'item' || key === 'fallback' || key === 'empty') && isNode(value)) {
+      // A repeat draws no box: its item sits where the repeat does (an image's fallback and a
+      // shelf's empty node stand where their node does).
       walkNode(value, path, place, out);
+    } else if (key === 'after' && Array.isArray(value)) {
+      value.forEach((child, i) => {
+        if (isNode(child)) walkNode(child, `${path}[${i}]`, place, out);
+      });
     }
   }
 }
@@ -143,7 +148,7 @@ function walkTrees(trees: Record<string, unknown> | undefined, at: string, out: 
 }
 
 /** Every unsupported and approximated row the document writes (not the base it inherits). */
-export function portabilityReport(doc: SkinDocument): PortabilityFinding[] {
+export function portabilityReport(doc: Pick<SkinDocument, 'slots' | 'routes' | 'templates'>): PortabilityFinding[] {
   const out: PortabilityFinding[] = [];
   walkTrees(doc.slots, 'slots', out);
   walkTrees(doc.routes, 'routes', out);
