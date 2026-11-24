@@ -34,9 +34,10 @@ export class EtherTransport {
    */
   private refreshFailure?: { token: string; error: unknown; until: number };
   /**
-   * Refresh tokens whose idempotency key the server may hold for a rotation it never finished (it
-   * answered 409 `mutation_outcome_unknown`, or this client gave up waiting): how many keys each
-   * has used up. Asking again under the same key would only replay that unknown outcome forever.
+   * Refresh tokens whose idempotency key the server can no longer answer for: it answered 409
+   * `mutation_outcome_unknown` with no retry allowed (an Ether that kept the key of a rotation it
+   * abandoned and never committed). How many keys each has used up; the same key would only
+   * replay that unknown outcome forever.
    */
   private spentRefreshKeys = new Map<string, number>();
 
@@ -176,7 +177,7 @@ export class EtherTransport {
           await this.forgetRejected(current);
           throw error;
         }
-        if (outcomeUnknown(error)) {
+        if (deadKey(error)) {
           this.spendRefreshKey(token);
           // The server will never replay that key: one immediate ask under the new key, even for
           // a restore, because the 409 itself proves the server is answering.
@@ -210,11 +211,10 @@ export class EtherTransport {
     try {
       return await this.request<V.Tokens>('POST', '/auth/refresh', request, { auth: false, signal: abort.signal });
     } catch (error) {
-      if (abort.signal.aborted) {
-        // The server may still hold this key for a rotation it will never finish: the next ask uses a new one.
-        this.spendRefreshKey(request.refreshToken);
-        throw new Error(`The server did not answer within ${REFRESH_ATTEMPT_TIMEOUT_MS / 1000} seconds`);
-      }
+      // The same key asks again next time: the server may finish this rotation without us (Ether
+      // completes an abandoned refresh) and then replays its tokens. A new key would reuse a token
+      // it already rotated. A server that kept the key without finishing says so with a 409.
+      if (abort.signal.aborted) throw new Error(`The server did not answer within ${REFRESH_ATTEMPT_TIMEOUT_MS / 1000} seconds`);
       throw error;
     } finally {
       clearTimeout(timer);
@@ -300,8 +300,8 @@ function persistentDelete(key: string): void {
   try { storage()?.removeItem(persistentKey(key)); } catch { /* Optional storage. */ }
 }
 
-/** One refresh request waits this long for the server's answer. */
-export const REFRESH_ATTEMPT_TIMEOUT_MS = 8_000;
+/** One refresh request waits this long for the server's answer (Ether finishes auth work within 15 s). */
+export const REFRESH_ATTEMPT_TIMEOUT_MS = 15_000;
 /** After a failed refresh, requests mid-session wait this long (or the server's stated wait) before asking again. */
 export const REFRESH_FAILURE_HOLD_MS = 5_000;
 
@@ -323,11 +323,12 @@ export function serverWait(error: unknown): number {
 }
 
 /**
- * Whether the server could not say what became of a refresh under this idempotency key (Ether
- * stored the key for a rotation that never committed) and will not replay it: only a new key helps.
+ * Whether the server cannot say what became of a refresh under this idempotency key and will never
+ * replay it (409 mutation_outcome_unknown, retry not allowed): only a new key helps. With retry
+ * allowed the original attempt is still running, and the same key is asked again after its wait.
  */
-export function outcomeUnknown(error: unknown): boolean {
-  return error instanceof VelaError && error.detail.code === 'mutation_outcome_unknown';
+export function deadKey(error: unknown): boolean {
+  return error instanceof VelaError && error.detail.code === 'mutation_outcome_unknown' && error.detail.retry?.allowed !== true;
 }
 
 /** How long to wait before the next refresh attempt, or undefined when the server forbids another. */

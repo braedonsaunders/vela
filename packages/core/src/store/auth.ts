@@ -24,7 +24,8 @@ import type { VelaState } from './index';
  * - `offline`: restoration could not finish; stored credentials remain untouched, and it is
  *   tried again with backoff (`retryAt`) until the server answers or refuses the session.
  */
-export const SESSION_RESTORE_TIMEOUT_MS = 10_000;
+/** Covers a whole refresh attempt (REFRESH_ATTEMPT_TIMEOUT_MS) plus the reads around it. */
+export const SESSION_RESTORE_TIMEOUT_MS = 20_000;
 /** How long Sign in again waits for the server to revoke the session it is leaving. */
 export const SIGN_IN_AGAIN_REVOKE_MS = 3_000;
 
