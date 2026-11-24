@@ -6,6 +6,7 @@ import { BLOCK_KINDS, type BlockKind, type RNode, type Template } from '../resol
 import type { Value } from '../screen/holes';
 import { screenItemKey, screenItems, tabCtx, type Items } from '../screen/items';
 import type { Card, Ctx, Env } from '../vocabulary';
+import { nonSubscribingItemKey } from './record-scope';
 
 export { BLOCK_KINDS, type BlockKind };
 
@@ -82,7 +83,10 @@ export function createScreenBlockRuntime(
   return {
     renderNode,
     evalItems: (node, ctx, env) => screenItems(node.items, ctx, env),
-    evalItemKey: (node, itemCtx, env) => screenItemKey(node.items, itemCtx, env ?? ({} as Env)),
+    evalItemKey: (node, itemCtx, env) =>
+      nonSubscribingItemKey(node.items.as, itemCtx, () =>
+        screenItemKey(node.items, itemCtx, env ?? ({} as Env)),
+      ),
     bindTabCtx: (ctx, itemCtx, tab, as = 'item') => {
       if (itemCtx) {
         const bound = itemCtx.screen?.items[as];
