@@ -101,7 +101,13 @@ const android: Device = {
 };
 const device = platform === 'androidtv' ? android : apple;
 // Start from a fresh install's data: an earlier session's sign-out would stop the mock's demo sign-in.
-if (platform === 'androidtv') adb('shell', 'pm', 'clear', APP);
+if (platform === 'androidtv') {
+  adb('shell', 'pm', 'clear', APP);
+  // The first launch after a clear can lose to the launcher on a loaded emulator: launch once to warm up.
+  adb('shell', 'monkey', '-p', APP, '-c', 'android.intent.category.LEANBACK_LAUNCHER', '1');
+  await Bun.sleep(20_000);
+  adb('shell', 'am', 'force-stop', APP);
+}
 else {
   simctl('keychain', udid, 'reset');
   if (values.app) { try { simctl('uninstall', udid, APP); } catch {} simctl('install', udid, values.app); }

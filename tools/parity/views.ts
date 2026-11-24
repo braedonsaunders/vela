@@ -68,6 +68,8 @@ export const REVIEWED_VIEWS: { viewports: RegExp; views: string[]; reason: strin
     reason: 'TV index: the day strip shows 7 days (Ether) where legacy showed 8; the shell navigation (not Sports) changed between the legacy capture and now; legacy\'s first TV focus fell on Watch or Game details by the focus engine, the document focuses Game details' },
   { viewports: /^androidtv$/, views: ['index-top', 'index-spoiler-free', 'index-no-favourites'],
     reason: 'Android TV index: the day strip shows 7 days (Ether) where legacy showed 8; legacy\'s first focus landed on the shell navigation (Home), the document focuses the hero by the design\'s initial-focus rule (as legacy did on Apple TV)' },
+  { viewports: /^androidtv$/, views: ['game-final-ot'],
+    reason: 'Android TV initial focus: with no Watch button the document focuses the first panel (Scoring, with its ring) by the design rule, as legacy did on Apple TV; legacy on Android TV showed no focus' },
   { viewports: /^(tvos|androidtv)$/, views: ['game-final', 'game-spoiler'],
     reason: 'Watch from start is absent (Ether v1 sends no catch-up targets); legacy showed it for this archived final, so the pills after it sit one button to the left' },
   { viewports: /^ios-phone$/, views: ['game-spoiler'],
