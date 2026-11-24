@@ -620,6 +620,7 @@ export function checkArg(spec: ArgSpec, value: unknown): unknown {
     default:
       if (typeof value !== 'string') throw new Error('must be text');
       if (spec.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('must be a date');
+      if (spec.type === 'ref' && !REF.test(value)) throw new Error('must be a record key');
       if (value.length > (spec.max ?? 512) || (spec.enum && !spec.enum.includes(value))) throw new Error('is not allowed');
       return value;
   }
@@ -666,6 +667,10 @@ function openTopic(token: string): Topic | undefined {
 }
 
 const CONTEXT = ['event', 'channel', 'title', 'kind', 'alert.ref'];
+/** A `ref` is a record key Ether issued (a bare id is refused). */
+export const REF = /^(event|entity|item|channel|p):\S{1,256}$/;
+/** The record kind each surface context ref must name. */
+const CONTEXT_REF: Record<string, RegExp> = { event: /^event:\S+$/, 'alert.ref': /^event:\S+$/, channel: /^channel:\S+$/, title: /^item:\S+$/ };
 
 /** Validated page params (declared, typed, defaults applied) and the surface's context, as
  * `param.x` / `context.x`. An unknown name or a bad value is 400 invalid_request. A ref naming an
@@ -675,13 +680,18 @@ function inputs(target: Target, given: Iterable<[string, string]>, fail: Fail): 
   const values: Record<string, string> = {};
   for (const [key, value] of given) {
     if (typeof value !== 'string') fail('request', 'invalid_request', `Invalid value for ${key}`);
-    if (target.kind === 'surface' && CONTEXT.includes(key)) { values[`context.${key}`] = value; continue; }
+    if (target.kind === 'surface' && CONTEXT.includes(key)) {
+      if (value && CONTEXT_REF[key] && !CONTEXT_REF[key]!.test(value)) fail('request', 'invalid_request', `${key} must be a record key`);
+      values[`context.${key}`] = value;
+      continue;
+    }
     const spec = declared[key];
     if (!spec) fail('request', 'invalid_request', `Unknown param ${key}`);
     if (value === '') continue;
     const bad = (spec.max !== undefined && value.length > spec.max) || value.length > 512
       || (spec.enum && !spec.enum.includes(value)) || (spec.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value))
-      || (spec.type === 'int' && !/^-?\d+$/.test(value)) || (spec.type === 'bool' && value !== 'true' && value !== 'false');
+      || (spec.type === 'int' && !/^-?\d+$/.test(value)) || (spec.type === 'bool' && value !== 'true' && value !== 'false')
+      || (spec.type === 'ref' && !REF.test(value));
     if (bad) fail('request', 'invalid_request', `Invalid value for ${key}`);
     values[`param.${key}`] = value;
   }
@@ -762,7 +772,9 @@ function serveAction(req: Request, target: Target, action: string, body: unknown
   const read: Read = { viewerId, tz, records: {}, scope: '' };
   const answer: V.ScreenActionAnswer = {};
   if (action === 'ether.favorite') {
-    const key = typeof args.ref === 'string' ? args.ref.replace(/^entity:/, '') : '';
+    // Ether: ref must be an entity: record key; reveal takes the event with or without event:.
+    const key = typeof args.ref === 'string' && args.ref.startsWith('entity:') ? args.ref.slice('entity:'.length) : '';
+    if (!key) fail('request', 'invalid_request', 'ref must be an entity: record key');
     const team = sportsModel.teams().find(t => entityKey(t.id) === key);
     if (!team) fail('not-found', 'entity_not_found', 'Entity not found');
     const favourites = sportsModel.favourites(viewerId);
