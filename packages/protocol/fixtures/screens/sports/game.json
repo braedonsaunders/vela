@@ -43,7 +43,8 @@
       "type": "box", "style": { "flex": "1", "align-items": "center", "gap": "8px" },
       "states": [{ "when": [{ "test": "side.loser" }], "style": { "flex": "1", "align-items": "center", "gap": "8px", "opacity": "0.7" } }],
       "children": [
-        { "type": "use", "template": "vela:crest", "with": { "logo": "{side.logo}", "abbr": "{side.abbr}", "color": "{side|crest}", "size": "84px", "ring": "true" }, "small": { "width": "52px", "height": "52px" } },
+        { "type": "use", "template": "vela:crest", "when": [{ "test": "env.small", "not": true }], "with": { "logo": "{side.logo}", "abbr": "{side.abbr}", "color": "{side|crest}", "size": "84px", "ring": "true" } },
+        { "type": "use", "template": "vela:crest", "when": [{ "test": "env.small" }], "with": { "logo": "{side.logo}", "abbr": "{side.abbr}", "color": "{side|crest}", "size": "52px", "ring": "true" } },
         { "type": "text", "text": "{side.name}", "when": [{ "test": "env.small", "not": true }],
           "style": { "font-size": "20px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "text-align": "center", "line-clamp": "1", "text-overflow": "ellipsis" } },
         { "type": "text", "text": "{side.short}", "when": [{ "test": "env.small" }],
