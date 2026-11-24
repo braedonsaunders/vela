@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { Audio, initialAudio, preloadLead, type AudioEngine, type AudioEngineEvent, type AudioPreload } from '../src/store/audio';
+import { Audio, initialAudio, preloadLead, type AudioEngine, type AudioEngineEvent, type AudioPreload, type AudioSound } from '../src/store/audio';
 import { Playback, initialPlayback } from '../src/store/playback';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
 import type { Card } from '../src/models';
-import type { PlaybackPlan } from '../src/wire';
+import type { Loudness, PlaybackPlan } from '../src/wire';
+import { DEFAULT_SOUND, withPreset } from '../src/audio/sound';
 
 // Gapless playback: the next item's plan is asked for before the current item ends and handed to the
 // engine, which goes straight on to it. The finished item's session reports its end once and stops;
@@ -36,7 +37,7 @@ async function advance(ms: number): Promise<void> {
 
 const DURATION = 200;
 
-function harness(options: { gapless?: boolean; duration?: number; buffered?: () => number; queued?: boolean } = {}) {
+function harness(options: { gapless?: boolean; duration?: number; buffered?: () => number; queued?: boolean; handover?: number; loudness?: Record<string, Loudness> } = {}) {
   const gapless = options.gapless ?? true;
   const duration = options.duration ?? DURATION;
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
@@ -48,6 +49,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   const titles = new Map<string, string>();
   const plan = (id: string, titleId: string): PlaybackPlan => ({
     sessionId: id, revision: 1, sourceGeneration: 1, seekGeneration: 1, titleId, state: 'ready', media: 'audio', positionSeconds: 0, durationSeconds: duration,
+    ...(options.loudness?.[titleId] ? { loudness: options.loudness[titleId] } : {}),
     paths: [{ id: 'direct', kind: 'direct', transport: 'file', url: `/media/${id}`, mimeType: 'audio/flac', readiness: 'ready', qualities: [], boundaries: [] }],
     selectedPathId: 'direct', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null,
   } as unknown as PlaybackPlan);
@@ -70,7 +72,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
     },
     detail: async (id: string) => ({ title: { id, watch: { positionSeconds: 0 } } }),
   };
-  const session = { epoch: 0, features: options.queued ? { queuedPlayback: { available: true } } : {}, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
+  const session = { epoch: 0, features: options.queued || options.handover ? { queuedPlayback: { available: true, ...(options.handover ? { handoverSeconds: options.handover } : {}) } } : {}, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
   const box = new StateBox({ playback: initialPlayback, audio: initialAudio, auth: { phase: 'signed-in' } } as unknown as VelaState);
   /** What each stop asked to reconcile: the title and the media class the queue gave it. */
   const reconciled: string[] = [];
@@ -80,7 +82,9 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   const emit = (event: AudioEngineEvent) => { for (const l of [...listeners]) l(event); };
   let position = 0, playing = false;
   let queued: AudioPreload | null = null;
+  const sounds: AudioSound[] = [];
   const engine: AudioEngine = {
+    setSound(sound) { sounds.push(sound); },
     load(url, start) { loads.push(url); position = start; queued = null; },
     play() { playing = true; emit('playing'); },
     pause() { if (!playing) return; playing = false; emit('paused'); },
@@ -102,7 +106,9 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
     for (let i = 0; i < seconds * 4; i++) {
       if (playing) {
         position += 0.25;
-        if (position >= duration) {
+        // A crossfade hands over at its start, `at` seconds in; a gapless join at the end.
+        if (queued?.crossfade && position >= queued.crossfade.at) { loads.push(`crossfade:${queued.url}@${queued.crossfade.at}/${queued.crossfade.seconds}`); position = queued.startSeconds; queued = null; emit('advanced'); }
+        else if (position >= duration) {
           if (queued) { loads.push(`advanced:${queued.url}`); position = queued.startSeconds; queued = null; emit('advanced'); }
           else { playing = false; emit('ended'); }
         } else emit('time');
@@ -112,7 +118,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   };
   const seek = (seconds: number) => { position = seconds; };
   const fail = () => { playing = false; emit('error'); };
-  return { audio, box, starts, stops, loads, preloads, reports, requests, wire, reconciled, play, seek, fail, held: () => queued, isPlaying: () => playing };
+  return { audio, box, starts, stops, loads, preloads, reports, requests, wire, reconciled, play, seek, fail, sounds, held: () => queued, isPlaying: () => playing };
 }
 
 const track = (id: string, cls = 'music') => ({ id, kind: 'episode', name: id, durationSeconds: DURATION, media: { class: cls } } as unknown as Card);
@@ -433,4 +439,79 @@ test("the finished item's session has its end report before it is stopped", asyn
   const s1 = h.wire.filter(line => / s1$/.test(line));
   expect(s1.slice(-2)).toEqual(['ended s1', 'stop s1']);
   expect(h.wire).toContain('playing s2');
+});
+
+// Sound (docs/sound.md): levelling, the EQ and AutoMix's crossfade reach the engine.
+
+const measured = (trackGainDb: number, fadeOutStartMs = 192_000): Loudness => ({ trackGainDb, trackPeak: 0.5, lufs: -18 - trackGainDb, reference: -18, source: 'measured',
+  trim: { startMs: 300, endMs: 199_000, fadeInEndMs: 1000, fadeOutStartMs } });
+
+test('the playing item is levelled by its plan loudness, and the EQ goes with it; a settings change applies at once', async () => {
+  const h = harness({ loudness: { t1: measured(-6) } });
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  expect(h.sounds.at(-1)!.gain).toBeCloseTo(10 ** (-6 / 20), 9);
+  expect(h.sounds.at(-1)!.eq).toBeNull();
+  h.audio.setSound(withPreset({ ...DEFAULT_SOUND, levelling: { ...DEFAULT_SOUND.levelling, mode: 'off' } }, 'rock'));
+  expect(h.sounds.at(-1)!.gain).toBe(1);
+  expect(h.sounds.at(-1)!.eq?.filters).toHaveLength(10);
+});
+
+test('the prepared item is handed with its own gain; a gapless join without AutoMix', async () => {
+  const h = harness({ loudness: { t1: measured(-6), t2: measured(-9) } });
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await h.play(185);
+  const handed = h.held()!;
+  expect(handed.gain).toBeCloseTo(10 ** (-9 / 20), 9);
+  expect(handed.crossfade).toBeUndefined();
+});
+
+test('AutoMix with a server that keeps the outgoing session: a crossfade at the fade-out, played out, then stopped', async () => {
+  const h = harness({ handover: 15, buffered: () => 120, loudness: { t1: measured(-6), t2: measured(-6) } });
+  h.audio.setSound({ ...DEFAULT_SOUND, automix: { ...DEFAULT_SOUND.automix, on: true } });
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await h.play(185);
+  // The fade-out runs 192 to 199 s: seven seconds, from the incoming song's first sound (0.3 s).
+  expect(h.held()).toMatchObject({ startSeconds: 0.3, crossfade: { seconds: 7, at: 192 } });
+  await h.play(8);
+  expect(h.loads.at(-1)).toBe('crossfade:/media/s2@192/7');
+  expect(at(h).queue?.at).toBe(1);
+  // The outgoing session's last report is where it was, playing: the takeover counts it as played.
+  expect(h.reports.filter(r => r.sessionId === 's1').at(-1)).toMatchObject({ state: 'playing', position: 192 });
+  expect(h.reports.some(r => r.sessionId === 's1' && r.state === 'ended')).toBe(false);
+  // It plays out under the fade and stops once the fade is over.
+  expect(h.stops).not.toContain('s1');
+  await h.play(8);
+  expect(h.stops).toContain('s1');
+});
+
+test('AutoMix without the handover crossfades only when the outgoing item is all in the engine, and ends it as gapless does', async () => {
+  const partly = harness({ queued: true, buffered: () => 120, loudness: { t1: measured(-6) } });
+  partly.audio.setSound({ ...DEFAULT_SOUND, automix: { ...DEFAULT_SOUND.automix, on: true } });
+  partly.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await partly.play(185);
+  expect(partly.held()?.crossfade).toBeUndefined();
+
+  const whole = harness({ queued: true, loudness: { t1: measured(-6) } });
+  whole.audio.setSound({ ...DEFAULT_SOUND, automix: { ...DEFAULT_SOUND.automix, on: true } });
+  whole.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await whole.play(185);
+  expect(whole.held()?.crossfade).toEqual({ seconds: 7, at: 192 });
+  await whole.play(8);
+  expect(whole.reports.filter(r => r.sessionId === 's1').at(-1)).toMatchObject({ state: 'ended', position: DURATION });
+  expect(whole.stops).toContain('s1');
+});
+
+test('an album played in order stays gapless with AutoMix on', async () => {
+  const album = (id: string, index: number) => ({ ...track(id), media: { class: 'music', index, parents: [{ id: 'a1', name: 'A', role: 'album' }] } } as unknown as Card);
+  const h = harness({ handover: 15, loudness: { t1: measured(-6) } });
+  h.audio.setSound({ ...DEFAULT_SOUND, automix: { ...DEFAULT_SOUND.automix, on: true } });
+  h.audio.play({ items: [album('t1', 1), album('t2', 2)], index: 0, source: { id: 'a1', name: 'A', kind: 'title' } });
+  await settle();
+  await h.play(185);
+  expect(h.held()?.crossfade).toBeUndefined();
 });

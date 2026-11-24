@@ -12,6 +12,8 @@ interface NativeAudioModule {
   audioSetRate?(rate: number): Promise<void>;
   audioUnload?(): Promise<void>;
   audioNowPlaying?(info: Record<string, unknown> | null): Promise<void>;
+  /** Levelling and the EQ (docs/sound.md); a build without it plays at unity with no EQ. */
+  audioSound?(sound: Record<string, unknown>): Promise<void>;
   addListener?(event: 'onAudio', listener: (event: NativeAudioEvent) => void): { remove(): void };
 }
 
@@ -40,6 +42,9 @@ export function nativeAudioBridge(): NativeAudioBridge {
     seek: seconds => call(native.audioSeek, () => native.audioSeek!(seconds)),
     setRate: rate => call(native.audioSetRate, () => native.audioSetRate!(rate)),
     unload: () => call(native.audioUnload, () => native.audioUnload!()),
+    ...(native.audioSound ? {
+      sound: (sound: Parameters<NonNullable<NativeAudioBridge['sound']>>[0]) => void native.audioSound!({ gain: sound.gain, eq: sound.eq }).catch(() => undefined),
+    } : {}),
     nowPlaying: info => { if (native.audioNowPlaying) void native.audioNowPlaying(info ? { ...info } : null).catch(() => undefined); },
     subscribe(listener) {
       const subscription = native.addListener?.('onAudio', listener);

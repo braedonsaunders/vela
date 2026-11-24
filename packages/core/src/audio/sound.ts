@@ -140,7 +140,7 @@ export interface ListeningContext { albumInOrder: boolean }
 
 /** The queue is an album played in order: its source is the album the item belongs to, not shuffled. */
 export function albumInOrder(queue: { shuffle: boolean; source?: { id: string } } | null | undefined, item: Card | undefined): boolean {
-  const album = item?.media?.parents.find(p => p.role === 'album');
+  const album = item?.media?.parents?.find(p => p.role === 'album');
   return !!queue && !queue.shuffle && !!album && queue.source?.id === album.id;
 }
 
@@ -197,7 +197,7 @@ const SMART_FALLBACK = 6;
 
 /** Consecutive tracks of one album (the second straight after the first). */
 export function sameAlbumRun(from: Card, to: Card): boolean {
-  const a = from.media?.parents.find(p => p.role === 'album'), b = to.media?.parents.find(p => p.role === 'album');
+  const a = from.media?.parents?.find(p => p.role === 'album'), b = to.media?.parents?.find(p => p.role === 'album');
   if (!a || !b || a.id !== b.id) return false;
   const disc = (c: Card) => c.media?.disc || 1;
   const index = (c: Card) => c.media?.index ?? 0;

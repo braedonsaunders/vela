@@ -828,7 +828,7 @@ another release of the track); a missing value means unmeasured, and the client 
 the file at its own level. `TitleMedia.bpm` is sent when the provider knows it.
 Older clients ignore all of it.
 
-Queued handover for crossfades (agreed, pending Ether): a server that advertises
+Queued handover for crossfades (Ether, after 0.3.21): a server that advertises
 `features.queuedPlayback.handoverSeconds` keeps a superseded queued-playback session alive
 for that many seconds after its successor takes the device over. Its reads serve, its
 progress and stop are accepted, and it retires at the client's stop or when the time

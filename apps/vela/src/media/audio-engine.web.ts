@@ -6,7 +6,7 @@
 //   decoder for the track's codec and 1x speed (Web Audio cannot keep pitch at speed);
 // - otherwise <audio> elements: the current one and the next, ready, started the moment the current one
 //   ends (close, but not sample-exact: the element's own start-up sits between the tracks).
-import type { AudioEngine, AudioEngineEvent, AudioPreload, AudioState } from '@vela/core';
+import type { AudioEngine, AudioEngineEvent, AudioPreload, AudioSound, AudioState } from '@vela/core';
 import { currentInQueue } from '@vela/core';
 import { createGaplessPlayer, gaplessSupported } from '@vela/player/src/gapless-audio';
 
@@ -18,6 +18,9 @@ function createElementEngine(): ElementEngine {
   const emit = (event: AudioEngineEvent) => { for (const listener of [...listeners]) listener(event); };
   let rate = 1;
   let volume = 1;
+  /** Levelling: an element can only turn down (volume tops out at 1), and has no EQ. */
+  let level = 1;
+  const loudness = () => volume * Math.min(1, level);
   let start = 0;
   let loaded = false;
   let spare: { element: HTMLAudioElement; url: string; start: number } | null = null;
@@ -50,7 +53,7 @@ function createElementEngine(): ElementEngine {
     spare = null;
     const old = element;
     element = next.element;
-    element.playbackRate = rate; element.defaultPlaybackRate = rate; element.volume = volume;
+    element.playbackRate = rate; element.defaultPlaybackRate = rate; element.volume = loudness();
     if (next.start > 0 && element.readyState > 0) element.currentTime = next.start;
     void element.play().catch(() => emit('paused'));
     clear(old);
@@ -80,7 +83,8 @@ function createElementEngine(): ElementEngine {
     pause() { element.pause(); },
     seek(seconds) { if (element.readyState > 0) element.currentTime = seconds; else start = seconds; },
     setRate(value) { rate = value; element.playbackRate = value; element.defaultPlaybackRate = value; },
-    setVolume(value) { volume = value; element.volume = value; },
+    setVolume(value) { volume = value; element.volume = loudness(); },
+    setSound(sound) { level = sound.gain; element.volume = loudness(); },
     unload() {
       if (spare) { clear(spare.element); spare = null; }
       if (!loaded) return;
@@ -183,6 +187,7 @@ export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
       else element.setRate(speed);
     },
     setVolume(volume) { element.setVolume?.(volume); gapless?.setVolume(volume); },
+    setSound(sound: AudioSound) { element.setSound?.(sound); gapless?.setSound(sound); },
     unload() { wanted = false; next = null; element.unload(); gapless?.unload(); keepAlive.pause(); },
     position: () => engine().position(),
     duration: () => engine().duration(),
