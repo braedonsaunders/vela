@@ -466,12 +466,13 @@ export function detailModel(
   // Ether supplies seasonNumber without seasonId. Resolve the relationship while the wire's
   // optional number is still distinguishable from the display model's default zero.
   const seasons = data.seasons ?? [];
+  const rowBackdropWidth = Math.min(artWidth, CARD_BACKDROP_WIDTH);
   const episodeCard = (episode: Title): Card => {
     const exact = seasons.find(season => season.id === episode.seasonId);
     const numbered = episode.seasonNumber === undefined ? [] : seasons.filter(season => season.seasonNumber === episode.seasonNumber);
     const parent = exact ?? (numbered.length === 1 ? numbered[0] : undefined);
     const seasonId = episode.seasonId || parent?.id || (data.title.kind === 'season' ? data.title.id : undefined);
-    return card({ ...episode, seasonId }, '', images, artWidth);
+    return card({ ...episode, seasonId }, '', images, artWidth, rowBackdropWidth);
   };
   const titleCard = card(data.title, '', images, artWidth);
   // Title pages use the background; shelves and episode rows keep their landscape still.
@@ -490,7 +491,7 @@ export function detailModel(
     crewPeople: (data.crew ?? []).map(person),
     canPlay: data.canPlay ?? false,
     resumeSeconds: position,
-    seasons: (data.seasons ?? []).map(t => card(t, '', images, artWidth)),
+    seasons: (data.seasons ?? []).map(t => card(t, '', images, artWidth, rowBackdropWidth)),
     nextUp: data.nextUp === undefined ? undefined : data.nextUp ? [episodeCard(data.nextUp)] : [],
     episodes: (data.episodes ?? []).map(episodeCard),
     extras: data.extras.map(e => ({
