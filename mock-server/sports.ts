@@ -1,15 +1,17 @@
-// Live events, the Sports screen and multiview, shaped exactly like Ether's 0.3.19 contract
-// (packages/protocol/live-events.ts). Scores tick while the mock runs so live UI visibly moves:
-// every VELA_MOCK_LIVE_TICK_MS (default 3000) each live event advances its clock, sometimes
-// scores, and the change is pushed on /live/stream. A finished replay restarts its script.
+// The Sports plugin's live feed (LiveEvent shapes, packages/protocol/live-events.ts) and multiview.
+// screens.ts serves it as Ether's plugin screens and surfaces (view-model records, page topics).
+// Scores tick while the mock runs so live UI visibly moves: every VELA_MOCK_LIVE_TICK_MS (default
+// 3000) each live event advances its clock, sometimes scores, and the change is pushed on the
+// page topics of /live/stream. A finished replay restarts its script.
 //
-// Knobs: VELA_MOCK_NO_SPORTS=1 hides it all (no features, navigation or endpoints);
+// Knobs: VELA_MOCK_NO_SPORTS=1 hides it all (no screens, surfaces or multiview);
 // VELA_MOCK_SPORTS_FREEZE=1 stops the clock for screenshot parity: nothing ticks, and "now" is
 // VELA_MOCK_SPORTS_NOW (an ISO instant) or 15:00 local on the day the mock started, so scores,
 // clocks, plays, probability and start times are identical in every capture;
 // VELA_MOCK_SPOILER_FREE=1 makes the viewer spoiler-free for every started event;
 // VELA_MOCK_PROVIDER_CAP=n refuses a multiview tile past n channels of one provider.
-// POST /__admin/sports {providerCap, spoilerFree, alert} changes them at runtime.
+// POST /__admin/sports {providerCap, spoilerFree, screenDelayMs, screenFail, favourites, alert}
+// changes them at runtime.
 import type * as V from '../packages/protocol/types';
 
 const PLUGIN = 'sports', FEED = 'sports';
@@ -21,7 +23,7 @@ const tickMs = Math.max(20, Number(process.env.VELA_MOCK_LIVE_TICK_MS) || 3000);
 export const sportsKnobs = {
   providerCap: Math.max(0, Math.floor(Number(process.env.VELA_MOCK_PROVIDER_CAP) || 0)),
   spoilerFree: process.env.VELA_MOCK_SPOILER_FREE === '1',
-  /** Sports screen and game reads answer this late (the loading views), or fail (the failure views). */
+  /** Plugin-screen data reads answer this late (the loading views), or fail (the failure views). */
   screenDelayMs: 0,
   screenFail: false,
 };
@@ -39,7 +41,7 @@ const frozen = frozenNow(process.env);
 export const sportsFrozen = frozen !== undefined;
 /** The Sports clock: the frozen instant, or the real time. Everything in Sports reads time here. */
 export const sportsNow = () => frozen ?? Date.now();
-/** Await before answering a Sports screen or game read: honours screenDelayMs and screenFail. */
+/** Await before answering a plugin-screen data read: honours screenDelayMs and screenFail. */
 export async function sportsGate(fail: Fail): Promise<void> {
   if (sportsKnobs.screenDelayMs > 0) await Bun.sleep(sportsKnobs.screenDelayMs);
   if (sportsKnobs.screenFail) fail('transient', 'sports_unavailable', 'Sports is unavailable (mock fault)', {}, 503);
@@ -188,11 +190,10 @@ function seedFixtures(): void {
 // Presentation
 
 const teamById = (id: string) => TEAMS.find(t => t.id === id);
-let logoOrigin = '';
 const competitor = (sim: Sim, side: 0 | 1): V.LiveCompetitor => {
   const t = teamById(side ? sim.home : sim.away)!;
   const post = sim.state === 'post';
-  return { id: t.id, name: t.name, short: t.short, abbr: t.abbr, logo: `${logoOrigin}/vela/v0/sports-mock/logos/${t.id}.svg`, color: `#${t.color}`, altColor: `#${t.altColor}`,
+  return { id: t.id, name: t.name, short: t.short, abbr: t.abbr, logo: `/vela/v0/sports-mock/logos/${t.id}.svg`, color: `#${t.color}`, altColor: `#${t.altColor}`,
     ...(sim.state === 'pre' ? {} : { score: String(sim.scores[side]) }), record: t.record, home: side === 1,
     ...(post ? { winner: sim.scores[side] > sim.scores[side ? 0 : 1] } : {}), entityId: t.id };
 };
@@ -456,7 +457,6 @@ function alert(kind: V.LiveAlertKind, sim: Sim, force = false): void {
 // Endpoints
 
 type Fail = (cls: V.ProtocolError['class'], code: string, message: string, extra?: Partial<V.ProtocolError>, status?: number) => never;
-const json = (data: unknown) => Response.json(data, { headers: { 'Cache-Control': 'no-store' } });
 let lineup: V.Channel[] = [];
 
 export function initSports(channels: V.Channel[]): void {
@@ -583,15 +583,14 @@ export const sportsModel = {
   /** The event as this viewer reads it (spoiler mask applied), and its detail. */
   event: (sim: Sim, viewerId: string): V.LiveEvent => presentEvent(sim, viewerId),
   detail: (sim: Sim, viewerId: string): V.LiveEventDetail => presentDetail(sim, viewerId),
-  logo: (teamId: string) => `${logoOrigin}/vela/v0/sports-mock/logos/${teamId}.svg`,
-  setLogoOrigin: (origin: string) => { logoOrigin ||= origin; },
+  logo: (teamId: string) => `/vela/v0/sports-mock/logos/${teamId}.svg`,
   favourites: (viewerId: string): Set<string> => favouritesOf(viewerId),
   isFavourite: (sim: Sim, viewerId: string) => isFavourite(sim, viewerId),
   spoilerFree: (viewerId: string) => spoilerPreference.get(viewerId) ?? sportsKnobs.spoilerFree,
   setSpoilerFree: (viewerId: string, on: boolean) => { spoilerPreference.set(viewerId, on); },
   reveal: (viewerId: string, id: string) => { let set = revealed.get(viewerId); if (!set) revealed.set(viewerId, set = new Set()); set.add(id); },
   spoilered: (sim: Sim, viewerId: string) => spoilered(sim, viewerId),
-  /** An alert's words, as the legacy alert says them. */
+  /** An alert's words (title and body of the AlertFrame). */
   alertText(kind: V.LiveAlertKind, sim: Sim): { title: string; body: string } {
     const away = teamById(sim.away), home = teamById(sim.home);
     const score = `${away?.short ?? ''} ${sim.scores[0]}–${sim.scores[1]} ${home?.short ?? ''}`;
