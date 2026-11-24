@@ -100,6 +100,8 @@ const android: Device = {
   shoot(file) { writeFileSync(file, adb('exec-out', 'screencap', '-p')); },
 };
 const device = platform === 'androidtv' ? android : apple;
+// Start from a fresh install's data: an earlier session's sign-out would stop the mock's demo sign-in.
+if (platform === 'androidtv') adb('shell', 'pm', 'clear', APP);
 async function admin(knobs: Knobs): Promise<{ now: string; frozen: boolean }> {
   const response = await fetch(`${values.mock}/__admin/sports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(knobs) });
   return response.json() as Promise<{ now: string; frozen: boolean }>;
