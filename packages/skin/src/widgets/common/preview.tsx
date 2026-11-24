@@ -12,6 +12,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 import { StyleSheet, View, type HostInstance } from 'react-native';
 import { GroupContext, useHost, type WidgetProps } from '../../host';
+import { heroVisibility, type HeroVisibility } from './hero-visibility';
 import { useVisibility, type Reach } from './in-view';
 
 export interface PreviewSource {
@@ -67,14 +68,14 @@ export function HeroPreview({ ctx }: WidgetProps) {
   const source = useContext(PreviewContext);
   const heroId = ctx.hero?.id ?? '';
   const box = useRef<HostInstance>(null);
-  const report = source?.heroVisible;
-  useVisibility(box, ON_SCREEN, visible => {
-    if (heroId) report?.(heroId, visible);
-  });
-  useEffect(() => {
-    if (!heroId || !report) return;
-    return () => report(heroId, false);
-  }, [report, heroId]);
+  const report = useRef(source?.heroVisible);
+  report.current = source?.heroVisible;
+  const shown = useRef<HeroVisibility | null>(null);
+  shown.current ??= heroVisibility((id, visible) => report.current?.(id, visible));
+  useVisibility(box, ON_SCREEN, visible => shown.current?.visible(visible));
+  // On TV this widget stays as the carousel rotates: its hero changes while its box stays in view.
+  useEffect(() => { shown.current?.hero(heroId); }, [heroId]);
+  useEffect(() => () => shown.current?.hero(''), []);
   const playing = source && heroId !== '' && env.preview?.heroId === heroId ? source.heroUrl : '';
   const heroEnded = source?.heroEnded;
   const ended = useCallback(() => heroEnded?.(heroId), [heroEnded, heroId]);
