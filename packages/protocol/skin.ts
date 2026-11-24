@@ -157,8 +157,11 @@ export interface ShelfNode extends ItemsBase { type: 'shelf'; itemWidth?: PerCla
 export interface GridNode extends ItemsBase { type: 'grid'; columns: PerClass<number>; gap?: string }
 export interface TabsNode extends NodeBase { type: 'tabs'; over: string; as: string; value: Template; label: Template; count?: Template;
   bind: { param?: string; state?: string; clear?: string[] }; default?: Template; all?: Template; chip?: string; size?: 'small';
-  /** Nodes drawn after the options inside the same scroll and focus row (Sports' Hide scores switch). */ after?: Node[] }
-export interface TableNode extends NodeBase { type: 'table'; data: string; compact?: boolean; focusRows?: number }
+  /** Nodes drawn after the options inside the same scroll and focus row (Sports' Hide scores switch). */ after?: Node[];
+  /** With `bind.param`: on first draw an empty param takes the resolved `default` (history replace, no re-read), so a later
+   *  change of the default does not move the selection. */ pin?: boolean }
+export interface TableNode extends NodeBase { type: 'table'; data: string; compact?: boolean; focusRows?: number;
+  /** false: ignore rows' `highlight` (a game's own tables are not lit, as standings are). Default true. */ highlight?: boolean }
 export interface LineGraphNode extends NodeBase { type: 'lineGraph'; series: string; sides?: string; subject?: Template; live?: Template; height?: PerClass<string> }
 export interface PlayerNode extends NodeBase { type: 'player'; channel: Template }
 export interface ParamInputNode extends NodeBase { type: 'paramInput'; param: string; placeholder?: Template }

@@ -4693,7 +4693,7 @@
     },
     "SurfaceRow": {
       "additionalProperties": false,
-      "description": "A Home row that is a surface (bootstrap and home rows): row id `surface:<pluginID>:<id>`.",
+      "description": "A Home row that is a surface (bootstrap and home rows), placed after the first row: id `surface:<pluginID>:<id>` (`surface:org.ether.sports:tonight`), surface the surface id (`sports.tonight`).",
       "properties": {
         "id": {
           "type": "string"
@@ -4860,6 +4860,10 @@
         },
         "groupHover": {
           "$ref": "#/$defs/Style"
+        },
+        "highlight": {
+          "description": "false: ignore rows' `highlight` (a game's own tables are not lit, as standings are). Default true.",
+          "type": "boolean"
         },
         "hover": {
           "$ref": "#/$defs/Style",
@@ -5187,6 +5191,10 @@
         },
         "over": {
           "type": "string"
+        },
+        "pin": {
+          "description": "With `bind.param`: on first draw an empty param takes the resolved `default` (history replace, no re-read), so a later\nchange of the default does not move the selection.",
+          "type": "boolean"
         },
         "returnFocus": {
           "type": "string"
