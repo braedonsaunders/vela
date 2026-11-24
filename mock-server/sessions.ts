@@ -8,6 +8,25 @@ interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs;
   /** The live event on air on a live channel session (Sports A6); undefined for other sessions. */ liveEvent?: LiveEventRef | null }
 export const sessions = new Map<string, Session>();
+/** The sidecar title (POST /__admin/sidecar): new VOD plans of the generated fixture carry its English WebVTT as an
+ * external file, as Jellyfin, Emby and Plex sidecars arrive, selected from the start when `selected` (a default or
+ * remembered subtitle). The direct MP4 is the original file and `pathId` is where plans start. Track commands are
+ * answered as Ether answers them: off the original file, with a new source generation. */
+export const sidecarFixture = { enabled: false, selected: true, pathId: 'direct' };
+export function withSidecar(plan: PlaybackPlan, base: string) {
+  plan.subtitleTracks = [{ id: 'sub-en', kind: 'subtitle', language: 'en', name: 'English · sidecar', codec: 'webvtt',
+    delivery: { kind: 'external', format: 'webvtt', url: `${base}/subtitles.vtt` } }];
+  plan.selectedSubtitleTrackId = sidecarFixture.selected ? 'sub-en' : null;
+  const direct = plan.paths.find(path => path.id === 'direct');
+  if (direct) Object.assign(direct, { original: true, range: true });
+  if (plan.paths.some(path => path.id === sidecarFixture.pathId)) plan.selectedPathId = sidecarFixture.pathId;
+}
+/** Ether's answer to a track choice: the original file applies it in the player; a server path makes a new source. */
+export function answerTracks(plan: PlaybackPlan, cmd: { audioTrackId?: string; subtitleTrackId?: string | null }) {
+  if (cmd.audioTrackId !== undefined) plan.selectedAudioTrackId = cmd.audioTrackId;
+  if (cmd.subtitleTrackId !== undefined) plan.selectedSubtitleTrackId = cmd.subtitleTrackId;
+  if (sidecarFixture.enabled && plan.paths.find(path => path.id === plan.selectedPathId)?.original !== true) plan.sourceGeneration++;
+}
 export function snapshot(s: Session): SessionSnapshot {
   return { ...(s.liveEvent !== undefined ? { liveEvent: s.liveEvent } : {}), cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: s.plan.durationSeconds ?? fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
 }
@@ -49,6 +68,7 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
       boundaries: Array.from({ length: fixtureDurationSeconds / 4 }, (_, n) => ({ atSeconds: n * 4, independent: true,
         timelineId: `synthetic-${fixtureDurationSeconds}`, compatibility: 'same-source', audioTrackIds: ['audio-en', 'audio-es'], subtitleTrackIds: ['sub-en'] })) });
   }
+  if (sidecarFixture.enabled && available && !request.channelId && !request.extraId && !originalFixture.name) withSidecar(plan, base);
   if (!request.channelId && !request.extraId && originalFixture.name) {
     // A format-matrix fixture leads as the original file; the synthetic paths stay as the fallback.
     const mimeType = { mkv: 'video/x-matroska', webm: 'video/webm', mp4: 'video/mp4', mov: 'video/quicktime' }[originalFixture.name.slice(originalFixture.name.lastIndexOf('.') + 1)] ?? 'application/octet-stream';
@@ -118,7 +138,7 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
     case 'pause': s.plan.state = 'paused'; break;
     case 'resume': s.plan.state = 'playing'; break;
     case 'stop': s.plan.state = 'ended'; break;
-    case 'tracks': if (cmd.audioTrackId !== undefined) s.plan.selectedAudioTrackId = cmd.audioTrackId; if (cmd.subtitleTrackId !== undefined) s.plan.selectedSubtitleTrackId = cmd.subtitleTrackId; break;
+    case 'tracks': answerTracks(s.plan, cmd); break;
     case 'switch': s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds; break;
     case 'version': s.plan.selectedVersionId = cmd.versionId; s.plan.sourceGeneration++; s.plan.seekGeneration++; if (cmd.positionSeconds !== undefined) s.plan.positionSeconds = cmd.positionSeconds; break;
   }

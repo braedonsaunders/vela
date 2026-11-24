@@ -8,7 +8,7 @@ import { allTitles, artwork, channels as defaultChannels, detail, extras, featur
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
 import { trickplaySheet } from './trickplay';
-import { applyCommand, createSession, events, observe, publish, requestedInit, sessions, snapshot, type Session } from './sessions';
+import { applyCommand, createSession, events, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
@@ -985,7 +985,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (body.kind === 'goLive') { goLive(s.plan, (s.plan.paths[0]?.url ?? '').replace(/\/live\/(archive\/[^/]+\/[^/]+\/)?master\.m3u8$/, '')); publish(s); return json(s.plan); }
       const duration = s.plan.durationSeconds ?? fixtureDurationSeconds;
       if (body.kind === 'seek' && !s.plan.live && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > duration)) fail('request', 'invalid_position', `Position must be 0–${duration}`);
-      if (body.kind === 'tracks') fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
+      if (body.kind === 'tracks' && !sidecarFixture.enabled) fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
       if (body.kind === 'stop') recordPlayback(s, false);
       applyCommand(s, body); return json(s.plan);
@@ -1010,6 +1010,17 @@ async function dispatch(req: Request): Promise<Response> {
         if (originalFixture.video && data.video && typeof data.video === 'object') Object.assign(originalFixture.video, data.video);
         originalFixture.selectSubtitle = data.selectSubtitle === true; }
       return json(originalFixture);
+    }
+    if (url.pathname === '/__admin/sidecar') {
+      if (req.method === 'POST') { const data = await req.json(); if (typeof data.enabled === 'boolean') sidecarFixture.enabled = data.enabled;
+        if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected; if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId; }
+      return json(sidecarFixture);
+    }
+    // A new revision of every open session's plan, changing nothing: the same source, as a server sends for any update.
+    if (req.method === 'POST' && url.pathname === '/__admin/revise') {
+      const revised = [...sessions.values()].filter(s => s.plan.state !== 'ended');
+      for (const s of revised) publish(s);
+      return json(revised.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, sourceGeneration: s.plan.sourceGeneration })));
     }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; return json(faults); }
