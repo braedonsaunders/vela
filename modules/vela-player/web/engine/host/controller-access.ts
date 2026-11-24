@@ -8,6 +8,7 @@ import {
 } from '../media-auth';
 
 import { abortable } from '../core/async';
+import { randomId } from '../random-id';
 
 const retired = () => new DOMException('Media authorization retired', 'AbortError');
 
@@ -48,7 +49,7 @@ export class ControllerMediaAccess implements BrowserMediaAccess {
       this.assertCurrent(provider, lifetime);
       const next = parseMediaAuthorization(
         JSON.stringify({
-          handle: this.value?.handle ?? crypto.randomUUID(),
+          handle: this.value?.handle ?? randomId(),
           origin: provider.origin,
           pathPrefix: provider.pathPrefix,
           headers,
@@ -58,7 +59,7 @@ export class ControllerMediaAccess implements BrowserMediaAccess {
       if (changed && this.value) {
         this.lifetime.abort();
         this.lifetime = new AbortController();
-        next!.handle = crypto.randomUUID();
+        next!.handle = randomId();
       }
       this.value = next;
       return changed;

@@ -56,6 +56,18 @@ describe('PlexAdapter addresses', () => {
     expect(() => adapter.mediaURL('/:/prefs')).toThrow('Plex media outside selected server');
     expect(() => adapter.mediaURL('https://other.example/library/parts/1')).toThrow('Plex media outside selected server');
   });
+
+  // The browser's own HLS (a plain-http page's last resort) reads the variant Ether's master names,
+  // whose query carries Ether's per-stream read tokens; they stay, beside the transient Plex token.
+  test('a native attachment keeps the server\'s stream parameters and carries only the transient token', async () => {
+    routeFetch({ 'GET /security/token': { MediaContainer: { token: 'transient-1' } } });
+    const adapter = plex();
+    const variant = `${ORIGIN}/video/:/transcode/universal/session/s/base/index.m3u8?X-Ether-Stream-Token=S&X-Ether-Read-Token=R&X-Plex-Token=persistent`;
+    const attached = new URL(await adapter.transientMediaURL(variant));
+    expect(attached.pathname).toBe('/video/:/transcode/universal/session/s/base/index.m3u8');
+    expect(Object.fromEntries(attached.searchParams)).toEqual({ 'X-Ether-Stream-Token': 'S', 'X-Ether-Read-Token': 'R', 'X-Plex-Token': 'transient-1' });
+    await expect(adapter.transientMediaURL('https://other.example/video/:/transcode/universal/session/s/base/index.m3u8')).rejects.toThrow('Plex media outside selected server');
+  });
 });
 
 describe('PlexAdapter requests', () => {

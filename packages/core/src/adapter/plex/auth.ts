@@ -28,6 +28,16 @@ export function plexHeaders(device: PlexDevice): Record<string, string> {
     'X-Plex-Client-Identifier': device.id, 'X-Plex-Platform': known.platform, 'X-Plex-Device': known.device,
     'X-Plex-Device-Name': device.name || 'Vela' };
 }
+/**
+ * The headers a player sends with this device's media reads. Every player host (web, iOS, Android)
+ * refuses a media authorization naming any header outside one fixed set
+ * (modules/vela-player/web/engine/media-auth.ts), and X-Plex-Device is not in it: the server
+ * already knows the device from the client identifier, so media reads leave it out.
+ */
+export function plexMediaHeaders(device: PlexDevice): Record<string, string> {
+  const { 'X-Plex-Device': _device, ...headers } = plexHeaders(device);
+  return headers;
+}
 async function cloud<T>(path: string, device: PlexDevice, method = 'GET', accountToken?: string, refused?: string): Promise<T> {
   const url = new URL(path, 'https://plex.tv');
   if (url.origin !== 'https://plex.tv' || !url.pathname.startsWith('/api/v2/')) throw new Error('Invalid Plex account endpoint');

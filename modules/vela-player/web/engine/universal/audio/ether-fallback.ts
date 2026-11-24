@@ -1,4 +1,5 @@
 import type { AudioFallbackRequest, AudioFallbackResponse, Mutation, Ack } from '../../../../../../packages/protocol/types';
+import { randomId } from '../../random-id';
 
 /** Authenticated adapter calls stay outside the native view. Implemented by EtherAdapter. */
 export interface AudioFallbackTransport {
@@ -36,7 +37,7 @@ export class EtherAudioFallback {
       await previous;
       signal.throwIfAborted();
       if (revision !== this.revision) throw new DOMException('Audio fallback superseded', 'AbortError');
-      const request: AudioFallbackRequest = { idempotencyKey: crypto.randomUUID(), trackId: position.trackId,
+      const request: AudioFallbackRequest = { idempotencyKey: randomId(), trackId: position.trackId,
         positionSeconds: position.positionSeconds, sourceGeneration: position.sourceGeneration,
         seekGeneration: position.seekGeneration, preferredCodec: 'aac' };
       const requestAbort = new AbortController(); this.requestAbort = requestAbort;
@@ -72,7 +73,7 @@ export class EtherAudioFallback {
   private async retire(active: Active) {
     try {
       await this.transport.cancelAudioFallback(active.sessionId, active.descriptor.id,
-        { idempotencyKey: crypto.randomUUID() }, AbortSignal.timeout(10_000));
+        { idempotencyKey: randomId() }, AbortSignal.timeout(10_000));
     } catch (error) {
       this.cleanupError = error instanceof Error ? error.message : String(error);
     }

@@ -22,7 +22,7 @@ const command = (kind: 'pause' | 'resume' | 'stop', key = kind) => ({ kind, sour
 
 function plexRoutes() {
   return { 'GET /library/metadata/10': { MediaContainer: { Metadata: [movie] } }, 'POST /:/timeline': noContent,
-    'PUT /:/scrobble': noContent, 'GET /video/:/transcode/universal/stop': noContent };
+    'PUT /:/scrobble': noContent, 'GET /video/:/transcode/universal/stop': noContent, 'GET /video/:/transcode/universal/decision': { MediaContainer: {} } };
 }
 function jfRoutes(direct = true) {
   return { 'GET /Users/viewer-1/Items/10': jfMovie, 'POST /Items/10/PlaybackInfo': { PlaySessionId: 'jf-session', MediaSources: [{
@@ -272,6 +272,9 @@ test('Plex transcode track changes restart at the observed offset with a new sou
   expect(url.searchParams.get('session')).not.toBe(plan.sessionId);
   expect(path.timelineOriginSeconds).toBe(42);
   expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(true);
+  // Each new transcode is asked a decision for first, with the transcode's own session.
+  const decided = seen.filter(r => r.url.pathname.endsWith('/decision')).map(r => r.url.searchParams.get('session'));
+  expect(decided).toEqual([plan.sessionId, url.searchParams.get('session')]);
 });
 
 for (const direct of [true, false]) test(`Jellyfin/Emby mid-play track changes (${direct ? 'direct' : 'transcode'})`, async () => {
