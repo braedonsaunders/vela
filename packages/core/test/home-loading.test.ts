@@ -181,6 +181,23 @@ test('a title not on Home\'s shelves yet (it may need a shelf Home does not show
   expect(box.get().home.progressRevision).toBe(1);
 });
 
+test('when the shelf showing the title cannot be read, Home itself is read', async () => {
+  const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
+  const homeCalls: boolean[] = [];
+  const reading = { ...shelfRow('book', 0), id: 'continue-reading' };
+  const first = { ...bootstrap, rows: [shelfRow('film', 10), reading] } as unknown as Bootstrap;
+  const api = {
+    home: async (fresh = false) => { homeCalls.push(fresh); return fresh ? { ...first, rows: [shelfRow('film', 55), reading] } as unknown as Bootstrap : first; },
+    row: async (id: string) => { if (id === 'continue') throw new Error('row_not_found'); return reading; },
+  };
+  const session = { epoch: 0, onReset() {}, negotiate: async () => {}, ready: async () => ({ adapter: api, images: async () => undefined }), check() {} };
+  const home = new Home(box, session as unknown as Session, () => 640, HOME_SLOW_MS, 1, 0);
+  await home.ensure();
+  await home.reconcile({ titleId: 'film', positionSeconds: 55, finished: false });
+  expect(homeCalls).toEqual([false, true]);
+  expect(box.get().home.value!.rows[0]!.items[0]!.progressSeconds).toBe(55);
+});
+
 test('a finished title leaves its emptied shelf; a shelf that cannot be read keeps what it shows', async () => {
   const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
   const nextUp = { ...shelfRow('episode', 0), id: 'next-up', purpose: 'nextUp' };

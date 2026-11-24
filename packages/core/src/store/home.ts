@@ -266,8 +266,10 @@ export class Home {
         // shelves alone. Anything else (the first stop of a title, an audiobook part whose book is
         // the card, a book's reading place) may need a shelf Home does not show yet: Home itself.
         const shown = this.box.get().home.value?.rows.filter(progressRow) ?? [];
-        const onShelf = watched !== ANY_PROGRESS && shown.some(row => row.items.some(card => card.id === watched.titleId));
-        const shelves = onShelf ? await this.readShelves(connection, shown) : [];
+        const holding = watched === ANY_PROGRESS ? [] : shown.filter(row => row.items.some(card => card.id === watched.titleId));
+        const read = holding.length ? await this.readShelves(connection, shown) : [];
+        // The shelves that show the title must all have answered; otherwise Home itself.
+        const shelves = holding.every(row => read.some(fresh => fresh.id === row.id)) ? read : [];
         if (signal.aborted || generation !== this.reconcileGeneration) return;
         let value: Card | undefined;
         let merge: (home: HomeModel) => HomeModel;
