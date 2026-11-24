@@ -47,6 +47,8 @@ export interface Env {
   /** Screen documents (env.canMultiview, env.canPlay): multiview is available here; playback is (default true). */
   canMultiview?: boolean;
   canPlay?: boolean;
+  /** Screen documents (env.isTV): a TV device, where env.tv is the TV class (a TV, or a window 1600px or wider). */
+  isTV?: boolean;
   home?: HomeModel;
   heroIndex: number;
   libraries: Destination[];
