@@ -225,3 +225,37 @@ describe('a long status line (Ether puts the last play in detail)', () => {
     }
   });
 });
+
+describe('a long single-word team name (lab: "Tennessee", "Maryland" at 390 px)', () => {
+  test('the phone hero and game band draw names on one line with an ellipsis, never broken inside the word', async () => {
+    const sample = await json<Sample>('data-sample.json');
+    const game = await json<Sample>('data-game.json');
+    const longNames = (records: Sample['records']) => Object.fromEntries(Object.entries(records).map(([key, rec]) => {
+      const value = rec.value as { sides?: { short: string; name: string }[] };
+      if (!key.startsWith('event:') || !value.sides) return [key, rec];
+      return [key, { ...rec, value: { ...value, sides: [{ ...value.sides[0]!, short: 'Tennessee', name: 'Tennessee' }, { ...value.sides[1]!, short: 'Maryland', name: 'Maryland' }] } }];
+    }));
+    for (const [file, data] of [['index.json', sample], ['game.json', game]] as const) {
+      const doc = await json<ScreenDocument>(file);
+      const records = longNames(data.records);
+      const env = envAt(390);
+      const r = resolveScreenDocument(doc, { width: 390, tv: false }, 'en', {});
+      const names: RNode[] = [];
+      const visit = (n: RNode, c: Ctx) => {
+        if (!holds(n.when, c, env)) return;
+        const node = n as RNode & { children?: RNode[]; item?: RNode };
+        if (n.kind === 'text' && ['Tennessee', 'Maryland'].includes(fill(n.text, c, env))) names.push(n);
+        if ((n.kind === 'repeat' || n.kind === 'shelf') && node.item) for (const i of items(n as never, c, env)) visit(node.item, i);
+        node.children?.forEach(child => visit(child, c));
+      };
+      visit(r.tree, screenRoot(page(data.sources), key => records[key]));
+      expect(names.length).toBeGreaterThan(1);
+      for (const n of names) {
+        const style = n.base.style as Record<string, unknown>;
+        const value = (k: string) => fill(style[k] as never, screenRoot(page({}), () => undefined), env);
+        expect(value('line-clamp')).toBe('1');
+        expect(value('text-overflow')).toBe('ellipsis');
+      }
+    }
+  });
+});
