@@ -30,7 +30,7 @@ import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
-import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
+import { EscapeScope, focusElement, focusPressed, focusTarget, leaveButton, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { useFocusStyles } from './focus';
 import { focusStyle } from './focus-style';
@@ -969,6 +969,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         }
         unregister?.();
         untrack?.();
+        leaveButton(target);
         if (contextTarget && contextHandler) contextTarget.removeEventListener('contextmenu', contextHandler);
         unepisode?.();
       };
@@ -992,6 +993,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
       notePress(buttonRef.current, `${press.action}:${arg}`);
+      focusPressed(buttonRef.current);
       // Pausing or playing the slideshow clears the hold its keyboard focus placed, so play takes
       // effect while focus stays on the control.
       if (heroControl && press.action === 'toggle') host.setFlag('hero-interacting', false);
