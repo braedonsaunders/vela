@@ -29,18 +29,18 @@
     "team": {
       "type": "box",
       "style": { "background-color": "$palette.glass", "flex-direction": "row", "align-items": "center", "gap": "6px", "padding": "0px 12px" },
-      "small": { "gap": "4.5px", "padding": "0px 8px" },
+      "small": { "gap": "5px", "padding": "0px 8px" },
       "children": [
         { "type": "use", "template": "ball", "when": [{ "test": "arg.trailing" }, { "test": "arg.ball" }] },
-        { "type": "use", "template": "crest", "when": [{ "test": "arg.trailing", "not": true }] },
+        { "type": "use", "template": "crest", "with": { "logo": "{arg.logo}", "color": "{arg.color}" }, "when": [{ "test": "arg.trailing", "not": true }] },
         {
           "type": "text",
           "text": "{arg.abbr}",
-          "style": { "font-size": "15px", "font-weight": "750", "color": "$ui.ink", "letter-spacing": "0.4px", "line-clamp": "1" },
+          "style": { "font-size": "15px", "font-weight": "750", "color": "$ui.ink", "line-clamp": "1" },
           "small": { "font-size": "12px" },
           "states": [{ "when": [{ "test": "arg.loser" }], "style": { "opacity": "0.6" } }]
         },
-        { "type": "use", "template": "crest", "when": [{ "test": "arg.trailing" }] },
+        { "type": "use", "template": "crest", "with": { "logo": "{arg.logo}", "color": "{arg.color}" }, "when": [{ "test": "arg.trailing" }] },
         { "type": "use", "template": "ball", "when": [{ "test": "arg.trailing", "not": true }, { "test": "arg.ball" }] },
         {
           "type": "box",
@@ -91,14 +91,7 @@
         {
           "type": "text",
           "text": "{arg.text}",
-          "style": {
-            "font-size": "13px",
-            "font-weight": "700",
-            "color": "$ui.inkSecondary",
-            "font-variant-numeric": "tabular-nums",
-            "letter-spacing": "0.3px",
-            "line-clamp": "1"
-          },
+          "style": { "font-size": "13px", "font-weight": "700", "color": "$ui.inkSecondary", "font-variant-numeric": "tabular-nums", "line-clamp": "1" },
           "small": { "font-size": "11px" },
           "states": [
             { "when": [{ "test": "arg.state", "is": "eq", "value": "in" }], "style": { "color": "#ffffff" } },
@@ -111,7 +104,7 @@
       "type": "text",
       "text": "{arg.value}",
       "onChange": { "value": "{arg.value}", "motion": "roll" },
-      "style": { "font-size": "17px", "font-weight": "800", "color": "$ui.inkInverse", "font-variant-numeric": "tabular-nums", "letter-spacing": "0.3px" },
+      "style": { "font-size": "17px", "font-weight": "800", "color": "$ui.inkInverse", "font-variant-numeric": "tabular-nums" },
       "small": { "font-size": "13px" },
       "states": [{ "when": [{ "test": "arg.loser" }], "style": { "opacity": "0.55" } }]
     }
@@ -159,12 +152,12 @@
             "style": {
               "flex-direction": "row",
               "align-items": "stretch",
-              "height": "36.1px",
+              "height": "36px",
               "border-radius": "min($ui.radiusControl, 10px)",
               "overflow": "hidden",
               "border": "1px solid #ffffff14"
             },
-            "small": { "height": "24.9px", "border-radius": "min($ui.radiusControl, 7px)" },
+            "small": { "height": "25px", "border-radius": "min($ui.radiusControl, 7px)" },
             "tv": { "border-width": "0px" },
             "children": [
               {
@@ -199,13 +192,7 @@
                   {
                     "type": "text",
                     "text": "–",
-                    "style": {
-                      "font-size": "17px",
-                      "font-weight": "800",
-                      "color": "$ui.inkInverse",
-                      "font-variant-numeric": "tabular-nums",
-                      "letter-spacing": "0.3px"
-                    },
+                    "style": { "font-size": "17px", "font-weight": "800", "color": "$ui.inkInverse", "font-variant-numeric": "tabular-nums" },
                     "small": { "font-size": "13px" }
                   },
                   {
@@ -230,13 +217,7 @@
                   {
                     "type": "text",
                     "text": "–",
-                    "style": {
-                      "font-size": "17px",
-                      "font-weight": "800",
-                      "color": "$ui.inkInverse",
-                      "font-variant-numeric": "tabular-nums",
-                      "letter-spacing": "0.3px"
-                    },
+                    "style": { "font-size": "17px", "font-weight": "800", "color": "$ui.inkInverse", "font-variant-numeric": "tabular-nums" },
                     "small": { "font-size": "13px" }
                   },
                   { "type": "use", "template": "score", "with": { "value": "{src.game.detail.plays|asOf:at,scores.1}", "loser": "" } }
@@ -257,13 +238,7 @@
                   {
                     "type": "text",
                     "text": "–",
-                    "style": {
-                      "font-size": "17px",
-                      "font-weight": "800",
-                      "color": "$ui.inkInverse",
-                      "font-variant-numeric": "tabular-nums",
-                      "letter-spacing": "0.3px"
-                    },
+                    "style": { "font-size": "17px", "font-weight": "800", "color": "$ui.inkInverse", "font-variant-numeric": "tabular-nums" },
                     "small": { "font-size": "13px" }
                   },
                   { "type": "use", "template": "score", "with": { "value": "0", "loser": "" } }
@@ -552,12 +527,12 @@
             "style": {
               "flex-direction": "row",
               "align-items": "stretch",
-              "height": "36.1px",
+              "height": "36px",
               "border-radius": "min($ui.radiusControl, 10px)",
               "overflow": "hidden",
               "border": "1px solid #ffffff14"
             },
-            "small": { "height": "24.9px", "border-radius": "min($ui.radiusControl, 7px)" },
+            "small": { "height": "25px", "border-radius": "min($ui.radiusControl, 7px)" },
             "tv": { "border-width": "0px" },
             "children": [
               {

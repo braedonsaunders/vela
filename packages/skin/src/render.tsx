@@ -94,6 +94,18 @@ const PointerInheritance = createContext<PointerMode>('auto');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
+/** A surface over the picture while the player's chrome is hidden: its presses take no focus (a
+ * pointer or touch still reaches them), so the remote never lands on an overlay it cannot see the
+ * controls around. */
+export const Unfocusable = createContext(false);
+/** Plugin surfaces in skin pages (docs/plugin-screens.md: Surfaces), given by the app: a Home row
+ * whose row is a surface (drawn in place of the skin's row), and title panels after a title's
+ * related rows. Without them (or with surfaces off) those places draw as before. */
+export interface SurfaceSlotViews {
+  row?: ComponentType<{ id: string; surface: string }>;
+  titlePanels?: ComponentType<{ id: string; kind: string }>;
+}
+export const SurfaceSlots = createContext<SurfaceSlotViews | null>(null);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
 const PressLabelContent = createContext(false);
 const HeroInteraction = createContext(false);
@@ -464,6 +476,7 @@ function SkinNodeView({ node, ctx, route, after, hero, changed }: { node: RNode;
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
   const hiddenLibraryNav = useContext(HiddenLibraryNav);
+  const surfaceSlots = useContext(SurfaceSlots);
   if (!loadingLibraryNav && node.id === 'vela-library-views' && env.route === 'library' && env.load !== 'ready') return null;
   if (hiddenLibraryNav && node.kind === 'box' && node.base.style.position === 'sticky'
     && node.children.some(child => child.id === 'vela-library-views')) {
@@ -489,12 +502,18 @@ function SkinNodeView({ node, ctx, route, after, hero, changed }: { node: RNode;
     // focus to the pager, where Select picked the first title).
     let shown = 0;
     const steadyHero = node.over === 'home.hero' && Platform.isTV;
+    const SurfaceRow = node.over === 'home.rows' ? surfaceSlots?.row : undefined;
     const drawn = items(node, ctx, env).flatMap(c => {
       const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
       if (!holds(node.when, c, env)) return [];
       const key = steadyHero ? `hero-shown-${shown++}` : itemKey(node, c, env);
+      // A plugin's Home row draws its surface in the row's place.
+      if (c.row?.surface) return SurfaceRow ? [<SurfaceRow key={key} id={c.row.id} surface={c.row.surface} />] : [];
       return [<SkinNode key={key} node={node.item} ctx={context} hero={node.over === 'home.hero'} />];
     });
+    const TitlePanels = node.over === 'detail.related' ? surfaceSlots?.titlePanels : undefined;
+    const title = TitlePanels ? env.detail?.title[0] : undefined;
+    if (TitlePanels && title) drawn.push(<TitlePanels key="surface-title-panels" id={title.id} kind={title.kind} />);
     const lazy = node.items ? undefined : LAZY_REPEATS[node.over];
     return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{drawn}</LazyRepeat> : <>{drawn}</>;
   }
@@ -742,7 +761,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const band = useContext(Band);
   // A section the remote reaches though it presses nothing: below a scroll's last control, or one
   // the document marks (a menu's About line).
-  const stop = useContext(ReadingStop) || (Platform.isTV && node.readingStop === true);
+  const unfocusable = useContext(Unfocusable);
+  const readingStop = useContext(ReadingStop);
+  const stop = !unfocusable && (readingStop || (Platform.isTV && node.readingStop === true));
   const routeFocus = useRouteFocusContext();
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
@@ -1069,7 +1090,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
         {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
-        focusable={selectable(node)}
+        focusable={selectable(node) && !unfocusable}
         {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}), ...(heroSegment ? { velaHeroSegment: String(ctx.index) } : {}) }, onKeyDown: (event) => {
           const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
           const heroTo = heroSegment ? heroSegmentDestination(key, ctx.index, env.home?.hero.length ?? 0) : null;

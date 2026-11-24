@@ -13,6 +13,7 @@ import { ChapterStrip } from './chapters';
 import { LiveDial, LiveMark, LiveMultiview, LiveStatusLine, LiveZap, type LiveWatch } from './live';
 import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLiveOverlay } from '../live-overlay/player';
+import type { OverlaySwitch } from '../../surfaces/player';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
 import { AudioMenu, qualityMenuRows, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
@@ -129,6 +130,8 @@ interface BottomProps {
   live: LiveWatch;
   /** Sports over a live channel: the ticker's toggle. */
   overlay?: PlayerLiveOverlay;
+  /** Plugin overlays that apply here, each with its switch (the subtitles menu lists them). */
+  overlaySwitches?: OverlaySwitch[];
 }
 
 export function BottomBar(props: BottomProps) {
@@ -250,6 +253,7 @@ function Controls({
   visible,
   reveal,
   overlay,
+  overlaySwitches,
 }: BottomProps) {
   // A channel plays at the live edge: channel up and down and the LIVE mark take the place of
   // the ten-second steps; no speed, no chapters. A rewind window brings the steps back.
@@ -270,7 +274,7 @@ function Controls({
       case 'chapters':
         return <ChapterStrip look={look} view={view} disabled={blocked} onSeek={seek} />;
       case 'subtitles':
-        return <SubtitlesMenu look={look} view={view} blocked={blocked} send={send} />;
+        return <SubtitlesMenu look={look} view={view} blocked={blocked} send={send} overlays={overlaySwitches} />;
       case 'audio':
         return <AudioMenu look={look} view={view} blocked={blocked} send={send} />;
       case 'quality':

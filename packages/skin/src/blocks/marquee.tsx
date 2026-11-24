@@ -1,124 +1,73 @@
-// The `marquee` layout block (`docs/plugin-screens.md` §Surfaces): a horizontal run of an item
-// template that scrolls continuously at reading speed (64 design points/sec) on the UI thread,
-// duplicating its copy when wider than the viewport so it loops without a gap, and pausing under
-// reduced motion (`look.still`) or while a descendant has focus.
+// The `marquee` block (docs/plugin-screens.md: Language additions for surfaces): a horizontal run of
+// an item template that scrolls right to left, endlessly, at reading speed (the scores ticker). The
+// run advances on the UI thread (a frame callback); a second copy takes over as the first leaves,
+// so there is never a gap, and a run that grows or shrinks as scores change carries on where it was.
+// It stands still under reduced motion, while focus is inside it, and when it fits.
 import { useEffect, useMemo, useState } from 'react';
-import { View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import { View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
-import { measure, useHost } from '../host';
-import { fill, type RNode } from '../resolve';
-import { boxStyle } from '../translate';
-import type { Ctx, Env } from '../vocabulary';
-import { FocusBand, hasFocusableChild } from './focus';
-import { marqueeScrolls, marqueeStep, parsePoints } from './layout-math';
+import { useHost } from '../host';
+import type { Ctx } from '../vocabulary';
+import { parsePoints } from './layout-math';
 import { useBlockLook } from './look';
-import { ScopedRecordNode } from './record-scope';
+import { marqueeScrolls, marqueeStep } from './marquee-math';
 import { useScreenBlockRuntime, type MarqueeBlockNode } from './types';
 
-/** Reading speed in design points per second (matches legacy LiveTicker SPEED = 64). */
-const MARQUEE_SPEED = 64;
-
-function translateOwnStyle(node: RNode, ctx: Ctx, env: Env, host: ReturnType<typeof useHost>): ViewStyle {
-  const raw: Record<string, string> = {};
-  for (const [k, v] of Object.entries(node.base.style ?? {})) {
-    raw[k] = fill(v, ctx, env);
-  }
-  return boxStyle(raw, measure(host.viewport, 16)).style as ViewStyle;
-}
+/** Reading speed without a `speed`, in design points a second. */
+const SPEED = 64;
 
 export function MarqueeBlock({ node, ctx }: { node: MarqueeBlockNode; ctx: Ctx }) {
   const host = useHost();
   const look = useBlockLook();
   const runtime = useScreenBlockRuntime();
   const { px } = look;
-
-  const gap = parsePoints(node.gap, px, px(14));
+  const gap = parsePoints(node.gap, px, 0);
   const rawItems = runtime ? runtime.evalItems(node, ctx, host.env) : [];
   const entries = useMemo(() => {
     if (!runtime) return [];
-    return rawItems.map((itemCtx, idx) => ({
-      key: runtime.evalItemKey(node, itemCtx, host.env) || String(idx),
-      ctx: itemCtx,
-    }));
+    return rawItems.map((itemCtx, idx) => ({ key: runtime.evalItemKey(node, itemCtx, host.env) || String(idx), ctx: itemCtx }));
   }, [runtime, node, rawItems, host.env]);
 
   const offset = useSharedValue(0);
-  const contentW = useSharedValue(0);
+  const width = useSharedValue(0);
   const [measured, setMeasured] = useState({ content: 0, viewport: 0 });
   const [focused, setFocused] = useState(false);
-
-  const scrolls = !look.still && !focused && marqueeScrolls(measured.content, measured.viewport);
-  const speed = px(MARQUEE_SPEED);
-
+  const scrolls = !host.env.still && !focused && marqueeScrolls(measured.content, measured.viewport);
+  const speed = px(node.speed ?? SPEED);
   const frames = useFrameCallback(frame => {
-    offset.value = marqueeStep(offset.value, frame.timeSincePreviousFrame ?? 0, speed, contentW.value);
+    offset.value = marqueeStep(offset.value, frame.timeSincePreviousFrame ?? 0, speed, width.value);
   }, false);
-
   useEffect(() => {
     frames.setActive(scrolls);
-    if (!marqueeScrolls(measured.content, measured.viewport) || look.still) {
-      offset.value = 0;
-    }
-  }, [scrolls, measured.content, measured.viewport, look.still, frames, offset]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -offset.value }],
-  }));
+    // Reduced motion and a run that fits stand at the start; focus holds the run where it is.
+    if (!scrolls && !focused) offset.value = 0;
+  }, [scrolls, focused]);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: -offset.value }] }));
 
   if (!runtime || !entries.length) return null;
-
-  const onCopyLayout = (event: LayoutChangeEvent) => {
-    const w = Math.round(event.nativeEvent.layout.width);
-    contentW.value = w;
-    setMeasured(m => (m.content === w ? m : { ...m, content: w }));
+  const onCopy = (event: LayoutChangeEvent) => {
+    // One copy and the gap after it: the distance after which the second copy stands where the first began.
+    const content = Math.round(event.nativeEvent.layout.width + gap);
+    width.value = content;
+    setMeasured(m => (m.content === content ? m : { ...m, content }));
   };
-
-  const onViewportLayout = (event: LayoutChangeEvent) => {
-    const w = Math.round(event.nativeEvent.layout.width);
-    setMeasured(m => (m.viewport === w ? m : { ...m, viewport: w }));
+  const onViewport = (event: LayoutChangeEvent) => {
+    const viewport = Math.round(event.nativeEvent.layout.width);
+    setMeasured(m => (m.viewport === viewport ? m : { ...m, viewport }));
   };
-
-  const ownStyle = translateOwnStyle(node, ctx, host.env, host);
-  const rowStyle: ViewStyle = {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap,
-    paddingRight: gap,
-  };
-
-  const body = (
-    <View
-      style={[{ flex: 1, overflow: 'hidden', justifyContent: 'center' }, ownStyle]}
-      onLayout={onViewportLayout}
-      {...({
-        onFocusCapture: () => setFocused(true),
-        onBlurCapture: () => setFocused(false),
-      } as object)}
-    >
-      <Animated.View style={[{ flexDirection: 'row', alignItems: 'center' }, animatedStyle]}>
-        <View style={rowStyle} onLayout={onCopyLayout}>
-          {entries.map(entry => (
-            <View key={entry.key}>
-              <ScopedRecordNode node={node.item} ctx={entry.ctx} renderNode={runtime.renderNode} />
-            </View>
-          ))}
-        </View>
-        {marqueeScrolls(measured.content, measured.viewport) && !look.still ? (
-          <View
-            style={rowStyle}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            {entries.map(entry => (
-              <View key={`dup-${entry.key}`}>
-                <ScopedRecordNode node={node.item} ctx={entry.ctx} renderNode={runtime.renderNode} />
-              </View>
-            ))}
-          </View>
-        ) : null}
+  const copy = (hidden: boolean) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap, marginRight: gap }} onLayout={hidden ? undefined : onCopy}
+      {...(hidden ? { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const } : {})}>
+      {entries.map(entry => <View key={entry.key}>{runtime.renderNode(node.item, entry.ctx)}</View>)}
+    </View>
+  );
+  return (
+    <View style={{ flex: 1, alignSelf: 'stretch', overflow: 'hidden', justifyContent: 'center' }} onLayout={onViewport}
+      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
+      <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', position: 'absolute', left: 0, top: 0, bottom: 0 }, style]}>
+        {copy(false)}
+        {scrolls || focused ? copy(true) : null}
       </Animated.View>
     </View>
   );
-
-  return hasFocusableChild(node.item) ? <FocusBand>{body}</FocusBand> : body;
 }
