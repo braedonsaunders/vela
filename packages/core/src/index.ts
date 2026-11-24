@@ -56,4 +56,5 @@ export type { ChildrenModel, MediaFeatures } from './store/media';
 export { AUDIO_RATES, chapterEnd, type AudioEngine, type AudioEngineEvent, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
 export { current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf } from './audio/cards';
+export type { LikedList, Lyrics as MusicLyrics } from './store/music';
 export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, childSectionsWait, recommendationTabWaits, settledPluginLevels, videoRoleLabel, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';

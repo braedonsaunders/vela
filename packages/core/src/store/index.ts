@@ -17,6 +17,7 @@ import { initialPlayback, Playback, type PlaybackState } from './playback';
 import type { MediaCapabilities, VelaPlatform } from './platform';
 import { initialPreviews, Previews, type PreviewState } from './previews';
 import { initialPlaylists, Playlists, type PlaylistsState } from './playlists';
+import { initialMusic, Music, type MusicState } from './music';
 import { Receipts } from './receipts';
 import { initialSearch, Search, type SearchState } from './search';
 import { Media, type ChildrenModel } from './media';
@@ -42,6 +43,7 @@ export interface VelaState {
   /** A media title's children (tracks, albums, books, parts) by title ID. */
   children: Record<string, Loadable<ChildrenModel>>;
   playlists: PlaylistsState;
+  music: MusicState;
   search: SearchState;
   playback: PlaybackState;
   /** The audio queue and its engine's state (music, audiobooks). */
@@ -86,6 +88,7 @@ export interface Vela {
   receipts: Receipts;
   previews: Previews;
   playlists: Playlists;
+  music: Music;
   media: Media;
   audio: Audio;
 }
@@ -102,6 +105,7 @@ const initialState: VelaState = {
   collections: {},
   children: {},
   playlists: initialPlaylists,
+  music: initialMusic,
   search: initialSearch,
   playback: initialPlayback,
   audio: initialAudio,
@@ -126,6 +130,7 @@ export function createVela(options: VelaOptions): Vela {
   const home = new Home(box, session, width);
   const catalogue = new Catalogue(box, session, width);
   const playlists = new Playlists(box, session, width);
+  const music = new Music(box, session, width);
   // What the viewer watched changes their resume positions, Continue Watching and the hero:
   // applied locally only from the server-confirmed stop position. Detail and Home's progress
   // shelves are then reconciled in place; navigation and playback never repeat the full bootstrap.
@@ -167,6 +172,7 @@ export function createVela(options: VelaOptions): Vela {
     home,
     catalogue,
     playlists,
+    music,
     rows: new Rows(box, session, width),
     search: new Search(box, session, width),
     playback,

@@ -329,6 +329,19 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.CollectionContents>('GET', path, undefined, CACHED);
   }
 
+  favoriteTitles(role: string, cursor?: string, limit?: number) {
+    return this.http.request<V.FavoriteTitlesPage>('GET', `/favorites/titles${query({ role, cursor, limit })}`);
+  }
+
+  async titleLyrics(id: string): Promise<V.TitleLyrics | null> {
+    try {
+      return await this.http.request<V.TitleLyrics>('GET', `/titles/${segment(id)}/lyrics`, undefined, CACHED);
+    } catch (error) {
+      if (error instanceof VelaError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   playlists(cursor?: string, limit?: number) {
     return this.http.request<V.Page<V.PlaylistCard>>('GET', `/playlists${query({ cursor, limit })}`, undefined, CACHED);
   }

@@ -61,20 +61,35 @@ export function usePlaylist(id: string | undefined): Loadable<CollectionModel> |
   return value;
 }
 
-export type Liked = { tracks: Card[]; albums: Card[]; artists: Card[]; loading: boolean };
+export type Liked = { tracks: Card[]; albums: Card[]; artists: Card[]; loading: boolean; trackTotal: number; moreTracks: boolean; loadMoreTracks(): void };
 
-/** What the viewer liked, split by role. */
+/** What the viewer liked, split by role: the server's role lists where it has them
+ * (features.favoritesList), else the Favorites playlist (servers before it). */
 export function useLiked(): Liked {
+  const store = useVela();
+  const listed = useVelaState(state => state.music.liked);
+  const byRole = store.music.likedAvailable;
+  const features = useVelaState(state => state.home.value?.playlistsAvailable);
+  useEffect(() => {
+    if (!byRole) return;
+    for (const role of ['track', 'album', 'artist']) void store.music.liked(role);
+  }, [store, byRole, features]);
   const { liked } = usePlaylists();
-  const list = usePlaylist(liked?.id);
+  const list = usePlaylist(byRole ? undefined : liked?.id);
   return useMemo(() => {
+    if (byRole) {
+      const tracks = listed.track?.value;
+      return {
+        tracks: tracks?.items ?? [], albums: listed.album?.value?.items ?? [], artists: listed.artist?.value?.items ?? [],
+        loading: !tracks, trackTotal: tracks?.total ?? 0, moreTracks: !!tracks?.more, loadMoreTracks: () => void store.music.liked('track', true),
+      };
+    }
     const items = list?.value?.items ?? [];
     const music = items.filter(item => item.media?.class === 'music');
+    const tracks = music.filter(item => item.media?.role === 'track');
     return {
-      tracks: music.filter(item => item.media?.role === 'track'),
-      albums: music.filter(item => item.media?.role === 'album'),
-      artists: music.filter(item => item.media?.role === 'artist'),
-      loading: !list?.value,
+      tracks, albums: music.filter(item => item.media?.role === 'album'), artists: music.filter(item => item.media?.role === 'artist'),
+      loading: !list?.value, trackTotal: tracks.length, moreTracks: false, loadMoreTracks: () => undefined,
     };
-  }, [list]);
+  }, [byRole, listed, list, store]);
 }

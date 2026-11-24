@@ -69,7 +69,7 @@ export function MusicHome() {
   const m = useMediaLook();
   const { rows } = useLibraryRows(app.libraryId);
   const { playlists, liked } = usePlaylists();
-  const likedTracks = useLiked().tracks;
+  const likedTotal = useLiked().trackTotal;
   const jump = rows.find(r => r.id.endsWith(':jump-back-in'))?.items ?? [];
   const quick: (Card | 'liked')[] = [...(liked ? ['liked' as const] : []), ...playlists.map(playlistCard), ...jump].slice(0, 8);
   const shelves = rows.filter(r => !r.id.endsWith(':jump-back-in') && r.items.length);
@@ -81,7 +81,7 @@ export function MusicHome() {
         <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '38px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { marginBottom: 20 }]}>{greeting()}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 36 }} testID="music-quick">
           {quick.map(item => item === 'liked'
-            ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTracks.length === 1 ? 'one' : 'other'}`, { count: number(likedTracks.length) })} cover={<LikedCover size={64} />} onPress={() => app.go({ kind: 'liked' })} />
+            ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={64} />} onPress={() => app.go({ kind: 'liked' })} />
             : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
         </View>
       </View>
@@ -392,10 +392,11 @@ export function MusicPlaylist({ id }: { id: string }) {
 export function MusicLiked() {
   const app = useMusic();
   const m = useMediaLook();
-  const { tracks } = useLiked();
+  const liked = useLiked();
+  const { tracks } = liked;
   const viewer = useVelaState(s => s.auth.viewer);
-  const { liked } = usePlaylists();
-  const id = liked?.id ?? 'liked';
+  // Now Playing's "Playing from" names Liked Songs; the id only has to be stable.
+  const id = 'liked-songs';
   const playing = usePlayingFrom(id);
   const source = { id, name: msg('music.liked') };
   return (
@@ -403,13 +404,18 @@ export function MusicLiked() {
       <Wash accent={m.ui.accent} height={460} />
       <View style={{ paddingHorizontal: 28 }}>
         <Header eyebrow={msg('music.playlist')} title={msg('music.liked')} cover={<LikedCover size={m.width >= 1300 ? 232 : 192} />}>
-          <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}><Text style={m.text({ 'font-weight': '700', color: '$ui.ink' })}>{viewer}</Text> · {totalLabel(tracks)}</Text>
+          <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}><Text style={m.text({ 'font-weight': '700', color: '$ui.ink' })}>{viewer}</Text> · {liked.moreTracks ? msg(`media.count.tracks.other`, { count: number(liked.trackTotal) }) : totalLabel(tracks)}</Text>
         </Header>
         <ActionBar>
           <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" />
           <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />
         </ActionBar>
         <TrackList tracks={tracks} options={{ covers: true, album: true, position: true, source }} />
+        {liked.moreTracks ? (
+          <Pressable onPress={liked.loadMoreTracks} accessibilityRole="button" style={[NO_RING, { alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 12 }]} testID="music-liked-more">
+            <Text style={m.text({ 'font-size': '14px', 'font-weight': '700', color: '$ui.inkSecondary' })}>{msg('music.seeMore')}</Text>
+          </Pressable>
+        ) : null}
         <View style={{ height: 40 }} />
       </View>
     </View>

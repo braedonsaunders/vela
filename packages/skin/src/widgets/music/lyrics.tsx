@@ -26,6 +26,19 @@ function parseLrc(lrc: string): Lyrics['synced'] {
 }
 
 export function useLyrics(card: Card | undefined): { lyrics: Lyrics | null | undefined } {
+  const store = useVela();
+  const served = useVelaState(state => (card ? state.music.lyrics[card.id] : undefined));
+  const fromServer = store.music.lyricsAvailable;
+  useEffect(() => { if (card && fromServer) void store.music.lyrics(card.id); }, [store, card, fromServer]);
+  const fallback = useDevLyrics(fromServer ? undefined : card);
+  if (!fromServer) return fallback;
+  if (!served || served.load === 'loading') return { lyrics: undefined };
+  const value = served.value;
+  return { lyrics: value ? { synced: value.lines, plain: value.plain, source: value.source } : null };
+}
+
+/** S0 only: servers without features.lyrics, development builds read LRCLIB directly. */
+function useDevLyrics(card: Card | undefined): { lyrics: Lyrics | null | undefined } {
   const key = card?.id ?? '';
   const [lyrics, setLyrics] = useState<Lyrics | null | undefined>(() => cache.get(key));
   useEffect(() => {

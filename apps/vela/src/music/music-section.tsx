@@ -28,14 +28,16 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const [queueOpen, setQueueOpen] = useState(false);
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const favorites = useVelaState(state => state.collections);
+  const roleLists = useVelaState(state => state.music.liked);
   const likedIds = useMemo(() => {
     const ids = new Set<string>();
+    for (const list of Object.values(roleLists)) for (const item of list?.value?.items ?? []) ids.add(item.id);
     for (const value of Object.values(favorites)) {
       if (value?.value?.name !== 'Favorites') continue;
       for (const item of value.value.items) ids.add(item.id);
     }
     return ids;
-  }, [favorites]);
+  }, [favorites, roleLists]);
 
   const go = useCallback((next: MusicPlace) => {
     router.push({ pathname: '/library/[id]', params: { id: libraryId, m: placeParam(next) } });
@@ -54,6 +56,9 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
       setLikes(current => ({ ...current, [card.id]: on }));
       void store.catalogue.setTitleWatch(card.id, { favorite: on })
         .then(() => {
+          // A row heart, a menu or Follow anywhere: the lists that show it read again.
+          const role = card.media?.role;
+          if (store.music.likedAvailable && role) { void store.music.liked(role, false, true); return; }
           const liked = store.getState().playlists.list.value?.find(p => p.name === 'Favorites');
           if (liked) void store.playlists.open(liked.id, false, true);
         })

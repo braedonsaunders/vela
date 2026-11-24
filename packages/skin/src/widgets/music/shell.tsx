@@ -87,7 +87,7 @@ function Sidebar({ rail, onToggle }: { rail: boolean; onToggle(): void }) {
       ) : null}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: rail ? 8 : 8, paddingBottom: 12 }}>
         {filter === 'all' || filter === 'playlists'
-          ? <LibraryRow rail={rail} place={{ kind: 'liked' }} title={msg('music.liked')} subtitle={`${msg('music.playlist')} · ${msg(`media.count.tracks.${liked.tracks.length === 1 ? 'one' : 'other'}`, { count: number(liked.tracks.length) })}`} cover={<LikedCover size={48} />} pinned />
+          ? <LibraryRow rail={rail} place={{ kind: 'liked' }} title={msg('music.liked')} subtitle={`${msg('music.playlist')} · ${msg(`media.count.tracks.${liked.trackTotal === 1 ? 'one' : 'other'}`, { count: number(liked.trackTotal) })}`} cover={<LikedCover size={48} />} pinned />
           : null}
         {entries.map(({ card, subtitle }) => (
           <LibraryRow key={card.id} rail={rail} place={placeOf(card)} card={card} title={card.name} subtitle={subtitle}

@@ -64,6 +64,10 @@ export interface ServerCapabilities {
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
     descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
     playlists?: Feature & { maxEntries: number };
+    /** GET /favorites/titles?role=: a viewer's likes of one role (Liked Songs, saved albums, followed artists). */
+    favoritesList?: Feature;
+    /** GET /titles/:id/lyrics for playable titles whose source has lyrics. */
+    lyrics?: Feature;
     /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
     mediaClasses?: Feature & { classes: MediaClass[] };
     /** POST /titles/:id/read and reading progress, for these formats. */
@@ -351,6 +355,10 @@ export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directo
   /** Playlist-only fields. */ smart?: boolean; entryCount?: number; updatedAt?: Timestamp }
 export interface CollectionContents extends Page<RowEntry> { collection: Collection }
 
+/** One page of a viewer's likes of one role, newest first (or the viewer's own order). */
+export interface FavoriteTitlesPage extends Page<{ id: ID; kind: 'title'; title: Title; likedAt: Timestamp; receiptToken: string }> { total: number }
+/** A playable title's lyrics: timed lines when the source has them, else plain text. */
+export interface TitleLyrics { lines: { startMs: number; text: string }[]; plain?: string; instrumental: boolean; source?: string }
 export interface PlaylistCard { id: ID; kind: 'playlist'; name: string; artwork: ArtworkRef[]; itemCount: number; smart: boolean; updatedAt: Timestamp }
 export interface CreatePlaylistRequest extends Mutation { name: string; titleIds?: ID[] }
 export interface RenamePlaylistRequest extends Mutation { name: string }

@@ -115,6 +115,18 @@ export interface ViewerPlaylists {
   titlePlaylists(titleId: string): Promise<V.TitlePlaylists>;
 }
 
+/** A viewer's likes listed by role, and lyrics (features.favoritesList, features.lyrics). */
+export interface MusicLibrary {
+  favoriteTitles(role: string, cursor?: string, limit?: number): Promise<V.FavoriteTitlesPage>;
+  /** Null when the title has none. */
+  titleLyrics(id: string): Promise<V.TitleLyrics | null>;
+}
+
+export function hasMusicLibrary(adapter: ServerAdapter): adapter is ServerAdapter & MusicLibrary {
+  const a = adapter as unknown as Record<string, unknown>;
+  return typeof a.favoriteTitles === 'function' && typeof a.titleLyrics === 'function';
+}
+
 export function hasViewerPlaylists(adapter: ServerAdapter): adapter is ServerAdapter & ViewerPlaylists {
   return ['playlists', 'playlist', 'createPlaylist', 'renamePlaylist', 'deletePlaylist', 'addPlaylistEntries',
     'removePlaylistEntry', 'movePlaylistEntry', 'titlePlaylists'].every(name =>
