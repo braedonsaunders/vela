@@ -6,7 +6,7 @@ import type { ArtworkRef } from '../wire';
 export interface Images {
   origin: string;
   sized?: (url: URL, width: number, height: number) => string | undefined;
-  /** The browser can ask Ether's proxy for widths between the advertised sizes. */
+  /** Ask Ether's proxy for widths between the advertised sizes. */
   fitProxyWidth?: boolean;
 }
 

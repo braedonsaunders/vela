@@ -14,6 +14,7 @@ import { NO_RING, Glyph, useInteraction } from '../common/controls';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { MediaGlyph } from '../media/icons';
 import { placeOf, useMusic } from './context';
+import { listenedFraction } from './listening';
 import { SYMBOLS } from '../../icons';
 
 /** A Vela symbol, or the media player's glyph of that name (shuffle, repeat, repeatOne). */
@@ -161,7 +162,7 @@ export function Heart({ card, size = 32, iconSize = 18, quiet = false }: { card:
   const m = useMediaLook();
   const on = app.liked(card.id);
   const role = card.media?.role;
-  const label = role === 'artist' ? msg(on ? 'cardMenu.unfollow' : 'cardMenu.follow') : role === 'track' ? msg(on ? 'cardMenu.unlikeSong' : 'cardMenu.likeSong') : msg(on ? 'cardMenu.removeFromLibrary' : 'cardMenu.saveToLibrary');
+  const label = role === 'artist' || role === 'show' ? msg(on ? 'cardMenu.unfollow' : 'cardMenu.follow') : role === 'track' ? msg(on ? 'cardMenu.unlikeSong' : 'cardMenu.likeSong') : msg(on ? 'cardMenu.removeFromLibrary' : 'cardMenu.saveToLibrary');
   if (quiet && !on) return <View style={{ width: size, height: size }} />;
   return <IconButton symbol={on ? 'heart-fill' : 'heart'} label={label} onPress={() => app.like(card, !on)} size={size} iconSize={iconSize} color={on ? m.ui.accent : undefined} testID={`like-${card.id}`} />;
 }
@@ -172,8 +173,12 @@ export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card
   const m = useMediaLook();
   const size = m.small ? Math.min(wanted, 132) : wanted;
   const round = card.media?.role === 'artist';
-  const playable = card.media?.role === 'album' || card.media?.role === 'track' || card.kind === 'playlist';
-  const line = subtitle ?? (round ? msg('media.ui.artist') : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · '));
+  const role = card.media?.role;
+  const playable = role === 'album' || role === 'track' || card.kind === 'playlist' || role === 'audiobook' || role === 'part' || role === 'show' || role === 'episode';
+  // An episode names its show, a part its book; spoken word shows where the viewer is.
+  const line = subtitle ?? (round ? msg('media.ui.artist') : role === 'episode' || role === 'part' ? [card.media?.parent?.name, card.media?.byline].filter(Boolean)[0] ?? ''
+    : role === 'show' ? card.media?.byline ?? '' : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · '));
+  const listened = listenedFraction(card);
   return (
     <Surface onPress={() => app.go(placeOf(card))} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={card.id} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}
       style={(lit, focus) => [{ width: size + (m.small ? 16 : 24), borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.control : 'transparent' },
@@ -183,6 +188,11 @@ export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card
         <>
           <View pointerEvents="box-none" style={{ width: size, height: size }}>
             <View pointerEvents="none"><Cover uri={card.poster} shape={round ? 'round' : 'square'} size={size} title={card.name} byline={card.media?.byline} accent={card.accent} lift={lit ? 1.5 : 1} /></View>
+            {listened > 0 ? (
+              <View pointerEvents="none" style={{ position: 'absolute', left: 8, right: 8, bottom: 8, height: 4, borderRadius: 2, overflow: 'hidden', backgroundColor: alpha('#000000', 0.5) }} testID={`music-tile-progress-${card.id}`}>
+                <View style={{ width: `${Math.round(listened * 100)}%`, height: 4, backgroundColor: m.ui.accent }} />
+              </View>
+            ) : null}
             {playable && !musicTV() ? (
               <View pointerEvents={lit ? 'auto' : 'none'} style={[{ position: 'absolute', right: 8, bottom: 8, opacity: lit ? 1 : 0, transform: [{ translateY: lit ? 0 : 10 }] }, transition('opacity, transform', 240)]}>
                 <PlayFab playing={false} size={46} onPress={() => app.playCard(card)} label={`${msg('media.ui.play')} ${card.name}`} />
@@ -204,17 +214,48 @@ export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card
 const SHELF_TV_ROOM: ViewStyle = { padding: 12 };
 const SHELF_TV_BLEED: ViewStyle = { margin: -12 };
 
+/** On a pointer device a shelf pages with arrows beside its title (a mouse wheel scrolls the page,
+ * not the row); touch swipes and TV focus move it as before. */
+const POINTER = Platform.OS === 'web' && typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
+
 export function Shelf({ title, detail, children, onMore }: { title: string; detail?: string; children: ReactNode; onMore?(): void }) {
   const m = useMediaLook();
+  const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [span, setSpan] = useState({ x: 0, width: 0, content: 0 });
+  const arrows = POINTER && !musicTV() && span.content > span.width + 4;
+  const page = (direction: -1 | 1) => {
+    const step = Math.max(200, span.width * 0.85);
+    const x = Math.min(Math.max(0, span.content - span.width), Math.max(0, span.x + direction * step));
+    scroller.current?.scrollTo({ x, animated: true });
+  };
   return (
     <View style={{ marginBottom: 28 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 4 }}>
-        <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' })}>{title}</Text>
-        {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 4, gap: 12 }}>
+        <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { flexShrink: 1 }]}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
+          {arrows ? <ShelfArrow flip={false} label={msg('ui.scrollBack')} disabled={span.x <= 2} onPress={() => page(-1)} /> : null}
+          {arrows ? <ShelfArrow flip label={msg('ui.scrollOn')} disabled={span.x >= span.content - span.width - 2} onPress={() => page(1)} /> : null}
+        </View>
       </View>
       {detail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginBottom: 4 }]}>{detail}</Text> : null}
-      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView horizontal showsHorizontalScrollIndicator={false} style={musicTV() ? SHELF_TV_BLEED : undefined} contentContainerStyle={musicTV() ? SHELF_TV_ROOM : { gap: 0 }}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
+      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} style={musicTV() ? SHELF_TV_BLEED : undefined} contentContainerStyle={musicTV() ? SHELF_TV_ROOM : { gap: 0 }}
+        scrollEventThrottle={64}
+        onScroll={event => { const x = event.nativeEvent.contentOffset.x; setSpan(old => Math.abs(old.x - x) < 1 ? old : { ...old, x }); }}
+        onLayout={event => { const width = event.nativeEvent.layout.width; setSpan(old => old.width === width ? old : { ...old, width }); }}
+        onContentSizeChange={content => setSpan(old => old.content === content ? old : { ...old, content })}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
     </View>
+  );
+}
+
+function ShelfArrow({ flip, label, disabled, onPress }: { flip: boolean; label: string; disabled: boolean; onPress(): void }) {
+  const m = useMediaLook();
+  const { state, handlers } = useInteraction();
+  return (
+    <Pressable {...handlers} onPress={disabled ? undefined : onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }}
+      style={[NO_RING, { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: state.hover || state.focus ? m.ui.control : alpha(m.ui.ink, 0.06), opacity: disabled ? 0.35 : 1 }]}>
+      <View style={flip ? { transform: [{ scaleX: -1 }] } : undefined}><Glyph symbol="back" size={18} color={m.ui.ink} /></View>
+    </Pressable>
   );
 }
 
@@ -225,7 +266,9 @@ export function Wash({ accent, height = 420, image }: { accent: string; height?:
   const tint = accent || m.ui.accent;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height, overflow: 'hidden' }}>
-      {image ? <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} /> : null}
+      {/* Native image blur (expo-image on Android and iOS) stops far short of 80: the artwork's own
+          lettering showed through behind a page's title. There the wash is the colour alone. */}
+      {image && Platform.OS === 'web' ? <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} /> : null}
       <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.55)} 0%, ${alpha(tint, 0.18)} 55%, ${alpha(m.ui.page, 0)} 100%)` })]} />
     </View>
   );

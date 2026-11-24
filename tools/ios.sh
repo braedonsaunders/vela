@@ -6,8 +6,10 @@
 #   tools/ios.sh --tour [<test>...] [--device <udid|name>] [--team <id>]
 #
 #   --prebuild   regenerate apps/vela/ios for iOS (expo prebuild --clean without EXPO_TV, then pod install)
-#   --simulator  build for the iOS simulator and install on the booted (or first) iPhone simulator
-#   --device     a paired iPhone; when omitted and exactly one is connected, that one is used
+#   --simulator  build for the iOS simulator and install on the booted (or first) iPhone simulator;
+#                with --device, on that simulator (its UDID or name) and no other
+#   --device     a paired iPhone (or, with --simulator, a simulator); when omitted and exactly one
+#                iPhone is connected, that one is used
 #   --team       your Apple developer team ID (device builds; see Xcode > Settings > Accounts)
 #   --no-launch  install without opening Vela (the phone may be in use)
 #   --tour       instead of installing, run the scripted UI tour (tools/ios-tour) on the device: it
@@ -39,6 +41,7 @@ device=${VELA_IPHONE:-}
 team=${VELA_APPLE_TEAM:-}
 prebuild=0
 simulator=0
+asked_device=""
 open=""
 launch=1
 tour=0
@@ -48,7 +51,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --prebuild) prebuild=1 ;;
     --simulator) simulator=1 ;;
-    --device) device=$2; shift ;;
+    --device) device=$2; asked_device=$2; shift ;;
     --team) team=$2; shift ;;
     --open) open=$2; shift ;;
     --no-launch) launch=0 ;;
@@ -182,7 +185,15 @@ app=$derived/Build/Products/$products/Vela.app
 
 if [ "$simulator" = 1 ]; then
   uuid='[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}'
-  sim=$(xcrun simctl list devices booted | grep 'iPhone' | grep -oE "$uuid" | head -1)
+  # An explicit --device names the simulator (VELA_IPHONE, a physical phone, does not): never
+  # another booted one, which may be someone else's.
+  if [ -n "$asked_device" ]; then
+    sim=$(xcrun simctl list devices available | grep -F -- "$asked_device" | grep -oE "$uuid" | head -1)
+    [ -n "$sim" ] || { echo "ios: no available simulator $asked_device (xcrun simctl list devices)" >&2; exit 2; }
+    xcrun simctl list devices booted | grep -q "$sim" || xcrun simctl boot "$sim"
+  else
+    sim=$(xcrun simctl list devices booted | grep 'iPhone' | grep -oE "$uuid" | head -1)
+  fi
   if [ -z "$sim" ]; then
     sim=$(xcrun simctl list devices available | grep 'iPhone' | grep -oE "$uuid" | head -1)
     [ -n "$sim" ] || { echo "ios: no iPhone simulator (Xcode > Settings > Platforms)" >&2; exit 2; }
@@ -190,6 +201,7 @@ if [ "$simulator" = 1 ]; then
   fi
   xcrun simctl install "$sim" "$app"
   echo "ios: installed $app on simulator $sim"
+  [ "$launch" = 1 ] || exit 0
   if [ -n "$open" ]; then xcrun simctl openurl "$sim" "$open"; else xcrun simctl launch "$sim" app.ether.vela >/dev/null; fi
   exit 0
 fi

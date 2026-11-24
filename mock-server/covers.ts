@@ -1,5 +1,5 @@
-// Original procedural SVG covers for the music, book and audiobook fixtures: album art,
-// cloth-bound book covers, audiobook covers and abstract artist/author portraits.
+// Original procedural SVG covers for the music, book, audiobook and podcast fixtures: album art,
+// cloth-bound book covers, audiobook and podcast covers and abstract artist/author portraits.
 // No external images or font files; system font stacks only.
 import { coverVariant, mediaPerson, mediaSeed, mediaTitle, paletteFor, type CoverPalette } from '../packages/protocol/fixtures/media';
 import type { Title } from '../packages/protocol/types';
@@ -174,6 +174,33 @@ ${textLines(lines, 80, 110 + size, size, 1.06, `font-family="${SERIF}" font-weig
 }
 
 // ---------------------------------------------------------------------------------------------
+// Podcast shows (1000 × 1000): a microphone in a ring of sound, the show's name and its hosts
+function podcastCover(title: Title, seed: number, p: CoverPalette): string {
+  const hosts = (title.media?.credits ?? []).filter(credit => credit.role === 'host').map(credit => credit.name).join(' & ');
+  const [a0, a1, a2] = p.accents, r = random(seed);
+  const lines = wrap(title.name, 14), size = fit(lines, 820, 104, 0.52);
+  const rings = Array.from({ length: 4 }, (_, i) => `<circle cx="500" cy="300" r="${118 + i * 40}" fill="none" stroke="${[a0, a1, a2][i % 3]}" stroke-width="${12 - i * 2.5}" opacity="${0.9 - i * 0.18}" stroke-dasharray="${i % 2 ? '24 18' : 'none'}"/>`).join('');
+  return `<defs><linearGradient id="bg" x2="0" y2="1"><stop stop-color="${lighten(p.bg, 0.06)}"/><stop offset="1" stop-color="${darken(p.bg, 0.3)}"/></linearGradient></defs><rect width="1000" height="1000" fill="url(#bg)"/>
+<circle cx="${160 + r() * 80}" cy="${820 + r() * 60}" r="260" fill="${a2}" opacity=".12"/>${rings}
+<rect x="460" y="208" width="80" height="140" rx="40" fill="${p.ink}"/><path d="M432 306A68 68 0 0 0 568 306" fill="none" stroke="${p.ink}" stroke-width="12" stroke-linecap="round"/><path d="M500 376V404M468 406H532" stroke="${p.ink}" stroke-width="12" stroke-linecap="round"/>
+${textLines(lines, 500, 640 + size * 0.35 - (lines.length - 1) * size * 0.5, size, 1.04, `text-anchor="middle" font-family="${DISPLAY}" fill="${p.ink}"`)}<text x="500" y="912" text-anchor="middle" font-size="30" font-family="${SANS}" letter-spacing="7" fill="${a0}">${esc(hosts.toUpperCase())}</text>${grain('g', 0.06, 1000)}`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Photos: a landscape at some hour (sky, sun, hills, water), seeded per picture
+function photoScene(seed: number, p: CoverPalette, w: number, h: number): string {
+  const r = random(seed), [a0, a1, a2] = p.accents;
+  const horizon = h * (0.5 + r() * 0.15), sunX = w * (0.2 + r() * 0.6), sunY = horizon - h * (0.08 + r() * 0.2);
+  const hill = (base: number, amp: number, fill: string, op: number) => {
+    const pts = Array.from({ length: 9 }, (_, i) => `${(i * w / 8).toFixed(0)},${(base - Math.abs(Math.sin(i * 1.7 + seed % 7 + base)) * amp).toFixed(0)}`).join(' ');
+    return `<polygon points="0,${h} ${pts} ${w},${h}" fill="${fill}" opacity="${op}"/>`;
+  };
+  return `<defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="${darken(a2, 0.2)}"/><stop offset=".7" stop-color="${lighten(a0, 0.25)}"/><stop offset="1" stop-color="${lighten(a1, 0.35)}"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="${(w / 80).toFixed(0)}"/></filter></defs>
+<rect width="${w}" height="${h}" fill="url(#sky)"/><circle cx="${sunX.toFixed(0)}" cy="${sunY.toFixed(0)}" r="${(w * 0.06).toFixed(0)}" fill="${lighten(a1, 0.6)}" filter="url(#soft)"/>
+${hill(horizon, h * 0.12, darken(p.bg, 0.1), 0.85)}${hill(horizon + h * 0.12, h * 0.1, darken(p.bg, 0.45), 0.95)}<rect x="0" y="${(horizon + h * 0.2).toFixed(0)}" width="${w}" height="${h}" fill="${darken(a2, 0.5)}" opacity=".9"/>${grain('g', 0.08, w, h)}`;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Portraits (1000 × 1000; clients draw artists round) and artist backdrops (1600 × 900)
 function portrait(name: string, seed: number, p: CoverPalette): string {
   const r = random(seed), [a0, a1, a2] = p.accents;
@@ -220,6 +247,7 @@ export function renderCover(id: string, kind: string, width: number): string | u
   const title = mediaTitle(id);
   if (!title?.media) return undefined;
   const role = title.media.role;
+  if (title.media.class === 'photo') return kind === 'poster' ? svg(width, 1000, 1000, photoScene(mediaSeed(id), paletteFor(id), 1000, 1000)) : svg(width, 1600, 900, photoScene(mediaSeed(id), paletteFor(id), 1600, 900));
   if (role === 'concert') return kind === 'poster' ? svg(width, 600, 900, concertStage(title, mediaSeed(id), paletteFor(id), 600, 900)) : svg(width, 1600, 900, concertStage(title, mediaSeed(id), paletteFor(id), 1600, 900));
   if (role === 'artist') return kind === 'backdrop' ? svg(width, 1600, 900, backdrop(title.name, mediaSeed(id), paletteFor(id))) : svg(width, 1000, 1000, portrait(title.name, mediaSeed(id), paletteFor(id)));
   if (role === 'track') return renderCover(title.media.parents?.[0]?.id ?? '', kind, width);
@@ -229,5 +257,7 @@ export function renderCover(id: string, kind: string, width: number): string | u
     return parent && svg(width, 1000, 1000, audiobookCover(parent, mediaSeed(parent.id), paletteFor(parent.id), title.media.index));
   }
   if (role === 'audiobook') return svg(width, 1000, 1000, audiobookCover(title, mediaSeed(id), paletteFor(id)));
+  if (role === 'show') return svg(width, 1000, 1000, podcastCover(title, mediaSeed(id), paletteFor(id)));
+  if (role === 'episode') return renderCover(title.media.parents?.[0]?.id ?? '', kind, width);
   return svg(width, 600, 900, bookCover(title, mediaSeed(id), paletteFor(id)));
 }

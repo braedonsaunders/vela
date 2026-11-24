@@ -71,3 +71,14 @@ test('Plex Home avatars resolve on the server and never invalidate the profile l
   expect(profileAvatar('https://ether.example', '/vela/v0/titles/1')).toBeUndefined();
   expect(profileAvatar('https://ether.example', undefined)).toBeUndefined();
 });
+
+test('Plex sign-in sends a same-origin auth proxy its cookie', async () => {
+  // A tunnel or auth proxy in front of Ether admits requests by its own cookie and answers 401 without it.
+  let credentials: RequestCredentials | undefined;
+  globalThis.fetch = Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+    credentials = init?.credentials;
+    return Response.json(tokens('vela-session'));
+  }, { preconnect: () => {} }) as typeof fetch;
+  await beginPlexHomeSignIn(origin, 'plex-secret', device, 'proxy-once');
+  expect(credentials).toBe('same-origin');
+});

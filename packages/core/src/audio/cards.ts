@@ -12,7 +12,8 @@ export function albumOrder(cards: Card[]): Card[] {
 }
 
 export async function audioCardsOf(store: VelaStore, card: Card): Promise<Card[]> {
-  if (card.media?.audio) return [card];
+  // A playable title with children (an audiobook in parts) plays its children.
+  if (card.media?.audio && !card.media.childCount) return [card];
   if (card.kind === 'playlist') {
     await store.playlists.open(card.id);
     const items = await settled(store, () => store.getState().collections[card.id]);

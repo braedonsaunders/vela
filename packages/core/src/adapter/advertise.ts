@@ -61,6 +61,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       // Media classes (docs/media-kinds.md): stated by the server; reading also needs the adapter.
       ...(description.features.mediaClasses ? { mediaClasses: description.features.mediaClasses } : {}),
       ...(description.features.audioPlayback ? { audioPlayback: description.features.audioPlayback } : {}),
+      ...(description.features.libraryExperiences ? { libraryExperiences: description.features.libraryExperiences } : {}),
       ...(hasReading(adapter) && description.features.reading ? { reading: description.features.reading } : {}),
       // Live events and multiview (Sports): operations, so the adapter must offer them too.
       ...(hasLiveEvents(adapter) && description.features.liveEvents ? { liveEvents: description.features.liveEvents } : {}),

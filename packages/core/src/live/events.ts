@@ -68,28 +68,44 @@ export function backoffMs(failures: number, jitter = Math.random()): number {
  * `competitors` for N-competitor events (golf, F1 carry `ranking` rows instead) and may omit other
  * optional lists; one missing array must never take a screen down. Anything without an id and a
  * status is not an event. */
-export function normaliseEvent(value: unknown): V.LiveEvent | null {
+export function normaliseEvent(value: unknown, origin?: string): V.LiveEvent | null {
   if (!value || typeof value !== 'object') return null;
   const event = value as Partial<V.LiveEvent>;
   if (typeof event.id !== 'string' || !event.status || typeof event.status.state !== 'string') return null;
   const list = <T>(items: T[] | undefined | null): T[] => Array.isArray(items) ? items : [];
+  const logo = <T extends { logo?: string }>(item: T): T => withLogo(item, origin);
+  const league = event.league ?? { id: '', name: '' };
   return {
     ...event,
-    league: event.league ?? { id: '', name: '' },
-    competitors: list(event.competitors),
+    league: logo(league),
+    competitors: list(event.competitors).map(logo),
     ...(event.ranking !== undefined ? { ranking: list(event.ranking) } : {}),
     ...(event.broadcasts !== undefined ? { broadcasts: list(event.broadcasts) } : {}),
-    ...(event.watch !== undefined ? { watch: list(event.watch) } : {}),
+    ...(event.watch !== undefined ? { watch: list(event.watch).map(logo) } : {}),
   } as V.LiveEvent;
 }
 
-export function normaliseEvents(values: unknown): V.LiveEvent[] {
-  return Array.isArray(values) ? values.map(normaliseEvent).filter((event): event is V.LiveEvent => !!event) : [];
+/** A logo the server sends as a path on itself (Ether's signed /vela/v0/images grants) becomes an
+ * absolute URL on that server, so native image views and a desktop app (whose page is not on the
+ * server's origin) can load it. Absolute URLs and anything else are kept as they are. */
+export function serverURL(url: string | undefined, origin: string | undefined): string | undefined {
+  if (!url || !origin || !url.startsWith('/') || url.startsWith('//')) return url;
+  try { return new URL(url, origin).href; } catch { return url; }
+}
+
+function withLogo<T extends { logo?: string }>(item: T, origin: string | undefined): T {
+  if (!item || typeof item !== 'object' || !item.logo) return item;
+  const logo = serverURL(item.logo, origin);
+  return logo === item.logo ? item : { ...item, logo };
+}
+
+export function normaliseEvents(values: unknown, origin?: string): V.LiveEvent[] {
+  return Array.isArray(values) ? values.map(value => normaliseEvent(value, origin)).filter((event): event is V.LiveEvent => !!event) : [];
 }
 
 /** A detail with every list a list (tables, plays, the probability series, links). */
-export function normaliseDetail(value: unknown): V.LiveEventDetail | null {
-  const event = normaliseEvent(value);
+export function normaliseDetail(value: unknown, origin?: string): V.LiveEventDetail | null {
+  const event = normaliseEvent(value, origin);
   if (!event) return null;
   const detail = value as Partial<V.LiveEventDetail>;
   const list = <T>(items: T[] | undefined | null): T[] => Array.isArray(items) ? items : [];
@@ -97,18 +113,18 @@ export function normaliseDetail(value: unknown): V.LiveEventDetail | null {
 }
 
 /** A screen whose sections all carry their lists, events normalised and unreadable ones dropped. */
-export function normaliseScreen(screen: V.Screen): V.Screen {
+export function normaliseScreen(screen: V.Screen, origin?: string): V.Screen {
   const list = <T>(items: T[] | undefined | null): T[] => Array.isArray(items) ? items : [];
   return {
     ...screen,
     sections: list(screen.sections).map(section => {
       const raw = section as unknown as Record<string, unknown>;
       switch (section.type) {
-        case 'hero': return { ...section, event: normaliseEvent(raw.event) ?? undefined, also: normaliseEvents(raw.also) } as V.ScreenSection;
-        case 'events': case 'schedule': return { ...section, events: normaliseEvents(raw.events) } as V.ScreenSection;
+        case 'hero': return { ...section, event: normaliseEvent(raw.event, origin) ?? undefined, also: normaliseEvents(raw.also, origin) } as V.ScreenSection;
+        case 'events': case 'schedule': return { ...section, events: normaliseEvents(raw.events, origin) } as V.ScreenSection;
         case 'table': return { ...section, tables: list(raw.tables as V.LiveTable[]) } as V.ScreenSection;
-        case 'leagues': return { ...section, leagues: list(raw.leagues as never[]) } as V.ScreenSection;
-        case 'entities': return { ...section, entities: list(raw.entities as never[]) } as V.ScreenSection;
+        case 'leagues': return { ...section, leagues: list(raw.leagues as { logo?: string }[]).map(item => withLogo(item, origin)) } as V.ScreenSection;
+        case 'entities': return { ...section, entities: list(raw.entities as { logo?: string }[]).map(item => withLogo(item, origin)) } as V.ScreenSection;
         default: return section;
       }
     }),
@@ -117,14 +133,14 @@ export function normaliseScreen(screen: V.Screen): V.Screen {
 
 /** A pushed stream event, validated: updates, alerts and heartbeats; anything else is ignored. */
 export type LiveStreamMessage = { kind: 'update'; events: V.LiveEvent[] } | { kind: 'alert'; alert: V.LiveAlert } | { kind: 'heartbeat' } | { kind: 'ignored' };
-export function readLiveMessage(name: string, data: string): LiveStreamMessage {
+export function readLiveMessage(name: string, data: string, origin?: string): LiveStreamMessage {
   if (name === 'heartbeat') return { kind: 'heartbeat' };
   if (name !== 'update' && name !== 'alert') return { kind: 'ignored' };
   let value: unknown;
   try { value = JSON.parse(data); } catch { return { kind: 'ignored' }; }
   if (name === 'update') {
     const events = (value as { events?: unknown })?.events;
-    return Array.isArray(events) ? { kind: 'update', events: normaliseEvents(events) } : { kind: 'ignored' };
+    return Array.isArray(events) ? { kind: 'update', events: normaliseEvents(events, origin) } : { kind: 'ignored' };
   }
   const alert = value as V.LiveAlert;
   return alert && typeof alert.id === 'string' && typeof alert.eventId === 'string' && ['started', 'close', 'final'].includes(alert.kind)

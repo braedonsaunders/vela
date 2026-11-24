@@ -101,11 +101,24 @@ function mixed(text: string): string {
   return value;
 }
 
+/**
+ * Lengths that draw on whole and half points, as the hard-coded screens drew them (SportsLook.px):
+ * with `scale` points per CSS px (1.25 on Apple TV, the Android TV pixel scale), each `<n>px` becomes
+ * the length that the renderer's scaling turns into round(n x scale x 2) / 2 points. 1 leaves it.
+ */
+export function halfPoints(text: string, scale = 1): string {
+  if (scale === 1) return text;
+  return text.replace(/(^|[^\w.#-])(-?\d*\.?\d+)px\b/g, (_, lead: string, n: string) => {
+    const points = Math.round(Number(n) * scale * 2) / 2;
+    return `${lead}${Math.round((points / scale) * 10_000) / 10_000}px`;
+  });
+}
+
 /** A screen document's style row, tokens already substituted: holes compiled and validated as filled. */
-export function screenStyleRow(row: string, text: string, scope: HoleScope): Template {
+export function screenStyleRow(row: string, text: string, scope: HoleScope, scale = 1): Template {
   const template = compileTemplate(text, scope, (hole: Accessor): Accessor => (c, e) => styleHole(row, hole(c, e)));
-  if (typeof template === 'string') return mixColours(fold(template));
-  const parts = template.parts.map(p => (typeof p === 'string' ? fold(p) : p));
+  if (typeof template === 'string') return mixColours(fold(halfPoints(template, scale)));
+  const parts = template.parts.map(p => (typeof p === 'string' ? fold(halfPoints(p, scale)) : p));
   if (!text.includes('color-mix(')) return { parts };
   const whole: Accessor = (c, e) => mixed(parts.map(p => (typeof p === 'string' ? p : p(c, e))).join(''));
   return { parts: [whole] };

@@ -21,15 +21,18 @@ export interface ScreenViewport {
   width: number;
   /** A TV: `tv` variants and per-class values apply. */
   tv?: boolean;
+  /** Points per CSS px on this device (css.ts: 1.25 on Apple TV, tvPixelScale on Android TV). Lengths
+   * then land on half points, as the hard-coded screens' look.px did. Default 1 (no rounding). */
+  scale?: number;
 }
 
 export interface ResolvedScreen {
   document: ScreenDocument;
   title: Template;
   tree: RNode;
-  /** Drawn while the first read is pending, and when it fails (the host's generic ones when absent). */
-  loading?: RNode;
-  failure?: RNode;
+  /** Drawn while the first read is pending, and when it fails (generic ones when the document has none). */
+  loading: RNode;
+  failure: RNode;
   /** The element id focused first on TV and keyboard. */
   focusInitial?: Template;
   /** The document's motion presets, each carrying its keyframes (`frames`). */
@@ -190,17 +193,18 @@ export function resolveScreenDocument(doc: ScreenDocument, viewport: ScreenViewp
   };
   const r: Context = {
     doc: pseudo, ui: tokens, strings, width: viewport.width, tv: viewport.tv === true, count: 0, unsupported: new Set(),
-    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens), palette, warnings },
+    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens), palette, warnings, scale: viewport.scale ?? 1 },
   };
   const tree = convertNode(held(doc.tree), r);
-  const loading = doc.loading ? convertNode(held(doc.loading), r) : undefined;
-  const failure = doc.failure ? convertNode(held(doc.failure), r) : undefined;
+  // Without its own, a page draws a generic skeleton while loading and the kit's failure.
+  const loading = convertNode(doc.loading ? held(doc.loading) : DEFAULT_LOADING, r);
+  const failure = convertNode(doc.failure ? held(doc.failure) : DEFAULT_FAILURE, r);
   return {
     document: doc,
     title: compileTemplate(String(doc.title ?? ''), r.screen!.scope),
     tree,
-    ...(loading ? { loading } : {}),
-    ...(failure ? { failure } : {}),
+    loading,
+    failure,
     ...(doc.focus?.initial ? { focusInitial: compileTemplate(doc.focus.initial, r.screen!.scope) } : {}),
     motion,
     warnings: [...warnings],
@@ -210,8 +214,13 @@ export function resolveScreenDocument(doc: ScreenDocument, viewport: ScreenViewp
 
 /** Every node of a resolved screen (for the budget and symbol checks). */
 export function screenTrees(resolved: ResolvedScreen): [string, RNode][] {
-  return [['tree', resolved.tree], ...(resolved.loading ? [['loading', resolved.loading] as [string, RNode]] : []),
-    ...(resolved.failure ? [['failure', resolved.failure] as [string, RNode]] : [])];
+  return [['tree', resolved.tree], ['loading', resolved.loading], ['failure', resolved.failure]];
 }
+
+const bar = (width: string, height: string): Node => ({ type: 'use', template: 'vela:placeholder', with: { width, height } });
+const DEFAULT_LOADING: Node = { type: 'box', style: { padding: '12px max(28px, 4vw)', gap: '18px' }, small: { padding: '12px 18px' }, children: [
+  bar('40%', '28px'), bar('100%', '220px'), { type: 'box', style: { 'flex-direction': 'row', gap: '14px' }, children: [bar('32%', '128px'), bar('32%', '128px'), bar('32%', '128px')] },
+] };
+const DEFAULT_FAILURE: Node = { type: 'use', template: 'vela:failure' };
 
 export type { Node };

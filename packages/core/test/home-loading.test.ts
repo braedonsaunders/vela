@@ -206,3 +206,25 @@ test('the library list never waits on probing a server for library views (a coll
   expect(box.get().libraries.value).not.toBe(listed.value);
   expect(box.get().libraries.value).toEqual(listed.value);
 });
+
+test("libraries listed before the server's features are known choose by class, then again by the server's word", async () => {
+  const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
+  const library = (id: string, media: string | undefined, kind: string, experience?: string) => ({ id, name: id, kind, ...(media ? { media } : {}), artwork: [], ...(experience ? { experience } : {}) });
+  const features = { libraryExperiences: { available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] } };
+  const api = {
+    libraries: async () => ({ items: [library('music', 'music', 'mixed', 'watch'), library('books', 'audiobook', 'mixed', 'listen'), library('photos', 'photo', 'mixed'),
+      library('tv', undefined, 'live'), library('odd', 'video', 'movies', 'karaoke')], continuation: 'exhausted' }),
+    home: async () => ({ ...bootstrap, capabilities: { ...bootstrap.capabilities, features } }),
+  };
+  const session = { epoch: 0, features: undefined as unknown, onReset() {}, negotiate: async () => {},
+    ready: async () => ({ adapter: api, images: async () => ({ origin: 'https://fixture.test' }) }), check: () => {} };
+  const home = new Home(box, session as unknown as Session, () => 640);
+  const chosen = () => box.get().libraries.value?.map(l => [l.id, l.experience]);
+  await home.libraries();
+  expect(chosen()).toEqual([['music', 'listen'], ['books', 'listen'], ['photos', 'gallery'], ['tv', 'live'], ['odd', 'watch']]);
+  await home.ensure();
+  expect(chosen()).toEqual([['music', 'watch'], ['books', 'listen'], ['photos', 'gallery'], ['tv', 'live'], ['odd', 'watch']]);
+  // Listed again with the features known, the server's word stands from the start.
+  await home.libraries();
+  expect(chosen()).toEqual([['music', 'watch'], ['books', 'listen'], ['photos', 'gallery'], ['tv', 'live'], ['odd', 'watch']]);
+});

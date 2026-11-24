@@ -110,7 +110,9 @@ export interface NavigateAction {
 }
 
 /** POST /screens/{id}/actions/{action} */
-export interface ScreenActionRequest { page: ID; params: Record<string, string>; args: Record<string, string>; context?: Record<string, string>; /** The viewer's IANA zone. */ tz?: string }
+/** An action argument as its declared type wants it: text, a whole number, true/false or a list of texts. */
+export type ScreenActionArg = string | number | boolean | string[];
+export interface ScreenActionRequest { page: ID; params: Record<string, string>; args: Record<string, ScreenActionArg>; context?: Record<string, string>; /** The viewer's IANA zone. */ tz?: string }
 export interface ScreenActionAnswer {
   records?: Record<string, RecordEntry>;
   sources?: Record<string, unknown>;

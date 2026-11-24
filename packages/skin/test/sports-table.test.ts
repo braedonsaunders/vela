@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { LiveTable } from '@vela/core';
-import { fitTable, numericColumn, textWidth } from '../src/widgets/sports/table';
+import { fitTable, numericColumn, textWidth } from '../src/blocks/table-fit';
 
 const nfl: LiveTable = {
   title: 'AFC',
