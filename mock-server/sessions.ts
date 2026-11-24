@@ -19,6 +19,9 @@ export function withSidecar(plan: PlaybackPlan, base: string) {
     // A track inside the source, which only the server can deliver over its HLS (here it delivers nothing).
     { id: 'sub-fr', kind: 'subtitle', language: 'fr', name: 'French · in the file', codec: 'subrip', streamIndex: 3, delivery: { kind: 'embedded' } }];
   plan.selectedSubtitleTrackId = sidecarFixture.selected ? 'sub-en' : null;
+  // The original's own audio streams, which a player switches itself, and a commentary the file lacks: the server's.
+  plan.audioTracks = [...plan.audioTracks.map((track, n) => ({ ...track, streamIndex: n + 1 })),
+    { id: 'audio-commentary', kind: 'audio', language: 'en', name: 'English commentary · server', codec: 'aac', channels: 2, streamIndex: 3 }];
   const direct = plan.paths.find(path => path.id === 'direct');
   if (direct) Object.assign(direct, { original: true, range: true });
   if (plan.paths.some(path => path.id === sidecarFixture.pathId)) plan.selectedPathId = sidecarFixture.pathId;

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-(process.platform === 'darwin' ? test : test.skip)('Apple keeps a sidecar subtitle on from the start, across plans, and turns it off in the player', async () => {
+(process.platform === 'darwin' ? test : test.skip)('Apple keeps a sidecar subtitle on from the start, across plans, and turns it off in the player; the report follows track choices the server applies', async () => {
   const scratch = await mkdtemp(join(homedir(), '.scratch/tmp/vela-sidecar-'));
   try {
     const ios = join(import.meta.dir, '../ios');
