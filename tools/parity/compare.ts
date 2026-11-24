@@ -10,7 +10,7 @@ import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { decodePng, encodePng } from './png';
 import { diffImages, movingMask, RULE, verdict, type Rect } from './diff';
-import { DEVICE_MASKS } from './views';
+import { CAPTURE_SCALE, DEVICE_MASKS } from './views';
 
 interface Capture { viewport: string; view: string; file: string; frame: string; description: string; review?: string; ok: boolean; error?: string; reviewedRegions?: (Rect & { note: string })[] }
 interface Manifest { variant: string; platform: string; now: string; captures: Capture[] }
@@ -41,12 +41,15 @@ for (const before of legacy.captures) {
   const result = diffImages(a, b, { mask, threshold });
   const diffFile = join('diffs', before.file);
   writeFileSync(join(out, diffFile), encodePng(result.image));
+  // Moves are judged in points: a 2x screenshot's 2 px is 1 point.
+  const scale = CAPTURE_SCALE[before.viewport] ?? 1;
+  result.maxDisplacement = Math.round((result.maxDisplacement / scale) * 100) / 100;
   const judged = verdict(result);
   Object.assign(row, {
     status: before.review ? 'review' : judged.pass ? 'pass' : 'fail', percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
     masked: mask.length, reasons: judged.reasons, ...(reviewedNotes.length ? { reviewedNotes } : {}),
     // The regions that moved too far, for finding them on the diff picture.
-    moved: result.regions.filter(r => (r.displacement ?? 0) > RULE.maxDisplacement).slice(0, 12).map(({ x, y, width, height, shift }) => ({ x, y, width, height, shift })),
+    moved: result.regions.filter(r => (r.displacement ?? 0) / scale > RULE.maxDisplacement).slice(0, 12).map(({ x, y, width, height, shift }) => ({ x, y, width, height, shift })),
     legacy: relative(out, join(legacyDir, before.file)), document: relative(out, join(documentDir, after.file)), diff: diffFile,
   });
 }

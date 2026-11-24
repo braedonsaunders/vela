@@ -56,6 +56,7 @@ import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocab
 import { itemKey, items } from './screen/items';
 import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
+import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
@@ -470,7 +471,11 @@ function useChangeMotion(node: RNode, still: boolean): Record<string, unknown> |
   return node.onChange && changes > 0 ? animation(node.onChange.motion, {}, still, 0) : undefined;
 }
 
-function SkinNodeView({ node, ctx, route, after, hero, changed }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; changed?: boolean }) {
+function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; changed?: boolean }) {
+  // Screens: this node reads records through its own reader, so a push redraws only its readers.
+  const ctx = useScopedReads(given);
+  // Development: a probe (tools/perf/screen-record-push.ts) may count which nodes draw.
+  if (__DEV__) (globalThis as { __velaRenderProbe?: (node: RNode, ctx: Ctx) => void }).__velaRenderProbe?.(node, ctx);
   // A row's arrows read its pager: they, and nothing else, redraw when the row reports its ends.
   usePager(readsPager(node) ? ctx.row?.id : undefined);
   const { env } = useHost();
@@ -549,7 +554,13 @@ function usePager(rowId: string | undefined): void {
 const SkinNode = memo(SkinNodeView, (a, b) => a.node === b.node && a.route === b.route
   && a.after === b.after && a.hero === b.hero
   && (a.ctx === b.ctx || Object.keys(a.ctx).length === Object.keys(b.ctx).length
-    && (Object.keys(a.ctx) as (keyof Ctx)[]).every(key => a.ctx[key] === b.ctx[key])));
+    && (Object.keys(a.ctx) as (keyof Ctx)[]).every(key => a.ctx[key] === b.ctx[key] || key === 'screen' && sameScreenScope(a.ctx.screen, b.ctx.screen))));
+
+/** A screen scope that differs only in its reader: every screen node reads through its own reader
+ * (useScopedReads), so a parent's new reader (a record it read changed) does not redraw its children. */
+function sameScreenScope(a: Ctx['screen'], b: Ctx['screen']): boolean {
+  return !!a && !!b && a.page === b.page && a.state === b.state && a.items === b.items && a.source === b.source && !!a.source;
+}
 
 // ---- Style: layers, overlays, translation ----
 
@@ -1793,3 +1804,4 @@ const styles = StyleSheet.create({
 export function SkinNodeFor({ node, ctx }: { node: RNode; ctx: Ctx }) {
   return <SkinNode node={node} ctx={ctx} />;
 }
+

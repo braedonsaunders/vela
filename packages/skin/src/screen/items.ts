@@ -5,7 +5,7 @@
 import type { ScreenPageState } from '../../../core/src/screens/types';
 import { collection, itemKey as vocabularyKey, type Ctx, type Env } from '../vocabulary';
 import { timeOf, type Template, type Value } from './holes';
-import { deref, refKey, walk, type Bound, type RecordReader } from './scope';
+import { deref, refKey, walk, type Bound, type RecordReader, type RecordSource } from './scope';
 
 /** A screen collection, compiled (resolve.ts). */
 export interface Items {
@@ -24,8 +24,8 @@ const fillT = (t: Template, c: Ctx, e: Env): string =>
   typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
 
 /** The root context of a page or surface: its data, the record reader and its local state. */
-export function screenRoot(page: ScreenPageState, record: RecordReader, state: Record<string, string> = {}): Ctx {
-  return { index: 0, screen: { page, record, state, items: {} } };
+export function screenRoot(page: ScreenPageState, record: RecordReader, state: Record<string, string> = {}, source?: RecordSource): Ctx {
+  return { index: 0, screen: { page, record, state, items: {}, ...(source ? { source } : {}) } };
 }
 
 /** A context that binds `value` as `as` at `index`. */
