@@ -1,6 +1,6 @@
 // Open full-screen Now Playing from anywhere (the bar's expand and lyrics buttons): the audio dock
 // that owns it listens. `panel` picks the side it opens on.
-export type NowPlayingPanel = 'queue' | 'lyrics';
+export type NowPlayingPanel = 'queue' | 'lyrics' | 'sound';
 type Listener = (panel: NowPlayingPanel | undefined) => void;
 const listeners = new Set<Listener>();
 

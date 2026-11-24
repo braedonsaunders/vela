@@ -6,6 +6,7 @@
 import type * as V from '../wire';
 import type { Card } from '../models';
 import { appendAutoplay, clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, removeAt, toggleShuffle, type AudioQueue, type Random } from '../audio/queue';
+import { DEFAULT_SOUND, soundSettings, type SoundSettings } from '../audio/sound';
 import type { Playback, PlaybackTarget } from './playback';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -59,11 +60,13 @@ export interface AudioState {
   /** The app's own volume, 0..1, and mute (the device's volume still applies). */
   volume: number;
   muted: boolean;
+  /** AutoMix, loudness levelling and the equalizer (audio/sound.ts); this device's own. */
+  sound: SoundSettings;
 }
 
 export const initialAudio: AudioState = {
   queue: null, phase: 'idle', positionSeconds: 0, durationSeconds: 0, rate: 1,
-  sleep: { mode: 'off', endsAt: 0 }, chapters: [], error: '', unsupported: false, volume: 1, muted: false,
+  sleep: { mode: 'off', endsAt: 0 }, chapters: [], error: '', unsupported: false, volume: 1, muted: false, sound: DEFAULT_SOUND,
 };
 
 export interface AudioRequest {
@@ -135,7 +138,7 @@ export class Audio {
     private readonly random: Random = Math.random,
   ) {
     // A prepared session belongs to the old sign-in: dropped, never released through the new one.
-    session.onReset(() => { this.prepared = undefined; this.halt(); this.box.update('audio', () => initialAudio); });
+    session.onReset(() => { this.prepared = undefined; this.halt(); this.box.update('audio', audio => ({ ...initialAudio, sound: audio.sound })); });
     // A session that is no longer ours (a video started, the server replaced it) stops the engine;
     // a recovered plan for our session reloads at the same place.
     box.subscribe(() => this.follow());
@@ -279,6 +282,11 @@ export class Audio {
     this.patch({ muted });
   }
 
+  /** Replace the sound settings (checked, so a stored or partial value cannot break the engines). */
+  setSound(next: SoundSettings): void {
+    this.patch({ sound: soundSettings(next) });
+  }
+
   toggleShuffle(): void { if (this.state.queue) this.requeue(toggleShuffle(this.state.queue, this.random)); }
   cycleRepeat(): void { if (this.state.queue) this.requeue(cycleRepeat(this.state.queue)); }
 
@@ -294,7 +302,7 @@ export class Audio {
     // Asked before the queue and session are cleared: they are how the playback is known as ours.
     const owns = this.ownsPlayback();
     this.halt();
-    this.box.update('audio', audio => ({ ...initialAudio, rate: audio.rate, unsupported: audio.unsupported, volume: audio.volume, muted: audio.muted }));
+    this.box.update('audio', audio => ({ ...initialAudio, rate: audio.rate, unsupported: audio.unsupported, volume: audio.volume, muted: audio.muted, sound: audio.sound }));
     if (owns) await this.playback.stop();
   }
 

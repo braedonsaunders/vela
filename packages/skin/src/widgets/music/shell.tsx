@@ -37,6 +37,7 @@ function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
   if (page.kind === 'search') return <ListeningSearch />;
   return <ListeningHome />;
 }
+import { SoundBlock } from '../../blocks/sound';
 
 export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
   const app = useMusic();
@@ -46,6 +47,10 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   const inset = host.doc.document.traits?.headerInset ?? headerInsetOf(host.doc.document.slots?.shell);
   const [collapsed, setCollapsed] = useState(false);
   const [panel, setPanel] = useState<BarPanel>('');
+  // The side beside the page holds the queue or Sound, one at a time.
+  const [soundOpen, setSoundOpen] = useState(false);
+  const sideSound = soundOpen;
+  const sideQueue = queueOpen && !soundOpen;
   const music = app.listening === 'music';
   const narrow = m.width < 1180;
   const rail = collapsed || narrow;
@@ -72,10 +77,11 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
           <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main">
             {renderMusicPage(page, music)}
           </ScrollView>)}
-        {queueOpen ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
+        {sideSound ? side(<SoundBlock onClose={() => setSoundOpen(false)} />, 360, 'left')
+          : sideQueue ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
       </View>
       <View style={[{ height: 1 }, hairline]} />
-      <View style={{ height: NOW_PLAYING_BAR_HEIGHT, backgroundColor: m.ui.raised }}><NowPlayingBar queueOpen={queueOpen} onQueue={() => onQueue(!queueOpen)} panel={panel} onPanel={setPanel} /></View>
+      <View style={{ height: NOW_PLAYING_BAR_HEIGHT, backgroundColor: m.ui.raised }}><NowPlayingBar queueOpen={sideQueue} onQueue={() => { setSoundOpen(false); onQueue(!sideQueue); }} soundOpen={sideSound} onSound={() => setSoundOpen(!sideSound)} panel={panel} onPanel={setPanel} /></View>
       <BarPanelView panel={panel} onClose={() => setPanel('')} />
     </View>
   );

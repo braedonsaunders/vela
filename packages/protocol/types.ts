@@ -108,7 +108,11 @@ export interface ServerCapabilities {
     /** Subtitle search for a running session: GET /sessions/:id/subtitles/search and
      * POST /sessions/:id/subtitles/:offerId. `languages` are the codes a search accepts
      * (ISO 639-1, or a BCP 47 tag such as pt-BR where a region matters), in the server's order. */
-    subtitleSearch?: Feature & { languages: string[] } };
+    subtitleSearch?: Feature & { languages: string[] };
+    /** Loudness levelling and AutoMix markers: TitleMedia.loudness and PlaybackPlan.loudness. A sub-flag
+     * absent or false means that part is never sent: `album` (albumGainDb/albumPeak), `fades`
+     * (trim.fadeInEndMs/fadeOutStartMs). Without the feature a client never levels or crossfades by them. */
+    loudness?: Feature & { album?: boolean; fades?: boolean } };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -150,6 +154,18 @@ export type MediaClass = 'video' | 'music' | 'audiobook' | 'book' | 'podcast' | 
 export type MediaRole = 'item' | 'artist' | 'album' | 'track' | 'series' | 'book' | 'audiobook' | 'part' | 'show' | 'episode' | 'collection';
 export type ReadingFormat = 'epub' | 'pdf' | 'cbz';
 export type MediaCreditRole = 'artist' | 'albumArtist' | 'author' | 'narrator' | 'composer' | 'illustrator' | 'translator' | 'host';
+/** A track's measured (or provider-hinted) loudness (features.loudness), ReplayGain 2.0 style: the gain
+ * that brings it to `reference` LUFS. Peaks are linear true peak (1.0 = 0 dBTP). A `provider` hint carries
+ * trackGainDb only; album values come once every track of the album is measured. */
+export interface Loudness {
+  trackGainDb: number; trackPeak?: number; albumGainDb?: number; albumPeak?: number;
+  /** Integrated loudness, LUFS. */ lufs?: number; /** The gain's target, LUFS (-18). */ reference: number;
+  source: 'measured' | 'provider';
+  /** Milliseconds into the file: silence (below -60 dBFS) ends at startMs and starts at endMs; with
+   * features.loudness.fades, the intro reaches full level at fadeInEndMs and the outro leaves it for
+   * good at fadeOutStartMs (momentary loudness within 10 LU of integrated). */
+  trim?: { startMs: number; endMs: number; fadeInEndMs?: number; fadeOutStartMs?: number };
+}
 /** A title's media class, role and structure. Title.kind keeps the movie/show/season/episode projection. */
 export interface TitleMedia {
   /** A plugin level's own role is free text (a video child's 'concert'); clients read an unknown one as 'item'. */
@@ -167,6 +183,8 @@ export interface TitleMedia {
   /** Plain facts a page shows as written (label, publisher, ISBN). */ facts?: { label: string; value: string }[];
   /** Recording identity (ISRC or fingerprint) shared by every release of one recording (features.duplicates). */
   recordingId?: string;
+  /** Tracks (features.loudness): for pages and levelling decisions; PlaybackPlan.loudness is authoritative. */ loudness?: Loudness;
+  /** Beats per minute, when the provider knows it. */ bpm?: number;
 }
 /** Opaque locator (EPUB CFI, page index) plus the share of the whole document; shared Ether watch state. */
 export interface ReadingProgress { locator: string; fraction: number; label?: string; updatedAt: Timestamp }
@@ -317,6 +335,7 @@ export interface TrickplayMetadata {
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; libraryId?: ID; liveItemId?: ID; title?: string; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   /** Audio-only plans say so; omitted: 'video'. */ media?: 'video' | 'audio';
+  /** features.loudness: measured on the exact source this plan plays; omitted when unmeasured. */ loudness?: Loudness;
   paths: PlaybackPath[]; selectedPathId: ID; audioTracks: Track[]; subtitleTracks: Track[];
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
   /** Also carried by SessionSnapshot.plan and full plan events. */

@@ -1,6 +1,6 @@
 // Music, book, audiobook and podcast fixtures for the media-kinds contract (docs/media-kinds.md).
 // Every artist, album, track, book, author, narrator, show, host and label here is fictional.
-import type { ArtworkRef, Chapter, Library, LibraryBrowseOptions, MediaRole, ReadingFormat, RowEntry, Title, TitleDetail, WatchState } from '../types';
+import type { ArtworkRef, Chapter, Library, LibraryBrowseOptions, Loudness, MediaRole, ReadingFormat, RowEntry, Title, TitleDetail, WatchState } from '../types';
 
 /** Stable 32-bit FNV-1a hash; seeds cover art, palettes and chapter layouts. */
 export function mediaSeed(id: string): number {
@@ -168,6 +168,21 @@ const artistSpecs: ArtistSpec[] = [
     ] },
 ];
 /** Artists with albums only, concerts only (Harbour Brass Collective) and both (The Hollow Lanterns, Velvet Comet). */
+/** A fixture track's loudness (features.loudness), stable per track: most albums measured (with fades),
+ * every fourth album only partly known (a provider hint on odd tracks, nothing on even ones). */
+function trackLoudness(id: string, durationSeconds: number, albumOrdinal: number): { loudness?: Loudness; bpm?: number } {
+  let hash = 0;
+  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const unit = (shift: number) => ((hash >>> shift) % 1000) / 1000;
+  const trackGainDb = Math.round((-3 - unit(0) * 8) * 10) / 10;
+  const bpm = 84 + Math.round(unit(3) * 60);
+  const ordinal = Number(id.slice(-2));
+  if (albumOrdinal % 4 === 3) return ordinal % 2 ? { loudness: { trackGainDb, reference: -18, source: 'provider' }, bpm } : {};
+  const endMs = Math.round(durationSeconds * 1000 - unit(5) * 600);
+  return { bpm, loudness: { trackGainDb, trackPeak: Math.round((0.88 + unit(7) * 0.12) * 1000) / 1000, lufs: Math.round((-18 - trackGainDb) * 10) / 10, reference: -18, source: 'measured',
+    trim: { startMs: Math.round(unit(9) * 300), endMs, fadeInEndMs: Math.round(400 + unit(11) * 1600), fadeOutStartMs: Math.round(endMs - 1500 - unit(13) * 7500) } } };
+}
+
 const concertSpecs: Record<string, ConcertSpec[]> = {
   'hollow-lanterns': [
     { slug: 'lanterns-live-at-the-boathouse', name: 'Live at the Boathouse', venue: 'The Old Boathouse', year: 2023, month: 6, minutes: 94, positionSeconds: 75,
@@ -223,10 +238,18 @@ for (const spec of artistSpecs) {
       albumTracks.push({ id, kind: 'episode', name, summary: '', year: album.year, airDate, genres: spec.genres, durationSeconds: clip.durationSeconds,
         artwork: [cover], showId: artistId, showName: spec.name, seasonId: albumId, seasonNumber: albumIndex + 1, episodeNumber: albumTracks.length + 1,
         media: { class: 'music', role: 'track', index: index + 1, disc: discIndex + 1, recordingId,
+          ...trackLoudness(id, clip.durationSeconds, albums.length),
           parents: [{ id: albumId, name: album.name, role: 'album' }, { id: artistId, name: spec.name, role: 'artist' }],
           credits: [{ name: spec.name, role: 'artist', personId }, ...(spec.composer ? [{ name: spec.composer, role: 'composer', personId: composerId }] : [])],
           facts: [{ label: 'ISRC', value: recordingId }, { label: 'Format', value: clip.codec.toUpperCase() }] } });
     }));
+    // Album gain once every track of the album is measured (features.loudness.album).
+    const measured = albumTracks.map(track => track.media?.loudness).filter(l => l?.source === 'measured');
+    if (measured.length === albumTracks.length && measured.length) {
+      const albumGainDb = Math.round(10 * -10 * Math.log10(measured.reduce((sum, l) => sum + 10 ** (-l!.trackGainDb / 10), 0) / measured.length)) / 10;
+      const albumPeak = Math.max(...measured.map(l => l!.trackPeak ?? 0));
+      for (const track of albumTracks) track.media!.loudness = { ...track.media!.loudness!, albumGainDb, albumPeak };
+    }
     const albumTitle: Title = { id: albumId, kind: 'season', name: album.name, summary: album.summary, year: album.year, airDate, genres: spec.genres,
       durationSeconds: albumTracks.reduce((total, track) => total + (track.durationSeconds ?? 0), 0), artwork: [cover],
       showId: artistId, showName: spec.name, seasonNumber: albumIndex + 1,

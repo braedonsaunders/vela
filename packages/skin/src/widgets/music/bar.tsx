@@ -23,7 +23,7 @@ const web = Platform.OS === 'web';
 /** Spoken word's speed and sleep choices, opened from the bar over the page above it. */
 export type BarPanel = '' | 'speed' | 'sleep';
 
-export function NowPlayingBar({ queueOpen, onQueue, panel, onPanel }: { queueOpen: boolean; onQueue(): void; panel: BarPanel; onPanel(panel: BarPanel): void }) {
+export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, panel, onPanel }: { queueOpen: boolean; onQueue(): void; soundOpen?: boolean; onSound?(): void; panel: BarPanel; onPanel(panel: BarPanel): void }) {
   const app = useMusic();
   const m = useMediaLook();
   const store = useVela();
@@ -90,6 +90,7 @@ export function NowPlayingBar({ queueOpen, onQueue, panel, onPanel }: { queueOpe
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
         {spoken ? (audio.chapters.length ? <IconButton symbol="chapters" label={msg('media.player.chapters')} onPress={() => openNowPlaying()} size={34} iconSize={18} testID="bar-chapters" /> : null)
           : store.music.lyricsAvailable ? <IconButton symbol="lyrics" label={msg('music.lyrics')} onPress={() => openNowPlaying('lyrics')} size={34} iconSize={18} testID="bar-lyrics" /> : null}
+        {onSound ? <IconButton symbol="sound" label={msg('music.sound')} onPress={onSound} active={soundOpen} size={34} iconSize={18} testID="bar-sound" /> : null}
         <IconButton symbol="queue" label={msg('music.queue')} onPress={onQueue} active={queueOpen} size={34} iconSize={18} testID="bar-queue" />
         <IconButton symbol={audio.muted || audio.volume === 0 ? 'speaker-mute' : 'speaker'} label={msg('music.mute')} onPress={() => store.audio.toggleMute()} size={34} iconSize={18} testID="bar-mute" />
         <View style={{ width: 110 }}><Slider value={audio.muted ? 0 : audio.volume} onChange={v => store.audio.setVolume(v)} label={msg('music.volume')} testID="bar-volume" /></View>

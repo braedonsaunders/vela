@@ -5,6 +5,7 @@ import type * as V from './wire';
 import type { Card } from './models';
 import { clock, minute, msg, number, percent, plural } from './i18n';
 import { childCountsLine, childCountsOf } from './plugin-levels';
+import { loudnessOf } from './audio/sound';
 
 const CLASSES: V.MediaClass[] = ['video', 'music', 'audiobook', 'book', 'podcast', 'photo'];
 const ROLES: V.MediaRole[] = ['item', 'artist', 'album', 'track', 'series', 'book', 'audiobook', 'part', 'show', 'episode', 'collection'];
@@ -55,6 +56,10 @@ export interface CardMedia {
   facts: { label: string; value: string }[];
   /** Plays as audio: tracks, audiobooks, parts and podcast episodes. */
   audio: boolean;
+  /** A track's loudness (features.loudness), when measured or hinted. */
+  loudness?: V.Loudness;
+  /** Beats per minute, when the provider knows it. */
+  bpm?: number;
   /** "Track 3", "Book 2", "Part 1" ('' when unnumbered). */
   indexLabel: string;
   /** A track's length as m:ss ('' when unknown). */
@@ -112,6 +117,7 @@ export function cardMedia(title: V.Title): CardMedia | undefined {
   const index = positive(media.index);
   const format = media.reading?.format;
   const recordingId = typeof media.recordingId === 'string' && media.recordingId.trim() ? media.recordingId.trim() : undefined;
+  const loudness = loudnessOf(media.loudness);
   return {
     class: cls,
     role,
@@ -136,6 +142,8 @@ export function cardMedia(title: V.Title): CardMedia | undefined {
     audio: isAudioRole(cls, role),
     indexLabel: index ? msg(`media.index.${role === 'book' ? 'book' : role === 'part' ? 'part' : role === 'track' ? 'track' : 'item'}`, { index: number(index) }) : '',
     clockLabel: title.durationSeconds ? clock(title.durationSeconds) : '',
+    ...(loudness ? { loudness } : {}),
+    ...(typeof media.bpm === 'number' && media.bpm > 0 && media.bpm < 400 ? { bpm: media.bpm } : {}),
   };
 }
 
