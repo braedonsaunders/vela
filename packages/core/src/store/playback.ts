@@ -695,7 +695,8 @@ export class Playback {
     const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
     this.end();
     this.box.update('playback', () => initialPlayback);
-    await this.release(plan, target, phase);
+    if (!plan || plan.state === 'ended') return;
+    await this.finish(plan, target, phase, last, this.reporting);
   }
 
   /** The current session's stall deadline, armed again whenever it moves (stall.ts). */
@@ -722,6 +723,7 @@ export class Playback {
   private giveUp(): void {
     const current = this.box.get().playback;
     const plan = current.plan ?? this.abandoned;
+    const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
     this.follow?.abort();
     this.follow = undefined;
     this.followNow = undefined;
@@ -736,13 +738,7 @@ export class Playback {
     this.abandoned = null;
     this.patch({ phase: 'failed', plan: null, sessionId: '', error: '', errorCode: 'playback_stalled', errorClass: 'transient',
       retryAfterSeconds: 0, retryAttempt: 0, versions: null, live: null });
-    void this.release(plan, current.target, current.phase);
-  }
-
-  /** The server releases the session at the plan's generations, and resume state is published. */
-  private async release(plan: V.PlaybackPlan | null, target: PlaybackTarget | null, phase: PlaybackPhase): Promise<void> {
-    if (!plan || plan.state === 'ended') return;
-    await this.finish(plan, target, phase, last, this.reporting);
+    if (plan && plan.state !== 'ended') void this.finish(plan, current.target, current.phase, last, this.reporting);
   }
 
   /** Release a session that played, then publish the resume state the server kept for it. */
