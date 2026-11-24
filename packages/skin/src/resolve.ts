@@ -267,6 +267,14 @@ function tokenValue(raw: string, r: Context): string {
   }));
 }
 
+/** A `with` value that names a token (`ink: "$ui.ink"`) stands in a style as that token, so it resolves. */
+function tokenArgs(text: string, scope: HoleScope): string {
+  return text.replace(/\{arg\.(\^*\w+)\}/g, (hole, name: string) => {
+    const arg = scope.args[name];
+    return arg && typeof arg.template === 'string' && arg.template.includes('$') ? arg.template : hole;
+  });
+}
+
 /** Style tokens substituted and bound values compiled. */
 function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
@@ -276,7 +284,7 @@ function css(style: Style | undefined, r: Context): CssT {
   if (line) style = { ...style, 'line-height': line };
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
-    const text = tokenValue(String(raw), r);
+    const text = tokenValue(r.screen ? tokenArgs(String(raw), r.screen.scope) : String(raw), r);
     if (r.screen) {
       // Any row may hold a hole; each is validated once filled (resolve/screen-style.ts).
       if (UNSAFE.test(text.replace(/\{[^{}]*\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
