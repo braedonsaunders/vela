@@ -55,10 +55,15 @@ const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_
 if (sportsEnabled) Object.assign(capabilities.features, { liveEvents: { available: true }, multiview: { available: true, maxTiles: 4 } });
 Object.assign(capabilities.features, catchUpFeature());
 if (mediaEnabled) Object.assign(capabilities.features, {
-  mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook'] },
+  mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast', 'photo'] },
   reading: { available: true, formats: ['epub', 'pdf', 'cbz'] },
   audioPlayback: yes,
 } satisfies Partial<V.ServerCapabilities['features']>);
+// Every library names how it opens (protocol README, Library experience): music, audiobooks and
+// podcasts listen, books read, photos are a gallery, Live TV is live, the rest watch.
+// VELA_MOCK_NO_EXPERIENCES=1 is a server without it (Vela chooses by media class).
+const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
+if (experiencesEnabled) capabilities.features.libraryExperiences = { available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] };
 // Plugin levels (concerts under music artists, rows per recommended tab). VELA_MOCK_NO_LEVELS=1 is
 // a server from before them: no capability, no Concerts tab, no childCounts and no video children.
 const levelsEnabled = mediaEnabled && process.env.VELA_MOCK_NO_LEVELS !== '1';
@@ -73,8 +78,9 @@ const videoLibraries: V.Library[] = labPreset ? [
   { ...fixtureLibraries[1]!, id: '2', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
   { ...fixtureLibraries[1]!, id: '4', name: 'Anime Shows', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
 ] : fixtureLibraries;
-const libraries: V.Library[] = [...videoLibraries, ...(mediaEnabled ? mediaLibraries.map(library => levelsEnabled ? library
-  : { ...library, tabs: library.tabs?.filter(tab => !(tab.kind === 'recommended' && tab.card)) }) : [])];
+const libraries: V.Library[] = [...videoLibraries.map(library => experiencesEnabled ? { ...library, experience: library.kind === 'live' ? 'live' : 'watch' } : library),
+  ...(mediaEnabled ? mediaLibraries.map(({ experience, ...library }) => experiencesEnabled ? { ...library, experience } : library).map(library => levelsEnabled ? library
+    : { ...library, tabs: library.tabs?.filter(tab => !(tab.kind === 'recommended' && tab.card)) }) : [])];
 const isMedia = (libraryId: string) => mediaEnabled && isMediaLibrary(libraryId);
 /** A library's entries; media libraries list the root level, or `level` when a tab names one. */
 const libraryEntries = (id: string, level?: string): V.RowEntry[] => isMedia(id) ? mediaLibraryEntries(id, level) ?? []
@@ -186,9 +192,12 @@ const titleRow = (id: string, name: string, purpose: V.Row['purpose'], style: st
 const recentFirst = (a: V.Title, b: V.Title) => (b.watch?.lastViewedAt ?? '').localeCompare(a.watch?.lastViewedAt ?? '');
 const continueReading = (g: Grant) => mediaGroups.books.map(title => present(g, title))
   .filter(title => !!title.watch?.reading && !title.watch.played && !removedContinue.has(title.id)).sort(recentFirst);
-// Audiobooks and their parts resume; music never enters Continue.
-const continueListening = () => [...mediaGroups.audiobooks, ...mediaGroups.parts]
-  .filter(title => (title.watch?.positionSeconds ?? 0) > 0 && !title.watch?.played && !removedContinue.has(title.id)).sort(recentFirst);
+// Audiobooks, their parts and podcast episodes resume; music never enters Continue.
+const continueListening = (only?: 'audiobook' | 'podcast') => [...mediaGroups.audiobooks, ...mediaGroups.parts, ...mediaGroups.episodes]
+  .filter(title => (!only || title.media?.class === only) && (title.watch?.positionSeconds ?? 0) > 0 && !title.watch?.played && !removedContinue.has(title.id)).sort(recentFirst);
+/** Each show's newest episode the viewer has not heard, newest first. */
+const newEpisodes = () => mediaGroups.shows.flatMap(show => mediaChildren(show.id).filter(episode => !episode.watch?.played && !(episode.watch?.positionSeconds)).slice(0, 1))
+  .sort((a, b) => (b.airDate ?? '').localeCompare(a.airDate ?? ''));
 const recentAlbums = () => [...mediaGroups.albums].sort((a, b) => (b.airDate ?? '').localeCompare(a.airDate ?? ''));
 function mediaHomeRows(g: Grant): V.Row[] {
   if (!mediaEnabled || labPreset) return [];
@@ -216,7 +225,11 @@ function mediaLibraryRows(g: Grant, libraryId: string, tab?: string): V.Row[] {
   if (libraryId === 'books') return [...titleRow('books-continue', 'Continue reading', 'continue', 'poster', continueReading(g)),
     ...titleRow('books-series', 'Series to start', 'recommendation', 'poster', mediaGroups.series),
     ...titleRow('books-standalone', 'Standalone reads', 'collection', 'poster', mediaGroups.books.filter(book => !book.media?.parents?.length).map(book => present(g, book)))];
-  return [...titleRow('audiobooks-continue', 'Continue listening', 'continue', 'square', continueListening()),
+  if (libraryId === 'photos') return titleRow('photos-recent', 'Recent photos', 'recentlyAdded', 'square', mediaGroups.photos);
+  if (libraryId === 'podcasts') return [...titleRow('podcasts-continue', 'Continue listening', 'continue', 'square', continueListening('podcast')),
+    ...titleRow('podcasts-new', 'New episodes', 'recentlyReleased', 'square', newEpisodes()),
+    ...titleRow('podcasts-shows', 'Your shows', 'collection', 'square', mediaGroups.shows)];
+  return [...titleRow('audiobooks-continue', 'Continue listening', 'continue', 'square', continueListening('audiobook')),
     ...titleRow('audiobooks-recent', 'Recently added', 'recentlyAdded', 'square', [...mediaGroups.audiobooks].sort((a, b) => (b.year ?? 0) - (a.year ?? 0)))];
 }
 /** Playlist members: playable leaves of a media container (an album's tracks, an artist's albums). */
@@ -811,7 +824,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (body.library !== undefined && !visibleLibraries.some(l => l.id === body.library)) fail('request', 'invalid_library', 'Invalid library');
     const libraryIds = body.library ? new Set(libraryEntries(body.library).flatMap(e => e.kind === 'title' ? [e.title.id] : [])) : undefined;
     const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
-    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks].map(t => present(g, t)) : [])];
+    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks, ...mediaGroups.shows].map(t => present(g, t)) : [])];
     const found = (byName: boolean) => searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (byName ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
     // Auto (unified search): titles by name; description matches only when no name matches.
     const named = body.mode === 'descriptive' ? [] : found(true);
@@ -1111,7 +1124,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 

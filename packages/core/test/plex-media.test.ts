@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { libraryExperience } from '../src/library-presentation';
 import { PlexAdapter } from '../src/adapter/plex';
 import { partAt, plexProjection } from '../src/adapter/plex/media';
 import { FakeCredentials, restoreFetch, routeFetch } from './helpers';
@@ -51,6 +52,8 @@ describe('Plex media sections', () => {
       ['Audiobooks', 'audiobook', 'square', ['recommended', 'library', 'artist']],
       ['Photos', 'photo', 'square', ['recommended', 'library']],
     ]);
+    // Plex has no features.libraryExperiences: each library opens in its experience by class.
+    expect(libraries.map(l => libraryExperience(l, undefined))).toEqual(['watch', 'listen', 'listen', 'gallery']);
     const types: (string | null)[] = [];
     for (const tab of [undefined, 'artists', 'tracks']) {
       await adapter.library('2', { tab });

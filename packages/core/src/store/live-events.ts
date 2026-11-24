@@ -358,7 +358,7 @@ export class LiveEvents {
   }
 
   private receive(name: string, data: string): void {
-    const message = readLiveMessage(name, data);
+    const message = readLiveMessage(name, data, this.session.selected().record.origin);
     if (message.kind === 'update') {
       this.merge(message.events);
       for (const event of message.events) this.followDetail(event.id);

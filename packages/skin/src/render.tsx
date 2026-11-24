@@ -29,8 +29,8 @@ import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
-import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
-import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
+import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type ScreenPress, type SkinHost } from './host';
+import { EscapeScope, focusElement, focusPressed, focusTarget, leaveButton, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { useFocusStyles } from './focus';
 import { focusStyle } from './focus-style';
@@ -50,11 +50,12 @@ import { Arrive, EASE_IN, MOTION } from './presence';
 import { needsAnimatedFrame } from './animated-frame';
 import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
-import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
+import { fill, holds, type CssT, type Layer, type RNode, type RPress, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
 import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocabulary';
 import { itemKey, items } from './screen/items';
 import { screenImageSrc } from './screen/scope';
+import { BlockView } from './screen/block-view';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
@@ -152,7 +153,7 @@ const HOME_SLOW_NODE: Extract<RNode, { kind: 'widget' }> = {
 };
 
 
-export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
+export function SkinRoot({ host, node, ctx = ROOT_CONTEXT }: { host: SkinHost; node: RNode; /** The root binding context (a screen's). */ ctx?: Ctx }) {
   useFocusStyles();
   useEffect(() => {
     if (host.doc.unsupported.length) console.warn(`${host.doc.name}: rows outside the React Native style matrix: ${host.doc.unsupported.join(', ')}`);
@@ -164,7 +165,7 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
   return (
     <TrackedHost host={drawn}>
       <NavFit.Provider value={reportNav}>
-        <SkinNode node={node} ctx={ROOT_CONTEXT} />
+        <SkinNode node={node} ctx={ctx} />
       </NavFit.Provider>
     </TrackedHost>
   );
@@ -237,8 +238,10 @@ function FitCell({ id, fit, measure, children }: { id: string; fit: string | nul
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is
  * open); `lead` is the host's own element drawn first in that scroll (Apple TV search's Back). */
-function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = false, openingFocus = true }: {
+function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = false, openingFocus = true, ctx: rootCtx = ROOT_CONTEXT }: {
   host: SkinHost; node: RNode; after?: RNode; lead?: ReactNode; hideLibraryViews?: boolean;
+  /** The root binding context (a screen document's: screen/items screenRoot). */
+  ctx?: Ctx;
   /** Off where focus belongs elsewhere as the route opens (Apple TV's search keyboard above results). */
   openingFocus?: boolean;
 }) {
@@ -296,8 +299,8 @@ function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = fals
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
               <HiddenLibraryNav.Provider value={hideLibraryViews || floatingLibraryNav}>
                 {floatingLibraryNav && host.env.load !== 'ready' ? (
-                  <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} /></View>
-                ) : <SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} />}
+                  <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={rootCtx} route after={after} /></View>
+                ) : <SkinNode node={node} ctx={rootCtx} route after={after} />}
               </HiddenLibraryNav.Provider>
             </InstantContent.Provider>
           </RouteLead.Provider></RouteLayout.Provider>
@@ -321,7 +324,7 @@ function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = fals
   );
 }
 
-export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after && a.lead === b.lead
+export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after && a.lead === b.lead && a.ctx === b.ctx
   && a.hideLibraryViews === b.hideLibraryViews && a.openingFocus === b.openingFocus
   && sameRouteHost(a.host, b.host, [b.node, b.after, b.host.doc.libraryViews]));
 
@@ -407,6 +410,17 @@ function HeroCopy({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx
   })}</>;
 }
 
+/** A screen press with its arguments and optimistic patch filled where it was drawn. */
+function screenPress(press: RPress, arg: string, node: RNode, ctx: Ctx, env: Env): ScreenPress {
+  const args = Object.fromEntries(Object.entries(press.args ?? {}).map(([name, value]) => [name, fill(value, ctx, env)]));
+  const o = press.optimistic;
+  return {
+    action: press.action, arg, args,
+    ...(o ? { optimistic: { ...(o.record ? { record: fill(o.record, ctx, env) } : {}), ...(o.source ? { source: o.source } : {}), path: o.path, value: fill(o.value, ctx, env) } } : {}),
+    control: fill(node.id, ctx, env) || fill(node.testId, ctx, env) || fill(node.label, ctx, env) || `${press.action}:${arg}`,
+  };
+}
+
 /** How many times a node's onChange value has changed while drawn (screens). */
 const ChangeCount = createContext(0);
 
@@ -487,6 +501,10 @@ function SkinNodeView({ node, ctx, route, after, hero, changed }: { node: RNode;
     case 'icon': return <Icon node={node} ctx={ctx} />;
     case 'slot': return <Slot node={node} ctx={ctx} />;
     case 'widget': return <Widget node={node} ctx={ctx} />;
+    // Renderer 19 blocks (docs/plugin-screens.md), drawn by ./blocks through the screen's runtime.
+    case 'sections': case 'shelf': case 'grid': case 'marquee': case 'tabs': case 'table':
+    case 'lineGraph': case 'player': case 'paramInput': case 'titleCard':
+      return <BlockView node={node} ctx={ctx} />;
   }
 }
 
@@ -999,6 +1017,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         }
         unregister?.();
         untrack?.();
+        leaveButton(target);
         if (contextTarget && contextHandler) contextTarget.removeEventListener('contextmenu', contextHandler);
         unepisode?.();
       };
@@ -1022,10 +1041,12 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
       notePress(buttonRef.current, `${press.action}:${arg}`);
+      focusPressed(buttonRef.current);
       // Pausing or playing the slideshow clears the hold its keyboard focus placed, so play takes
       // effect while focus stays on the control.
       if (heroControl && press.action === 'toggle') host.setFlag('hero-interacting', false);
-      host.dispatch(press.action, arg);
+      if (ctx.screen && host.screenPress) host.screenPress(screenPress(press, arg, node, ctx, env));
+      else host.dispatch(press.action, arg);
       // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
       if (focus) requestAnimationFrame(() => focusElement(focus));
     });
@@ -1734,3 +1755,8 @@ export function page(rowId: string, direction: 1 | -1, inset = 0, peek = 0): voi
 const styles = StyleSheet.create({
   searchGuide: { alignSelf: 'stretch', alignItems: 'center' },
 });
+
+/** Any resolved node drawn in a context (a screen's blocks draw their items through this). */
+export function SkinNodeFor({ node, ctx }: { node: RNode; ctx: Ctx }) {
+  return <SkinNode node={node} ctx={ctx} />;
+}
