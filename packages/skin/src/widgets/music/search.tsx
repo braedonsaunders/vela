@@ -19,7 +19,7 @@ import { pad, playlistCard } from './pages';
 import { FocusGroup, FocusScope, MusicTile, PlayFab, Shelf, Surface, transition } from './parts';
 import { ItemList } from './spoken';
 import { TrackList } from './tracks';
-import { booksBy, listeningResults, type ListeningResults, type ResultGroup, type ResultPerson } from './search-results';
+import { albumsTab, booksBy, listeningResults, seeAllAlbums, type ListeningResults, type ResultGroup, type ResultPerson } from './search-results';
 
 const OWN_KEYBOARD = ownKeyboard(Platform.OS, Platform.isTV);
 const web = Platform.OS === 'web';
@@ -229,6 +229,9 @@ function ResultGroups({ results, query }: { results: ListeningResults; query: st
   const tv = musicTV();
   const [person, setPerson] = useState<ResultPerson | null>(null);
   const [allSongs, setAllSongs] = useState(false);
+  // Albums' "See all": the artist's whole discography, or every album the library matches.
+  const albumView = useVelaState(state => !!albumsTab(state.libraries.value?.find(library => library.id === app.libraryId)?.tabs));
+  const allAlbums = app.listening === 'music' ? seeAllAlbums(results, query, albumView) : undefined;
   useEffect(() => { setPerson(null); setAllSongs(false); }, [query]);
   const lead = results.groups.find(g => g.layout === 'rows');
   // Wide (and a TV): the top result beside the first songs (or episodes), as one band.
@@ -260,7 +263,8 @@ function ResultGroups({ results, query }: { results: ListeningResults; query: st
       ) : leadRows}
       {rest.map(group => group.layout === 'people'
         ? <PeopleShelf key={group.id} group={group} onPick={setPerson} />
-        : <View key={group.id} style={{ marginHorizontal: -12 }}><Shelf title={msg(group.title)}>{group.items.map(card => <MusicTile key={card.id} card={card} size={tv ? 200 : m.small ? 132 : 168} subtitle={tileLine(card, app.listening)} testID={`music-search-${group.id}-${card.id}`} />)}</Shelf></View>)}
+        : <View key={group.id} style={{ marginHorizontal: -12 }}><Shelf title={msg(group.title)}
+          {...(group.id === 'albums' && allAlbums ? { onMore: () => app.go(allAlbums), moreLabel: msg('music.seeAll'), moreTestID: 'music-search-albums-all' } : {})}>{group.items.map(card => <MusicTile key={card.id} card={card} size={tv ? 200 : m.small ? 132 : 168} subtitle={tileLine(card, app.listening)} testID={`music-search-${group.id}-${card.id}`} />)}</Shelf></View>)}
     </View>
   );
 }

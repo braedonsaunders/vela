@@ -7,8 +7,10 @@ import { join } from 'node:path';
 import type { Card } from '@vela/core';
 import { listeningWords } from '../src/widgets/music/listening';
 import {
-  booksBy, creditedPeople, forgetSearch, listeningResults, nameMatches, readRecent, rememberSearch, RECENT_LIMIT, scopedItems, topResult,
+  albumsTab, booksBy, creditedPeople, forgetSearch, listeningResults, nameMatches, readRecent, rememberSearch, RECENT_LIMIT, scopedItems, seeAllAlbums, topResult,
 } from '../src/widgets/music/search-results';
+import { parsePlace, placeParam } from '../src/widgets/music/place';
+import { nearEnd } from '../src/widgets/music/scroll-end';
 
 const catalogue = JSON.parse(readFileSync(join(import.meta.dir, '../../core/src/i18n/strings/en.json'), 'utf8')) as Record<string, string>;
 
@@ -153,4 +155,66 @@ test('recent searches read back from storage; anything malformed reads as none',
   expect(readRecent('not json')).toEqual([]);
   expect(readRecent('{"a":1}')).toEqual([]);
   expect(readRecent(JSON.stringify(['a', 3, '', 'b']))).toEqual(['a', 'b']);
+});
+
+const artistOf = (id: string, name: string) => ({ parents: [{ id, name, role: 'artist' }] } as Partial<Media>);
+const crash = card('Crash', { role: 'album', ...artistOf('dmb', 'Dave Matthews Band') }, { kind: 'season' });
+const busted = card('Busted Stuff', { role: 'album', ...artistOf('dmb', 'Dave Matthews Band') }, { kind: 'season' });
+const someDevil = card('Some Devil', { role: 'album', ...artistOf('dave', 'Dave Matthews') }, { kind: 'season' });
+const dmb = card('Dave Matthews Band', { role: 'artist' }, { kind: 'show' });
+
+test("Albums' See all opens the top artist's page when every album is theirs; mixed albums open every match", () => {
+  const own = card('Crash', { role: 'album', ...artistOf('Dave Matthews Band', 'Dave Matthews Band') }, { kind: 'season' });
+  const alone = listeningResults([dmb, own], 'dave matthews band', 'music', true);
+  expect(alone.top?.id).toBe('Dave Matthews Band');
+  expect(seeAllAlbums(alone, 'dave matthews band', true)).toEqual({ kind: 'title', id: 'Dave Matthews Band' });
+  // "Dave Matthews": the solo artist on top, albums by him and by the band: the artist's page
+  // would list fewer than the shelf, so the library's albums matching the query open.
+  const mixed = listeningResults([dmb, crash, someDevil], 'dave matthews', 'music', true);
+  expect(seeAllAlbums(mixed, 'dave matthews', true)).toEqual({ kind: 'albums', query: 'dave matthews' });
+  // A library without an album view: the top artist's page.
+  expect(seeAllAlbums(mixed, 'dave matthews', false)).toEqual({ kind: 'title', id: 'Dave Matthews Band' });
+});
+
+test("Albums' See all opens the one artist every album found is by, the byline's link standing in for a parent", () => {
+  const results = listeningResults([crash, busted], 'crash', 'music', true);
+  expect(seeAllAlbums(results, 'crash', true)).toEqual({ kind: 'title', id: 'dmb' });
+  const linked = card('Linked', { role: 'album', bylineTarget: 'title:dmb' }, { kind: 'season' });
+  expect(seeAllAlbums(listeningResults([crash, linked], 'x', 'music', true), 'x', false)).toEqual({ kind: 'title', id: 'dmb' });
+});
+
+test("albums by several artists open every album the library matches, only where the library has that view", () => {
+  const results = listeningResults([crash, someDevil], ' dave ', 'music', true);
+  expect(seeAllAlbums(results, ' dave ', true)).toEqual({ kind: 'albums', query: 'dave' });
+  expect(seeAllAlbums(results, 'dave', false)).toBeUndefined();
+  // An album without a known artist is not "one artist".
+  const loose = card('Loose', { role: 'album' }, { kind: 'season' });
+  expect(seeAllAlbums(listeningResults([crash, loose], 'x', 'music', true), 'x', true)).toEqual({ kind: 'albums', query: 'x' });
+  // No albums group, no See all.
+  expect(seeAllAlbums(listeningResults([yellow], 'yellow', 'music', true), 'yellow', true)).toBeUndefined();
+});
+
+test("the library's album view is its searchable album-level view tab, never a collections tab at that level", () => {
+  expect(albumsTab([
+    { id: 'genres', label: 'Genres', kind: 'collections', level: 'album', search: true },
+    { id: 'artists', label: 'Artists', kind: 'view', level: 'artist', search: true },
+    { id: 'albums', label: 'Albums', kind: 'view', level: 'album', search: true },
+  ])).toBe('albums');
+  expect(albumsTab([{ id: 'albums', label: 'Albums', kind: 'view', level: 'album' }])).toBeUndefined();
+  expect(albumsTab(undefined)).toBeUndefined();
+});
+
+test('the albums a search matches have an address of their own, the query kept as typed', () => {
+  const place = parsePlace(placeParam({ kind: 'albums', query: 'dave: live' }));
+  expect(place).toEqual({ kind: 'albums', query: 'dave: live' });
+  expect(parsePlace('albums:')).toEqual({ kind: 'home' });
+  expect(parsePlace('albums:  ')).toEqual({ kind: 'home' });
+});
+
+test('a paged list reads on within a screen of its end, and at once when it does not fill the page', () => {
+  expect(nearEnd({ offset: 0, viewport: 800, content: 4000 })).toBe(false);
+  expect(nearEnd({ offset: 2400, viewport: 800, content: 4000 })).toBe(true);
+  expect(nearEnd({ offset: 0, viewport: 800, content: 600 })).toBe(true);
+  // Not laid out yet: nothing is known, so nothing is read.
+  expect(nearEnd({ offset: 0, viewport: 0, content: 0 })).toBe(false);
 });

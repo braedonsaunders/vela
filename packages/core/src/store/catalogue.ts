@@ -37,15 +37,18 @@ export interface LibraryQuery {
   year?: number;
   played?: boolean;
   favorite?: boolean;
+  /** Titles per page, when the view asks other than 100 (the music app's albums asks 50). */
+  limit?: number;
 }
 
 /** The key a library view is kept under in state (`state.library`). */
 export function libraryKey(id: string, query: LibraryQuery): string {
-  const { tab, sort, direction, kind, genre, year, played, favorite, collectionId } = query;
+  const { tab, sort, direction, kind, genre, year, played, favorite, collectionId, limit } = query;
   const facets = Object.entries(query.facets ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([field, values]) => [field, [...new Set(values)].sort()]);
-  return JSON.stringify([id, tab, sort, direction, kind, genre, year, played, favorite, collectionId, query.query, facets]);
+  const key = [id, tab, sort, direction, kind, genre, year, played, favorite, collectionId, query.query, facets];
+  return JSON.stringify(limit === undefined ? key : [...key, limit]);
 }
 
 const PAGE = 100;
@@ -436,7 +439,7 @@ export class Catalogue {
     return { ...row, items: row.items.map(item => withDateDisplay(item, display)) };
   }
 
-  /** One library view, `pages` pages deep (100 items a page). A background revisit
+  /** One library view, `pages` pages deep (100 items a page, or the query's `limit`). A background revisit
    * keeps a cached view ready, including if the refresh fails. Concurrent reads share work. */
   library(id: string, query: LibraryQuery = {}, pages = 1, background = false): Promise<void> {
     const key = libraryKey(id, query);
@@ -452,7 +455,7 @@ export class Catalogue {
     const extend = !background && held && held.pages < pages && snapshot?.cursor ? { held, snapshot } : undefined;
     const reading = this.read('library', key, async connection => {
       const api = connection.adapter;
-      const browse: V.LibraryBrowseQuery = { ...query, limit: PAGE };
+      const browse: V.LibraryBrowseQuery = { ...query, limit: query.limit ?? PAGE };
       const load = async (previous: typeof extend, fresh: boolean) => {
         const seen = new Set(previous?.snapshot.seen);
         const entries = new Map<string, V.RowEntry>();
