@@ -14,7 +14,10 @@
     "multiview": "Multiview",
     "addToMultiview": "Add to multiview",
     "onNow": "On this channel now",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "press": "Press",
+    "toWatch": "to watch",
+    "toAddToMultiview": "to add to multiview"
   },
   "palette": { "toast": "#0b0f1a", "glass": "#0b0f1af0" },
   "motion": { "countdown": { "keyframes": "doc:countdown", "duration": 12000, "easing": "linear", "fill": "both", "still": { "keyframes": "none", "duration": 0 } } },
@@ -64,6 +67,7 @@
                       {
                         "type": "text",
                         "text": "{context.alert.title}",
+                        "tv": { "letter-spacing": "0.4px" },
                         "style": { "font-size": "13px", "font-weight": "800", "color": "$ui.inkSecondary", "flex": "1", "line-clamp": "1" },
                         "states": [
                           { "when": [{ "test": "context.alert.kind", "is": "eq", "value": "started" }], "style": { "color": "$ui.live" } },
@@ -186,6 +190,80 @@
                       { "test": "context.channel", "is": "eq", "value": "channel:{src.game.event.watch.primary.channelId}" }
                     ],
                     "style": { "font-size": "12px", "font-weight": "600", "color": "$ui.inkSecondary", "margin-top": "2px" }
+                  },
+                  {
+                    "type": "box",
+                    "when": [
+                      { "test": "env.tv" },
+                      { "test": "src.game.event.watch.primary.channelId" },
+                      { "test": "context.channel", "is": "ne", "value": "channel:{src.game.event.watch.primary.channelId}" },
+                      { "test": "env.canMultiview" },
+                      { "test": "context.channel" }
+                    ],
+                    "style": { "flex-direction": "row", "align-items": "center", "gap": "5px", "margin-top": "2px" },
+                    "children": [
+                      { "type": "text", "text": "{s:press}", "style": { "font-size": "11px", "font-weight": "500", "color": "$ui.inkQuiet" } },
+                      {
+                        "type": "icon",
+                        "paths": ["M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"],
+                        "style": { "width": "11px", "height": "11px", "font-size": "11px", "color": "$ui.inkSecondary" }
+                      },
+                      {
+                        "type": "icon",
+                        "paths": ["M6.5 4.5h3.5v15H6.5zM14 4.5h3.5v15H14z"],
+                        "style": { "width": "11px", "height": "11px", "font-size": "11px", "color": "$ui.inkSecondary" }
+                      },
+                      { "type": "text", "text": "{s:toAddToMultiview}", "style": { "font-size": "11px", "font-weight": "500", "color": "$ui.inkQuiet" } }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "when": [
+                      { "test": "env.tv" },
+                      { "test": "src.game.event.watch.primary.channelId" },
+                      { "test": "context.channel", "is": "ne", "value": "channel:{src.game.event.watch.primary.channelId}" },
+                      { "test": "env.canMultiview", "not": true }
+                    ],
+                    "style": { "flex-direction": "row", "align-items": "center", "gap": "5px", "margin-top": "2px" },
+                    "children": [
+                      { "type": "text", "text": "{s:press}", "style": { "font-size": "11px", "font-weight": "500", "color": "$ui.inkQuiet" } },
+                      {
+                        "type": "icon",
+                        "paths": ["M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"],
+                        "style": { "width": "11px", "height": "11px", "font-size": "11px", "color": "$ui.inkSecondary" }
+                      },
+                      {
+                        "type": "icon",
+                        "paths": ["M6.5 4.5h3.5v15H6.5zM14 4.5h3.5v15H14z"],
+                        "style": { "width": "11px", "height": "11px", "font-size": "11px", "color": "$ui.inkSecondary" }
+                      },
+                      { "type": "text", "text": "{s:toWatch}", "style": { "font-size": "11px", "font-weight": "500", "color": "$ui.inkQuiet" } }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "when": [
+                      { "test": "env.tv" },
+                      { "test": "src.game.event.watch.primary.channelId" },
+                      { "test": "context.channel", "is": "ne", "value": "channel:{src.game.event.watch.primary.channelId}" },
+                      { "test": "env.canMultiview" },
+                      { "test": "context.channel", "not": true }
+                    ],
+                    "style": { "flex-direction": "row", "align-items": "center", "gap": "5px", "margin-top": "2px" },
+                    "children": [
+                      { "type": "text", "text": "{s:press}", "style": { "font-size": "11px", "font-weight": "500", "color": "$ui.inkQuiet" } },
+                      {
+                        "type": "icon",
+                        "paths": ["M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"],
+                        "style": { "width": "11px", "height": "11px", "font-size": "11px", "color": "$ui.inkSecondary" }
+                      },
+                      {
+                        "type": "icon",
+                        "paths": ["M6.5 4.5h3.5v15H6.5zM14 4.5h3.5v15H14z"],
+                        "style": { "width": "11px", "height": "11px", "font-size": "11px", "color": "$ui.inkSecondary" }
+                      },
+                      { "type": "text", "text": "{s:toWatch}", "style": { "font-size": "11px", "font-weight": "500", "color": "$ui.inkQuiet" } }
+                    ]
                   }
                 ]
               }

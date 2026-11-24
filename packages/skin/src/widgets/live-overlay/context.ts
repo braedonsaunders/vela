@@ -64,7 +64,8 @@ const tickerListeners = new Set<() => void>();
 export function useTickerPreference(): [boolean, (on: boolean) => void] {
   const { preferences } = useLiveOverlayActions();
   if (tickerOn === undefined) {
-    try { tickerOn = preferences?.get(TICKER_KEY) === '1'; } catch { tickerOn = false; }
+    // EXPO_PUBLIC_VELA_TICKER=1: on from the start, for parity captures on a simulator (no remote to press).
+    try { tickerOn = preferences?.get(TICKER_KEY) === '1' || process.env.EXPO_PUBLIC_VELA_TICKER === '1'; } catch { tickerOn = false; }
   }
   const on = useSyncExternalStore(
     listener => { tickerListeners.add(listener); return () => { tickerListeners.delete(listener); }; },

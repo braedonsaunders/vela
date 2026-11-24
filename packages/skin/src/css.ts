@@ -18,6 +18,8 @@ export interface Viewport {
   /** Points per CSS px here, when a host draws at its own scale (a plugin overlay over the TV player
    * draws in the player look's 1.4); else the platform's (PX, or Android TV's pixel scale). */
   pxScale?: number;
+  /** With pxScale: the points lengths round to (the player look rounds each size to whole points). */
+  pxStep?: number;
 }
 
 /** What a length is measured against: the font size in force, and which viewport axis a

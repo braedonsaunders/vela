@@ -38,6 +38,7 @@
           "text": "{arg.abbr}",
           "style": { "font-size": "15px", "font-weight": "750", "color": "$ui.ink", "line-clamp": "1" },
           "small": { "font-size": "12px" },
+          "tv": { "letter-spacing": "0.4px" },
           "states": [{ "when": [{ "test": "arg.loser" }], "style": { "opacity": "0.6" } }]
         },
         { "type": "use", "template": "crest", "with": { "logo": "{arg.logo}", "color": "{arg.color}" }, "when": [{ "test": "arg.trailing" }] },
@@ -152,12 +153,12 @@
             "style": {
               "flex-direction": "row",
               "align-items": "stretch",
-              "height": "36px",
+              "height": "36.1px",
               "border-radius": "min($ui.radiusControl, 10px)",
               "overflow": "hidden",
               "border": "1px solid #ffffff14"
             },
-            "small": { "height": "25px", "border-radius": "min($ui.radiusControl, 7px)" },
+            "small": { "height": "24.9px", "border-radius": "min($ui.radiusControl, 7px)" },
             "tv": { "border-width": "0px" },
             "children": [
               {
@@ -527,12 +528,12 @@
             "style": {
               "flex-direction": "row",
               "align-items": "stretch",
-              "height": "36px",
+              "height": "36.1px",
               "border-radius": "min($ui.radiusControl, 10px)",
               "overflow": "hidden",
               "border": "1px solid #ffffff14"
             },
-            "small": { "height": "25px", "border-radius": "min($ui.radiusControl, 7px)" },
+            "small": { "height": "24.9px", "border-radius": "min($ui.radiusControl, 7px)" },
             "tv": { "border-width": "0px" },
             "children": [
               {
