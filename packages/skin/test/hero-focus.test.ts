@@ -1,36 +1,97 @@
-// On TV a focused hero button can leave as the carousel rotates (the title now on show has other
-// buttons); the hero button arriving in its place takes the focus back, once.
+// On TV the hero on show keeps its buttons as the carousel rotates, but titles differ in which
+// buttons they have. When the focused one leaves, focus goes back to the hero's primary button
+// (Play or Resume, else More info, Restart last), never to the pager.
 import { expect, test } from 'bun:test';
-import { HERO_FOCUS_CARRY_MS, heroFocusCarry } from '../src/hero-focus';
+import { heroButtonRank, heroFocusCarry } from '../src/hero-focus';
 
-test('a focused hero button that leaves hands its focus to the one arriving', () => {
-  const carry = heroFocusCarry();
-  carry.left(true, 1000);
-  expect(carry.arrives(1000)).toBe(true);
+const resume = heroButtonRank('play', 'title-1');
+const restart = heroButtonRank('play', 'title-1|||0');
+const moreInfo = heroButtonRank('select', 'movie|title-1');
+
+test('Play and Resume rank first, More info next, Restart last', () => {
+  expect(resume).toBeLessThan(moreInfo);
+  expect(moreInfo).toBeLessThan(restart);
 });
 
-test('the focus is handed on once', () => {
-  const carry = heroFocusCarry();
-  carry.left(true, 1000);
-  expect(carry.arrives(1000)).toBe(true);
-  expect(carry.arrives(1001)).toBe(false);
+test('a focused button leaving hands focus to the primary button arriving in its place', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('psycho-resume', resume);
+  carry.focused('psycho-resume', true);
+  expect(carry.remove('psycho-resume')).toBe(true);
+  // A title with nothing to resume: More info and a fresh Play arrive in the same redraw, Play
+  // drawn after Restart's sibling would have been.
+  carry.add('derry-more', moreInfo);
+  carry.add('derry-play', resume);
+  expect(carry.take()).toBe('derry-play');
 });
 
-test('a hero button that leaves without focus hands nothing on', () => {
-  const carry = heroFocusCarry();
-  carry.left(false, 1000);
-  expect(carry.arrives(1000)).toBe(false);
+test('a title with nothing to play hands focus to More info', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('moon-resume', resume);
+  carry.add('moon-more', moreInfo);
+  carry.focused('moon-resume', true);
+  expect(carry.remove('moon-resume')).toBe(true);
+  carry.remove('moon-more');
+  carry.add('clover-more', moreInfo);
+  expect(carry.take()).toBe('clover-more');
 });
 
-test('a hero button arriving long after the focused one left does not take focus', () => {
-  const carry = heroFocusCarry();
-  carry.left(true, 1000);
-  expect(carry.arrives(1000 + HERO_FOCUS_CARRY_MS + 1)).toBe(false);
+test('Restart arriving with Resume does not win the focus', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('clover-more', moreInfo);
+  carry.focused('clover-more', true);
+  expect(carry.remove('clover-more')).toBe(true);
+  carry.add('psycho-restart', restart);
+  carry.add('psycho-resume', resume);
+  carry.add('psycho-more', moreInfo);
+  expect(carry.take()).toBe('psycho-resume');
 });
 
-test('an unfocused button leaving in the same redraw keeps the focused one\'s hand-off', () => {
-  const carry = heroFocusCarry();
-  carry.left(true, 1000);
-  carry.left(false, 1000);
-  expect(carry.arrives(1000)).toBe(true);
+test('focus on a leaving Restart goes to the primary button that stays', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('primary', resume);
+  carry.add('psycho-restart', restart);
+  carry.focused('psycho-restart', true);
+  expect(carry.remove('psycho-restart')).toBe(true);
+  expect(carry.take()).toBe('primary');
+});
+
+test('a focused button only redrawn (released and bound again) loses nothing', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('more', moreInfo);
+  carry.add('resume', resume);
+  carry.focused('more', true);
+  expect(carry.remove('more')).toBe(true);
+  carry.add('more', moreInfo);
+  expect(carry.take()).toBeUndefined();
+  // It still counts as focused: leaving for real later hands focus on.
+  expect(carry.remove('more')).toBe(true);
+  expect(carry.take()).toBe('resume');
+});
+
+test('a button leaving without focus hands nothing on', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('resume', resume);
+  carry.add('restart', restart);
+  carry.focused('resume', true);
+  expect(carry.remove('restart')).toBe(false);
+  expect(carry.take()).toBeUndefined();
+});
+
+test('focus moved away from the hero is not handed back', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('resume', resume);
+  carry.focused('resume', true);
+  carry.focused('resume', false);
+  expect(carry.remove('resume')).toBe(false);
+});
+
+test('leaving Home with every hero button hands focus to nothing', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('resume', resume);
+  carry.add('more', moreInfo);
+  carry.focused('resume', true);
+  expect(carry.remove('resume')).toBe(true);
+  carry.remove('more');
+  expect(carry.take()).toBeUndefined();
 });
