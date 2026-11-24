@@ -108,6 +108,7 @@ interface Sim {
   home: string; away: string; scores: [number, number]; lines: [number[], number[]];
   situation?: Record<string, string>; probability: number; series: V.LiveProbabilityPoint[];
   plays: V.LivePlay[]; broadcasts: V.LiveBroadcast[]; venue?: V.LiveEvent['venue'];
+  /** Its plays carry `at` and the score after them (plugin-supplied; a timeshifted viewer sees the score as of the picture). */ timed?: boolean;
   /** Channel indexes (into the mock lineup) carrying it. */ channels: number[]; addon?: string;
   ranking?: V.LiveRankingRow[]; laps?: [number, number];
   updatedAt: string; initial?: string; postedAt?: number;
@@ -139,7 +140,11 @@ function seedFixtures(): void {
       { clock: '6:40', period: 4, text: 'Jones pass deep right to Nabers for 41 yards, TOUCHDOWN · NYG 24–24', emphasis: 'score', competitorId: 'nfl-nyg' },
       { clock: '8:15', period: 4, text: 'Hurts sacked at PHI 30 for -8 yards (Burns)', emphasis: 'key', competitorId: 'nfl-nyg' },
       { clock: '11:02', period: 4, text: 'Hurts 2 yd run, TOUCHDOWN · PHI 24–17', emphasis: 'score', competitorId: 'nfl-phi' },
-    ],
+    ].map((play, n): V.LivePlay => ({ ...play as V.LivePlay,
+      // Timed, with the score after each play; nhl-tor-mtl stays untimed (both asOf paths).
+      at: new Date(now0 - [2, 5, 7, 10, 13, 16, 20][n]! * 60_000).toISOString(),
+      score: n <= 2 ? { 'nfl-nyg': '24', 'nfl-phi': '27' } : n <= 4 ? { 'nfl-nyg': '24', 'nfl-phi': '24' } : { 'nfl-nyg': '17', 'nfl-phi': '24' } })),
+    timed: true,
   });
   makeSim('nhl-tor-mtl', 'nhl', 'MTL', 'TOR', now0 - 1.5 * H, 'in', { period: 2, clock: 520, lines: [[1, 0], [1, 1]], probability: 0.61,
     broadcasts: [{ name: 'Sportsnet', kind: 'tv', region: 'CA' }], channels: [28], situation: { Shots: 'MTL 17 · TOR 24', 'Power play': 'TOR 1:12' },
@@ -404,6 +409,7 @@ function step(sim: Sim): boolean {
     sim.plays.unshift({ clock, period: sim.period, text: `${teamById(side ? sim.home : sim.away)!.short} ${lines[Math.floor(random() * lines.length)]}`, emphasis: 'normal', competitorId: side ? sim.home : sim.away });
     changed = true;
   }
+  if (sim.timed && sim.plays[0] && !sim.plays[0].at) sim.plays[0] = { ...sim.plays[0], at: new Date(sportsNow()).toISOString(), score: { [sim.away]: String(sim.scores[0]), [sim.home]: String(sim.scores[1]) } };
   sim.plays.length = Math.min(sim.plays.length, 60);
   // The period ends: the next starts, or the game is final.
   if (rules.countUp && sim.period === 1 && sim.clock >= 45 * 60) { sim.period = 2; changed = true; }
