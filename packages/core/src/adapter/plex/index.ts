@@ -8,7 +8,7 @@ import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
-import { directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
+import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
@@ -554,8 +554,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (r.audioTrackId !== undefined || r.subtitleTrackId !== undefined) await this.request(`/library/parts/${enc(String(part.id))}`, { audioStreamID: r.audioTrackId, subtitleStreamID: r.subtitleTrackId === null ? 0 : r.subtitleTrackId, allParts: 1 }, 'PUT');
     const original = r.client.originalPlayback;
     const compatible = !!original && original.demuxContainers.includes(media.container) &&
-      (!media.videoCodec || original.videoDecoders.includes(media.videoCodec)) && (!media.audioCodec || original.audioDecoders.includes(media.audioCodec));
-    const nativeCompatible = r.client.containers.includes(media.container) && (!media.videoCodec || r.client.videoCodecs.includes(media.videoCodec)) && (!media.audioCodec || r.client.audioCodecs.includes(media.audioCodec));
+      (!media.videoCodec || original.videoDecoders.includes(media.videoCodec)) && (!media.audioCodec || original.audioDecoders.includes(decoderAudioCodec(media.audioCodec)));
+    const nativeCompatible = r.client.containers.includes(media.container) && (!media.videoCodec || r.client.videoCodecs.includes(media.videoCodec)) && (!media.audioCodec || r.client.audioCodecs.includes(decoderAudioCodec(media.audioCodec)));
     const direct = (compatible || nativeCompatible) && !burnSubtitle && !stacked;
     if (!direct && r.allowTranscode === false) fail(burnSubtitle ? 'Selected Plex subtitle requires transcoding' : 'Original media is incompatible and transcoding is disabled', 'playback');
     const paths: V.PlaybackPath[] = [];
