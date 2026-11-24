@@ -18,7 +18,7 @@ import type { Focusable } from '../../escape';
 import { useGuideLook, type GuideLook, alpha } from '../guide/look';
 import { Line, LogoTile, Press } from '../guide/parts';
 import { PlayerIcon } from '../player/icons';
-import { ScoreBug } from '../live-overlay/score-bug';
+import { TileOverlays } from '../../surfaces/player';
 import { refusalTitle } from './refusal';
 import type { LiveEventRef, MultiviewController, MultiviewTile, MultiviewView } from './controller';
 import { featureBand, placement, slotRects, type MultiviewLayout, type Rect, type Size } from './layout';
@@ -262,7 +262,9 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
         ) : null}
         {tile.liveEvent && playing ? (
           <Animated.View style={{ position: 'absolute', left: 0, top: 0, transformOrigin: 'left top', transform: [{ scale: counter }] } as never}>
-            <View style={{ padding: TV ? 18 : 10 }}><ScoreBug eventId={tile.liveEvent.id} size={fullscreen ? 'full' : 'tile'} /></View>
+            <View style={{ padding: TV ? 18 : 10 }}>
+              <TileOverlays channelId={tile.channelId} eventId={tile.liveEvent.id} feed={tile.liveEvent.feed} width={fullscreen ? size.width : Math.min(rect.width, 600)} />
+            </View>
           </Animated.View>
         ) : null}
         {tile.buffering ? (
@@ -406,7 +408,9 @@ function Caption({ look, tile, channel, focused }: {
           </Line>
         </View>
         {channel?.now ? <Line look={look} size={TV ? 12 : 11} color={look.inkQuiet}>{channel.now}</Line> : null}
-        {tile.liveEvent ? <View style={{ marginTop: TV ? 4 : 2, alignSelf: 'flex-start' }}><ScoreBug eventId={tile.liveEvent.id} size="compact" /></View> : null}
+        {tile.liveEvent ? <View style={{ marginTop: TV ? 4 : 2, alignSelf: 'flex-start' }}>
+          <TileOverlays channelId={tile.channelId} eventId={tile.liveEvent.id} feed={tile.liveEvent.feed} width={320} />
+        </View> : null}
       </View>
     </View>
   );

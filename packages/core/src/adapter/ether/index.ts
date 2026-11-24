@@ -11,13 +11,13 @@ import type {
   DeviceGrantSignIn,
   EventStream,
   FallbackCommand,
+  HistoryRecap,
   Interactions,
+  LibraryDuplicates,
   LibraryLive,
-  LiveEntitiesQuery,
-  LiveEvents,
-  LiveStreamQuery,
   LiveTv,
   Multiview,
+  PlaylistImports,
   TileReplan,
   PasswordSignIn,
   PathSwitching,
@@ -25,7 +25,6 @@ import type {
   ProactiveFallback,
   ScreenDataRead,
   QuickConnectSignIn,
-  ScreenQuery,
   SwitchCommand,
   TrackChanges,
   TrackCommand,
@@ -36,7 +35,6 @@ import type {
 import type { TitleActions } from '../capabilities';
 import type { SubtitleSearch } from '../media-actions';
 import { VelaError } from '../errors';
-import { normaliseDetail, normaliseEvents, normaliseScreen } from '../../live/events';
 import { EtherTransport } from './transport';
 import { localeContext } from '../../i18n';
 import type { ScreenTarget } from '../../screens/keys';
@@ -58,7 +56,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  LiveEvents, Multiview, TileReplan, SubtitleSearch, PluginScreens {
+  Multiview, TileReplan, SubtitleSearch, PluginScreens, HistoryRecap, PlaylistImports, LibraryDuplicates {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -366,6 +364,34 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.RecentPlayContexts>('GET', `/recent${query({ limit })}`);
   }
 
+  historyRecap(recapQuery: { period: V.HistoryRecapPeriod; at?: string; library?: string; tz?: string }) {
+    return this.http.request<V.HistoryRecap>('GET', `/history/recap${query(recapQuery)}`);
+  }
+
+  startPlaylistImport(request: V.PlaylistImportRequest) {
+    return this.http.request<V.PlaylistImportJobRef>('POST', '/playlists/import', request);
+  }
+
+  playlistImport(id: string) {
+    return this.http.request<V.PlaylistImport>('GET', `/playlists/import/${segment(id)}`);
+  }
+
+  savePlaylistImport(id: string, request: V.SavePlaylistImportRequest) {
+    return this.http.request<V.PlaylistCard>('POST', `/playlists/import/${segment(id)}/save`, request);
+  }
+
+  libraryDuplicates(libraryId: string, cursor?: string, limit?: number) {
+    return this.http.request<V.DuplicateGroupsPage>('GET', `/libraries/${segment(libraryId)}/duplicates${query({ cursor, limit })}`);
+  }
+
+  titleRecording(id: string) {
+    return this.http.request<V.RecordingReleases>('GET', `/titles/${segment(id)}/recording`);
+  }
+
+  setDuplicatePreference(libraryId: string, recordingId: string, request: V.DuplicatePreferenceRequest) {
+    return this.http.request<V.DuplicateGroup>('POST', `/libraries/${segment(libraryId)}/duplicates/${segment(recordingId)}`, request);
+  }
+
   async titleLyrics(id: string): Promise<V.TitleLyrics | null> {
     try {
       return await this.http.request<V.TitleLyrics>('GET', `/titles/${segment(id)}/lyrics`, undefined, CACHED);
@@ -621,58 +647,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.GuideWindowResponse>('POST', '/live/guide/window', request, CACHED);
   }
 
-  // Live events and plugin screens (features.liveEvents). Live data is never cached here: the
-  // stream keeps it current and a stale answer would show an old score.
-
-  async screen(id: string, screenQuery: ScreenQuery = {}, signal?: AbortSignal) {
-    return normaliseScreen(await this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal }), this.origin);
-  }
-
-  async liveEvents(ids: string[]): Promise<V.LiveEventsResponse> {
-    const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/events${query({ ids: ids.length ? ids.join(',') : undefined })}`);
-    return { ...response, events: normaliseEvents(response?.events, this.origin) };
-  }
-
-  async liveEvent(id: string): Promise<V.LiveEventDetail> {
-    const detail = normaliseDetail(await this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`), this.origin);
-    if (!detail) throw new VelaError({ class: 'source', code: 'invalid_live_event', message: 'The server sent an unreadable live event.', retry: { allowed: true } }, 502);
-    return detail;
-  }
-
-  revealLiveEvent(id: string, request: V.Mutation) {
-    return this.http.request<unknown>('POST', `/live/events/${segment(id)}/reveal`, request);
-  }
-
-  liveEntities(entities: LiveEntitiesQuery) {
-    return this.http.request<V.LiveEntitiesResponse>('GET', `/live/entities${query(entities)}`);
-  }
-
-  setEntityFavorite(key: string, favorite: boolean, request: V.Mutation) {
-    return this.http.request<unknown>(favorite ? 'PUT' : 'DELETE', `/favorites/entities/${segment(key)}`, request);
-  }
-
-  livePreferences() {
-    return this.http.request<V.LivePreferences>('GET', '/live/preferences');
-  }
-
-  setLivePreferences(preferences: V.LivePreferences, request: V.Mutation) {
-    return this.http.request<unknown>('PUT', '/live/preferences', { ...preferences, idempotencyKey: request.idempotencyKey });
-  }
-
-  async liveTicker(screen?: string): Promise<V.LiveEventsResponse> {
-    const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
-    return { ...response, events: normaliseEvents(response?.events, this.origin) };
-  }
-
-  streamLive(live: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
-    const path = `/live/stream${query({ events: live.events.join(',') || undefined, screens: live.screens.join(',') || undefined, alerts: live.alerts ? '1' : undefined })}`;
-    return this.http.stream(path, {}, onEvent, signal);
-  }
-
   // Plugin screens and surfaces (docs/plugin-screens.md; Ether design sections 6 and 7)
 
-  /** A document by its href. Ether serves the current document for a stale `v` (200, no-cache), never a redirect. */
-  /** `fresh`: read past the cache (a Studio reload); drafts in preview are never cached. */
+  /** A document by its href. Ether serves the current document for a stale `v` (200, no-cache),
+   * never a redirect. `fresh`: read past the cache (a Studio reload); drafts are never cached. */
   async screenDocument(href: string, signal?: AbortSignal, fresh = false): Promise<V.ScreenDocument> {
     const path = this.http.boundPath(href);
     if (!path) throw new VelaError({ class: 'request', code: 'invalid_document_href', message: 'A screen document must come from this server.', retry: { allowed: false } }, 400);

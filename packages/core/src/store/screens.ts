@@ -15,8 +15,9 @@ import { chooseTopics, connectionKey, emptyQuery, readScreenMessage, streamQuery
 import type { ScreenPageState } from '../screens/types';
 import type { Session } from './session';
 import { failed, loading, message, previewExpired, ready, type Loadable, type StateBox } from './state';
-import type { LiveStreamPhase } from './live-events';
 import type { VelaState } from './index';
+
+export type LiveStreamPhase = 'idle' | 'connecting' | 'open' | 'retrying';
 
 export interface ScreensState {
   /** Documents by href, read once (immutable for their `v`). */

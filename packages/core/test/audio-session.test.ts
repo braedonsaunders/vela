@@ -34,7 +34,8 @@ async function advance(ms: number): Promise<void> {
   now = end;
 }
 
-function harness() {
+/** `eagerPause`: the engine says 'paused' on every pause, at once, as the web's engines do. */
+function harness({ eagerPause = false } = {}) {
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
   const lost = new Set<string>();
   const plan = (id: string, titleId: string): PlaybackPlan => ({
@@ -59,7 +60,7 @@ function harness() {
   const engine: AudioEngine = {
     load(url, start) { loads.push(url); position = start; },
     play() { playing = true; for (const l of listeners) l('playing'); },
-    pause() { if (!playing) return; playing = false; for (const l of listeners) l('paused'); },
+    pause() { if (!playing && !eagerPause) return; playing = false; for (const l of listeners) l('paused'); },
     seek(seconds) { position = seconds; },
     setRate() {},
     unload() { playing = false; },
@@ -78,7 +79,7 @@ function harness() {
     }
   };
   const end = () => { playing = false; for (const l of listeners) l('ended'); };
-  return { audio, box, starts, stops, loads, lost, play, end, isPlaying: () => playing, position: () => position };
+  return { audio, box, playback, starts, stops, loads, lost, play, end, isPlaying: () => playing, position: () => position };
 }
 
 const track = (id: string) => ({ id, kind: 'episode', name: id, durationSeconds: 200 } as unknown as Card);
@@ -162,4 +163,19 @@ test('a paused item whose session is recovered stays paused at its place on the 
   expect(h.isPlaying()).toBe(true);
   await h.play(2);
   expect(h.starts).toEqual(['t1', 't1']);
+});
+
+test('a film starting over paused music leaves the music paused, with an engine that reports its pause at once', async () => {
+  const h = harness({ eagerPause: true });
+  h.audio.play({ items: [track('t1')], index: 0 });
+  await settle();
+  await h.play(2);
+  h.audio.pause();
+  // Another title takes the playback session: the audio store lets go of its own.
+  await h.playback.start({ kind: 'title', id: 'film' });
+  await settle();
+  expect(h.starts).toEqual(['t1', 'film']);
+  expect(h.box.get().playback.sessionId).toBe('s2');
+  expect(h.box.get().audio.phase).toBe('paused');
+  expect(h.isPlaying()).toBe(false);
 });

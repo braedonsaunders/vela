@@ -50,7 +50,10 @@ const SUBTITLE_SETTINGS = [
   },
 ] as const;
 
-export function SubtitlesMenu({ look, view, blocked, send }: Props) {
+/** A plugin overlay's switch, as the subtitles menu lists it (surfaces/player.tsx). */
+interface OverlayChoice { id: string; label: string; on: boolean; toggle(): void }
+
+export function SubtitlesMenu({ look, view, blocked, send, overlays }: Props & { overlays?: OverlayChoice[] }) {
   const [searching, setSearching] = useState(false);
   const off = view.subtitleId === '' && view.pendingSubtitleId === '';
   const appearance = view.subtitleLook;
@@ -95,6 +98,17 @@ export function SubtitlesMenu({ look, view, blocked, send }: Props) {
               options={values.map(value => ({ value, label: msg(label(value)) }))}
               onPick={value => send({ type: 'subtitleStyle', value: `${setting}=${value}` })}
             />
+          ))}
+        </>
+      ) : null}
+      {overlays?.length ? (
+        <>
+          {/* Every plugin overlay can be switched off here (on screen over the picture). */}
+          <MenuRule look={look} />
+          <MenuHeading look={look} text={msg('player.onScreen')} />
+          {overlays.map(overlay => (
+            <ChoiceRow key={overlay.id} look={look} name={overlay.label} selected={overlay.on} enabled testID={`player-overlay-switch-${overlay.id}`}
+              onChoose={overlay.toggle} />
           ))}
         </>
       ) : null}

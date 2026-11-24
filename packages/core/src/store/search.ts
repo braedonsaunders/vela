@@ -50,6 +50,10 @@ export interface SearchState extends V.SearchOptions {
   match?: NonNullable<V.SearchResponse['match']>;
 }
 
+/** The state slices a search answers in: the app's search, and the audio app's own (musicSearch),
+ * which runs beside it without touching the query the app's field and address show. */
+export type SearchSlice = 'search' | 'musicSearch';
+
 const emptyLane: SearchLane = { status: 'idle', items: [], error: '' };
 
 export const initialSearch: SearchState = {
@@ -87,6 +91,8 @@ export class Search {
    * refused as reused ("heat" collided with an earlier launch's "inception" at generation 2).
    */
   private scope = randomId();
+  /** The library every query is kept to (scopeTo), where the server can restrict search to one. */
+  private scoped: string | undefined;
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -94,19 +100,21 @@ export class Search {
     private readonly artWidth: () => number,
     /** The typing pause before a title search is sent (0 sends at once). */
     private readonly typingMs = TYPING_MS,
+    /** The state slice it answers in: the app's search, or the audio app's (kept to one library). */
+    private readonly slice: SearchSlice = 'search',
   ) {
     session.onReset(() => {
       this.controller.abort();
       this.stopTimers();
       this.scope = randomId();
-      this.box.update('search', () => initialSearch);
+      this.box.update(this.slice, () => initialSearch);
     });
   }
 
   /** A new query: a new generation, with every lane started again. An empty query clears search.
    * Typed queries wait `typingMs` after the last keystroke; `immediate` (a changed filter) does not. */
   setQuery(query: string, immediate = false): void {
-    const previous = this.box.get().search;
+    const previous = this.box.get()[this.slice];
     const generation = previous.generation + 1;
     this.controller.abort();
     this.controller = new AbortController();
@@ -115,14 +123,14 @@ export class Search {
     this.stopTimers();
     const text = query.trim();
     if (!text) {
-      this.box.update('search', () => ({ ...initialSearch, ...options, library: undefined, ...caps, query, generation }));
+      this.box.update(this.slice, () => ({ ...initialSearch, ...options, library: undefined, ...caps, query, generation }));
       return;
     }
     // A lane the server does not offer says so at once; one it offers waits for typing to pause
     // and for the list to need it.
     const unified = this.offersUnified();
     const descriptive = !unified && this.offersDescriptive();
-    this.box.update('search', () => ({
+    this.box.update(this.slice, () => ({
       ...options,
       ...caps,
       query,
@@ -145,32 +153,33 @@ export class Search {
 
   /** Start the description search once typing has paused, if the list will show it. */
   private describeIfWanted(query: string, generation: number): void {
-    const state = this.box.get().search;
+    const state = this.box.get()[this.slice];
     if (this.paused !== generation || !this.current(generation) || state.descriptive.status !== 'idle') return;
     if (wantsDescription(query, state.fast)) void this.descriptive(query, generation);
   }
 
   /** Accept only advertised options, including a direction valid for the selected sort. */
   private options(value: V.SearchOptions, caps = this.session.searchCapabilities): V.SearchOptions {
+    const library = this.scoped ?? value.library;
     const sort = caps?.searchSorts?.find(s => s.id === value.sort) ?? caps?.searchSorts?.[0];
     return {
-      ...(caps?.searchLibraries && this.box.get().libraries.value?.some(l => l.id === value.library) ? { library: value.library } : {}),
+      ...(caps?.searchLibraries && this.box.get().libraries.value?.some(l => l.id === library) ? { library } : {}),
       ...(sort ? { sort: sort.id, ...(sort.directions.length ? { direction: sort.directions.includes(value.direction!) ? value.direction : sort.directions[0] } : {}) } : {}),
       ...(caps?.searchKinds?.some(k => (typeof k === 'string' ? k : k.id) === value.kind) ? { kind: value.kind } : {}),
     };
   }
 
   setOptions(change: V.SearchOptions): void {
-    const state = this.box.get().search;
+    const state = this.box.get()[this.slice];
     const options = this.options({ ...state, ...change });
     if (state.sort === options.sort && state.direction === options.direction && state.kind === options.kind && state.library === options.library) return;
-    this.box.update('search', s => ({ ...s, sort: undefined, direction: undefined, kind: undefined, library: undefined, ...options }));
+    this.box.update(this.slice, s => ({ ...s, sort: undefined, direction: undefined, kind: undefined, library: undefined, ...options }));
     this.setQuery(state.query, true);
   }
 
   /** The list's next page, from the lane the list shows. Each cursor belongs to its lane and generation. */
   more(): void {
-    const state = this.box.get().search;
+    const state = this.box.get()[this.slice];
     const lane = searchList(state).more;
     if (!lane) return;
     if (!state[lane].nextCursor || state[lane].loadingMore) return;
@@ -192,12 +201,12 @@ export class Search {
     // The controls too, when home has not brought them yet (the request itself went without).
     if (fetched && !this.session.searchCapabilities) {
       const { searchSorts, searchKinds, searchLibraries } = fetched;
-      this.box.update('search', search => ({ ...search, searchSorts, searchKinds, searchLibraries }));
+      this.box.update(this.slice, search => ({ ...search, searchSorts, searchKinds, searchLibraries }));
     }
     const unified = !!features?.unifiedSearch?.available && hasUnifiedSearch(api);
     const describes = !unified && !!features?.descriptiveSearch.available && hasDescriptiveSearch(api);
     this.unifiedFor = unified ? generation : 0;
-    const status = this.box.get().search.descriptive.status;
+    const status = this.box.get()[this.slice].descriptive.status;
     if (status === 'idle' || status === 'unavailable') this.patch('descriptive', { status: describes ? 'idle' : 'unavailable' });
     return unified;
   }
@@ -216,19 +225,36 @@ export class Search {
     this.setQuery('');
   }
 
+  /**
+   * Keep every query to one library (the audio app's search); `undefined` lets go. The scope is
+   * asked for only where the server can restrict search (searchLibraries) to a library it lists;
+   * elsewhere queries go unscoped and the state's `library` stays unset, so the view can tell and
+   * keep to the library's own kinds itself. A changed scope starts the open query again.
+   */
+  scopeTo(library: string | undefined): void {
+    if (this.scoped === library) return;
+    this.scoped = library;
+    const { query } = this.box.get()[this.slice];
+    if (query.trim()) this.setQuery(query, true);
+  }
+
   private current(generation: number): boolean {
-    return this.box.get().search.generation === generation;
+    return this.box.get()[this.slice].generation === generation;
   }
 
   private async fast(query: string, generation: number, cursor?: string, again = false): Promise<void> {
     try {
       const signal = this.controller.signal;
-      const options = this.options(this.box.get().search);
       const connection = await this.session.ready();
       if (!this.current(generation) || signal.aborted) return;
       const api = connection.adapter;
       const unified = cursor || again ? this.unifiedFor === generation : await this.lanes(api, generation, signal);
       if (unified === undefined) return;
+      // Read once the server's controls are known (lanes asks for them when home has not), so a
+      // first query still goes scoped; the state says which library it went to.
+      const asked = this.box.get()[this.slice];
+      const options = this.options(asked, this.session.searchCapabilities ?? asked);
+      if (this.box.get()[this.slice].library !== options.library) this.box.update(this.slice, search => ({ ...search, library: options.library }));
       // A first page is asked once per generation; asking again (a pending answer) is a new request.
       const idempotencyKey = cursor || again ? this.session.key() : `search-${this.scope}-${generation}`;
       const request = { ...options, query, generation, cursor, idempotencyKey };
@@ -239,7 +265,7 @@ export class Search {
       const dateDisplay = this.dateDisplay(options.library);
       const items = result.items.map(title => card({ ...title, dateDisplay: title.dateDisplay ?? (dateDisplay === 'date' ? 'date' : undefined) }, '', images, this.artWidth()));
       if (unified && !cursor) return this.ranked(query, generation, result, items, live);
-      this.patch('fast', { status: 'ready', items: cursor ? [...this.box.get().search.fast.items, ...items] : items, nextCursor: result.nextCursor, loadingMore: false, error: '', ...live });
+      this.patch('fast', { status: 'ready', items: cursor ? [...this.box.get()[this.slice].fast.items, ...items] : items, nextCursor: result.nextCursor, loadingMore: false, error: '', ...live });
       if (!cursor) this.describeIfWanted(query, generation);
     } catch (error) {
       if (this.current(generation)) this.patch('fast', { loadingMore: false, status: 'failed', error: message(error) });
@@ -249,7 +275,7 @@ export class Search {
   private async descriptive(query: string, generation: number, cursor?: string): Promise<void> {
     try {
       const signal = this.controller.signal;
-      const options = this.options(this.box.get().search);
+      const options = this.options(this.box.get()[this.slice]);
       const connection = await this.session.ready();
       if (!this.current(generation) || signal.aborted) return;
       const api = connection.adapter;
@@ -264,7 +290,7 @@ export class Search {
       const dateDisplay = this.dateDisplay(options.library);
       const items = result.items.map(title => card({ ...title, dateDisplay: title.dateDisplay ?? (dateDisplay === 'date' ? 'date' : undefined) }, '', images, this.artWidth()));
       this.patch('descriptive', { nextCursor: result.nextCursor, loadingMore: false });
-      this.described(query, generation, result.descriptive, cursor ? [...this.box.get().search.descriptive.items, ...items] : items, cursor);
+      this.described(query, generation, result.descriptive, cursor ? [...this.box.get()[this.slice].descriptive.items, ...items] : items, cursor);
     } catch (error) {
       if (this.current(generation)) this.patch('descriptive', { loadingMore: false, status: 'failed', error: message(error), canRetry: false });
     }
@@ -282,9 +308,9 @@ export class Search {
     const described = result.descriptive?.state;
     const describing = described === 'pending' || described === 'busy' || described === 'partial';
     const hold = pending && (items.length === 0 || describing);
-    const shown = this.box.get().search.fast.status === 'ready';
+    const shown = this.box.get()[this.slice].fast.status === 'ready';
     if (!hold || !shown) {
-      this.box.update('search', search => ({
+      this.box.update(this.slice, search => ({
         ...search,
         match: hold ? search.match : result.match ?? (items.length ? 'title' : 'none'),
         fast: hold
@@ -330,7 +356,7 @@ export class Search {
 
   /** Ask the descriptive lane again, once the server has allowed it (a unified server: the whole list). */
   retryDescriptive(): void {
-    const { query, generation, descriptive, match } = this.box.get().search;
+    const { query, generation, descriptive, match } = this.box.get()[this.slice];
     if (!query.trim() || !descriptive.canRetry) return;
     if (match !== undefined) {
       this.patch('descriptive', { status: 'loading', canRetry: false });
@@ -360,6 +386,6 @@ export class Search {
   }
 
   private patch<K extends 'fast' | 'descriptive'>(lane: K, change: Partial<SearchState[K]>): void {
-    this.box.update('search', search => ({ ...search, [lane]: { ...search[lane], ...change } }));
+    this.box.update(this.slice, search => ({ ...search, [lane]: { ...search[lane], ...change } }));
   }
 }

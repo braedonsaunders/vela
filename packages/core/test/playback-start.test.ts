@@ -37,6 +37,21 @@ test('stopping never publishes a local resume that the server might reject', asy
   expect(reconciled).toBe(1);
 });
 
+test('a stop hands the stopped title\'s media class to the reconcile, and none for an undescribed title', async () => {
+  const reconciled: (string | undefined)[] = [];
+  const plan = { sessionId: 's', sourceGeneration: 0, seekGeneration: 0, state: 'playing', titleId: 't' } as PlaybackPlan;
+  const adapter = { command: async () => ({ ...plan, state: 'ended' }), detail: async () => ({ title: { watch: { positionSeconds: 30 } } }), reportObservation: async () => ({ accepted: true }) };
+  const session = { onReset() {}, ready: async () => ({ adapter }) };
+  for (const target of [{ kind: 'title', id: 't', media: 'music' }, { kind: 'title', id: 't' }] as const) {
+    const box = new StateBox({ playback: { ...initialPlayback, phase: 'playing', sessionId: 's', plan, target } } as VelaState);
+    const playback = new Playback(box, session as unknown as Session, () => {}, (_watched, media) => { reconciled.push(media); });
+    await playback.observe('s', { positionSeconds: 30, state: 'playing' } as never);
+    await playback.stop();
+    await Promise.resolve();
+  }
+  expect(reconciled).toEqual(['music', undefined]);
+});
+
 test('a plan arriving after Back releases its server session instead of leaking a slot', async () => {
   let resolve!: (plan: PlaybackPlan) => void;
   const pending = new Promise<PlaybackPlan>(r => { resolve = r; });

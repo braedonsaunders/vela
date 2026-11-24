@@ -330,7 +330,6 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     screens: screenNavigation(data.navigation),
     surfaces,
     pluginLevels: pluginLevelsOf(features),
-    ...(typeof data.viewer.spoilerFree === 'boolean' ? { spoilerFree: data.viewer.spoilerFree } : {}),
   };
 }
 

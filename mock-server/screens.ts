@@ -909,8 +909,6 @@ function hook(): void {
   });
 }
 
-/** Whether a /live/stream request is a plugin-screens one (topics, or a client that draws screens). */
-export const screenStream = (req: Request, url: URL) => url.searchParams.has('topic') || rendererOf(req) > 0;
 
 function stream(req: Request, url: URL, viewerId: string, authorized: () => boolean, fail: Fail): Response {
   hook();
@@ -957,7 +955,7 @@ function stream(req: Request, url: URL, viewerId: string, authorized: () => bool
 /** The plugin-screen routes under /vela/v0; undefined for any other path. */
 export async function screensApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail, body?: unknown): Promise<Response | undefined> {
   if (!sportsEnabled) return undefined;
-  if (method === 'GET' && path === '/live/stream' && screenStream(req, url)) return stream(req, url, viewerId, authorized, fail);
+  if (method === 'GET' && path === '/live/stream') return stream(req, url, viewerId, authorized, fail);
   const preview = /^\/(screens|surfaces)\//.test(path) ? previewOf(req, fail) : false;
   const screen = /^\/screens\/([^/]+)\/(?:pages\/([^/]+)\/(document|data)|actions\/([^/]+))$/.exec(path);
   if (screen) {

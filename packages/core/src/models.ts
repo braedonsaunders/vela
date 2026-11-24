@@ -118,8 +118,6 @@ export interface HomeModel {
   screens: ScreenNav[];
   /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels). */
   surfaces: V.SurfaceContribution[];
-  /** The viewer's spoiler-free preference when bootstrap carries it (else read from /live/preferences). */
-  spoilerFree?: boolean;
   /** What the server answers for plugin levels (features.pluginLevels), known once bootstrap is: pages
    * that depend on it (a recommended tab's own rows, an artist's sections) wait for it or follow it. */
   pluginLevels?: PluginLevels;

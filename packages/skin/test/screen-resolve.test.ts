@@ -114,6 +114,18 @@ describe('templates, the kit and variants', () => {
     expect(textOf(box(r.tree).children[0]!, c)).toBe('Score Leafs n:7 []');
     expect(style(box(r.tree).children[1]!, 'background-color', c)).toBe('#00205b');
   });
+  test('a with value naming a token resolves as that token in a style', () => {
+    const r = resolve(doc({ type: 'use', template: 'dot', with: { ink: '$ui.ink', gap: '$gap' } }, { tokens: { gap: '6px' },
+      templates: { dot: { type: 'box', style: { color: '{arg.ink}', gap: '{arg.gap}' } } } }));
+    expect(style(r.tree, 'color')).toBe('#f5f1e9');
+    expect(style(r.tree, 'gap')).toBe('6px');
+    // The skeleton's radius from a document token, and a placeholder that never shrinks in its row.
+    const bar = box(resolve(doc({ type: 'use', template: 'vela:placeholder', with: { width: '286px', height: '128px', radius: '$radiusPanel' } },
+      { tokens: { radiusPanel: 'min($ui.radiusPanel * 0.6, 22px)' } })).tree);
+    const placed = bar.states.find(s => holds(s.when, root({}), env))!;
+    expect(fill(placed.layer.style['border-radius'], root({}), env)).toBe('17px');
+    expect(fill(placed.layer.style['flex-shrink'], root({}), env)).toBe('0');
+  });
   test("a caller's own fields keep reading the caller's arguments inside the template", () => {
     const r = resolve(doc({ type: 'use', template: 'outer', with: { prefix: 'fav' } }, {
       templates: {

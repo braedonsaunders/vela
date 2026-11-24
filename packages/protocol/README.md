@@ -47,6 +47,13 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | POST | /titles/:id/watch | WatchRequest | Ack |
 | POST | /titles/:id/read | ReadingRequest | ReadingGrant (features.reading) |
 | POST | /titles/:id/reading-progress | ReadingProgressRequest | Ack (features.reading) |
+| GET | /titles/:id/recording | — | RecordingReleases (features.duplicates) |
+| GET | /history/recap | period, at, library (query) | HistoryRecap (features.historyRecap) |
+| POST | /playlists/import | PlaylistImportRequest | 202 PlaylistImportJobRef (features.playlistImport) |
+| GET | /playlists/import/:id | — | PlaylistImport (features.playlistImport) |
+| POST | /playlists/import/:id/save | SavePlaylistImportRequest | PlaylistCard (features.playlistImport) |
+| GET | /libraries/:id/duplicates | cursor, limit (query) | DuplicateGroupsPage (features.duplicates) |
+| POST | /libraries/:id/duplicates/:recordingId | DuplicatePreferenceRequest | DuplicateGroup (features.duplicates) |
 | POST | /search | SearchRequest | SearchResponse |
 | POST | /search/ai | AISearchRequest | AISearchJob |
 | GET | /search/ai/:id | — | AISearchJob |
@@ -62,19 +69,20 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /sessions/:id/trickplay/:width/:sheet.jpg | bearer + device; optional If-None-Match | private JPEG sprite sheet or 304 |
 | GET | /live/channels | cursor, limit (query) | Page<Channel> |
 | GET | /live/guide | GuideQuery (query) | GuideResponse |
-| GET | /screens/:id | league, date (query) | Screen (features.liveEvents) |
-| GET | /live/events | ids (query, comma-separated) | LiveEventsResponse |
-| GET | /live/events/:id | — | LiveEventDetail |
-| POST | /live/events/:id/reveal | Mutation | LiveEventDetail (spoiler-free viewers) |
-| GET | /live/stream | events, screens (comma-separated), alerts=1 (query) | SSE `update` LiveStreamUpdate, `alert` LiveAlert, `heartbeat` (25 s) |
-| GET | /live/ticker | screen (query) | LiveEventsResponse |
-| GET | /live/entities | feed, league, q (query) | LiveEntitiesResponse |
-| PUT, DELETE | /favorites/entities/:key | Mutation | Ack or 204 |
+| GET | /screens/:id/pages/:page/document | v, r, l (query); X-Vela-Screen-Renderer | ScreenDocument (screen.ts) |
+| GET | /screens/:id/pages/:page/data | sources, p.<param>, tz (query) | ScreenData |
+| POST | /screens/:id/actions/:action | ScreenActionRequest; Idempotency-Key | ScreenActionAnswer |
+| GET | /surfaces/:id/document, /surfaces/:id/data | as screens; context as p.<name> | ScreenDocument, ScreenData |
+| POST | /surfaces/:id/actions/:action | ScreenActionRequest | ScreenActionAnswer |
+| PUT | /surfaces/:id/setting | {enabled} | 204 |
+| GET | /live/stream | topic (repeated), since, tz, alerts=1 (query) | SSE `records` StreamRecords, `source` StreamSource, `alert` AlertFrame, `heartbeat` (25 s) |
 | POST | /multiview | MultiviewRequest | MultiviewGroup (features.multiview) |
 | DELETE | /multiview/:groupId | Mutation | Ack or 204 |
 
-Live events, plugin screens and multiview are in [live-events.ts](live-events.ts). Bootstrap
-`navigation` lists plugin screens (`{kind: 'screen', id, title, icon}`) as top-level sections.
+Plugin screens and surfaces are in [screen.ts](screen.ts) (docs/plugin-screens.md); multiview and
+the session's live event are in [live-events.ts](live-events.ts). Bootstrap `navigation` lists
+plugin screens (`{kind: 'screen', id, title, icon, page, document}`) as top-level sections, and
+`surfaces` the plugin surfaces this client may show.
 A live-channel session's snapshot carries `liveEvent` (`{id, feed}` or null) and its event
 stream sends `event: liveEvent` with `{liveEvent}` when the programme on air changes. A
 multiview tile past an IPTV provider's connection cap is refused with HTTP 409
@@ -787,6 +795,12 @@ titles open with `POST /titles/:id/read` (a short-lived range-capable URL) and
 save `{locator, fraction}` with `POST /titles/:id/reading-progress`; the progress
 returns as `WatchState.reading`. Clients gate on `features.mediaClasses`,
 `features.audioPlayback` and `features.reading`.
+
+### Listening recap, playlist import and duplicate recordings
+
+- **Listening recap (`features.historyRecap: {available, periods}`)**: `GET /history/recap?period=week|month|year|all&at=YYYY-MM-DD&library=<id>` returns `HistoryRecap`. `at` selects the week, month or year containing that date (default today); `library` optionally scopes to one visible library. An empty period returns zeros and empty arrays, never 404. Artists and albums are derived from each played track's `media.parents`, so audiobooks and podcasts use the same shape (author/show).
+- **Playlist import (`features.playlistImport: {available, links, files, maxTracks}`)**: `POST /playlists/import` with `{idempotencyKey, library, url}` or `{idempotencyKey, library, file: {name, format, text}}` returns 202 `{id}`; an unsupported URL returns 400 `unsupported_link`. `GET /playlists/import/:id` returns `PlaylistImport` (`state: 'reading' | 'matching' | 'done' | 'failed'`, `total`, `done`, `matched` with `by: 'isrc' | 'title'`, and `unmatched` with `reason: 'not_found' | 'ambiguous'`, where `ambiguous` items carry `candidates?: Title[]` up to 8 releases). `POST /playlists/import/:id/save` with `{idempotencyKey, name?, exclude?, choose?}` (mapping source index strings to a chosen candidate `titleId`, or 400 `invalid_choice`) creates and returns the ordinary `PlaylistCard` in source order.
+- **Duplicate recordings (`features.duplicates: {available}`)**: `TitleMedia.recordingId` carries the recording identity (such as ISRC) shared across releases of the same recording. `GET /libraries/:id/duplicates?cursor=&limit=` pages `DuplicateGroup` items (`{recordingId, count, titles, preferredTitleId?}`), most copies first. `GET /titles/:id/recording` returns `{recordingId, preferredTitleId?, titles}` for every release of that recording in the library. `POST /libraries/:id/duplicates/:recordingId` with `{idempotencyKey, preferredTitleId, hideOtherIds?}` records the viewer's preferred release and optionally hides the other release IDs from the viewer's library lists, search and Liked Songs, returning the updated `DuplicateGroup`.
 
 ### Library experience
 

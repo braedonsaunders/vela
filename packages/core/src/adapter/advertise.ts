@@ -5,12 +5,15 @@ import {
   hasAudioFallback,
   hasDescriptiveSearch,
   hasDeviceGrantSignIn,
+  hasHistoryRecap,
+  hasLibraryDuplicates,
   hasLiveTv,
   hasLibraryLive,
   hasMusicLibrary,
-  hasLiveEvents,
+  
   hasMultiview,
   hasPasswordSignIn,
+  hasPlaylistImports,
   hasReading,
   hasProactiveFallback,
   hasQuickConnectSignIn,
@@ -63,14 +66,16 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(description.features.audioPlayback ? { audioPlayback: description.features.audioPlayback } : {}),
       ...(description.features.libraryExperiences ? { libraryExperiences: description.features.libraryExperiences } : {}),
       ...(hasReading(adapter) && description.features.reading ? { reading: description.features.reading } : {}),
-      // Live events and multiview (Sports): operations, so the adapter must offer them too.
-      ...(hasLiveEvents(adapter) && description.features.liveEvents ? { liveEvents: description.features.liveEvents } : {}),
+      // Multiview: an operation, so the adapter must offer it too.
       ...(hasMultiview(adapter) && description.features.multiview ? { multiview: description.features.multiview } : {}),
       // Music (docs/media-kinds.md): liked lists, lyrics and play contexts are operations the adapter must offer.
       ...(hasMusicLibrary(adapter) && description.features.favoritesList ? { favoritesList: description.features.favoritesList } : {}),
       ...(hasMusicLibrary(adapter) && description.features.lyrics ? { lyrics: description.features.lyrics } : {}),
       ...(hasMusicLibrary(adapter) && description.features.playContexts ? { playContexts: description.features.playContexts } : {}),
       ...(hasMusicLibrary(adapter) && description.features.continuation ? { continuation: description.features.continuation } : {}),
+      ...(hasHistoryRecap(adapter) && description.features.historyRecap ? { historyRecap: description.features.historyRecap } : {}),
+      ...(hasPlaylistImports(adapter) && description.features.playlistImport ? { playlistImport: description.features.playlistImport } : {}),
+      ...(hasLibraryDuplicates(adapter) && description.features.duplicates ? { duplicates: description.features.duplicates } : {}),
       // Queued (gapless next-track) sessions are a property of the server's playback: stated by it.
       ...(description.features.queuedPlayback ? { queuedPlayback: description.features.queuedPlayback } : {}),
       // Plugin levels describe answers to existing reads (rows per tab, children per role): stated by the server.
