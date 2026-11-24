@@ -21,7 +21,9 @@ import type {
   TileReplan,
   PasswordSignIn,
   PathSwitching,
+  PluginScreens,
   ProactiveFallback,
+  ScreenDataRead,
   QuickConnectSignIn,
   ScreenQuery,
   SwitchCommand,
@@ -36,6 +38,8 @@ import type { SubtitleSearch } from '../media-actions';
 import { VelaError } from '../errors';
 import { normaliseDetail, normaliseEvents, normaliseScreen } from '../../live/events';
 import { EtherTransport } from './transport';
+import type { ScreenTarget } from '../../screens/keys';
+import { streamSearch, type ScreenStreamQuery } from '../../screens/stream';
 import { plexHomeSelection, plexTokens } from './plex';
 import { etherSubtitleLanguages, etherSubtitleSearch, SUBTITLE_PREPARE_LIMIT_MS, subtitleRetryDelayMs } from './subtitles';
 
@@ -53,7 +57,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  LiveEvents, Multiview, TileReplan, SubtitleSearch {
+  LiveEvents, Multiview, TileReplan, SubtitleSearch, PluginScreens {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -146,9 +150,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return [];
   }
 
-  constructor(private readonly origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void) {
+  /** `rendererVersion`: the skin renderer this client draws (RENDERER_VERSION), sent as
+   * X-Vela-Screen-Renderer on bootstrap and every screen call. Without it Ether lists no screens. */
+  constructor(private readonly origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void, private readonly rendererVersion?: number) {
     this.credentials = credentials;
     this.http = new EtherTransport(origin, credentials, capabilityContext, onSessionRejected);
+  }
+
+  private get screenHeaders(): Record<string, string> {
+    return this.rendererVersion ? { 'X-Vela-Screen-Renderer': String(this.rendererVersion) } : {};
   }
 
   setCapabilityContext(context: string): void {
@@ -270,13 +280,13 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   /** A home whose continuation the server has expired is read again without revalidation. */
   async home(fresh = false, signal?: AbortSignal): Promise<Home> {
     try {
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...BOOTSTRAP_CACHED, fresh, signal });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...BOOTSTRAP_CACHED, fresh, signal, headers: this.screenHeaders });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     } catch (error) {
       const expired = error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
       if (!expired) throw error;
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { signal });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { signal, headers: this.screenHeaders });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     }
@@ -651,6 +661,42 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.stream(path, {}, onEvent, signal);
   }
 
+  // Plugin screens and surfaces (docs/plugin-screens.md; Ether design sections 6 and 7)
+
+  async screenDocument(href: string, signal?: AbortSignal): Promise<{ document: V.ScreenDocument; href: string }> {
+    const path = this.http.boundPath(href);
+    if (!path) throw new VelaError({ class: 'request', code: 'invalid_document_href', message: 'A screen document must come from this server.', retry: { allowed: false } }, 400);
+    let read = path;
+    const document = await this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: true, signal, headers: this.screenHeaders, follow: true, moved: moved => { read = moved; } });
+    return { document, href: read === path ? href : `/vela/v0${read}` };
+  }
+
+  screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData> {
+    const params = new URLSearchParams();
+    if (read.sources) params.set('sources', read.sources.join(','));
+    // Context first, then params: both are p.<name>; a page never declares a param a context names.
+    for (const [name, value] of Object.entries(read.context ?? {})) params.set(`p.${name}`, value);
+    for (const [name, value] of Object.entries(read.params)) params.set(`p.${name}`, value);
+    if (read.tz) params.set('tz', read.tz);
+    const search = params.size ? `?${params}` : '';
+    return this.http.request<V.ScreenData>('GET', `${screenBase(target)}/data${search}`, undefined, { signal, headers: this.screenHeaders });
+  }
+
+  screenAction(target: ScreenTarget, action: string, request: V.ScreenActionRequest, mutation: V.Mutation): Promise<V.ScreenActionAnswer> {
+    const base = target.kind === 'screen' ? `/screens/${segment(target.id)}` : `/surfaces/${segment(target.id)}`;
+    // The key travels as the header Ether's design names and, as every other Vela mutation, in the body.
+    return this.http.request<V.ScreenActionAnswer>('POST', `${base}/actions/${segment(action)}`, { ...request, idempotencyKey: mutation.idempotencyKey },
+      { headers: { ...this.screenHeaders, 'Idempotency-Key': mutation.idempotencyKey } }).then(answer => answer ?? {});
+  }
+
+  async setSurfaceSetting(id: string, enabled: boolean, mutation: V.Mutation): Promise<void> {
+    await this.http.request<unknown>('PUT', `/surfaces/${segment(id)}/setting`, { enabled, idempotencyKey: mutation.idempotencyKey }, { headers: { ...this.screenHeaders, 'Idempotency-Key': mutation.idempotencyKey } });
+  }
+
+  streamScreens(live: ScreenStreamQuery, tz: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+    return this.http.stream(`/live/stream${streamSearch(live, tz)}`, this.screenHeaders, onEvent, signal);
+  }
+
   createMultiview(request: V.MultiviewRequest) {
     return this.http.request<V.MultiviewGroup>('POST', '/multiview', request);
   }
@@ -672,6 +718,11 @@ export function libraryBrowseQuery(browse: V.LibraryBrowseQuery): string {
 }
 
 const segment = encodeURIComponent;
+
+/** `/screens/{id}/pages/{page}` or `/surfaces/{id}`. */
+function screenBase(target: ScreenTarget): string {
+  return target.kind === 'screen' ? `/screens/${segment(target.id)}/pages/${segment(target.page)}` : `/surfaces/${segment(target.id)}`;
+}
 
 function query(values: object): string {
   const pairs = Object.entries(values)

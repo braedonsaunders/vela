@@ -1,5 +1,6 @@
 /** Vela v0. All durations/positions are seconds, rates bits/second, timestamps RFC3339 UTC. */
 import type { LiveEventRef, MultiviewTile, NavigationEntry, ProviderCapDetails } from './live-events';
+import type { ScreenNavigationEntry, SurfaceContribution, SurfaceRow } from './screen';
 export type * from './live-events';
 export type * from './screen';
 export type ID = string;
@@ -202,8 +203,12 @@ export interface HeroAction { kind: 'resume' | 'play' | 'details'; titleId: ID; 
 export interface Hero { title: Title; receiptToken: string; reason: HeroReason; action: HeroAction;
   /** Short supporting/reason text, not the primary action button label. */
   label?: string; previewOnFocus?: boolean; trailer?: Extra }
-export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor;
-  /** Plugin screens the viewer may open, as top-level sections after Live TV. */ navigation?: NavigationEntry[] }
+export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[];
+  /** Feed rows, and `surface` rows (a plugin's homeRow surface) in the place Ether lists them. */ rows: (Row | SurfaceRow)[]; nextCursor?: Cursor;
+  /** Plugin screens the viewer may open, as top-level sections after Live TV. An entry without a
+   * `document` (an Ether before plugin screens) is not drawn (hard cut). */ navigation?: (ScreenNavigationEntry | NavigationEntry)[];
+  /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels), filtered, capped and ordered by Ether. */
+  surfaces?: SurfaceContribution[] }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }
 /** `auto` (only with features.unifiedSearch): one ranked list; the server decides when description matches lead. */
 export interface SearchRequest extends Mutation, SearchOptions { query: string; generation: number; mode: 'fast' | 'descriptive' | 'auto'; cursor?: Cursor; limit?: number }

@@ -483,6 +483,7 @@ function tick(): void {
     if (sim.state === 'in' && wasState !== 'in') alert('started', sim);
   }
   if (!changed.length) return;
+  for (const hook of changeHooks) hook(changed);
   for (const listener of listeners) {
     const events = changed.filter(sim => wants(listener, sim)).map(sim => presentEvent(sim, listener.viewerId));
     if (events.length) listener.send('update', { events } satisfies V.LiveStreamUpdate);
@@ -490,6 +491,7 @@ function tick(): void {
 }
 let alerts = 0;
 function alert(kind: V.LiveAlertKind, sim: Sim, force = false): void {
+  for (const hook of alertHooks) hook(kind, sim, force);
   for (const listener of listeners) {
     if (!listener.alerts) continue;
     const favourite = [sim.home, sim.away].find(id => favouritesOf(listener.viewerId).has(entityKey(id)));
@@ -694,3 +696,42 @@ export function replanTile(plan: V.PlaybackPlan, maxHeight: number): V.PlaybackP
   if (JSON.stringify(plan.paths.map(path => path.qualities.map(quality => quality.id))) !== before) plan.revision += 1;
   return plan;
 }
+
+// Plugin screens access (W2): read-only views of the simulation for mock-server/screens.ts, which
+// derives Ether's view-model records from them, and hooks for its stream. The legacy routes above
+// are untouched.
+const changeHooks = new Set<(changed: Sim[]) => void>();
+const alertHooks = new Set<(kind: V.LiveAlertKind, sim: Sim, force: boolean) => void>();
+export type SportsSim = Sim;
+export type SportsTeam = Team;
+export const sportsModel = {
+  plugin: PLUGIN,
+  feed: FEED,
+  sims: (): Sim[] => [...sims.values()],
+  sim: (id: string): Sim | undefined => sims.get(id),
+  leagues: (): (V.LiveLeague & { category: string })[] => Object.values(LEAGUES),
+  league: (id: string) => LEAGUES[id],
+  teams: (): Team[] => TEAMS,
+  standings: (league: string): V.LiveTable[] | undefined => STANDINGS[league],
+  /** The event as this viewer reads it (spoiler mask applied), and its detail. */
+  event: (sim: Sim, viewerId: string): V.LiveEvent => presentEvent(sim, viewerId),
+  detail: (sim: Sim, viewerId: string): V.LiveEventDetail => presentDetail(sim, viewerId),
+  entity: (t: Team, viewerId: string): V.LiveEntity => entity(t, viewerId),
+  logo: (teamId: string) => `${logoOrigin}/vela/v0/sports-mock/logos/${teamId}.svg`,
+  setLogoOrigin: (origin: string) => { logoOrigin ||= origin; },
+  favourites: (viewerId: string): Set<string> => favouritesOf(viewerId),
+  isFavourite: (sim: Sim, viewerId: string) => isFavourite(sim, viewerId),
+  spoilerFree: (viewerId: string) => spoilerPreference.get(viewerId) ?? sportsKnobs.spoilerFree,
+  setSpoilerFree: (viewerId: string, on: boolean) => { spoilerPreference.set(viewerId, on); },
+  reveal: (viewerId: string, id: string) => { let set = revealed.get(viewerId); if (!set) revealed.set(viewerId, set = new Set()); set.add(id); },
+  spoilered: (sim: Sim, viewerId: string) => spoilered(sim, viewerId),
+  /** An alert's words, as the legacy alert says them. */
+  alertText(kind: V.LiveAlertKind, sim: Sim): { title: string; body: string } {
+    const away = teamById(sim.away), home = teamById(sim.home);
+    const score = `${away?.short ?? ''} ${sim.scores[0]}–${sim.scores[1]} ${home?.short ?? ''}`;
+    const title = { started: 'Starting now', close: 'Close game', final: 'Final' }[kind];
+    return { title, body: kind === 'started' ? `${away?.short} at ${home?.short} · ${LEAGUES[sim.league]!.name}` : `${score}, ${statusOf(sim).detail}` };
+  },
+  onChange(hook: (changed: Sim[]) => void): () => void { changeHooks.add(hook); return () => changeHooks.delete(hook); },
+  onAlert(hook: (kind: V.LiveAlertKind, sim: Sim, force: boolean) => void): () => void { alertHooks.add(hook); return () => alertHooks.delete(hook); },
+};

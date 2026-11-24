@@ -68,6 +68,8 @@ export interface Row {
   nextCursor: string;
   continuation: V.Row['continuation'];
   previewOnFocus: boolean;
+  /** A Home row a plugin surface draws (its id in `HomeModel.surfaces`); the row has no items of its own. */
+  surface?: string;
   cardStyle?: 'poster' | 'landscape' | 'square';
   presentation: string;
 }
@@ -113,6 +115,8 @@ export interface HomeModel {
   playlistsAvailable: boolean;
   /** Plugin screens from bootstrap navigation (Sports), as top-level sections after Live TV. */
   screens: ScreenNav[];
+  /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels). */
+  surfaces: V.SurfaceContribution[];
   /** The viewer's spoiler-free preference when bootstrap carries it (else read from /live/preferences). */
   spoilerFree?: boolean;
   /** What the server answers for plugin levels (features.pluginLevels), known once bootstrap is: pages
@@ -120,8 +124,8 @@ export interface HomeModel {
   pluginLevels?: PluginLevels;
 }
 
-/** A plugin screen the viewer may open (bootstrap `navigation`). */
-export interface ScreenNav { id: string; title: string; icon: string }
+/** A plugin screen the viewer may open (bootstrap `navigation`): its landing page's document. */
+export interface ScreenNav { id: string; title: string; icon: string; page: string; document: { href: string; renderer: number } }
 
 export interface Rating {
   /** `rt-critics`, `rt-audience`, or the wire source (`imdb`, `tmdb`, …). */
