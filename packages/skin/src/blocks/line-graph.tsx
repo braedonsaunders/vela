@@ -1,7 +1,7 @@
 // The `lineGraph` layout block (`docs/plugin-screens.md` §6): renders a 0..1 probability / time-series
 // curve with Catmull-Rom cubic Bézier smoothing, gradient fill, animated draw-on stroke, and a live
 // pulsing endpoint dot (`live`).
-// Matches legacy `ProbabilityGraph` in `packages/skin/src/widgets/sports/graph.tsx` pixel-for-pixel.
+// Matches legacy `ProbabilityGraph` pixel-for-pixel.
 import { useEffect, useState } from 'react';
 import { Platform, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -11,7 +11,7 @@ import { fill, type Template } from '../resolve';
 import type { Ctx } from '../vocabulary';
 import { luminance, pathLength, probabilityPath } from './graph-math';
 import { parsePoints } from './layout-math';
-import { alpha, useBlockLook, type BlockLook } from './look';
+import { alpha, mix, useBlockLook, type BlockLook } from './look';
 import type { LineGraphBlockNode } from './types';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -22,25 +22,14 @@ interface GraphSide {
   color: string;
 }
 
-function mixHex(a: string, b: string, weight: number): string {
-  const pa = /^#([0-9a-f]{6})$/i.exec(a.trim());
-  const pb = /^#([0-9a-f]{6})$/i.exec(b.trim());
-  if (!pa || !pb) return a;
-  const na = parseInt(pa[1]!, 16);
-  const nb = parseInt(pb[1]!, 16);
-  const t = Math.max(0, Math.min(1, weight));
-  const ch = (shift: number) => Math.round(((na >> shift) & 255) * (1 - t) + ((nb >> shift) & 255) * t);
-  return `#${[ch(16), ch(8), ch(0)].map(v => v.toString(16).padStart(2, '0')).join('')}`;
-}
-
 /** A team colour lifted until it reads on the page (a navy on a dark page is lightened). */
 export function readableTeam(colour: string, page: string): string {
   const norm = /^[0-9a-f]{6}$/i.test(colour.trim()) ? `#${colour.trim()}` : colour.trim();
   if (!/^#[0-9a-f]{6}$/i.test(norm)) return norm || '#7aa2ff';
   const dark = luminance(page) < 0.4;
   const l = luminance(norm);
-  if (dark && l < 0.12) return mixHex(norm, '#ffffff', Math.min(0.6, 0.12 + (0.12 - l) * 3.4));
-  if (!dark && l > 0.6) return mixHex(norm, '#000000', 0.35);
+  if (dark && l < 0.12) return mix(norm, '#ffffff', Math.min(0.6, 0.12 + (0.12 - l) * 3.4));
+  if (!dark && l > 0.6) return mix(norm, '#000000', 0.35);
   return norm;
 }
 
@@ -112,10 +101,11 @@ function EdgeLabel({ look, side, color, style }: { look: BlockLook; side: GraphS
       <View style={{ width: look.px(7), height: look.px(7), borderRadius: look.px(4), backgroundColor: color }} />
       <Text
         numberOfLines={1}
+        ellipsizeMode="tail"
         style={{
           ...look.face(800),
           fontSize: look.px(11),
-          lineHeight: Math.round(look.px(11) * 1.28),
+          lineHeight: look.px(11 * 1.25),
           color: look.ink,
         }}
       >

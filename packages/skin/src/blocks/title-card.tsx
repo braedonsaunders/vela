@@ -1,8 +1,8 @@
 // The `titleCard` layout block (`docs/plugin-screens.md` §6): renders Vela's own title card for an
-// `item:<id>` record in the record pool, using the active skin's `card` slot (`host.doc.slots.card`)
+// `item:<id>` record in the record pool, using the active skin's `card` slot (`host.doc.routes` / `card`)
 // so library items embedded inside a plugin screen match Vela's native library cards.
 import { useHost } from '../host';
-import { fill, type Template } from '../resolve';
+import { fill, type RNode, type Template } from '../resolve';
 import type { Card, Ctx } from '../vocabulary';
 import { stripRecordPrefix } from './action-validation';
 import { useScreenBlockRuntime, type TitleCardBlockNode } from './types';
@@ -11,7 +11,7 @@ function coerceRecordToCard(id: string, data: Record<string, unknown>): Card {
   const str = (key: string, fallback = '') => (typeof data[key] === 'string' ? (data[key] as string) : fallback);
   const num = (key: string, fallback = 0) => (typeof data[key] === 'number' ? (data[key] as number) : fallback);
   const bool = (key: string) => data[key] === true;
-  const kind = str('kind', 'movie') as Card['kind'];
+  const kind = str('kind', 'movie');
   const year = num('year', 0);
   const genres = Array.isArray(data.genres) ? data.genres.map(String) : [];
   return {
@@ -19,6 +19,7 @@ function coerceRecordToCard(id: string, data: Record<string, unknown>): Card {
     kind,
     name: str('name', str('title', id)),
     summary: str('summary', ''),
+    airDate: str('airDate', ''),
     facts: str('facts', ''),
     year,
     yearLabel: str('yearLabel', year > 0 ? String(year) : ''),
@@ -28,11 +29,14 @@ function coerceRecordToCard(id: string, data: Record<string, unknown>): Card {
     progressSeconds: num('progressSeconds', 0),
     progressLabel: str('progressLabel', ''),
     played: bool('played'),
+    favorite: bool('favorite'),
+    watchlisted: bool('watchlisted'),
     poster: str('poster', str('image', '')),
     backdrop: str('backdrop', ''),
     logo: str('logo', ''),
     accent: str('accent', ''),
     receipt: str('receipt', ''),
+    showId: str('showId', ''),
     seasonId: str('seasonId', ''),
     seasonNumber: num('seasonNumber', 0),
     seasonNumberLabel: str('seasonNumberLabel', ''),
@@ -42,7 +46,6 @@ function coerceRecordToCard(id: string, data: Record<string, unknown>): Card {
     episodeContext: str('episodeContext', ''),
     contextParts: [],
     genres,
-    previewUrl: str('previewUrl', ''),
   };
 }
 
@@ -58,16 +61,15 @@ export function TitleCardBlock({ node, ctx }: { node: TitleCardBlockNode; ctx: C
 
   let card: Card | undefined = runtime.resolveItemCard?.(recordKey, ctx);
   if (!card) {
-    const recordEntry = (
-      ctx as { screen?: { record?: (k: string) => { data?: Record<string, unknown> } | undefined } }
-    ).screen?.record?.(recordKey);
-    if (recordEntry?.data && typeof recordEntry.data === 'object') {
-      card = coerceRecordToCard(itemId, recordEntry.data);
+    const entry = ctx.screen?.record(recordKey);
+    const data = entry?.value;
+    if (data && typeof data === 'object') {
+      card = coerceRecordToCard(itemId, data as Record<string, unknown>);
     }
   }
   if (!card) return null;
 
-  const cardSlot = host.doc.slots?.card;
+  const cardSlot = (host.doc as { slots?: { card?: RNode } }).slots?.card;
   if (!cardSlot) return null;
 
   return runtime.renderNode(cardSlot, { ...ctx, card });

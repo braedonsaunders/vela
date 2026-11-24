@@ -88,7 +88,7 @@ export function createScreenBlockRuntime(
         const bound = itemCtx.screen?.items[as];
         return tabCtx(ctx, as, bound?.value, itemCtx.index, tab);
       }
-      return tabCtx(ctx, '$all', undefined, 0, tab);
+      return tabCtx(ctx, as, { id: 'all' }, 0, tab);
     },
     ...options,
   };

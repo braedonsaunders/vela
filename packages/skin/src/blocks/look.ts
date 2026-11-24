@@ -1,14 +1,18 @@
 // Shared visual tokens, scaling, and colour helpers for renderer-19 layout blocks.
-// Reads the active skin document's variables (`surface.page`, `surface.raised`, `ink.primary`,
-// `ink.secondary`, `ink.quiet`, `AccentColor`, `cinematic.display`, `--vela-bar-top`) so blocks
-// match the active skin while preserving exact pixel parity with the legacy Sports layout.
+// Reads the active skin document's `ui` tokens (`resolveUi(host.doc.document.ui)`) and floating shell
+// bar offset (`barOffset`) so blocks match the active skin while preserving exact pixel parity with
+// the legacy Sports layout.
 import { useMemo } from 'react';
-import { Platform, type TextStyle } from 'react-native';
-import { colour, PX } from '../css';
+import { Platform, useWindowDimensions, type TextStyle } from 'react-native';
+import { PX } from '../css';
 import { fontFace } from '../fonts';
-import { useHost } from '../host';
-import { THEME } from '../theme';
+import { useOptionalHost } from '../host';
+import { resolveUi } from '../resolve/ui';
+import type { UiTokens } from '../resolve/ui-defaults';
 import { tvPixelScale } from '../tv-pixel-scale';
+import { barOffset } from './bar';
+
+export { barOffset } from './bar';
 
 /** A colour with an opacity (0–1): turns `#rrggbb`, `#rrggbbaa`, `#rgb`, `rgb()` into `rgba(...)`. */
 export function alpha(c: string, a: number): string {
@@ -25,6 +29,18 @@ export function alpha(c: string, a: number): string {
   return c;
 }
 
+/** Mixes two `#rrggbb` colours (`weight` 0..1 of `b`). */
+export function mix(a: string, b: string, weight: number): string {
+  const pa = /^#([0-9a-f]{6})$/i.exec(a.trim());
+  const pb = /^#([0-9a-f]{6})$/i.exec(b.trim());
+  if (!pa || !pb) return a;
+  const na = parseInt(pa[1]!, 16);
+  const nb = parseInt(pb[1]!, 16);
+  const t = Math.max(0, Math.min(1, weight));
+  const ch = (shift: number) => Math.round(((na >> shift) & 255) * (1 - t) + ((nb >> shift) & 255) * t);
+  return `#${[ch(16), ch(8), ch(0)].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** Whether a surface colour is light (such as Index or Mochi). */
 export function isLight(c: string): boolean {
   const hex = /^#([0-9a-f]{3,8})$/i.exec(c.trim());
@@ -37,6 +53,7 @@ export function isLight(c: string): boolean {
 }
 
 export interface BlockLook {
+  ui: UiTokens;
   page: string;
   raised: string;
   ink: string;
@@ -61,50 +78,49 @@ export interface BlockLook {
 }
 
 export function createScalePx(width: number, height: number, isTV = Platform.isTV, os = Platform.OS): (n: number) => number {
-  const scale = isTV && os === 'android' ? tvPixelScale(width, height) : (isTV ? 1.25 : PX);
+  const scale = isTV && os === 'android' ? tvPixelScale(width, height) : PX;
   return (n: number) => Math.round(n * scale * 2) / 2;
 }
 
 export function useBlockLook(): BlockLook {
-  const host = useHost();
-  const { width, height } = host.viewport;
-  const { small, tv, still } = host.env;
-  const vars = host.doc.variables;
+  const host = useOptionalHost();
+  const window = useWindowDimensions();
+  const block = host?.doc.document.ui;
+  const width = host?.viewport.width ?? window.width;
+  const height = host?.viewport.height ?? window.height;
+  const still = host?.env.still ?? false;
+  const shell = host?.doc.document.slots?.shell;
+  const insetTop = host?.viewport.insets.top ?? 0;
+  const small = width < 640;
+  const barCss = useMemo(() => barOffset(shell, small, insetTop), [shell, small, insetTop]);
   return useMemo(() => {
-    const pick = (name: string, fallback: string) => colour(vars[name] ?? THEME[name] ?? fallback) ?? fallback;
-    const page = pick('surface.page', '#090b0e');
-    const raised = pick('surface.raised', '#15191e');
-    const ink = pick('ink.primary', '#f5f1e9');
-    const secondary = pick('ink.secondary', '#b6b8bb');
-    const quiet = pick('ink.quiet', '#858d98');
-    const accent = pick('AccentColor', '#dcb998');
-    const light = isLight(page);
-    const displayStack = vars['cinematic.display'] ?? THEME['cinematic.display'] ?? 'Georgia, serif';
-    const bodyStack = 'system-ui, -apple-system, sans-serif';
+    const ui = resolveUi(block);
+    const light = isLight(ui.page);
     const px = createScalePx(width, height, Platform.isTV, Platform.OS);
-    const barCss = parseFloat(vars['x-vela-bar-top'] ?? '');
+    const tv = Platform.isTV || width >= 1600;
     return {
-      page,
-      raised,
-      ink,
-      secondary,
-      quiet,
-      accent,
+      ui,
+      page: ui.page,
+      raised: ui.raised,
+      ink: ui.ink,
+      secondary: ui.inkSecondary,
+      quiet: ui.inkQuiet,
+      accent: ui.accent,
       light,
       small,
       tv,
       still,
       width,
       height,
-      line: alpha(ink, light ? 0.12 : 0.1),
-      cardFill: light ? alpha('#ffffff', 0.82) : alpha(raised, 0.86),
-      cardEdge: alpha(ink, light ? 0.11 : 0.09),
-      chipFill: alpha(ink, light ? 0.07 : 0.08),
-      live: '#e5484d',
+      line: alpha(ui.ink, 0.08),
+      cardFill: mix(ui.page, ui.raised, 0.92),
+      cardEdge: ui.glassEdge,
+      chipFill: alpha(ui.ink, 0.07),
+      live: ui.live,
       gutter: small ? px(18) : Math.max(px(28), width * 0.04),
       barTop: barCss ? px(barCss) : 0,
       px,
-      face: (weight = 400, display = false) => fontFace(display ? displayStack : bodyStack, String(weight), false),
+      face: (weight = 400, display = false) => fontFace(display ? ui.fontDisplay : ui.font, String(weight), false),
     };
-  }, [vars, width, height, small, tv, still]);
+  }, [block, width, height, small, still, barCss]);
 }

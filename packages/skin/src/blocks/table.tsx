@@ -1,7 +1,7 @@
 // The `table` layout block (`docs/plugin-screens.md` §6): renders a standings, box-score, or
 // statistical table with auto-fitted columns (`fitTable`), tabular numerals, highlighted rows,
 // and optional row-by-row TV focus (`focusRows`) for long tables.
-// Matches legacy `TableView` in `packages/skin/src/widgets/sports/cards.tsx` pixel-for-pixel.
+// Matches legacy `TableView` pixel-for-pixel.
 import { useMemo, useState } from 'react';
 import { Platform, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useHost } from '../host';
@@ -58,10 +58,11 @@ export function TableBlock({ node, ctx }: { node: TableBlockNode; ctx: Ctx }) {
       {table.title ? (
         <Text
           numberOfLines={2}
+          ellipsizeMode="tail"
           style={{
             ...look.face(700),
             fontSize: px(12),
-            lineHeight: Math.round(px(12) * 1.28),
+            lineHeight: px(12 * 1.25),
             color: look.quiet,
             letterSpacing: px(1.1),
             textTransform: 'uppercase',
@@ -83,10 +84,11 @@ export function TableBlock({ node, ctx }: { node: TableBlockNode; ctx: Ctx }) {
           <Text
             key={`${c.index}-${table.columns[c.index]}`}
             numberOfLines={1}
+            ellipsizeMode="tail"
             style={{
               ...look.face(650),
               fontSize: px(11.5),
-              lineHeight: Math.round(px(11.5) * 1.28),
+              lineHeight: px(11.5 * 1.25),
               color: look.quiet,
               ...cellStyle(c, n),
             }}
@@ -111,14 +113,16 @@ export function TableBlock({ node, ctx }: { node: TableBlockNode; ctx: Ctx }) {
         };
         const rowCells = fit.columns.map((c, n) => {
           const total = c.index === table.columns.length - 1 && !c.name;
+          const cellSize = compact ? 13 : 13.5;
           return (
             <Text
               key={c.index}
               numberOfLines={1}
+              ellipsizeMode="tail"
               style={{
                 ...look.face(c.name ? 650 : total ? 700 : 520),
-                fontSize: px(compact ? 13 : 13.5),
-                lineHeight: Math.round(px(compact ? 13 : 13.5) * 1.28),
+                fontSize: px(cellSize),
+                lineHeight: px(cellSize * 1.25),
                 color: c.name || total ? look.ink : look.secondary,
                 fontVariant: ['tabular-nums'],
                 ...cellStyle(c, n),

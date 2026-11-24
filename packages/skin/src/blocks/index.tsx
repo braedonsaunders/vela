@@ -37,7 +37,7 @@ export {
   type ParsedItemWidth,
   type TabBindingState,
 } from './layout-math';
-export { alpha, createScalePx, isLight, useBlockLook, type BlockLook } from './look';
+export { alpha, barOffset, createScalePx, isLight, mix, useBlockLook, type BlockLook } from './look';
 export {
   fitTable,
   fitTextMetrics,

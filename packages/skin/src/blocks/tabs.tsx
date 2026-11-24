@@ -5,17 +5,53 @@
 // Renders each option using W1's resolved kit template `node.chip` (`vela:tab` by default, or
 // `vela:chip`) with `$tab` bound via `bindTabCtx` and `role: 'tab'` / `press` cloned onto the root box.
 import { useMemo } from 'react';
-import { Platform, ScrollView, View } from 'react-native';
-import { useHost } from '../host';
-import { fill, type RPress, type Template } from '../resolve';
-import type { Ctx } from '../vocabulary';
+import { Platform, ScrollView, View, type ViewStyle } from 'react-native';
+import { measure, useHost } from '../host';
+import { fill, type RNode, type RPress, type Template } from '../resolve';
+import { boxStyle } from '../translate';
+import type { Ctx, Env } from '../vocabulary';
 import { FocusBand } from './focus';
-import { resolveActiveTabValue } from './layout-math';
+import { parsePoints, resolveActiveTabValue } from './layout-math';
 import { useBlockLook } from './look';
 import { useScreenBlockRuntime, type TabsBlockNode } from './types';
 
 function literalTemplate(text: string): Template {
   return text;
+}
+
+function splitTabsStyle(node: RNode, ctx: Ctx, env: Env, host: ReturnType<typeof useHost>, defaultGutter: number, defaultGap: number): {
+  outerStyle: ViewStyle;
+  contentStyle: ViewStyle;
+} {
+  const raw: Record<string, string> = {};
+  for (const [k, v] of Object.entries(node.base.style ?? {})) {
+    raw[k] = fill(v, ctx, env);
+  }
+  const translated = boxStyle(raw, measure(host.viewport, 16)).style as Record<string, unknown>;
+  const outer: Record<string, unknown> = {};
+  const content: Record<string, unknown> = { alignItems: 'center' };
+  for (const [k, v] of Object.entries(translated)) {
+    if (k.startsWith('margin')) {
+      outer[k] = v;
+    } else {
+      content[k] = v;
+    }
+  }
+  const hasPadding =
+    content.padding !== undefined ||
+    content.paddingHorizontal !== undefined ||
+    content.paddingVertical !== undefined ||
+    content.paddingLeft !== undefined ||
+    content.paddingRight !== undefined ||
+    content.paddingTop !== undefined ||
+    content.paddingBottom !== undefined;
+  if (!hasPadding) {
+    content.paddingHorizontal = defaultGutter;
+  }
+  if (content.gap === undefined) {
+    content.gap = raw.gap ? parsePoints(raw.gap, n => n, defaultGap) : defaultGap;
+  }
+  return { outerStyle: outer as ViewStyle, contentStyle: content as ViewStyle };
 }
 
 interface TabEntry {
@@ -86,18 +122,15 @@ export function TabsBlock({ node, ctx }: { node: TabsBlockNode; ctx: Ctx }) {
   const clearStr = node.bind.clear?.length ? node.bind.clear.join(',') : '';
   const afterNodes = Array.isArray(node.after) ? node.after : [];
   const alias = node.items?.as ?? 'item';
+  const { outerStyle, contentStyle } = splitTabsStyle(node, ctx, host.env, host, look.gutter, px(8));
 
   return (
-    <FocusBand>
+    <FocusBand style={outerStyle}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         accessibilityRole={Platform.OS === 'web' ? ('tablist' as 'header') : undefined}
-        contentContainerStyle={{
-          paddingHorizontal: look.gutter,
-          gap: px(8),
-          alignItems: 'center',
-        }}
+        contentContainerStyle={contentStyle}
       >
         {options.map(opt => {
           const on = opt.value === activeValue;
@@ -127,7 +160,10 @@ export function TabsBlock({ node, ctx }: { node: TabsBlockNode; ctx: Ctx }) {
                   arg: literalTemplate(opt.value ? `${stateName}:${opt.value}` : stateName),
                 }
               : undefined;
-          const chipObj = node.chip && typeof node.chip === 'object' ? (node.chip as Record<string, unknown>) : null;
+          const chipObj =
+            node.chip && typeof node.chip === 'object'
+              ? (node.chip as unknown as Record<string, unknown>)
+              : null;
           const chipWithPress = chipObj
             ? {
                 ...chipObj,

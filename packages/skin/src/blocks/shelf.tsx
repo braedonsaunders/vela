@@ -6,8 +6,10 @@
 //   (such as `favorite` on a team pill) never reshuffles the shelf under a TV remote.
 // - Wraps the row in a TV `FocusBand` (`TVFocusGuideView autoFocus`) for focus memory.
 import { useMemo, useRef } from 'react';
-import { FlatList, View } from 'react-native';
-import { useHost } from '../host';
+import { FlatList, View, type ViewStyle } from 'react-native';
+import { measure, useHost } from '../host';
+import { fill, type RNode, type Template } from '../resolve';
+import { boxStyle } from '../translate';
 import type { Ctx, Env } from '../vocabulary';
 import { FocusBand } from './focus';
 import { applyStableOrder, parseItemWidth, parsePoints, resolveShelfItemWidth } from './layout-math';
@@ -46,6 +48,14 @@ function measureItemNaturalWidth(
   return tableNaturalWidth(px, table, compact) + pad * 2 + px(8);
 }
 
+function translateOwnStyle(node: RNode, ctx: Ctx, env: Env, host: ReturnType<typeof useHost>): ViewStyle {
+  const raw: Record<string, string> = {};
+  for (const [k, v] of Object.entries(node.base.style ?? {})) {
+    raw[k] = fill(v, ctx, env);
+  }
+  return boxStyle(raw, measure(host.viewport, 16)).style as ViewStyle;
+}
+
 interface ShelfEntry {
   key: string;
   ctx: Ctx;
@@ -69,7 +79,7 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
 
   // Reset `stableOrder` map when the page's active filter parameters change (just as Sports `Entities`
   // cleared `order.current` when `league` changed).
-  const pageParams = (ctx as { screen?: { page?: { params?: Record<string, string> } } }).screen?.page?.params;
+  const pageParams = ctx.screen?.page.params;
   const scopeKey = pageParams ? JSON.stringify(pageParams) : '';
   if (scopeKey !== lastScopeKey.current) {
     lastScopeKey.current = scopeKey;
@@ -80,7 +90,7 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
   const keyedItems = useMemo(() => {
     if (!runtime) return [];
     const base = rawItems.map((itemCtx, idx) => ({
-      key: runtime.evalItemKey(node, itemCtx) || String(idx),
+      key: runtime.evalItemKey(node, itemCtx, host.env) || String(idx),
       ctx: itemCtx,
     }));
     if (!node.stableOrder) return base;
@@ -88,7 +98,7 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
       ...entry,
       ctx: { ...entry.ctx, index: idx },
     }));
-  }, [runtime, node, rawItems]);
+  }, [runtime, node, rawItems, host.env]);
 
   const entries: ShelfEntry[] = useMemo(() => {
     return keyedItems.map(entry => {
@@ -110,10 +120,29 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
     return <View style={{ paddingHorizontal: look.gutter }}>{runtime.renderNode(node.empty, ctx)}</View>;
   }
 
-  const fixedStride = parsedWidth.kind === 'fixed' ? parsedWidth.width + gap : undefined;
+  const ownStyle = translateOwnStyle(node, ctx, host.env, host);
+  const hasOwnPadding =
+    ownStyle.padding !== undefined ||
+    ownStyle.paddingHorizontal !== undefined ||
+    ownStyle.paddingVertical !== undefined ||
+    ownStyle.paddingLeft !== undefined ||
+    ownStyle.paddingRight !== undefined ||
+    ownStyle.paddingTop !== undefined ||
+    ownStyle.paddingBottom !== undefined;
+
+  const contentContainerStyle: ViewStyle = hasOwnPadding
+    ? ownStyle
+    : {
+        paddingHorizontal: look.gutter,
+        paddingVertical: px(8),
+        ...ownStyle,
+      };
+
+  const fixedWidth = parsedWidth.kind === 'fixed' ? parsedWidth.width : undefined;
+  const fixedStride = fixedWidth !== undefined ? fixedWidth + gap : undefined;
   const initialCount = fixedStride
     ? Math.min(entries.length, Math.max(3, Math.ceil(look.width / fixedStride) + 1))
-    : Math.min(entries.length, 4);
+    : Math.min(entries.length, 6);
 
   return (
     <FocusBand>
@@ -122,18 +151,15 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
         data={entries}
         keyExtractor={item => item.key}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: look.gutter,
-          paddingVertical: px(8),
-        }}
+        contentContainerStyle={contentContainerStyle}
         ItemSeparatorComponent={() => <View style={{ width: gap }} />}
         initialNumToRender={initialCount}
         maxToRenderPerBatch={4}
         windowSize={5}
         getItemLayout={
-          fixedStride
+          fixedWidth !== undefined && fixedStride !== undefined
             ? (_, index) => ({
-                length: parsedWidth.width,
+                length: fixedWidth,
                 offset: look.gutter + index * fixedStride,
                 index,
               })

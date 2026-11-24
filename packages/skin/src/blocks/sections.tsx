@@ -3,15 +3,17 @@
 //   never takes down the page.
 // - Mounts the first `FIRST_SECTIONS = 3` sections on the initial frame and streams the remaining
 //   sections one per animation frame (`useStreamedCount`).
-// - Wraps each section in a staggered entrance motion (`Rise`: opacity + 18px translateY, delay
+// - Wraps each section in a staggered entrance motion (`SectionRise`: opacity + 18px translateY, delay
 //   `min(index, 3) * 70ms`, skipped when `still` is true).
 // - Calls `requestNeeds` when a section with `needs: string[]` is about to mount.
 // - Renders a hidden level-1 heading on the web (`aria-level={1}`) for screen readers.
 // - Wraps each section in a TV `FocusBand` (`TVFocusGuideView autoFocus`) for per-section focus memory.
-import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, Easing, Platform, ScrollView, Text, View, type TextStyle } from 'react-native';
-import { useHost } from '../host';
+import { Component, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Platform, ScrollView, Text, View, type TextStyle } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import { InheritedContext, useHost } from '../host';
 import { fill, holds, type Template } from '../resolve';
+import { inheritText } from '../text-inheritance';
 import type { Ctx, Env } from '../vocabulary';
 import { FocusBand } from './focus';
 import { FIRST_SECTIONS, initialStreamedCount, nextStreamedCount, parsePoints } from './layout-math';
@@ -58,52 +60,46 @@ export function useStreamedCount(count: number): number {
   return Math.min(mounted, count);
 }
 
-function SectionRise({ look, delay = 0, children }: { look: BlockLook; delay?: number; children: ReactNode }) {
-  const progress = useRef(new Animated.Value(look.still ? 1 : 0)).current;
+function SectionRise({ look, index, children }: { look: BlockLook; index: number; children: ReactNode }) {
+  const t = useSharedValue(look.still ? 1 : 0);
   useEffect(() => {
-    if (look.still) {
-      progress.setValue(1);
-      return;
-    }
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: 420,
-      delay,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [progress, look.still, delay]);
-  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [look.px(18), 0] });
-  return (
-    <Animated.View style={{ opacity: progress, transform: [{ translateY }] }}>
-      {children}
-    </Animated.View>
-  );
+    if (look.still) return;
+    t.value = withDelay(
+      Math.min(index, 8) * 70,
+      withTiming(1, { duration: 620, easing: Easing.bezier(0.16, 1, 0.3, 1) }),
+    );
+    // Only on mount: a section that is already shown does not rise again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animated = useAnimatedStyle(() => ({
+    opacity: t.value,
+    transform: [{ translateY: (1 - t.value) * 18 }],
+  }));
+  return <Animated.View style={animated}>{children}</Animated.View>;
 }
 
 function SectionsPlaceholder({ look }: { look: BlockLook }) {
   const { px } = look;
+  const cardWidth = look.small ? Math.min(px(272), look.width * 0.74) : px(look.tv ? 300 : 286);
   return (
-    <View style={{ paddingHorizontal: look.gutter, gap: px(12) }}>
+    <View style={{ paddingHorizontal: look.gutter, gap: px(14) }}>
       <View
         style={{
-          width: px(140),
-          height: px(18),
+          width: px(180),
+          height: px(20),
           borderRadius: px(6),
           backgroundColor: look.chipFill,
         }}
       />
-      <View style={{ flexDirection: 'row', gap: px(14) }}>
-        {[0, 1, 2].map(i => (
+      <View style={{ flexDirection: 'row', gap: px(14), overflow: 'hidden' }}>
+        {[0, 1, 2, 3, 4].map(i => (
           <View
             key={i}
             style={{
-              width: px(286),
-              height: px(136),
-              borderRadius: px(14),
-              backgroundColor: look.cardFill,
-              borderWidth: 1,
-              borderColor: look.cardEdge,
+              width: cardWidth,
+              height: px(128),
+              borderRadius: Math.min(px(look.ui.radiusCard), px(18)),
+              backgroundColor: look.chipFill,
             }}
           />
         ))}
@@ -138,13 +134,22 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   const host = useHost();
   const look = useBlockLook();
   const runtime = useScreenBlockRuntime();
+  const parentText = useContext(InheritedContext);
   const { px } = look;
 
   const isPage = runtime?.presentation === 'page';
-  const defaultGap = px(isPage ? 18 : 26);
+  const defaultGap = px(isPage ? 22 : 30);
   const gap = parsePoints(node.gap, px, defaultGap);
-  const topPad = isPage ? px(look.small ? 18 : 24) : look.barTop + px(look.tv ? 8 : 12);
+  const topPad = isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
   const bottomPad = px(isPage ? 48 : 64);
+
+  const inheritedRows: Record<string, string> = {};
+  for (const [k, v] of Object.entries(node.base.style ?? {})) {
+    if (k === 'font-family' || k === 'color' || k === 'font-size' || k === 'line-height' || k === 'font-weight') {
+      inheritedRows[k] = fill(v, ctx, host.env);
+    }
+  }
+  const text = inheritText(parentText, inheritedRows, host.viewport);
 
   const visibleChildren = node.children.filter(child => sectionWhenHolds(child, ctx, host.env));
   const mountedCount = useStreamedCount(visibleChildren.length);
@@ -167,34 +172,38 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
 
   const title = runtime.pageTitle;
   const shown = visibleChildren.slice(0, mountedCount);
+  const testID = node.testId ? fill(node.testId as Template, ctx, host.env).trim() || undefined : undefined;
 
   return (
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{
-        paddingTop: topPad,
-        paddingBottom: bottomPad,
-        gap,
-      }}
-      showsVerticalScrollIndicator={!Platform.isTV}
-    >
-      {Platform.OS === 'web' && title ? (
-        <Text accessibilityRole="header" {...{ 'aria-level': 1 }} style={HIDDEN_H1}>
-          {title}
-        </Text>
-      ) : null}
-      {shown.map((child, idx) => {
-        const rawId = (child as { id?: Template; testId?: Template })?.id ?? (child as { testId?: Template })?.testId;
-        const id = (rawId ? fill(rawId, ctx, host.env).trim() : '') || `section-${idx}`;
-        return (
-          <SectionBoundary key={id} name={id}>
-            <SectionRise look={look} delay={Math.min(idx, 3) * 70}>
-              <FocusBand>{runtime.renderNode(child, ctx)}</FocusBand>
-            </SectionRise>
-          </SectionBoundary>
-        );
-      })}
-      {mountedCount < visibleChildren.length ? <SectionsPlaceholder look={look} /> : null}
-    </ScrollView>
+    <InheritedContext.Provider value={text}>
+      <ScrollView
+        testID={testID}
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: topPad,
+          paddingBottom: bottomPad,
+          gap,
+        }}
+        showsVerticalScrollIndicator={!Platform.isTV}
+      >
+        {Platform.OS === 'web' && title ? (
+          <Text accessibilityRole="header" {...{ 'aria-level': 1 }} style={HIDDEN_H1}>
+            {title}
+          </Text>
+        ) : null}
+        {shown.map((child, idx) => {
+          const rawId = (child as { id?: Template; testId?: Template })?.id ?? (child as { testId?: Template })?.testId;
+          const id = (rawId ? fill(rawId, ctx, host.env).trim() : '') || `section-${idx}`;
+          return (
+            <SectionBoundary key={id} name={id}>
+              <SectionRise look={look} index={Math.min(idx, FIRST_SECTIONS)}>
+                <FocusBand>{runtime.renderNode(child, ctx)}</FocusBand>
+              </SectionRise>
+            </SectionBoundary>
+          );
+        })}
+        {mountedCount < visibleChildren.length ? <SectionsPlaceholder look={look} /> : null}
+      </ScrollView>
+    </InheritedContext.Provider>
   );
 }

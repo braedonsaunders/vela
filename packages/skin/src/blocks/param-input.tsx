@@ -15,11 +15,13 @@ const DEBOUNCE_MS = 220;
 export function ParamInputBlock({ node, ctx }: { node: ParamInputBlockNode; ctx: Ctx }) {
   const host = useHost();
   const look = useBlockLook();
+  const { px } = look;
 
   const paramName = node.param;
   const externalValue =
     (ctx as { screen?: { page?: { params?: Record<string, string> } } }).screen?.page?.params?.[paramName] ?? '';
   const [value, setValue] = useState(externalValue);
+  const [focused, setFocused] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -38,9 +40,7 @@ export function ParamInputBlock({ node, ctx }: { node: ParamInputBlockNode; ctx:
         clearTimeout(timer.current);
         timer.current = null;
       }
-      host.dispatch('setParam', paramName, {
-        args: { param: paramName, value: nextValue },
-      } as never);
+      host.dispatch('setParam', `${paramName}=${nextValue}`);
     },
     [host, paramName],
   );
@@ -63,16 +63,27 @@ export function ParamInputBlock({ node, ctx }: { node: ParamInputBlockNode; ctx:
   return (
     <View style={{ paddingHorizontal: look.gutter }}>
       <TextField
-        id={id || `param-${paramName}`}
+        nativeID={id || `param-${paramName}`}
+        testID={id || `param-${paramName}`}
         value={value}
         onChangeText={onChangeText}
         onSubmitEditing={() => commit(value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         placeholderTextColor={look.quiet}
-        color={look.ink}
-        backgroundColor={look.cardFill}
-        borderColor={look.cardEdge}
-        focusBorderColor={look.ink}
+        secureTextEntry={false}
+        style={{
+          ...look.face(500),
+          fontSize: px(14),
+          color: look.ink,
+          backgroundColor: look.cardFill,
+          borderColor: focused ? look.ink : look.cardEdge,
+          borderWidth: 1,
+          borderRadius: px(10),
+          paddingHorizontal: px(14),
+          paddingVertical: px(10),
+        }}
       />
     </View>
   );
