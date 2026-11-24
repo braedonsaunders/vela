@@ -166,5 +166,8 @@ describe('tools/perf/record-push reader isolation audit', () => {
     expect(audit.totalCollectionItems).toBeGreaterThan(audit.actualReaderItems);
     expect(audit.actualReaderItems).toBeGreaterThan(0);
     expect(audit.isolatedPerItemInvalidatedItems).toBe(audit.actualReaderItems);
+    expect(audit.rootReadsTotalRecords).toBe(0);
+    expect(audit.currentRootInvalidatedItems).toBe(audit.actualReaderItems);
+    expect(audit.isolatesToReadersOnly).toBe(true);
   });
 });
