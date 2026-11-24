@@ -1,5 +1,6 @@
 // Self-contained rich block for B7 Playlist import (`packages/skin/src/blocks/import.tsx`).
 import { importTruncatedNote } from './import-note';
+import { importFileModeLabel, importFileTextLabel, importFormatName, importRefusalMessage, importSampleLinks, importUrlPlaceholder, SAMPLE_LINKS } from './import-copy';
 // Exposes the URL/file import form, reading/matching progress bar, matched tracks with plain match
 // badges ("Exact match" / "Matched by title & artist") and include/exclude toggles, unmatched tracks
 // with inline release picker for ambiguous songs, and playlist save action over `@vela/core`'s
@@ -10,11 +11,13 @@ import {
   clock,
   msg,
   number,
+  VelaError,
   type Card,
   type Loadable,
   type PlaylistImportFormat,
   type PlaylistImportMatchModel,
   type PlaylistImportModel,
+  type PlaylistImportSources,
   type PlaylistImportUnmatchedModel,
 } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -26,8 +29,8 @@ const web = Platform.OS === 'web';
 const transition = (properties: string, ms = 160): ViewStyle =>
   web ? ({ transitionProperty: properties, transitionDuration: `${ms}ms`, transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)' } as ViewStyle) : {};
 
-export const SAMPLE_SPOTIFY_URL = 'https://open.spotify.com/playlist/37i9dQZF1DX4JAvHpjipBk';
-export const SAMPLE_DEEZER_URL = 'https://www.deezer.com/playlist/908622995';
+export const SAMPLE_SPOTIFY_URL = SAMPLE_LINKS.spotify!;
+export const SAMPLE_DEEZER_URL = SAMPLE_LINKS.deezer!;
 export const SAMPLE_M3U = `#EXTM3U
 #EXTINF:228,The Hollow Lanterns - Paper Boats
 The Hollow Lanterns - Paper Boats.flac
@@ -40,12 +43,17 @@ Cedar & Wire - Late Tram Home (Live at the Corner Booth).flac
 #EXTINF:265,The Hollow Lanterns - Harbour Lights
 The Hollow Lanterns - Harbour Lights.flac`;
 
-/** Hook into `@vela/core`'s playlist import state and automatic polling (`store.music.pollPlaylistImport`). */
-export function usePlaylistImport(): {
+/** Hook into `@vela/core`'s playlist import state and, unless `poll` is false, poll a running job
+ * (`store.music.pollPlaylistImport`). One mounted hook polls; others on the same screen only read. */
+export function usePlaylistImport({ poll = true }: { poll?: boolean } = {}): {
   job: PlaylistImportModel | null | undefined;
   load: Loadable<PlaylistImportModel | null>['load'];
   error: string;
+  /** The server's refusal code for the last start or poll ("unsupported_link"), when it gave one. */
+  code: string | undefined;
   available: boolean;
+  /** What this server's import reads; null when it offers no import. */
+  sources: PlaylistImportSources | null;
 } {
   const store = useVela();
   const state = useVelaState(s => s.music.playlistImport);
@@ -53,17 +61,21 @@ export function usePlaylistImport(): {
   const available = store.music.playlistImportAvailable;
   const job = state.value;
   useEffect(() => {
-    if (!available || !job || (job.state !== 'reading' && job.state !== 'matching')) return;
+    // Every poll answers a new job, so this re-arms after each one, including answers whose
+    // progress has not moved yet.
+    if (!poll || !available || !job || (job.state !== 'reading' && job.state !== 'matching')) return;
     const timer = setTimeout(() => {
       void store.music.pollPlaylistImport(job.id);
     }, 900);
     return () => clearTimeout(timer);
-  }, [store, available, job?.id, job?.state, job?.done]);
+  }, [store, poll, available, job]);
   return {
     job,
     load: state.load,
     error: state.error,
+    code: state.code,
     available,
+    sources: store.music.playlistImportSources,
   };
 }
 
@@ -91,16 +103,21 @@ export function PlaylistImportBlock({
 }: PlaylistImportBlockProps) {
   const store = useVela();
   const m = useMediaLook();
-  const { job, load, error } = usePlaylistImport();
-  const [mode, setMode] = useState<'url' | 'file'>('url');
+  const { job, load, error, code, sources } = usePlaylistImport();
+  const links = sources?.links ?? [];
+  const files = sources?.files ?? [];
+  const [chosenMode, setMode] = useState<'url' | 'file'>('url');
+  const mode = !links.length ? 'file' : !files.length ? 'url' : chosenMode;
   const [url, setUrl] = useState('');
   const [fileName, setFileName] = useState('Harbour & Midnight');
-  const [format, setFormat] = useState<PlaylistImportFormat>('m3u');
+  const [chosenFormat, setFormat] = useState<PlaylistImportFormat | null>(null);
+  const format: PlaylistImportFormat = chosenFormat ?? files[0] ?? 'm3u';
   const [fileText, setFileText] = useState('');
   const [playlistName, setPlaylistName] = useState('');
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [saveCode, setSaveCode] = useState<string | null>(null);
 
   useEffect(() => {
     const nextName = job?.name ?? '';
@@ -108,6 +125,7 @@ export function PlaylistImportBlock({
     onNameChange?.(nextName);
     setExcluded(new Set());
     setChosen({});
+    setSaveCode(null);
   }, [job?.id, job?.name]);
 
   const updatePlaylistName = (next: string) => {
@@ -135,12 +153,16 @@ export function PlaylistImportBlock({
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.m3u,.m3u8,.csv,text/plain,text/csv';
+    input.accept = [
+      ...(files.includes('m3u') ? ['.m3u', '.m3u8', 'text/plain', 'audio/x-mpegurl'] : []),
+      ...(files.includes('csv') ? ['.csv', 'text/csv'] : []),
+    ].join(',');
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;
       const lower = file.name.toLowerCase();
       const detected: PlaylistImportFormat = lower.endsWith('.csv') ? 'csv' : 'm3u';
+      // A format the server does not list is kept, so the refusal names the formats it does read.
       setFormat(detected);
       setFileName(file.name.replace(/\.(m3u8?|csv|txt)$/i, '') || 'Imported Playlist');
       const reader = new FileReader();
@@ -177,6 +199,7 @@ export function PlaylistImportBlock({
   const savePlaylist = async () => {
     if (!job || saving) return;
     setSaving(true);
+    setSaveCode(null);
     try {
       const created = await store.music.savePlaylistImport(job.id, {
         name: playlistName.trim() || job.name,
@@ -189,6 +212,8 @@ export function PlaylistImportBlock({
         store.music.resetPlaylistImport();
         onSaved?.(created.id);
       }
+    } catch (failure) {
+      setSaveCode(failure instanceof VelaError ? failure.detail.code : '');
     } finally {
       setSaving(false);
     }
@@ -198,12 +223,15 @@ export function PlaylistImportBlock({
   const includedCount = (job?.matched.length ?? 0) - excluded.size + chosenCount;
 
   if (!job) {
+    if (!sources || (!links.length && !files.length)) return null;
     return (
       <View style={{ gap: 20, maxWidth: 760, marginTop: 8 }} testID="music-import-form">
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup">
-          <ImportChip label={msg('music.import.modeUrl')} on={mode === 'url'} onPress={() => setMode('url')} />
-          <ImportChip label={msg('music.import.modeFile')} on={mode === 'file'} onPress={() => setMode('file')} />
-        </View>
+        {links.length && files.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup">
+            <ImportChip label={msg('music.import.modeUrl')} on={mode === 'url'} onPress={() => setMode('url')} />
+            <ImportChip label={importFileModeLabel(sources)} on={mode === 'file'} onPress={() => setMode('file')} />
+          </View>
+        ) : null}
 
         {mode === 'url' ? (
           <View style={{ padding: m.small ? 16 : 22, borderRadius: 16, backgroundColor: alpha(m.ui.ink, 0.05), borderWidth: 1, borderColor: m.ui.glassEdge, gap: 14 }}>
@@ -214,7 +242,7 @@ export function PlaylistImportBlock({
               testID="music-import-url-input"
               value={url}
               onChangeText={setUrl}
-              placeholder={msg('music.import.urlPlaceholder')}
+              placeholder={importUrlPlaceholder(sources)}
               placeholderTextColor={m.ui.inkQuiet}
               onSubmitEditing={() => void startUrl()}
               accessibilityLabel={msg('music.import.urlLabel')}
@@ -222,8 +250,9 @@ export function PlaylistImportBlock({
             />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                <ImportChip label={msg('music.import.loadSampleSpotify')} on={url === SAMPLE_SPOTIFY_URL} onPress={() => void startUrl(SAMPLE_SPOTIFY_URL)} />
-                <ImportChip label={msg('music.import.loadSampleDeezer')} on={url === SAMPLE_DEEZER_URL} onPress={() => void startUrl(SAMPLE_DEEZER_URL)} />
+                {importSampleLinks(sources).map(sample => (
+                  <ImportChip key={sample.source} label={sample.label} on={url === sample.url} onPress={() => void startUrl(sample.url)} />
+                ))}
               </View>
               <ImportPrimaryButton label={msg('music.import.start')} disabled={!url.trim() || load === 'loading'} onPress={() => void startUrl()} testID="music-import-start" />
             </View>
@@ -246,8 +275,9 @@ export function PlaylistImportBlock({
                 />
               </View>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <ImportChip label="M3U" on={format === 'm3u'} onPress={() => setFormat('m3u')} />
-                <ImportChip label="CSV" on={format === 'csv'} onPress={() => setFormat('csv')} />
+                {files.length > 1 ? files.map(listed => (
+                  <ImportChip key={listed} label={importFormatName(listed)} on={format === listed} onPress={() => setFormat(listed)} />
+                )) : null}
                 {Platform.OS === 'web' ? (
                   <ImportChip label={msg('music.import.pickFile')} on={false} onPress={pickWebFile} />
                 ) : null}
@@ -256,7 +286,7 @@ export function PlaylistImportBlock({
 
             <View style={{ gap: 6 }}>
               <Text style={m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>
-                {msg('music.import.fileTextLabel')}
+                {importFileTextLabel(sources)}
               </Text>
               <TextInput
                 testID="music-import-file-text"
@@ -265,24 +295,22 @@ export function PlaylistImportBlock({
                 multiline
                 placeholder={msg('music.import.fileTextPlaceholder')}
                 placeholderTextColor={m.ui.inkQuiet}
-                accessibilityLabel={msg('music.import.fileTextLabel')}
+                accessibilityLabel={importFileTextLabel(sources)}
                 style={[m.text({ 'font-size': '13px', 'line-height': '1.45', color: '$ui.ink' }), { minHeight: 136, borderRadius: 12, padding: 12, textAlignVertical: 'top', backgroundColor: alpha(m.ui.ink, 0.06), borderWidth: 1, borderColor: m.ui.glassEdge }, NO_RING]}
               />
             </View>
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <ImportChip label={msg('music.import.loadSample')} on={false} onPress={() => { setFormat('m3u'); setFileName('Coastal M3U Mix'); setFileText(SAMPLE_M3U); }} />
+              {files.includes('m3u') ? (
+                <ImportChip label={msg('music.import.loadSample')} on={false} onPress={() => { setFormat('m3u'); setFileName('Coastal M3U Mix'); setFileText(SAMPLE_M3U); }} />
+              ) : <View />}
               <ImportPrimaryButton label={msg('music.import.start')} disabled={!fileText.trim() || load === 'loading'} onPress={() => void startFile()} testID="music-import-file-start" />
             </View>
           </View>
         )}
 
         {load === 'failed' || error ? (
-          <View testID="music-import-error" style={{ padding: 16, borderRadius: 12, backgroundColor: alpha(m.ui.live, 0.14), borderWidth: 1, borderColor: alpha(m.ui.live, 0.4) }}>
-            <Text style={m.text({ 'font-size': '14px', 'font-weight': '650', color: '$ui.ink' })}>
-              {error.includes('unsupported_link') || error.includes('Spotify or Deezer') ? msg('music.import.unsupportedLink') : (error || msg('music.import.failed'))}
-            </Text>
-          </View>
+          <ImportNotice text={code ? (importRefusalMessage(code, sources) || msg('music.import.failed')) : (error || msg('music.import.failed'))} />
         ) : null}
       </View>
     );
@@ -299,9 +327,20 @@ export function PlaylistImportBlock({
       onChooseRelease={chooseRelease}
       includedCount={includedCount}
       saving={saving}
+      saveProblem={saveCode === null ? '' : (importRefusalMessage(saveCode, sources) || msg('music.import.saveFailed'))}
       onSave={() => void savePlaylist()}
       onReset={() => store.music.resetPlaylistImport()}
     />
+  );
+}
+
+/** A refusal or failure under the form or the save bar. */
+function ImportNotice({ text }: { text: string }) {
+  const m = useMediaLook();
+  return (
+    <View testID="music-import-error" accessibilityRole="alert" style={{ padding: 16, borderRadius: 12, backgroundColor: alpha(m.ui.live, 0.14), borderWidth: 1, borderColor: alpha(m.ui.live, 0.4) }}>
+      <Text style={m.text({ 'font-size': '14px', 'font-weight': '650', color: '$ui.ink' })}>{text}</Text>
+    </View>
   );
 }
 
@@ -316,6 +355,7 @@ export function ImportResultView({
   onChooseRelease,
   includedCount,
   saving,
+  saveProblem = '',
   onSave,
   onReset,
 }: {
@@ -328,6 +368,8 @@ export function ImportResultView({
   onChooseRelease?(index: number, candidateId: string | null): void;
   includedCount: number;
   saving: boolean;
+  /** Why the last save was refused, if it was. */
+  saveProblem?: string;
   onSave(): void;
   onReset(): void;
 }) {
@@ -380,6 +422,8 @@ export function ImportResultView({
           />
         </View>
       </View>
+
+      {saveProblem ? <ImportNotice text={saveProblem} /> : null}
 
       <View style={{ gap: 10 }} testID="music-import-matched">
         <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '24px', color: '$ui.ink' })}>

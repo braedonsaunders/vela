@@ -35,6 +35,7 @@ export { entitiesKey, screenKey, spoilerFreeOf, type LiveEventsState, type LiveS
 export { backoffMs, isFavoriteCompetitor, isNewer, mergeEvents, probabilityFor, readLiveMessage, screenEvents, seriesPoints, sides, streamQuery, teamColor, venueText, withEvent, type LiveInterest } from './live/events';
 export { liveEventRef } from './protocol/events';
 export { hasLiveEvents, hasMultiview, type LiveEvents as LiveEventsApi, type LiveStreamQuery, type Multiview, type ScreenQuery } from './adapter/capabilities';
+export { importLinkFromSources, playlistImportSources, type PlaylistImportSources } from './adapter/capabilities';
 export type * from './live-events-wire';
 export type { PreviewContext, PreviewState } from './store/previews';
 export type { PlaylistsState } from './store/playlists';
