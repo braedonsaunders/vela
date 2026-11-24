@@ -115,9 +115,10 @@ const initialState: VelaState = {
   previews: initialPreviews,
 };
 
-/** Art widths come in steps, so a window resized by a few pixels reads the same images. */
+/** Art widths come in steps, so a window resized by a few pixels reads the same images; never wider than 4K. */
 const ART_STEP = 320;
-const bucket = (width: number) => Math.max(ART_STEP, Math.ceil(width / ART_STEP) * ART_STEP);
+const MAX_ART_WIDTH = 3840;
+const bucket = (width: number) => Math.min(MAX_ART_WIDTH, Math.max(ART_STEP, Math.ceil(width / ART_STEP) * ART_STEP));
 
 export function createVela(options: VelaOptions): Vela {
   const box = new StateBox<VelaState>(initialState);
