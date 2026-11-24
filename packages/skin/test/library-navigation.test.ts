@@ -44,3 +44,30 @@ test('the shared phone shell provides a discoverable destination menu', async ()
   expect(compact?.a11y?.expanded).toHaveLength(1);
   expect(JSON.stringify(resolveDocument(velaBase, 390).shell)).not.toContain('"widget":"libraryTabs"');
 });
+
+test('the phone navigation names Live TV once, whether or not the server lists it as a library', async () => {
+  const { resolveDocument, holds, fill } = await import('../src/resolve');
+  const { velaBase } = await import('../src/resolve/base');
+  type RNode = import('../src/resolve').RNode;
+  const find = (node: RNode, id: string): RNode | undefined => {
+    if (node.id === id) return node;
+    if (node.kind === 'box') for (const child of node.children) { const found = find(child, id); if (found) return found; }
+    if (node.kind === 'repeat') return find(node.item, id);
+    return undefined;
+  };
+  const trigger = find(resolveDocument(velaBase, 390, 'en').shell!, 'mobile-navigation-trigger');
+  if (trigger?.kind !== 'box') throw new Error('no phone navigation trigger');
+  const shown = (libraries: { id: string; kind: string; name: string }[]) => {
+    const env = { section: 'live', libraries, flags: [] } as unknown as import('../src/vocabulary').Env;
+    const names: string[] = [];
+    for (const child of trigger.children) {
+      if (child.kind === 'text' && holds(child.when, { index: 0 }, env)) names.push(fill(child.text, { index: 0 }, env));
+      if (child.kind === 'repeat' && child.item.kind === 'text') {
+        for (const dest of libraries) if (holds(child.item.when, { index: 0, dest } as never, env)) names.push(fill(child.item.text, { index: 0, dest } as never, env));
+      }
+    }
+    return names;
+  };
+  expect(shown([{ id: 'movies', kind: 'movies', name: 'Movies' }, { id: 'live', kind: 'live', name: 'Live TV' }])).toEqual(['Live TV']);
+  expect(shown([{ id: 'movies', kind: 'movies', name: 'Movies' }])).toEqual(['Live TV']);
+});

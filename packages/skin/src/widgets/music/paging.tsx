@@ -9,9 +9,11 @@ import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, useInteraction } from '../common/controls';
 import { useMediaLook } from '../media/parts';
 import { musicTV } from './layout';
-import { nearEnd, type ScrollMetrics } from './scroll-end';
+import { canResume, createScrollMemory, nearEnd, type ScrollMetrics } from './scroll-end';
 
 type Listener = (metrics: ScrollMetrics) => void;
+/** What the page scroller is asked to do: go back to where the viewer left the page. */
+interface Scroller { scrollTo(options: { y: number; animated: boolean }): void }
 
 export interface PageScroll {
   /** Hand these to the page's ScrollView. */
@@ -20,24 +22,51 @@ export interface PageScroll {
     onLayout(event: LayoutChangeEvent): void;
     onContentSizeChange(width: number, height: number): void;
     scrollEventThrottle: number;
+    onScrollBeginDrag(): void;
+    onScrollEndDrag(event: NativeSyntheticEvent<NativeScrollEvent>): void;
+    onMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>): void;
+    ref(scroller: Scroller | null): void;
   };
   subscribe(listener: Listener): () => void;
   metrics(): ScrollMetrics;
 }
 
+/** The page last scrolled, for the shell that replaces this one on a fold or a resize. */
+const memory = createScrollMemory();
+
 /** The page scroller's metrics, for the shell to own and its pages to read; a new page (`page`,
- * its key) starts a new scroller at its top. */
+ * its key) starts a new scroller at its top, and the same page in a new shell where it was. */
 export function usePageScroll(page: string): PageScroll {
   return useMemo(() => {
     const listeners = new Set<Listener>();
+    // The same page in a new scroller (the shell changing form on a fold or a resize) is put back
+    // where the viewer left it once its content is tall enough; a drag first leaves it where the
+    // viewer takes it. A shell's scroll state can outlive its scroller (the wide shell stands while
+    // the compact one draws), so each scroller that attaches reads the memory afresh.
+    let resume = 0;
+    let scroller: Scroller | null = null;
     const now: ScrollMetrics = { offset: 0, viewport: 0, content: 0 };
-    const tell = () => { for (const listener of [...listeners]) listener({ ...now }); };
+    const tell = () => {
+      if (scroller && canResume(resume, now)) { scroller.scrollTo({ y: resume, animated: false }); now.offset = resume; resume = 0; }
+      for (const listener of [...listeners]) listener({ ...now });
+    };
+    const keep = (event: NativeSyntheticEvent<NativeScrollEvent>) => memory.keep(page, event.nativeEvent.contentOffset.y);
     return {
       handlers: {
         onScroll: event => { now.offset = event.nativeEvent.contentOffset.y; now.viewport = event.nativeEvent.layoutMeasurement.height || now.viewport; now.content = event.nativeEvent.contentSize.height || now.content; tell(); },
         onLayout: event => { now.viewport = event.nativeEvent.layout.height; tell(); },
         onContentSizeChange: (_width, height) => { now.content = height; tell(); },
         scrollEventThrottle: 64,
+        // Kept where the viewer leaves it, not on every scroll event: a scroller being resized
+        // away (the window changing as the device folds) reports its clamped offset first.
+        onScrollBeginDrag: () => { resume = 0; },
+        onScrollEndDrag: keep,
+        onMomentumScrollEnd: keep,
+        ref: value => {
+          if (value && value !== scroller) { resume = memory.resume(page); Object.assign(now, { offset: 0, viewport: 0, content: 0 }); }
+          scroller = value;
+          tell();
+        },
       },
       subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
       metrics: () => ({ ...now }),

@@ -1,7 +1,9 @@
 // Which form the music app takes: TV (a remote and a focus engine, read from across the room),
-// compact (phones, tablets upright: touch), or wide (pointer and keyboard).
+// compact (phones, tablets upright: touch), or wide (Your Library beside the page: pointer and
+// keyboard, a landscape tablet, an unfolded iPhone Duo).
 import { Platform } from 'react-native';
 import type { MediaLook } from '../media/parts';
+import { wideMusic } from '../media/window-layout';
 
 /** Previewing the TV form in a development web build: `?musictv=1` (kept for the tab; `?musictv=0`
  * ends it). Layout only. */
@@ -18,5 +20,6 @@ export function musicTV(): boolean {
   return Platform.isTV || previewTV();
 }
 
-/** Compact layouts (phones, tablets upright) stack headers and drop the album column. */
-export const compactMusic = (m: MediaLook) => !musicTV() && m.width < 980;
+/** Compact layouts (phones, tablets upright, a folded iPhone Duo) stack headers and drop the album
+ * column; a landscape window from 840 px (an unfolded iPhone Duo) or any from 980 px is wide. */
+export const compactMusic = (m: MediaLook) => !musicTV() && !wideMusic(m.width, m.height);

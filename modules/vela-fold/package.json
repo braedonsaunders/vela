@@ -1,0 +1,9 @@
+{
+  "name": "@vela/fold",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A foldable's posture and fold: iPhone Duo (UIHingeInteraction, reserved division regions); flat elsewhere",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": { "expo": "*", "expo-modules-core": "*", "react": "*", "react-native": "*" }
+}

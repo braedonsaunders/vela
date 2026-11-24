@@ -11,6 +11,7 @@
       "dependencies": {
         "@react-native-masked-view/masked-view": "0.3.2",
         "@vela/core": "workspace:*",
+        "@vela/fold": "workspace:*",
         "@vela/guide-native": "workspace:*",
         "@vela/player": "workspace:*",
         "@vela/search-native": "workspace:*",
@@ -43,6 +44,16 @@
         "@react-native-tvos/config-tv": "0.1.7",
         "@types/react": "~19.3.0",
         "typescript": "~5.9.3",
+      },
+    },
+    "modules/vela-fold": {
+      "name": "@vela/fold",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "expo": "*",
+        "expo-modules-core": "*",
+        "react": "*",
+        "react-native": "*",
       },
     },
     "modules/vela-guide": {
@@ -477,6 +488,8 @@
     "@ungap/structured-clone": ["@ungap/structured-clone@1.4.0", "", {}, "sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ=="],
 
     "@vela/core": ["@vela/core@workspace:packages/core"],
+
+    "@vela/fold": ["@vela/fold@workspace:modules/vela-fold"],
 
     "@vela/guide-native": ["@vela/guide-native@workspace:modules/vela-guide"],
 

@@ -46,7 +46,7 @@
         { "type": "use", "template": "vela:crest", "when": [{ "test": "env.small", "not": true }], "with": { "logo": "{side.logo}", "abbr": "{side.abbr}", "color": "{side|crest}", "size": "84px", "ring": "true" } },
         { "type": "use", "template": "vela:crest", "when": [{ "test": "env.small" }], "with": { "logo": "{side.logo}", "abbr": "{side.abbr}", "color": "{side|crest}", "size": "52px", "ring": "true" } },
         { "type": "text", "text": "{side.name}", "when": [{ "test": "env.small", "not": true }],
-          "style": { "font-size": "20px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "text-align": "center", "line-clamp": "1", "text-overflow": "ellipsis" } },
+          "style": { "font-size": "20px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "text-align": "center", "line-clamp": "1", "text-overflow": "ellipsis" }, "below": { "760": { "font-size": "17px" } } },
         { "type": "text", "text": "{side.short}", "when": [{ "test": "env.small" }],
           "style": { "font-size": "14px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "text-align": "center", "line-clamp": "1", "text-overflow": "ellipsis" } },
         { "type": "text", "text": "{side.record}", "when": [{ "test": "side.record" }],
@@ -55,7 +55,7 @@
     },
     "score": {
       "type": "text", "testId": "{arg.testId}", "text": "{arg.value}", "onChange": { "value": "{arg.value}", "motion": "scoreFlash" },
-      "style": { "font-size": "72px", "line-height": "1.12", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "44px" },
+      "style": { "font-size": "72px", "line-height": "1.12", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "below": { "760": { "font-size": "58px" } }, "small": { "font-size": "44px" },
       "states": [{ "when": [{ "test": "arg.loser" }], "style": { "opacity": "0.55" } }]
     },
     "metaLine": {
@@ -159,7 +159,7 @@
 
           { "type": "box", "when": [{ "test": "src.game.event.sides" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "12px" }, "children": [
             { "type": "repeat", "over": "src.game.event.sides", "as": "side", "limit": 1, "item": { "type": "use", "template": "teamBlock" } },
-            { "type": "box", "testId": "sports-game-centre", "style": { "align-items": "center", "min-width": "260px", "max-width": "50%", "flex-shrink": "1" }, "small": { "min-width": "120px", "max-width": "60%" }, "children": [
+            { "type": "box", "testId": "sports-game-centre", "style": { "align-items": "center", "min-width": "260px", "max-width": "50%", "flex-shrink": "1" }, "below": { "760": { "min-width": "200px" } }, "small": { "min-width": "120px", "max-width": "60%" }, "children": [
               { "type": "box", "when": [{ "test": "src.game.event.scored" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "18px" }, "small": { "gap": "10px" }, "children": [
                 { "type": "use", "template": "score", "with": { "testId": "sports-game-away-score", "value": "{src.game.event.sides.0.score}", "loser": "{src.game.event.sides.0.loser}" } },
                 { "type": "text", "text": "–", "style": { "font-size": "43.2px", "line-height": "1.25", "font-weight": "300", "color": "#ffffff8c" }, "small": { "font-size": "26.4px" } },
@@ -220,23 +220,23 @@
           { "type": "text", "text": "{s:broadcastLine|with:name=src.game.event.watch.airing.0.name,more=src.game.event.watch.airing.1.name}",
             "style": { "flex-shrink": "1", "font-size": "14px", "line-height": "1.25", "font-weight": "560", "color": "$ui.inkSecondary", "line-clamp": "1", "text-overflow": "ellipsis" } } ] },
 
-        { "type": "box", "id": "columns", "style": { "flex-direction": "row", "gap": "22px", "align-items": "flex-start" }, "small": { "flex-direction": "column" }, "children": [
-          { "type": "box", "when": [{ "test": "src.game.detail.tables.0" }], "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "small": { "flex": "none" }, "children": [
+        { "type": "box", "id": "columns", "style": { "flex-direction": "row", "gap": "22px", "align-items": "flex-start" }, "below": { "760": { "flex-direction": "column" } }, "children": [
+          { "type": "box", "when": [{ "test": "src.game.detail.tables.0" }], "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "below": { "760": { "flex": "none" } }, "children": [
             { "type": "use", "template": "probabilityPanel", "when": [{ "test": "src.game.event.sides" }, { "test": "src.game.detail.probabilitySeries.1" }, { "test": "src.game.event.spoiler", "not": true }] },
             { "type": "repeat", "over": "src.game.detail.tables", "as": "t", "item": { "type": "use", "template": "vela:panel", "with": { "focusable": "{t.rows|count|lt:11}" }, "children": [
               { "type": "table", "data": "t", "testId": "sports-table-{$index}", "focusRows": 10, "highlight": false } ] } } ] },
           { "type": "box", "when": [{ "test": "src.game.detail.tables.0", "not": true }, { "test": "src.game.event.sides" }, { "test": "src.game.detail.probabilitySeries.1" }, { "test": "src.game.event.spoiler", "not": true }],
-            "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "small": { "flex": "none" }, "children": [{ "type": "use", "template": "probabilityPanel" }] },
+            "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "below": { "760": { "flex": "none" } }, "children": [{ "type": "use", "template": "probabilityPanel" }] },
           { "type": "box", "when": [{ "test": "src.game.detail.tables.0", "not": true }, { "test": "src.game.event.sides", "not": true }, { "test": "src.game.event.ranking.0" }],
-            "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "small": { "flex": "none" }, "children": [
+            "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "below": { "760": { "flex": "none" } }, "children": [
             { "type": "use", "template": "vela:panel", "with": { "focusable": "{src.game.event.ranking|count|lt:11}" }, "children": [
               { "type": "use", "template": "panelTitle", "with": { "text": "{s:leaderboard}" }, "style": { "margin-bottom": "10px" } },
               { "type": "box", "style": { "gap": "3px" }, "children": [
                 { "type": "repeat", "over": "src.game.event.ranking", "as": "entry", "item": { "type": "use", "template": "rankRow" } } ] } ] } ] },
 
-          { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0" }], "style": { "flex": "1", "align-self": "stretch" }, "small": { "flex": "none" }, "children": [{ "type": "use", "template": "plays" }] },
-          { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0", "not": true }, { "test": "src.game.event.phase", "is": "eq", "value": "upcoming" }], "style": { "flex": "1", "align-self": "stretch" }, "small": { "flex": "none" }, "children": [{ "type": "use", "template": "plays" }] },
-          { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0", "not": true }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }, { "test": "src.game.event.spoiler" }], "style": { "flex": "1", "align-self": "stretch" }, "small": { "flex": "none" }, "children": [{ "type": "use", "template": "plays" }] }
+          { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0" }], "style": { "flex": "1", "align-self": "stretch" }, "below": { "760": { "flex": "none" } }, "children": [{ "type": "use", "template": "plays" }] },
+          { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0", "not": true }, { "test": "src.game.event.phase", "is": "eq", "value": "upcoming" }], "style": { "flex": "1", "align-self": "stretch" }, "below": { "760": { "flex": "none" } }, "children": [{ "type": "use", "template": "plays" }] },
+          { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0", "not": true }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }, { "test": "src.game.event.spoiler" }], "style": { "flex": "1", "align-self": "stretch" }, "below": { "760": { "flex": "none" } }, "children": [{ "type": "use", "template": "plays" }] }
         ] },
 
         { "type": "box", "id": "links", "when": [{ "test": "src.game.detail.links.0" }, { "test": "env.isTV", "not": true }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px" }, "children": [

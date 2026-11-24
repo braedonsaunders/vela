@@ -10,6 +10,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING } from '../common/controls';
 import { Cover, useMediaLook } from '../media/parts';
+import { barVolumeSlider } from '../media/window-layout';
 import { MediaGlyph } from '../media/icons';
 import { placeOf, useMusic } from './context';
 import { isSpoken, listeningWords } from './listening';
@@ -96,7 +97,7 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
         {onSound ? <IconButton symbol="sound" label={msg('music.sound')} onPress={onSound} active={soundOpen} size={34} iconSize={18} testID="bar-sound" /> : null}
         <IconButton symbol="queue" label={msg('music.queue')} onPress={onQueue} active={queueOpen} size={34} iconSize={18} testID="bar-queue" />
         <IconButton symbol={audio.muted || audio.volume === 0 ? 'speaker-mute' : 'speaker'} label={msg('music.mute')} onPress={() => store.audio.toggleMute()} size={34} iconSize={18} testID="bar-mute" />
-        <View style={{ width: 110 }}><Slider value={audio.muted ? 0 : audio.volume} onChange={v => store.audio.setVolume(v)} label={msg('music.volume')} testID="bar-volume" /></View>
+        {barVolumeSlider(m.width) ? <View style={{ width: 110 }}><Slider value={audio.muted ? 0 : audio.volume} onChange={v => store.audio.setVolume(v)} label={msg('music.volume')} testID="bar-volume" /></View> : null}
         <IconButton symbol="expand" label={msg('media.player.open')} onPress={() => openNowPlaying()} size={34} iconSize={17} testID="bar-expand" />
       </View>
     </View>

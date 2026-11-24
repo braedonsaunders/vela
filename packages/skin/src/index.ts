@@ -3,7 +3,7 @@ export { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, page } from './ren
 export { useHost, useInheritedText, useWidgetInteraction, type SkinHost, type WidgetProps } from './host';
 export { fill, holds } from './resolve';
 export { loadFonts, type DocumentFont } from './fonts';
-export type { Viewport } from './css';
+export type { Fold, Viewport } from './css';
 export { aboutLine, aboutOf, type About } from './about';
 export type { Accessor, Card, Ctx, Destination, DetailModel, Env, HomeModel } from './vocabulary';
 export * from './widgets/player';
