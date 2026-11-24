@@ -102,23 +102,39 @@ function mixed(text: string): string {
 }
 
 /**
- * Lengths that draw on whole and half points, as the hard-coded screens drew them (SportsLook.px):
- * with `scale` points per CSS px (1.25 on Apple TV, the Android TV pixel scale), each `<n>px` becomes
- * the length that the renderer's scaling turns into round(n x scale x 2) / 2 points. 1 leaves it.
+ * Lengths that draw on whole and half points on every platform, as the hard-coded screens drew them
+ * (SportsLook.px): with `scale` points per CSS px (1 on the web and phones, 1.25 on Apple TV, the
+ * Android TV pixel scale), each `<n>px` becomes the length that the renderer's scaling turns into
+ * round(n x scale x 2) / 2 points.
  */
 export function halfPoints(text: string, scale = 1): string {
-  if (scale === 1) return text;
   return text.replace(/(^|[^\w.#-])(-?\d*\.?\d+)px\b/g, (_, lead: string, n: string) => {
     const points = Math.round(Number(n) * scale * 2) / 2;
     return `${lead}${Math.round((points / scale) * 10_000) / 10_000}px`;
   });
 }
 
+/**
+ * A unitless line height beside a font size in px, as the length it makes, on half points: the
+ * hard-coded screens set lineHeight = px(size x 1.25), so 11.5px text has a 14.5 point line, not 14.375.
+ */
+export function lineHeightPoints(fontSize: string | undefined, lineHeight: string | undefined, scale = 1): string | undefined {
+  const size = /^(\d*\.?\d+)px$/.exec(fontSize?.trim() ?? '');
+  if (!size || !lineHeight || !/^\d*\.?\d+$/.test(lineHeight.trim())) return undefined;
+  const points = Math.round(Number(size[1]) * Number(lineHeight) * scale * 2) / 2;
+  return `${Math.round((points / scale) * 10_000) / 10_000}px`;
+}
+
 /** A screen document's style row, tokens already substituted: holes compiled and validated as filled. */
 export function screenStyleRow(row: string, text: string, scope: HoleScope, scale = 1): Template {
   const template = compileTemplate(text, scope, (hole: Accessor): Accessor => (c, e) => styleHole(row, hole(c, e)));
-  if (typeof template === 'string') return mixColours(fold(halfPoints(template, scale)));
-  const parts = template.parts.map(p => (typeof p === 'string' ? fold(halfPoints(p, scale)) : p));
+  // Each length rounds, and so does what folding makes of them (min($ui.radiusPanel * 0.6, 22px) is
+  // 17px, as look.px rounded each radius); a border's computed width stays as computed (Crest's
+  // max(1.5, size * 0.05) was never rounded).
+  const raw = /^(border(?!-radius)|inset$|outline)/.test(row);
+  const round = (t: string) => (raw ? fold(halfPoints(t, scale)) : halfPoints(fold(halfPoints(t, scale)), scale));
+  if (typeof template === 'string') return mixColours(round(template));
+  const parts = template.parts.map(p => (typeof p === 'string' ? round(p) : p));
   if (!text.includes('color-mix(')) return { parts };
   const whole: Accessor = (c, e) => mixed(parts.map(p => (typeof p === 'string' ? p : p(c, e))).join(''));
   return { parts: [whole] };

@@ -22,7 +22,7 @@ import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 import { compileTemplate, holeValue, makeArg, pathField, singleHole, type Arg, type HoleScope, type Value } from './screen/holes';
 import { text as valueText } from './screen/scope';
 import type { Items } from './screen/items';
-import { fold, halfPoints, screenStyleRow } from './resolve/screen-style';
+import { fold, halfPoints, lineHeightPoints, screenStyleRow } from './resolve/screen-style';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
  * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
@@ -261,6 +261,10 @@ function tokenValue(raw: string, r: Context): string {
 /** Style tokens substituted and bound values compiled. */
 function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
+  // Screens: a unitless line height beside a px font size becomes a half-point length (look.px).
+  const line = r.screen && style?.['line-height'] && style['font-size']
+    ? lineHeightPoints(tokenValue(style['font-size'], r), style['line-height'], r.screen.scale) : undefined;
+  if (line) style = { ...style, 'line-height': line };
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
     const text = tokenValue(String(raw), r);
