@@ -210,7 +210,7 @@ describe('collections', () => {
     expect(tabs.small).toBe(true);
     expect(tabs.testId).toBeUndefined();
     const c = root({ leagues: [{ id: 'nfl', label: 'NFL' }] });
-    const option = items({ over: '', limit: 0, items: tabs.items }, c, env)[0]!;
+    const option = items({ over: '', limit: 1000, items: tabs.items }, c, env)[0]!;
     expect(fill(tabs.label, option, env)).toBe('NFL');
     expect(fill(tabs.chip.testId, option, env)).toBe('league-nfl');
     expect(() => resolve(doc({ type: 'tabs', over: 'src.x', as: 'l', value: '', label: '', bind: {} }))).toThrow('exactly one');
