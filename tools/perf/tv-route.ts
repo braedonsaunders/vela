@@ -192,16 +192,40 @@ if (import.meta.main) {
       ...process.env,
       ANDROID_ADB_SERVER_PORT: process.env.ANDROID_ADB_SERVER_PORT ?? '5041',
     };
-    const res = Bun.spawnSync(['timeout', '15', adbBin, '-s', udid, ...args], {
-      env: adbEnv,
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    if (res.exitCode !== 0) {
-      throw new Error(`adb -s ${udid} ${args.join(' ')} failed (exit ${res.exitCode}): ${res.stderr.toString().trim()}`);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const res = Bun.spawnSync(['timeout', '25', adbBin, '-s', udid, ...args], {
+        env: adbEnv,
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      if (res.exitCode === 0) {
+        return res.stdout.toString();
+      }
+      if (attempt === 1) {
+        Bun.spawnSync(['timeout', '5', adbBin, 'reconnect', 'offline'], {
+          env: adbEnv,
+          stdin: 'ignore',
+          stdout: 'ignore',
+          stderr: 'ignore',
+        });
+      } else {
+        throw new Error(`adb -s ${udid} ${args.join(' ')} failed (exit ${res.exitCode}): ${res.stderr.toString().trim()}`);
+      }
     }
-    return res.stdout.toString();
+    return '';
+  }
+
+  /** Set the systemd user service CPUQuota for the emulator (if running under systemd-run). */
+  function setEmulatorCpuQuota(quota: string): void {
+    const portMatch = /emulator-(\d+)/.exec(udid);
+    if (!portMatch) return;
+    const unit = `vela-tv-floor-${portMatch[1]}.service`;
+    Bun.spawnSync(['systemctl', '--user', 'set-property', unit, `CPUQuota=${quota}`], {
+      stdin: 'ignore',
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
   }
 
   /** Start an isolated frozen mock server on `mockPort` if `--mock` was not externally supplied.
@@ -353,6 +377,9 @@ if (import.meta.main) {
   }
 
   async function measureRoute(mockUrl: string, route: string, label: string): Promise<RoutePerfResult> {
+    // Unthrottle emulator during Metro bundling & ADB setup so host Metro doesn't starve the guest adbd
+    setEmulatorCpuQuota('400%');
+
     // Reset mock state to deterministic defaults
     await fetch(`${mockUrl}/__admin/sports`, {
       method: 'POST',
@@ -380,6 +407,9 @@ if (import.meta.main) {
         'shell',
         `run-as ${APP} sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/vela-perf-prefs.xml shared_prefs/${APP}_preferences.xml'`,
       );
+
+      // Apply target floor CPUQuota right before launching the app and measuring frames!
+      setEmulatorCpuQuota(cpuQuota);
 
       // Launch app and wait for homeReady + useStartRoutes (1500ms timer after homeReady) + route settle
       runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'reset');
