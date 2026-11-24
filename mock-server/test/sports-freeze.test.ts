@@ -56,4 +56,13 @@ describe('mock server: frozen sports', () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(240);
     await admin({ screenDelayMs: 0 });
   });
+
+  test('admin can start every viewer from no favourite teams, and back', async () => {
+    const yours = async () => ((await (await get('/screens/sports')).json()) as V.Screen).sections.find(s => s.id === 'favorites') as V.EventsSection;
+    expect((await yours()).events.length).toBeGreaterThan(0);
+    await admin({ favourites: [] });
+    expect((await yours()).events).toEqual([]);
+    await admin({ favourites: null });
+    expect((await yours()).events.length).toBeGreaterThan(0);
+  });
 });

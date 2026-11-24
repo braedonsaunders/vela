@@ -90,6 +90,8 @@ const LEAGUES: Record<string, V.LiveLeague & { category: string }> = {
   f1: { id: 'f1', name: 'Formula 1', abbr: 'F1', category: 'f1' },
 };
 const DEFAULT_FAVOURITES = ['nfl-phi', 'nhl-tor', 'nba-tor', 'mlb-tor', 'epl-mci'];
+/** Every viewer's starting favourites (team ids); /__admin/sports {favourites} replaces them. */
+let startingFavourites = DEFAULT_FAVOURITES;
 
 /** One sport's rules for the simulation and the score page. */
 interface Rules { periods: number; periodSeconds: number; countUp?: boolean; tick: number; scoreChance: number; points: number[]; periodName: (n: number) => string; columns: (n: number) => string }
@@ -287,7 +289,7 @@ function tablesFor(sim: Sim): V.LiveTable[] {
 
 const favourites = new Map<string, Set<string>>();
 const revealed = new Map<string, Set<string>>();
-const favouritesOf = (viewerId: string) => { let set = favourites.get(viewerId); if (!set) favourites.set(viewerId, set = new Set(DEFAULT_FAVOURITES.map(entityKey))); return set; };
+const favouritesOf = (viewerId: string) => { let set = favourites.get(viewerId); if (!set) favourites.set(viewerId, set = new Set(startingFavourites.map(entityKey))); return set; };
 const DEFAULT_SPOILERS = new Set([ns('epl-che-mci')]);
 /** A viewer's own spoiler-free choice (PUT /live/preferences); the admin knob otherwise. */
 const spoilerPreference = new Map<string, boolean>();
@@ -606,10 +608,15 @@ export function liveEventOnChannel(channelId: string | undefined): V.LiveEventRe
 }
 
 /** Admin: change the knobs, or push an alert for an event to every alert listener. */
-export function sportsAdmin(body: { providerCap?: number; spoilerFree?: boolean; screenDelayMs?: number; screenFail?: boolean; alert?: { kind: V.LiveAlertKind; eventId: string } }): typeof sportsKnobs & { now: string; frozen: boolean } {
+export function sportsAdmin(body: { providerCap?: number; spoilerFree?: boolean; screenDelayMs?: number; screenFail?: boolean; favourites?: string[] | null; alert?: { kind: V.LiveAlertKind; eventId: string } }): typeof sportsKnobs & { now: string; frozen: boolean } {
   if (Number.isFinite(body.providerCap) && body.providerCap! >= 0) sportsKnobs.providerCap = Math.floor(body.providerCap!);
   if (Number.isFinite(body.screenDelayMs) && body.screenDelayMs! >= 0) sportsKnobs.screenDelayMs = Math.min(600_000, Math.floor(body.screenDelayMs!));
   if (typeof body.screenFail === 'boolean') sportsKnobs.screenFail = body.screenFail;
+  // Every viewer starts again from these favourites (null: the defaults); reveals are forgotten too.
+  if (body.favourites === null || Array.isArray(body.favourites)) {
+    startingFavourites = body.favourites?.filter(id => TEAMS.some(t => t.id === id)) ?? DEFAULT_FAVOURITES;
+    favourites.clear(); revealed.clear();
+  }
   if (typeof body.spoilerFree === 'boolean') { sportsKnobs.spoilerFree = body.spoilerFree; spoilerPreference.clear(); }
   const sim = body.alert && sims.get(body.alert.eventId);
   if (sim && body.alert) alert(body.alert.kind, sim, true);
