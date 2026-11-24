@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, PATIENCE_SECONDS, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample } from '../src/store/stall';
+import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, parkedBeforeGap, PATIENCE_SECONDS, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample } from '../src/store/stall';
 import { Playback, initialPlayback } from '../src/store/playback';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
@@ -267,4 +267,30 @@ test('a dead stream on Apple ends in the failed state in the same bound, through
     expect(box.get().playback.errorCode).toBe('playback_stalled');
     expect(stops).toEqual(['s1', 's2', 's3']);
   });
+});
+
+test('a playhead parked in front of a gap is told apart from one inside its buffer', () => {
+  // The lab, November 2026: the playhead at the playlist's 0 s, the media buffered from 5 s on.
+  expect(parkedBeforeGap({ position: 0, playable: [{ start: 5, end: 29.976 }] })).toBe(true);
+  // Inside, at the edge of, or just short of its buffer (a hole the engine steps over itself): not parked.
+  expect(parkedBeforeGap({ position: 6, playable: [{ start: 5, end: 30 }] })).toBe(false);
+  expect(parkedBeforeGap({ position: 4.98, playable: [{ start: 5, end: 30 }] })).toBe(false);
+  expect(parkedBeforeGap({ position: 4.7, playable: [{ start: 5, end: 30 }] })).toBe(false);
+  // Nothing buffered yet, or only behind it (a seek forward still loading): waiting, not parked.
+  expect(parkedBeforeGap({ position: 900, playable: [] })).toBe(false);
+  expect(parkedBeforeGap({ position: 900, playable: [{ start: 0, end: 50 }] })).toBe(false);
+  expect(parkedBeforeGap({ playable: [{ start: 5, end: 30 }] })).toBe(false);
+});
+
+test('bytes arriving beyond a gap the playhead is parked in front of are not progress: the attempt stalls', () => {
+  // The buffer beyond the gap grows by a segment every 5 s and bytes keep arriving, as on the lab.
+  const parked = Array.from({ length: 30 }, (_, i) => ({
+    state: 'buffering', position: 0, playable: [{ start: 5, end: 10 + i }], bufferAheadSeconds: 0, loadProgress: i * 1_500_000,
+  }));
+  const { watch } = feed(parked);
+  // Heard at the first sample (1 s) and never again: stalled at the first attempt's quiet budget.
+  expect(stallDeadline(watch)).toBe(1 * S + QUIET_SECONDS[0] * S);
+  // The same growth with the playhead inside the buffer is a slow start, still loading.
+  const loadingIn = feed(parked.map(sample => ({ ...sample, position: 5.01 })));
+  expect(stallDeadline(loadingIn.watch)).toBe(loadingIn.now + QUIET_SECONDS[0] * S);
 });

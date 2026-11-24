@@ -97,6 +97,22 @@ function bufferedEnd(sample: StallSample): number {
   return end;
 }
 
+/** A hole this wide in front of the playhead is one it cannot play into on its own. */
+const PARKED_GAP_SECONDS = 0.5;
+
+/**
+ * The playhead parked in front of media it cannot reach: outside every playable range, with one
+ * starting beyond a gap ahead of it (a live start whose media begins later than its playlist says).
+ * Media arriving beyond the gap is not progress for the viewer, who sees nothing.
+ */
+export function parkedBeforeGap(sample: Pick<StallSample, 'position' | 'playable'>): boolean {
+  const position = sample.position;
+  const ranges = sample.playable ?? [];
+  if (position === undefined || !Number.isFinite(position) || !ranges.length) return false;
+  if (ranges.some(r => position >= r.start - EPSILON && position <= r.end + EPSILON)) return false;
+  return ranges.some(r => r.start > position + PARKED_GAP_SECONDS);
+}
+
 /**
  * A growing measure against its mark: the value it last counted as growth at. Growth is counted
  * from the mark, not the previous sample, so a buffer filling slowly over many snapshots still
@@ -146,8 +162,9 @@ export function heardEngine(watch: StallWatch, sample: StallSample, now: number)
   }
   if (positionChanged || newIntent) return { ...next, heard: now, moved: now, playedFrom: null };
   // An engine that says it is waiting is believed while its buffer grows, bytes keep arriving or
-  // it moves through its preparation. One that says it is playing must move its position.
-  const loading = WAITING.has(state) && (
+  // it moves through its preparation, unless its playhead is parked in front of a gap that all of
+  // that lands beyond. One that says it is playing must move its position.
+  const loading = WAITING.has(state) && !parkedBeforeGap(sample) && (
     buffered.grew || ahead.grew || load.grew ||
     (marks.throughput !== null && marks.throughput > 0 && marks.throughput !== last.throughput) ||
     marks.preparation !== last.preparation);
