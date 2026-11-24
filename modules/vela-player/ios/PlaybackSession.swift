@@ -799,7 +799,10 @@ final class PlaybackSession {
     }
 
     private func selectSubtitle(_ id: String?) -> String? {
-        if id == report.subtitleTrackId { return nil }
+        // The server may have selected a sidecar it just added before this choice of it arrives:
+        // that one is still to be added to the engine.
+        let unadded = id.flatMap { plan?.subtitleTrack($0) }.map { $0.isExternal && activeSidecar != $0.id } ?? false
+        if id == report.subtitleTrackId && !unadded { return nil }
         if playsOriginal, let id, id.hasPrefix("mpv-sub-"), let trackId = Int64(id.dropFirst(8)),
            state.tracks.contains(where: { $0["type"] as? String == "sub" && $0["id"] as? Int64 == trackId }) {
             report.subtitleTrackId = id
