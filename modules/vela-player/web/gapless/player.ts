@@ -6,7 +6,9 @@
 // hands speed changes, and anything this browser cannot open or decode here, to an <audio> element.
 import type { PcmChunk } from './stream';
 import { TrackStream, UnsupportedTrack } from './stream';
+import { registerDecoder } from 'mediabunny';
 import type { GaplessEvent, GaplessPlayer } from '../../src/gapless-audio';
+import { CompatAudioDecoder } from './compat-decoder';
 
 /** Seconds of audio kept scheduled ahead of the clock (background tabs tick about once a second). */
 const AHEAD = 6;
@@ -33,12 +35,19 @@ interface Item {
   failed?: unknown;
 }
 
-/** Whether this browser can run the gapless player at all: WebCodecs and Web Audio in a secure context. */
+/**
+ * Whether this browser can run the gapless player: Web Audio, and WebCodecs to decode, or (a page served
+ * over plain http, where WebCodecs is withheld) Web Audio's own decoder for FLAC, MP3 and AAC-LC.
+ */
 export function gaplessSupported(): boolean {
-  return typeof window !== 'undefined' && window.isSecureContext && typeof AudioDecoder !== 'undefined' && typeof AudioContext !== 'undefined';
+  return typeof window !== 'undefined' && typeof AudioContext !== 'undefined' && (typeof AudioDecoder !== 'undefined' || typeof OfflineAudioContext !== 'undefined');
 }
 
+let registered = false;
+
 export function createGaplessPlayer(): GaplessPlayer {
+  // Only claims codecs where WebCodecs is missing, so the video player's decoding is untouched.
+  if (!registered) { registered = true; registerDecoder(CompatAudioDecoder); }
   const listeners = new Set<(event: GaplessEvent) => void>();
   const emit = (event: GaplessEvent) => { for (const listener of [...listeners]) listener(event); };
   let context: AudioContext | null = null;

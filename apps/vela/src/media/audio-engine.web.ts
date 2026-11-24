@@ -1,9 +1,9 @@
 // The web's audio engine, one for the whole app so music keeps playing while the viewer browses, with
 // the Media Session API for the browser's and the OS's media controls (lock screen, keyboard media
 // keys, headset buttons). Two players behind it:
-// - the gapless player (@vela/player/src/gapless-audio: WebCodecs decoding into Web Audio), which joins
-//   consecutive tracks sample to sample. It needs a secure context, a decoder for the track's codec,
-//   and 1x speed (Web Audio cannot keep pitch at speed);
+// - the gapless player (@vela/player/src/gapless-audio: WebCodecs, or Web Audio's own decoder on a page
+//   served over plain http, into Web Audio), which joins consecutive tracks sample to sample. It needs a
+//   decoder for the track's codec and 1x speed (Web Audio cannot keep pitch at speed);
 // - otherwise <audio> elements: the current one and the next, ready, started the moment the current one
 //   ends (close, but not sample-exact: the element's own start-up sits between the tracks).
 import type { AudioEngine, AudioEngineEvent, AudioPreload, AudioState } from '@vela/core';
