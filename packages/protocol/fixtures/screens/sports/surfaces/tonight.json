@@ -15,7 +15,8 @@
     "card": "color-mix(in srgb, $ui.page 8%, $ui.raised 92%)",
     "cardHover": "color-mix(in srgb, $ui.raised 94%, $ui.ink 6%)",
     "hairline": "color-mix(in srgb, $ui.ink 8%, transparent)",
-    "radiusCard": "min($ui.radiusCard, 18px)"
+    "radiusCard": "min($ui.radiusCard, 18px)",
+    "gutter": "max(28px, 4vw)"
   },
   "motion": { "pop": { "keyframes": "doc:pop", "duration": 1360, "easing": "ease-out", "still": { "keyframes": "none", "duration": 0 } } },
   "keyframes": { "pop": { "0%": { "scale": 1 }, "12%": { "scale": 1.16, "color": "$ui.accent" }, "48%": { "scale": 1.16, "color": "$ui.accent" }, "100%": { "scale": 1 } } },
@@ -23,9 +24,14 @@
     "type": "box",
     "testId": "sports-tonight",
     "when": [{ "test": "src.tonight.events" }],
-    "style": { "font-family": "$ui.font", "gap": "12px" },
+    "style": { "font-family": "$ui.font", "gap": "12px", "padding-bottom": "28px" },
     "children": [
-      { "type": "use", "template": "vela:heading", "with": { "text": "{s:title}", "aside": "{s:subtitle}" } },
+      {
+        "type": "box",
+        "style": { "padding": "0px $gutter" },
+        "small": { "padding": "0px 18px" },
+        "children": [{ "type": "use", "template": "vela:heading", "with": { "text": "{s:title}", "aside": "{s:subtitle}" } }]
+      },
       {
         "type": "shelf",
         "over": "src.tonight.events",
