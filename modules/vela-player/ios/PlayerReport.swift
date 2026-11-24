@@ -67,12 +67,29 @@ final class PlayerReport {
             sequence = 0
             liveBehind = false
         }
+        if plan.selectedPath.map({ !$0.isOriginalFile }) == true {
+            // A server path plays the tracks the server selects. A choice made among the original file's own
+            // streams does not carry over to it; one about a sidecar does, as the player still draws it there.
+            audioClientOnly = false
+            if subtitleClientOnly && !Self.sidecarChoice(subtitleTrackId, in: plan) {
+                subtitleClientOnly = false
+            }
+        }
         if !audioClientOnly {
             audioTrackId = plan.selectedAudioTrackId
         }
         if !subtitleClientOnly {
             subtitleTrackId = plan.selectedSubtitleTrackId
         }
+    }
+
+    /// Whether a subtitle choice made in the player concerns sidecars only: one chosen, or Off while the server
+    /// selects none or a sidecar (which only the player draws).
+    static func sidecarChoice(_ id: String?, in plan: VelaPlan) -> Bool {
+        guard let id else {
+            return plan.subtitleTrack(plan.selectedSubtitleTrackId)?.isExternal != false
+        }
+        return plan.subtitleTrack(id)?.isExternal == true
     }
 
     /// The viewer's own audio choice, applied in the player (the original file's streams): later plans keep it.

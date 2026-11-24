@@ -8,11 +8,12 @@ struct PlaybackPreferences {
     let values: [String: String] = [:]
 }
 
-func plan(session: String = "s", revision: Int = 1, selected: String? = "sidecar", audio: String = "english") -> VelaPlan {
+func plan(session: String = "s", revision: Int = 1, selected: String? = "sidecar", audio: String = "english", path: String = "hls") -> VelaPlan {
     VelaPlan.decode([
         "sessionId": session, "revision": revision, "sourceGeneration": 1, "seekGeneration": 1,
-        "positionSeconds": 0, "selectedPathId": "hls",
-        "paths": [["id": "hls", "kind": "transcode", "transport": "hls", "readiness": "ready"]],
+        "positionSeconds": 0, "selectedPathId": path,
+        "paths": [["id": "hls", "kind": "transcode", "transport": "hls", "readiness": "ready"],
+                  ["id": "original", "kind": "direct", "transport": "file", "readiness": "ready", "original": true]],
         "audioTracks": [["id": "english", "name": "English", "streamIndex": 1], ["id": "spanish", "name": "Spanish", "streamIndex": 2],
                         ["id": "commentary", "name": "Commentary"]],
         "selectedAudioTrackId": audio,
@@ -115,18 +116,49 @@ func embeddedAfterSidecar() {
 /// back to the server, whose answer is shown, while a choice made in the player stays across plans.
 func audioAfterLocalPick() {
     let report = PlayerReport(snapshot: { _ in }, observation: { _ in }, error: { _ in }, sessionCommand: { _ in })
-    report.adopt(plan(), newSession: true)
+    report.adopt(plan(path: "original"), newSession: true)
     precondition(report.audioTrackId == "english" && !report.audioClientOnly)
     report.chooseAudio("spanish")
-    report.adopt(plan(revision: 2), newSession: false)
+    report.adopt(plan(revision: 2, path: "original"), newSession: false)
     precondition(report.audioTrackId == "spanish" && report.audioClientOnly)
     report.requestAudio("commentary")
     precondition(report.audioTrackId == "commentary" && !report.audioClientOnly)
-    report.adopt(plan(revision: 3, audio: "commentary"), newSession: false)
+    report.adopt(plan(revision: 3, audio: "commentary", path: "original"), newSession: false)
     precondition(report.audioTrackId == "commentary")
     // A refusal leaves the server's own choice, which is then shown.
-    report.adopt(plan(revision: 4, audio: "english"), newSession: false)
+    report.adopt(plan(revision: 4, audio: "english", path: "original"), newSession: false)
     precondition(report.audioTrackId == "english")
+}
+
+/// Choices made among the original file's own streams end when the plan moves to a server path, which plays what
+/// the server selects; a sidecar choice (or Off for a sidecar) goes on, as the player draws sidecars on any path.
+func localChoicesOnServerPath() {
+    let report = PlayerReport(snapshot: { _ in }, observation: { _ in }, error: { _ in }, sessionCommand: { _ in })
+    report.adopt(plan(selected: "embedded", path: "original"), newSession: true)
+    report.chooseAudio("spanish")
+    report.chooseSubtitle(nil)
+    report.adopt(plan(revision: 2, selected: "embedded", path: "original"), newSession: false)
+    precondition(report.audioTrackId == "spanish" && report.subtitleTrackId == nil)
+    // The switch to the server's HLS: its audio and its embedded subtitle are what plays and what the menu shows,
+    // so choosing Spanish there is a new choice again, for the server.
+    report.adopt(plan(revision: 3, selected: "embedded", path: "hls"), newSession: false)
+    precondition(report.audioTrackId == "english" && !report.audioClientOnly)
+    precondition(report.subtitleTrackId == "embedded" && !report.subtitleClientOnly)
+    // An embedded track picked in the file does not carry over either.
+    let picked = PlayerReport(snapshot: { _ in }, observation: { _ in }, error: { _ in }, sessionCommand: { _ in })
+    picked.adopt(plan(selected: nil, path: "original"), newSession: true)
+    picked.chooseSubtitle("embedded")
+    picked.adopt(plan(revision: 2, selected: nil, path: "hls"), newSession: false)
+    precondition(picked.subtitleTrackId == nil && !picked.subtitleClientOnly)
+    // The viewer's sidecar, and Off for the server's sidecar, stay theirs on the server path.
+    let sidecar = PlayerReport(snapshot: { _ in }, observation: { _ in }, error: { _ in }, sessionCommand: { _ in })
+    sidecar.adopt(plan(selected: nil, path: "original"), newSession: true)
+    sidecar.chooseSubtitle("found")
+    sidecar.adopt(plan(revision: 2, selected: nil, path: "hls"), newSession: false)
+    precondition(sidecar.subtitleTrackId == "found" && sidecar.subtitleClientOnly)
+    sidecar.chooseSubtitle(nil)
+    sidecar.adopt(plan(revision: 3, selected: "sidecar", path: "hls"), newSession: false)
+    precondition(sidecar.subtitleTrackId == nil && sidecar.subtitleClientOnly)
 }
 
 @main struct Probe {
@@ -135,6 +167,7 @@ func audioAfterLocalPick() {
         adoption()
         embeddedAfterSidecar()
         audioAfterLocalPick()
+        localChoicesOnServerPath()
         print("subtitle sidecar passed")
     }
 }
