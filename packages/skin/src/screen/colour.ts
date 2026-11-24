@@ -1,7 +1,6 @@
 // Colour arithmetic for screen documents' colour pipes (docs/plugin-screens.md: Bindings): the
-// relative luminance of a colour, a colour part way to another, and one at an opacity. Ported
-// from the hard-coded Sports look (widgets/sports/model.ts, colour.ts and graph.tsx), which is
-// deleted once Sports is a plugin document; these are copies, not imports.
+// relative luminance of a colour, a colour part way to another, and one at an opacity, with the
+// rules the built-in Sports screen used (pixel parity).
 
 export interface Rgba { r: number; g: number; b: number; a: number }
 

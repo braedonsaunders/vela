@@ -1,8 +1,7 @@
 // The fixed pipes of a screen document's holes (docs/plugin-screens.md: Bindings). There are no
 // expressions: a hole is a path and a list of these. The client keeps only what depends on the
-// viewer's clock, locale or skin; every other fact arrives from Ether already derived. Ported
-// from widgets/sports/model.ts (startText, dayOffset) and graph.tsx (readableTeam), which Sports'
-// removal deletes, so they are copied here, not imported.
+// viewer's clock, locale or skin; every other fact arrives from Ether already derived. The rules
+// are those the built-in Sports screen used (startText, dayOffset, readableTeam).
 import { duration as durationText, localeContext, number as numberText, time as clockText } from '@vela/core';
 import { crest, hexColour, parseColour, readable, tint, withAlpha } from './colour';
 import { deref, text, type RecordReader } from './scope';

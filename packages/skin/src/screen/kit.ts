@@ -1,9 +1,9 @@
 // The kit: `vela:*` templates a screen document uses by name (docs/plugin-screens.md: Building
 // blocks), written in the document language and drawn in the active skin's look ($ui), so a plugin
 // does not hand-roll controls. Each reads its `with` arguments as {arg.*}. Their measures follow
-// the hard-coded Sports parts they replace (widgets/sports/parts.tsx: Pill, Chip, Heading, Panel,
-// Crest, LiveBadge, ScoresSwitch, Placeholder, Failure) and the library toolbar's tab pill
-// (widgets/library/toolbar-controls.tsx Button), for pixel parity.
+// the Sports parts they replaced (Pill, Chip, Heading, Panel, Crest, LiveBadge, ScoresSwitch,
+// Placeholder, Failure) and the library toolbar's tab pill (widgets/library/toolbar-controls.tsx
+// Button), for pixel parity.
 import { msg } from '@vela/core';
 import type { MotionPreset, Node, Style } from '../../../protocol/skin';
 import type { UiTokens } from '../resolve/ui-defaults';

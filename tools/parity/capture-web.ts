@@ -13,7 +13,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { captureName, DEFAULT_KNOBS, reviewed, target, VIEWS, WEB_VIEWPORTS, webPath, type Knobs, type Variant } from './views';
+import { captureName, DEFAULT_KNOBS, REVIEWED_REGIONS, reviewed, target, VIEWS, WEB_VIEWPORTS, webPath, type Knobs, type Variant } from './views';
 
 const { values } = parseArgs({ options: {
   variant: { type: 'string', default: 'document' }, out: { type: 'string' }, app: { type: 'string', default: 'http://localhost:8141' },
@@ -70,7 +70,8 @@ const SCROLL = `el => {
   if (box) box.scrollTop += by; else window.scrollBy(0, by);
 }`;
 
-interface Capture { viewport: string; view: string; file: string; frame: string; url: string; description: string; review?: string; ok: boolean; error?: string }
+interface Capture { viewport: string; view: string; file: string; frame: string; url: string; description: string; review?: string; ok: boolean; error?: string;
+  /** Reviewed differences on screen in this capture (REVIEWED_REGIONS). */ reviewedRegions?: { x: number; y: number; width: number; height: number; note: string }[] }
 const captures: Capture[] = [];
 try {
   for (const viewport of viewports) {
@@ -89,15 +90,23 @@ try {
         await page.waitForTimeout(1800);
         ${scroll && 'selector' in scroll ? `await page.locator(${JSON.stringify(scroll.selector)}).first().evaluate(${SCROLL});
         await page.waitForTimeout(1500);` : ''}
+        const regions = await page.evaluate(specs => specs.flatMap(({ selector, note }) => {
+          const boxes = [...document.querySelectorAll(selector)].map(e => e.getBoundingClientRect()).filter(r => r.width && r.height && r.bottom > 0 && r.top < innerHeight);
+          if (!boxes.length) return [];
+          const top = Math.floor(Math.min(...boxes.map(r => r.top))), bottom = Math.ceil(Math.max(...boxes.map(r => r.bottom)));
+          return [{ x: 0, y: Math.max(0, top - 2), width: innerWidth, height: Math.min(innerHeight, bottom + 2) - Math.max(0, top - 2), note }];
+        }), ${JSON.stringify(REVIEWED_REGIONS)});
         await page.screenshot({ path: ${JSON.stringify(join(out, file))} });
         await page.waitForTimeout(700);
         await page.screenshot({ path: ${JSON.stringify(join(out, frame))} });
-        return page.url();
+        return { url: page.url(), regions };
       }`;
       const capture: Capture = { viewport: viewport.name, view: view.name, file, frame, url, description: view.description, review: reviewed(view, viewport.name), ok: false };
       try {
         await admin({ ...DEFAULT_KNOBS, ...view.knobs });
-        capture.url = result(cli(name, ['run-code', code])) ?? url;
+        const answer = result(cli(name, ['run-code', code])) as { url: string; regions: Capture['reviewedRegions'] } | undefined;
+        capture.url = answer?.url ?? url;
+        if (answer?.regions?.length) capture.reviewedRegions = answer.regions;
         capture.ok = true;
         console.log(`ok   ${viewport.name} ${view.name}`);
       } catch (error) {

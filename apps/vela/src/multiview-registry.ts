@@ -1,5 +1,5 @@
 // The multiview's hook (spec D), for anything that offers "Add to multiview" (plugin screens'
-// `multiview` action, and the hard-coded Sports until it is removed): while the multiview is
+// `multiview` action): while the multiview is
 // available it registers how to add a Live TV channel as a tile and show it.
 import { useSyncExternalStore } from 'react';
 

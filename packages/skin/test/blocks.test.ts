@@ -471,8 +471,8 @@ describe('action-validation (navigate, setParam, play, multiview, plugin, openLi
   });
 });
 
-describe('record-scope isolation (per-card re-render count on live record push vs legacy Sports)', () => {
-  test('pushing 1 event record out of 16 shelf/grid cards notifies and re-renders only 1 card (1 vs 16 in legacy Sports)', () => {
+describe('record-scope isolation (per-card re-render count on a live record push)', () => {
+  test('pushing 1 event record out of 16 shelf/grid cards notifies and re-renders only 1 card', () => {
     const store = new RecordStore();
     const cardCount = 16;
     const refs: { $record: string }[] = [];

@@ -88,3 +88,10 @@ export const captureName = (viewport: string, view: string) => `${viewport}--${v
 export const DEVICE_MASKS: Record<string, { x: number; y: number; width: number; height: number }[]> = {
   'ios-phone': [{ x: 1150, y: 0, width: 248, height: 360 }],
 };
+
+/** Differences reviewed and accepted in writing, found by selector in each document capture and
+ * left out of the pixel comparison (listed in the report instead). The box is the union of the
+ * matches, widened to the full viewport width (a row that scrolls sideways). */
+export const REVIEWED_REGIONS: { selector: string; note: string }[] = [
+  { selector: '[data-testid^="sports-day-"]', note: 'Schedule day strip: Ether serves 7 days (-2..+4), legacy showed 8 (-3..+4); decided with Ether' },
+];
