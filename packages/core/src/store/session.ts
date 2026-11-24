@@ -47,8 +47,12 @@ export class Session {
   private validation: { token: string; pending: Promise<V.Tokens | null> } | undefined;
   private negotiation: { epoch: number; context: string; pending: Promise<void> } | undefined;
 
-  constructor(platform: VelaPlatform) {
+  /** The skin renderer this client draws, sent to Ether with screen reads (RENDERER_VERSION). */
+  readonly rendererVersion: number | undefined;
+
+  constructor(platform: VelaPlatform & { rendererVersion?: number }) {
     this.platform = platform;
+    this.rendererVersion = platform.rendererVersion;
     this.registry = new ServerRegistry(platform.secrets, platform.etherOrigin ? validOrigin(platform.etherOrigin) : undefined);
     // A standalone app that starts with no server is already "on none", so the first server added
     // is a change of server that every slice hears.
@@ -138,7 +142,7 @@ export class Session {
         ? new SessionCredentials(this.platform.secrets, this.device, () => this.key())
         : new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);
       const context = this.clientValue ? JSON.stringify(this.clientValue) : '';
-      const adapter = new EtherAdapter(record.origin, credentials, context, rejected);
+      const adapter = new EtherAdapter(record.origin, credentials, context, rejected, this.rendererVersion);
       made = etherConnection(record, adapter, credentials, this.registry.standalone, this.platform.device.platform === 'web');
     } else {
       const credentials = new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);

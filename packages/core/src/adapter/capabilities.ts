@@ -2,6 +2,8 @@ import type * as V from '../wire';
 import type { SkinDocument } from '../wire';
 import type { EventHandler } from '../protocol/sse';
 import type { ServerAdapter } from './index';
+import type { ScreenTarget } from '../screens/keys';
+import type { ScreenStreamQuery } from '../screens/stream';
 
 export interface MediaVersion { id: string; name: string; audioTrackId?: string }
 export interface TitleActions {
@@ -367,6 +369,27 @@ export interface LiveEvents {
 }
 export function hasLiveEvents(adapter: ServerAdapter): adapter is ServerAdapter & LiveEvents {
   return ['screen', 'liveEvents', 'liveEvent', 'revealLiveEvent', 'liveEntities', 'setEntityFavorite', 'liveTicker', 'streamLive'].every(name =>
+    name in adapter && typeof (adapter as unknown as Record<string, unknown>)[name] === 'function');
+}
+
+/** One data read of a screen page or a surface: the sources to read (all that are not lazy when
+ * absent), the page's params and the surface's server context (both sent as `p.<name>`), and the
+ * viewer's time zone. */
+export interface ScreenDataRead { sources?: string[]; params: Record<string, string>; context?: Record<string, string>; tz: string }
+
+/** Plugin screens and surfaces (docs/plugin-screens.md): documents, per-viewer data, actions and
+ * the page topics of `/live/stream`. Every call carries the client's renderer version. */
+export interface PluginScreens {
+  /** An immutable document by its href; a stale href answers 301 and is followed (the href read is returned). */
+  screenDocument(href: string, signal?: AbortSignal): Promise<{ document: V.ScreenDocument; href: string }>;
+  screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData>;
+  screenAction(target: ScreenTarget, action: string, request: V.ScreenActionRequest, mutation: V.Mutation): Promise<V.ScreenActionAnswer>;
+  setSurfaceSetting(id: string, enabled: boolean, mutation: V.Mutation): Promise<void>;
+  /** One connection to `/live/stream` for page topics (and alerts); resolves when the server closes it. */
+  streamScreens(query: ScreenStreamQuery, tz: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
+}
+export function hasPluginScreens(adapter: ServerAdapter): adapter is ServerAdapter & PluginScreens {
+  return ['screenDocument', 'screenData', 'screenAction', 'setSurfaceSetting', 'streamScreens'].every(name =>
     name in adapter && typeof (adapter as unknown as Record<string, unknown>)[name] === 'function');
 }
 
