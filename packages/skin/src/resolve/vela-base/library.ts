@@ -106,7 +106,8 @@ const libraryViewsContent: Node = {
     { type: 'widget', widget: 'contentLoader', when: [is('library.viewLoad', 'idle')] },
     { ...failure('{t:library.couldNotOpen}'), when: [is('library.viewLoad', 'failed')] },
     { ...pulse, when: [{ test: 'env.libraryMoreLoading' }] },
-    { type: 'repeat', over: 'library.rows', when: [is('library.view', 'recommended')], item: { type: 'use', template: 'velaRow' } },
+    // A recommended row draws in its layout (hero, wide, tiles; the standard shelf otherwise).
+    { type: 'repeat', over: 'library.rows', when: [is('library.view', 'recommended')], item: { type: 'use', template: 'velaLibraryRow' } },
     { type: 'text', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0'), is('library.viewLoad', 'ready')], text: '{t:ui.yourLibraryHasNoRowsYet}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { ...titleGrid, when: [is('library.view', 'collections')], children: [{ type: 'repeat', over: 'library.collections', item: gridCard }] } as Node,
     { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0'), is('library.viewLoad', 'ready')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
