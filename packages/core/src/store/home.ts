@@ -8,8 +8,9 @@ import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
 import { card, entry, feedRow, homeModel } from '../discovery/models';
-import { homeCard, homeWatched, laterProgressRows, reconcileHomeProgress, recorded, type Watched } from '../discovery/progress';
-import type { Destination, HomeModel, Row } from '../models';
+import { homeCard, homeWatched, laterProgressRows, progressRow, reconcileHomeProgress, reconcileShelves, recorded, type Watched } from '../discovery/progress';
+import type { Card, Destination, HomeModel, Row } from '../models';
+import type { Connection } from '../adapter/connection';
 import type { Session } from './session';
 import { failed, idle, loading, ready, type Load, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
@@ -38,9 +39,23 @@ const PAGE_ITEMS = 20;
 const LIBRARY_PAGES = 100;
 const RECONCILE_RETRIES = 2;
 const RECONCILE_DELAY_MS = 500;
+/**
+ * After a Home progress read starts, the next one waits this long. Every read issues the server's
+ * ranking receipts for what it returns, so stops in a row (skipping through audiobook parts,
+ * zapping between titles) share one read instead of one each; the first after a quiet spell runs
+ * at once. The watched position itself is drawn locally at once (`watched`).
+ */
+export const RECONCILE_SPACING_MS = 30_000;
 export const HOME_SLOW_MS = 7_000;
 /** A reconcile that takes the server's answer as it is. */
 const ANY_PROGRESS: Watched = { titleId: '', positionSeconds: 0, finished: false };
+
+/** Whether a stop of this media class can change Home's progress shelves. Music (a track, a
+ * concert's audio) and photos never enter Continue, so their stops leave Home alone; an unknown
+ * class (a video title the caller did not describe) does. */
+export function reconcilesHome(media?: V.MediaClass): boolean {
+  return media !== 'music' && media !== 'photo';
+}
 
 export type HomePresentation = 'skeleton' | 'slow' | 'ready' | 'failed';
 
@@ -60,6 +75,9 @@ export class Home {
   private reconcileReading: Promise<void> | undefined;
   private reconcileController: AbortController | undefined;
   private reconcileGeneration = 0;
+  /** When the last progress read started, and the wait before the next one (RECONCILE_SPACING_MS). */
+  private reconciledAt = Number.NEGATIVE_INFINITY;
+  private reconcileSpacing: AbortController | undefined;
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -67,6 +85,7 @@ export class Home {
     private readonly artWidth: () => number,
     private readonly slowDelayMs = HOME_SLOW_MS,
     private readonly reconcileDelayMs = RECONCILE_DELAY_MS,
+    private readonly reconcileSpacingMs = RECONCILE_SPACING_MS,
   ) {
     session.onReset(() => {
       if (this.timer) clearTimeout(this.timer);
@@ -74,11 +93,14 @@ export class Home {
       this.controller?.abort();
       this.reading = undefined;
       this.controller = undefined;
-      this.artworkRead = undefined;
+      this.artworkReads.clear();
       this.reconcilePending = undefined;
       this.reconcileGeneration++;
       this.reconcileController?.abort();
       this.reconcileController = undefined;
+      this.reconcileSpacing?.abort();
+      this.reconcileSpacing = undefined;
+      this.reconciledAt = Number.NEGATIVE_INFINITY;
       this.box.update('home', () => initialHome);
       this.box.update('libraries', () => idle());
     });
@@ -153,36 +175,31 @@ export class Home {
     }
   }
 
-  private artworkRead: Promise<HomeModel> | undefined;
+  private readonly artworkReads = new Map<string, Promise<Card>>();
 
-  /** Refresh signed hero art without replacing the carousel, progress or paged rows. */
+  /**
+   * Refresh one hero's signed art (its grant was refused) from the hero's own title, without
+   * replacing the carousel, progress or paged rows. Never a Home read: that issues a ranking
+   * receipt for every entry, and a hero whose images keep failing (an image service under load)
+   * would ask once per carousel turn. Concurrent asks for one hero share a read.
+   */
   async refreshArtwork(id: string): Promise<{ backdrop: string; poster: string } | undefined> {
-    if (!this.artworkRead) {
-      const epoch = this.session.epoch;
-      const read = (async () => {
-        const connection = await this.session.ready();
-        const bootstrap = await connection.adapter.home(true);
-        const images = await connection.images();
-        this.session.check(epoch, 'hero artwork');
-        return homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
-      })();
-      this.artworkRead = read;
-      void read.finally(() => { if (this.artworkRead === read) this.artworkRead = undefined; }).catch(() => {});
-    }
     const epoch = this.session.epoch;
-    const model = await this.artworkRead;
-    let fresh = model.hero.find(hero => hero.id === id);
-    if (!fresh) {
-      const connection = await this.session.ready();
-      const detail = await connection.adapter.detail(id, true);
-      fresh = card(detail.title, '', await connection.images(), this.artWidth());
+    let read = this.artworkReads.get(id);
+    if (!read) {
+      const next = (async () => {
+        const connection = await this.session.ready();
+        const detail = await connection.adapter.detail(id, true);
+        return card(detail.title, '', await connection.images(), this.artWidth());
+      })();
+      read = next;
+      this.artworkReads.set(id, next);
+      void next.finally(() => { if (this.artworkReads.get(id) === next) this.artworkReads.delete(id); }).catch(() => {});
     }
+    const fresh = await read;
     this.session.check(epoch, 'hero artwork');
     this.box.update('home', home => !home.value ? home : ({ ...home, value: {
-      ...home.value, hero: home.value.hero.map(hero => {
-        const art = hero.id === id ? fresh : model.hero.find(item => item.id === hero.id);
-        return art ? { ...hero, backdrop: art.backdrop, poster: art.poster, logo: art.logo } : hero;
-      }),
+      ...home.value, hero: home.value.hero.map(hero => hero.id === id ? { ...hero, backdrop: fresh.backdrop, poster: fresh.poster, logo: fresh.logo } : hero),
     } }));
     return fresh;
   }
@@ -200,7 +217,11 @@ export class Home {
     return this.reconcile(ANY_PROGRESS);
   }
 
-  /** Re-read only the server-owned progress presentation after a confirmed playback stop. */
+  /**
+   * Re-read only the server-owned progress presentation after a confirmed playback stop: the
+   * progress shelves Home shows, each on its own, or (when Home shows none yet) Home itself. A
+   * newer stop replaces one waiting or in flight, and reads are spaced (RECONCILE_SPACING_MS).
+   */
   reconcile(watched: Watched): Promise<void> {
     this.reconcilePending = watched;
     this.reconcileGeneration++;
@@ -216,11 +237,21 @@ export class Home {
 
   private async drainReconciles(): Promise<void> {
     while (this.reconcilePending) {
+      const due = this.reconciledAt + this.reconcileSpacingMs - Date.now();
+      if (due > 0) {
+        const spacing = new AbortController();
+        this.reconcileSpacing = spacing;
+        // A session reset ends the wait (and clears what was pending); a newer stop only replaces it.
+        await wait(due, spacing.signal).catch(() => {});
+        if (this.reconcileSpacing === spacing) this.reconcileSpacing = undefined;
+        continue;
+      }
       const watched = this.reconcilePending;
       this.reconcilePending = undefined;
       const generation = this.reconcileGeneration;
       const controller = new AbortController();
       this.reconcileController = controller;
+      this.reconciledAt = Date.now();
       await this.reconcileOne(watched, generation, controller.signal);
       if (this.reconcileController === controller) this.reconcileController = undefined;
     }
@@ -231,28 +262,41 @@ export class Home {
     for (let attempt = 0; attempt <= RECONCILE_RETRIES; attempt++) {
       try {
         const connection = await this.session.ready();
-        const bootstrap = await connection.adapter.home(true, signal);
-        const images = await connection.images();
+        const shown = this.box.get().home.value;
+        const shelves = shown ? await this.readShelves(connection, shown.rows.filter(progressRow)) : [];
+        if (signal.aborted || generation !== this.reconcileGeneration) return;
+        let value: Card | undefined;
+        let merge: (home: HomeModel) => HomeModel;
+        if (shelves.length) {
+          value = shelves.flatMap(row => row.items).find(card => card.id === watched.titleId);
+          merge = home => reconcileShelves(home, shelves);
+        } else {
+          // No progress shelf to read on its own (the first title the viewer started): Home itself.
+          const bootstrap = await connection.adapter.home(true, signal);
+          this.session.check(epoch, 'home progress');
+          if (signal.aborted || generation !== this.reconcileGeneration) return;
+          const fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, await connection.images(), this.artWidth());
+          value = homeCard(fresh, watched.titleId);
+          // Progress shelves that came with a later page (not in the fresh first page) are read
+          // again one by one; one that cannot be read keeps what it shows.
+          const now = this.box.get().home.value;
+          const later = now ? await this.readShelves(connection, laterProgressRows(now, fresh)) : [];
+          merge = home => reconcileHomeProgress(home, fresh, later);
+        }
         this.session.check(epoch, 'home progress');
         if (signal.aborted || generation !== this.reconcileGeneration) return;
-        const fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
-        const value = homeCard(fresh, watched.titleId);
-        const serverRecorded = watched === ANY_PROGRESS || (watched.finished || value !== undefined) && recorded(value, watched);
-        if (!serverRecorded && attempt < RECONCILE_RETRIES) {
+        // A card the server still shows at an older place is read again (it answered before it
+        // stored the last report); a title it does not show (a track, an audiobook part, a stop
+        // below its resume threshold) is its answer, not a reason to ask again.
+        const behind = watched !== ANY_PROGRESS && value !== undefined && !recorded(value, watched);
+        if (behind && attempt < RECONCILE_RETRIES) {
           await wait(this.reconcileDelayMs * (attempt + 1), signal);
           continue;
         }
-        if (!serverRecorded) return;
-        // Progress shelves that came with a later page (not in the fresh first page) are read
-        // again one by one; one that cannot be read keeps what it shows.
-        const shown = this.box.get().home.value;
-        const later = shown ? (await Promise.all(laterProgressRows(shown, fresh).map(row => connection.adapter.row(row.id, undefined, PAGE_ITEMS)
-          .then(value => feedRow(value, images, this.artWidth()), () => undefined)))).filter((row): row is Row => !!row) : [];
-        this.session.check(epoch, 'home progress');
-        if (signal.aborted || generation !== this.reconcileGeneration) return;
+        if (behind) return;
         this.box.update('home', home => ({
           ...home,
-          value: home.value ? reconcileHomeProgress(home.value, fresh, later) : home.value,
+          value: home.value ? merge(home.value) : home.value,
           progressRevision: home.progressRevision + 1,
         }));
         return;
@@ -262,6 +306,14 @@ export class Home {
         return;
       }
     }
+  }
+
+  /** Progress shelves read again one by one; one that cannot be read is left out (it keeps what it shows). */
+  private async readShelves(connection: Connection, rows: Row[]): Promise<Row[]> {
+    if (!rows.length) return [];
+    const read = await Promise.all(rows.map(row => connection.adapter.row(row.id, undefined, PAGE_ITEMS).catch(() => undefined)));
+    const images = await connection.images();
+    return read.filter((row): row is V.Row => !!row).map(row => feedRow(row, images, this.artWidth()));
   }
 
   /** The next page of rows, without the heroes' titles and without rows already shown. */

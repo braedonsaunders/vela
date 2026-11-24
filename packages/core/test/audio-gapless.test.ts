@@ -72,7 +72,9 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   };
   const session = { epoch: 0, features: options.queued ? { queuedPlayback: { available: true } } : {}, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
   const box = new StateBox({ playback: initialPlayback, audio: initialAudio, auth: { phase: 'signed-in' } } as unknown as VelaState);
-  const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+  /** What each stop asked to reconcile: the title and the media class the queue gave it. */
+  const reconciled: string[] = [];
+  const playback = new Playback(box, session as unknown as Session, () => {}, (watched, media) => { reconciled.push(`${watched.titleId}:${media}`); });
   const audio = new Audio(box, session as unknown as Session, playback, () => 0);
   const listeners = new Set<(event: AudioEngineEvent) => void>();
   const emit = (event: AudioEngineEvent) => { for (const l of [...listeners]) l(event); };
@@ -110,7 +112,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   };
   const seek = (seconds: number) => { position = seconds; };
   const fail = () => { playing = false; emit('error'); };
-  return { audio, box, starts, stops, loads, preloads, reports, requests, wire, play, seek, fail, held: () => queued, isPlaying: () => playing };
+  return { audio, box, starts, stops, loads, preloads, reports, requests, wire, reconciled, play, seek, fail, held: () => queued, isPlaying: () => playing };
 }
 
 const track = (id: string, cls = 'music') => ({ id, kind: 'episode', name: id, durationSeconds: DURATION, media: { class: cls } } as unknown as Card);
@@ -225,6 +227,22 @@ test('a whole album plays through with one plan request per track and no reloads
   expect(h.stops).toEqual(['s1', 's2', 's3']);
   for (const id of ['s1', 's2', 's3']) expect(h.reports.filter(r => r.sessionId === id && r.state === 'ended')).toHaveLength(1);
   expect(at(h).phase).toBe('ended');
+});
+
+test('each stop tells the store the item\'s media class, so tracks can leave Home alone and audiobook parts do not', async () => {
+  const album = harness();
+  album.audio.play({ items: tracks('t1', 't2', 't3'), index: 0 });
+  await settle();
+  await album.play(DURATION * 3 + 5);
+  expect(album.reconciled).toEqual(['t1:music', 't2:music', 't3:music']);
+
+  const book = harness();
+  book.audio.play({ items: [track('p1', 'audiobook'), track('p2', 'audiobook')], index: 0 });
+  await settle();
+  await book.play(DURATION + 5);
+  void book.audio.stop();
+  for (let i = 0; i < 4; i++) { await advance(250); await settle(); }
+  expect(book.reconciled).toEqual(['p1:audiobook', 'p2:audiobook']);
 });
 
 test('the last item with repeat off prepares nothing', async () => {

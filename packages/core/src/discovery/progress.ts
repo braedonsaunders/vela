@@ -50,7 +50,8 @@ export function homeWatched(home: HomeModel, watched: Watched): HomeModel {
   };
 }
 
-const progressRow = (row: Row) => row.purpose === 'continue' || row.purpose === 'nextUp';
+/** A server-owned progress shelf: Continue Watching (Reading, Listening) or Next Up. */
+export const progressRow = (row: Row) => row.purpose === 'continue' || row.purpose === 'nextUp';
 
 const sameValue = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
 
@@ -147,6 +148,30 @@ export function reconcileHomeProgress(current: HomeModel, fresh: HomeModel, late
   });
   const same = rows === current.rows && hero.every((value, index) => value === current.hero[index]) && heroActions.every((value, index) => value === current.heroActions[index]);
   return same ? current : { ...current, hero, heroActions, rows };
+}
+
+/**
+ * Home's progress shelves read again on their own (no full Home read), in place: each shelf read
+ * takes its fresh copy (an emptied one goes), and the hero and other shelves showing a title from
+ * them take its progress. A shelf that was not read keeps what it shows; heroes and their actions
+ * keep the watched position already applied (homeWatched).
+ */
+export function reconcileShelves(current: HomeModel, shelves: Row[]): HomeModel {
+  const read = new Map(shelves.map(row => [row.id, row]));
+  const cards = new Map<string, Card>();
+  for (const row of shelves) for (const value of row.items) if (!cards.has(value.id)) cards.set(value.id, value);
+  const rows: Row[] = [];
+  for (const row of current.rows) {
+    const next = read.get(row.id);
+    if (next) { if (next.items.length) rows.push(freshRow(row, next)); continue; }
+    if (progressRow(row)) { rows.push(row); continue; }
+    const items = row.items.map(value => withProgress(value, cards.get(value.id)));
+    rows.push(items.every((value, at) => value === row.items[at]) ? row : { ...row, items });
+  }
+  const hero = current.hero.map(value => withProgress(value, cards.get(value.id)));
+  const same = rows.length === current.rows.length && rows.every((row, index) => row === current.rows[index])
+    && hero.every((value, index) => value === current.hero[index]);
+  return same ? current : { ...current, hero, rows };
 }
 
 /** Home's progress shelves the fresh first page does not carry and does not cover (they came with

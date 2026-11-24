@@ -25,7 +25,10 @@ import type { StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
-  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext }
+  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext;
+    /** The title's media class when the caller knows it (the audio queue does): a class that never
+     * enters Continue (music) is not followed by a read of Home's progress shelves. Not sent. */
+    media?: V.MediaClass }
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string }
   /** A programme from the channel's archive (features.liveCatchUp): ended, or with `from: 'start'` on air from its start. */
@@ -156,13 +159,14 @@ export class Playback {
 
   /**
    * `watched` receives only server-confirmed resume state after stop/end, and `reconcile`
-   * refreshes the page after the last report. A session with no reports changes no resume.
+   * refreshes the page after the last report (with the stopped title's media class, when known).
+   * A session with no reports changes no resume.
    */
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly watched: (watched: Watched) => void,
-    private readonly reconcile: (watched: Watched) => void,
+    private readonly reconcile: (watched: Watched, media?: V.MediaClass) => void,
   ) {
     this.trickplay.subscribe(() => this.trickplayChanged());
     session.onReset(() => {
@@ -850,7 +854,8 @@ export class Playback {
     // Resume eligibility belongs to the server (Ether, for example, drops positions below
     // 5%). Publish only its answer, never a local position that will immediately disappear.
     if (confirmedPosition !== undefined) this.watched(watched);
-    void reported.then(() => this.reconcile(watched));
+    const media = target?.kind === 'title' ? target.media : undefined;
+    void reported.then(() => this.reconcile(watched, media));
   }
 
   private end(): void {
