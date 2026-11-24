@@ -18,6 +18,7 @@ import { LiveDial, LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
 import { present, type PlayerView } from './present';
+import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
 import { Status, type Failed } from './status';
 import { PlayerLiveOverlays, usePlayerLiveOverlay } from '../live-overlay/player';
@@ -30,7 +31,6 @@ const ANDROID_TV = Platform.OS === 'android' && Platform.isTV;
  * keep tap-to-show-the-controls. */
 const POINTER_CLICKS = Platform.OS === 'web' && typeof window !== 'undefined'
   && typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-const DOUBLE_CLICK_MS = 300;
 
 /** Draws nothing outside a watch route (the route provides the chrome's state). */
 export function PlayerChrome() {
@@ -66,7 +66,18 @@ function Chrome({ state }: { state: PlayerChromeState }) {
    * step from the remote, so that the next side presses keep stepping. */
   const [reveal, setReveal] = useState<Reveal>('toggle');
   const lastStep = useRef<{ seconds: number; at: number } | null>(null);
-  const lastClick = useRef(0);
+  const lastClick = useRef<ClickMemory>(NO_CLICK);
+  /** A double click's undo, waiting behind its full-screen command (picture-click.ts). */
+  const pendingUndo = useRef<{ command: PlayCommand; timer: ReturnType<typeof setTimeout> } | null>(null);
+  /** Cancels a waiting undo and returns it: the caller's own play or pause takes its place. */
+  const takeUndo = (): PlayCommand | null => {
+    const pending = pendingUndo.current;
+    if (!pending) return null;
+    clearTimeout(pending.timer);
+    pendingUndo.current = null;
+    return pending.command;
+  };
+  useEffect(() => () => { if (pendingUndo.current) clearTimeout(pendingUndo.current.timer); }, []);
 
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
@@ -114,16 +125,23 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     setOpened(current => (current === menu ? null : menu));
   };
   const toggleInfo = () => setInfo(on => !on);
+  // While a double click's undo waits, the picture is about to be back as it was before the double
+  // click: a toggle starts from there, and an explicit play or pause is sent even when the view
+  // already reads that way, since the undo it replaces would have changed it.
   const togglePlay = () => {
-    if (view.playing) live.leftLive();
-    if (!view.ended && state.plan) send({ type: view.playing ? 'pause' : 'play' });
+    const undo = takeUndo();
+    const playing = undo ? undo === 'play' : view.playing;
+    if (playing) live.leftLive();
+    if (!view.ended && state.plan) send({ type: playing ? 'pause' : 'play' });
   };
   const play = () => {
-    if (!view.ended && state.plan && !view.playing) send({ type: 'play' });
+    const undone = takeUndo() !== null;
+    if (!view.ended && state.plan && (undone || !view.playing)) send({ type: 'play' });
   };
   const pause = () => {
+    const undone = takeUndo() !== null;
     live.leftLive();
-    if (state.plan && view.playing) send({ type: 'pause' });
+    if (state.plan && (undone || view.playing)) send({ type: 'pause' });
   };
 
   const wake = (focus?: Reveal) => {
@@ -161,17 +179,27 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const tapStage = () => {
     if (opened) setOpened(null);
     // A mouse click on the picture plays or pauses (and shows the chrome), as in every desktop
-    // web player; a second click within the double-click window takes the picture full screen.
+    // web player; a double click changes full screen only (picture-click.ts).
     else if (POINTER_CLICKS) {
-      const now = Date.now();
-      if (now - lastClick.current < DOUBLE_CLICK_MS) {
-        lastClick.current = 0;
-        togglePlay(); // the first click's toggle is undone: a double click only changes full screen
-        if (view.fullscreen) send({ type: 'fullscreen' });
-      } else {
-        lastClick.current = now;
-        togglePlay();
-      }
+      const undo = takeUndo();
+      const click = pictureClick(lastClick.current, {
+        now: Date.now(),
+        playing: undo ? undo === 'play' : view.playing,
+        canToggle: !view.ended && !!state.plan,
+        fullscreen: view.fullscreen,
+      });
+      lastClick.current = click.memory;
+      if (click.now === 'pause') live.leftLive();
+      if (click.now) send({ type: click.now });
+      const later = click.later;
+      // The view takes one command a render: the undo follows full screen once the host has it.
+      if (later) pendingUndo.current = {
+        command: later,
+        timer: setTimeout(() => {
+          pendingUndo.current = null;
+          send({ type: later });
+        }, UNDO_AFTER_MS),
+      };
       idle.wake();
     }
     else if (idle.visible && view.playing) idle.hide();
