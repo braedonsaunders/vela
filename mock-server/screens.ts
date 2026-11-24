@@ -113,13 +113,13 @@ export function screensBootstrap(req: Request, viewerId: string): { navigation?:
     ...(row ? { homeRow: { kind: 'surface', id: `surface:sports:${row.id.split('.')[1]}`, surface: row.id } } : {}) };
 }
 
-function serveDocument(req: Request, url: URL, doc: Compiled, fresh: string, fail: Fail): Response {
+function serveDocument(req: Request, url: URL, doc: Compiled, fail: Fail): Response {
   if (doc.document.renderer > rendererOf(req)) fail('not-found', 'update_required', 'No variant of this page fits this client');
-  const v = url.searchParams.get('v');
-  if (v && v !== doc.hash) return new Response(null, { status: 301, headers: { Location: fresh, 'Cache-Control': 'no-store' } });
+  // Immutable when v names this version; without v, or with a stale one, the current document is
+  // served (200, its ETag) and may change. There is no redirect.
+  const current = url.searchParams.get('v') === doc.hash;
   const etag = `"${doc.hash}"`;
-  // Immutable when v names this version; read without one, it may change.
-  const headers = { ETag: etag, 'Cache-Control': v ? 'private, max-age=31536000, immutable' : 'private, no-cache', 'Content-Type': 'application/json' };
+  const headers = { ETag: etag, 'Cache-Control': current ? 'private, max-age=31536000, immutable' : 'private, no-cache', 'Content-Type': 'application/json' };
   if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers });
   return new Response(JSON.stringify(doc.document), { headers });
 }
@@ -707,7 +707,7 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
     const page = PAGES.find(p => p.screen === id && p.page === pageName);
     const doc = page && load(page.file);
     if (!page || !doc || method !== 'GET') fail('not-found', 'screen_not_found', 'Screen not found');
-    if (screen[3] === 'document') return serveDocument(req, url, doc, pageHref(page, doc, url.searchParams.get('l') ?? 'en'), fail);
+    if (screen[3] === 'document') return serveDocument(req, url, doc, fail);
     return serveData(req, url, { kind: 'screen', screen: id, page: pageName, doc }, viewerId, fail);
   }
   const surface = /^\/surfaces\/([^/]+)\/(document|data|setting|actions\/([^/]+))$/.exec(path);
@@ -717,7 +717,7 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
     const doc = spec && load(spec.file);
     if (!spec || !doc || hidden.has(id)) fail('not-found', 'surface_not_found', 'Surface not found');
     const target: SurfaceOwner = { kind: 'surface', surface: id, doc };
-    if (surface[2] === 'document' && method === 'GET') return serveDocument(req, url, doc, surfaceHref(spec, doc, url.searchParams.get('l') ?? 'en'), fail);
+    if (surface[2] === 'document' && method === 'GET') return serveDocument(req, url, doc, fail);
     if (surface[2] === 'data' && method === 'GET') return serveData(req, url, target, viewerId, fail);
     if (surface[2] === 'setting' && method === 'PUT') {
       const enabled = (body as { enabled?: unknown } | undefined)?.enabled;

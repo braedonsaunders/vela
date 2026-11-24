@@ -668,12 +668,11 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   // Plugin screens and surfaces (docs/plugin-screens.md; Ether design sections 6 and 7)
 
-  async screenDocument(href: string, signal?: AbortSignal): Promise<{ document: V.ScreenDocument; href: string }> {
+  /** A document by its href. Ether serves the current document for a stale `v` (200, no-cache), never a redirect. */
+  async screenDocument(href: string, signal?: AbortSignal): Promise<V.ScreenDocument> {
     const path = this.http.boundPath(href);
     if (!path) throw new VelaError({ class: 'request', code: 'invalid_document_href', message: 'A screen document must come from this server.', retry: { allowed: false } }, 400);
-    let read = path;
-    const document = await this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: true, signal, headers: this.screenHeaders, follow: true, moved: moved => { read = moved; } });
-    return { document, href: read === path ? href : `/vela/v0${read}` };
+    return this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: true, signal, headers: this.screenHeaders });
   }
 
   screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData> {

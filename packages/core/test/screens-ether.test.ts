@@ -9,26 +9,22 @@ const ORIGIN = 'https://ether.example';
 const adapter = () => new EtherAdapter(ORIGIN, new FakeCredentials(), '', undefined, 19);
 const DOC = { schema: 1, kind: 'screen', renderer: 19, screen: 'sports', page: 'index', version: '2', title: 'Sports', presentation: 'section', sources: {}, tree: { type: 'box' } };
 
-test('a document is read with the renderer header; a stale href follows its 301 inside the server', async () => {
+test('a document is read with the renderer header and cached by ETag; redirects and hrefs outside the server are refused', async () => {
   const seen = routeFetch({
-    'GET /vela/v0/screens/sports/pages/index/document': (request: { url: URL }) => request.url.searchParams.get('v') === 'old'
-      ? new Response(null, { status: 301, headers: { Location: '/vela/v0/screens/sports/pages/index/document?v=new&r=19&l=en' } })
-      : Response.json(DOC, { headers: { ETag: '"new"' } }),
+    'GET /vela/v0/screens/sports/pages/index/document': (request: { headers: Headers }) => request.headers.get('if-none-match') === '"new"'
+      ? new Response(null, { status: 304, headers: { ETag: '"new"' } })
+      : Response.json(DOC, { headers: { ETag: '"new"', 'Cache-Control': 'private, no-cache' } }),
+    'GET /vela/v0/screens/x/pages/index/document': new Response(null, { status: 301, headers: { Location: '/vela/v0/screens/x/pages/index/document?v=2' } }),
   });
-  const read = await adapter().screenDocument('/vela/v0/screens/sports/pages/index/document?v=old&r=19&l=en');
-  expect(read.document.screen).toBe('sports');
-  expect(read.href).toBe('/vela/v0/screens/sports/pages/index/document?v=new&r=19&l=en');
-  expect(seen.map(r => r.url.search)).toEqual(['?v=old&r=19&l=en', '?v=new&r=19&l=en']);
+  const api = adapter();
+  expect((await api.screenDocument('/vela/v0/screens/sports/pages/index/document?v=old&r=19&l=en')).screen).toBe('sports');
+  expect((await api.screenDocument(`${ORIGIN}/vela/v0/screens/sports/pages/index/document?v=old&r=19&l=en`)).screen).toBe('sports');
+  expect(seen[1]!.headers.get('if-none-match')).toBe('"new"');
   expect(seen.every(r => r.headers.get('x-vela-screen-renderer') === '19' && r.headers.get('authorization') === 'Bearer token-1')).toBe(true);
-  // The same href read fresh is not moved.
-  expect((await adapter().screenDocument(`${ORIGIN}/vela/v0/screens/sports/pages/index/document?v=new&r=19&l=en`)).href).toBe(`${ORIGIN}/vela/v0/screens/sports/pages/index/document?v=new&r=19&l=en`);
-});
-
-test('a document redirect or href outside the server is refused', async () => {
-  routeFetch({ 'GET /vela/v0/screens/x/pages/index/document': new Response(null, { status: 301, headers: { Location: 'https://evil.example/vela/v0/doc' } }) });
-  await expect(adapter().screenDocument('/vela/v0/screens/x/pages/index/document?v=1')).rejects.toThrow('outside');
-  await expect(adapter().screenDocument('https://evil.example/vela/v0/screens/x/pages/index/document')).rejects.toThrow('this server');
-  await expect(adapter().screenDocument('/elsewhere/document')).rejects.toThrow('this server');
+  // Ether never redirects a document; a redirect is not followed.
+  await expect(api.screenDocument('/vela/v0/screens/x/pages/index/document?v=1')).rejects.toThrow();
+  await expect(api.screenDocument('https://evil.example/vela/v0/screens/x/pages/index/document')).rejects.toThrow('this server');
+  await expect(api.screenDocument('/elsewhere/document')).rejects.toThrow('this server');
 });
 
 test('data reads: sources, params and context as p.<name>, the time zone; surfaces at their own path', async () => {

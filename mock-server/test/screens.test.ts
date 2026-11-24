@@ -92,7 +92,7 @@ describe('on a frozen clock', () => {
       setting: { id: 'scorebug', label: 'Score', default: true, enabled: true }, document: { href: expect.stringContaining('/vela/v0/surfaces/sports.scorebug/document?v='), renderer: 19 } }]);
   });
 
-  test('documents are immutable, carry deps, answer a stale v with 301 and a too-old client with 404', async () => {
+  test('documents are immutable, carry deps, answer a stale v with the current document and a too-old client with 404', async () => {
     const href = (((await c.json('/bootstrap')) as V.Bootstrap).navigation![0] as V.ScreenNavigationEntry).document.href;
     const response = await c.get(href);
     expect(response.status).toBe(200);
@@ -104,9 +104,12 @@ describe('on a frozen clock', () => {
     expect(doc.sources.teams!.deps).toEqual(['league', 'teamsLeague']);
     expect(doc.sources.viewer!.deps).toEqual([]);
     expect((await c.get(href, '19', { 'If-None-Match': etag })).status).toBe(304);
+    // A stale v gets the current document: 200, no-cache, the current ETag (no redirect).
     const stale = await c.get('/screens/sports/pages/index/document?v=0000&r=19&l=en');
-    expect(stale.status).toBe(301);
-    expect(stale.headers.get('location')).toBe(href);
+    expect(stale.status).toBe(200);
+    expect(stale.headers.get('cache-control')).toBe('private, no-cache');
+    expect(stale.headers.get('etag')).toBe(etag);
+    expect(((await stale.json()) as Json).sources.hero.deps).toEqual(['league']);
     expect((await c.get(href, '18')).status).toBe(404);
     // Served as Ether serves it: the index is a section; without v the document may change.
     expect(doc).toMatchObject({ screen: 'sports', page: 'index', presentation: 'section' });

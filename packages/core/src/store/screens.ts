@@ -1,5 +1,5 @@
 // Plugin screens and surfaces (docs/plugin-screens.md: Data, records and live updates): documents
-// by href (immutable, read once), pages by canonical key (one data read per param set, re-read by
+// by href (read once), pages by canonical key (one data read per param set, re-read by
 // `deps`), the shared record pool, plugin actions with optimistic patches, and ONE /live/stream
 // connection following the topics of the pages on show. Hosts open a page while they show it; a
 // page released stays a little while (a param change seeds the next one from it, a quick re-show
@@ -19,7 +19,7 @@ import type { LiveStreamPhase } from './live-events';
 import type { VelaState } from './index';
 
 export interface ScreensState {
-  /** Documents by href, read once (they are immutable). A moved href is stored under both. */
+  /** Documents by href, read once (immutable for their `v`). */
   documents: Record<string, Loadable<V.ScreenDocument>>;
   /** Pages and surfaces by `pageKey`. */
   pages: Record<string, ScreenPageState>;
@@ -143,11 +143,11 @@ export class Screens {
     const previous = this.box.get().screens.documents[href];
     this.set('documents', documents => ({ ...documents, [href]: loading(previous) }));
     try {
-      const { document, href: read } = await (await this.api()).screenDocument(href);
+      const document = await (await this.api()).screenDocument(href);
       if (epoch !== this.session.epoch) return;
       const problem = documentProblem(document, this.rendererVersion);
       if (problem) throw new Error(problem);
-      this.set('documents', documents => ({ ...documents, [href]: ready(document), ...(read !== href ? { [read]: ready(document) } : {}) }));
+      this.set('documents', documents => ({ ...documents, [href]: ready(document) }));
       // Pages opened before their document arrived start their refresh now.
       for (const [key, entry] of this.entries) if (entry.request.href === href && entry.opened) this.startRefresh(key, entry);
     } catch (error) {

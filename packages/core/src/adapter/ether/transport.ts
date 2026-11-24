@@ -20,13 +20,7 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Extra request headers (X-Vela-Screen-Renderer). */
   headers?: Record<string, string>;
-  /** Follow a redirect that stays inside the bound server's /vela/v0 (a stale screen document's
-   * 301); `moved` hears the path read. Redirects are refused otherwise. */
-  follow?: boolean;
-  moved?: (path: string) => void;
 }
-
-const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 /**
  * HTTP to one Ether server's `/vela/v0/` tree: bearer credentials, token rotation, ETag answers
@@ -68,7 +62,7 @@ export class EtherTransport {
   }
 
   async request<T>(method: Method, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
-    const { auth = true, cacheable = false, persistent = false, fresh = false, retryAuth = true, signal, follow = false } = options;
+    const { auth = true, cacheable = false, persistent = false, fresh = false, retryAuth = true, signal } = options;
     signal?.throwIfAborted();
     let tokens = auth ? await abortable(this.credentials.get(), signal) : null;
     if (auth && !tokens) throw new Error('Sign in required');
@@ -82,7 +76,7 @@ export class EtherTransport {
       if (cached && useCache) headers['If-None-Match'] = cached.etag;
       const init: RequestInit = { method, signal, headers };
       if (body !== undefined) init.body = JSON.stringify(body);
-      return follow ? this.fetchFollowing(path, init, token, options.moved) : this.fetchBound(`/vela/v0${path}`, init, token);
+      return this.fetchBound(`/vela/v0${path}`, init, token);
     };
     let response = await send(tokens);
     if (response.status === 401 && tokens && retryAuth) {
@@ -246,13 +240,13 @@ export class EtherTransport {
     return url.href;
   }
 
-  private fetchBound(path: string, init: RequestInit, token: Token, redirect: RequestRedirect = 'error'): Promise<Response> {
+  private fetchBound(path: string, init: RequestInit, token: Token): Promise<Response> {
     const headers: Record<string, string> = { ...init.headers as Record<string, string> };
     if (token) {
       headers.Authorization = `Bearer ${token.accessToken}`;
       headers['X-Vela-Device-Id'] = this.credentials.device.id;
     }
-    return fetch(this.boundURL(path), { ...init, redirect, headers });
+    return fetch(this.boundURL(path), { ...init, redirect: 'error', headers });
   }
 
   /** The path under /vela/v0 of a URL inside the bound server, or undefined outside it. */
@@ -262,31 +256,6 @@ export class EtherTransport {
       if (url.origin !== this.origin || !url.pathname.startsWith('/vela/v0/')) return undefined;
       return `${url.pathname.slice('/vela/v0'.length)}${url.search}`;
     } catch { return undefined; }
-  }
-
-  /** A GET that follows at most three redirects, each inside the bound server. Natively the
-   * Location is read and checked before it is asked; a browser hides it (an opaque redirect), so
-   * there the request is sent following and the final URL is checked. */
-  private async fetchFollowing(path: string, init: RequestInit, token: Token, moved?: (path: string) => void): Promise<Response> {
-    let current = path;
-    for (let hop = 0; hop < 4; hop++) {
-      const response = await this.fetchBound(`/vela/v0${current}`, init, token, 'manual');
-      if (response.type === 'opaqueredirect') {
-        const followed = await this.fetchBound(`/vela/v0${current}`, init, token, 'follow');
-        const final = followed.url ? this.boundPath(followed.url) : current;
-        if (!final) throw new Error('Request outside bound server');
-        if (final !== current) moved?.(final);
-        return followed;
-      }
-      if (!REDIRECTS.has(response.status)) {
-        if (current !== path) moved?.(current);
-        return response;
-      }
-      const next = this.boundPath(response.headers.get('location') ?? '');
-      if (!next) throw new Error('Redirect outside bound server');
-      current = next;
-    }
-    throw new Error('Too many redirects');
   }
 }
 

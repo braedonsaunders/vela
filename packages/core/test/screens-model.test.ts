@@ -23,7 +23,7 @@ test('a page key is canonical: sorted params, empty ones dropped, a surface keye
 test('changed params and another page of the same screen', () => {
   expect(changedParams({ league: 'nfl', date: 'd1' }, { league: 'nba', date: 'd1', teamsLeague: 'x' })).toEqual(['league', 'teamsLeague']);
   expect(changedParams({ a: '1' }, { a: '1' })).toEqual([]);
-  expect(screenDocumentHref('/vela/v0/screens/sports/pages/index/document?v=9f&r=19&l=en', 'game')).toBe('/vela/v0/screens/sports/pages/game/document?v=9f&r=19&l=en');
+  expect(screenDocumentHref('/vela/v0/screens/sports/pages/index/document?v=9f&r=19&l=en', 'game')).toBe('/vela/v0/screens/sports/pages/game/document?r=19&l=en');
 });
 
 test('records: a higher rev wins, the same or a lower one changes nothing, an equal value keeps identity', () => {
