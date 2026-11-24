@@ -114,6 +114,12 @@ export function halfPoints(text: string, scale = 1, step = 0.5): string {
   });
 }
 
+/** Each `<n>px` as the length the renderer's scaling turns into n points (n / scale px). */
+export function unscaled(text: string, scale = 1): string {
+  if (scale === 1) return text;
+  return text.replace(/(^|[^\w.#-])(-?\d*\.?\d+)px\b/g, (_, lead: string, n: string) => `${lead}${Math.round((Number(n) / scale) * 10_000) / 10_000}px`);
+}
+
 /**
  * A unitless line height beside a font size in px, as the length it makes, on half points: the
  * hard-coded screens set lineHeight = px(size x 1.25), so 11.5px text has a 14.5 point line, not 14.375.
@@ -132,7 +138,10 @@ export function screenStyleRow(row: string, text: string, scope: HoleScope, scal
   // 17px, as look.px rounded each radius); a border's computed width stays as computed (Crest's
   // max(1.5, size * 0.05) was never rounded).
   const raw = /^(border(?!-radius)|inset$|outline)/.test(row);
-  const round = (t: string) => (raw ? fold(halfPoints(t, scale, step)) : halfPoints(fold(halfPoints(t, scale, step)), scale, step));
+  // Border widths are points, never scaled (Sports drew every hairline as borderWidth 1 on a TV
+  // too): a 1px border is one point wherever the renderer scales px.
+  const width = /^border(-(top|right|bottom|left))?(-width)?$/.test(row);
+  const round = (t: string) => (width ? unscaled(fold(t), scale) : raw ? fold(halfPoints(t, scale, step)) : halfPoints(fold(halfPoints(t, scale, step)), scale, step));
   if (typeof template === 'string') return mixColours(round(template));
   const parts = template.parts.map(p => (typeof p === 'string' ? round(p) : p));
   if (!text.includes('color-mix(')) return { parts };
