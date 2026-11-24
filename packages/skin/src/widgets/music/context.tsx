@@ -37,10 +37,16 @@ export interface MusicApp {
   /** Like or unlike (follow, save) a title. */
   like(card: Card, on: boolean): void;
   liked(id: string): boolean;
+  /** This library's recent searches, newest first (kept on this device). */
+  searches: string[];
+  /** Remember a search the viewer acted on. */
+  noteSearch(query: string): void;
+  /** Forget one recent search, or every one. */
+  dropSearch(query?: string): void;
 }
 
 const noop = () => undefined;
-export const MusicContext = createContext<MusicApp>({ libraryId: '', listening: 'music', place: { kind: 'home' }, go: noop, play: noop, playCard: noop, menu: noop, toggle: noop, drawer: noop, like: noop, liked: () => false });
+export const MusicContext = createContext<MusicApp>({ libraryId: '', listening: 'music', place: { kind: 'home' }, go: noop, play: noop, playCard: noop, menu: noop, toggle: noop, drawer: noop, like: noop, liked: () => false, searches: [], noteSearch: noop, dropSearch: noop });
 export const useMusic = () => useContext(MusicContext);
 
 /** Where a card opens in the music app. */

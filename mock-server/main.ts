@@ -819,14 +819,21 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (body.direction !== undefined && !['asc', 'desc'].includes(body.direction)) fail('request', 'invalid_direction', 'Invalid direction');
     if (body.kind !== undefined && !capabilities.searchKinds!.some(k => (typeof k === 'string' ? k : k.id) === body.kind)) fail('request', 'invalid_kind', 'Invalid kind');
     if (body.library !== undefined && !visibleLibraries.some(l => l.id === body.library)) fail('request', 'invalid_library', 'Invalid library');
-    const libraryIds = body.library ? new Set(libraryEntries(body.library).flatMap(e => e.kind === 'title' ? [e.title.id] : [])) : undefined;
+    // A media library's search reaches every level in it (an artist's albums and their tracks), as
+    // Ether's does; leaves (tracks, parts, episodes) are searched only within a library.
+    const mediaScope = !!body.library && isMedia(body.library);
+    const libraryIds = body.library ? new Set<string>() : undefined;
+    const within = (id: string): void => { if (!libraryIds || libraryIds.has(id)) return; libraryIds.add(id); if (mediaScope) for (const child of mediaChildren(id)) within(child.id); };
+    if (body.library) for (const entry of libraryEntries(body.library)) if (entry.kind === 'title') within(entry.title.id);
     const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
-    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks, ...mediaGroups.shows].map(t => present(g, t)) : [])];
-    const found = (byName: boolean) => searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (byName ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
+    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks, ...mediaGroups.shows, ...(mediaScope ? [...mediaGroups.tracks, ...mediaGroups.parts, ...mediaGroups.episodes] : [])].map(t => present(g, t)) : [])];
+    // Within a media library a title is found by the people it credits too (an artist's songs, an author's books).
+    const named = (t: V.Title) => mediaScope ? `${t.name} ${(t.media?.credits ?? []).map(credit => credit.name).join(' ')} ${(t.media?.parents ?? []).filter(parent => parent.role === 'artist').map(parent => parent.name).join(' ')}` : t.name;
+    const found = (byName: boolean) => searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (byName ? named(t) : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
     // Auto (unified search): titles by name; description matches only when no name matches.
-    const named = body.mode === 'descriptive' ? [] : found(true);
-    const items = body.mode === 'fast' || named.length ? named : found(false);
-    const match = body.mode !== 'auto' ? undefined : named.length ? 'title' : items.length ? 'description' : 'none';
+    const byName = body.mode === 'descriptive' ? [] : found(true);
+    const items = body.mode === 'fast' || byName.length ? byName : found(false);
+    const match = body.mode !== 'auto' ? undefined : byName.length ? 'title' : items.length ? 'description' : 'none';
     if (body.sort && body.sort !== 'relevance') items.sort((a, b) => (body.direction === 'desc' ? -1 : 1) * (body.sort === 'title' ? a.name.localeCompare(b.name) : (a.year ?? 0) - (b.year ?? 0)));
     const paging = new URL(url); if (body.cursor) paging.searchParams.set('cursor', body.cursor); if (body.limit) paging.searchParams.set('limit', String(body.limit));
     const titlePage = page(items, paging, g, `search:${body.mode}:${body.query}:${body.sort ?? ""}:${body.direction ?? ""}:${body.kind ?? ""}:${body.library ?? ""}`);

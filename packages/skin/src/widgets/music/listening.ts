@@ -34,6 +34,9 @@ export interface ListeningWords {
   likeKey: string;
   /** Shift ←/→ ("Previous or next song"). */
   skipKey: string;
+  /** The search field's placeholder and the empty search page's line ("Find artists, songs… in {library}"). */
+  searchPlaceholder: string;
+  searchIntro: string;
 }
 
 export function listeningWords(listening: Listening): ListeningWords {
@@ -42,21 +45,25 @@ export function listeningWords(listening: Listening): ListeningWords {
       playlists: true, transport: 'tracks',
       filters: [{ role: 'playlist', label: 'music.playlists' }, { role: 'album', label: 'music.albums' }, { role: 'artist', label: 'music.artists' }],
       savedRoles: ['track', 'album', 'artist'], genreCount: 'music.albumsCount', likeKey: 'music.key.like', skipKey: 'music.key.skip',
+      searchPlaceholder: 'listening.search.music', searchIntro: 'listening.searchIntro.music',
     };
     case 'audiobook': return {
       playlists: false, transport: 'spoken',
       filters: [{ role: 'progress', label: 'listening.inProgress' }, { role: 'saved', label: 'listening.saved' }, { role: 'finished', label: 'listening.finished' }],
       savedRoles: ['audiobook'], genreCount: 'listening.audiobooksCount', likeKey: 'listening.key.save', skipKey: 'listening.key.skipBook',
+      searchPlaceholder: 'listening.search.audiobook', searchIntro: 'listening.searchIntro.audiobook',
     };
     case 'podcast': return {
       playlists: false, transport: 'spoken',
       filters: [{ role: 'progress', label: 'listening.inProgress' }, { role: 'saved', label: 'listening.following' }],
       savedRoles: ['show', 'episode'], genreCount: 'listening.showsCount', likeKey: 'listening.key.save', skipKey: 'listening.key.skipEpisode',
+      searchPlaceholder: 'listening.search.podcast', searchIntro: 'listening.searchIntro.podcast',
     };
     default: return {
       playlists: false, transport: 'tracks',
       filters: [{ role: 'progress', label: 'listening.inProgress' }, { role: 'saved', label: 'listening.saved' }],
       savedRoles: [], genreCount: 'listening.titlesCount', likeKey: 'listening.key.save', skipKey: 'listening.key.skipItem',
+      searchPlaceholder: 'listening.search.audio', searchIntro: 'listening.searchIntro.audio',
     };
   }
 }

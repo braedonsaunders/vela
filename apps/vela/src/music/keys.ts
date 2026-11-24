@@ -29,7 +29,13 @@ export function useMusicKeys(store: VelaStore, app: MusicApp, actions: { toggleQ
       const spoken = listeningWords(app.listening).transport === 'spoken';
       const key = event.key;
       const handled = (): void => { event.preventDefault(); event.stopPropagation(); };
-      if (meta && key.toLowerCase() === 'k') { handled(); app.go({ kind: 'search' }); return; }
+      if (meta && key.toLowerCase() === 'k') {
+        handled();
+        // Already searching: back to the field (its page opens with it focused).
+        if (app.place.kind === 'search') document.querySelector<HTMLElement>('[data-testid="music-search-input"]')?.focus();
+        else app.go({ kind: 'search' });
+        return;
+      }
       if (meta || event.altKey) return;
       if (key === '?') { handled(); actions.help(); return; }
       if (!item && key !== 'q' && key !== 'Q') return;
