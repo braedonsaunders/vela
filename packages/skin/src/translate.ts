@@ -62,8 +62,9 @@ export interface Transitions {
 
 /** Box rows: the element's own layout and paint. */
 export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions; fx: Effects } {
-  // CSS flex items shrink by default; React Native's do not. (A route's content never has a fixed
-  // height, so its children are not squeezed: CSS would keep them at their content size.)
+  // CSS flex items shrink by default; React Native's do not. (A route's content has a fixed height
+  // only where the document sets one, a frame on the web (scroll-styles.ts); elsewhere its children
+  // are not squeezed: CSS would keep them at their content size.)
   const s: Record<string, unknown> = { flexShrink: 1 };
   const fx: Effects = {};
   const transform: Record<string, unknown>[] = [];
