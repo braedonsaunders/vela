@@ -29,6 +29,7 @@ import { holdBack } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { setQuietPlayback } from '@vela/skin/src/quiet-playback';
+import { PreviewBadge, previewReturnPath, startPreview, usePreviewReload } from './screen-preview';
 
 // A lab or development build (a pinned server on a device, start routes, or __DEV__) never starts
 // playback with sound: it may open a channel or multiview on launch on a shared TV.
@@ -110,17 +111,21 @@ export function VelaProvider({ children }: { children: ReactNode }) {
   const [store] = useState(() => createVela({ ...boot, rendererVersion: RENDERER_VERSION }));
   const [consoleUrl, setConsoleUrl] = useState(boot.page?.consoleUrl);
   useEffect(() => {
+    // A Studio preview (screen-preview.tsx) enters preview mode before bootstrap is read.
+    startPreview(store);
     void start(store);
     return listenWebHandoff(link => {
       setConsoleUrl(link.consoleUrl);
       if (link.code !== undefined) void store.auth.signInWithWebCode(link.code).then(signedIn => {
-        if (signedIn) router.replace('/');
+        if (signedIn) router.replace((previewReturnPath() ?? '/') as never);
       });
     });
   }, [store]);
+  usePreviewReload(store);
   return (
     <StoreProvider vela={store}>
       <AppProvider store={store} consoleUrl={consoleUrl}>{children}</AppProvider>
+      <PreviewBadge />
     </StoreProvider>
   );
 }

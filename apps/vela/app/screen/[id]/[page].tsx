@@ -22,7 +22,7 @@ export default function ScreenPage() {
   const entry = useVelaState(state => state.home.value?.screens.find(screen => screen.id === id));
   const href = entry ? screenDocumentHref(entry.document.href, page) : '';
   // The development flag (?screens=1) is the address's, not the page's.
-  const params = useMemo(() => Object.fromEntries(Object.entries(rest).filter(([name, v]) => typeof v === 'string' && name !== 'screens')) as Record<string, string>,
+  const params = useMemo(() => Object.fromEntries(Object.entries(rest).filter(([name, v]) => typeof v === 'string' && name !== 'screens' && name !== 'screenPreview')) as Record<string, string>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(rest)]);
   const back = useCallback(() => closeModal(() => {
