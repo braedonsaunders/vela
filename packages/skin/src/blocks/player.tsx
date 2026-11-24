@@ -3,7 +3,7 @@
 // `TilePicture` and `LiveContext`.
 // - At most one `player` block is active per page.
 // - ALWAYS MUTED in preview: never emits audio on its own.
-// - Pressing the preview dispatches `play` `channel:<id>` to tune into full-screen playback.
+// - Pressing the preview dispatches `play` `{ channel: channelId }` to tune into full-screen playback.
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -59,7 +59,16 @@ export function PlayerBlock({ node, ctx }: { node: PlayerBlockNode; ctx: Ctx }) 
 
   const onTune = useCallback(() => {
     if (!channelId) return;
-    host.dispatch('play', `channel:${channelId}`);
+    if (host.screenPress) {
+      host.screenPress({
+        action: 'play',
+        arg: `channel:${channelId}`,
+        args: { channel: channelId },
+        control: `player:${channelId}`,
+      });
+    } else {
+      host.dispatch('play', `channel:${channelId}`);
+    }
   }, [host, channelId]);
 
   if (!channelId || !claimed) return null;

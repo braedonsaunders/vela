@@ -16,6 +16,8 @@ import {
   chunkGridRows,
   hasFocusableChild,
   initialStreamedCount,
+  marqueeScrolls,
+  marqueeStep,
   nextStreamedCount,
   parseItemWidth,
   parsePoints,
@@ -318,6 +320,14 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
         children: [{ kind: 'repeat', item: { kind: 'box', readingStop: true } }],
       }),
     ).toBe(true);
+  });
+
+  test('marqueeScrolls and marqueeStep loop continuously without resetting when content width shifts', () => {
+    expect(marqueeScrolls(400, 600)).toBe(false);
+    expect(marqueeScrolls(800, 600)).toBe(true);
+    expect(marqueeStep(100, 500, 64, 500)).toBe(132);
+    expect(marqueeStep(490, 500, 64, 500)).toBe(22);
+    expect(marqueeStep(100, 500, 64, 0)).toBe(0);
   });
 });
 

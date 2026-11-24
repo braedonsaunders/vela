@@ -29,6 +29,8 @@ export {
   applyStableOrder,
   chunkGridRows,
   initialStreamedCount,
+  marqueeScrolls,
+  marqueeStep,
   nextStreamedCount,
   parseItemWidth,
   parsePoints,

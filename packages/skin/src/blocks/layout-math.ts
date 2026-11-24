@@ -1,4 +1,4 @@
-// Pure layout, streaming, ordering, and tab-selection helpers for renderer-19 layout blocks.
+// Pure layout, streaming, ordering, tab-selection, and marquee helpers for renderer-19 layout blocks.
 // Tested without a React renderer via `bun:test`.
 
 export type ParsedItemWidth =
@@ -189,4 +189,20 @@ export function hasFocusableChild(node: unknown): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * Advances a continuous marquee offset by `speed` points/sec for `ms` milliseconds, wrapping
+ * seamlessly at `width` so a second copy takes over without a gap or reset when content width shifts.
+ */
+export function marqueeStep(offset: number, ms: number, speed: number, width: number): number {
+  'worklet';
+  if (!(width > 0) || !Number.isFinite(offset)) return 0;
+  const next = offset + (Math.max(0, ms) * speed) / 1000;
+  return next >= width ? next % width : next;
+}
+
+/** A marquee scrolls continuously only when one copy of its content is wider than its viewport. */
+export function marqueeScrolls(contentWidth: number, viewportWidth: number): boolean {
+  return contentWidth > 0 && viewportWidth > 0 && contentWidth > viewportWidth;
 }
