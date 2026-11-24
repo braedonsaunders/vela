@@ -50,6 +50,23 @@ export const musicClips: (AudioSource & { key: string })[] = [
   { key: 'glasshouse-drone', file: 'clip-glasshouse-drone.mp3', durationSeconds: 70, mimeType: 'audio/mpeg', codec: 'mp3' },
   { key: 'arcade-bounce', file: 'clip-arcade-bounce.flac', durationSeconds: 34, mimeType: 'audio/flac', codec: 'flac' },
 ];
+/**
+ * The gapless test albums (mock-server/scripts/make-gapless-media.ts): one continuous signal (a 220 to
+ * 880 Hz sweep over a seeded noise floor) cut into four parts at sample counts that line up with no codec
+ * frame, encoded as FLAC, MP3 and AAC. Played in order, the parts must join with no gap and no click;
+ * tools/gapless/measure.ts compares a recording against the signal at each join.
+ */
+export type GaplessFormat = 'flac' | 'mp3' | 'aac';
+export const GAPLESS_RATE = 44100;
+export const gaplessPartFrames = [321_930, 302_085, 357_651, 341_334];
+const gaplessTypes: Record<GaplessFormat, { ext: string; mimeType: string; codec: string }> = {
+  flac: { ext: 'flac', mimeType: 'audio/flac', codec: 'flac' },
+  mp3: { ext: 'mp3', mimeType: 'audio/mpeg', codec: 'mp3' },
+  aac: { ext: 'm4a', mimeType: 'audio/mp4', codec: 'aac' },
+};
+export const gaplessSources: (AudioSource & { format: GaplessFormat; part: number; frames: number })[] = (['flac', 'mp3', 'aac'] as const).flatMap(format =>
+  gaplessPartFrames.map((frames, index) => ({ format, part: index + 1, frames, file: `gapless-sweep-${index + 1}.${gaplessTypes[format].ext}`,
+    durationSeconds: frames / GAPLESS_RATE, mimeType: gaplessTypes[format].mimeType, codec: gaplessTypes[format].codec })));
 export interface ReadingSource { file: string; format: ReadingFormat; mimeType: string }
 export const readingMimeTypes: Record<ReadingFormat, string> = { epub: 'application/epub+zip', pdf: 'application/pdf', cbz: 'application/vnd.comicbook+zip' };
 
@@ -67,7 +84,7 @@ const roleLabel: Record<string, string> = { artist: 'Artist', albumArtist: 'Albu
 
 // ---------------------------------------------------------------------------------------------
 // Music: artist → album → track. Title.kind keeps the show/season/episode projection.
-interface AlbumSpec { slug: string; name: string; year: number; month: number; type: 'Album' | 'EP'; summary: string; discs: string[] }
+interface AlbumSpec { slug: string; name: string; year: number; month: number; type: 'Album' | 'EP'; summary: string; discs: string[]; gapless?: GaplessFormat }
 interface ArtistSpec { slug: string; name: string; genres: string[]; label: string; bio: string; composer?: string; albums: AlbumSpec[] }
 /** A filmed concert: a plugin's video level under the artist (features.pluginLevels), role 'concert'. */
 interface ConcertSpec { slug: string; name: string; venue: string; year: number; month: number; minutes: number; summary: string; positionSeconds?: number }
@@ -118,6 +135,11 @@ const artistSpecs: ArtistSpec[] = [
       { slug: 'winter-garden', name: 'Winter Garden', year: 2023, month: 12, type: 'Album', summary: 'Seven miniatures for a frozen garden, written for the shortest days of the year.',
         discs: ['Hoarfrost|Snowdrops|Bare Branches|Robin at the Window|Frozen Pond|Candlemas|Thaw'] },
     ] },
+  { slug: 'vela-test-signals', name: 'Vela Test Signals', genres: ['Test Signal'], label: 'Vela',
+    bio: 'Not music: one continuous sweep cut into four parts, to hear (and measure) whether a player joins tracks with no gap.',
+    albums: (['flac', 'mp3', 'aac'] as const).map((format, index) => ({ slug: `gapless-sweep-${format}`, name: `Gapless Sweep (${format.toUpperCase()})`, year: 2026, month: 11 - index,
+      type: 'EP' as const, gapless: format, summary: `A 220 to 880 Hz sweep in four ${format.toUpperCase()} parts that must play as one unbroken tone.`,
+      discs: ['Sweep, part 1|Sweep, part 2|Sweep, part 3|Sweep, part 4'] })) },
   // Concerts only: a live band with no studio albums in the library.
   { slug: 'harbour-brass-collective', name: 'Harbour Brass Collective', genres: ['Brass', 'Jazz'], label: 'Quayside Live',
     bio: 'An imaginary twelve-piece street brass band who only ever play live, from harbour walls to festival tents.', albums: [] },
@@ -171,7 +193,7 @@ for (const spec of artistSpecs) {
     const cover = mediaArtwork(albumId, 'square');
     const albumTracks: Title[] = [];
     album.discs.forEach((disc, discIndex) => disc.split('|').forEach((name, index) => {
-      const clip = musicClips[trackOrdinal++ % musicClips.length]!;
+      const clip = album.gapless ? gaplessSources.find(source => source.format === album.gapless && source.part === index + 1)! : musicClips[trackOrdinal++ % musicClips.length]!;
       const id = `track-${album.slug}-${discIndex + 1}-${String(index + 1).padStart(2, '0')}`;
       audioSources.set(id, clip);
       albumTracks.push({ id, kind: 'episode', name, summary: '', year: album.year, airDate, genres: spec.genres, durationSeconds: clip.durationSeconds,
