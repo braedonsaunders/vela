@@ -124,6 +124,8 @@ describe('the Sports game document', () => {
     const t = await draw('game.json', 'data-game.json', 1440);
     expect(t.slice(0, 13)).toEqual(['LIVE', 'NFL · Lincoln Financial Field, Philadelphia', 'Close game',
       'New York Giants', '4-7', '24', '–', '27', 'Q4 · 2:14', 'Philadelphia Eagles', '9-2', 'Down', '3rd & 6']);
+    // Possession comes from the side (sides[].possession), drawn last like legacy's third chip.
+    expect(t.slice(t.indexOf('Ball'), t.indexOf('Ball') + 4)).toEqual(['Ball', 'NYG 38', 'Possession', 'PHI']);
     expect(t).toContain('Where to watch');
     expect(t).toContain('Watch on Matchday · 107');
     expect(t).toContain('Watch on Metro Sports 1 · 120');

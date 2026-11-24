@@ -37,10 +37,6 @@
      {
       "label": "Ball",
       "value": "NYG 38"
-     },
-     {
-      "label": "Possession",
-      "value": "PHI"
      }
     ],
     "watch": {
@@ -124,7 +120,8 @@
       "loser": false,
       "score": "27",
       "share": 83,
-      "leads": true
+      "leads": true,
+      "possession": true
      }
     ],
     "probability": {
