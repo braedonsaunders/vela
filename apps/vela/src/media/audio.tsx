@@ -75,8 +75,8 @@ export function AudioDock() {
   const actions = useMediaPageActions(undefined, back, useMediaPlayerActions(), useReaderActions(undefined));
   // Video and the reader own the screen; the sign-in pages have nothing to play.
   const covered = pathname.startsWith('/watch') || pathname.startsWith('/read') || pathname.startsWith('/sign-in') || pathname.startsWith('/connect');
-  // The music app draws its own now-playing bar along the bottom; the floating one stands aside.
-  const musicLibrary = useVelaState(state => state.libraries.value?.some(library => library.media === 'music' && pathname === `/library/${library.id}`));
+  // The audio app draws its own now-playing bar along the bottom; the floating one stands aside.
+  const musicLibrary = useVelaState(state => state.libraries.value?.some(library => library.experience === 'audio' && pathname === `/library/${library.id}`));
   const inMusicShell = !!musicLibrary && !musicTV() && (host?.viewport.width ?? 0) >= 980;
   const playing = !!audio.queue && !covered;
   if (!host) return null;

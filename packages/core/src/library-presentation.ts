@@ -1,5 +1,6 @@
+import { mediaClass } from './media';
 import type { Card } from './models';
-import type { Library, LibraryTab } from './wire';
+import type { Feature, Library, LibraryExperience, LibraryTab } from './wire';
 
 export function libraryCard(value: unknown): 'poster' | 'landscape' | 'square' {
   return value === 'landscape' || value === 'square' ? value : 'poster';
@@ -29,4 +30,19 @@ export function facetCollectionQuery(id: string, tab: LibraryTab) {
   return tab.kind === 'collections' && tab.facet && facet?.field === tab.facet
     ? { facets: { [facet.field]: [facet.valueId] }, sort: tab.sort, direction: tab.direction }
     : undefined;
+}
+
+/**
+ * How a library opens (protocol README, Library experience): the audio app or the standard pages.
+ * A server with features.libraryExperiences decides each library; without it, or for a library that
+ * does not say, music opens as the audio app and every other class as the standard pages.
+ */
+export function libraryExperience(
+  library: { media?: unknown; presentation?: { experience?: unknown } },
+  feature: (Feature & { experiences?: readonly string[] }) | undefined,
+): LibraryExperience {
+  const asked = library.presentation?.experience;
+  if (feature?.available === true && (asked === 'audio' || asked === 'standard')
+    && (!Array.isArray(feature.experiences) || feature.experiences.includes(asked))) return asked;
+  return mediaClass(library.media) === 'music' ? 'audio' : 'standard';
 }

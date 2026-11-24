@@ -1,9 +1,10 @@
-// The music app: Your Library down the left, the page in the middle, the queue on the right when
+// The audio app: Your Library down the left, the page in the middle, the queue on the right when
 // asked for, and the now-playing bar along the bottom. Wide layouts only; phones and TVs draw the
-// same pages full width with the floating mini player.
+// same pages full width with the floating mini player. Music, audiobooks and podcasts share it;
+// listening.ts words each, and spoken.tsx draws spoken word's pages.
 import { useState, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { msg, number, type Card, type PlaylistModel } from '@vela/core';
+import { durationLabel, msg, number, type Card, type PlaylistModel } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
@@ -11,13 +12,15 @@ import { useHost } from '../../host';
 import { headerInsetOf } from '../../resolve/inherit';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
-import { useLiked, usePlaylists } from './data';
-import { LikedCover, MusicHome, MusicLiked, MusicPlaylist, MusicTitle, playlistCard, Chip } from './pages';
+import { LikedCover, MusicLiked, MusicPlaylist, playlistCard, Chip } from './pages';
+import { ListeningHome, ListeningTitle } from './spoken';
+import { listenedFraction, listeningWords } from './listening';
+import { useLibraryItems, useLibraryRows, useLiked, usePlaylists } from './data';
 import { MINI_PLAYER_HEIGHT } from '../media/player';
 import { compactMusic, musicTV } from './layout';
 import { samePlace, type MusicPlace } from './place';
 import { FocusGroup, IconButton, Surface, transition } from './parts';
-import { NowPlayingBar, NOW_PLAYING_BAR_HEIGHT } from './bar';
+import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
 import { QueuePanel } from './queue';
 
 export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
@@ -27,6 +30,8 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   // Below the shell's navigation, wherever this document draws it (overlay or in flow).
   const inset = host.doc.document.traits?.headerInset ?? headerInsetOf(host.doc.document.slots?.shell);
   const [collapsed, setCollapsed] = useState(false);
+  const [panel, setPanel] = useState<BarPanel>('');
+  const music = app.listening === 'music';
   const narrow = m.width < 1180;
   const rail = collapsed || narrow;
   const page = app.place;
@@ -50,16 +55,16 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
         {side(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, rail ? 84 : 316, 'right')}
         {flush(
           <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main">
-            {page.kind === 'home' ? <MusicHome />
-              : page.kind === 'liked' ? <MusicLiked />
+            {page.kind === 'liked' && music ? <MusicLiked />
               : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
-              : page.kind === 'title' ? <MusicTitle id={page.id} />
-              : <MusicHome />}
+              : page.kind === 'title' ? <ListeningTitle id={page.id} />
+              : <ListeningHome />}
           </ScrollView>)}
         {queueOpen ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
       </View>
       <View style={[{ height: 1 }, hairline]} />
-      <View style={{ height: NOW_PLAYING_BAR_HEIGHT, backgroundColor: m.ui.raised }}><NowPlayingBar queueOpen={queueOpen} onQueue={() => onQueue(!queueOpen)} /></View>
+      <View style={{ height: NOW_PLAYING_BAR_HEIGHT, backgroundColor: m.ui.raised }}><NowPlayingBar queueOpen={queueOpen} onQueue={() => onQueue(!queueOpen)} panel={panel} onPanel={setPanel} /></View>
+      <BarPanelView panel={panel} onClose={() => setPanel('')} />
     </View>
   );
 }
@@ -70,6 +75,7 @@ function CompactShell({ top }: { top: string }) {
   const app = useMusic();
   const m = useMediaLook();
   const page = app.place;
+  const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
   const tabs: { label: string; place: MusicPlace }[] = [
     { label: msg('music.home'), place: { kind: 'home' } },
@@ -83,16 +89,16 @@ function CompactShell({ top }: { top: string }) {
       </View>
       <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main">
         {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : page.kind === 'liked' ? <MusicLiked />
+          : page.kind === 'liked' && music ? <MusicLiked />
           : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
-          : page.kind === 'title' ? <MusicTitle id={page.id} />
-          : <MusicHome />}
+          : page.kind === 'title' ? <ListeningTitle id={page.id} />
+          : <ListeningHome />}
       </ScrollView>
     </View>
   );
 }
 
-/** A TV: an icon rail (Home, Search, Your Library, Liked Songs) beside a full-width page; the
+/** A TV: an icon rail (Home, Search, Your Library and, for music, Liked Songs) beside a full-width page; the
  * focusable mini player floats over it and opens Now Playing. Everything is one focus target at a
  * time; Back walks Now Playing → page → music Home → the app. */
 function TVShell({ top }: { top: string }) {
@@ -100,6 +106,7 @@ function TVShell({ top }: { top: string }) {
   const m = useMediaLook();
   const host = useHost();
   const page = app.place;
+  const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
   // The page ends where the mini player begins, which the dock lifts above the bottom safe inset
   // (media/audio.tsx): Apple TV's inset is 60pt, and a fixed margin left the last rows under the bar.
@@ -110,15 +117,15 @@ function TVShell({ top }: { top: string }) {
         <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail />
         <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail />
         <NavItem symbol="library" label={msg('music.yourLibrary')} place={{ kind: 'library' }} rail />
-        <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail />
+        {music ? <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail /> : null}
       </FocusGroup>
       {/* The page ends above the floating mini player, so a focused row is never under it. */}
       <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main">
         {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : page.kind === 'liked' ? <MusicLiked />
+          : page.kind === 'liked' && music ? <MusicLiked />
           : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
-          : page.kind === 'title' ? <MusicTitle id={page.id} />
-          : <MusicHome />}
+          : page.kind === 'title' ? <ListeningTitle id={page.id} />
+          : <ListeningHome />}
       </ScrollView>
     </View>
   );
@@ -135,7 +142,12 @@ function pageKey(place: MusicPlace): string {
 
 type Filter = 'all' | 'playlists' | 'albums' | 'artists';
 
-function Sidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle(): void; embedded?: boolean }) {
+function Sidebar(props: { rail: boolean; onToggle(): void; embedded?: boolean }) {
+  const app = useMusic();
+  return app.listening === 'music' ? <MusicSidebar {...props} /> : <SpokenSidebar {...props} />;
+}
+
+function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle(): void; embedded?: boolean }) {
   const app = useMusic();
   const m = useMediaLook();
   const { playlists } = usePlaylists();
@@ -178,6 +190,65 @@ function Sidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle
           <LibraryRow key={card.id} rail={rail} place={placeOf(card)} card={card} title={card.name} subtitle={subtitle}
             cover={card.kind === 'playlist' ? <PlaylistThumb playlist={playlists.find(p => p.id === card.id)} /> : <Cover uri={card.poster} shape={card.media?.role === 'artist' ? 'round' : 'square'} size={48} title={card.name} accent={card.accent} lift={0.2} />} />
         ))}
+        </View>
+      </List>
+    </View>
+  );
+}
+
+/** Your Library for spoken word: the library's books or shows, the viewer's under way first, with
+ * In progress, Saved (Following) and Finished as filters. No playlists and no Liked Songs. */
+function SpokenSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle(): void; embedded?: boolean }) {
+  const app = useMusic();
+  const m = useMediaLook();
+  const words = listeningWords(app.listening);
+  const { items } = useLibraryItems(app.libraryId);
+  const { rows } = useLibraryRows(app.libraryId);
+  const [filter, setFilter] = useState('');
+  // What is under way: the library's Continue listening, each part or episode as its book or show.
+  const resume = rows.find(row => row.purpose === 'continue')?.items ?? [];
+  const progress = new Map<string, Card>();
+  for (const card of resume) { const place = placeOf(card); const id = place.kind === 'title' ? place.id : card.id; if (!progress.has(id)) progress.set(id, card); }
+  const List = (embedded ? View : ScrollView) as typeof ScrollView;
+  const ordered = [...items.filter(card => progress.has(card.id)), ...items.filter(card => !progress.has(card.id))];
+  const shown = ordered.filter(card => filter === 'progress' ? progress.has(card.id) : filter === 'saved' ? app.liked(card.id) : filter === 'finished' ? card.played : true);
+  const subtitle = (card: Card) => {
+    const under = progress.get(card.id);
+    const left = under && under.durationSeconds ? msg('media.ui.left', { time: durationLabel(Math.max(0, under.durationSeconds - under.progressSeconds)) }) : '';
+    return [card.media?.byline ?? '', left || (card.played ? msg('media.ui.finished') : '')].filter(Boolean).join(' · ');
+  };
+  return (
+    <View style={{ flex: 1 }} testID="music-library" accessibilityLabel={msg('music.yourLibrary')} {...({ role: 'navigation' } as object)}>
+      {embedded ? null : <>
+        <View style={{ padding: rail ? 12 : 10, gap: 2 }}>
+          <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail={rail} />
+          <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail={rail} />
+        </View>
+        <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
+      </>}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', paddingHorizontal: rail ? 0 : 16, paddingTop: 14, paddingBottom: 8 }}>
+        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={msg('music.yourLibrary')} style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
+          <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
+          {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text> : null}
+        </Pressable>
+      </View>
+      {!rail ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }} accessibilityRole="radiogroup">
+          {words.filters.map(f => <Chip key={f.role} label={msg(f.label)} on={filter === f.role} onPress={() => setFilter(filter === f.role ? '' : f.role)} />)}
+        </View>
+      ) : null}
+      <List style={embedded ? undefined : { flex: 1 }} {...(embedded ? {} : { contentContainerStyle: { paddingHorizontal: 8, paddingBottom: 12 } })}>
+        <View style={embedded ? { paddingHorizontal: 8 } : undefined}>
+          {shown.map(card => {
+            const under = progress.get(card.id);
+            return (
+              <LibraryRow key={card.id} rail={rail} place={placeOf(card)} card={card} title={card.name} subtitle={subtitle(card)}
+                cover={<View><Cover uri={card.poster} shape="square" size={48} title={card.name} accent={card.accent} lift={0.2} />
+                  {under ? <View style={{ position: 'absolute', left: 3, right: 3, bottom: 3, height: 3, borderRadius: 2, backgroundColor: alpha('#000000', 0.45), overflow: 'hidden' }}>
+                    <View style={{ width: `${Math.round(listenedFraction(under) * 100)}%`, height: 3, backgroundColor: m.ui.accent }} /></View> : null}</View>} />
+            );
+          })}
+          {!shown.length && !rail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { padding: 12 }]}>{msg('listening.nothingHere')}</Text> : null}
         </View>
       </List>
     </View>

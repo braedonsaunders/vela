@@ -2,6 +2,7 @@
 // and the libraries the shell lists as destinations. A failed home is retried on the server's
 // terms (its retry policy and Retry-After), at most twice, then left for the viewer to retry.
 import type * as V from '../wire';
+import { libraryExperience } from '../library-presentation';
 import { mediaClass } from '../media';
 import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
@@ -134,6 +135,7 @@ export class Home {
       this.session.check(epoch, 'home');
       this.session.features = bootstrap.capabilities.features;
       this.session.searchCapabilities = bootstrap.capabilities;
+      this.settleExperiences();
       const images = await connection.images();
       const model = homeModel(bootstrap, images, this.artWidth());
       this.box.update('home', home => ({ ...home, ...ready(model), slow: false, rowsLoading: [], moreRows: 'idle' }));
@@ -361,7 +363,8 @@ export class Home {
         const page = await connection.adapter.libraries({ cursor, limit: 100 });
         for (const { id, name, kind, artwork, dateDisplay = 'year', media, presentation } of page.items) {
           const image = artwork.find(a => a.kind === 'backdrop');
-          items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), ...(presentation ? { presentation } : {}), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
+          items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), ...(presentation ? { presentation } : {}),
+            experience: libraryExperience({ media, presentation }, this.session.features?.libraryExperiences), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
         }
         if (page.continuation === 'exhausted') {
           this.session.check(epoch, 'libraries');
@@ -389,6 +392,16 @@ export class Home {
     } catch (error) {
       if (epoch === this.session.epoch) this.box.update('libraries', libraries => failed(error, libraries));
     }
+  }
+
+  /** Libraries listed before the server's features were known chose by class alone: choose again. */
+  private settleExperiences(): void {
+    const libraries = this.box.get().libraries;
+    const feature = this.session.features?.libraryExperiences;
+    if (!libraries.value?.some(item => item.experience !== libraryExperience(item, feature))) return;
+    this.box.update('libraries', current => current.value
+      ? { ...current, value: current.value.map(item => ({ ...item, experience: libraryExperience(item, feature) })) }
+      : current);
   }
 
   ensureLibraries(): void {

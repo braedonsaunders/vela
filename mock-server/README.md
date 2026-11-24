@@ -247,8 +247,8 @@ hour on that channel to verify that vertical focus retains time across gaps.
 the first media request after the setting changes. Set it to zero and make a
 media request before rearming the same duration. Non-range requests continue.
 
-Music, books and audiobooks ([media kinds](../docs/media-kinds.md)): the `music`, `books`
-and `audiobooks` libraries (fixtures in `packages/protocol/fixtures/media.ts`, all fictional)
+Music, books, audiobooks and podcasts ([media kinds](../docs/media-kinds.md)): the `music`,
+`books`, `audiobooks` and `podcasts` libraries (fixtures in `packages/protocol/fixtures/media.ts`, all fictional)
 carry `Library.media` and `Title.media`, list their root level by default and one level per
 `tab` with a `level` (Albums, Tracks, All books, Series). Artists, albums, series and
 multi-part audiobooks page their children (tracks by disc then index); Home gains
@@ -260,6 +260,14 @@ byte ranges) and save `POST /titles/:id/reading-progress`, which returns per vie
 `WatchState.reading` (`fraction >= 0.98` marks played; `watch {played:false}` clears it).
 Covers, book jackets and portraits are original SVG from `covers.ts`. `VELA_MOCK_OLD=1` and
 `VELA_MOCK_LAB=1` omit these libraries and the `mediaClasses`/`reading`/`audioPlayback` flags.
+
+The `podcasts` library holds three shows (role `show`, hosts credited as `host`) and their
+episodes (role `episode`, newest first, some played, one under way, with chapters); episodes
+play the audiobook generator's spoken-word files, so they need no media of their own. Its rows
+are Continue listening, New episodes and Your shows. Every library says how it opens
+(`presentation.experience`, `features.libraryExperiences`): music, audiobooks and podcasts as
+the audio app, everything else standard. `VELA_MOCK_NO_EXPERIENCES=1` is a server from before
+the field (no flag, no field: Vela chooses by class, so only music opens as the audio app).
 
 Generate their media once (scratch, not committed; files are served 503 until present):
 `bun mock-server/scripts/make-music-media.ts` synthesizes six original clips (AAC, MP3,

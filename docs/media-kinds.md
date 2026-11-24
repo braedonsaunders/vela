@@ -1,4 +1,4 @@
-# Media kinds: music, books, audiobooks
+# Media kinds: music, books, audiobooks, podcasts
 
 Status: **v1, signed off by the Ether coordinator on 2026-11-20** (with the
 edits folded in below). Ether puts the final contract text in its
@@ -67,6 +67,12 @@ interface LibraryTab {
   level?: string;                    // level key; items carry the level's role
 }
 ```
+
+`presentation.experience` (`audio | standard`, agreed with Ether 2026-11-24, under
+`features.libraryExperiences`) says whether the library opens as Vela's audio app or its
+standard library pages; see [the protocol reference](../packages/protocol/README.md#library-experience).
+Ether sends it on every library: the plugin's `mediaKinds[].library.experience`, else `audio`
+for music. Without the feature Vela chooses by class (music only).
 
 `presentation.card` is unchanged (`poster | landscape | square`). Vela draws the
 cover treatment from the class and role: books get a 2:3 cover with a spine and
@@ -223,6 +229,16 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   its close control. A title page without that region gets a page of its own.
 - Player: persistent mini player + Now Playing (queue, shuffle, repeat), audiobook
   mode (chapters, speed, sleep timer), web Media Session.
+- The audio app (`packages/skin/src/widgets/music`): any library whose experience is `audio`
+  (core's `libraryExperience`) opens in it, in its wide, compact (phones) or TV form. Its words
+  and controls follow the library's class (`listening.ts`): music keeps playlists, Liked Songs,
+  shuffle and repeat; audiobooks and podcasts get Continue listening on Home, Your Library as
+  the library's books or shows (In progress, Saved or Following, Finished), an audiobook page
+  (author, narrator, where the viewer is, Resume and Start over, chapters or parts), a show page
+  (hosts, episodes newest first with date, New or Played, what is left), and a bar with speed,
+  15/30 s skips and the sleep timer in place of shuffle, previous, next and repeat. A book in
+  parts resumes in the part under way; a show plays its episode under way, else its newest
+  unheard. Spoken word's keyboard: ←/→ skip 15/30 s, [ and ] change speed.
 - Native audio: one player for the whole app in the player module, behind the
   store's unchanged `AudioEngine` (`modules/vela-player/src/audio.ts`: load identity,
   the position clock between native reports, native state to engine events). Apple:

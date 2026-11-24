@@ -1,7 +1,7 @@
 // The music app's reads, over the store's existing loaders (titles, children, detail rows,
 // library rows, playlists). Each is bounded by the server's page size.
 import { useEffect, useMemo, useState } from 'react';
-import { childrenKey, type Card, type ChildrenModel, type CollectionModel, type DetailModel, type Loadable, type PlaylistModel, type Row } from '@vela/core';
+import { childrenKey, libraryKey, type Card, type ChildrenModel, type CollectionModel, type DetailModel, type Loadable, type PlaylistModel, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 
 export function useTitle(id: string | undefined): Loadable<DetailModel> | undefined {
@@ -26,14 +26,18 @@ export function useDetailRows(id: string | undefined): Row[] {
   return rows?.value ?? [];
 }
 
-/** The music library's Home shelves, as the plugin declares them. */
+/** The library's Home shelves, as the plugin declares them: its `home` tab's, else (a library
+ * without one, as an audiobook plugin's) the library's own rows. */
 export function useLibraryRows(libraryId: string): { rows: Row[]; loading: boolean } {
   const store = useVela();
-  const cached = store.catalogue.cachedLibraryRecommendations(libraryId, 'home')?.value;
+  const cached = store.catalogue.cachedLibraryRecommendations(libraryId, 'home')?.value ?? store.catalogue.cachedLibraryRecommendations(libraryId)?.value;
   const [rows, setRows] = useState<Row[] | undefined>(cached);
   useEffect(() => {
     let live = true;
-    void store.catalogue.libraryRecommendations(libraryId, 'shows', false, 'home').then(value => { if (live && value) setRows(value); });
+    const read = (tab?: string) => store.catalogue.libraryRecommendations(libraryId, 'shows', false, tab);
+    void read('home').catch(() => read(undefined))
+      .then(value => { if (live && value) setRows(value); })
+      .catch(() => { if (live) setRows(current => current ?? []); });
     return () => { live = false; };
   }, [store, libraryId]);
   return { rows: rows ?? [], loading: !rows };
@@ -103,4 +107,12 @@ export function useRecent(): { items: import('@vela/core').RecentContext[]; avai
   // Read on open and whenever a new source starts playing, so Home reflects it.
   useEffect(() => { if (available) void store.music.recent(true); }, [store, available, phase]);
   return { items: recent.value ?? [], available };
+}
+
+/** The library's own titles (its root level: books, shows), the first page in the server's order. */
+export function useLibraryItems(libraryId: string): { items: Card[]; loading: boolean } {
+  const store = useVela();
+  const library = useVelaState(state => state.library[libraryKey(libraryId, {})]);
+  useEffect(() => { void store.catalogue.library(libraryId, {}).catch(() => undefined); }, [store, libraryId]);
+  return { items: library?.value?.items ?? [], loading: !library?.value };
 }
