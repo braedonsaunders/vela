@@ -14,10 +14,10 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { captureName, DEFAULT_KNOBS, VIEWS, type Knobs, type Variant, type View } from './views';
+import { captureName, DEFAULT_KNOBS, VIEWS, webPath, type Knobs, type Variant } from './views';
 
 const { values } = parseArgs({ options: {
-  udid: { type: 'string' }, platform: { type: 'string', default: 'tvos' }, variant: { type: 'string', default: 'legacy' }, out: { type: 'string' },
+  udid: { type: 'string' }, platform: { type: 'string', default: 'tvos' }, variant: { type: 'string', default: 'document' }, out: { type: 'string' },
   mock: { type: 'string', default: 'http://127.0.0.1:7841' }, views: { type: 'string' }, settle: { type: 'string', default: '9000' },
   'metro-port': { type: 'string', default: '8142' },
   /** The simulator display to shoot (a foldable iPhone shows the app on its cover display, "1"). */
@@ -30,12 +30,8 @@ mkdirSync(join(out, 'frames'), { recursive: true });
 const settle = Number(values.settle);
 const env = { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR ?? '/Applications/Xcode.app/Contents/Developer' };
 
-/** The app route a variant opens a page at (expo-router path). */
-export function appRoute(variant: Variant, page: View['page']): string {
-  if ('index' in page) return variant === 'legacy' ? '/screen/sports?screens=0' : '/screen/sports?screens=1';
-  const event = encodeURIComponent(page.game);
-  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}&screens=1`;
-}
+/** The app route the document variant opens a page at (the web paths are the expo-router paths). */
+export const appRoute = webPath;
 
 const root = resolve(import.meta.dir, '../..');
 const port = values['metro-port']!;
@@ -44,7 +40,7 @@ async function metroFor(route: string): Promise<() => void> {
   const log: string[] = [];
   const child = Bun.spawn(['bun', 'x', 'expo', 'start', '--port', port, '--clear', '--no-dev'], {
     cwd: join(root, 'apps/vela'), stdout: 'pipe', stderr: 'pipe',
-    env: { ...process.env, EXPO_PUBLIC_VELA_SERVER: values.mock!, EXPO_PUBLIC_VELA_MOCK: '1', EXPO_PUBLIC_VELA_START_ROUTES: route, ...(variant === 'document' ? { EXPO_PUBLIC_VELA_SCREENS: '1' } : {}), CI: '1' },
+    env: { ...process.env, EXPO_PUBLIC_VELA_SERVER: values.mock!, EXPO_PUBLIC_VELA_MOCK: '1', EXPO_PUBLIC_VELA_START_ROUTES: route, CI: '1' },
   });
   const reader = async (stream: ReadableStream<Uint8Array>) => {
     const read = stream.getReader();

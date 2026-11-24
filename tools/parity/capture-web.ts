@@ -1,6 +1,9 @@
 // Capture the Sports parity views on the web with the host's playwright-cli (headless, muted Chrome).
 //
-//   bun tools/parity/capture-web.ts --variant legacy --out <dir> --app http://localhost:8141 --mock http://127.0.0.1:7841
+//   bun tools/parity/capture-web.ts --out <dir> --app http://localhost:8141 --mock http://127.0.0.1:7841
+//
+// Captures the Sports documents; the legacy hard-coded Sports was deleted in the hard cut and its
+// captures are the archived baselines compare.ts reads.
 //     [--views index-top,game-live] [--viewports web-1440,web-390]
 //
 // The mock must run with VELA_MOCK_SPORTS_FREEZE=1. The browser clock is set to the mock's frozen
@@ -13,7 +16,7 @@ import { parseArgs } from 'node:util';
 import { captureName, DEFAULT_KNOBS, reviewed, target, VIEWS, WEB_VIEWPORTS, webPath, type Knobs, type Variant } from './views';
 
 const { values } = parseArgs({ options: {
-  variant: { type: 'string', default: 'legacy' }, out: { type: 'string' }, app: { type: 'string', default: 'http://localhost:8141' },
+  variant: { type: 'string', default: 'document' }, out: { type: 'string' }, app: { type: 'string', default: 'http://localhost:8141' },
   mock: { type: 'string', default: 'http://127.0.0.1:7841' }, views: { type: 'string' }, viewports: { type: 'string' },
 } });
 const variant = values.variant as Variant;

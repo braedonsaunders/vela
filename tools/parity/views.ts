@@ -64,13 +64,13 @@ export function reviewed(view: View, viewport: string): string | undefined {
   return view.review;
 }
 
-/** Where a variant draws a page, on the web. Each URL names its variant with the parity flag
- * (`?screens=1` documents, `?screens=0` legacy; the flag exists until the hard cut), so a capture
- * never depends on how Metro was started. */
+/** Where the document variant draws a page (`screen/[id]` and `screen/[id]/[page]`). The legacy
+ * hard-coded Sports was deleted in the hard cut: its captures are archived baselines, and capturing
+ * the legacy variant is refused rather than silently drawing documents. */
 export function webPath(variant: Variant, page: View['page']): string {
-  if ('index' in page) return variant === 'legacy' ? '/screen/sports?screens=0' : '/screen/sports?screens=1';
-  const event = encodeURIComponent(page.game);
-  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}&screens=1`;
+  if (variant === 'legacy') throw new Error('legacy Sports was removed in the hard cut; compare against the archived legacy captures');
+  if ('index' in page) return '/screen/sports';
+  return `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}`;
 }
 
 /** A data-testid prefix, `text:…` or `wait:ms`, as a CSS/Playwright selector (or a wait). */
