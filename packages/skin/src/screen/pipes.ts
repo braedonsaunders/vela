@@ -2,7 +2,7 @@
 // expressions: a hole is a path and a list of these. The client keeps only what depends on the
 // viewer's clock, locale or skin; every other fact arrives from Ether already derived. The rules
 // are those the built-in Sports screen used (startText, dayOffset, readableTeam).
-import { duration as durationText, localeContext, number as numberText, time as clockText } from '@vela/core';
+import { duration as durationText, localeContext, msg, number as numberText, time as clockText } from '@vela/core';
 import { crest, hexColour, parseColour, readable, tint, withAlpha } from './colour';
 import { deref, text, type RecordReader } from './scope';
 
@@ -28,11 +28,29 @@ function instant(value: unknown): number {
   return s ? Date.parse(s) : NaN;
 }
 
+// Hermes (iOS, tvOS, Android) has Intl.DateTimeFormat and toLocaleDateString but neither
+// Intl.RelativeTimeFormat nor, everywhere, formatToParts: every Intl use below works without them.
+
+/** The parts of a formatted date, or none where the engine cannot give them. */
+function partsOf(locale: string, options: Intl.DateTimeFormatOptions, at: number): Intl.DateTimeFormatPart[] | undefined {
+  try {
+    const format = new Intl.DateTimeFormat(locale, options);
+    return typeof format.formatToParts === 'function' ? format.formatToParts(at) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The calendar date (Y, M, D as a UTC day number) of an instant in the viewer's zone. */
 function dayNumber(at: number, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at);
-  const get = (type: string) => Number(parts.find(p => p.type === type)?.value);
-  return Date.UTC(get('year'), get('month') - 1, get('day')) / 86_400_000;
+  const parts = partsOf('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }, at);
+  if (parts) {
+    const get = (type: string) => Number(parts.find(p => p.type === type)?.value);
+    return Date.UTC(get('year'), get('month') - 1, get('day')) / 86_400_000;
+  }
+  // en-US numeric dates read M/D/YYYY.
+  const m = /(\d+)\D+(\d+)\D+(\d{4})/.exec(new Date(at).toLocaleDateString('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' }));
+  return m ? Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2])) / 86_400_000 : Math.floor(at / 86_400_000);
 }
 
 /** A date-only value (`2026-11-24`) as a UTC day number, else undefined. */
@@ -48,10 +66,9 @@ export function dayOffset(value: unknown, at = now()): number | undefined {
   return day === undefined ? undefined : Math.round(day - dayNumber(at, timeZone));
 }
 
-/** Today, Tomorrow or Yesterday in the viewer's language, capitalised. */
+/** Today, Tomorrow or Yesterday in the viewer's language (Vela's strings: no Intl.RelativeTimeFormat on Hermes). */
 function relativeDay(offset: number): string {
-  const word = new Intl.RelativeTimeFormat(localeContext().formatLocale, { numeric: 'auto' }).format(offset, 'day');
-  return word.charAt(0).toLocaleUpperCase() + word.slice(1);
+  return msg(offset < 0 ? 'screen.yesterday' : offset > 0 ? 'screen.tomorrow' : 'screen.today');
 }
 
 /** Today's startText: "7:30 PM", "Tomorrow 7:00 PM", "Sat 7:00 PM", "Nov 30 7:00 PM". */
@@ -77,9 +94,15 @@ export function dayText(value: unknown): string {
   // A date-only value names a calendar day, drawn as that day wherever the viewer is. The weekday
   // leads ("Thu 26"), as the chips always read, whatever order the locale's own format would give.
   const at = only !== undefined ? only * 86_400_000 : instant(value);
-  const parts = new Intl.DateTimeFormat(formatLocale, { weekday: 'short', day: 'numeric', timeZone: only !== undefined ? 'UTC' : timeZone }).formatToParts(at);
-  const part = (type: string) => parts.find(p => p.type === type)?.value ?? '';
-  return `${part('weekday')} ${part('day')}`.trim();
+  const zone = only !== undefined ? 'UTC' : timeZone;
+  const parts = partsOf(formatLocale, { weekday: 'short', day: 'numeric', timeZone: zone }, at);
+  if (parts) {
+    const part = (type: string) => parts.find(p => p.type === type)?.value ?? '';
+    return `${part('weekday')} ${part('day')}`.trim();
+  }
+  const weekday = new Date(at).toLocaleDateString(formatLocale, { weekday: 'short', timeZone: zone });
+  const day = new Date(at).toLocaleDateString(formatLocale, { day: 'numeric', timeZone: zone });
+  return `${weekday} ${day}`.trim();
 }
 
 function dateText(value: unknown): string {
