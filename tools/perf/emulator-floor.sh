@@ -6,12 +6,12 @@
 #
 # Safety invariants:
 # - Never runs on macOS (exits immediately if uname != Linux).
-# - Uses its own dedicated AVD (`vela-tv-floor`) and console port (default 5584 -> `emulator-5584`).
+# - Uses its own dedicated AVD (`vela-tv-floor`), console port (default 5584 -> `emulator-5584`),
+#   and ADB server port (default 5041) so it never collides with other workers.
 # - Records the exact PID it starts in `$PID_FILE` and stops ONLY that PID (never pkill/killall).
-# - Throttles the 4 emulator cores to Cortex-A55 class via `systemd-run --user -u <unit> -p CPUQuota=...`
-#   (default `100%` of one host Zen 5 core across the 4 guest vCPUs, configurable via `--cpu-quota`).
-#   Using `systemd-run --user --unit=...` (detached service unit) ensures the emulator survives
-#   across non-interactive SSH sessions without WSL's PAM session teardown killing `--scope` units.
+# - Boots the emulator at normal host speed so Android system services initialize reliably, then
+#   applies the Cortex-A55 CPU quota (`systemctl --user set-property <unit> CPUQuota=...`, default
+#   `100%` of one host Zen 5 core across the 4 guest vCPUs) once `sys.boot_completed=1`.
 #
 # Usage:
 #   bash tools/perf/emulator-floor.sh setup
@@ -45,17 +45,31 @@ done
 
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/.scratch/android-sdk}"
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.scratch/android-avd}"
-export ANDROID_ADB_SERVER_PORT="${ANDROID_ADB_SERVER_PORT:-5039}"
+export ANDROID_ADB_SERVER_PORT="${ANDROID_ADB_SERVER_PORT:-5041}"
 
 ADB="$ANDROID_SDK_ROOT/platform-tools/adb"
 EMULATOR="$ANDROID_SDK_ROOT/emulator/emulator"
 SERIAL="emulator-${PORT}"
 UNIT_NAME="vela-tv-floor-${PORT}"
+ADB_UNIT_NAME="vela-tv-floor-adb-${ANDROID_ADB_SERVER_PORT}"
 
 WORK_DIR="${VELA_TV_FLOOR_DIR:-$HOME/.scratch/tmp/vela-tv-floor}"
 mkdir -p "$WORK_DIR"
 PID_FILE="$WORK_DIR/emulator-${PORT}.pid"
 LOG_FILE="$WORK_DIR/emulator-${PORT}.log"
+
+ensure_adb_server() {
+  if ! "$ADB" devices >/dev/null 2>&1; then
+    systemctl --user stop "$ADB_UNIT_NAME" >/dev/null 2>&1 || true
+    systemctl --user reset-failed "$ADB_UNIT_NAME" >/dev/null 2>&1 || true
+    systemd-run --user --unit="$ADB_UNIT_NAME" \
+      --setenv="ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" \
+      --setenv="ANDROID_AVD_HOME=${ANDROID_AVD_HOME}" \
+      --setenv="ANDROID_ADB_SERVER_PORT=${ANDROID_ADB_SERVER_PORT}" \
+      "$ADB" -L "tcp:${ANDROID_ADB_SERVER_PORT}" nodaemon server >/dev/null 2>&1 || true
+    sleep 1
+  fi
+}
 
 setup_avd() {
   local base_avd="$ANDROID_AVD_HOME/vela-tv.avd"
@@ -147,51 +161,37 @@ is_running() {
 
 start_emulator() {
   setup_avd
+  ensure_adb_server
   if is_running; then
     echo "Emulator ${SERIAL} is already running (PID $(cat "$PID_FILE"))"
     return 0
   fi
 
   rm -f "$ANDROID_AVD_HOME/${AVD_NAME}.avd/"*.lock 2>/dev/null || true
-  "$ADB" start-server >/dev/null 2>&1 || true
 
-  echo "Starting ${AVD_NAME} on ${SERIAL} (2048 MB RAM, 4 cores, CPUQuota=${CPU_QUOTA}, AllowedCPUs=${ALLOWED_CPUS})..."
+  echo "Starting ${AVD_NAME} on ${SERIAL} (2048 MB RAM, 4 cores, AllowedCPUs=${ALLOWED_CPUS}; throttling to CPUQuota=${CPU_QUOTA} after boot)..."
 
   systemctl --user stop "$UNIT_NAME" >/dev/null 2>&1 || true
   systemctl --user reset-failed "$UNIT_NAME" >/dev/null 2>&1 || true
 
-  if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --unit="${UNIT_NAME}-probe" -p CPUQuota="$CPU_QUOTA" true 2>/dev/null; then
-    systemctl --user reset-failed "${UNIT_NAME}-probe" >/dev/null 2>&1 || true
-    systemd-run --user --unit="$UNIT_NAME" \
-      --setenv="ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" \
-      --setenv="ANDROID_AVD_HOME=${ANDROID_AVD_HOME}" \
-      --setenv="ANDROID_ADB_SERVER_PORT=${ANDROID_ADB_SERVER_PORT}" \
-      -p "CPUQuota=${CPU_QUOTA}" \
-      -p "AllowedCPUs=${ALLOWED_CPUS}" \
-      /bin/bash -c "exec \"$EMULATOR\" -avd \"$AVD_NAME\" -port \"$PORT\" -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 >\"$LOG_FILE\" 2>&1"
-    sleep 1
-    local emu_pid
-    emu_pid="$(systemctl --user show -p MainPID --value "$UNIT_NAME" 2>/dev/null || true)"
-    if [[ -z "$emu_pid" || "$emu_pid" == "0" ]]; then
-      echo "error: failed to get MainPID for systemd unit ${UNIT_NAME}" >&2
-      exit 1
-    fi
-    echo "$emu_pid" > "$PID_FILE"
-  else
-    echo "warning: systemd-run --user not available; falling back to setsid + taskset -c ${ALLOWED_CPUS}" >&2
-    setsid taskset -c "$ALLOWED_CPUS" \
-      "$EMULATOR" -avd "$AVD_NAME" \
-      -port "$PORT" \
-      -no-window -no-audio -no-snapshot -no-boot-anim \
-      -gpu swiftshader_indirect \
-      -memory 2048 -cores 4 \
-      >"$LOG_FILE" 2>&1 < /dev/null &
-    local emu_pid=$!
-    echo "$emu_pid" > "$PID_FILE"
-  fi
+  # Boot unthrottled (CPUQuota=400%) on the 4 pinned CPUs so Android OS services finish startup cleanly,
+  # then dial down to CPUQuota=${CPU_QUOTA} once boot completes.
+  systemd-run --user --unit="$UNIT_NAME" \
+    --setenv="ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" \
+    --setenv="ANDROID_AVD_HOME=${ANDROID_AVD_HOME}" \
+    --setenv="ANDROID_ADB_SERVER_PORT=${ANDROID_ADB_SERVER_PORT}" \
+    -p "CPUQuota=400%" \
+    -p "AllowedCPUs=${ALLOWED_CPUS}" \
+    /bin/bash -c "exec \"$EMULATOR\" -avd \"$AVD_NAME\" -port \"$PORT\" -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 >\"$LOG_FILE\" 2>&1"
 
+  sleep 1
   local emu_pid
-  emu_pid="$(cat "$PID_FILE")"
+  emu_pid="$(systemctl --user show -p MainPID --value "$UNIT_NAME" 2>/dev/null || true)"
+  if [[ -z "$emu_pid" || "$emu_pid" == "0" ]]; then
+    echo "error: failed to get MainPID for systemd unit ${UNIT_NAME}" >&2
+    exit 1
+  fi
+  echo "$emu_pid" > "$PID_FILE"
   echo "Launched ${SERIAL} with PID ${emu_pid}. Waiting for boot completion..."
 
   local elapsed=0
@@ -202,9 +202,8 @@ start_emulator() {
       tail -n 40 "$LOG_FILE" >&2 || true
       exit 1
     fi
-    "$ADB" connect "localhost:$((PORT + 1))" >/dev/null 2>&1 || true
     local boot_completed
-    boot_completed="$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)"
+    boot_completed="$(timeout 5 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed < /dev/null 2>/dev/null | tr -d '\r\n' || true)"
     if [[ "$boot_completed" == "1" ]]; then
       break
     fi
@@ -218,62 +217,65 @@ start_emulator() {
   fi
 
   # Enforce 1920x1080 @ 320 dpi and disable system window animations for deterministic frame timings.
-  "$ADB" -s "$SERIAL" shell wm size 1920x1080 >/dev/null 2>&1 || true
-  "$ADB" -s "$SERIAL" shell wm density 320 >/dev/null 2>&1 || true
-  "$ADB" -s "$SERIAL" shell settings put global window_animation_scale 0 >/dev/null 2>&1 || true
-  "$ADB" -s "$SERIAL" shell settings put global transition_animation_scale 0 >/dev/null 2>&1 || true
-  "$ADB" -s "$SERIAL" shell settings put global animator_duration_scale 0 >/dev/null 2>&1 || true
+  timeout 10 "$ADB" -s "$SERIAL" shell wm size 1920x1080 < /dev/null >/dev/null 2>&1 || true
+  timeout 10 "$ADB" -s "$SERIAL" shell wm density 320 < /dev/null >/dev/null 2>&1 || true
+  timeout 10 "$ADB" -s "$SERIAL" shell settings put global window_animation_scale 0 < /dev/null >/dev/null 2>&1 || true
+  timeout 10 "$ADB" -s "$SERIAL" shell settings put global transition_animation_scale 0 < /dev/null >/dev/null 2>&1 || true
+  timeout 10 "$ADB" -s "$SERIAL" shell settings put global animator_duration_scale 0 < /dev/null >/dev/null 2>&1 || true
 
-  echo "Ready: ${SERIAL} (PID ${emu_pid})"
+  # Apply the Cortex-A55 CPU quota now that the guest OS is booted.
+  echo "Applying Cortex-A55 CPU throttle: systemctl --user set-property ${UNIT_NAME}.service CPUQuota=${CPU_QUOTA}"
+  systemctl --user set-property "${UNIT_NAME}.service" "CPUQuota=${CPU_QUOTA}"
+
+  echo "Ready: ${SERIAL} (PID ${emu_pid}, CPUQuota=${CPU_QUOTA})"
   status_emulator
 }
 
 status_emulator() {
+  ensure_adb_server
   if is_running; then
     local pid
     pid="$(cat "$PID_FILE")"
     echo "RUNNING: ${SERIAL} (PID ${pid})"
-    "$ADB" -s "$SERIAL" shell "wm size; wm density; grep -E 'MemTotal|processor' /proc/meminfo /proc/cpuinfo" 2>/dev/null || true
+    timeout 10 "$ADB" -s "$SERIAL" shell "wm size; wm density; grep -E 'MemTotal|processor' /proc/meminfo /proc/cpuinfo" < /dev/null 2>/dev/null || true
+    systemctl --user show -p CPUQuotaPerSecUSec,AllowedCPUs "${UNIT_NAME}.service" 2>/dev/null || true
   else
     echo "STOPPED: ${SERIAL}"
   fi
 }
 
 stop_emulator() {
-  if [[ ! -f "$PID_FILE" ]]; then
-    echo "No PID file at ${PID_FILE}; nothing to stop."
-    return 0
-  fi
-  local pid
-  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-  if [[ -z "$pid" ]]; then
+  if [[ -f "$PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$pid" ]]; then
+      echo "Stopping ${SERIAL} (owned PID ${pid})..."
+      timeout 5 "$ADB" -s "$SERIAL" emu kill < /dev/null >/dev/null 2>&1 || true
+
+      local waited=0
+      while kill -0 "$pid" 2>/dev/null && (( waited < 10 )); do
+        sleep 1
+        (( waited += 1 ))
+      done
+
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 2
+      fi
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null || true
+      fi
+    fi
     rm -f "$PID_FILE"
-    return 0
-  fi
-
-  echo "Stopping ${SERIAL} (owned PID ${pid})..."
-  "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
-
-  local waited=0
-  while kill -0 "$pid" 2>/dev/null && (( waited < 15 )); do
-    sleep 1
-    (( waited += 1 ))
-  done
-
-  if kill -0 "$pid" 2>/dev/null; then
-    kill -TERM "$pid" 2>/dev/null || true
-    sleep 2
-  fi
-  if kill -0 "$pid" 2>/dev/null; then
-    kill -KILL "$pid" 2>/dev/null || true
   fi
 
   systemctl --user stop "$UNIT_NAME" >/dev/null 2>&1 || true
   systemctl --user reset-failed "$UNIT_NAME" >/dev/null 2>&1 || true
+  systemctl --user stop "$ADB_UNIT_NAME" >/dev/null 2>&1 || true
+  systemctl --user reset-failed "$ADB_UNIT_NAME" >/dev/null 2>&1 || true
 
-  rm -f "$PID_FILE"
   rm -f "$ANDROID_AVD_HOME/${AVD_NAME}.avd/"*.lock 2>/dev/null || true
-  echo "Stopped ${SERIAL} (PID ${pid})."
+  echo "Stopped ${SERIAL}."
 }
 
 case "$ACTION" in

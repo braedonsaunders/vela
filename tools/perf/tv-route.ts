@@ -103,7 +103,6 @@ const DPAD_SEQUENCE: string[] = [
 ];
 
 const APP = 'app.ether.vela';
-const START_ROUTES_DELAY_MS = 1500;
 
 export function formatComparisonMarkdown(
   legacy: RoutePerfResult,
@@ -118,7 +117,7 @@ export function formatComparisonMarkdown(
 - **Target Floor Profile**: \`vela-tv-floor\` on \`gpu-workstation\` (budget Google TV stick class: onn 4K / Chromecast with Google TV)
   - **Display**: \`${document.deviceProfile.resolution}\` @ \`${document.deviceProfile.density}\`
   - **Memory**: \`${document.deviceProfile.ramMb} MB\` RAM
-  - **CPU**: \`${document.deviceProfile.cores}\` vCPUs throttled via \`systemd-run --user --scope -p CPUQuota=${document.deviceProfile.cpuQuota}\` (Cortex-A55 class)
+  - **CPU**: \`${document.deviceProfile.cores}\` vCPUs throttled via \`systemd-run --user -p CPUQuota=${document.deviceProfile.cpuQuota}\` (Cortex-A55 class)
 - **Budgets**:
   - First frame: \`<= ${PERF_BUDGETS.firstFrameMs} ms\`
   - Focus move \`p95\`: \`<= ${PERF_BUDGETS.focusMoveP95Ms} ms\`
@@ -183,13 +182,18 @@ if (import.meta.main) {
 
   function runAdb(...args: string[]): string {
     const adbBin = process.env.ADB ?? (process.env.ANDROID_SDK_ROOT ? `${process.env.ANDROID_SDK_ROOT}/platform-tools/adb` : 'adb');
-    const res = Bun.spawnSync([adbBin, '-s', udid, ...args], {
-      env: process.env,
+    const adbEnv = {
+      ...process.env,
+      ANDROID_ADB_SERVER_PORT: process.env.ANDROID_ADB_SERVER_PORT ?? '5041',
+    };
+    const res = Bun.spawnSync(['timeout', '15', adbBin, '-s', udid, ...args], {
+      env: adbEnv,
+      stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
     });
     if (res.exitCode !== 0) {
-      throw new Error(`adb -s ${udid} ${args.join(' ')} failed: ${res.stderr.toString().trim()}`);
+      throw new Error(`adb -s ${udid} ${args.join(' ')} failed (exit ${res.exitCode}): ${res.stderr.toString().trim()}`);
     }
     return res.stdout.toString();
   }
@@ -203,6 +207,7 @@ if (import.meta.main) {
     const url = `http://127.0.0.1:${mockPort}`;
     const child = Bun.spawn(['bun', 'mock-server/main.ts'], {
       cwd: root,
+      stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
@@ -250,6 +255,7 @@ if (import.meta.main) {
     const log: string[] = [];
     const child = Bun.spawn(['bun', 'x', 'expo', 'start', '--port', metroPort, '--clear', '--no-dev'], {
       cwd: join(root, 'apps/vela'),
+      stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
@@ -362,20 +368,15 @@ if (import.meta.main) {
       runAdb('push', tmpPrefs, '/data/local/tmp/vela-perf-prefs.xml');
       rmSync(tmpPrefs);
 
-      // Prime app directory with preferences
-      runAdb('shell', 'monkey', '-p', APP, '-c', 'android.intent.category.LEANBACK_LAUNCHER', '1');
-      await Bun.sleep(1500);
-      runAdb('shell', 'am', 'force-stop', APP);
       runAdb(
         'shell',
         `run-as ${APP} sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/vela-perf-prefs.xml shared_prefs/${APP}_preferences.xml'`,
       );
 
-      // Warm run once so home/auth/fonts are cached and bundle is loaded, then measure warm route open
+      // Launch app and wait for homeReady + useStartRoutes (1500ms timer after homeReady) + route settle
       runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'reset');
       runAdb('shell', 'monkey', '-p', APP, '-c', 'android.intent.category.LEANBACK_LAUNCHER', '1');
 
-      // Wait for home ready + useStartRoutes (1500ms timer after homeReady) + route settle
       await Bun.sleep(settleMs);
 
       const mountGfxRaw = runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'framestats');
@@ -398,8 +399,6 @@ if (import.meta.main) {
         if (splitIdx > 0) {
           const routeBurst = mountSamples.slice(splitIdx);
           routeFirstFrameDurationMs = routeBurst[0]!.totalMs;
-          // Time from the first vsync of the route push to completion of its first drawn frame
-          // plus any data-read frames in the initial route commit window (up to 350ms).
           const burstStartNs = routeBurst[0]!.intendedVsyncNs;
           let contentFrame = routeBurst[0]!;
           for (const f of routeBurst) {
