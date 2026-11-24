@@ -5,6 +5,7 @@
 import type * as V from './wire';
 import type { CardMedia, CardShape } from './media';
 import type { PluginLevels } from './plugin-levels';
+import type { VelaExperience } from './library-presentation';
 
 /** A labelled piece of a title's parent context and its select action, when known. */
 export interface ContextPart { label: string; select: string }
@@ -68,6 +69,8 @@ export interface Row {
   nextCursor: string;
   continuation: V.Row['continuation'];
   previewOnFocus: boolean;
+  /** A Home row a plugin surface draws (its id in `HomeModel.surfaces`); the row has no items of its own. */
+  surface?: string;
   cardStyle?: 'poster' | 'landscape' | 'square';
   presentation: string;
 }
@@ -113,6 +116,8 @@ export interface HomeModel {
   playlistsAvailable: boolean;
   /** Plugin screens from bootstrap navigation (Sports), as top-level sections after Live TV. */
   screens: ScreenNav[];
+  /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels). */
+  surfaces: V.SurfaceContribution[];
   /** The viewer's spoiler-free preference when bootstrap carries it (else read from /live/preferences). */
   spoilerFree?: boolean;
   /** What the server answers for plugin levels (features.pluginLevels), known once bootstrap is: pages
@@ -120,8 +125,8 @@ export interface HomeModel {
   pluginLevels?: PluginLevels;
 }
 
-/** A plugin screen the viewer may open (bootstrap `navigation`). */
-export interface ScreenNav { id: string; title: string; icon: string }
+/** A plugin screen the viewer may open (bootstrap `navigation`): its landing page's document. */
+export interface ScreenNav { id: string; title: string; icon: string; page: string; document: { href: string; renderer: number } }
 
 export interface Rating {
   /** `rt-critics`, `rt-audience`, or the wire source (`imdb`, `tmdb`, …). */
@@ -184,6 +189,12 @@ export interface Destination {
   media?: V.MediaClass;
   /** The library's declared card shape (a landscape library's thumbnails). */
   presentation?: V.Library['presentation'];
+  /** How it opens (libraryExperience): watch, listen, read, gallery or live; absent reads as watch. */
+  experience?: VelaExperience;
+  /** The experience the server named, as sent (chosen again once the server's features are known). */
+  declaredExperience?: string;
+  /** The library's declared tabs (absent from a server that declares none). */
+  tabs?: V.LibraryTab[];
   dateDisplay: 'year' | 'date';
   backdrop: string;
 }

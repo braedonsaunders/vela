@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import type { LiveEvent } from '@vela/core';
-import { barOffset } from '../src/widgets/sports/bar';
-import { airingText, bestWatch, newestFirst, cardLine, crestColor, leagueLabel, rankRows, watchTarget, dayOffset, heroTint, initials, matchup, pathLength, probabilityLead, probabilityPath, watchLabel } from '../src/widgets/sports/model';
+import { barOffset } from '../src/blocks/bar';
+import { pathLength, probabilityPath } from '../src/blocks/graph-math';
+import { airingText, bestWatch, newestFirst, cardLine, crestColor, leagueLabel, rankRows, watchTarget, dayOffset, heroTint, initials, matchup, probabilityLead, watchLabel } from '../src/widgets/sports/model';
 import { resolveDocument } from '../src/resolve';
 import { cinematicDoc } from '../../protocol/fixtures/skins/cinematic';
 

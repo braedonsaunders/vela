@@ -18,6 +18,8 @@ export interface RequestOptions {
   /** Refresh and resend once on 401 (default true). */
   retryAuth?: boolean;
   signal?: AbortSignal;
+  /** Extra request headers (X-Vela-Screen-Renderer). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -69,7 +71,7 @@ export class EtherTransport {
     const cached = cacheable && !fresh ? this.cache.get(key) ?? (persistent ? persistentRead(key) : undefined) : undefined;
     if (cached && !this.cache.has(key)) this.cache.set(key, cached);
     const send = (token: Token, useCache = true) => {
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = { ...options.headers };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (cached && useCache) headers['If-None-Match'] = cached.etag;
       const init: RequestInit = { method, signal, headers };
@@ -245,6 +247,15 @@ export class EtherTransport {
       headers['X-Vela-Device-Id'] = this.credentials.device.id;
     }
     return fetch(this.boundURL(path), { ...init, redirect: 'error', headers });
+  }
+
+  /** The path under /vela/v0 of a URL inside the bound server, or undefined outside it. */
+  boundPath(href: string): string | undefined {
+    try {
+      const url = new URL(href, `${this.origin}/`);
+      if (url.origin !== this.origin || !url.pathname.startsWith('/vela/v0/')) return undefined;
+      return `${url.pathname.slice('/vela/v0'.length)}${url.search}`;
+    } catch { return undefined; }
   }
 }
 

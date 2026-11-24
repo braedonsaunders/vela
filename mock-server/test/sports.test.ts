@@ -57,8 +57,10 @@ describe('mock server: sports', () => {
     const capabilities = await (await fetch(`${mock.url}/vela/v0/capabilities`)).json() as V.ServerCapabilities;
     expect(capabilities.features.liveEvents?.available).toBe(true);
     expect(capabilities.features.multiview).toEqual({ available: true, maxTiles: 4 });
-    const bootstrap = await (await get('/bootstrap')).json() as V.Bootstrap;
-    expect(bootstrap.navigation).toEqual([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }]);
+    // Hard cut: only a client that says its renderer gets the screen (as a document; screens.test.ts).
+    expect((await (await get('/bootstrap')).json() as V.Bootstrap).navigation).toBeUndefined();
+    const bootstrap = await (await fetch(`${mock.url}/vela/v0/bootstrap`, { headers: { ...headers(), 'X-Vela-Screen-Renderer': '19' } })).json() as V.Bootstrap;
+    expect(bootstrap.navigation).toMatchObject([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports', page: 'index' }]);
   });
 
   test('the sports screen resolves every section type with events', async () => {

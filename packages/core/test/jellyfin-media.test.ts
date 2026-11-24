@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { libraryExperience } from '../src/library-presentation';
 import { JellyfinAdapter, bookFraction } from '../src/adapter/jellyfin';
 import { foldAudiobooks, readingFormat, titleProjection } from '../src/adapter/jellyfin/media';
 import type { Item } from '../src/adapter/jellyfin/types';
@@ -77,6 +78,8 @@ describe('Jellyfin media libraries', () => {
       ['Books', 'book', 'poster', ['recommended', 'library', 'audiobook']],
       ['Photos', 'photo', 'square', ['recommended', 'library']],
     ]);
+    // A server without features.libraryExperiences: each library still opens in its experience, by class.
+    expect(libraries.map(l => libraryExperience(l, undefined))).toEqual(['listen', 'read', 'gallery']);
   });
 
   test('library tabs read albums, the library\'s album artists, and songs', async () => {

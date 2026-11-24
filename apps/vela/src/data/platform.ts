@@ -35,10 +35,10 @@ export function aboutApp(): { version: string; build: string; platform: string }
   return { version: config.appVersion, build: code ? String(code) : '', platform: PLATFORM_NAMES[device().platform] ?? '' };
 }
 
-/** The longer side of the screen in pixels, at most twice its points. */
+/** The longer side of the screen in pixels, at most twice its points and never above 4K. */
 export function screenArtWidth(): number {
   const { width, height } = Dimensions.get('screen');
-  return Math.ceil(Math.max(width, height, 960) * Math.min(2, PixelRatio.get()));
+  return Math.min(3840, Math.ceil(Math.max(width, height, 960) * Math.min(2, PixelRatio.get())));
 }
 
 export function platform(): VelaPlatform {

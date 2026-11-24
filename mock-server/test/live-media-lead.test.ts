@@ -65,3 +65,24 @@ test.skipIf(!mediaGenerated)('mediaLeadSeconds starts every live segment that mu
   }
   expect(await decodeAt()).toBeCloseTo(onTime, 2);
 });
+
+test.skipIf(!mediaGenerated)('a live plan and each live playlist anchor a sequence at the time its media carries', async () => {
+  const channels = await (await call('/live/channels?limit=1')).json() as V.Page<V.Channel>;
+  const plan = await (await post('/playback', { channelId: channels.items[0]!.id, client, idempotencyKey: 'anchor-tune' })).json() as V.PlaybackPlan;
+  const anchor = plan.live?.anchor;
+  expect(anchor).toBeDefined();
+  const variant = new URL('v360/index.m3u8', new URL(plan.paths[0]!.url ?? '', mock.url));
+  const response = await fetch(variant);
+  const playlist = await response.text();
+  const first = Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(playlist)![1]);
+  // Each live media playlist anchors itself too: its first sequence and that segment's time.
+  expect(response.headers.get('X-Ether-Live-Media-Sequence')).toBe(String(first));
+  expect(Number(response.headers.get('X-Ether-Live-Window-Start'))).toBe(first * 4);
+  const count = (playlist.match(/#EXTINF/g) ?? []).length;
+  // Vela's packet runtime refuses an anchor outside the playlist it reads.
+  expect(anchor!.mediaSequence).toBeGreaterThanOrEqual(first);
+  expect(anchor!.mediaSequence).toBeLessThan(first + count);
+  const init = new Uint8Array(await (await fetch(new URL('init.mp4', variant))).arrayBuffer());
+  const segment = new Uint8Array(await (await fetch(new URL(`segment-${anchor!.mediaSequence}.m4s`, variant))).arrayBuffer());
+  expect(firstDecodeSeconds(init, segment)).toBeCloseTo(anchor!.windowStartSeconds, 0);
+});

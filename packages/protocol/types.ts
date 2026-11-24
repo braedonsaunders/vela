@@ -1,5 +1,6 @@
 /** Vela v0. All durations/positions are seconds, rates bits/second, timestamps RFC3339 UTC. */
 import type { LiveEventRef, MultiviewTile, NavigationEntry, ProviderCapDetails } from './live-events';
+import type { ScreenNavigationEntry, SurfaceContribution, SurfaceRow } from './screen';
 export type * from './live-events';
 export type * from './screen';
 export type ID = string;
@@ -84,6 +85,9 @@ export interface ServerCapabilities {
     reading?: Feature & { formats: ReadingFormat[] };
     /** Audio-only plans (PlaybackPlan.media = 'audio'). */
     audioPlayback?: Feature;
+    /** Library.experience is sent on every library and is final (a plugin names how its library opens);
+     * `experiences` lists the ids the server sends. Without it a client chooses by media class. */
+    libraryExperiences?: Feature & { experiences: LibraryExperience[] };
     /** Live events: /live/events, /live/stream, screens and entity favourites (live-events.ts). */
     liveEvents?: Feature;
     /** Live TV multiview groups: POST /multiview, PlaybackRequest.multiview. */
@@ -202,8 +206,12 @@ export interface HeroAction { kind: 'resume' | 'play' | 'details'; titleId: ID; 
 export interface Hero { title: Title; receiptToken: string; reason: HeroReason; action: HeroAction;
   /** Short supporting/reason text, not the primary action button label. */
   label?: string; previewOnFocus?: boolean; trailer?: Extra }
-export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor;
-  /** Plugin screens the viewer may open, as top-level sections after Live TV. */ navigation?: NavigationEntry[] }
+export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[];
+  /** Feed rows, and `surface` rows (a plugin's homeRow surface) in the place Ether lists them. */ rows: (Row | SurfaceRow)[]; nextCursor?: Cursor;
+  /** Plugin screens the viewer may open, as top-level sections after Live TV. An entry without a
+   * `document` (an Ether before plugin screens) is not drawn (hard cut). */ navigation?: (ScreenNavigationEntry | NavigationEntry)[];
+  /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels), filtered, capped and ordered by Ether. */
+  surfaces?: SurfaceContribution[] }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }
 /** `auto` (only with features.unifiedSearch): one ranked list; the server decides when description matches lead. */
 export interface SearchRequest extends Mutation, SearchOptions { query: string; generation: number; mode: 'fast' | 'descriptive' | 'auto'; cursor?: Cursor; limit?: number }
@@ -411,6 +419,11 @@ export interface TitlePlaylists { items: TitlePlaylistMembership[] }
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated' | 'lastViewed';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
+/** How a client presents a whole library, by name. Vela's experiences: 'watch' (films and TV, the
+ * standard library), 'listen' (the audio app: music, audiobooks, podcasts), 'read' (books and comics),
+ * 'gallery' (photos and home videos), 'live' (guide, multiview, sports). The set is open: a client
+ * draws an id it does not know as 'watch'. Unrelated to `LibraryTab.layout` (grid, list, timeline). */
+export type LibraryExperience = 'watch' | 'listen' | 'read' | 'gallery' | 'live' | (string & {});
 export interface LibraryTab { /** A library or view tab listing one level (a level key) instead of the root. */ level?: string; search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people' | 'live' | 'view'; layout?: 'grid' | 'list' | 'timeline';
   /** The tab's own card shape for its rows and items, over the library's presentation.card (a recommended tab too, with features.pluginLevels). */ card?: LibraryCard; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
@@ -422,7 +435,9 @@ export interface LibraryBrowseOptions {
   /** Boolean fields declare support; kind lists supported values. */
   filters: { facets?: LibraryFacet[]; kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean; collectionId?: boolean };
 }
-export interface Library { /** Omitted: 'video'. */ media?: MediaClass; presentation?: { card: LibraryCard }; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
+export interface Library { /** Omitted: 'video'. */ media?: MediaClass;
+  /** How the library opens (features.libraryExperiences); omitted: chosen by `media` and `kind`. */ experience?: LibraryExperience;
+  presentation?: { card: LibraryCard }; dateDisplay?: 'year' | 'date'; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }
 export interface LibraryBrowseQuery extends LibrariesQuery {
   tab?: string; query?: string; facets?: Record<string, string[]>;

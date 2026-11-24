@@ -15,10 +15,11 @@ export interface Probe {
 
 const PROBE_MS = 6000;
 
-/** Public, credential-free reads with redirects refused, so an address is identified only by what it serves itself. */
+/** Public reads with redirects refused, so an address is identified only by what it serves itself. No Vela or server
+ * credential is sent; only a same-origin auth proxy's own cookie, which it needs to admit the request at all. */
 async function read(url: string, headers: Record<string, string>): Promise<Record<string, unknown> | undefined> {
   try {
-    const response = await fetch(url, { headers, redirect: 'error', credentials: 'omit', signal: timeoutSignal(PROBE_MS) });
+    const response = await fetch(url, { headers, redirect: 'error', credentials: 'same-origin', signal: timeoutSignal(PROBE_MS) });
     if (!response.ok) return undefined;
     const value = await response.json();
     return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
@@ -64,7 +65,7 @@ export async function probeServer(input: string, device: PlexDevice, pageSecure:
     const identity = plex?.MediaContainer as Record<string, unknown> | undefined;
     if (identity && text(identity.machineIdentifier)) return { state: 'found', kind: 'plex', name: '', version: text(identity.version, 40), url: address.origin };
     // Any readable answer (even an error page) means the address is reachable but not a media server.
-    if (await fetch(base, { method: 'HEAD', redirect: 'manual', credentials: 'omit', signal: timeoutSignal(PROBE_MS) }).then(() => true, () => false)) return { state: 'unsupported', kind: '', name: '', version: '', url: base };
+    if (await fetch(base, { method: 'HEAD', redirect: 'manual', credentials: 'same-origin', signal: timeoutSignal(PROBE_MS) }).then(() => true, () => false)) return { state: 'unsupported', kind: '', name: '', version: '', url: base };
   }
   if (blocked) return { state: 'insecure', kind: '', name: '', version: '', url: blocked };
   return { state: parsed ? 'unreachable' : 'invalid', kind: '', name: '', version: '', url: '' };
@@ -77,7 +78,7 @@ export async function probeEther(origin: string, timeoutMs = 3000): Promise<{ or
   try {
     const url = new URL(origin);
     if (!['http:', 'https:'].includes(url.protocol)) return null;
-    const response = await fetch(`${url.origin}/vela/v0/capabilities`, { headers: { Accept: 'application/json' }, credentials: 'omit', redirect: 'error', signal: controller.signal });
+    const response = await fetch(`${url.origin}/vela/v0/capabilities`, { headers: { Accept: 'application/json' }, credentials: 'same-origin', redirect: 'error', signal: controller.signal });
     if (response.status !== 200 || !/^application\/json(?:\s*;|\s*$)/i.test(response.headers.get('content-type') ?? '')) return null;
     const value = await response.json();
     if (!value || typeof value !== 'object' || typeof value.protocolVersion !== 'number' || !value.server || typeof value.server.id !== 'string' || !value.server.id || typeof value.server.name !== 'string' || !value.server.name || !value.features || typeof value.features !== 'object' || Array.isArray(value.features)) return null;

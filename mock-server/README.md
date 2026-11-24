@@ -247,8 +247,8 @@ hour on that channel to verify that vertical focus retains time across gaps.
 the first media request after the setting changes. Set it to zero and make a
 media request before rearming the same duration. Non-range requests continue.
 
-Music, books and audiobooks ([media kinds](../docs/media-kinds.md)): the `music`, `books`
-and `audiobooks` libraries (fixtures in `packages/protocol/fixtures/media.ts`, all fictional)
+Music, books, audiobooks and podcasts ([media kinds](../docs/media-kinds.md)): the `music`,
+`books`, `audiobooks` and `podcasts` libraries (fixtures in `packages/protocol/fixtures/media.ts`, all fictional)
 carry `Library.media` and `Title.media`, list their root level by default and one level per
 `tab` with a `level` (Albums, Tracks, All books, Series). Artists, albums, series and
 multi-part audiobooks page their children (tracks by disc then index); Home gains
@@ -261,6 +261,15 @@ byte ranges) and save `POST /titles/:id/reading-progress`, which returns per vie
 Covers, book jackets and portraits are original SVG from `covers.ts`. `VELA_MOCK_OLD=1` and
 `VELA_MOCK_LAB=1` omit these libraries and the `mediaClasses`/`reading`/`audioPlayback` flags.
 
+The `podcasts` library holds three shows (role `show`, hosts credited as `host`) and their
+episodes (role `episode`, newest first, some played, one under way, with chapters); episodes
+play the audiobook generator's spoken-word files, so they need no media of their own. Its rows
+are Continue listening, New episodes and Your shows. The `photos` library (class `photo`) holds
+eight procedural pictures. Every library names how it opens (`experience`,
+`features.libraryExperiences`): music, audiobooks and podcasts listen, books read, photos are a
+gallery, Live TV is live, everything else watches. `VELA_MOCK_NO_EXPERIENCES=1` is a server
+without the feature (no flag, no field: Vela chooses by media class, with the same result).
+
 Generate their media once (scratch, not committed; files are served 503 until present):
 `bun mock-server/scripts/make-music-media.ts` synthesizes six original clips (AAC, MP3,
 FLAC) and a chaptered spoken-word stand-in per audiobook file into
@@ -269,3 +278,35 @@ duration against the fixture. `bun mock-server/scripts/make-book-media.ts` write
 books, the PDF field guide and the CBZ comic into `~/.scratch/tmp/vela/media-books/` without
 dependencies. Both take an output directory argument; `VELA_MOCK_MUSIC_ROOT` and
 `VELA_MOCK_BOOKS_ROOT` point the mock (and the scripts' defaults) elsewhere.
+
+## Plugin screens and surfaces (Sports)
+
+`screens.ts` serves Sports as Ether serves plugin screens (docs/plugin-screens.md; Ether design
+sections 3b, 5.4, 6 and 7), built on the Sports simulation in `sports.ts`:
+
+- Bootstrap lists `navigation` (with the document href) and `surfaces` only to a client that sends
+  `X-Vela-Screen-Renderer` at or above the document's renderer (hard cut). `X-Vela-Language` (else
+  `Accept-Language`, first tag) is the locale.
+- `GET /screens/{id}/pages/{page}/document?v=&r=&l=` and `/surfaces/{id}/document`: the documents in
+  `packages/protocol/fixtures/screens/` with `deps` added, immutable with an ETag when `v` matches
+  (no `v` or a stale one: the current document, 200, `no-cache`, its ETag; never a redirect); no variant for the client's renderer is 404
+  `update_required`. Surfaces are offered once `sports/surfaces/{scorebug,ticker,alert,tonight}.json`
+  exists; the Home row surface sits after the first Home row.
+- `GET …/data?sources=&p.<param>=&tz=`: the section 5.4 view models as `event:`, `detail:` and
+  `entity:` records (a rev moves only when content changes), with `liveEvents` windows `today`,
+  `week`, `recent` and `ticker`. An unknown key, param or bad value is 400 `invalid_request`; an
+  event the viewer cannot read is that source's `errors.<id> = not_found`.
+- `POST …/actions/ether.favorite|ether.reveal|ether.spoilerFree` (`Idempotency-Key`; body fields
+  page, params, args, context, tz, idempotencyKey only) answer the changed records and every source
+  of the page re-read; `PUT /surfaces/{id}/setting {enabled}`.
+- `/live/stream?topic=…&since=&tz=&alerts=1` (or any stream request with the renderer header):
+  replays what changed above `since`, then `records`, `source` and `alert` frames as the
+  simulation or the viewer's choices change; at most 4 topics.
+
+Knobs: `VELA_MOCK_SPORTS_FREEZE=1` (with `VELA_MOCK_SPORTS_NOW`) freezes the Sports clock for
+parity captures; `VELA_MOCK_FROM_START=1` adds programme/fromStart to watch targets (not in Ether
+E1/E2); `VELA_MOCK_SCREEN_FIXTURES=<dir>` reads the documents from another directory;
+`POST /__admin/screens {hide: [id], show: [id]}` hides a screen or surface from viewers (404, and
+the streams following it end); `POST /__admin/sports {screenDelayMs, screenFail, favourites,
+spoilerFree, alert}` as in `sports.ts`. The legacy Sports routes (`/screens/{id}`, `/live/events*`,
+`/live/ticker`, `/live/entities`, `/live/preferences`, `/favorites/entities`) stay until the hard cut.

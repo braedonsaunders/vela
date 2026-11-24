@@ -1,5 +1,6 @@
-// A music library opens as the music app (wide layouts): the shell from the skin package, given the
-// app's router, player and the card menu. The page in view lives in the address (`?m=`).
+// A library whose experience is 'listen' opens as the audio app: the shell from the skin package,
+// given the app's router, player and the card menu, worded for what the library holds (music,
+// audiobooks, podcasts). The page in view lives in the address (`?m=`).
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, View } from 'react-native';
@@ -10,22 +11,20 @@ import { HostContext } from '@vela/skin/src/host';
 import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
+import { listenFrom, listeningOf } from '@vela/skin/src/widgets/music/listening';
 import { useVela } from '../vela';
 import { useMusicKeys } from './keys';
 import { MusicKeysSheet } from './keys-sheet';
 
-/** Whether this library draws as the music app: every music library, in the shell's wide,
- * compact (below 980px) or TV form. */
-export function useMusicShell(libraryId: string): boolean {
-  const media = useVelaState(state => state.libraries.value?.find(library => library.id === libraryId)?.media);
-  return media === 'music';
-}
+/** Titles the audio app opens in place: its roles (and the card kinds media titles carry). */
+const OPENS_IN_PLACE = ['artist', 'album', 'track', 'season', 'show', 'audiobook', 'part', 'series', 'episode', 'podcast', 'podcastEpisode'];
 
 export function MusicSection({ libraryId, at }: { libraryId: string; at: string | undefined }) {
   const vela = useVela();
   const store = vela.store;
   const base = vela.host('library', libraryId);
   const place = parsePlace(at);
+  const listening = listeningOf(useVelaState(state => state.libraries.value?.find(library => library.id === libraryId)?.media));
   const [menu, setMenu] = useState<MusicMenuRequest | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [drawer, setDrawer] = useState<PlaylistDrawerRequest | null>(null);
@@ -61,12 +60,17 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   }, [home, libraryId]);
   const app = useMemo<MusicApp>(() => ({
     libraryId,
+    listening,
     place,
     go,
-    play: (items: Card[], index: number, source, shuffle) => store.audio.play({ items, index: Math.max(0, index), source, shuffle }),
+    play: (items: Card[], index: number, source, shuffle, positionSeconds) => store.audio.play({ items, index: Math.max(0, index), source, shuffle, positionSeconds }),
     playCard: (card: Card, shuffle?: boolean) => {
-      const source = card.media?.role === 'track' ? undefined : { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' as const : 'title' as const };
-      void audioCardsOf(store, card).then(items => store.audio.play({ items, index: 0, shuffle, source }));
+      const role = card.media?.role;
+      const leaf = role === 'track' || role === 'episode' || role === 'part';
+      const source = leaf ? undefined : { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' as const : 'title' as const };
+      // A book resumes where the viewer left it (in the part under way), a show at its episode
+      // under way, else its newest.
+      void audioCardsOf(store, card).then(items => store.audio.play({ ...(role === 'show' || role === 'audiobook' ? listenFrom(card, items) : { items, index: 0 }), shuffle, source }));
     },
     menu: setMenu,
     toggle: () => store.audio.toggle(),
@@ -84,7 +88,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
         .catch(() => setLikes(current => ({ ...current, [card.id]: !on })));
     },
     liked: (id: string) => likes[id] ?? likedIds.has(id),
-  }), [libraryId, place, go, store, likes, likedIds]);
+  }), [libraryId, listening, place, go, store, likes, likedIds]);
 
   const keyActions = useMemo(() => ({ toggleQueue: () => setQueueOpen(open => !open), help: () => setKeysOpen(true) }), []);
   useMusicKeys(store, app, keyActions);
@@ -95,7 +99,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     dispatch: (action: string, arg: string) => {
       if (action === 'select') {
         const [id = '', kind = ''] = arg.split('|');
-        if (id && ['artist', 'album', 'track', 'season', 'show'].includes(kind)) { go({ kind: 'title', id }); return; }
+        if (id && OPENS_IN_PLACE.includes(kind)) { go({ kind: 'title', id }); return; }
       }
       base.dispatch(action as never, arg);
     },
@@ -107,7 +111,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
         <View pointerEvents="box-none" style={{ flex: 1 }}>
           <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />
           <PlaylistDrawer request={drawer} close={() => setDrawer(null)} />
-          <MusicKeysSheet open={keysOpen} close={() => setKeysOpen(false)} />
+          <MusicKeysSheet open={keysOpen} close={() => setKeysOpen(false)} listening={listening} />
           {menu ? (
             <CardContextMenu card={menu.card} primary={{ action: 'select', arg: `${menu.card.id}|${menu.card.media?.role ?? menu.card.kind}|` }}
               anchor={menu.anchor} mode={menu.mode ?? 'pointer'} opener={menu.opener ?? null} playlistEntry={menu.entry} close={() => setMenu(null)}

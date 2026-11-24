@@ -20,7 +20,11 @@ export const sequenceAt = (ms: number) => Math.floor((ms - epoch) / 4000);
 const windowSegments = () => (timeshiftMinutes ? timeshiftMinutes * 15 : 12);
 export function liveWindow() {
   const edgeSeq = edgeSequence(), edge = edgeSeq * 4;
-  return { mode: 'adaptive' as const, windowStartSeconds: Math.max(0, edgeSeq - windowSegments()) * 4, liveEdgeSeconds: edge, maxDriftSeconds: 45,
+  // As Ether publishes it: one exact sequence and its time from the playlist this plan was made
+  // from. The newest published segment stays in the window longest. Vela's packet runtime (https or
+  // localhost) refuses a live playlist it cannot anchor.
+  const anchorSeq = Math.max(0, edgeSeq - 1);
+  return { mode: 'adaptive' as const, anchor: { mediaSequence: anchorSeq, windowStartSeconds: anchorSeq * 4 }, windowStartSeconds: Math.max(0, edgeSeq - windowSegments()) * 4, liveEdgeSeconds: edge, maxDriftSeconds: 45,
     ...(timeshiftMinutes ? { timeshift: { maxMinutes: timeshiftMinutes }, edgeAt: new Date(epoch + edgeSeq * 4000).toISOString() } : {}) };
 }
 /** A programme from the archive, on its own timeline from zero: its start, and its end (still airing: open). */
@@ -129,7 +133,9 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
       if (liveFaults.gapEvery > 0 && seq % liveFaults.gapEvery === 0) lines.push('#EXT-X-GAP');
       lines.push(`segment-${seq}.m4s`);
     }
-    return new Response(lines.join('\n') + '\n', { headers });
+    // Ether anchors every live media playlist: its first sequence and that segment's time. Vela's
+    // packet runtime (https or localhost) refuses a live playlist without one.
+    return new Response(lines.join('\n') + '\n', { headers: { ...headers, 'X-Ether-Live-Media-Sequence': String(first), 'X-Ether-Live-Window-Start': String(first * 4) } });
   }
   const segment = /^(v360|v540|v720)\/segment-(\d+)\.m4s$/.exec(resource);
   if (segment) {

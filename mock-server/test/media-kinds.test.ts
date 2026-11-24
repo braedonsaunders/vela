@@ -37,12 +37,17 @@ const titlesOf = (page: V.Page<V.RowEntry>) => page.items.flatMap(item => item.k
 describe('media kinds', () => {
   test('capabilities and libraries carry media classes', async () => {
     const capabilities = await get<V.ServerCapabilities>('/capabilities');
-    expect(capabilities.features.mediaClasses).toEqual({ available: true, classes: ['video', 'music', 'book', 'audiobook'] });
+    expect(capabilities.features.mediaClasses).toEqual({ available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast', 'photo'] });
+    expect(capabilities.features.libraryExperiences).toEqual({ available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] });
     expect(capabilities.features.reading?.formats).toEqual(['epub', 'pdf', 'cbz']);
     expect(capabilities.features.audioPlayback?.available).toBe(true);
     const libraries = (await get<V.Page<V.Library>>('/libraries?limit=100')).items;
-    expect(Object.fromEntries(libraries.filter(library => library.media).map(library => [library.id, [library.media, library.presentation?.card]]))).toEqual({
-      music: ['music', 'square'], books: ['book', 'poster'], audiobooks: ['audiobook', 'square'] });
+    expect(Object.fromEntries(libraries.filter(library => library.media).map(library => [library.id, [library.media, library.presentation?.card, library.experience]]))).toEqual({
+      music: ['music', 'square', 'listen'], books: ['book', 'poster', 'read'], audiobooks: ['audiobook', 'square', 'listen'], podcasts: ['podcast', 'square', 'listen'], photos: ['photo', 'square', 'gallery'] });
+    // Every library names its experience once the server has the feature; Live TV is live.
+    expect(libraries.every(library => typeof library.experience === 'string')).toBe(true);
+    expect(libraries.find(library => library.kind === 'live')?.experience).toBe('live');
+    expect(libraries.find(library => library.id === 'movies')?.experience).toBe('watch');
     expect(libraries.find(library => library.id === 'music')!.tabs!.filter(tab => tab.level).map(tab => [tab.id, tab.level])).toEqual([['albums', 'album'], ['tracks', 'track']]);
   });
 
@@ -104,6 +109,25 @@ describe('media kinds', () => {
     expect(audiobook.chapters.length).toBeGreaterThan(0);
     const book = await post('/playback', { titleId: 'book-quiet-poison', client, idempotencyKey: key() });
     expect(book.status).toBe(400);
+  });
+
+  test('a podcast library lists shows; episodes come newest first with hosts, chapters, played state and resume', async () => {
+    const shows = titlesOf(await get('/libraries/podcasts/items'));
+    expect(shows.map(show => [show.media?.class, show.media?.role])).toEqual(Array(mediaGroups.shows.length).fill(['podcast', 'show']));
+    const show = shows[0]!;
+    expect(show.media?.credits?.every(credit => credit.role === 'host' && !!credit.personId)).toBe(true);
+    const episodes = (await get<V.ChildrenPage>(`/titles/${show.id}/children`)).items;
+    expect(episodes.length).toBe(show.media!.childCount!);
+    expect(episodes.map(episode => episode.airDate)).toEqual(episodes.map(episode => episode.airDate).sort().reverse());
+    expect(episodes.every(episode => episode.media?.role === 'episode' && episode.media.parents?.[0]?.id === show.id)).toBe(true);
+    expect(episodes.some(episode => episode.watch?.played)).toBe(true);
+    const underway = episodes.find(episode => (episode.watch?.positionSeconds ?? 0) > 0)!;
+    expect((await get<V.TitleDetail>(`/titles/${underway.id}`)).chapters.length).toBeGreaterThan(1);
+    const plan = await (await post('/playback', { titleId: underway.id, client, idempotencyKey: key() })).json() as V.PlaybackPlan;
+    expect(plan).toMatchObject({ media: 'audio', positionSeconds: underway.watch!.positionSeconds });
+    const rows = (await get<V.Page<V.Row>>('/rows?placement=library&libraryId=podcasts')).items;
+    expect(rows.map(row => row.purpose)).toEqual(['continue', 'recentlyReleased', 'collection']);
+    expect(rows[0]!.items.flatMap(item => item.kind === 'title' ? [item.title.media?.class] : [])).toEqual(['podcast']);
   });
 
   test('a read grant is a short-lived URL fetched without the bearer, with ranges', async () => {

@@ -16,9 +16,15 @@ export interface ScreenPageState {
   errors: Record<string, string>;
   /** The first read: loading until it answers, failed when it could not. */
   load: 'loading' | 'ready' | 'failed';
+  /** Why the first read failed: a message, and Ether's code (`not_found` for a 404, which hosts
+   *  treat as "nothing to draw" for a surface). */
+  error?: string;
+  failure?: string;
   /** Surfaces: what the host is showing. */
   context?: SurfaceContext;
+  /** The high-water rev of what the page holds (the stream's `since`), and its sealed stream topic. */
   rev: number;
+  topic?: string;
 }
 
 /** The shared record pool: every page and surface reads the same `event:`/`entity:`/`item:`/`channel:`/`p:` records. */

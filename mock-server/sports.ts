@@ -108,6 +108,7 @@ interface Sim {
   home: string; away: string; scores: [number, number]; lines: [number[], number[]];
   situation?: Record<string, string>; probability: number; series: V.LiveProbabilityPoint[];
   plays: V.LivePlay[]; broadcasts: V.LiveBroadcast[]; venue?: V.LiveEvent['venue'];
+  /** Its plays carry `at` and the score after them (plugin-supplied; a timeshifted viewer sees the score as of the picture). */ timed?: boolean;
   /** Channel indexes (into the mock lineup) carrying it. */ channels: number[]; addon?: string;
   ranking?: V.LiveRankingRow[]; laps?: [number, number];
   updatedAt: string; initial?: string; postedAt?: number;
@@ -139,7 +140,11 @@ function seedFixtures(): void {
       { clock: '6:40', period: 4, text: 'Jones pass deep right to Nabers for 41 yards, TOUCHDOWN · NYG 24–24', emphasis: 'score', competitorId: 'nfl-nyg' },
       { clock: '8:15', period: 4, text: 'Hurts sacked at PHI 30 for -8 yards (Burns)', emphasis: 'key', competitorId: 'nfl-nyg' },
       { clock: '11:02', period: 4, text: 'Hurts 2 yd run, TOUCHDOWN · PHI 24–17', emphasis: 'score', competitorId: 'nfl-phi' },
-    ],
+    ].map((play, n): V.LivePlay => ({ ...play as V.LivePlay,
+      // Timed, with the score after each play; nhl-tor-mtl stays untimed (both asOf paths).
+      at: new Date(now0 - [2, 5, 7, 10, 13, 16, 20][n]! * 60_000).toISOString(),
+      score: n <= 2 ? { 'nfl-nyg': '24', 'nfl-phi': '27' } : n <= 4 ? { 'nfl-nyg': '24', 'nfl-phi': '24' } : { 'nfl-nyg': '17', 'nfl-phi': '24' } })),
+    timed: true,
   });
   makeSim('nhl-tor-mtl', 'nhl', 'MTL', 'TOR', now0 - 1.5 * H, 'in', { period: 2, clock: 520, lines: [[1, 0], [1, 1]], probability: 0.61,
     broadcasts: [{ name: 'Sportsnet', kind: 'tv', region: 'CA' }], channels: [28], situation: { Shots: 'MTL 17 · TOR 24', 'Power play': 'TOR 1:12' },
@@ -404,6 +409,7 @@ function step(sim: Sim): boolean {
     sim.plays.unshift({ clock, period: sim.period, text: `${teamById(side ? sim.home : sim.away)!.short} ${lines[Math.floor(random() * lines.length)]}`, emphasis: 'normal', competitorId: side ? sim.home : sim.away });
     changed = true;
   }
+  if (sim.timed && sim.plays[0] && !sim.plays[0].at) sim.plays[0] = { ...sim.plays[0], at: new Date(sportsNow()).toISOString(), score: { [sim.away]: String(sim.scores[0]), [sim.home]: String(sim.scores[1]) } };
   sim.plays.length = Math.min(sim.plays.length, 60);
   // The period ends: the next starts, or the game is final.
   if (rules.countUp && sim.period === 1 && sim.clock >= 45 * 60) { sim.period = 2; changed = true; }
@@ -483,6 +489,7 @@ function tick(): void {
     if (sim.state === 'in' && wasState !== 'in') alert('started', sim);
   }
   if (!changed.length) return;
+  for (const hook of changeHooks) hook(changed);
   for (const listener of listeners) {
     const events = changed.filter(sim => wants(listener, sim)).map(sim => presentEvent(sim, listener.viewerId));
     if (events.length) listener.send('update', { events } satisfies V.LiveStreamUpdate);
@@ -490,6 +497,7 @@ function tick(): void {
 }
 let alerts = 0;
 function alert(kind: V.LiveAlertKind, sim: Sim, force = false): void {
+  for (const hook of alertHooks) hook(kind, sim, force);
   for (const listener of listeners) {
     if (!listener.alerts) continue;
     const favourite = [sim.home, sim.away].find(id => favouritesOf(listener.viewerId).has(entityKey(id)));
@@ -694,3 +702,42 @@ export function replanTile(plan: V.PlaybackPlan, maxHeight: number): V.PlaybackP
   if (JSON.stringify(plan.paths.map(path => path.qualities.map(quality => quality.id))) !== before) plan.revision += 1;
   return plan;
 }
+
+// Plugin screens access (W2): read-only views of the simulation for mock-server/screens.ts, which
+// derives Ether's view-model records from them, and hooks for its stream. The legacy routes above
+// are untouched.
+const changeHooks = new Set<(changed: Sim[]) => void>();
+const alertHooks = new Set<(kind: V.LiveAlertKind, sim: Sim, force: boolean) => void>();
+export type SportsSim = Sim;
+export type SportsTeam = Team;
+export const sportsModel = {
+  plugin: PLUGIN,
+  feed: FEED,
+  sims: (): Sim[] => [...sims.values()],
+  sim: (id: string): Sim | undefined => sims.get(id),
+  leagues: (): (V.LiveLeague & { category: string })[] => Object.values(LEAGUES),
+  league: (id: string) => LEAGUES[id],
+  teams: (): Team[] => TEAMS,
+  standings: (league: string): V.LiveTable[] | undefined => STANDINGS[league],
+  /** The event as this viewer reads it (spoiler mask applied), and its detail. */
+  event: (sim: Sim, viewerId: string): V.LiveEvent => presentEvent(sim, viewerId),
+  detail: (sim: Sim, viewerId: string): V.LiveEventDetail => presentDetail(sim, viewerId),
+  entity: (t: Team, viewerId: string): V.LiveEntity => entity(t, viewerId),
+  logo: (teamId: string) => `${logoOrigin}/vela/v0/sports-mock/logos/${teamId}.svg`,
+  setLogoOrigin: (origin: string) => { logoOrigin ||= origin; },
+  favourites: (viewerId: string): Set<string> => favouritesOf(viewerId),
+  isFavourite: (sim: Sim, viewerId: string) => isFavourite(sim, viewerId),
+  spoilerFree: (viewerId: string) => spoilerPreference.get(viewerId) ?? sportsKnobs.spoilerFree,
+  setSpoilerFree: (viewerId: string, on: boolean) => { spoilerPreference.set(viewerId, on); },
+  reveal: (viewerId: string, id: string) => { let set = revealed.get(viewerId); if (!set) revealed.set(viewerId, set = new Set()); set.add(id); },
+  spoilered: (sim: Sim, viewerId: string) => spoilered(sim, viewerId),
+  /** An alert's words, as the legacy alert says them. */
+  alertText(kind: V.LiveAlertKind, sim: Sim): { title: string; body: string } {
+    const away = teamById(sim.away), home = teamById(sim.home);
+    const score = `${away?.short ?? ''} ${sim.scores[0]}–${sim.scores[1]} ${home?.short ?? ''}`;
+    const title = { started: 'Starting now', close: 'Close game', final: 'Final' }[kind];
+    return { title, body: kind === 'started' ? `${away?.short} at ${home?.short} · ${LEAGUES[sim.league]!.name}` : `${score}, ${statusOf(sim).detail}` };
+  },
+  onChange(hook: (changed: Sim[]) => void): () => void { changeHooks.add(hook); return () => changeHooks.delete(hook); },
+  onAlert(hook: (kind: V.LiveAlertKind, sim: Sim, force: boolean) => void): () => void { alertHooks.add(hook); return () => alertHooks.delete(hook); },
+};

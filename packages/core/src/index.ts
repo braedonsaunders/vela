@@ -34,6 +34,13 @@ export type { LiveState, LiveTvAccess } from './store/live';
 export { entitiesKey, screenKey, spoilerFreeOf, type LiveEventsState, type LiveStreamPhase, type ScreenParams } from './store/live-events';
 export { backoffMs, isFavoriteCompetitor, isNewer, mergeEvents, probabilityFor, readLiveMessage, screenEvents, seriesPoints, sides, streamQuery, teamColor, venueText, withEvent, type LiveInterest } from './live/events';
 export { liveEventRef } from './protocol/events';
+export { busyKey, documentProblem, type OptimisticPatch, type PageHandle, type ScreenActionCall, type ScreensState } from './store/screens';
+export { changedParams, cleanParams, pageKey, sameTarget, screenDocumentHref, serverContext, type PageRequest, type ScreenTarget } from './screens/keys';
+export { isRecordRef, linkHrefs, mergeRecords, recordRefs, RecordStore, setPath } from './screens/records';
+export { eagerSources, sourceDeps, sourcesToReread } from './screens/deps';
+export { chooseTopics, MAX_TOPICS, readScreenMessage, streamSearch, type ScreenStreamMessage, type ScreenStreamQuery } from './screens/stream';
+export type { RecordPool, ScreenPageState } from './screens/types';
+export { hasPluginScreens, type PluginScreens, type ScreenDataRead } from './adapter/capabilities';
 export { hasLiveEvents, hasMultiview, type LiveEvents as LiveEventsApi, type LiveStreamQuery, type Multiview, type ScreenQuery } from './adapter/capabilities';
 export type * from './live-events-wire';
 export type { PreviewContext, PreviewState } from './store/previews';
@@ -49,7 +56,7 @@ export { sendCommand } from './adapter/commands';
 
 export type { TitleActions, MediaVersion, RemoteSubtitle, SubtitleSearchResult, SubtitleLanguages } from './adapter/media-actions';
 export { languageLabel, orderSubtitleLanguages, type SubtitleLanguage } from './subtitle-languages';
-export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';
+export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, classExperience, libraryExperience, libraryHomeTab, libraryTabs, VELA_EXPERIENCES, type VelaExperience } from './library-presentation';
 
 export { canSeeAll } from './store/rows';
 export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFlowEvent, type AuthStep } from './store/auth-flow';

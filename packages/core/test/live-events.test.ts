@@ -101,9 +101,12 @@ test('small readings: colours, venues and favourites', () => {
   expect(isFavoriteCompetitor({ id: 'x', name: 'Giants', entityId: 'nfl-nyg' }, new Set(['sports:sports:team:nfl-phi']))).toBe(false);
 });
 
-test('navigation lists each plugin screen once and skips what it does not know', () => {
-  expect(screenNavigation([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }, { kind: 'screen', id: 'sports', title: 'Again' },
-    { kind: 'other' as 'screen', id: 'x', title: 'X' }])).toEqual([{ id: 'sports', title: 'Sports', icon: 'sports' }]);
+test('navigation lists each plugin screen once, with its document, and skips what it does not know', () => {
+  const document = { href: '/vela/v0/screens/sports/pages/index/document?v=1&r=19&l=en', renderer: 19 };
+  expect(screenNavigation([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports', page: 'index', document }, { kind: 'screen', id: 'sports', title: 'Again', page: 'index', document },
+    { kind: 'other' as 'screen', id: 'x', title: 'X' }])).toEqual([{ id: 'sports', title: 'Sports', icon: 'sports', page: 'index', document }]);
+  // Hard cut: an entry without a document (an Ether before plugin screens) is not offered.
+  expect(screenNavigation([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }])).toEqual([]);
   expect(screenNavigation(undefined)).toEqual([]);
 });
 

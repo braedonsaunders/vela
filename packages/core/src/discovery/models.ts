@@ -1,6 +1,6 @@
 // Projections of the wire's discovery data (home, rows, titles) into the display models of
 // models.ts: labels formatted for the current locale, artwork sized for each slot.
-import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, Title, TitleDetail } from '../wire';
+import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, ScreenNavigationEntry, SurfaceContribution, SurfaceRow, Title, TitleDetail } from '../wire';
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
@@ -307,17 +307,19 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
   const heroes = (data.heroes ?? []).slice(0, 6);
   const previews: PreviewGrant[] = [];
   const features = data.capabilities.features;
+  const surfaces = surfaceContributions(data.surfaces);
   return {
     viewer: data.viewer.name,
     viewerAvatar: viewerAvatar(data.viewer.avatar, images),
     defaultSkinId: data.defaultSkinId,
     skins: data.capabilities.skins.map(s => s.id),
     hero: heroes.map(hero => card(hero.title, hero.receiptToken, images, artWidth)),
-    heroActions: heroes.map(hero => heroAction(hero, data.rows)),
+    heroActions: heroes.map(hero => heroAction(hero, data.rows.filter((row): row is WireRow => !isSurfaceRow(row)))),
     heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id),
     previews,
     // A row with nothing in it (no shows to continue, say) is a heading over an empty shelf: left out.
-    rows: data.rows.filter(row => row.items.length > 0).map(row => feedRow(row, images, artWidth)),
+    // A plugin's Home-row surface keeps its place, drawn by the Home-row host from its document.
+    rows: data.rows.flatMap(row => isSurfaceRow(row) ? surfaceRow(row, surfaces) : row.items.length > 0 ? [feedRow(row, images, artWidth)] : []),
     nextCursor: data.nextCursor ?? '',
     liveAvailable: features.liveTV.available,
     libraryLiveAvailable: features.libraryLive?.available ?? false,
@@ -326,19 +328,50 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     trailerPreviewAvailable: features.trailerPreview?.available ?? false,
     playlistsAvailable: features.playlists?.available ?? false,
     screens: screenNavigation(data.navigation),
+    surfaces,
     pluginLevels: pluginLevelsOf(features),
     ...(typeof data.viewer.spoilerFree === 'boolean' ? { spoilerFree: data.viewer.spoilerFree } : {}),
   };
 }
 
-/** Bootstrap navigation's plugin screens, once each, in the server's order. Unknown kinds are skipped. */
+/** Bootstrap navigation's plugin screens, once each, in the server's order. An entry without a
+ * document (an Ether before plugin screens) or of an unknown kind is skipped: hard cut. */
 export function screenNavigation(navigation: Bootstrap['navigation']): HomeModel['screens'] {
   const seen = new Set<string>();
   return (Array.isArray(navigation) ? navigation : []).flatMap(entry => {
     if (entry?.kind !== 'screen' || typeof entry.id !== 'string' || !entry.id || seen.has(entry.id)) return [];
+    const document = (entry as Partial<ScreenNavigationEntry>).document;
+    if (!document || typeof document.href !== 'string' || !document.href || typeof document.renderer !== 'number') return [];
     seen.add(entry.id);
-    return [{ id: entry.id, title: typeof entry.title === 'string' && entry.title ? entry.title : entry.id, icon: typeof entry.icon === 'string' ? entry.icon : '' }];
+    const page = typeof (entry as Partial<ScreenNavigationEntry>).page === 'string' && (entry as ScreenNavigationEntry).page ? (entry as ScreenNavigationEntry).page : 'index';
+    return [{ id: entry.id, title: typeof entry.title === 'string' && entry.title ? entry.title : entry.id, icon: typeof entry.icon === 'string' ? entry.icon : '',
+      page, document: { href: document.href, renderer: document.renderer } }];
   });
+}
+
+const PRESENTATIONS = new Set(['playerOverlay', 'toast', 'homeRow', 'titlePanel']);
+const ANCHORS = new Set(['topLeft', 'topRight', 'bottom']);
+
+/** Bootstrap's surfaces, each once, in Ether's order (it has capped and ordered them). One that is
+ * unreadable, or a player overlay without an anchor or a switch, is left out. */
+export function surfaceContributions(surfaces: Bootstrap['surfaces']): SurfaceContribution[] {
+  const seen = new Set<string>();
+  return (Array.isArray(surfaces) ? surfaces : []).flatMap(surface => {
+    if (!surface || typeof surface.id !== 'string' || !surface.id || seen.has(surface.id) || !PRESENTATIONS.has(surface.presentation)) return [];
+    if (!surface.document || typeof surface.document.href !== 'string' || !surface.document.href || typeof surface.document.renderer !== 'number') return [];
+    if (surface.presentation === 'playerOverlay' && (!ANCHORS.has(surface.anchor ?? '') || !surface.setting || typeof surface.setting.id !== 'string')) return [];
+    seen.add(surface.id);
+    return [surface];
+  });
+}
+
+const isSurfaceRow = (row: Bootstrap['rows'][number]): row is SurfaceRow => (row as { kind?: unknown }).kind === 'surface';
+
+/** A Home row a plugin's homeRow surface fills: kept only when that surface was contributed. */
+function surfaceRow(row: SurfaceRow, surfaces: readonly SurfaceContribution[]): Row[] {
+  if (typeof row.surface !== 'string' || !surfaces.some(surface => surface.id === row.surface && surface.presentation === 'homeRow')) return [];
+  return [{ id: typeof row.id === 'string' && row.id ? row.id : `surface:${row.surface}`, name: '', purpose: 'recommendation', receipt: '', items: [], nextCursor: '',
+    continuation: 'exhausted', previewOnFocus: false, presentation: '', surface: row.surface }];
 }
 
 /** A title's technical summary stays compact; individual tracks belong in the player menus. */
@@ -466,12 +499,13 @@ export function detailModel(
   // Ether supplies seasonNumber without seasonId. Resolve the relationship while the wire's
   // optional number is still distinguishable from the display model's default zero.
   const seasons = data.seasons ?? [];
+  const rowBackdropWidth = Math.min(artWidth, CARD_BACKDROP_WIDTH);
   const episodeCard = (episode: Title): Card => {
     const exact = seasons.find(season => season.id === episode.seasonId);
     const numbered = episode.seasonNumber === undefined ? [] : seasons.filter(season => season.seasonNumber === episode.seasonNumber);
     const parent = exact ?? (numbered.length === 1 ? numbered[0] : undefined);
     const seasonId = episode.seasonId || parent?.id || (data.title.kind === 'season' ? data.title.id : undefined);
-    return card({ ...episode, seasonId }, '', images, artWidth);
+    return card({ ...episode, seasonId }, '', images, artWidth, rowBackdropWidth);
   };
   const titleCard = card(data.title, '', images, artWidth);
   // Title pages use the background; shelves and episode rows keep their landscape still.
@@ -490,7 +524,7 @@ export function detailModel(
     crewPeople: (data.crew ?? []).map(person),
     canPlay: data.canPlay ?? false,
     resumeSeconds: position,
-    seasons: (data.seasons ?? []).map(t => card(t, '', images, artWidth)),
+    seasons: (data.seasons ?? []).map(t => card(t, '', images, artWidth, rowBackdropWidth)),
     nextUp: data.nextUp === undefined ? undefined : data.nextUp ? [episodeCard(data.nextUp)] : [],
     episodes: (data.episodes ?? []).map(episodeCard),
     extras: data.extras.map(e => ({

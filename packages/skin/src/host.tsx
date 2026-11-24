@@ -18,6 +18,9 @@ export interface SkinHost {
   env: Env;
   viewport: Viewport;
   dispatch(action: Action, arg: string): void;
+  /** Screens (renderer 19): a press inside a screen or surface document, its arguments filled.
+   * When present it receives every press drawn with a screen scope instead of `dispatch`. */
+  screenPress?(press: ScreenPress): void;
   /** A canonical web destination for a navigation action; absent for non-navigation actions. */
   href?(action: Action, arg: string): string | undefined;
   /** An image source for a document path: an app asset, the document's own asset, or a URL. */
@@ -37,6 +40,16 @@ export interface SkinHost {
   refreshing?: boolean;
   /** Where the shell draws the route (slot `children`). */
   children?: ReactNode;
+}
+
+/** A screen document's press, filled where it was drawn (docs/plugin-screens.md: Actions). */
+export interface ScreenPress {
+  action: Action;
+  arg: string;
+  args: Record<string, string>;
+  optimistic?: { record?: string; source?: string; path: string; value: string };
+  /** The pressed control's identity (its id, test id or label), for its busy state. */
+  control: string;
 }
 
 export interface InheritedText { rows: Css; fontSize: number }
