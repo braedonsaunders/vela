@@ -186,6 +186,8 @@ export interface Destination {
   presentation?: V.Library['presentation'];
   /** How it opens: the audio app or the standard pages (libraryExperience); absent reads as standard. */
   experience?: V.LibraryExperience;
+  /** The library's declared tabs (absent from a server that declares none). */
+  tabs?: V.LibraryTab[];
   dateDisplay: 'year' | 'date';
   backdrop: string;
 }

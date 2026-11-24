@@ -29,3 +29,11 @@ test('an absent or unknown value is the class default, and a value the server do
   // An unknown class reads as video.
   expect(libraryExperience({ media: 'hologram' }, feature)).toBe('standard');
 });
+
+test("the audio app asks for a library's home tab only when the library declares it", async () => {
+  const { libraryHomeTab } = await import('../src/library-presentation');
+  expect(libraryHomeTab([{ id: 'home', kind: 'recommended' }, { id: 'browse', kind: 'library' }])).toBe('home');
+  expect(libraryHomeTab([{ id: 'recommended', kind: 'recommended' }, { id: 'library', kind: 'library' }])).toBeUndefined();
+  expect(libraryHomeTab([{ id: 'home', kind: 'library' }])).toBeUndefined();
+  expect(libraryHomeTab(undefined)).toBeUndefined();
+});

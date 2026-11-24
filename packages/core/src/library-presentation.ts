@@ -46,3 +46,10 @@ export function libraryExperience(
     && (!Array.isArray(feature.experiences) || feature.experiences.includes(asked))) return asked;
   return mediaClass(library.media) === 'music' ? 'audio' : 'standard';
 }
+
+/** The recommended tab whose rows are a library's Home in the audio app: its `home` tab when it
+ * declares one, else none (the library's own rows). Asking for a tab a library does not declare is
+ * a not-found. */
+export function libraryHomeTab(tabs: readonly Pick<LibraryTab, 'id' | 'kind'>[] | undefined): string | undefined {
+  return tabs?.some(tab => tab.id === 'home' && tab.kind === 'recommended') ? 'home' : undefined;
+}

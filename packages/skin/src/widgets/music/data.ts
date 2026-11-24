@@ -1,7 +1,7 @@
 // The music app's reads, over the store's existing loaders (titles, children, detail rows,
 // library rows, playlists). Each is bounded by the server's page size.
 import { useEffect, useMemo, useState } from 'react';
-import { childrenKey, libraryKey, type Card, type ChildrenModel, type CollectionModel, type DetailModel, type Loadable, type PlaylistModel, type Row } from '@vela/core';
+import { childrenKey, libraryHomeTab, libraryKey, type Card, type ChildrenModel, type CollectionModel, type DetailModel, type Loadable, type PlaylistModel, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 
 export function useTitle(id: string | undefined): Loadable<DetailModel> | undefined {
@@ -26,20 +26,20 @@ export function useDetailRows(id: string | undefined): Row[] {
   return rows?.value ?? [];
 }
 
-/** The library's Home shelves, as the plugin declares them: its `home` tab's, else (a library
- * without one, as an audiobook plugin's) the library's own rows. */
+/** The library's Home shelves, as the plugin declares them: its `home` tab's when it declares one,
+ * else (an audiobook plugin's library without it) the library's own rows. */
 export function useLibraryRows(libraryId: string): { rows: Row[]; loading: boolean } {
   const store = useVela();
-  const cached = store.catalogue.cachedLibraryRecommendations(libraryId, 'home')?.value ?? store.catalogue.cachedLibraryRecommendations(libraryId)?.value;
+  const tab = useVelaState(state => libraryHomeTab(state.libraries.value?.find(library => library.id === libraryId)?.tabs));
+  const cached = store.catalogue.cachedLibraryRecommendations(libraryId, tab)?.value;
   const [rows, setRows] = useState<Row[] | undefined>(cached);
   useEffect(() => {
     let live = true;
-    const read = (tab?: string) => store.catalogue.libraryRecommendations(libraryId, 'shows', false, tab);
-    void read('home').catch(() => read(undefined))
+    void store.catalogue.libraryRecommendations(libraryId, 'shows', false, tab)
       .then(value => { if (live && value) setRows(value); })
       .catch(() => { if (live) setRows(current => current ?? []); });
     return () => { live = false; };
-  }, [store, libraryId]);
+  }, [store, libraryId, tab]);
   return { rows: rows ?? [], loading: !rows };
 }
 
