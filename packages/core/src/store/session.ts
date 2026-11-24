@@ -36,7 +36,7 @@ export class Session {
   private readonly platform: VelaPlatform;
   private readonly registry: ServerRegistry;
   private readonly connections = new Map<string, Connection>();
-  private readonly resetListeners = new Set<(kind: ResetKind) => void>();
+  private readonly resetListeners = new Set<(kind: ResetKind, refused?: boolean) => void>();
   /** The server last read as selected: undefined before the first read, '' while there is none. */
   private activeId: string | undefined;
   private deviceValue: V.Device | undefined;
@@ -95,7 +95,8 @@ export class Session {
     return randomId();
   }
 
-  onReset(listener: (kind: ResetKind) => void): () => void {
+  /** `refused`: the server refused the stored session (its refresh token), so it ended. */
+  onReset(listener: (kind: ResetKind, refused?: boolean) => void): () => void {
     this.resetListeners.add(listener);
     return () => this.resetListeners.delete(listener);
   }
@@ -112,14 +113,14 @@ export class Session {
     for (const listener of [...this.resetListeners]) listener('session');
   }
 
-  private resetServer(): void {
+  private resetServer(refused = false): void {
     this.epoch++;
     this.signingIn = undefined;
     this.validation = undefined;
     this.negotiation = undefined;
     this.features = undefined;
     this.searchCapabilities = undefined;
-    for (const listener of [...this.resetListeners]) listener('server');
+    for (const listener of [...this.resetListeners]) listener('server', refused);
   }
 
   /** The connection for one record. A record whose address changed gets a new connection. */
@@ -128,7 +129,7 @@ export class Session {
     const known = this.connections.get(id);
     if (known && JSON.stringify(known.record) === JSON.stringify(record)) return known;
     const rejected = () => {
-      if (this.activeId === id) this.resetServer();
+      if (this.activeId === id) this.resetServer(true);
     };
     let made: Connection;
     if (record.kind === 'ether') {

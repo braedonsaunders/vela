@@ -9,6 +9,7 @@ import { capabilitiesOf } from '../adapter/advertise';
 import { hasEventStream, hasPasswordSignIn, hasQuickConnectSignIn, hasWebCodeSignIn } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { EtherAdapter } from '../adapter/ether';
+import { refusesSession, serverWait } from '../adapter/ether/transport';
 import type { ServerKind } from '../session/servers';
 import { msg, time } from '../i18n';
 import type { VelaPlatform } from './platform';
@@ -20,9 +21,15 @@ import type { VelaState } from './index';
  * - `starting`: reading the stored session and the server's options.
  * - `redeeming`: the web's sign-in link is being exchanged for a session.
  * - `signed-out` / `signed-in`: settled.
- * - `offline`: restoration could not finish; stored credentials remain untouched.
+ * - `offline`: restoration could not finish; stored credentials remain untouched, and it is
+ *   tried again with backoff (`retryAt`) until the server answers or refuses the session.
  */
 export const SESSION_RESTORE_TIMEOUT_MS = 10_000;
+
+/** Seconds before the next automatic restore after `attempt` earlier failures: 5, 10, 20, 40, then every 60. */
+export function reconnectDelaySeconds(attempt: number): number {
+  return Math.min(60, 5 * 2 ** Math.min(attempt, 4));
+}
 
 export type AuthPhase = 'starting' | 'redeeming' | 'signed-out' | 'signed-in' | 'offline';
 
@@ -51,6 +58,10 @@ export interface AuthState {
   /** The server's HTTPS origin this http: page may hand its session to; '' when none. */
   secureOrigin: string;
   error: string;
+  /** Offline: when (epoch ms) the next automatic attempt runs; 0 while one runs or none is due. */
+  retryAt: number;
+  /** Offline: an attempt to restore the session is in flight. */
+  restoring: boolean;
   /** Moves on with every session change, so views can key on it. */
   revision: number;
   /** Seconds between snapshot reads for a server without session events (0: it streams them). */
@@ -70,6 +81,8 @@ export const initialAuth: AuthState = {
   quickAvailable: false,
   secureOrigin: '',
   error: '',
+  retryAt: 0,
+  restoring: false,
   revision: 0,
   pollSeconds: 0,
   quick: null,
@@ -93,17 +106,20 @@ export class Auth {
   private redemption: { code: string; idempotencyKey: string; consumed: boolean } | undefined;
   /** Retry session restoration offline, or discover options for an unreachable signed-out server. */
   private reconnect: { timer: ReturnType<typeof setTimeout>; attempt: number } | undefined;
+  /** The wait the server asked for with its last restore failure (Retry-After), in milliseconds. */
+  private serverWait = 0;
 
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly platform: VelaPlatform,
   ) {
-    session.onReset(kind => {
+    session.onReset((kind, refused) => {
       if (kind === 'server') this.linkGeneration++;
       this.cancelReconnect();
       this.cancelPlex();
-      if (this.box.get().auth.phase !== 'redeeming') void this.refresh().catch(() => {});
+      // A session the server refused ends here, whichever read found it: the viewer is told why.
+      if (this.box.get().auth.phase !== 'redeeming') void this.refresh(refused ? msg('server.sessionEnded') : '').catch(() => {});
     });
   }
 
@@ -117,10 +133,15 @@ export class Auth {
     this.reconnect = undefined;
   }
 
-  /** Foreground and manual retries restart the delay sequence. */
+  /**
+   * Foreground and manual retries ask the server now and restart the delay sequence. An attempt
+   * already in flight is the fresh attempt (it is bounded by the restore deadline); otherwise a
+   * new one starts, whatever the scheduled one was waiting for.
+   */
   retry(): Promise<void> {
     if (this.box.get().auth.phase !== 'offline') return Promise.resolve();
     this.cancelReconnect();
+    this.serverWait = 0;
     return this.retryRestore();
   }
 
@@ -132,18 +153,23 @@ export class Auth {
     this.cancelReconnect();
     const generation = this.linkGeneration;
     const serverId = this.box.get().auth.serverId;
+    // A server that said when to come back (Retry-After) is not asked sooner than that.
+    const delay = Math.max(reconnectDelaySeconds(attempt) * 1000, Math.min(this.serverWait, 300_000));
+    this.serverWait = 0;
     const timer = setTimeout(() => {
       if (generation !== this.linkGeneration || !this.session.hasServer() || this.session.selected().record.id !== serverId) return;
       if (this.box.get().auth.phase === 'offline') void this.retryRestore();
       else if (this.box.get().auth.phase === 'signed-out') void this.refresh().catch(() => {});
-    }, Math.min(60, 5 * 2 ** Math.min(attempt, 4)) * 1000);
+    }, delay);
     this.reconnect = { timer, attempt: attempt + 1 };
+    this.patch({ retryAt: Date.now() + delay });
   }
 
   // One deadline covers validation, credential reads and sign-in option discovery.
   // A late answer cannot repaint the offline state or a subsequent sign-in.
   private async restoreSession(): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    if (this.box.get().auth.phase === 'offline') this.patch({ restoring: true, retryAt: 0 });
     const restoring = this.startSession();
     const generation = this.linkGeneration;
     try {
@@ -170,6 +196,7 @@ export class Auth {
       this.scheduleReconnect(this.reconnect?.attempt ?? 0);
     } finally {
       clearTimeout(timer);
+      if (this.box.get().auth.restoring) this.patch({ restoring: false });
     }
   }
 
@@ -197,9 +224,9 @@ export class Auth {
       // A transient failure is not sign-out: the stored session stays and the app says it is offline.
       // A session the server no longer accepts was dropped: the viewer is asked to sign in again
       // rather than shown the server's own wording ("Refresh invalid").
-      const rejected = !stillSignedIn && error instanceof VelaError && (error.status === 401 || error.detail.class === 'auth');
-      const text = rejected ? msg('server.sessionEnded') : message(error, msg('server.unreachable'));
-      await this.refresh(text, stillSignedIn ? 'offline' : undefined);
+      const rejected = !stillSignedIn && refusesSession(error);
+      if (stillSignedIn) this.serverWait = serverWait(error);
+      await this.refresh(rejected ? msg('server.sessionEnded') : restoreFailure(error), stillSignedIn ? 'offline' : undefined);
     }
   }
 
@@ -297,6 +324,7 @@ export class Auth {
       viewerId: tokens?.viewer.id ?? '',
       ...options,
       error,
+      retryAt: 0,
       revision: this.session.epoch,
       pollSeconds: hasEventStream(connection.adapter) ? 0 : SNAPSHOT_POLL_SECONDS,
     });
@@ -321,12 +349,16 @@ export class Auth {
   }
 
   cancelPlex(): void {
+    const auth = this.box.get().auth;
+    // Only a Plex flow's own error goes with it: closing a sign-in screen that never started one
+    // must not wipe why the viewer is there ("Your session has ended").
+    const active = !!auth.plex || auth.plexSwitching || !!this.plexAuthorization || !!this.plexSelection;
     this.plexGeneration++;
     clearTimeout(this.plexTimer);
     this.plexAuthorization?.close();
     this.plexAuthorization = undefined;
     this.plexSelection = undefined;
-    this.patch({ plex: null, plexSwitching: false, error: '' });
+    this.patch({ plex: null, plexSwitching: false, ...(active ? { error: '' } : {}) });
   }
 
   /** Open a fresh profile challenge for the currently signed-in Plex account. */
@@ -625,4 +657,10 @@ function secureOriginFor(platform: VelaPlatform, origins: string[] | undefined, 
     }
   }
   return '';
+}
+
+/** Why a stored session could not be restored, in the viewer's words: the server's own answer when it gave one. */
+export function restoreFailure(error: unknown): string {
+  if (error instanceof VelaError) return msg('server.restoreTrouble', { detail: error.detail.message || `${error.status}` });
+  return msg('server.unreachable');
 }

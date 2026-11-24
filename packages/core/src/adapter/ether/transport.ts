@@ -27,7 +27,12 @@ export interface RequestOptions {
 export class EtherTransport {
   private cache = new Map<string, { etag: string; body: unknown }>();
   private refreshing: Promise<V.Tokens> | undefined;
-  private refreshFailure?: { token: string; error: unknown };
+  /**
+   * A refresh the server just failed: requests that find their token rejected meanwhile do not
+   * ask again until `until` (the server's stated wait, else a short hold). Never permanent: a
+   * transient failure leaves the same refresh token, and it must be tried again later.
+   */
+  private refreshFailure?: { token: string; error: unknown; until: number };
 
   constructor(
     private readonly origin: string,
@@ -128,21 +133,26 @@ export class EtherTransport {
     return acrossWindows(`vela-refresh:${this.origin}`, work);
   }
 
-  /** Rotate the session's tokens once, shared by every request that found them rejected. */
-  refresh(tokens: V.Tokens): Promise<V.Tokens> {
+  /**
+   * Rotate the session's tokens once, shared by every request that found them rejected. Session
+   * restoration asks with `restore`: one attempt that always reaches the server, because the
+   * caller paces its own retries (and the viewer's Retry must really ask again).
+   */
+  refresh(tokens: V.Tokens, restore = false): Promise<V.Tokens> {
     if (!this.refreshing) {
-      this.refreshing = acrossWindows(`vela-refresh:${this.origin}`, () => this.rotate(tokens)).finally(() => {
+      this.refreshing = acrossWindows(`vela-refresh:${this.origin}`, () => this.rotate(tokens, restore)).finally(() => {
         this.refreshing = undefined;
       });
     }
     return this.refreshing;
   }
 
-  private async rotate(tokens: V.Tokens): Promise<V.Tokens> {
+  private async rotate(tokens: V.Tokens, restore: boolean): Promise<V.Tokens> {
     const current = await this.credentials.get();
     if (current && current.refreshToken !== tokens.refreshToken) return current;
     if (!current) throw new Error('Session ended');
-    if (this.refreshFailure?.token === current.refreshToken) throw this.refreshFailure.error;
+    const failed = this.refreshFailure;
+    if (!restore && failed?.token === current.refreshToken && Date.now() < failed.until) throw failed.error;
     const request: V.RefreshRequest = {
       refreshToken: current.refreshToken,
       device: this.credentials.device,
@@ -151,18 +161,18 @@ export class EtherTransport {
       idempotencyKey: refreshIdempotencyKey(current.refreshToken),
     };
     let next: V.Tokens | undefined;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < (restore ? 1 : 3); attempt++) {
       try {
-        next = await this.request<V.Tokens>('POST', '/auth/refresh', request, { auth: false });
+        next = await this.refreshOnce(request);
         break;
       } catch (error) {
-        if (error instanceof VelaError && (error.status === 401 || error.detail.class === 'auth')) {
+        if (refusesSession(error)) {
           await this.forgetRejected(current);
           throw error;
         }
         const delay = retryDelay(error, attempt);
-        if (delay === undefined) {
-          this.refreshFailure = { token: current.refreshToken, error };
+        if (restore || delay === undefined) {
+          this.refreshFailure = { token: current.refreshToken, error, until: Date.now() + (serverWait(error) || REFRESH_FAILURE_HOLD_MS) };
           throw error;
         }
         await new Promise<void>(resolve => setTimeout(resolve, delay));
@@ -174,6 +184,20 @@ export class EtherTransport {
     if (!latest || latest.refreshToken !== current.refreshToken) throw new Error('Session changed during refresh');
     await this.credentials.set(next);
     return next;
+  }
+
+  /** One refresh request, abandoned when the server does not answer in time (a held socket never ends on Android). */
+  private async refreshOnce(request: V.RefreshRequest): Promise<V.Tokens> {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), REFRESH_ATTEMPT_TIMEOUT_MS);
+    try {
+      return await this.request<V.Tokens>('POST', '/auth/refresh', request, { auth: false, signal: abort.signal });
+    } catch (error) {
+      if (abort.signal.aborted) throw new Error(`The server did not answer within ${REFRESH_ATTEMPT_TIMEOUT_MS / 1000} seconds`);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** The server rejected this session: clear it, unless a newer one already replaced it. */
@@ -247,14 +271,34 @@ function persistentDelete(key: string): void {
   try { storage()?.removeItem(persistentKey(key)); } catch { /* Optional storage. */ }
 }
 
+/** One refresh request waits this long for the server's answer. */
+export const REFRESH_ATTEMPT_TIMEOUT_MS = 8_000;
+/** After a failed refresh, requests mid-session wait this long (or the server's stated wait) before asking again. */
+export const REFRESH_FAILURE_HOLD_MS = 5_000;
+
+/**
+ * Whether a refresh answer ends the session for good: the server refused the refresh token
+ * (401/403, or an auth-class error). Everything else (5xx, 503, timeouts, no network) is transient.
+ */
+export function refusesSession(error: unknown): boolean {
+  return error instanceof VelaError && (error.status === 401 || error.status === 403 || error.detail.class === 'auth');
+}
+
+/** The wait the server asked for (Retry-After or retry.afterSeconds), in milliseconds; 0 when none. */
+export function serverWait(error: unknown): number {
+  if (!(error instanceof VelaError)) return 0;
+  const header = error.retryAfter ? Number(error.retryAfter) : 0;
+  const headerDelay = Number.isFinite(header) && header > 0 ? header * 1000 : 0;
+  const after = error.detail.retry?.afterSeconds ?? 0;
+  return Math.max(headerDelay, Number.isFinite(after) && after > 0 ? after * 1000 : 0);
+}
+
 /** How long to wait before the next refresh attempt, or undefined when the server forbids another. */
 function retryDelay(error: unknown, attempt: number): number | undefined {
   const policy = error instanceof VelaError ? error.detail.retry : undefined;
   const maxAttempts = policy?.maxAttempts;
   const limit = maxAttempts && Number.isFinite(maxAttempts) ? Math.max(1, Math.min(3, Math.floor(maxAttempts))) : 3;
-  const header = error instanceof VelaError && error.retryAfter ? Number(error.retryAfter) : 0;
-  const headerDelay = Number.isFinite(header) && header > 0 ? header * 1000 : 0;
-  const delay = Math.max(1000 * 2 ** attempt, (policy?.afterSeconds ?? 0) * 1000, headerDelay);
+  const delay = Math.max(1000 * 2 ** attempt, serverWait(error));
   if (policy?.allowed === false || attempt + 1 >= limit || !Number.isFinite(delay) || delay > 30000) return undefined;
   return delay;
 }

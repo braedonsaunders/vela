@@ -35,8 +35,16 @@ export async function probeOriginalFixture(name: string): Promise<Pick<typeof or
 }
 const originalTypes: Record<string, string> = { mkv: 'video/x-matroska', webm: 'video/webm', mp4: 'video/mp4', mov: 'video/quicktime' };
 export const originalFixtureName = /^[\w.()-]+\.(mkv|webm|mp4|mov)$/;
-export interface Faults { rangeFailSeconds: number; bandwidthBps: number; failEvery: number; truncateEvery: number; stallMs: number; fallbackUnavailable: boolean; capacityExhausted: boolean }
-export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false };
+export interface Faults {
+  rangeFailSeconds: number; bandwidthBps: number; failEvery: number; truncateEvery: number; stallMs: number; fallbackUnavailable: boolean; capacityExhausted: boolean;
+  /** Session refresh (POST /auth/refresh) fails for this many seconds from when it is set (main.ts). */
+  refreshFailSeconds: number;
+  /** 500 answers like a server whose database is busy (no retry offered); 503 offers a retry after 2 s. */
+  refreshFailStatus: number;
+  /** Delay before any refresh answer, to stand in for a server that does not answer. */
+  refreshStallMs: number;
+}
+export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0 };
 let segmentCount = 0;
 let rangeFailureUntil = 0;
 let rangeFailureSetting = 0;

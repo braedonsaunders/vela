@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, jest, test } from 'bun:test';
 import { VelaError } from '../src/adapter/errors';
-import { Auth, initialAuth, SESSION_RESTORE_TIMEOUT_MS } from '../src/store/auth';
+import { Auth, initialAuth, reconnectDelaySeconds, SESSION_RESTORE_TIMEOUT_MS } from '../src/store/auth';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import { Session } from '../src/store/session';
@@ -114,6 +114,7 @@ test('an unreadable saved server leaves startup even when recovery cannot read i
 
 function reconnectHarness() {
   let available = false, rejected = false, saved: ReturnType<typeof tokens> | null = tokens();
+  let failure: Error = new Error('Offline');
   let validations = 0, selected = 'saved';
   const listeners: ((kind: 'session' | 'server') => void)[] = [];
   const connection = { record: { id: 'saved', kind: 'plex', name: 'Saved server' },
@@ -124,11 +125,11 @@ function reconnectHarness() {
     hasServer: () => true, servers: { standalone: true }, selected: () => ({ ...connection, record: { ...connection.record, id: selected } }),
     demoSignIn: () => false, key: () => 'key', tokens: async () => saved,
     resetSession: () => { session.epoch++; listeners.forEach(listener => listener('session')); },
-    validate: async (target: typeof connection) => { if (target.record.id === 'saved') validations++; if (rejected) { saved = null; throw new VelaError({ class: 'auth', code: 'invalid', message: 'Rejected', retry: { allowed: false } }, 401); } if (!available) throw new Error('Offline'); return saved; } };
+    validate: async (target: typeof connection) => { if (target.record.id === 'saved') validations++; if (rejected) { saved = null; throw new VelaError({ class: 'auth', code: 'invalid', message: 'Rejected', retry: { allowed: false } }, 401); } if (!available) throw failure; return saved; } };
   const box = new StateBox({ auth: { ...initialAuth } } as VelaState);
   const auth = new Auth(box, session as unknown as Session, {} as VelaPlatform);
   return { auth, state: () => box.get().auth, validations: () => validations, saved: () => saved,
-    online: () => { available = true; }, reject: () => { rejected = true; },
+    online: () => { available = true; }, reject: () => { rejected = true; }, failWith: (error: Error) => { failure = error; },
     switch: () => { selected = 'other'; listeners.forEach(listener => listener('server')); } };
 }
 
@@ -193,4 +194,66 @@ test('session validation contacts the server again after a transient failure', a
   expect(await session.validate(connection, saved)).toBe(saved);
   expect(await session.validate(connection, saved)).toBe(saved);
   expect(calls).toBe(2);
+});
+
+test('automatic attempts back off 5, 10, 20, 40 s, then every minute', () => {
+  expect([0, 1, 2, 3, 4, 5, 12].map(reconnectDelaySeconds)).toEqual([5, 10, 20, 40, 60, 60, 60]);
+});
+
+test('offline says when the next attempt runs and when one is in flight', async () => {
+  const h = harness('validation');
+  const starting = h.auth.start();
+  await settle();
+  jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+  await starting;
+  expect(h.state()).toMatchObject({ phase: 'offline', restoring: false });
+  expect(h.state().retryAt).toBe(Date.now() + 5000);
+  const retry = h.auth.retry();
+  expect(h.state()).toMatchObject({ phase: 'offline', restoring: true, retryAt: 0 });
+  h.pending.resolve(h.saved);
+  await retry;
+  expect(h.state()).toMatchObject({ phase: 'signed-in', restoring: false, retryAt: 0, error: '' });
+});
+
+test('a server failure is shown in its own words and a server-stated wait is honoured', async () => {
+  const h = reconnectHarness();
+  h.failWith(new VelaError({ class: 'transient', code: 'unavailable', message: 'database is locked', retry: { allowed: true, afterSeconds: 30 } }, 503, '30'));
+  await h.auth.start();
+  expect(h.state().phase).toBe('offline');
+  expect(h.state().error).toContain('database is locked');
+  expect(h.state().retryAt).toBe(Date.now() + 30_000);
+  const count = h.validations();
+  jest.advanceTimersByTime(29_999); await settle();
+  expect(h.validations()).toBe(count);
+  jest.advanceTimersByTime(1); await settle();
+  expect(h.validations()).toBe(count + 1);
+  expect(h.saved()).not.toBeNull();
+});
+
+test('Retry while waiting for the next attempt asks the server at once, and recovers when it answers', async () => {
+  const h = reconnectHarness();
+  await h.auth.start();
+  jest.advanceTimersByTime(2000); await settle();
+  const count = h.validations();
+  const retry = h.auth.retry();
+  await settle();
+  expect(h.validations()).toBe(count + 1);
+  await retry;
+  expect(h.state().phase).toBe('offline');
+  h.online();
+  await h.auth.retry();
+  expect(h.state()).toMatchObject({ phase: 'signed-in', error: '' });
+});
+
+test('Retry after the restore deadline gave up starts a fresh attempt', async () => {
+  const h = harness('validation');
+  const starting = h.auth.start();
+  await settle();
+  jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+  await starting;
+  expect(h.state().phase).toBe('offline');
+  const before = h.validations();
+  void h.auth.retry();
+  await settle();
+  expect(h.validations()).toBe(before + 1);
 });

@@ -102,6 +102,16 @@ function authenticate(req: Request): Grant {
   if (!g || g.revoked || g.expires <= Date.now() || req.headers.get('x-vela-device-id') !== g.device.id) fail('auth', 'unauthorized', 'Valid bearer and X-Vela-Device-Id required');
   return g;
 }
+/** Until when session refresh fails (POST /__admin/faults refreshFailSeconds re-arms it from now). */
+let refreshFailureUntil = 0;
+/** A transient refresh failure as the lab gave one: 500 with no retry ("database is locked"), or 503 with Retry-After. */
+function refreshFailure(): never {
+  const busy = faults.refreshFailStatus === 503;
+  const error: V.ProtocolError = busy
+    ? { class: 'transient', code: 'unavailable', message: 'Sign-in is briefly unavailable', retry: { allowed: true, afterSeconds: 2 } }
+    : { class: 'transient', code: 'internal', message: 'database is locked', retry: { allowed: false } };
+  throw Response.json({ error } satisfies V.ErrorResponse, { status: busy ? 503 : 500, headers: { 'Cache-Control': 'no-store', ...(busy ? { 'Retry-After': '2' } : {}) } });
+}
 function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}, statusOverride?: number): never {
   const status = statusOverride ?? { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, playback: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
   throw Response.json({ error: { class: cls, code, message, retry: { allowed: ['capacity', 'transient'].includes(cls), ...(cls === 'capacity' ? { afterSeconds: 3, maxAttempts: 3 } : {}) }, ...extra } } satisfies V.ErrorResponse, { status, headers: { 'Cache-Control': 'no-store', ...(cls === 'capacity' ? { 'Retry-After': '3' } : {}) } });
@@ -376,6 +386,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   if (method === 'POST' && path === '/auth/sign-in') { if (body.username !== 'demo' || body.password !== 'vela') fail('auth', 'invalid_credentials', 'Invalid sign-in'); return json(issue(body.device)); }
   if (method === 'POST' && path === '/auth/refresh') {
+    if (faults.refreshStallMs > 0) await Bun.sleep(Math.min(faults.refreshStallMs, 600_000));
+    if (Date.now() < refreshFailureUntil) refreshFailure();
     const g = refresh.get(body.refreshToken); if (!g || g.revoked || g.device.id !== body.device?.id) fail('auth', 'invalid_refresh', 'Refresh invalid');
     access.delete(g.access); refresh.delete(g.refresh); g.access = crypto.randomUUID(); g.refresh = crypto.randomUUID(); g.expires = Date.now() + 3600000; access.set(g.access, g); refresh.set(g.refresh, g); return json(tokens(g));
   }
@@ -976,7 +988,7 @@ async function dispatch(req: Request): Promise<Response> {
       return json(originalFixture);
     }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
-    if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } return json(faults); }
+    if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/appearance') return json(setAppearance(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'); const expires = Date.now() + (url.searchParams.has('expired') ? -1 : 60000); webCodes.set(code, expires); return json({ code, expiresAt: new Date(expires).toISOString() }); }
@@ -1032,8 +1044,12 @@ async function dispatch(req: Request): Promise<Response> {
   const key = `${identity}:${url.pathname}:${body.idempotencyKey}`, old = idempotency.get(key);
   if (old && old.expires > Date.now()) { if (old.body !== raw) fail('conflict', 'idempotency_conflict', 'Key reused with different body'); return (await old.response).clone(); }
   const response = api(req, url, body).catch(e => { if (e instanceof Response) return e; throw e; });
-  idempotency.set(key, { body: raw, response, expires: Date.now() + 86400000 });
-  return (await response).clone();
+  const entry = { body: raw, response, expires: Date.now() + 86400000 };
+  idempotency.set(key, entry);
+  // Like Ether, a server-side failure (5xx) is not kept: the same key asks again once the server recovers.
+  const answer = await response.catch(e => { if (idempotency.get(key) === entry) idempotency.delete(key); throw e; });
+  if (answer.status >= 500 && idempotency.get(key) === entry) idempotency.delete(key);
+  return answer.clone();
 }
 const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', port, idleTimeout: 0, async fetch(req) {
   // Delay API answers without delaying preflight or artwork.

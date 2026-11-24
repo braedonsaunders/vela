@@ -17,6 +17,10 @@ export interface SessionAuth {
   quickAvailable: boolean;
   secureOrigin: string;
   error: string;
+  /** Offline: when (epoch ms) the next automatic attempt runs; 0 while one runs or none is due. */
+  retryAt?: number;
+  /** Offline: an attempt to restore the session is in flight. */
+  restoring?: boolean;
   quick: null | { code: string; expiresLabel: string; status: 'pending' | 'expired' | 'denied' };
 }
 

@@ -155,10 +155,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   // Session
 
-  /** Validate a stored session by rotating it before the auth resource presents it. */
+  /** Validate a stored session by rotating it before the auth resource presents it (one attempt; the caller paces retries). */
   async validateSession(): Promise<V.Tokens | null> {
     const tokens = await this.credentials.get();
-    return tokens ? this.http.refresh(tokens) : null;
+    return tokens ? this.http.refresh(tokens, true) : null;
   }
 
   /** A revocation the server refuses as expired is retried once with freshly rotated tokens. */
