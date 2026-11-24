@@ -182,7 +182,9 @@ MP4, beside an English commentary (`audio-commentary`) the file lacks, so only t
 it; the sidecar is selected from the start when `selected` (a default or remembered
 subtitle), the direct MP4 is the original file (`original: true`), and plans start on `pathId`
 (`direct`, `remux` or `transcode`). While enabled, track commands are answered as Ether answers
-them: the selection changes and, off the original file, the source generation increases. POST
+them: the selection changes and, off the original file, the source generation increases; and a
+path switch is accepted at any position, as a player's quality choice sends it (the generated HLS
+lists no switch boundaries), and the remux names its 720p output so quality menus offer it. POST
 `/__admin/revise` publishes a new revision of every open session's plan, changing nothing (the same
 source), as a server does for any update; a body `{"selectedSubtitleTrackId":null}` (or a track id)
 makes it one in which the server changed the selected subtitle itself. `{"enabled":false}` restores the default fixture.

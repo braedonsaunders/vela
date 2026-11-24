@@ -24,6 +24,9 @@ export function withSidecar(plan: PlaybackPlan, base: string) {
     { id: 'audio-commentary', kind: 'audio', language: 'en', name: 'English commentary · server', codec: 'aac', channels: 2, streamIndex: 3 }];
   const direct = plan.paths.find(path => path.id === 'direct');
   if (direct) Object.assign(direct, { original: true, range: true });
+  // The remux names its output, so a player's quality menu offers it as a path to switch to.
+  const remux = plan.paths.find(path => path.id === 'remux');
+  if (remux) remux.quality = { width: 1280, height: 720, bitrate: 2200000, codec: 'h264', videoCodec: 'avc1.64001f', codecStatus: 'verified' };
   if (plan.paths.some(path => path.id === sidecarFixture.pathId)) plan.selectedPathId = sidecarFixture.pathId;
 }
 /** Ether's answer to a track choice: the original file applies it in the player; a server path makes a new source. */

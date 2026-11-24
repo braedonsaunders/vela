@@ -21,6 +21,7 @@ test('the sidecar title delivers its subtitle as an external WebVTT file, select
   expect(p.audioTracks.map(track => [track.id, track.streamIndex])).toEqual([['audio-en', 1], ['audio-es', 2], ['audio-commentary', 3]]);
   expect(p.selectedPathId).toBe('remux');
   expect(p.paths[0]).toMatchObject({ original: true, range: true });
+  expect(p.paths[1]).toMatchObject({ id: 'remux', quality: { width: 1280, height: 720 } });
   Object.assign(sidecarFixture, { selected: false, pathId: 'absent' });
   const unselected = plan();
   withSidecar(unselected, '/m');
