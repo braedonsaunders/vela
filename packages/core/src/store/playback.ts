@@ -591,7 +591,9 @@ export class Playback {
       sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
       idempotencyKey: this.session.key(),
     }));
-    if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: next, error: '' });
+    const now = this.box.get().playback;
+    // A restart (stall recovery) asks for the file now playing, not the one first asked for.
+    if (now.sessionId === sessionId) this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     return next;
   }
 
