@@ -93,7 +93,7 @@ export const DEVICE_MASKS: Record<string, { x: number; y: number; width: number;
  * left out of the pixel comparison (listed in the report instead). The box is the union of the
  * matches, widened to the full viewport width (a row that scrolls sideways). */
 export const REVIEWED_REGIONS: { selector: string; note: string }[] = [
-  { selector: '[data-testid^="sports-day-"]', note: 'Schedule day strip: Ether serves 7 days (-2..+4), legacy showed 8 (-3..+4); decided with Ether' },
+  { selector: '[role="tab"][data-testid^="sports-day-"]', note: 'Schedule day strip: Ether serves 7 days (-2..+4), legacy showed 8 (-3..+4); decided with Ether' },
   { selector: '[data-testid="sports-watch-row"], [data-testid="sports-hero-actions"]', note: 'Watch rows: Ether v1 sends no catch-up targets, so legacy\'s Watch from start (where the archive held the game) is absent; the rows are compared by review' },
 ];
 
