@@ -4,7 +4,7 @@
 import { router } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
-import { opensMediaPage, spoilerFreeOf, type Vela as Store } from '@vela/core';
+import { opensMediaPage, type Vela as Store } from '@vela/core';
 import { focusElement, page, type SkinHost } from '@vela/skin';
 import { liveAction, requestGuideTop, type LiveController } from '@vela/skin/src/widgets/guide';
 import type { Action } from '../../../packages/protocol/skin';
@@ -185,11 +185,6 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'playlists':
         actions.resetFlags();
         return router.push('/playlists');
-      case 'hideScores': {
-        const on = spoilerFreeOf(store.getState()) === true;
-        void store.liveEvents.setSpoilerFree(!on).catch(error => console.warn('Vela could not change hiding scores', error));
-        return;
-      }
       case 'addToPlaylist': {
         const [titleId, titleKind] = arg.split('|');
         if (titleId) openAddToPlaylist(titleId, titleKind || undefined);
