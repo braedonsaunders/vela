@@ -37,11 +37,31 @@ final class PlaybackClient {
     private var readRetryStarted: Date?
     private var readRetryAttempt = 0
     private var engine: AetherEngine?
-    /// Bytes through the scoped reader, and Aether's startup checkpoints passed: they grow while a
-    /// slow start still gets somewhere (the snapshot's loadProgress). Aether's own HTTP is not counted.
+    /// Bytes delivered (through the scoped reader, and Aether's own pull from the source), and the
+    /// furthest of Aether's startup checkpoints passed: they grow while a slow start still gets somewhere
+    /// (the snapshot's loadProgress). A reload after a read failure passes the same checkpoints again,
+    /// which is not progress, so only a new furthest counts; its reconnect attempts deliver no bytes.
     private let received = ReceivedBytes()
-    private var startupSteps: Int64 = 0
-    var loadProgress: Int64 { received.total + startupSteps }
+    private var startupReached: Int64 = 0
+    /// Aether's source bytes (`demuxerBytesFetched`, once a second): those of earlier loads, and this one's.
+    private var fetchedBefore: Int64 = 0
+    private var fetched: Int64 = 0
+    var loadProgress: Int64 { received.total + fetchedBefore + fetched + startupReached }
+    /// The newest video frame the engine decoded, and whether the picture moves with the clock
+    /// (PresentationProgress): `paused-for-cache` and `time-pos` report what is on screen.
+    private let frames = FrameFrontier()
+    private var presentation = PresentationProgress()
+    private var presentationTimer: Timer?
+    private var engineBuffering = false
+    /// Aether's reader is reconnecting to the source (`playbackPhase` stalled): logged, not a stall by
+    /// itself while what it buffered still plays.
+    private var readerStalled = false
+    /// Reloading after a read failure: waiting, at the position it failed at, until the new load is up.
+    private var reloading = false
+    /// The current load returned: until then the engine's published values belong to the load before
+    /// (a reused engine) and say nothing about this one.
+    private var engineLoaded = false
+    private var reportedStarved: Bool?
     private var subscriptions = Set<AnyCancellable>()
     private var liveRateObservation: NSKeyValueObservation?
     private var liveItemObservation: NSKeyValueObservation?
@@ -66,6 +86,7 @@ final class PlaybackClient {
     private var dead = false
     private var paused: Bool
     private var volume: Float = 1
+    private var outputVolume: Float { muted || PlaybackSilence.on ? 0 : volume }
     private var muted: Bool
     private var audio: Int?
     private var subtitle: Int?
@@ -129,7 +150,7 @@ final class PlaybackClient {
             if !flag { rendering.clearFrozenPicture() }
             flag ? engine?.pause() : engine?.play()
         }
-        if name == "mute" { engine?.volume = flag ? 0 : volume }
+        if name == "mute" { engine?.volume = outputVolume }
     }
     func set(_ name: String, double: Double) {
         if name == "sub-delay" {
@@ -145,7 +166,7 @@ final class PlaybackClient {
             emit("speed", Double(rate))
         }
         if name == "volume" { volume = Float(double / 100) }
-        if name == "volume" { engine?.volume = muted ? 0 : volume }
+        if name == "volume" { engine?.volume = outputVolume }
     }
     func command(_ args: [String]) {
         switch args.first {
@@ -179,6 +200,11 @@ final class PlaybackClient {
             self.subscriptions.removeAll()
             self.rendering.removeSurface()
             self.formatDescription = nil
+            self.presentation.reset(keepingPosition: self.reloading)
+            self.engineLoaded = false
+            self.frames.clear()
+            self.engineBuffering = false
+            self.readerStalled = false
             do {
                 // Upstream messages may contain media URLs. Keep grant URLs out of logs.
                 EngineLog.handler = { _ in }
@@ -189,6 +215,9 @@ final class PlaybackClient {
                 if self.tile == nil { if preview { Self.previewEngine = nil } else { Self.primaryEngine = nil } }
                 self.engine = engine
                 engine.logTag = self.tile.map { "tile\($0)" }
+                let frames = self.frames
+                engine.setSoftwareVideoFrameTimeObserver { frames.note(CMTimeGetSeconds($0.presentation), generation: $0.generation) }
+                engine.setNativeVideoFrameTimeObserver { frames.note(CMTimeGetSeconds($0.source), generation: $0.epoch) }
                 engine.maximumSubtitleOffsetSeconds = abs(self.subtitleOffset)
                 engine.videoGravity = self.aspectFill ? .resizeAspectFill : .resizeAspect
                 // Only a full-screen watch plays on behind the home screen (or in its PiP window); a
@@ -197,7 +226,7 @@ final class PlaybackClient {
                 try self.rendering.bind(engine: engine)
                 self.pictureInPicture?.attach(engine)
                 self.layout()
-                engine.volume = self.muted ? 0 : self.volume
+                engine.volume = self.outputVolume
                 engine.diagnostics.$sessionCacheStatus.removeDuplicates().sink { [weak self] status in
                     self?.logCacheStatus(status)
                 }.store(in: &self.subscriptions)
@@ -222,7 +251,7 @@ final class PlaybackClient {
                 engine.clock.$currentTime.sink { [weak self] time in
                     if let self, self.readRetryStarted != nil, time > self.start + 10 { self.readRetryStarted = nil; self.readRetryAttempt = 0 }
                     self?.prepareFrameOutput()
-                    self?.emit("time-pos", time)
+                    self?.reportPresentation()
                     if self?.engine?.hasFirstFrameReadyForDisplay == true {
                         if self?.reportedFirstFrame == false {
                             self?.reportedFirstFrame = true
@@ -256,7 +285,11 @@ final class PlaybackClient {
                     Task { @MainActor [weak self] in self?.publishFormat(force: true) }
                 }.store(in: &self.subscriptions)
                 engine.$duration.sink { [weak self] in self?.emit("duration", $0) }.store(in: &self.subscriptions)
-                engine.$isBuffering.sink { [weak self] in self?.emit("paused-for-cache", $0) }.store(in: &self.subscriptions)
+                engine.$isBuffering.sink { [weak self] in self?.engineBuffering = $0; self?.reportPresentation() }.store(in: &self.subscriptions)
+                engine.$playbackPhase.sink { [weak self] phase in
+                    if case .stalled = phase { self?.readerStalled = true } else { self?.readerStalled = false }
+                    self?.reportPresentation()
+                }.store(in: &self.subscriptions)
                 if self.isLive, !preview {
                     // Aether publishes its live window on every clock tick, and once a second while paused;
                     // `behindLiveSeconds` is assigned last, so the edge and range are current when it fires.
@@ -265,9 +298,27 @@ final class PlaybackClient {
                 engine.seekEvents.sink { [weak self] event in
                     if case .landed = event.outcome { self?.onEvent?(.seekDone) }
                 }.store(in: &self.subscriptions)
-                engine.$isSeeking.sink { [weak self] in self?.emit("seeking", $0) }.store(in: &self.subscriptions)
-                engine.clock.$bufferedPosition.sink { [weak self] in self?.emit("demuxer-cache-time", $0) }.store(in: &self.subscriptions)
-                engine.$startupProgress.sink { [weak self] progress in if progress != nil { self?.startupSteps += 1 } }.store(in: &self.subscriptions)
+                engine.$isSeeking.sink { [weak self] seeking in
+                    if seeking { self?.frames.clear() }
+                    self?.emit("seeking", seeking)
+                }.store(in: &self.subscriptions)
+                engine.clock.$bufferedPosition.sink { [weak self, weak engine] buffered in
+                    // Aether never lets the buffered end trail its clock, so over a starved picture it
+                    // runs on with the clock: nothing is buffered beyond what is on screen then.
+                    guard let self, let engine else { return }
+                    let shown = self.properties["time-pos"] as? Double ?? buffered
+                    self.emit("demuxer-cache-time", buffered - engine.clock.currentTime <= 0.05 ? min(buffered, shown) : buffered)
+                }.store(in: &self.subscriptions)
+                engine.diagnostics.$liveTelemetry.dropFirst().sink { [weak self] telemetry in
+                    guard let self, let bytes = telemetry?.demuxerBytesFetched else { return }
+                    // A new load counts from zero: what the last one fetched stays counted.
+                    if bytes < self.fetched { self.fetchedBefore += self.fetched }
+                    self.fetched = bytes
+                }.store(in: &self.subscriptions)
+                engine.$startupProgress.sink { [weak self] progress in
+                    guard let self, let progress else { return }
+                    self.startupReached = max(self.startupReached, Int64(progress.completed))
+                }.store(in: &self.subscriptions)
                 let source: MediaSource
                 if self.headers.isEmpty {
                     source = .url(url)
@@ -306,6 +357,10 @@ final class PlaybackClient {
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
                 guard !self.dead, !self.failed else { return }
+                self.reloading = false
+                self.engineLoaded = true
+                self.startPresentationTimer()
+                self.reportPresentation()
                 if self.isLive, let player = engine.currentAVPlayer {
                     self.liveItemObservation = player.observe(\.currentItem, options: [.initial, .new]) { player, _ in
                         Task { @MainActor in
@@ -479,12 +534,13 @@ final class PlaybackClient {
                 if Date().timeIntervalSince(began) + wait <= 60 {
                     start = (properties["time-pos"] as? Double) ?? start
                     reconnecting = true
+                    reloading = true
                     emit("reconnecting", true)
                     liveRateObservation = nil
                     liveItemObservation = nil
                     subscriptions.removeAll()
                     engine?.stop()
-                    emit("paused-for-cache", true)
+                    reportPresentation()
                     loadTask = Task { @MainActor [weak self] in
                         do { try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) } catch { return }
                         guard let self, !self.dead else { return }
@@ -520,6 +576,54 @@ final class PlaybackClient {
         onEvent?(.endFile(reason: 4, error: -1))
     }
 
+    /// Reports what is on screen (PresentationProgress): `paused-for-cache` while the engine waits, a
+    /// reload is under way or the picture is starved, and a `time-pos` that holds
+    /// where the picture stopped rather than following a clock that runs on without frames.
+    private func reportPresentation() {
+        guard !dead, !failed else { return }
+        let starved: Bool
+        let position: Double
+        if reloading || !engineLoaded || engine == nil {
+            // Loading, or between loads: nothing plays yet, at the start or where the last load reached.
+            starved = true
+            position = presentation.position ?? start
+        } else if let engine {
+            let reading = PresentationProgress.Reading(
+                clock: engine.clock.currentTime,
+                sourceClock: engine.clock.sourceTimeFollowsPicture ? engine.clock.sourceTime : engine.clock.currentTime,
+                now: ProcessInfo.processInfo.systemUptime,
+                playing: engine.state == .playing,
+                seeking: engine.isSeeking,
+                // Aether's reader reconnecting is not a stall while frames it buffered still play.
+                waiting: engineBuffering,
+                framesExpected: engine.clock.sourceTimeFollowsPicture && engine.sourceVideoWidth > 0
+                    && (engine.videoRoute == .software || engine.videoRoute == .loopback),
+                newestFrame: frames.newest)
+            (starved, position) = presentation.observe(reading)
+        } else {
+            return
+        }
+        if properties["paused-for-cache"] as? Bool != starved { emit("paused-for-cache", starved) }
+        if properties["time-pos"] as? Double != position { emit("time-pos", position) }
+        if starved != reportedStarved, !preview, tile == nil {
+            // Without URLs: whether the picture moves, for a slow or dead start in the device log.
+            print("[vela-player] presentation \(starved ? "starved" : "moving") at \(String(format: "%.2f", position))"
+                  + " clock=\(String(format: "%.2f", engine?.clock.currentTime ?? .nan)) frame=\(String(format: "%.2f", frames.newest ?? .nan))"
+                  + " buffering=\(engineBuffering) reader=\(readerStalled) reloading=\(reloading) route=\(engine?.videoRoute.rawValue ?? "none")")
+        }
+        reportedStarved = starved
+    }
+
+    /// A clock that stands still publishes nothing, so the picture is also checked four times a second.
+    private func startPresentationTimer() {
+        presentationTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reportPresentation() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        presentationTimer = timer
+    }
+
     /// Native video layers clear on upstream failure, so the outgoing preview needs its own still.
     private func prepareFrameOutput() {
         guard retainPausedPicture, let item = engine?.currentAVPlayer?.currentItem, item !== outputItem else { return }
@@ -541,6 +645,7 @@ final class PlaybackClient {
     }
 
     func destroy() {
+        presentationTimer?.invalidate(); presentationTimer = nil
         displayCriteriaObservation?.invalidate(); displayCriteriaObservation = nil
         displayObservers.forEach(NotificationCenter.default.removeObserver)
         displayObservers.removeAll()
@@ -568,6 +673,8 @@ final class PlaybackClient {
 extension PlaybackClient {
     /// A stopped engine goes back to its pool; a tile's is released (Aether counts it out on `stop()`).
     fileprivate func retire(_ engine: AetherEngine?) {
+        engine?.setSoftwareVideoFrameTimeObserver(nil)
+        engine?.setNativeVideoFrameTimeObserver(nil)
         guard tile == nil, let engine else { return }
         if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
     }
@@ -576,4 +683,25 @@ extension PlaybackClient {
 struct PlaybackError: Error, CustomStringConvertible {
     let description: String
     init(_ message: String) { description = message }
+}
+
+/// The newest video frame the engine decoded in its current run, from Aether's frame-time observers
+/// (called on its decode and pump threads). A new generation (a seek, a load) starts a new run.
+final class FrameFrontier: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation: UInt64?
+    private var latest: Double?
+
+    func note(_ seconds: Double, generation next: UInt64) {
+        guard seconds.isFinite else { return }
+        lock.lock(); defer { lock.unlock() }
+        if let generation, next < generation { return }
+        if generation != next { generation = next; latest = seconds; return }
+        latest = max(latest ?? seconds, seconds)
+    }
+
+    /// A seek began: frames before it say nothing about the picture after it.
+    func clear() { lock.lock(); latest = nil; lock.unlock() }
+
+    var newest: Double? { lock.lock(); defer { lock.unlock() }; return latest }
 }
