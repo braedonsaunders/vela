@@ -13,7 +13,7 @@
     "leagues": { "from": "liveLeagues", "feed": "sports" },
     "hero": { "from": "liveEvents", "feed": "sports", "query": { "league": "{param.league}", "window": "today" }, "sort": "featured", "limit": 1 },
     "also": { "from": "liveEvents", "feed": "sports", "query": { "league": "{param.league}", "state": ["in", "pre", "delayed"] }, "sort": "featured", "limit": 4 },
-    "yours": { "from": "liveEvents", "feed": "sports", "query": { "favorites": true, "window": "week", "league": "{param.league}" }, "sort": "start" },
+    "yours": { "from": "liveEvents", "feed": "sports", "query": { "favorites": true, "window": "week", "league": "{param.league}" }, "sort": "featured" },
     "live": { "from": "liveEvents", "feed": "sports", "query": { "state": ["in"], "league": "{param.league}" }, "sort": "featured" },
     "schedule": { "from": "liveSchedule", "feed": "sports", "league": "{param.league}", "date": "{param.date}" },
     "standings": { "from": "liveTables", "feed": "sports", "league": "{param.league}", "lazy": true },
@@ -22,7 +22,7 @@
   "strings": {
     "title": "Sports", "all": "All", "closeGame": "Close game", "yourTeam": "Your team",
     "yourTeams": "Your teams", "liveNow": "Live now", "schedule": "Schedule", "pickTeams": "Pick your teams",
-    "standingsOf": "{src.standings.league.name} standings", "hideScores": "Hide scores", "hideScoresFailed": "Could not change. Try again",
+    "standingsOf": "{src.standings.league.name} standings", "standings": "Standings", "scheduleFailed": "The schedule could not be loaded.", "hideScores": "Hide scores", "hideScoresFailed": "Could not change. Try again",
     "noFavourites": "Follow teams below and their games show up here.", "noFavouriteGames": "No games for your teams on this day.",
     "noGames": "No games on this day.", "watchOn": "Watch on {arg.name}{arg.number| · }", "fromStart": "Watch from start",
     "addToMultiview": "Add to multiview", "gameDetails": "Game details", "recap": "Box score and plays",
@@ -353,11 +353,13 @@
         { "type": "use", "template": "eventShelf", "with": { "over": "src.schedule.events", "prefix": "day-{src.schedule.date}" },
           "when": [{ "test": "src.schedule.$pending", "not": true }, { "test": "src.schedule.events.0" }] },
         { "type": "use", "template": "gutter", "when": [{ "test": "src.schedule.$pending", "not": true }, { "test": "src.schedule.events.0", "not": true }], "children": [
-          { "type": "text", "text": "{s:noGames}", "style": { "margin-top": "10px", "font-size": "14px", "line-height": "1.25", "color": "$ui.inkQuiet" } } ] }
+          { "type": "text", "text": "{s:noGames}", "when": [{ "test": "src.schedule.$error", "not": true }], "style": { "margin-top": "10px", "font-size": "14px", "line-height": "1.25", "color": "$ui.inkQuiet" } },
+          { "type": "text", "text": "{s:scheduleFailed}", "when": [{ "test": "src.schedule.$error" }], "style": { "margin-top": "10px", "font-size": "14px", "line-height": "1.25", "color": "$ui.inkQuiet" } } ] }
       ] },
 
       { "type": "box", "id": "standings", "needs": ["standings"], "when": [{ "test": "src.standings.tables.0" }], "children": [
-        { "type": "use", "template": "heading", "with": { "text": "{s:standingsOf}" } },
+        { "type": "use", "template": "heading", "with": { "text": "{s:standingsOf}" }, "when": [{ "test": "src.standings.league.name" }] },
+        { "type": "use", "template": "heading", "with": { "text": "{s:standings}" }, "when": [{ "test": "src.standings.league.name", "not": true }] },
         { "type": "shelf", "over": "src.standings.tables", "as": "t", "itemWidth": { "default": "fit 320px..640px", "small": "100%", "tv": "fit 320px..680px" }, "gap": "16px",
           "style": { "padding": "0 $gutter", "align-items": "flex-start" }, "small": { "padding": "0 18px" },
           "item": { "type": "box", "testId": "sports-standings-{$index}", "label": "{t.title}", "readingStop": true,

@@ -14,8 +14,8 @@ const json = async <T>(file: string) => await Bun.file(join(dir, file)).json() a
 interface Sample { sources: Record<string, unknown>; records: Record<string, { rev: number; value: unknown }> }
 
 const envAt = (width: number): Env => ({ small: width < 640, wide: width >= 1200, tv: false, still: true, width, canMultiview: true } as unknown as Env);
-const page = (sources: Record<string, unknown>, params: Record<string, string> = {}): ScreenPageState =>
-  ({ href: 'h', key: 'k', params, sources, pending: {}, errors: {}, load: 'ready', rev: 1 });
+const page = (sources: Record<string, unknown>, params: Record<string, string> = {}, errors: ScreenPageState['errors'] = {}): ScreenPageState =>
+  ({ href: 'h', key: 'k', params, sources, pending: {}, errors, load: 'ready', rev: 1 });
 
 /** Every text drawn (conditions held), depth first, with the testId of the nearest box above it. */
 function texts(tree: RNode, at: Ctx, env: Env): string[] {
@@ -102,6 +102,21 @@ test('every navigate to the game page passes the event record key (a ref param)'
   visit(r.tree, screenRoot(page(data.sources), key => data.records[key]));
   expect(events.length).toBeGreaterThan(5);
   expect(events.every(e => e.startsWith('event:org.ether.sports:sports:'))).toBe(true);
+});
+
+test('All leagues: a generic standings heading; a failed schedule says so instead of "no games"', async () => {
+  const doc = await json<ScreenDocument>('index.json');
+  const data = await json<Sample>('data-sample.json');
+  const r = resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {});
+  const standings = data.sources.standings as { league: object };
+  const sources = { ...data.sources, standings: { ...standings, league: { id: '', name: '', label: '' } }, schedule: { date: '2026-11-24', days: [], events: [] } };
+  const t = texts(r.tree, screenRoot(page(sources, {}, { schedule: { code: 'timeout', retry: true } } as never), key => data.records[key]), envAt(1440));
+  expect(t).toContain('Standings');
+  expect(t).not.toContain(' standings');
+  expect(t).toContain('The schedule could not be loaded.');
+  expect(t).not.toContain('No games on this day.');
+  const quiet = texts(r.tree, screenRoot(page(sources), key => data.records[key]), envAt(1440));
+  expect(quiet).toContain('No games on this day.');
 });
 
 describe('the Sports game document', () => {
