@@ -1,5 +1,5 @@
 import { audioCardsOf, msg, type Card, type TitleActions } from '@vela/core';
-import { useVela } from '@vela/core/react';
+import { useVela, useVelaState } from '@vela/core/react';
 import { BlurView } from 'expo-blur';
 import { forwardRef, Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
@@ -22,6 +22,7 @@ import { MOTION, presenceStyle } from '../presence';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
 import { useMultiview } from './multiview/context';
+import { MINI_PLAYER_HEIGHT } from './media/player';
 import { Glyph } from './common/controls';
 import { useLook } from './common/look';
 
@@ -132,7 +133,12 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
     return () => cancelAnimationFrame(frame);
   }, [focusFirst, menuSize.height]);
 
-  const viewport = { width: host.viewport.width, height: host.viewport.height };
+  // While something is queued the mini player floats over every screen, above this menu too (on
+  // iPhone it has a window of its own): the menu fits above it, or its last items sat under the bar
+  // and a tap on "Go to album" opened Now Playing.
+  const queued = useVelaState(state => !!state.audio.queue);
+  const dock = queued ? MINI_PLAYER_HEIGHT + Math.max(14, host.viewport.insets.bottom + 10) : 0;
+  const viewport = { width: host.viewport.width, height: host.viewport.height - dock };
   const placement = anchor.kind === 'point'
     ? placeAtPoint(anchor.point, menuSize, viewport)
     : placeAtRect(anchor.rect, menuSize, viewport);
@@ -186,12 +192,18 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
     setError('');
     try {
       await vela.catalogue.setTitleWatch(card.id, item.command.change);
+      // A like from here shows in Liked Songs and Your Library as one from the heart does: their
+      // lists are read again (they were read once and kept, so the new like never appeared).
+      if ('favorite' in item.command.change) {
+        const role = card.media?.role;
+        if (vela.music.likedAvailable && role) void vela.music.liked(role, false, true);
+      }
       dismiss();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : msg('cardMenu.actionFailed'));
       setBusy(false);
     }
-  }, [busy, card.id, dismiss, host, vela]);
+  }, [busy, card.id, card.media?.role, dismiss, host, vela]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
