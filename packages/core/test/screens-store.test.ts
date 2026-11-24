@@ -32,8 +32,9 @@ class FakeApi implements PluginScreens {
   calls: Call[] = [];
   actions: { action: string; request: V.ScreenActionRequest; key: string; resolve(answer: V.ScreenActionAnswer): void; reject(error: unknown): void }[] = [];
   streams: { query: ScreenStreamQuery; onEvent: EventHandler; close(): void }[] = [];
-  /** Refuse every stream with this status (Ether's 400 to a query it does not accept). */
+  /** Refuse every stream with this status and problem code. */
   refuseStreams = 0;
+  refuseCode = 'invalid_topic';
   document: V.ScreenDocument = DOC;
   /** Answer data reads at once with this, unless null (then they wait for resolve). */
   auto: ((read: ScreenDataRead) => Partial<V.ScreenData>) | null = null;
@@ -60,7 +61,7 @@ class FakeApi implements PluginScreens {
   streamScreens(query: ScreenStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
     if (this.refuseStreams) {
       this.streams.push({ query, onEvent, close: () => {} });
-      return Promise.reject(Object.assign(new Error('invalid request'), { status: this.refuseStreams }));
+      return Promise.reject(Object.assign(new Error('refused'), { status: this.refuseStreams, detail: { code: this.refuseCode } }));
     }
     return new Promise(resolve => {
       const stream = { query, onEvent, close: () => resolve() };
@@ -569,4 +570,45 @@ test('a stream that ends renews the pages at most once a minute too', async () =
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   expect(h.api.calls.length).toBeLessThanOrEqual(2);
+});
+
+test('a plain 400 from the stream is a client bug: no page re-read, no reconnect until a page opens', async () => {
+  const h = harness();
+  let n = 0;
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' }, live: { topic: `t${++n}` } });
+  h.api.refuseStreams = 400;
+  h.api.refuseCode = 'invalid_request';
+  const warn = console.warn;
+  const warned: string[] = [];
+  console.warn = (...args: unknown[]) => { warned.push(String(args[0])); };
+  try {
+    const first = open(h);
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(h.api.streams.length).toBe(1);
+    expect(h.api.calls.length).toBe(1);
+    expect(h.box.get().screens.stream).toBe('idle');
+    expect(warned.some(line => line.includes('invalid_request'))).toBe(true);
+    // A refresh (a new topic) does not reconnect either.
+    h.screens.refresh(first.key);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(h.api.streams.length).toBe(1);
+    // Opening a page tries again.
+    h.api.refuseStreams = 0;
+    open(h, { league: 'nba' });
+    await settle(); await settle();
+    expect(h.api.streams.length).toBe(2);
+  } finally { console.warn = warn; }
+});
+
+test('400 invalid_topic reads the pages once for fresh topics, then backs off', async () => {
+  const h = harness();
+  let n = 0;
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' }, live: { topic: `t${++n}` } });
+  h.api.refuseStreams = 400;
+  h.api.refuseCode = 'invalid_topic';
+  open(h);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  expect(h.api.calls.length).toBe(2);
+  expect(h.api.streams.length).toBeGreaterThan(2);
+  expect(h.box.get().screens.stream).toBe('retrying');
 });

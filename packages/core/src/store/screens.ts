@@ -94,6 +94,8 @@ export class Screens {
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private failures = 0;
   private renewedAt = 0;
+  /** Set when Ether refused the stream with a plain 400: no reconnecting until a page opens. */
+  private refused: string | undefined;
   private gcQueued = false;
 
   constructor(
@@ -255,6 +257,8 @@ export class Screens {
    * param are read again while the rest stay as they are.
    */
   open(request: PageRequest, from?: string): PageHandle {
+    // A page opened (or its params changed): a refused stream may be tried again.
+    this.refused = undefined;
     const params = cleanParams(request.params);
     const key = pageKey(request.target, params, request.context);
     let entry = this.entries.get(key);
@@ -588,6 +592,7 @@ export class Screens {
 
   /** A toast host is mounted: the stream carries alerts until the returned function is called. */
   followAlerts(): () => void {
+    this.refused = undefined;
     this.alertFollowers++;
     this.schedule();
     let released = false;
@@ -627,6 +632,7 @@ export class Screens {
     const query = this.query();
     const key = connectionKey(query);
     if (key === this.connected && this.controller) return;
+    if (this.refused !== undefined) return;
     this.disconnect();
     if (emptyQuery(query) || !this.available() || this.box.get().screens.preview?.expired) return;
     this.connected = key;
@@ -673,9 +679,22 @@ export class Screens {
         if (controller.signal.aborted) return;
         if (previewExpired(error)) { this.expirePreview(); return; }
         this.failures++;
-        // A topic Ether no longer honours (expired, the page gone): read the pages again for fresh ones.
         const status = (error as { status?: number })?.status;
-        if (status === 400 || status === 404 || status === 410) this.renewPages();
+        const code = (error as { detail?: { code?: string } })?.detail?.code;
+        if (status === 400 && code === 'invalid_topic') {
+          // A topic Ether did not issue (or bound to another viewer): the pages once more for fresh ones, then back off.
+          this.renewPages();
+        } else if (status === 400) {
+          // Any other 400 (invalid_request, too_many_topics) is a client bug, never transient: say so and stop
+          // following until a page is opened again or its params change.
+          console.warn(`Vela: /live/stream refused (${code ?? 'invalid_request'}); not following it until a page opens`);
+          this.refused = this.connected;
+          if (this.controller === controller) { this.controller = undefined; this.connected = ''; }
+          this.set('stream', () => 'idle');
+          return;
+        } else if (status === 404 || status === 410) {
+          this.renewPages();
+        }
       }
     }
   }
@@ -732,6 +751,7 @@ export class Screens {
   /** Another viewer or server: nothing read stays. Pages still on show read again under the new session. */
   private reset(): void {
     this.disconnect();
+    this.refused = undefined;
     for (const entry of this.entries.values()) {
       if (entry.timer) clearInterval(entry.timer);
       for (const timer of entry.retryTimers) clearTimeout(timer);
