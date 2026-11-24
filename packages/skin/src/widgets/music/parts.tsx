@@ -97,16 +97,17 @@ export function Heart({ card, size = 32, iconSize = 18, quiet = false }: { card:
 }
 
 /** A square (or round, for an artist) tile with its name; a play button rises on hover. */
-export function MusicTile({ card, size, subtitle, testID }: { card: Card; size: number; subtitle?: string; testID?: string }) {
+export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card; size: number; subtitle?: string; testID?: string }) {
   const app = useMusic();
   const m = useMediaLook();
+  const size = m.small ? Math.min(wanted, 132) : wanted;
   const round = card.media?.role === 'artist';
   const playable = card.media?.role === 'album' || card.media?.role === 'track' || card.kind === 'playlist';
   const line = subtitle ?? (round ? msg('media.ui.artist') : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · '));
   return (
     <Surface onPress={() => app.go(placeOf(card))} onMenu={point => app.menu({ card, anchor: { kind: 'point', point } })} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}
-      style={lit => [{ width: size + 24, borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.control : 'transparent' }, transition('background-color', 160)]}
-      contentStyle={{ padding: 12, gap: 10 }}>
+      style={lit => [{ width: size + (m.small ? 16 : 24), borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.control : 'transparent' }, transition('background-color', 160)]}
+      contentStyle={{ padding: m.small ? 8 : 12, gap: 10 }}>
       {lit => (
         <>
           <View pointerEvents="box-none" style={{ width: size, height: size }}>
@@ -132,7 +133,7 @@ export function Shelf({ title, detail, children, onMore }: { title: string; deta
   return (
     <View style={{ marginBottom: 28 }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 4 }}>
-        <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' })}>{title}</Text>
+        <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' })}>{title}</Text>
         {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
       </View>
       {detail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginBottom: 4 }]}>{detail}</Text> : null}

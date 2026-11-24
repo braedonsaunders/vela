@@ -215,7 +215,7 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   const shownPanel = useLast(panel || undefined);
   const [list, setList] = useState<'queue' | 'chapters' | 'lyrics'>(opening === 'lyrics' ? 'lyrics' : 'queue');
   const book = spoken(item);
-  const music = item?.media?.class === 'music';
+  const music = item?.media?.class === 'music' && store.music.lyricsAvailable;
   useEffect(() => { setList(current => (book && audio.chapters.length ? 'chapters' : current === 'lyrics' && music ? 'lyrics' : 'queue')); }, [book, music, audio.chapters.length, item?.id]);
   useEffect(() => { if (opening) setList(opening === 'lyrics' && music ? 'lyrics' : 'queue'); }, [opening, music]);
   // Space plays and pauses; Escape closes (web).
@@ -329,6 +329,13 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
               {controls}
             </View>
             <View style={{ flex: 1, maxWidth: 520, paddingTop: 8 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
+          </View>
+        ) : list === 'lyrics' ? (
+          // On a phone the lyrics take the screen, with the title and transport below them.
+          <View style={{ gap: 18 }}>
+            {tabs}
+            <View style={[{ height: Math.max(260, m.height - 430), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 8%, #000 88%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>
+            {controls}
           </View>
         ) : (
           <View style={{ gap: 28, alignItems: 'center' }}>

@@ -7,6 +7,7 @@ import {
   hasDeviceGrantSignIn,
   hasLiveTv,
   hasLibraryLive,
+  hasMusicLibrary,
   hasLiveEvents,
   hasMultiview,
   hasPasswordSignIn,
@@ -62,6 +63,10 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       // Live events and multiview (Sports): operations, so the adapter must offer them too.
       ...(hasLiveEvents(adapter) && description.features.liveEvents ? { liveEvents: description.features.liveEvents } : {}),
       ...(hasMultiview(adapter) && description.features.multiview ? { multiview: description.features.multiview } : {}),
+      // Music (docs/media-kinds.md): liked lists, lyrics and play contexts are operations the adapter must offer.
+      ...(hasMusicLibrary(adapter) && description.features.favoritesList ? { favoritesList: description.features.favoritesList } : {}),
+      ...(hasMusicLibrary(adapter) && description.features.lyrics ? { lyrics: description.features.lyrics } : {}),
+      ...(hasMusicLibrary(adapter) && description.features.playContexts ? { playContexts: description.features.playContexts } : {}),
       // Plugin levels describe answers to existing reads (rows per tab, children per role): stated by the server.
       ...(description.features.pluginLevels ? { pluginLevels: description.features.pluginLevels } : {}),
     },

@@ -4,6 +4,7 @@
 import { useState, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { msg, number, type Card, type PlaylistModel } from '@vela/core';
+import { useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
 import { useHost } from '../../host';
@@ -11,7 +12,8 @@ import { headerInsetOf } from '../../resolve/inherit';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { useLiked, usePlaylists } from './data';
-import { LikedCover, MusicHome, MusicLiked, MusicPlaylist, MusicTitle, playlistCard, Chip } from './pages';
+import { compactMusic, LikedCover, MusicHome, MusicLiked, MusicPlaylist, MusicTitle, playlistCard, Chip } from './pages';
+import { MINI_PLAYER_HEIGHT } from '../media/player';
 import { samePlace, type MusicPlace } from './place';
 import { IconButton, menuHandlers, transition } from './parts';
 import { NowPlayingBar, NOW_PLAYING_BAR_HEIGHT } from './bar';
@@ -27,11 +29,13 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   const narrow = m.width < 1180;
   const rail = collapsed || narrow;
   const page = app.place;
+  const top = `calc(${m.small ? inset.small : inset.wide} + 6px)`;
+  if (compactMusic(m)) return <CompactShell top={top} />;
   const panel = (children: ReactNode, style: object = {}) => (
     <View style={[{ backgroundColor: m.ui.raised, borderRadius: Number(m.ui.radiusPanel) || 14, overflow: 'hidden' }, m.box({ border: '1px solid $ui.glassEdge' }), style]}>{children}</View>
   );
   return (
-    <View pointerEvents="box-none" style={[{ flex: 1, paddingHorizontal: 10, gap: 8 }, m.box({ 'padding-top': `calc(${m.small ? inset.small : inset.wide} + 6px)` })]} testID="music-shell">
+    <View pointerEvents="box-none" style={[{ flex: 1, paddingHorizontal: 10, gap: 8 }, m.box({ 'padding-top': top })]} testID="music-shell">
       <View style={{ flex: 1, flexDirection: 'row', gap: 8, minHeight: 0 }}>
         {panel(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, { width: rail ? 84 : 316 })}
         {panel(
@@ -49,18 +53,48 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   );
 }
 
+/** Phones and upright tablets: Home, Search and Your Library as chips under the app's
+ * navigation, the page full width, and the floating mini player over it. */
+function CompactShell({ top }: { top: string }) {
+  const app = useMusic();
+  const m = useMediaLook();
+  const page = app.place;
+  const queued = useVelaState(state => !!state.audio.queue);
+  const tabs: { label: string; place: MusicPlace }[] = [
+    { label: msg('music.home'), place: { kind: 'home' } },
+    { label: msg('music.search'), place: { kind: 'search' } },
+    { label: msg('music.yourLibrary'), place: { kind: 'library' } },
+  ];
+  return (
+    <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': top })]} testID="music-shell">
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }} accessibilityRole="tablist">
+        {tabs.map(tab => <Chip key={tab.label} label={tab.label} on={samePlace(page, tab.place)} onPress={() => app.go(tab.place)} />)}
+      </View>
+      <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main">
+        {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
+          : page.kind === 'liked' ? <MusicLiked />
+          : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
+          : page.kind === 'title' ? <MusicTitle id={page.id} />
+          : <MusicHome />}
+      </ScrollView>
+    </View>
+  );
+}
+
 function pageKey(place: MusicPlace): string {
   return place.kind === 'title' || place.kind === 'playlist' ? `${place.kind}:${place.id}` : place.kind;
 }
 
 type Filter = 'all' | 'playlists' | 'albums' | 'artists';
 
-function Sidebar({ rail, onToggle }: { rail: boolean; onToggle(): void }) {
+function Sidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle(): void; embedded?: boolean }) {
   const app = useMusic();
   const m = useMediaLook();
   const { playlists } = usePlaylists();
   const liked = useLiked();
   const [filter, setFilter] = useState<Filter>('all');
+  // Embedded in a page that scrolls (Your Library on a phone): a plain list.
+  const List = (embedded ? View : ScrollView) as typeof ScrollView;
   const entries: { card: Card; subtitle: string }[] = [
     ...(filter === 'all' || filter === 'playlists' ? playlists.map(p => ({ card: playlistCard(p), subtitle: `${msg('music.playlist')} · ${countLabel(p)}` })) : []),
     ...(filter === 'all' || filter === 'albums' ? liked.albums.map(a => ({ card: a, subtitle: `${msg('media.ui.album')} · ${a.media?.byline ?? ''}` })) : []),
@@ -68,11 +102,13 @@ function Sidebar({ rail, onToggle }: { rail: boolean; onToggle(): void }) {
   ];
   return (
     <View style={{ flex: 1 }} testID="music-library" accessibilityLabel={msg('music.yourLibrary')} {...({ role: 'navigation' } as object)}>
-      <View style={{ padding: rail ? 12 : 10, gap: 2 }}>
-        <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail={rail} />
-        <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail={rail} />
-      </View>
-      <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
+      {embedded ? null : <>
+        <View style={{ padding: rail ? 12 : 10, gap: 2 }}>
+          <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail={rail} />
+          <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail={rail} />
+        </View>
+        <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
+      </>}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: rail ? 'center' : 'space-between', paddingHorizontal: rail ? 0 : 16, paddingTop: 14, paddingBottom: 8 }}>
         <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={msg('music.yourLibrary')} style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
           <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
@@ -85,7 +121,8 @@ function Sidebar({ rail, onToggle }: { rail: boolean; onToggle(): void }) {
           {(['playlists', 'albums', 'artists'] as const).map(f => <Chip key={f} label={msg(`music.${f}`)} on={filter === f} onPress={() => setFilter(filter === f ? 'all' : f)} />)}
         </View>
       ) : null}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: rail ? 8 : 8, paddingBottom: 12 }}>
+      <List style={embedded ? undefined : { flex: 1 }} {...(embedded ? {} : { contentContainerStyle: { paddingHorizontal: 8, paddingBottom: 12 } })}>
+        <View style={embedded ? { paddingHorizontal: 8 } : undefined}>
         {filter === 'all' || filter === 'playlists'
           ? <LibraryRow rail={rail} place={{ kind: 'liked' }} title={msg('music.liked')} subtitle={`${msg('music.playlist')} · ${msg(`media.count.tracks.${liked.trackTotal === 1 ? 'one' : 'other'}`, { count: number(liked.trackTotal) })}`} cover={<LikedCover size={48} />} pinned />
           : null}
@@ -93,7 +130,8 @@ function Sidebar({ rail, onToggle }: { rail: boolean; onToggle(): void }) {
           <LibraryRow key={card.id} rail={rail} place={placeOf(card)} card={card} title={card.name} subtitle={subtitle}
             cover={card.kind === 'playlist' ? <PlaylistThumb playlist={playlists.find(p => p.id === card.id)} /> : <Cover uri={card.poster} shape={card.media?.role === 'artist' ? 'round' : 'square'} size={48} title={card.name} accent={card.accent} lift={0.2} />} />
         ))}
-      </ScrollView>
+        </View>
+      </List>
     </View>
   );
 }

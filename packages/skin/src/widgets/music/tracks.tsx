@@ -33,14 +33,14 @@ export function TrackList({ tracks, options = {} }: { tracks: Card[]; options?: 
   const wide = m.width >= 1100;
   return (
     <View testID="music-tracklist" accessibilityRole="list">
-      <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, height: 36, marginBottom: 8 }, m.box({ 'border-bottom': '1px solid $ui.glassEdge' })]}>
+      {m.small ? null : <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, height: 36, marginBottom: 8 }, m.box({ 'border-bottom': '1px solid $ui.glassEdge' })]}>
         <Text style={[head(m), { width: 28, textAlign: 'center' }]}>#</Text>
         <Text style={[head(m), { flex: 1 }]}>{msg('music.title')}</Text>
         {options.album && wide ? <Text style={[head(m), { flex: 0.8 }]}>{msg('media.ui.album')}</Text> : null}
         <View style={{ width: 32 }} />
         <View style={{ width: 52, alignItems: 'flex-end' }}><Glyph symbol="clock" size={16} color={m.ui.inkQuiet} /></View>
         <View style={{ width: 32 }} />
-      </View>
+      </View>}
       {tracks.map((track, i) => <TrackRow key={`${track.id}-${i}`} track={track} index={i} tracks={tracks} options={options} wide={wide} />)}
     </View>
   );
@@ -69,12 +69,14 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
   const artist = track.media?.byline;
   const numberLabel = options.position || !track.media?.index ? number(index + 1) : number(track.media.index);
   const liked = app.liked(track.id);
+  // A touch layout plays on a tap and keeps ⋯ in reach; a pointer plays on a double click.
+  const touch = !web || m.width < 980;
   return (
-    <Surface onPress={web ? undefined : play} onDoubleClick={play} onMenu={openMenu} testID={`music-track-${track.id}`} selected={current}
+    <Surface onPress={touch ? play : undefined} onDoubleClick={touch ? undefined : play} onMenu={openMenu} testID={`music-track-${track.id}`} selected={current}
       label={[track.name, artist, track.media?.clockLabel].filter(Boolean).join(', ')}
       style={(lit, focus) => [{ height: options.covers ? 60 : 52, borderRadius: 8, backgroundColor: lit ? m.ui.control : current ? alpha(m.ui.accent, 0.1) : 'transparent' },
         focus ? m.box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${m.ui.ink}` }) : {}, transition('background-color', 120)]}
-      contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16 }}>
+      contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: touch ? 12 : 16, paddingHorizontal: touch ? 8 : 16 }}>
       {lit => (
         <>
           <View style={{ width: 28, alignItems: 'center' }} pointerEvents="box-none">
@@ -105,11 +107,11 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
               </Pressable>
             </View>
           ) : null}
-          <View style={{ width: 32, alignItems: 'center', opacity: lit || liked ? 1 : 0 }} pointerEvents={lit || liked ? 'box-none' : 'none'}><Heart card={track} size={32} iconSize={17} /></View>
-          <View pointerEvents="none" style={{ width: 52, alignItems: 'flex-end' }}>
+          {m.small && !liked ? null : <View style={{ width: 32, alignItems: 'center', opacity: lit || liked ? 1 : 0 }} pointerEvents={lit || liked ? 'box-none' : 'none'}><Heart card={track} size={32} iconSize={17} /></View>}
+          <View pointerEvents="none" style={{ width: m.small ? 40 : 52, alignItems: 'flex-end' }}>
             <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>{track.media?.clockLabel || (track.durationSeconds ? clock(track.durationSeconds) : '')}</Text>
           </View>
-          <View ref={more} style={{ width: 32, alignItems: 'center', opacity: lit ? 1 : 0 }} pointerEvents={lit ? 'box-none' : 'none'}>
+          <View ref={more} style={{ width: 32, alignItems: 'center', opacity: lit || touch ? 1 : 0 }} pointerEvents={lit || touch ? 'box-none' : 'none'}>
             <IconButton symbol="more" label={msg('cardMenu.actionsFor', { title: track.name })} onPress={() => openMenu()} size={32} iconSize={18} testID={`music-track-more-${track.id}`} />
           </View>
         </>

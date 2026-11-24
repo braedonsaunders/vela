@@ -1,8 +1,7 @@
 // Synced lyrics beside Now Playing: the line being sung is lit, the ones sung fade, the list keeps
 // the current line in view, and pressing a line seeks there. Plain lyrics scroll as text.
-//
-// S0 (screenshots): read from LRCLIB directly in development builds. S1 replaces this with Ether's
-// GET /titles/:id/lyrics (features.lyrics), which asks the kind plugin and caches the answer.
+// Lyrics come from the server (features.lyrics: GET /titles/:id/lyrics), which asks the
+// title's source and remembers the answer.
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { msg, type Card } from '@vela/core';
@@ -14,50 +13,15 @@ import { transition } from './parts';
 
 export interface Lyrics { synced: { startMs: number; text: string }[]; plain: string; source: string }
 
-const cache = new Map<string, Lyrics | null>();
-
-function parseLrc(lrc: string): Lyrics['synced'] {
-  const out: Lyrics['synced'] = [];
-  for (const line of lrc.split('\n')) {
-    const match = /^\[(\d+):(\d+(?:\.\d+)?)\]\s?(.*)$/.exec(line.trim());
-    if (match) out.push({ startMs: Math.round((Number(match[1]) * 60 + Number(match[2])) * 1000), text: match[3] ?? '' });
-  }
-  return out;
-}
-
 export function useLyrics(card: Card | undefined): { lyrics: Lyrics | null | undefined } {
   const store = useVela();
   const served = useVelaState(state => (card ? state.music.lyrics[card.id] : undefined));
   const fromServer = store.music.lyricsAvailable;
   useEffect(() => { if (card && fromServer) void store.music.lyrics(card.id); }, [store, card, fromServer]);
-  const fallback = useDevLyrics(fromServer ? undefined : card);
-  if (!fromServer) return fallback;
+  if (!fromServer || !card) return { lyrics: null };
   if (!served || served.load === 'loading') return { lyrics: undefined };
   const value = served.value;
   return { lyrics: value ? { synced: value.lines, plain: value.plain, source: value.source } : null };
-}
-
-/** S0 only: servers without features.lyrics, development builds read LRCLIB directly. */
-function useDevLyrics(card: Card | undefined): { lyrics: Lyrics | null | undefined } {
-  const key = card?.id ?? '';
-  const [lyrics, setLyrics] = useState<Lyrics | null | undefined>(() => cache.get(key));
-  useEffect(() => {
-    if (!card) return;
-    if (cache.has(card.id)) { setLyrics(cache.get(card.id)); return; }
-    setLyrics(undefined);
-    if (typeof __DEV__ === 'undefined' || !__DEV__) { cache.set(card.id, null); setLyrics(null); return; }
-    const album = card.media?.parents.find(p => p.role === 'album')?.name ?? '';
-    const q = new URLSearchParams({ artist_name: card.media?.byline ?? '', track_name: card.name, album_name: album });
-    if (card.durationSeconds) q.set('duration', String(Math.round(card.durationSeconds)));
-    let live = true;
-    void fetch(`https://lrclib.net/api/get?${q}`).then(r => (r.ok ? r.json() : null)).then((body: { syncedLyrics?: string; plainLyrics?: string } | null) => {
-      const value = body && (body.syncedLyrics || body.plainLyrics) ? { synced: parseLrc(body.syncedLyrics ?? ''), plain: body.plainLyrics ?? '', source: 'LRCLIB' } : null;
-      cache.set(card.id, value);
-      if (live) setLyrics(value);
-    }).catch(() => { if (live) setLyrics(null); });
-    return () => { live = false; };
-  }, [card]);
-  return { lyrics: key ? lyrics : null };
 }
 
 export function LyricsPanel({ card, large = false }: { card: Card | undefined; large?: boolean }) {

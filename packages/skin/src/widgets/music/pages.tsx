@@ -9,12 +9,18 @@ import { currentInQueue } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { useHost } from '../../host';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
-import { alpha, Cover, useMediaLook } from '../media/parts';
+import { alpha, Cover, useMediaLook, type MediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
 type FacetValue = { id: string; label: string; count: number };
 import { Byline, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
 import { TrackList } from './tracks';
+
+/** A page's side margin: tighter on a phone. */
+const coverSize = (m: MediaLook) => (compactMusic(m) ? Math.min(240, m.width - 120) : m.width >= 1300 ? 232 : 192);
+const pad = (m: MediaLook) => (m.small ? 16 : 28);
+/** Compact layouts (phones, tablets upright) stack headers and drop the album column. */
+export const compactMusic = (m: MediaLook) => m.width < 980;
 
 function totalLabel(tracks: Card[]): string {
   const seconds = tracks.reduce((sum, t) => sum + (t.durationSeconds || 0), 0);
@@ -29,7 +35,17 @@ function usePlayingFrom(id: string): boolean {
 /** The header every collection page shares: cover, eyebrow, the name, a byline. */
 function Header({ cover, eyebrow, title, children }: { cover: ReactNode; eyebrow: string; title: string; children?: ReactNode }) {
   const m = useMediaLook();
-  const size = title.length > 28 ? 44 : title.length > 16 ? 60 : 84;
+  const size = m.small ? (title.length > 24 ? 26 : 34) : title.length > 28 ? 44 : title.length > 16 ? 60 : 84;
+  if (compactMusic(m)) return (
+    <View style={{ alignItems: 'center', gap: 18, paddingTop: 24, paddingBottom: 6 }}>
+      {cover}
+      <View style={{ alignSelf: 'stretch', gap: 8 }}>
+        <Text style={m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{eyebrow}</Text>
+        <Text numberOfLines={3} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': `${size}px`, 'line-height': '1.05', 'letter-spacing': '-0.01em', color: '$ui.ink' })}>{title}</Text>
+        {children}
+      </View>
+    </View>
+  );
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 28, paddingTop: 48, paddingBottom: 26 }}>
       {cover}
@@ -84,15 +100,15 @@ export function MusicHome() {
   return (
     <View>
       <Wash accent={accent} height={360} />
-      <View style={{ paddingHorizontal: 20, paddingTop: 28 }}>
-        <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '38px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { marginBottom: 20 }]}>{greeting()}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 36 }} testID="music-quick">
+      <View style={{ paddingHorizontal: m.small ? 16 : 20, paddingTop: m.small ? 16 : 28 }}>
+        <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '30px' : '38px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { marginBottom: m.small ? 14 : 20 }]}>{greeting()}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 8 : 10, marginBottom: m.small ? 24 : 36 }} testID="music-quick">
           {quick.map(item => item === 'liked'
-            ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={64} />} onPress={() => app.go({ kind: 'liked' })} />
-            : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
+            ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'liked' })} />
+            : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={m.small ? 52 : 64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
         </View>
       </View>
-      <View style={{ paddingHorizontal: 8 }}>
+      <View style={{ paddingHorizontal: m.small ? 4 : 8 }}>
         {recentCards.length ? <Shelf title={msg('music.recentlyPlayed')}>{recentCards.map(card => <MusicTile key={card.id} card={card} size={176} subtitle={card.kind === 'playlist' ? msg('music.playlist') : undefined} />)}</Shelf> : null}
         {jump.length ? <Shelf title={msg('music.jumpBackIn')}>{jump.map(card => <MusicTile key={card.id} card={card} size={176} />)}</Shelf> : null}
         {shelves.map(row => <RowShelf key={row.id} row={row} />)}
@@ -125,18 +141,18 @@ function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; tit
   const width = `calc(${100 / columns}% - ${(10 * (columns - 1)) / columns}px)`;
   return (
     <Surface onPress={onPress} onMenu={card ? point => app.menu({ card, anchor: { kind: 'point', point } }) : undefined} label={title}
-      style={lit => [{ width: width as never, height: 64, borderRadius: 8, overflow: 'hidden', backgroundColor: lit ? m.ui.controlHover : alpha(m.ui.ink, 0.07) }, transition('background-color', 140)]}
-      contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      style={lit => [{ width: width as never, height: m.small ? 52 : 64, borderRadius: 8, overflow: 'hidden', backgroundColor: lit ? m.ui.controlHover : alpha(m.ui.ink, 0.07) }, transition('background-color', 140)]}
+      contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: m.small ? 10 : 14, paddingRight: m.small ? 8 : 0 }}>
       {lit => (
         <>
           <View pointerEvents="none">{cover}</View>
           <View pointerEvents="none" style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={2} style={m.text({ 'font-size': '15px', 'font-weight': '700', color: '$ui.ink' })}>{title}</Text>
+            <Text numberOfLines={2} style={m.text({ 'font-size': m.small ? '13px' : '15px', 'font-weight': '700', color: '$ui.ink' })}>{title}</Text>
             {subtitle ? <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet' })}>{subtitle}</Text> : null}
           </View>
-          <View pointerEvents={lit ? 'auto' : 'none'} style={[{ marginRight: 10, opacity: lit ? 1 : 0 }, transition('opacity', 160)]}>
+          {m.small ? null : <View pointerEvents={lit ? 'auto' : 'none'} style={[{ marginRight: 10, opacity: lit ? 1 : 0 }, transition('opacity', 160)]}>
             <PlayFab playing={false} size={38} onPress={card ? () => app.playCard(card) : onPress} />
-          </View>
+          </View>}
         </>
       )}
     </Surface>
@@ -157,11 +173,11 @@ function Genres() {
   if (!genres.length) return null;
   const hues = [12, 200, 280, 140, 330, 40, 170, 230, 300, 90, 0, 260];
   return (
-    <View style={{ paddingHorizontal: 12, marginBottom: 32 }}>
+    <View style={{ paddingHorizontal: m.small ? 8 : 12, marginBottom: 32 }}>
       <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginBottom: 14 }]}>{msg('music.browseGenres')}</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 10 : 14 }}>
         {genres.map((g, i) => (
-          <View key={g.id} style={[{ width: 196, height: 112, borderRadius: Number(m.ui.radiusCard) || 12, padding: 14, overflow: 'hidden' },
+          <View key={g.id} style={[{ width: m.small ? (m.width - 48) / 2 : 196, height: m.small ? 96 : 112, borderRadius: Number(m.ui.radiusCard) || 12, padding: 14, overflow: 'hidden' },
             m.box({ 'background-image': `linear-gradient(135deg, hsl(${hues[i % hues.length]} 46% 38%) 0%, hsl(${(hues[i % hues.length]! + 34) % 360} 52% 22%) 100%)` })]}>
             <Text style={m.text({ 'font-size': '19px', 'font-weight': '750', color: '#ffffff' })}>{g.label}</Text>
             <Text style={m.text({ 'font-size': '12px', color: 'rgba(255,255,255,0.72)' })}>{msg('music.albumsCount', { count: number(g.count) })}</Text>
@@ -196,8 +212,8 @@ function AlbumView({ card }: { card: Card }) {
   return (
     <View>
       <Wash accent={card.accent} image={card.poster} />
-      <View style={{ paddingHorizontal: 28 }}>
-        <Header eyebrow={kind} title={card.name} cover={<Cover uri={card.poster} shape="square" size={m.width >= 1300 ? 232 : 192} title={card.name} accent={card.accent} lift={2} />}>
+      <View style={{ paddingHorizontal: pad(m) }}>
+        <Header eyebrow={kind} title={card.name} cover={<Cover uri={card.poster} shape="square" size={coverSize(m)} title={card.name} accent={card.accent} lift={2} />}>
           <Byline card={card} facts={[card.yearLabel, tracks.length ? totalLabel(tracks) : '']} />
         </Header>
         <ActionBar>
@@ -247,24 +263,24 @@ function ArtistView({ card }: { card: Card }) {
   const following = app.liked(card.id);
   return (
     <View>
-      <View style={{ height: 360, overflow: 'hidden', justifyContent: 'flex-end' }}>
+      <View style={{ height: m.small ? 300 : 360, overflow: 'hidden', justifyContent: 'flex-end' }}>
         {art ? <Image source={host.image(art)} contentFit="cover" contentPosition="top" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as never} /> : null}
         <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(m.ui.page, 0)} 30%, ${alpha(card.accent || m.ui.page, 0.35)} 70%, ${m.ui.page} 100%)` })]} />
-        <View style={{ paddingHorizontal: 28, paddingBottom: 22 }}>
+        <View style={{ paddingHorizontal: pad(m), paddingBottom: 22 }}>
           <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{msg('media.ui.artist')}</Text>
-          <Text accessibilityRole="header" numberOfLines={1} style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': card.name.length > 18 ? '64px' : '96px', 'line-height': '1', 'letter-spacing': '-0.03em', color: '$ui.ink' })}>{card.name}</Text>
+          <Text accessibilityRole="header" numberOfLines={1} style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? (card.name.length > 14 ? '40px' : '54px') : card.name.length > 18 ? '64px' : '96px', 'line-height': '1', 'letter-spacing': '-0.03em', color: '$ui.ink' })}>{card.name}</Text>
           <Text style={[m.text({ 'font-size': '15px', color: '$ui.inkSecondary' }), { marginTop: 10 }]}>{[albums.length ? msg('music.releasesCount', { count: number(albums.length) }) : '', card.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</Text>
         </View>
       </View>
-      <View style={{ paddingHorizontal: 28 }}>
+      <View style={{ paddingHorizontal: pad(m) }}>
         <ActionBar>
           <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(top, 0, source))} testID="music-play" />
           <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(top, 0, source, true)} />
           <FollowButton on={following} onPress={() => app.like(card, !following)} />
           <MoreButton card={card} />
         </ActionBar>
-        <View style={{ flexDirection: 'row', gap: 40, flexWrap: 'wrap' }}>
-          <View style={{ flex: 2, minWidth: 520 }}>
+        <View style={m.small ? { gap: 28 } : { flexDirection: 'row', gap: 40, flexWrap: 'wrap' }}>
+          <View style={m.small ? { alignSelf: 'stretch' } : { flex: 2, minWidth: 520 }}>
             <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginBottom: 10 }]}>{msg('music.popular')}</Text>
             <TrackList tracks={top.slice(0, more ? 10 : 5)} options={{ covers: true, position: true, source }} />
             {top.length > 5 ? (
@@ -274,7 +290,7 @@ function ArtistView({ card }: { card: Card }) {
             ) : null}
           </View>
           {liked.length ? (
-            <View style={{ flex: 1, minWidth: 260, maxWidth: 380 }}>
+            <View style={m.small ? { alignSelf: 'stretch' } : { flex: 1, minWidth: 260, maxWidth: 380 }}>
               <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginBottom: 14 }]}>{msg('music.likedSongs')}</Text>
               <Pressable onPress={() => app.go({ kind: 'liked' })} accessibilityRole="link" style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 14 }]}>
                 <View><Cover uri={card.poster} shape="round" size={72} title={card.name} accent={card.accent} />
@@ -299,7 +315,7 @@ function ArtistView({ card }: { card: Card }) {
         <Shelf title="">{shown.map(a => <MusicTile key={a.id} card={a} size={168} subtitle={[a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ')} />)}</Shelf>
       </View>
       {card.summary ? (
-        <View style={{ paddingHorizontal: 28, paddingBottom: 40, maxWidth: 860 }}>
+        <View style={{ paddingHorizontal: pad(m), paddingBottom: 40, maxWidth: 860 }}>
           <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginBottom: 10 }]}>{msg('music.about')}</Text>
           <Text style={m.text({ 'font-size': '15px', 'line-height': '1.6', color: '$ui.inkSecondary' })}>{card.summary}</Text>
         </View>
@@ -377,8 +393,8 @@ export function MusicPlaylist({ id }: { id: string }) {
   return (
     <View>
       <Wash accent={accent} image={tracks[0]?.poster} />
-      <View style={{ paddingHorizontal: 28 }}>
-        <Header eyebrow={msg('music.playlist')} title={name} cover={<Mosaic tracks={tracks} size={m.width >= 1300 ? 232 : 192} poster={meta?.poster} />}>
+      <View style={{ paddingHorizontal: pad(m) }}>
+        <Header eyebrow={msg('music.playlist')} title={name} cover={<Mosaic tracks={tracks} size={coverSize(m)} poster={meta?.poster} />}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: m.ui.accent, alignItems: 'center', justifyContent: 'center' }}><Text style={m.text({ 'font-size': '12px', 'font-weight': '800', color: m.ui.onAccent })}>{viewer.slice(0, 1).toUpperCase()}</Text></View>
             <Text style={m.text({ 'font-size': '15px', 'font-weight': '700', color: '$ui.ink' })}>{viewer}</Text>
@@ -410,8 +426,8 @@ export function MusicLiked() {
   return (
     <View>
       <Wash accent={m.ui.accent} height={460} />
-      <View style={{ paddingHorizontal: 28 }}>
-        <Header eyebrow={msg('music.playlist')} title={msg('music.liked')} cover={<LikedCover size={m.width >= 1300 ? 232 : 192} />}>
+      <View style={{ paddingHorizontal: pad(m) }}>
+        <Header eyebrow={msg('music.playlist')} title={msg('music.liked')} cover={<LikedCover size={coverSize(m)} />}>
           <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}><Text style={m.text({ 'font-weight': '700', color: '$ui.ink' })}>{viewer}</Text> · {liked.moreTracks ? msg(`media.count.tracks.other`, { count: number(liked.trackTotal) }) : totalLabel(tracks)}</Text>
         </Header>
         <ActionBar>

@@ -11,12 +11,11 @@ import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
 import { MusicContext, MusicShell, parsePlace, placeOf, placeParam, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
 import { useVela } from '../vela';
 
-/** Whether this library draws as the music app: a music library on a wide screen (not a TV yet). */
+/** Whether this library draws as the music app: a music library on a phone, tablet or wider
+ * screen (the shell takes its compact form below 980px). TVs keep their focus layout for now. */
 export function useMusicShell(libraryId: string): boolean {
-  const vela = useVela();
   const media = useVelaState(state => state.libraries.value?.find(library => library.id === libraryId)?.media);
-  const host = vela.host('library', libraryId);
-  return media === 'music' && !Platform.isTV && (host?.viewport.width ?? 0) >= 980;
+  return media === 'music' && !Platform.isTV;
 }
 
 export function MusicSection({ libraryId, at }: { libraryId: string; at: string | undefined }) {
