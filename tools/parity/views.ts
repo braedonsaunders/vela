@@ -58,10 +58,14 @@ export const VIEWS: View[] = [
 ];
 
 /** The views compared by review, not pixels, at a viewport. */
-export function reviewed(view: View, viewport: string): string | undefined {
-  if (viewport === 'web-390' && (view.name === 'index-top' || view.name === 'index-spoiler-free' || view.name === 'index-no-favourites'))
-    return 'Phone hero: today truncates both team names to one letter at 390 px; the document wraps short names under the crests (a fix, reviewed).';
-  return view.review;
+/** Views compared by review, with the reason (a one-line, written acceptance). */
+export const REVIEWED_VIEWS: { viewports: RegExp; views: string[]; reason: string }[] = [
+  { viewports: /^web-390$/, views: ['index-top', 'index-spoiler-free', 'index-no-favourites'],
+    reason: 'Phone hero: names wrap under the crests (legacy truncated them), and without Watch from start (Ether v1) the hero is one button shorter, so the page below moves up' },
+];
+
+export function reviewed(view: View | { name: string; review?: string }, viewport: string): string | undefined {
+  return REVIEWED_VIEWS.find(r => r.viewports.test(viewport) && r.views.includes(view.name))?.reason ?? view.review;
 }
 
 /** Where the document variant draws a page (`screen/[id]` and `screen/[id]/[page]`). The legacy

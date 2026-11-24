@@ -10,7 +10,7 @@ import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { decodePng, encodePng } from './png';
 import { diffImages, movingMask, RULE, verdict, type Rect } from './diff';
-import { CAPTURE_SCALE, DEVICE_MASKS } from './views';
+import { CAPTURE_SCALE, DEVICE_MASKS, reviewed } from './views';
 
 interface Capture { viewport: string; view: string; file: string; frame: string; description: string; review?: string; ok: boolean; error?: string; reviewedRegions?: (Rect & { note: string })[] }
 interface Manifest { variant: string; platform: string; now: string; captures: Capture[] }
@@ -29,7 +29,7 @@ interface Row { viewport: string; view: string; description: string; status: 'pa
 const rows: Row[] = [];
 for (const before of legacy.captures) {
   const after = document.captures.find(c => c.viewport === before.viewport && c.view === before.view);
-  const row: Row = { viewport: before.viewport, view: before.view, description: before.description, status: 'missing', reasons: [], review: before.review };
+  const row: Row = { viewport: before.viewport, view: before.view, description: before.description, status: 'missing', reasons: [], review: reviewed({ name: before.view }, before.viewport) };
   rows.push(row);
   if (!before.ok || !after?.ok) { row.reasons.push(!before.ok ? `legacy capture failed: ${before.error?.split('\n')[0]}` : after ? `document capture failed: ${after.error?.split('\n')[0]}` : 'no document capture'); continue; }
   const a = png(legacyDir, before.file), b = png(documentDir, after.file);
@@ -46,7 +46,7 @@ for (const before of legacy.captures) {
   result.maxDisplacement = Math.round((result.maxDisplacement / scale) * 100) / 100;
   const judged = verdict(result);
   Object.assign(row, {
-    status: before.review ? 'review' : judged.pass ? 'pass' : 'fail', percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
+    status: row.review ? 'review' : judged.pass ? 'pass' : 'fail', percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
     masked: mask.length, reasons: judged.reasons, ...(reviewedNotes.length ? { reviewedNotes } : {}),
     // The regions that moved too far, for finding them on the diff picture.
     moved: result.regions.filter(r => (r.displacement ?? 0) / scale > RULE.maxDisplacement).slice(0, 12).map(({ x, y, width, height, shift }) => ({ x, y, width, height, shift })),
