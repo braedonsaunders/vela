@@ -3,6 +3,7 @@
   "requires": ["sections", "shelf", "tabs", "table"],
   "screen": "sports", "page": "index", "version": "2.0.0",
   "title": "{s:title}", "presentation": "section", "refresh": 300,
+  "focus": { "initial": "sports-hero-details" },
   "params": {
     "league": { "type": "string", "max": 64 },
     "date": { "type": "date" },
@@ -235,7 +236,7 @@
             { "type": "use", "template": "heroButton", "testId": "sports-hero-multiview", "when": [{ "test": "e.watch.primary.channelId" }, { "test": "env.canMultiview" }],
               "with": { "label": "{s:addToMultiview}", "glyph": "tiles" },
               "press": { "action": "multiview", "args": { "channel": "{e.watch.primary.channelId}" } } },
-            { "type": "use", "template": "heroButton", "testId": "sports-hero-details", "with": { "label": "{s:gameDetails}", "glyph": "list" },
+            { "type": "use", "template": "heroButton", "id": "sports-hero-details", "testId": "sports-hero-details", "with": { "label": "{s:gameDetails}", "glyph": "list" },
               "press": { "action": "navigate", "args": { "page": "game", "event": "{e.$key}" } } },
             { "type": "box", "when": [{ "test": "e.watch.primary.channelId", "not": true }, { "test": "e.watch.airing.0.name" }],
               "style": { "flex-direction": "row", "flex-shrink": "1", "align-items": "center", "gap": "7px", "height": "42px", "padding": "0 4px" }, "children": [
@@ -329,6 +330,7 @@
 
       { "type": "tabs", "id": "leagues", "over": "src.leagues.leagues", "as": "l", "value": "{l.id}", "label": "{l.label}", "bind": { "param": "league", "clear": ["teamsLeague"] },
         "all": "{s:all}", "testId": "sports-league-{l.id}", "style": { "padding": "3px $gutter", "gap": "8px", "margin-bottom": "-10px" }, "small": { "padding": "3px 18px" },
+        "tv": { "padding": "2.4px $gutter", "gap": "6.4px", "margin-bottom": "-10px" },
         "after": [
           { "type": "use", "template": "vela:switch", "when": [{ "test": "src.viewer.canSetSpoilerFree" }], "testId": "sports-hide-scores", "style": { "margin-left": "10px" },
             "with": { "on": "{src.viewer.spoilerFree}", "label": "{s:hideScores}", "glyph": "eye-off" },
