@@ -76,6 +76,9 @@ export interface NativeAudioEngine {
   preload(next: { url: string; startSeconds: number; gain?: number; crossfade?: { seconds: number; at: number } } | null): void;
   /** Levelling and the EQ (the store's AudioEngine.setSound). */
   setSound(sound: NativeSound): void;
+  /** Stops listening to the native player for good: an engine the app has replaced must neither pass on
+   * the system's media commands nor report the native player's events (both would come twice). */
+  dispose(): void;
 }
 
 interface Status {
@@ -153,7 +156,9 @@ export function createNativeAudioEngine(
       emit('error');
     });
   };
-  bridge.subscribe(event => {
+  let disposed = false;
+  const unsubscribe = bridge.subscribe(event => {
+    if (disposed) return;
     if (event.type === 'remote') { options.onRemote?.(event.command, event.seconds); return; }
     // The preloaded item took over: from here on its events are the store's. A status that names it
     // before the advance itself arrives is the advance.
@@ -245,6 +250,11 @@ export function createNativeAudioEngine(
     buffered: () => status.buffered,
     error: () => status.error,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    dispose() {
+      disposed = true;
+      listeners.clear();
+      unsubscribe();
+    },
   };
 }
 

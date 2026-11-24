@@ -134,7 +134,7 @@ let diagnose: () => unknown = () => null;
 export function audioDiagnostics(): unknown { return diagnose(); }
 
 /** The browser plays only URLs that carry their own authorization, so it takes no authorizer. */
-export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
+export function createAudioEngine(_authorize?: unknown): (AudioEngine & { dispose(): void }) | null {
   if (typeof document === 'undefined' || typeof Audio === 'undefined') return null;
   const element = createElementEngine();
   const gapless = gaplessSupported() ? createGaplessPlayer() : null;
@@ -200,6 +200,8 @@ export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
     buffered: () => engine().buffered(),
     error: () => engine().error(),
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    /** AudioDock unmounted: nothing more reaches the store it was attached to. */
+    dispose() { listeners.clear(); },
   };
 }
 

@@ -63,7 +63,13 @@ export function AudioDock() {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<NowPlayingPanel | undefined>(undefined);
   useEffect(() => onOpenNowPlaying(next => { setPanel(next); setOpen(true); }), []);
-  useEffect(() => store.audio.attach(createAudioEngine(() => store.playback.mediaAccess())), [store]);
+  // The engine belongs to this mount: unmounted (the tree can mount again in the same runtime), it stops
+  // listening, so a system media command (notification, lock screen, headset) reaches the queue once.
+  useEffect(() => {
+    const engine = createAudioEngine(() => store.playback.mediaAccess());
+    const detach = store.audio.attach(engine);
+    return () => { detach(); engine?.dispose(); };
+  }, [store]);
   // Development checks read what the audio did (docs/sound.md): the store's audio and the engine's last crossfade.
   useEffect(() => {
     if (!__DEV__) return;

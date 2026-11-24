@@ -45,9 +45,18 @@ function inside(url: string, scope: { origin: string; pathPrefix: string }): boo
 /** What the engine last did with sound; the native players keep it to themselves. */
 export function audioDiagnostics(): unknown { return null; }
 
-export function createAudioEngine(authorize?: AudioAuthorizer): AudioEngine | null {
+/** The engine AudioDock attaches to the store, which it disposes when it unmounts. */
+export type AppAudioEngine = AudioEngine & { dispose(): void };
+
+/** The engine made last: only it passes the system's media commands on. The app's whole tree can mount
+ * again in the same JavaScript runtime (Android: Back out of the app, then open it), and an older engine
+ * still listening sent each Next on as well, so a notification or headset Next skipped a track. */
+let newest = 0;
+
+export function createAudioEngine(authorize?: AudioAuthorizer): AppAudioEngine | null {
+  const engine = ++newest;
   return createNativeAudioEngine(nativeAudioBridge(), {
-    onRemote: remote,
+    onRemote: (command, seconds) => { if (engine === newest) remote(command, seconds); },
     authorize: authorize && (async (url): Promise<NativeAudioAccess | null> => {
       const grant = await authorize().catch(() => null);
       if (!grant || !inside(url, grant)) return null;

@@ -128,6 +128,29 @@ test("the system's media commands go to the remote handler, whatever load they n
   expect(remote).toEqual([['next', undefined], ['skip', -15]]);
 });
 
+test('a disposed engine stops listening: one Next from the system is one Next, however many engines were made', async () => {
+  // The one native player, heard by every engine that subscribes (the app's tree can mount again).
+  const subscribers = new Set<(event: NativeAudioEvent) => void>();
+  const { bridge } = fakeBridge();
+  bridge.subscribe = listener => { subscribers.add(listener); return () => { subscribers.delete(listener); }; };
+  const send = (event: NativeAudioEvent) => { for (const listener of [...subscribers]) listener(event); };
+  const remote: string[] = [];
+  const old = createNativeAudioEngine(bridge, { onRemote: command => remote.push(`old:${command}`) });
+  const oldEvents: AudioEngineEvent[] = [];
+  old.subscribe(event => oldEvents.push(event));
+  old.load('https://ether.example/track.flac', 0, 1);
+  await flush();
+  old.dispose();
+  expect(subscribers.size).toBe(0);
+  const current = createNativeAudioEngine(bridge, { onRemote: command => remote.push(`new:${command}`) });
+  current.load('https://ether.example/track.flac', 0, 1);
+  await flush();
+  send({ id: 1, type: 'remote', command: 'next' });
+  send(status(1, 'playing', 1, 200));
+  expect(remote).toEqual(['new:next']);
+  expect(oldEvents).toEqual([]);
+});
+
 test('a seek and a speed change move the clock at once', async () => {
   const { bridge, calls, send } = fakeBridge();
   let now = 0;
