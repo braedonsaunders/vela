@@ -119,6 +119,12 @@ describe('templates, the kit and variants', () => {
       templates: { dot: { type: 'box', style: { color: '{arg.ink}', gap: '{arg.gap}' } } } }));
     expect(style(r.tree, 'color')).toBe('#f5f1e9');
     expect(style(r.tree, 'gap')).toBe('6px');
+    // The skeleton's radius from a document token, and a placeholder that never shrinks in its row.
+    const bar = box(resolve(doc({ type: 'use', template: 'vela:placeholder', with: { width: '286px', height: '128px', radius: '$radiusPanel' } },
+      { tokens: { radiusPanel: 'min($ui.radiusPanel * 0.6, 22px)' } })).tree);
+    const placed = bar.states.find(s => holds(s.when, root({}), env))!;
+    expect(fill(placed.layer.style['border-radius'], root({}), env)).toBe('17px');
+    expect(fill(placed.layer.style['flex-shrink'], root({}), env)).toBe('0');
   });
   test("a caller's own fields keep reading the caller's arguments inside the template", () => {
     const r = resolve(doc({ type: 'use', template: 'outer', with: { prefix: 'fav' } }, {

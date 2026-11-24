@@ -249,9 +249,11 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     // Before the document or the first read: the document's own skeleton once it is resolved.
     return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} status={statusTop} /> : <View style={{ flex: 1 }} />;
   }
+  // The skeleton starts below the shell's bar; the failure centres in the whole section, as the hard-coded screens drew them.
   const status = page.load !== 'ready';
+  const statusInset = page.load === 'loading' ? statusTop : 0;
   const node = page.load === 'failed' ? resolved.failure : page.load === 'loading' ? resolved.loading : resolved.tree;
-  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} {...(status ? { status: statusTop } : {})} />;
+  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} {...(status ? { status: statusInset } : {})} />;
   if (!toast) return drawn;
   const ui = resolveUi(host.doc.document.ui);
   return (
