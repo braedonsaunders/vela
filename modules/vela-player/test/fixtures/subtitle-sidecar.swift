@@ -78,12 +78,42 @@ func adoption() {
     // A new session takes its plan's choice again.
     report.adopt(plan(session: "next"), newSession: true)
     precondition(report.subtitleTrackId == "sidecar" && !report.subtitleClientOnly)
+    // The server deselects the sidecar in a later plan of the same source: adopted, and the sidecar goes.
+    var added = SidecarSubtitle()
+    _ = added.step(plan().subtitleTrack("sidecar"), url: url, loaded: true)
+    report.adopt(plan(session: "next", revision: 2, selected: nil), newSession: false)
+    precondition(report.subtitleTrackId == nil)
+    precondition(added.step(plan().subtitleTrack(report.subtitleTrackId), url: nil, loaded: true) == .clear)
+}
+
+/// The viewer's sidecar, then a track only the server delivers (over its HLS): the sidecar goes at once, the menu
+/// shows the request, and the report follows the server from then on instead of keeping the sidecar for the next source.
+func embeddedAfterSidecar() {
+    let report = PlayerReport(snapshot: { _ in }, observation: { _ in }, error: { _ in }, sessionCommand: { _ in })
+    report.adopt(plan(selected: nil), newSession: true)
+    var added = SidecarSubtitle()
+    report.chooseSubtitle("sidecar")
+    precondition(added.step(plan().subtitleTrack(report.subtitleTrackId), url: url, loaded: true) == .add(url))
+    report.requestSubtitle("embedded")
+    precondition(report.subtitleTrackId == "embedded" && !report.subtitleClientOnly)
+    precondition(added.step(plan().subtitleTrack(report.subtitleTrackId), url: nil, loaded: true) == .clear)
+    // The answer (a new source) selects it; a refusal leaves the server's own choice, which is shown instead.
+    report.adopt(plan(revision: 2, selected: "embedded"), newSession: false)
+    precondition(report.subtitleTrackId == "embedded")
+    report.adopt(plan(revision: 3, selected: nil), newSession: false)
+    precondition(report.subtitleTrackId == nil)
+    // Off for a track the server delivers is the server's too, and its answer is adopted the same way.
+    report.chooseSubtitle("sidecar")
+    report.requestSubtitle(nil)
+    report.adopt(plan(revision: 4, selected: "embedded"), newSession: false)
+    precondition(report.subtitleTrackId == "embedded")
 }
 
 @main struct Probe {
     static func main() {
         sidecarSteps()
         adoption()
+        embeddedAfterSidecar()
         print("subtitle sidecar passed")
     }
 }

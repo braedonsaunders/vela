@@ -81,6 +81,14 @@ final class PlayerReport {
         subtitleClientOnly = true
     }
 
+    /// A subtitle choice the server applies (a track it delivers over its HLS, or one the file does not carry):
+    /// shown as chosen meanwhile, and from here on the report follows the server's selection again, not a choice
+    /// the viewer made on the device before.
+    func requestSubtitle(_ id: String?) {
+        subtitleTrackId = id
+        subtitleClientOnly = false
+    }
+
     func failure(kind: String, message: String, recoverable: Bool) {
         emitError(["kind": kind, "message": message, "recoverable": recoverable])
     }

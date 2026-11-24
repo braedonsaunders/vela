@@ -9,13 +9,15 @@ export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan
   /** The live event on air on a live channel session (Sports A6); undefined for other sessions. */ liveEvent?: LiveEventRef | null }
 export const sessions = new Map<string, Session>();
 /** The sidecar title (POST /__admin/sidecar): new VOD plans of the generated fixture carry its English WebVTT as an
- * external file, as Jellyfin, Emby and Plex sidecars arrive, selected from the start when `selected` (a default or
+ * external file, beside a French track embedded in the source, as Jellyfin, Emby and Plex sidecars arrive, selected from the start when `selected` (a default or
  * remembered subtitle). The direct MP4 is the original file and `pathId` is where plans start. Track commands are
  * answered as Ether answers them: off the original file, with a new source generation. */
 export const sidecarFixture = { enabled: false, selected: true, pathId: 'direct' };
 export function withSidecar(plan: PlaybackPlan, base: string) {
   plan.subtitleTracks = [{ id: 'sub-en', kind: 'subtitle', language: 'en', name: 'English · sidecar', codec: 'webvtt',
-    delivery: { kind: 'external', format: 'webvtt', url: `${base}/subtitles.vtt` } }];
+    delivery: { kind: 'external', format: 'webvtt', url: `${base}/subtitles.vtt` } },
+    // A track inside the source, which only the server can deliver over its HLS (here it delivers nothing).
+    { id: 'sub-fr', kind: 'subtitle', language: 'fr', name: 'French · in the file', codec: 'subrip', streamIndex: 3, delivery: { kind: 'embedded' } }];
   plan.selectedSubtitleTrackId = sidecarFixture.selected ? 'sub-en' : null;
   const direct = plan.paths.find(path => path.id === 'direct');
   if (direct) Object.assign(direct, { original: true, range: true });
