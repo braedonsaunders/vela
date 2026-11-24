@@ -70,6 +70,14 @@ function Screens() {
           contentStyle: { ...bars, backgroundColor: 'transparent' },
         }}
       />
+      {/* A plugin screen's page (presentation: page) opens over its section like a title page. */}
+      <Stack.Screen
+        name="screen/[id]/[page]"
+        options={{
+          presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal',
+          contentStyle: { ...bars, backgroundColor: 'transparent' },
+        }}
+      />
       <Stack.Screen name="person" options={{ presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal', contentStyle: { ...bars, backgroundColor: 'transparent' } }} />
     </Stack>
   );
