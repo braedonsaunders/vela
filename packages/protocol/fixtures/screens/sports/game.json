@@ -189,7 +189,7 @@
             { "type": "use", "template": "situationChip", "with": { "label": "{src.game.event.possessionLabel}", "value": "{src.game.event.sides.1.abbr}" } } ] }
         ] },
 
-      { "type": "box", "id": "body", "style": { "padding": "0 $gutter", "margin-top": "-2px", "gap": "22px" }, "small": { "padding": "0 18px" }, "children": [
+      { "type": "box", "id": "body", "style": { "padding": "20px $gutter 0", "margin-top": "-22px", "gap": "22px" }, "small": { "padding": "20px 18px 0" }, "children": [
 
         { "type": "use", "template": "vela:panel", "id": "reveal", "when": [{ "test": "src.game.event.spoiler" }], "children": [
           { "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "16px" }, "small": { "flex-direction": "column", "align-items": "flex-start" }, "children": [
