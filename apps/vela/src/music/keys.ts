@@ -1,27 +1,12 @@
-// The music app's keyboard (web and desktop): play/pause, seek, previous/next, volume, mute,
-// shuffle, repeat, like, queue, search and this list. Only while the music app is on screen and
-// no text field, video or open menu has the key; arrow keys leave sliders and menus alone.
+// The audio app's keyboard (web and desktop): play/pause, seek, previous/next, volume, mute,
+// shuffle and repeat (music) or speed (spoken word, whose arrows skip 15/30 s), like, queue,
+// search and this list. Only while the audio app is on screen and no text field, video or open
+// menu has the key; arrow keys leave sliders and menus alone.
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { currentInQueue, type Vela as VelaStore } from '@vela/core';
+import { AUDIO_RATES, currentInQueue, type Vela as VelaStore } from '@vela/core';
 import type { MusicApp } from '@vela/skin/src/widgets/music';
-
-export interface MusicKey { keys: string; label: string }
-
-/** The list the `?` sheet shows, in the order it shows them. */
-export const MUSIC_KEYS: MusicKey[] = [
-  { keys: 'Space', label: 'music.key.toggle' },
-  { keys: '← / →', label: 'music.key.seek' },
-  { keys: 'Shift ← / Shift →', label: 'music.key.skip' },
-  { keys: '↑ / ↓', label: 'music.key.volume' },
-  { keys: 'M', label: 'music.key.mute' },
-  { keys: 'S', label: 'music.key.shuffle' },
-  { keys: 'R', label: 'music.key.repeat' },
-  { keys: 'L', label: 'music.key.like' },
-  { keys: 'Q', label: 'music.key.queue' },
-  { keys: '⌘K / Ctrl K', label: 'music.key.search' },
-  { keys: '?', label: 'music.key.help' },
-];
+import { listeningWords } from '@vela/skin/src/widgets/music/listening';
 
 function typing(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -41,6 +26,7 @@ export function useMusicKeys(store: VelaStore, app: MusicApp, actions: { toggleQ
       const audio = store.getState().audio;
       const item = currentInQueue(audio.queue);
       const meta = event.metaKey || event.ctrlKey;
+      const spoken = listeningWords(app.listening).transport === 'spoken';
       const key = event.key;
       const handled = (): void => { event.preventDefault(); event.stopPropagation(); };
       if (meta && key.toLowerCase() === 'k') { handled(); app.go({ kind: 'search' }); return; }
@@ -55,14 +41,23 @@ export function useMusicKeys(store: VelaStore, app: MusicApp, actions: { toggleQ
           if (role === 'adjustable' || role === 'slider') return;
           handled();
           if (event.shiftKey) { if (key === 'ArrowLeft') store.audio.previous(); else store.audio.next(); }
+          else if (spoken) store.audio.skip(key === 'ArrowLeft' ? -15 : 30);
           else store.audio.skip(key === 'ArrowLeft' ? -5 : 5);
           return;
         case 'ArrowUp': case 'ArrowDown':
           if (role === 'adjustable' || role === 'slider') return;
           handled(); store.audio.setVolume(audio.volume + (key === 'ArrowUp' ? 0.1 : -0.1)); return;
         case 'm': case 'M': handled(); store.audio.toggleMute(); return;
-        case 's': case 'S': handled(); store.audio.toggleShuffle(); return;
-        case 'r': case 'R': handled(); store.audio.cycleRepeat(); return;
+        case 's': case 'S': if (spoken) return; handled(); store.audio.toggleShuffle(); return;
+        case 'r': case 'R': if (spoken) return; handled(); store.audio.cycleRepeat(); return;
+        case '[': case ']': {
+          if (!spoken) return;
+          handled();
+          const at = AUDIO_RATES.indexOf(audio.rate as typeof AUDIO_RATES[number]);
+          const next = AUDIO_RATES[Math.min(AUDIO_RATES.length - 1, Math.max(0, (at < 0 ? AUDIO_RATES.indexOf(1) : at) + (key === ']' ? 1 : -1)))]!;
+          store.audio.setRate(next);
+          return;
+        }
         case 'l': case 'L': if (item) { handled(); app.like(item, !app.liked(item.id)); } return;
         case 'q': case 'Q': handled(); actions.toggleQueue(); return;
       }

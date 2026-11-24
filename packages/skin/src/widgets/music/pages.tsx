@@ -1,5 +1,6 @@
-// The music app's pages: Home, an album, an artist, a playlist, Liked Songs. Built from the
-// store's ordinary reads; every page takes the document's `ui` look and the artwork's colour.
+// The audio app's music pages: Home, an album, an artist, a playlist, Liked Songs (spoken word's
+// Home, book and show pages are in spoken.tsx, which chooses between the two). Built from the store's ordinary reads; every page
+// takes the document's `ui` look and the artwork's colour.
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, Text, View } from 'react-native';
@@ -13,14 +14,15 @@ import { alpha, Cover, useMediaLook, type MediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
 type FacetValue = { id: string; label: string; count: number };
-import { Byline, FocusScope, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
+import { Byline, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
+import { listeningWords } from './listening';
 import { TrackList } from './tracks';
 import { compactMusic, musicTV } from './layout';
 export { compactMusic };
 
 /** A page's side margin: tighter on a phone. */
-const coverSize = (m: MediaLook) => (compactMusic(m) ? Math.min(240, m.width - 120) : m.width >= 1300 ? 232 : 192);
-const pad = (m: MediaLook) => (m.small ? 16 : 28);
+export const coverSize = (m: MediaLook) => (compactMusic(m) ? Math.min(240, m.width - 120) : m.width >= 1300 ? 232 : 192);
+export const pad = (m: MediaLook) => (m.small ? 16 : 28);
 
 function totalLabel(tracks: Card[]): string {
   const seconds = tracks.reduce((sum, t) => sum + (t.durationSeconds || 0), 0);
@@ -28,12 +30,12 @@ function totalLabel(tracks: Card[]): string {
   return seconds ? `${count}, ${durationLabel(seconds)}` : count;
 }
 
-function usePlayingFrom(id: string): boolean {
+export function usePlayingFrom(id: string): boolean {
   return useVelaState(s => s.audio.queue?.source?.id === id && (s.audio.phase === 'playing' || s.audio.phase === 'buffering' || s.audio.phase === 'loading'));
 }
 
 /** The header every collection page shares: cover, eyebrow, the name, a byline. */
-function Header({ cover, eyebrow, title, children }: { cover: ReactNode; eyebrow: string; title: string; children?: ReactNode }) {
+export function Header({ cover, eyebrow, title, children }: { cover: ReactNode; eyebrow: string; title: string; children?: ReactNode }) {
   const m = useMediaLook();
   const size = m.small ? (title.length > 24 ? 26 : 34) : title.length > 28 ? 44 : title.length > 16 ? 60 : 84;
   if (compactMusic(m)) return (
@@ -58,11 +60,11 @@ function Header({ cover, eyebrow, title, children }: { cover: ReactNode; eyebrow
   );
 }
 
-function ActionBar({ children }: { children: ReactNode }) {
+export function ActionBar({ children }: { children: ReactNode }) {
   return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 18 }}>{children}</View>;
 }
 
-function MoreButton({ card }: { card: Card }) {
+export function MoreButton({ card }: { card: Card }) {
   const app = useMusic();
   const ref = useRef<ComponentRef<typeof View>>(null);
   return (
@@ -75,7 +77,7 @@ function MoreButton({ card }: { card: Card }) {
 
 // ——— Home ————————————————————————————————————————————————————————————————————————
 
-function greeting(): string {
+export function greeting(): string {
   const hour = new Date().getHours();
   return msg(hour < 5 ? 'music.greeting.night' : hour < 12 ? 'music.greeting.morning' : hour < 18 ? 'music.greeting.afternoon' : 'music.greeting.evening');
 }
@@ -170,7 +172,7 @@ function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; tit
 }
 
 /** Genres as tiles, each in a colour of its own drawn from the document's accent. */
-function Genres() {
+export function Genres() {
   const app = useMusic();
   const store = useVela();
   const m = useMediaLook();
@@ -190,8 +192,8 @@ function Genres() {
           <View key={g.id} style={[{ width: m.small ? (m.width - 48) / 2 : 196, height: m.small ? 96 : 112, borderRadius: Number(m.ui.radiusCard) || 12, padding: 14, overflow: 'hidden' },
             m.box({ 'background-image': `linear-gradient(135deg, hsl(${hues[i % hues.length]} 46% 38%) 0%, hsl(${(hues[i % hues.length]! + 34) % 360} 52% 22%) 100%)` })]}>
             <Text style={m.text({ 'font-size': '19px', 'font-weight': '750', color: '#ffffff' })}>{g.label}</Text>
-            <Text style={m.text({ 'font-size': '12px', color: 'rgba(255,255,255,0.72)' })}>{msg('music.albumsCount', { count: number(g.count) })}</Text>
-            <View style={{ position: 'absolute', right: -14, bottom: -18, transform: [{ rotate: '22deg' }], opacity: 0.22 }}><Glyph symbol="album" size={86} color="#ffffff" /></View>
+            <Text style={m.text({ 'font-size': '12px', color: 'rgba(255,255,255,0.72)' })}>{msg(listeningWords(app.listening).genreCount, { count: number(g.count) })}</Text>
+            <View style={{ position: 'absolute', right: -14, bottom: -18, transform: [{ rotate: '22deg' }], opacity: 0.22 }}><Icon name={app.listening === 'music' ? 'album' : 'headphones'} size={86} color="#ffffff" /></View>
           </View>
         ))}
       </View>
