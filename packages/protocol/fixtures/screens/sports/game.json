@@ -197,7 +197,7 @@
             { "type": "use", "template": "vela:pill", "id": "sports-reveal", "testId": "sports-reveal", "with": { "label": "{s:reveal}", "primary": "true" },
               "press": { "action": "plugin", "args": { "name": "ether.reveal", "event": "{param.event}" } } } ] } ] },
 
-        { "type": "box", "id": "watch", "when": [{ "test": "src.game.event.watch.targets.0" }], "style": { "gap": "10px" }, "children": [
+        { "type": "box", "id": "watch", "testId": "sports-watch-row", "when": [{ "test": "src.game.event.watch.targets.0" }], "style": { "gap": "10px" }, "children": [
           { "type": "use", "template": "panelTitle", "with": { "text": "{s:whereToWatch}" } },
           { "type": "box", "style": { "flex-direction": "row", "gap": "10px", "overflow-x": "auto", "align-items": "center", "padding": "6px 4px", "margin": "0 -4px" }, "children": [
             { "type": "repeat", "over": "src.game.event.watch.targets", "as": "w", "item": { "type": "use", "template": "vela:pill", "id": "sports-watch-{$index}", "testId": "sports-watch-{$index}",

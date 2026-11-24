@@ -225,7 +225,7 @@
               { "type": "box", "style": { "flex": "1", "background-color": "$palette.homeShare" } } ] },
             { "type": "text", "text": "{s:winProbability|with:abbr=e.probability.leader.abbr,share=e.probability.leader.share}",
               "style": { "font-size": "11.5px", "line-height": "1.25", "font-weight": "600", "color": "#ffffffc7" } } ] },
-          { "type": "box", "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px" }, "children": [
+          { "type": "box", "testId": "sports-hero-actions", "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px" }, "children": [
             { "type": "use", "template": "vela:pill", "testId": "sports-hero-watch", "when": [{ "test": "e.watch.primary.channelId" }],
               "with": { "label": "{s:watchOn|with:name=e.watch.primary.name,number=e.watch.primary.number}", "glyph": "play-fill", "primary": "true" },
               "press": { "action": "play", "args": { "channel": "{e.watch.primary.channelId}" } } },
