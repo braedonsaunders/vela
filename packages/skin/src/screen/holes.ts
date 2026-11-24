@@ -37,7 +37,7 @@ export interface HoleScope {
 /** A binding path: dot segments from a root (`$` allowed: `$index`, `$key`, `$pending`). */
 const PATH = /^[$A-Za-z_][\w$-]*(\.[\w$^-]+)*$/;
 
-const ENV_KEYS = new Set(['small', 'wide', 'tv', 'still', 'canMultiview', 'canPlay', 'canRetry', 'range5', 'range6']);
+const ENV_KEYS = new Set(['small', 'wide', 'tv', 'isTV', 'still', 'canMultiview', 'canPlay', 'canRetry', 'range5', 'range6']);
 
 const fillT = (t: Template, c: Ctx, e: Env): string =>
   typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
@@ -74,6 +74,8 @@ export function pathValue(path: string, scope: HoleScope): Value {
           case 'small': return e.small;
           case 'wide': return e.width >= 1200;
           case 'tv': return e.tv;
+          // The TV class (`tv`) includes a web window 1600px or wider; `isTV` is a TV device only.
+          case 'isTV': return e.isTV === true;
           case 'still': return e.still;
           case 'canMultiview': return e.canMultiview === true;
           case 'canPlay': return e.canPlay !== false;

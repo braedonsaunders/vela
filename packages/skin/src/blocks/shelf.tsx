@@ -1,19 +1,22 @@
 // The `shelf` layout block (`docs/plugin-screens.md` §6): virtualised horizontal row of items.
-// - Supports `itemWidth`: optional / `"auto"` (items size themselves), fixed length (`"286px"`),
-//   percentage (`"100%"`), or `"fit min..max"` (e.g. `"fit 320px..640px"` for standings tables,
-//   measuring `tableNaturalWidth + pad * 2 + px(8)` with `pad = px(16)`).
+// - Supports `itemWidth`: optional / `"auto"` (items size themselves), fixed length (`"286px"`,
+//   `"min(272px, 74vw)"`), percentage (`"100%"`), or `"fit min..max"` (e.g. `"fit 320px..640px"`
+//   for standings tables, measuring `tableNaturalWidth + pad * 2 + px(8)` with `pad = px(16)`).
 // - Supports `stableOrder`: preserves first-seen key order while mounted so toggling a property
 //   (such as `favorite` on a team pill) never reshuffles the shelf under a TV remote.
+// - Wraps each repeated item in `ScopedRecordNode` (`useRecordReader`) so a live record push only
+//   re-renders the card whose `$record` changed.
 // - Wraps the row in a TV `FocusBand` (`TVFocusGuideView autoFocus`) for focus memory.
 import { useMemo, useRef } from 'react';
 import { FlatList, View, type ViewStyle } from 'react-native';
 import { measure, useHost } from '../host';
-import { fill, type RNode, type Template } from '../resolve';
+import { fill, type RNode } from '../resolve';
 import { boxStyle } from '../translate';
 import type { Ctx, Env } from '../vocabulary';
 import { FocusBand } from './focus';
 import { applyStableOrder, parseItemWidth, parsePoints, resolveShelfItemWidth } from './layout-math';
 import { useBlockLook } from './look';
+import { ScopedRecordNode } from './record-scope';
 import { normalizeTableData, tableNaturalWidth } from './table-fit';
 import { useScreenBlockRuntime, type ShelfBlockNode, type TableBlockNode } from './types';
 
@@ -73,8 +76,8 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
   const availableInnerWidth = Math.max(px(220), look.width - look.gutter * 2);
   const gap = parsePoints(node.gap, px, px(14));
   const parsedWidth = useMemo(
-    () => parseItemWidth(node.itemWidth, px, availableInnerWidth),
-    [node.itemWidth, px, availableInnerWidth],
+    () => parseItemWidth(node.itemWidth, px, availableInnerWidth, look.width),
+    [node.itemWidth, px, availableInnerWidth, look.width],
   );
 
   // Reset `stableOrder` map when the page's active filter parameters change (just as Sports `Entities`
@@ -121,21 +124,29 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
   }
 
   const ownStyle = translateOwnStyle(node, ctx, host.env, host);
+  // Strip any CSS `gap` / `columnGap` from `contentContainerStyle` because `FlatList` spaces
+  // horizontal items via `ItemSeparatorComponent` (`width: gap`); leaving `gap` on the flex
+  // container would double-apply the gap between items on `react-native-web`.
+  const { gap: _ownGap, columnGap: _ownColumnGap, rowGap: _ownRowGap, ...cleanOwnStyle } = ownStyle as ViewStyle & {
+    gap?: unknown;
+    columnGap?: unknown;
+    rowGap?: unknown;
+  };
   const hasOwnPadding =
-    ownStyle.padding !== undefined ||
-    ownStyle.paddingHorizontal !== undefined ||
-    ownStyle.paddingVertical !== undefined ||
-    ownStyle.paddingLeft !== undefined ||
-    ownStyle.paddingRight !== undefined ||
-    ownStyle.paddingTop !== undefined ||
-    ownStyle.paddingBottom !== undefined;
+    cleanOwnStyle.padding !== undefined ||
+    cleanOwnStyle.paddingHorizontal !== undefined ||
+    cleanOwnStyle.paddingVertical !== undefined ||
+    cleanOwnStyle.paddingLeft !== undefined ||
+    cleanOwnStyle.paddingRight !== undefined ||
+    cleanOwnStyle.paddingTop !== undefined ||
+    cleanOwnStyle.paddingBottom !== undefined;
 
   const contentContainerStyle: ViewStyle = hasOwnPadding
-    ? ownStyle
+    ? cleanOwnStyle
     : {
         paddingHorizontal: look.gutter,
         paddingVertical: px(8),
-        ...ownStyle,
+        ...cleanOwnStyle,
       };
 
   const fixedWidth = parsedWidth.kind === 'fixed' ? parsedWidth.width : undefined;
@@ -159,7 +170,7 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
         getItemLayout={
           fixedWidth !== undefined && fixedStride !== undefined
             ? (_, index) => ({
-                length: fixedWidth,
+                length: fixedStride,
                 offset: look.gutter + index * fixedStride,
                 index,
               })
@@ -167,7 +178,7 @@ export function ShelfBlock({ node, ctx }: { node: ShelfBlockNode; ctx: Ctx }) {
         }
         renderItem={({ item }) => (
           <View style={item.width !== undefined ? { width: item.width } : undefined}>
-            {runtime.renderNode(node.item, item.ctx)}
+            <ScopedRecordNode node={node.item} ctx={item.ctx} renderNode={runtime.renderNode} />
           </View>
         )}
       />
