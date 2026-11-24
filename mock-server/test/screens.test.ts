@@ -385,7 +385,8 @@ describe('on a frozen clock', () => {
     const five = await readStream(mock, `/live/stream?${Array.from({ length: 5 }, () => `topic=${topic}`).join('&')}`, c.headers(), () => true);
     expect(five.status).toBe(400);
     expect(five.body.error.code).toBe('too_many_topics');
-    expect((await readStream(mock, '/live/stream?topic=lt1.bogus', c.headers(), () => true)).status).toBe(400);
+    const bogus = await readStream(mock, '/live/stream?topic=lt1.bogus', c.headers(), () => true);
+    expect([bogus.status, bogus.body.error.code]).toEqual([400, 'invalid_topic']);
   });
 });
 
