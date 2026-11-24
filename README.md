@@ -232,14 +232,18 @@ Releases are signed inventories. Ether installs them atomically, can roll back, 
 
 ## Getting started
 
-**On the desktop (Windows, macOS, Linux).** Download Vela from [the latest release](https://github.com/braedonsaunders/vela/releases/latest), open it, and type your server's address. Vela works on its own with **Ether, Jellyfin, Emby or Plex**; no Ether required. It updates itself from Vela's releases.
+**On iPhone, iPad and Apple TV.** Join the public beta on TestFlight: **[testflight.apple.com/join/3stC2TNe](https://testflight.apple.com/join/3stC2TNe)**. Open the link on your iPhone or iPad (or install TestFlight on the Apple TV and accept the same invite with your Apple ID), install Vela, and type your server's address. TestFlight delivers each new build automatically.
 
-| Platform | Download | Playback |
+**On the desktop and Android.** Download Vela from [the latest release](https://github.com/braedonsaunders/vela/releases/latest), open it, and type your server's address. Vela works on its own with **Ether, Jellyfin, Emby or Plex**; no Ether required. The desktop apps update themselves from Vela's releases.
+
+| Platform | Get it | Playback |
 | :--- | :--- | :--- |
-| **Windows 10/11** (x64) | `Vela-Setup-<version>-x64.exe`, a signed per-user installer | Native **libmpv** under the Vela player |
-| **macOS** (Apple silicon) | `Vela-<version>-mac-arm64.dmg`, signed and notarized | Native **AetherEngine** with EDR HDR |
-| **Linux** (x64) | `.AppImage` or `.deb` (glibc 2.35+, Ubuntu 22.04 and later) | Native **libmpv** with VA-API, VDPAU and NVDEC |
-| **Android, Android TV** | `Vela-<version>-android.apk` / `-androidtv.apk`, to sideload | **Media3 ExoPlayer** |
+| **iPhone, iPad** (iOS 18+) | [TestFlight public beta](https://testflight.apple.com/join/3stC2TNe) | Native **AetherEngine** with HDR and Dolby Vision |
+| **Apple TV** (tvOS 18+) | [TestFlight public beta](https://testflight.apple.com/join/3stC2TNe), via the TestFlight app on the Apple TV | Native **AetherEngine** with HDR, Dolby Vision and Atmos |
+| **Windows 10/11** (x64) | `Vela-Setup-<version>-x64.exe` from [the latest release](https://github.com/braedonsaunders/vela/releases/latest), a signed per-user installer | Native **libmpv** under the Vela player |
+| **macOS** (Apple silicon) | `Vela-<version>-mac-arm64.dmg` from [the latest release](https://github.com/braedonsaunders/vela/releases/latest), signed and notarized | Native **AetherEngine** with EDR HDR |
+| **Linux** (x64) | `.AppImage` or `.deb` from [the latest release](https://github.com/braedonsaunders/vela/releases/latest) (glibc 2.35+, Ubuntu 22.04 and later) | Native **libmpv** with VA-API, VDPAU and NVDEC |
+| **Android, Android TV** | `Vela-<version>-android.apk` / `-androidtv.apk` from [the latest release](https://github.com/braedonsaunders/vela/releases/latest), to sideload | **Media3 ExoPlayer** |
 
 **In the browser, with Ether.**
 
@@ -256,7 +260,7 @@ Vela includes no media and no provider accounts. Your servers supply the catalog
 | **Web / PWA** | Ships with Ether. Signed releases pass Ether's installer qualification (install, upgrade, rollback, reinstall). |
 | **Windows** | Standalone app with native mpv playback, an Authenticode-signed installer and self-updates. A new certificate builds SmartScreen reputation over its first downloads. |
 | **macOS, Linux** | Standalone apps with native playback (AetherEngine on Mac, libmpv on Linux) and self-updates. macOS builds are Developer ID signed and notarized. |
-| **Apple TV, iPhone, iPad** | Feature-complete on AetherEngine and in daily use on a real Apple TV and iPhone; TestFlight and the App Store are next. |
+| **Apple TV, iPhone, iPad** | Feature-complete on AetherEngine and in daily use on a real Apple TV and iPhone. Public beta on [TestFlight](https://testflight.apple.com/join/3stC2TNe); the App Store is next. |
 | **Android, Android TV** | Feature-complete on Media3 ExoPlayer; signed APKs to sideload. Real-device testing on Android TV and Google Play are next. |
 
 ## Questions you're about to ask
