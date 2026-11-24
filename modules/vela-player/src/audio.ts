@@ -242,6 +242,14 @@ export const AUDIO_PLAYBACK: Record<'ios' | 'android', { audioCodecs: string[]; 
   android: { audioCodecs: ['aac', 'mp3', 'alac', 'flac', 'opus', 'vorbis', 'pcm'], containers: ['mp3', 'aac', 'm4a', 'm4b', 'flac', 'ogg', 'webm', 'wav'] },
 };
 
+/** What an audio session declares on a device: exactly what the native audio player opens (AVPlayer or
+ * Media3), not the video player's decoders it does not share. Elsewhere the device's own list. */
+export function nativeAudioCapabilities(capabilities: PlayerCapabilities, os: string): PlayerCapabilities {
+  const audio = os === 'ios' || os === 'android' ? AUDIO_PLAYBACK[os] : undefined;
+  if (!audio) return capabilities;
+  return { containers: [...audio.containers], videoCodecs: [], audioCodecs: [...audio.audioCodecs], subtitleFormats: [], hls: capabilities.hls, mse: false };
+}
+
 /** The device's capabilities with the native audio player's direct-play formats added. */
 export function withAudioPlayback(capabilities: PlayerCapabilities, os: string): PlayerCapabilities {
   const audio = os === 'ios' || os === 'android' ? AUDIO_PLAYBACK[os] : undefined;

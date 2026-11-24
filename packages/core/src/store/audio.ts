@@ -74,6 +74,20 @@ export interface AudioRequest {
   source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
 }
 
+/** An engine length this much shorter than the plan's is of a stream still arriving, seconds. */
+const PARTIAL_DURATION = 2;
+
+/**
+ * The length to show for the playing item: the engine's (it reads the file itself, so it refines the
+ * plan's, a gapless trim included) unless it is well short of the plan's. An <audio> element playing a
+ * live transcode reports only what has arrived so far, 0:05 then 0:10, while the item is the plan's
+ * length.
+ */
+export function shownDuration(engine: number, planned: number): number {
+  if (!(engine > 0) || !Number.isFinite(engine)) return planned;
+  return planned > 0 && engine < planned - PARTIAL_DURATION ? planned : engine;
+}
+
 /** Autoplay asks for what follows this long before the last item ends, seconds. */
 const AUTOPLAY_LEAD = 60;
 
@@ -119,6 +133,8 @@ export class Audio {
   private lastPatch = 0;
   /** The next item's plan, asked for ahead of the current item's end (gapless playback). */
   private prepared: Prepared | undefined;
+  /** The playing item's length as its plan gave it (the engine's may refine it: shownDuration). */
+  private planned = 0;
   /** The session and next title whose preparation failed: not asked again until either changes. */
   private declined = '';
   /** Autoplay: what plays after a music title when the queue runs out (the server's continuation). */
@@ -335,7 +351,7 @@ export class Audio {
   private target(id: string, startSeconds = 0): Extract<PlaybackTarget, { kind: 'title' }> {
     const source = this.state.queue?.source;
     const context = source?.kind ? { kind: source.kind, id: source.id } : undefined;
-    return { kind: 'title', id, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}), ...(context ? { context } : {}) };
+    return { kind: 'title', id, audio: true, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}), ...(context ? { context } : {}) };
   }
 
   private begin(plan: V.PlaybackPlan, startSeconds: number): void {
@@ -349,7 +365,8 @@ export class Audio {
     this.sequence = 0;
     this.lastObservation = 0;
     const start = plan.positionSeconds > 0 ? plan.positionSeconds : startSeconds;
-    this.patch({ chapters: plan.chapters ?? [], durationSeconds: plan.durationSeconds ?? this.state.durationSeconds, positionSeconds: start });
+    this.planned = plan.durationSeconds ?? this.state.durationSeconds;
+    this.patch({ chapters: plan.chapters ?? [], durationSeconds: this.planned, positionSeconds: start });
     this.loadEngine(path, start, () => {
       if (this.autoplay) this.engine?.play();
       else this.held('paused');
@@ -486,9 +503,10 @@ export class Audio {
     this.lastObservation = 0;
     this.lastPatch = 0;
     this.playback.adopt(this.target(item.id), plan);
+    this.planned = plan.durationSeconds ?? item.durationSeconds;
     this.patch({
       queue: after, phase: 'playing', error: '', chapters: plan.chapters ?? [],
-      durationSeconds: plan.durationSeconds ?? item.durationSeconds, positionSeconds: this.engine?.position() ?? prepared.start,
+      durationSeconds: this.planned, positionSeconds: this.engine?.position() ?? prepared.start,
     });
     this.observe('playing');
   }
@@ -544,7 +562,11 @@ export class Audio {
       case 'playing': this.patch({ phase: 'playing', positionSeconds: position }); this.observe('playing'); break;
       case 'paused': if (this.state.phase !== 'ended') { this.patch({ phase: 'paused', positionSeconds: position }); this.observe('paused'); this.held('paused'); } break;
       case 'waiting': this.patch({ phase: 'buffering' }); break;
-      case 'duration': if (engine.duration() > 0) this.patch({ durationSeconds: engine.duration() }); break;
+      case 'duration': {
+        const duration = shownDuration(engine.duration(), this.planned);
+        if (duration > 0) this.patch({ durationSeconds: duration });
+        break;
+      }
       case 'error':
         // With the next item prepared, the playing item's session may have ended under it (a server with
         // one session per device): play on from where it was, on a new session, once.

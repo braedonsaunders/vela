@@ -4,6 +4,7 @@
 // needed; nothing holds the whole file.
 import { ALL_FORMATS, AudioSampleCursor, Input, MP3, MP4, QTFF, UrlSource, type InputAudioTrack } from 'mediabunny';
 import { keptFrames, readTrimFacts, trimFor, type GaplessTrim } from './trim';
+import { completeStream } from './length';
 
 /** This browser cannot open or decode the track: another engine should play it. */
 export class UnsupportedTrack extends Error {}
@@ -28,7 +29,20 @@ export class TrackStream {
   get duration(): number { return Number.isFinite(this.trim.end) ? this.trim.end - this.trim.start : 0; }
 
   static async open(url: string): Promise<TrackStream> {
-    const input = new Input({ formats: ALL_FORMATS, source: new UrlSource(url, { getRetryDelay: attempts => (attempts < 3 ? attempts : null) }) });
+    // A response that does not say how long the file is (a transcode still being produced) is refused
+    // at its first response, before any of it is read as the whole track (length.ts).
+    const sized: typeof fetch = async (input, init) => {
+      const response = await fetch(input, init);
+      if (response.ok && !completeStream(response.status, response.headers)) {
+        void response.body?.cancel().catch(() => undefined);
+        throw new UnsupportedTrack('This stream has no length yet');
+      }
+      return response;
+    };
+    const input = new Input({ formats: ALL_FORMATS, source: new UrlSource(url, {
+      fetchFn: sized,
+      getRetryDelay: (attempts, error) => (error instanceof UnsupportedTrack ? null : attempts < 3 ? attempts : null),
+    }) });
     try {
       const format = await input.getFormat().catch(error => { throw new UnsupportedTrack(error instanceof Error ? error.message : 'Unknown audio format'); });
       const track = await input.getPrimaryAudioTrack();

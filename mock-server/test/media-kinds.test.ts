@@ -92,6 +92,17 @@ describe('media kinds', () => {
     expect(titlesOf(await get(`/people/${person}/titles?libraryId=books`)).every(title => title.media?.class === 'book')).toBe(true);
   });
 
+  test("a client that does not declare the original's codec gets Ether's live transcode, not the file", async () => {
+    const aacOnly = { ...client, containers: ['mp4'], audioCodecs: ['aac', 'ac3', 'eac3'] };
+    const transcoded = await (await post('/playback', { titleId: 'track-paper-boats-1-06', client: aacOnly, idempotencyKey: key() })).json() as V.PlaybackPlan;
+    expect(transcoded.selectedPathId).toBe('transcode');
+    expect(transcoded.paths[0]).toMatchObject({ kind: 'transcode', mimeType: 'audio/mp4', range: false });
+    expect(transcoded.paths[0]!.url).toEndWith('/stream.m4a');
+    expect(transcoded.paths[0]!.byteLength).toBeUndefined();
+    const direct = await (await post('/playback', { titleId: 'track-paper-boats-1-06', client, idempotencyKey: key() })).json() as V.PlaybackPlan;
+    expect(direct.paths[0]).toMatchObject({ kind: 'direct', mimeType: 'audio/flac', range: true });
+  });
+
   test('an audio plan is one direct, range-capable file', async () => {
     const response = await post('/playback', { titleId: 'track-paper-boats-1-01', client, idempotencyKey: key() });
     expect(response.status).toBe(200);
