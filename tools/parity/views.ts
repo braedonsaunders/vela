@@ -69,7 +69,7 @@ export function reviewed(view: View, viewport: string): string | undefined {
 export function webPath(variant: Variant, page: View['page']): string {
   if ('index' in page) return variant === 'legacy' ? '/screen/sports' : '/screen/sports?screens=1';
   const event = encodeURIComponent(page.game);
-  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${event}&screens=1`;
+  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}&screens=1`;
 }
 
 /** A data-testid prefix, `text:…` or `wait:ms`, as a CSS/Playwright selector (or a wait). */
