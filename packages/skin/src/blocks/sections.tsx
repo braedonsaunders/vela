@@ -144,7 +144,7 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   const defaultGap = px(isPage ? 22 : 30);
   const gap = parsePoints(node.gap, px, defaultGap);
   const topPad = isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
-  const bottomPad = px(isPage ? 48 : 64);
+  const bottomPad = px(isPage ? 48 : 64) + (isPage ? 0 : gap);
 
   const inheritedRows: Record<string, string> = {};
   for (const [k, v] of Object.entries(node.base.style ?? {})) {
