@@ -4455,6 +4455,9 @@
         "outline": {
           "type": "string"
         },
+        "outline-offset": {
+          "type": "string"
+        },
         "overflow": {
           "type": "string"
         },

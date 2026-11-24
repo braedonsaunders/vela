@@ -41,8 +41,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
   const liveInk = readableInk(String(ui.live));
   const card = 'color-mix(in srgb, $ui.page 8%, $ui.raised 92%)';
   // A focused surface's ring in the accent and its lifted shadow (parts.tsx Surface: a 2.5px ring
-  // round the surface, shadow 0.45 over 18px, 10px down).
-  const ring: Style = { outline: '2.5px solid $ui.accent', 'box-shadow': '0px 10px 18px #00000073' };
+  // drawn 3px outside the surface, so 0.5px clear of it; shadow 0.45 over 18px, 10px down).
+  const ring: Style = { outline: '2.5px solid $ui.accent', 'outline-offset': '0.5px', 'box-shadow': '0px 10px 18px #00000073' };
   const cardHover = 'color-mix(in srgb, $ui.raised 94%, $ui.ink 6%)';
   const radiusCard = 'min($ui.radiusCard, 18px)';
   type Tone = 'quiet' | 'primary' | 'onColor';
