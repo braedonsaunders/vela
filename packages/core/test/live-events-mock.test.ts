@@ -16,7 +16,7 @@ const device = { id: 'live-events-device-123', name: 'Browser', platform: 'web',
 beforeAll(async () => {
   mock = await launchMock({ VELA_MOCK_LIVE_TICK_MS: '100' });
   const code = (await (await fetch(`${mock.url}/__admin/web-code`, { method: 'POST' })).json()).code as string;
-  store = createVela({ etherOrigin: mock.url, secrets: new MemoryStore(), device, appVersion: '0.2.9', rendererVersion: 17,
+  store = createVela({ etherOrigin: mock.url, secrets: new MemoryStore(), device, appVersion: '0.2.9', rendererVersion: 19,
     media: { containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: { native: false, fmp4: false, mpegTs: false }, mse: false } as never,
     page: { origin: mock.url, webCode: code }, artWidth: 640 } as VelaPlatform & { rendererVersion: number });
   await store.auth.start();

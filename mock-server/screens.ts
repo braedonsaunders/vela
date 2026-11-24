@@ -1,0 +1,702 @@
+// Plugin screens and surfaces, shaped exactly like Ether's design (plugin-screens/ether-design.md
+// sections 3b, 5.4, 6 and 7; docs/plugin-screens.md): bootstrap navigation and surfaces, immutable
+// documents (served from packages/protocol/fixtures/screens with `deps` added), per-viewer data
+// with the section 5.4 view-model records, the ether.* actions, and /live/stream page topics
+// (`records`, `source`, `alert` frames). The records are derived from the Sports simulation in
+// sports.ts, so a goal there is a record push here.
+//
+// Knobs: VELA_MOCK_NO_FROM_START=1 serves watch targets without programme/fromStart (Ether v1);
+// VELA_MOCK_SCREEN_FIXTURES=<dir> reads the documents from another directory (same layout).
+// A client that sends no X-Vela-Screen-Renderer gets no screens and no surfaces (hard cut).
+import { createHash } from 'node:crypto';
+import { readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import type * as V from '../packages/protocol/types';
+import { entityKey, sportsEnabled, sportsGate, sportsModel, sportsNow, type SportsSim } from './sports';
+
+type Fail = (cls: V.ProtocolError['class'], code: string, message: string, extra?: Partial<V.ProtocolError>, status?: number) => never;
+type Json = Record<string, unknown>;
+
+const FIXTURES = process.env.VELA_MOCK_SCREEN_FIXTURES || join(import.meta.dir, '../packages/protocol/fixtures/screens');
+const noFromStart = process.env.VELA_MOCK_NO_FROM_START === '1';
+const H = 3600_000;
+
+// Documents
+
+interface Page { screen: string; page: string; file: string }
+interface SurfaceSpec { id: string; file: string; contribution: Omit<V.SurfaceContribution, 'id' | 'document'> }
+
+/** Sports' screen pages and surfaces. A surface is offered only once its document exists. */
+const PAGES: Page[] = [
+  { screen: 'sports', page: 'index', file: 'sports/index.json' },
+  { screen: 'sports', page: 'game', file: 'sports/game.json' },
+];
+const NAVIGATION = [{ id: 'sports', title: 'Sports', icon: 'sports', page: 'index' }];
+const SURFACES: SurfaceSpec[] = [
+  { id: 'sports.scorebug', file: 'sports/surfaces/scorebug.json', contribution: { presentation: 'playerOverlay', anchor: 'topLeft', when: { event: { feed: 'sports' } }, visibility: 'always',
+    setting: { id: 'scorebug', label: 'Score', default: true } } },
+  { id: 'sports.ticker', file: 'sports/surfaces/ticker.json', contribution: { presentation: 'playerOverlay', anchor: 'bottom', when: { kind: 'channel' }, visibility: 'toggle',
+    setting: { id: 'ticker', label: 'Scores ticker', default: false } } },
+  { id: 'sports.alert', file: 'sports/surfaces/alert.json', contribution: { presentation: 'toast', when: { alert: { plugin: 'sports' } }, ttl: 12 } },
+  { id: 'sports.tonight', file: 'sports/surfaces/tonight.json', contribution: { presentation: 'homeRow' } },
+];
+
+interface Compiled { document: V.ScreenDocument; hash: string; mtime: number }
+const compiled = new Map<string, Compiled>();
+
+/** A fixture with `deps` added to each source (its {param.x} holes), hashed; read again when the file changes. */
+function load(file: string): Compiled | undefined {
+  const path = join(FIXTURES, file);
+  let mtime: number;
+  try { mtime = statSync(path).mtimeMs; } catch { return undefined; }
+  const known = compiled.get(file);
+  if (known && known.mtime === mtime) return known;
+  const document = JSON.parse(readFileSync(path, 'utf8')) as V.ScreenDocument;
+  for (const spec of Object.values(document.sources ?? {})) spec.deps = holes(spec, 'param');
+  const hash = createHash('sha256').update(JSON.stringify(document)).digest('hex').slice(0, 16);
+  const entry = { document, hash, mtime };
+  compiled.set(file, entry);
+  return entry;
+}
+
+function holes(spec: V.SourceSpec, scope: 'param' | 'context'): string[] {
+  const { deps: _deps, from: _from, lazy: _lazy, ...args } = spec;
+  const found = new Set<string>();
+  for (const match of JSON.stringify(args).matchAll(new RegExp(`\\{${scope}\\.([A-Za-z0-9_.-]+)\\}`, 'g'))) found.add(match[1]!);
+  return [...found].sort();
+}
+
+const rendererOf = (req: Request) => { const n = Number(req.headers.get('x-vela-screen-renderer')); return Number.isInteger(n) && n > 0 ? n : 0; };
+const pageHref = (page: Page, doc: Compiled) => `/vela/v0/screens/${page.screen}/pages/${page.page}/document?v=${doc.hash}&r=${doc.document.renderer}&l=en`;
+const surfaceHref = (spec: SurfaceSpec, doc: Compiled) => `/vela/v0/surfaces/${spec.id}/document?v=${doc.hash}&r=${doc.document.renderer}&l=en`;
+
+// Viewer state that is the screens' own: surface switches.
+const surfaceSettings = new Map<string, Map<string, boolean>>();
+const settingOf = (viewerId: string, spec: SurfaceSpec) => surfaceSettings.get(viewerId)?.get(spec.id) ?? spec.contribution.setting?.default ?? true;
+
+/** Bootstrap's navigation, surfaces and the surface Home row, for a client that draws screens. */
+export function screensBootstrap(req: Request, viewerId: string): { navigation?: V.ScreenNavigationEntry[]; surfaces?: V.SurfaceContribution[]; homeRow?: V.SurfaceRow } {
+  const renderer = rendererOf(req);
+  if (!sportsEnabled || !renderer) return {};
+  const navigation = NAVIGATION.flatMap(entry => {
+    const page = PAGES.find(p => p.screen === entry.id && p.page === entry.page)!;
+    const doc = load(page.file);
+    return doc && doc.document.renderer <= renderer ? [{ kind: 'screen' as const, ...entry, document: { href: pageHref(page, doc), renderer: doc.document.renderer } }] : [];
+  });
+  const surfaces = SURFACES.flatMap(spec => {
+    const doc = load(spec.file);
+    if (!doc || doc.document.renderer > renderer) return [];
+    const setting = spec.contribution.setting ? { ...spec.contribution.setting, enabled: settingOf(viewerId, spec) } : undefined;
+    return [{ id: spec.id, ...spec.contribution, ...(setting ? { setting } : {}), document: { href: surfaceHref(spec, doc), renderer: doc.document.renderer } } as V.SurfaceContribution];
+  });
+  const row = surfaces.find(surface => surface.presentation === 'homeRow');
+  return { ...(navigation.length ? { navigation } : {}), ...(surfaces.length ? { surfaces } : {}),
+    ...(row ? { homeRow: { kind: 'surface', id: `surface:sports:${row.id.split('.')[1]}`, surface: row.id } } : {}) };
+}
+
+function serveDocument(req: Request, url: URL, doc: Compiled, fresh: string, fail: Fail): Response {
+  if (doc.document.renderer > rendererOf(req)) fail('not-found', 'screen_not_found', 'No variant of this page fits this client');
+  const v = url.searchParams.get('v');
+  if (v && v !== doc.hash) return new Response(null, { status: 301, headers: { Location: fresh, 'Cache-Control': 'no-store' } });
+  const etag = `"${doc.hash}"`;
+  const headers = { ETag: etag, 'Cache-Control': 'private, max-age=31536000, immutable', 'Content-Type': 'application/json' };
+  if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers });
+  return new Response(JSON.stringify(doc.document), { headers });
+}
+
+// Revisions: rev = max(last + 1, now), bumped only when the content hash changes (Ether section 7).
+
+const revs = new Map<string, { hash: string; rev: number }>();
+let lastRev = 0;
+function revOf(scope: string, value: unknown): number {
+  const hash = createHash('sha1').update(JSON.stringify(value) ?? 'undefined').digest('base64');
+  const known = revs.get(scope);
+  if (known && known.hash === hash) return known.rev;
+  lastRev = Math.max(lastRev + 1, Date.now());
+  revs.set(scope, { hash, rev: lastRev });
+  return lastRev;
+}
+
+// Time, in the viewer's zone
+
+function zone(tz: string | null): string {
+  if (tz) try { new Intl.DateTimeFormat('en', { timeZone: tz }); return tz; } catch { /* the server zone */ }
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
+/** The local date (YYYY-MM-DD) of an instant in a zone. */
+function localDay(at: number, tz: string): string {
+  let format = dayFormats.get(tz);
+  if (!format) dayFormats.set(tz, format = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }));
+  return format.format(at);
+}
+function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// View models (Ether section 5.4), from the event as the viewer reads it (spoiler mask applied)
+
+const recordKey = (id: string) => `event:${id}`;
+const detailKey = (id: string) => `detail:${id}`;
+const entityRecord = (favKey: string) => `entity:${favKey}`;
+const ref = (key: string) => ({ $record: key });
+
+export function leagueLabel(league: { name: string; abbr?: string }): string {
+  const name = league.name.trim(), abbr = (league.abbr ?? '').trim();
+  if (!abbr || !name || abbr.toLowerCase() === name.toLowerCase()) return name || abbr;
+  const words = name.split(/\s+/);
+  if (words[0]!.toLowerCase() === abbr.toLowerCase()) return abbr;
+  const initials = words.map(word => /^\d+$/.test(word) ? word : word[0]!).join('');
+  if (initials.toLowerCase() === abbr.toLowerCase() && (abbr.length >= 3 || name.length > 8)) return abbr;
+  if (name.length <= 12) return name;
+  return abbr;
+}
+const leagueOf = (league: V.LiveLeague) => ({ id: league.id, name: league.name, ...(league.abbr ? { abbr: league.abbr } : {}), label: leagueLabel(league) });
+
+export function phaseOf(state: V.LiveEventState): 'live' | 'upcoming' | 'final' | 'off' {
+  return state === 'in' ? 'live' : state === 'pre' || state === 'delayed' ? 'upcoming' : state === 'post' ? 'final' : 'off';
+}
+export function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length > 1) return words.slice(0, 3).map(w => w[0]!).join('').toUpperCase();
+  return (words[0] ?? '').slice(0, 3).toUpperCase();
+}
+const hex = (value: string | undefined) => {
+  if (!value) return undefined;
+  const h = value.startsWith('#') ? value.slice(1) : value;
+  return /^[0-9a-f]{6}$/i.test(h) ? `#${h.toLowerCase()}` : undefined;
+};
+const tunable = (t: V.WatchTarget) => !!t.channelId && t.available !== false;
+const watchScore = (t: V.WatchTarget) => (t.live ? 2 : 0) + (t.kind === 'channel' && t.channelId ? 1 : 0) + t.confidence;
+
+/** Where to watch: tunable targets best first, the first as `primary`, and at most two other places it airs. */
+export function watchOf(event: V.LiveEvent) {
+  const all = event.watch ?? [];
+  const targets = all.filter(tunable).sort((a, b) => watchScore(b) - watchScore(a)).map(t => {
+    const fromStart = noFromStart || !t.programme ? undefined : t.programme.catchUp ? 'catchUp' : t.programme.startOver ? 'startOver' : undefined;
+    return { kind: t.kind, channelId: t.channelId!, name: t.name, ...(t.number ? { number: t.number } : {}), ...(t.logo ? { logo: t.logo } : {}), live: t.live, confidence: t.confidence,
+      ...(fromStart && t.programme ? { fromStart, programme: { id: t.programme.id, start: t.programme.start, end: t.programme.end } } : {}) };
+  });
+  const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9+]/g, '');
+  const tuned = new Set(targets.map(t => key(t.name)));
+  const unavailable = all.filter(t => t.channelId && t.available === false).map(t => ({ name: t.number ? `${t.name} · ${t.number}` : t.name, unavailable: true }));
+  const addons = all.filter(t => !tunable(t) && t.kind === 'addon').map(t => ({ name: t.name }));
+  const rank = { tv: 0, stream: 1, radio: 2 } as const;
+  const broadcasts = [...(event.broadcasts ?? [])].sort((a, b) => (rank[a.kind] ?? 3) - (rank[b.kind] ?? 3)).map(b => ({ name: b.name }));
+  const seen = new Set<string>();
+  const airing = [...unavailable, ...addons, ...broadcasts].filter(item => {
+    const k = key(item.name);
+    if (!item.name.trim() || tuned.has(k) || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).slice(0, 2);
+  const primary = targets[0];
+  return { targets, ...(primary ? { primary } : {}), airing };
+}
+
+/** The `event:` record: facts the documents compose sentences from. */
+export function eventView(event: V.LiveEvent, favourites: ReadonlySet<string>): Json {
+  const phase = phaseOf(event.status.state);
+  const spoiler = event.spoiler === true;
+  const isFav = (c: V.LiveCompetitor) => !!c.entityId && [...favourites].some(key => key === c.entityId || key.endsWith(`:${c.entityId}`));
+  const [a, b] = event.competitors;
+  const pair = a && b && event.competitors.length === 2 ? (a.home && !b.home ? [b, a] : [a, b]) : null;
+  const final = phase === 'final';
+  // Probability: the home side's chance, the side the series is about, and who leads.
+  const p = !spoiler && pair && event.probability && Number.isFinite(event.probability.value) ? event.probability : undefined;
+  const subject = p ? Math.max(0, pair!.findIndex(c => c.id === (p.competitorId ?? pair![0]!.id))) : 0;
+  const value = p ? Math.min(1, Math.max(0, p.value)) : 0;
+  const home = p ? (subject === 1 ? value : 1 - value) : undefined;
+  const homeShare = home !== undefined ? Math.round(home * 100) : undefined;
+  const sides = pair?.map((c, n) => {
+    const other = pair[n ? 0 : 1]!;
+    const score = c.score ?? '';
+    const lost = final && (c.winner === false && other.winner === true || (!c.winner && !other.winner && Number(score) < Number(other.score ?? '')));
+    const share = homeShare !== undefined ? (n === 1 ? homeShare : 100 - homeShare) : undefined;
+    return {
+      id: c.id, name: c.name, short: c.short || c.name, abbr: c.abbr || initials(c.short || c.name), ...(c.logo ? { logo: relative(c.logo) } : {}),
+      ...(hex(c.color) ? { color: hex(c.color) } : {}), ...(hex(c.altColor) ? { altColor: hex(c.altColor) } : {}),
+      score, record: c.record ?? '', ...(c.entityId ? { entityId: c.entityId } : {}), favourite: isFav(c),
+      winner: final && (c.winner === true || !lost && Number(score) > Number(other.score ?? '')), loser: lost,
+      ...(share !== undefined ? { share, leads: n === 1 ? home! >= 0.5 : home! < 0.5 } : {}),
+    };
+  });
+  const scored = !!sides && !spoiler && phase !== 'upcoming' && sides.every(s => s.score !== '');
+  const shown = new Set([event.status.detail, event.status.clock].filter(Boolean).map(text => String(text).trim()));
+  const situation = spoiler ? [] : Object.entries(event.situation ?? {}).filter(([, v]) => typeof v === 'string' && v.trim() !== '' && !shown.has(v.trim())).map(([label, v]) => ({ label, value: v }));
+  const counts = new Map<number, number>();
+  for (const row of event.ranking ?? []) counts.set(row.pos, (counts.get(row.pos) ?? 0) + 1);
+  const venue = !event.venue ? '' : typeof event.venue === 'string' ? event.venue : [event.venue.name, event.venue.city].filter(Boolean).join(', ');
+  return {
+    id: event.id, feed: event.feed, category: event.category, phase, state: event.status.state, detail: event.status.detail,
+    ...(event.status.clock ? { clock: event.status.clock } : {}), ...(event.status.period !== undefined ? { period: event.status.period } : {}),
+    spoiler, close: !spoiler && event.status.close === true, scored, start: event.start,
+    league: leagueOf(event.league), ...(event.title ? { title: event.title } : {}), ...(venue ? { venue } : {}),
+    favourite: !!sides?.some(s => s.favourite),
+    ...(sides ? { sides } : {}),
+    situation,
+    watch: watchOf(event),
+    ...(p && sides && home !== undefined ? { probability: { home, away: Math.round((1 - home) * 1000) / 1000, subjectSide: subject,
+      leader: { abbr: home >= 0.5 ? sides[1]!.abbr : sides[0]!.abbr, share: Math.round(Math.max(home, 1 - home) * 100) } } } : {}),
+    ...(event.ranking && !spoiler ? { ranking: event.ranking.filter(row => row && typeof row.name === 'string').map(row => ({
+      place: Number.isFinite(row.pos) ? `${(counts.get(row.pos) ?? 0) > 1 ? 'T' : ''}${row.pos}` : '', pos: row.pos, name: row.name, ...(row.abbr ? { abbr: row.abbr } : {}),
+      detail: (row.detail ?? '').trim(), secondary: (row.secondary ?? '').trim(), ...(row.entityId ? { entityId: row.entityId } : {}),
+      favourite: !!row.entityId && [...favourites].some(key => key.endsWith(`:${row.entityId}`)),
+    })) } : {}),
+  };
+}
+
+/** The `detail:` record: plays (oldest first, with at/score; and newest first), tables, the series and links. */
+export function detailView(detail: V.LiveEventDetail, abbrs: ReadonlySet<string>): Json {
+  const plays = detail.plays.map(play => ({ ...(play.clock ? { clock: play.clock } : {}), ...(play.period !== undefined ? { period: play.period } : {}), text: play.text,
+    emphasis: play.emphasis, ...(play.competitorId ? { competitorId: play.competitorId } : {}), ...(play.at ? { at: play.at } : {}), ...(play.score ? { score: play.score } : {}) }));
+  // Oldest first on the wire, unless the periods already run backwards.
+  const first = plays[0]?.period, last = plays.at(-1)?.period;
+  const oldest = plays.length > 1 && first !== undefined && last !== undefined && first > last ? [...plays].reverse() : plays;
+  return {
+    id: detail.id, plays: oldest, playsNewest: [...oldest].reverse(),
+    tables: detail.tables.map(table => tableView(table, row => row.some(cell => abbrs.has(cell)))),
+    probabilitySeries: detail.probabilitySeries,
+    links: detail.links.flatMap(link => { const value = linkOf(link.url); return value ? [{ label: link.label, url: value }] : []; }),
+  };
+}
+
+export function tableView(table: V.LiveTable, highlight: (row: readonly string[]) => boolean) {
+  return { title: table.title, columns: table.columns, rows: table.rows.map(cells => ({ cells, ...(highlight(cells) ? { highlight: true } : {}) })) };
+}
+
+/** Ether's `$link` envelope after rewriting: https only, no credentials. */
+function linkOf(url: string): { href: string; host: string } | undefined {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password ? { href: parsed.href, host: parsed.host } : undefined;
+  } catch { return undefined; }
+}
+/** Images as Ether serves them: same-origin paths under /vela/v0/. */
+function relative(url: string): string {
+  try { const parsed = new URL(url, 'http://x'); return parsed.pathname.startsWith('/vela/v0/') ? `${parsed.pathname}${parsed.search}` : ''; } catch { return ''; }
+}
+
+// Sources
+
+interface Read { viewerId: string; tz: string; records: Record<string, V.RecordEntry>; scope: string }
+
+const viewerScope = (viewerId: string, key: string) => `${viewerId}|${key}`;
+function putRecord(read: Read, key: string, value: unknown): void {
+  read.records[key] = { rev: revOf(viewerScope(read.viewerId, key), value), value };
+}
+function eventRef(read: Read, sim: SportsSim): { $record: string } {
+  const key = recordKey(sim.id);
+  if (!read.records[key]) putRecord(read, key, eventView(sportsModel.event(sim, read.viewerId), sportsModel.favourites(read.viewerId)));
+  return ref(key);
+}
+function detailRef(read: Read, sim: SportsSim): { $record: string } {
+  const key = detailKey(sim.id);
+  if (!read.records[key]) {
+    const favourites = sportsModel.favourites(read.viewerId);
+    const abbrs = new Set(sportsModel.teams().filter(t => favourites.has(entityKey(t.id))).map(t => t.abbr));
+    putRecord(read, key, detailView(sportsModel.detail(sim, read.viewerId), abbrs));
+  }
+  return ref(key);
+}
+function entityRef(read: Read, team: ReturnType<typeof sportsModel.teams>[number]): { $record: string } {
+  const favKey = entityKey(team.id);
+  const key = entityRecord(favKey);
+  if (!read.records[key]) putRecord(read, key, { key: favKey, id: team.id, name: team.name, abbr: team.abbr, logo: relative(sportsModel.logo(team.id)), league: team.league,
+    color: `#${team.color}`, favourite: sportsModel.favourites(read.viewerId).has(favKey) });
+  return ref(key);
+}
+
+const list = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && !!v) : typeof value === 'string' && value ? value.split(',').filter(Boolean) : [];
+const simId = (value: string) => value.startsWith('event:') ? value.slice('event:'.length) : value;
+
+/** Ether's `featured` order: a favourite in progress, then in progress (earliest started first),
+ * upcoming soonest first, finals most recent first. */
+function featured(viewerId: string) {
+  const rank = (sim: SportsSim) => sim.state === 'in' ? (sportsModel.isFavourite(sim, viewerId) ? 0 : 1) : sim.state === 'pre' || sim.state === 'delayed' ? 2 : 3;
+  return (a: SportsSim, b: SportsSim) => rank(a) - rank(b) || (rank(a) === 3 ? b.start - a.start : a.start - b.start);
+}
+
+/** One source's value for the viewer, its records added to `read`. Throws a code for a source the mock cannot read. */
+function resolveSource(spec: V.SourceSpec, args: Json, read: Read): unknown {
+  const now = sportsNow();
+  const today = localDay(now, read.tz);
+  switch (spec.from) {
+    case 'viewer': {
+      const favourites = sportsModel.favourites(read.viewerId);
+      return { spoilerFree: sportsModel.spoilerFree(read.viewerId), canSetSpoilerFree: true, locale: 'en', favouriteCount: favourites.size };
+    }
+    case 'liveLeagues':
+      return { leagues: sportsModel.leagues().map(({ category: _c, ...league }) => ({ ...leagueOf(league), ...(league.logo ? { logo: league.logo } : {}) })), selected: typeof args.league === 'string' ? args.league : '' };
+    case 'liveEvents': {
+      const query = (args.query && typeof args.query === 'object' ? args.query : {}) as Json;
+      const states = list(query.state), ids = list(query.ids).map(simId);
+      const league = typeof query.league === 'string' ? query.league : '';
+      const exclude = typeof args.exclude === 'string' ? simId(args.exclude) : '';
+      let sims = sportsModel.sims().filter(sim => (!league || sim.league === league) && (!states.length || states.includes(sim.state)) && (!ids.length || ids.includes(sim.id)) && sim.id !== exclude
+        && (!query.category || sportsModel.league(sim.league)?.category === query.category)
+        && (query.favorites !== true || sportsModel.isFavourite(sim, read.viewerId)));
+      if (query.window === 'today') sims = sims.filter(sim => sim.state === 'in' || localDay(sim.start, read.tz) === today);
+      if (query.window === 'week') sims = sims.filter(sim => Math.abs(sim.start - now) < 7 * 24 * H);
+      if (query.window === 'recent') sims = sims.filter(sim => sim.state === 'post' && now - sim.start < 48 * H);
+      sims.sort(args.sort === 'start' ? (a, b) => a.start - b.start : featured(read.viewerId));
+      const limit = Math.max(1, Math.min(100, Number(args.limit) || 100));
+      return { events: sims.slice(0, limit).map(sim => eventRef(read, sim)) };
+    }
+    case 'liveSchedule': {
+      const league = typeof args.league === 'string' ? args.league : '';
+      const sims = sportsModel.sims().filter(sim => !league || sim.league === league);
+      const days = [-2, -1, 0, 1, 2, 3, 4].map(n => addDays(today, n));
+      const date = typeof args.date === 'string' && days.includes(args.date) ? args.date : typeof args.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.date) ? args.date : today;
+      const index = days.indexOf(date);
+      return {
+        date, ...(index > 0 ? { previous: days[index - 1] } : index < 0 ? { previous: addDays(date, -1) } : {}),
+        ...(index >= 0 && index < days.length - 1 ? { next: days[index + 1] } : index < 0 ? { next: addDays(date, 1) } : {}),
+        days: days.map(day => ({ date: day, count: sims.filter(sim => localDay(sim.start, read.tz) === day).length })),
+        events: sims.filter(sim => localDay(sim.start, read.tz) === date).sort((a, b) => a.start - b.start).map(sim => eventRef(read, sim)),
+      };
+    }
+    case 'liveEvent': {
+      const id = typeof args.id === 'string' ? simId(args.id) : '';
+      const sim = id ? sportsModel.sim(id) : undefined;
+      if (!sim) throw new SourceFailure('not_found');
+      return { event: eventRef(read, sim), detail: detailRef(read, sim) };
+    }
+    case 'liveTables': {
+      const asked = typeof args.league === 'string' ? args.league : '';
+      const league = asked && sportsModel.standings(asked) ? asked : 'nfl';
+      const favourites = sportsModel.favourites(read.viewerId);
+      // The mock's standings name teams by their short name: a favourite's row is lit by it.
+      const names = new Set(sportsModel.teams().filter(t => favourites.has(entityKey(t.id))).map(t => t.short));
+      const info = sportsModel.league(league)!;
+      return { league: { id: info.id, name: info.name, label: leagueLabel(info) }, tables: (sportsModel.standings(league) ?? []).map(table => tableView(table, row => row.some(cell => names.has(cell)))) };
+    }
+    case 'liveEntities': {
+      const favourites = sportsModel.favourites(read.viewerId);
+      const leagues = sportsModel.leagues().map(({ category: _c, ...league }) => leagueOf(league));
+      const teams = sportsModel.teams();
+      const followed = (t: (typeof teams)[number]) => favourites.has(entityKey(t.id));
+      const known = (id: unknown) => typeof id === 'string' && !!id && leagues.some(l => l.id === id) ? id : '';
+      const opening = known(args.league) || known(args.prefer) || teams.find(followed)?.league || leagues.find(l => teams.some(t => t.league === l.id))?.id || leagues[0]?.id || '';
+      const q = typeof args.q === 'string' ? args.q.toLowerCase() : '';
+      const entities = teams.filter(t => t.league === opening && (!q || `${t.name} ${t.abbr}`.toLowerCase().includes(q)))
+        .sort((a, b) => Number(followed(b)) - Number(followed(a)) || a.name.localeCompare(b.name));
+      return { entities: entities.map(t => entityRef(read, t)), leagues, opening };
+    }
+    case 'watch': {
+      const sim = typeof args.event === 'string' ? sportsModel.sim(simId(args.event)) : undefined;
+      if (!sim) throw new SourceFailure('not_found');
+      return watchOf(sportsModel.event(sim, read.viewerId));
+    }
+    default:
+      throw new SourceFailure('unsupported_source');
+  }
+}
+
+class SourceFailure extends Error { constructor(readonly code: string) { super(code); } }
+
+/** A source's arguments with {param.x} and {context.x} filled (a missing one reads ''). */
+function fill(value: unknown, values: Record<string, string>): unknown {
+  if (typeof value === 'string') {
+    const whole = /^\{((?:param|context)\.[A-Za-z0-9_.-]+)\}$/.exec(value);
+    if (whole) return values[whole[1]!] ?? '';
+    return value.replace(/\{((?:param|context)\.[A-Za-z0-9_.-]+)\}/g, (_, name: string) => values[name] ?? '');
+  }
+  if (Array.isArray(value)) return value.map(item => fill(item, values));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fill(v, values)]));
+  return value;
+}
+
+// Pages (screens and surfaces) as one shape
+
+interface Owner { kind: 'screen'; screen: string; page: string; doc: Compiled }
+interface SurfaceOwner { kind: 'surface'; surface: string; doc: Compiled }
+type Target = Owner | SurfaceOwner;
+
+/** What a sealed topic binds: viewer, page or surface, canonical params and context, time zone, live sources. */
+interface Topic { v: string; t: { kind: 'screen'; screen: string; page: string } | { kind: 'surface'; surface: string }; p: Record<string, string>; tz: string; s: string[] }
+
+function targetOf(t: Topic['t']): Target | undefined {
+  if (t.kind === 'screen') {
+    const page = PAGES.find(p => p.screen === t.screen && p.page === t.page);
+    const doc = page && load(page.file);
+    return doc ? { kind: 'screen', screen: t.screen, page: t.page, doc } : undefined;
+  }
+  const spec = SURFACES.find(s => s.id === t.surface);
+  const doc = spec && load(spec.file);
+  return doc ? { kind: 'surface', surface: t.surface, doc } : undefined;
+}
+const sealTopic = (topic: Topic) => `lt1.${Buffer.from(JSON.stringify(topic)).toString('base64url')}`;
+function openTopic(token: string): Topic | undefined {
+  if (!token.startsWith('lt1.')) return undefined;
+  try { const topic = JSON.parse(Buffer.from(token.slice(4), 'base64url').toString()) as Topic; return topic?.t && topic.p && Array.isArray(topic.s) ? topic : undefined; } catch { return undefined; }
+}
+
+const CONTEXT = ['event', 'channel', 'title', 'kind', 'alert.ref'];
+
+/** Validated page params (declared, typed, defaults applied) and the surface's context, as `param.x` / `context.x`. */
+function inputs(target: Target, url: URL, fail: Fail): Record<string, string> {
+  const declared = target.doc.document.params ?? {};
+  const values: Record<string, string> = {};
+  for (const [name, value] of url.searchParams) {
+    if (!name.startsWith('p.')) continue;
+    const key = name.slice(2);
+    if (target.kind === 'surface' && CONTEXT.includes(key)) { values[`context.${key}`] = value; continue; }
+    const spec = declared[key];
+    if (!spec) fail('request', 'invalid_param', `Unknown param ${key}`);
+    if (value === '') continue;
+    const bad = (spec.max !== undefined && value.length > spec.max) || value.length > 512
+      || (spec.enum && !spec.enum.includes(value)) || (spec.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value))
+      || (spec.type === 'int' && !/^-?\d+$/.test(value)) || (spec.type === 'bool' && value !== 'true' && value !== 'false');
+    if (bad) fail('request', 'invalid_param', `Invalid value for ${key}`);
+    values[`param.${key}`] = value;
+  }
+  for (const [name, spec] of Object.entries(declared)) if (values[`param.${name}`] === undefined && spec.default) values[`param.${name}`] = spec.default;
+  // Refs are re-checked against what the viewer may see: an unknown event is a 404 for the whole read.
+  for (const [name, value] of Object.entries(values)) {
+    const isRef = (name.startsWith('param.') && declared[name.slice(6)]?.type === 'ref') || name === 'context.event' || name === 'context.alert.ref';
+    if (isRef && value && !sportsModel.sim(simId(value))) fail('not-found', 'screen_not_found', 'Not found');
+  }
+  return values;
+}
+
+/** Resolve the asked sources (every one that is not lazy when none is named) into a data answer. */
+function resolve(target: Target, values: Record<string, string>, viewerId: string, tz: string, asked: string[] | undefined): V.ScreenData & { names: string[] } {
+  const specs = target.doc.document.sources ?? {};
+  const names = asked ?? Object.entries(specs).filter(([, spec]) => !spec.lazy).map(([name]) => name);
+  const pageScope = target.kind === 'screen' ? `screen:${target.screen}/${target.page}` : `surface:${target.surface}`;
+  const canonical = Object.entries(values).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => `${k}=${v}`).join('&');
+  const read: Read = { viewerId, tz, records: {}, scope: `${pageScope}?${canonical}|${tz}` };
+  const sources: Record<string, unknown> = {};
+  const errors: Record<string, V.SourceError> = {};
+  let rev = 0;
+  for (const name of names) {
+    const spec = specs[name];
+    if (!spec) continue;
+    try {
+      const value = resolveSource(spec, fill(spec, values) as Json, read);
+      sources[name] = value;
+      rev = Math.max(rev, revOf(viewerScope(viewerId, `${read.scope}|${name}`), value));
+    } catch (error) {
+      errors[name] = { code: error instanceof SourceFailure ? error.code : 'unavailable', retry: !(error instanceof SourceFailure) };
+    }
+  }
+  for (const entry of Object.values(read.records)) rev = Math.max(rev, entry.rev);
+  return { rev, sources, records: read.records, ...(Object.keys(errors).length ? { errors } : {}), names };
+}
+
+function sourceRev(target: Target, values: Record<string, string>, viewerId: string, tz: string, name: string): number {
+  const pageScope = target.kind === 'screen' ? `screen:${target.screen}/${target.page}` : `surface:${target.surface}`;
+  const canonical = Object.entries(values).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => `${k}=${v}`).join('&');
+  return revs.get(viewerScope(viewerId, `${pageScope}?${canonical}|${tz}|${name}`))?.rev ?? 0;
+}
+
+async function serveData(req: Request, url: URL, target: Target, viewerId: string, fail: Fail): Promise<Response> {
+  await sportsGate(fail);
+  const tz = zone(url.searchParams.get('tz'));
+  const values = inputs(target, url, fail);
+  const specs = target.doc.document.sources ?? {};
+  const asked = url.searchParams.has('sources') ? (url.searchParams.get('sources') ?? '').split(',').filter(Boolean) : undefined;
+  for (const name of asked ?? []) if (!specs[name]) fail('request', 'invalid_sources', `Unknown source ${name}`);
+  const { names, ...data } = resolve(target, values, viewerId, tz, asked);
+  // The topic covers what the page shows: its eager sources and any lazy one read now.
+  const live = [...new Set([...Object.entries(specs).filter(([, spec]) => !spec.lazy).map(([name]) => name), ...names])].sort();
+  const t = target.kind === 'screen' ? { kind: 'screen' as const, screen: target.screen, page: target.page } : { kind: 'surface' as const, surface: target.surface };
+  const answer: V.ScreenData = { ...data, live: { topic: sealTopic({ v: viewerId, t, p: values, tz, s: live }) } };
+  const body = JSON.stringify(answer);
+  const etag = `"${createHash('sha1').update(body).digest('base64url')}"`;
+  const headers = { ETag: etag, 'Cache-Control': 'private, no-cache', 'Content-Type': 'application/json' };
+  if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers });
+  return new Response(body, { headers });
+}
+
+// Actions
+
+const ACTION_FIELDS = new Set(['page', 'params', 'args', 'context', 'idempotencyKey']);
+const truthy = (value: unknown) => value === true || value === 'true';
+
+function serveAction(req: Request, target: Target, action: string, body: unknown, viewerId: string, fail: Fail): Response {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(name => !ACTION_FIELDS.has(name))) fail('request', 'invalid_request', 'Only page, params, args, context and idempotencyKey');
+  const request = body as { page?: unknown; params?: unknown; args?: unknown; context?: unknown };
+  if (!req.headers.get('idempotency-key') && !(body as { idempotencyKey?: unknown }).idempotencyKey) fail('request', 'idempotency_required', 'Idempotency-Key required');
+  const args = (request.args && typeof request.args === 'object' ? request.args : {}) as Json;
+  if (Object.keys(args).length > 8 || JSON.stringify(args).length > 8192) fail('request', 'invalid_args', 'Too many or too large arguments');
+  const specs = target.doc.document.sources ?? {};
+  const read: Read = { viewerId, tz: zone(null), records: {}, scope: '' };
+  const answer: V.ScreenActionAnswer = {};
+  // Sources that read favourites or spoilers: Ether has re-resolved them; the client reads them again.
+  const dependent = (test: (spec: V.SourceSpec) => boolean) => Object.entries(specs).filter(([, spec]) => test(spec)).map(([name]) => name);
+  if (action === 'ether.favorite') {
+    const key = typeof args.ref === 'string' ? args.ref.replace(/^entity:/, '') : '';
+    const team = sportsModel.teams().find(t => entityKey(t.id) === key);
+    if (!team) fail('not-found', 'entity_not_found', 'Entity not found');
+    const favourites = sportsModel.favourites(viewerId);
+    if (truthy(args.on)) favourites.add(key); else favourites.delete(key);
+    entityRef(read, team);
+    for (const sim of sportsModel.sims()) if (sim.home === team.id || sim.away === team.id) eventRef(read, sim);
+    answer.records = read.records;
+    answer.refresh = dependent(spec => spec.from === 'viewer' || spec.from === 'liveTables' || (spec.from === 'liveEvents' && (spec.sort === 'featured' || (spec.query as Json | undefined)?.favorites === true)));
+  } else if (action === 'ether.reveal') {
+    const sim = typeof args.event === 'string' ? sportsModel.sim(simId(args.event)) : undefined;
+    if (!sim) fail('not-found', 'event_not_found', 'Live event not found');
+    sportsModel.reveal(viewerId, sim.id);
+    eventRef(read, sim);
+    detailRef(read, sim);
+    answer.records = read.records;
+  } else if (action === 'ether.spoilerFree') {
+    sportsModel.setSpoilerFree(viewerId, truthy(args.on));
+    for (const sim of sportsModel.sims()) eventRef(read, sim);
+    answer.records = read.records;
+    answer.refresh = dependent(spec => spec.from === 'viewer');
+  } else if (target.doc.document.actions?.[action]) {
+    answer.toast = 'Done';
+  } else {
+    fail('not-found', 'action_not_found', 'Action not found');
+  }
+  pump(viewerId);
+  return Response.json(answer, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+// The stream: page topics
+
+interface Listener { viewerId: string; topics: { token: string; topic: Topic; target: Target }[]; alerts: boolean; sent: Map<string, number>; send(name: string, data: unknown): void; close(): void }
+const listeners = new Set<Listener>();
+
+/** Send what changed for a listener's topics: records and sources whose rev is newer than what it has. */
+function push(listener: Listener): void {
+  const records: Record<string, V.RecordEntry> = {};
+  const sources: V.StreamSource[] = [];
+  for (const { topic, target } of listener.topics) {
+    const data = resolve(target, topic.p, listener.viewerId, topic.tz, topic.s);
+    for (const [key, entry] of Object.entries(data.records)) if (entry.rev > (listener.sent.get(key) ?? 0)) { records[key] = entry; listener.sent.set(key, entry.rev); }
+    for (const [name, value] of Object.entries(data.sources)) {
+      const rev = sourceRev(target, topic.p, listener.viewerId, topic.tz, name);
+      const id = `${topic.t.kind === 'screen' ? `${topic.t.screen}/${topic.t.page}` : topic.t.surface}|${JSON.stringify(topic.p)}|${name}`;
+      if (rev <= (listener.sent.get(id) ?? 0)) continue;
+      listener.sent.set(id, rev);
+      sources.push(topic.t.kind === 'screen' ? { screen: topic.t.screen, page: topic.t.page, source: name, rev, value } : { surface: topic.t.surface, source: name, rev, value });
+    }
+  }
+  if (Object.keys(records).length) listener.send('records', { records } satisfies V.StreamRecords);
+  for (const frame of sources) listener.send('source', frame);
+}
+
+/** A viewer's state changed (a favourite, a reveal): their open streams hear it now, not at the next tick. */
+function pump(viewerId: string): void {
+  for (const listener of listeners) if (listener.viewerId === viewerId) push(listener);
+}
+
+let alertCount = 0;
+let hooked = false;
+function hook(): void {
+  if (hooked) return;
+  hooked = true;
+  sportsModel.onChange(() => { for (const listener of listeners) push(listener); });
+  sportsModel.onAlert((kind, sim, force) => {
+    const toast = SURFACES.find(spec => spec.contribution.presentation === 'toast' && load(spec.file));
+    for (const listener of listeners) {
+      if (!listener.alerts) continue;
+      const favourite = [sim.home, sim.away].some(id => sportsModel.favourites(listener.viewerId).has(entityKey(id)));
+      if (!favourite && !force) continue;
+      if (sportsModel.spoilered(sim, listener.viewerId) && kind !== 'started') continue;
+      const { title, body } = sportsModel.alertText(kind, sim);
+      listener.send('alert', { id: `screen-alert-${++alertCount}`, kind, title, body, at: new Date(sportsNow()).toISOString(), ref: recordKey(sim.id), plugin: sportsModel.plugin,
+        ...(toast ? { surface: toast.id } : {}) } satisfies V.AlertFrame);
+    }
+  });
+}
+
+/** Whether a /live/stream request is a plugin-screens one (topics, or a client that draws screens). */
+export const screenStream = (req: Request, url: URL) => url.searchParams.has('topic') || rendererOf(req) > 0;
+
+function stream(req: Request, url: URL, viewerId: string, authorized: () => boolean, fail: Fail): Response {
+  hook();
+  const tokens = url.searchParams.getAll('topic');
+  if (tokens.length > 4) fail('request', 'too_many_topics', 'At most 4 topics');
+  const topics = tokens.map(token => {
+    const topic = openTopic(token);
+    const target = topic && topic.v === viewerId ? targetOf(topic.t) : undefined;
+    if (!topic || !target) fail('request', 'invalid_topic', 'Unknown or expired topic');
+    return { token, topic, target };
+  });
+  const since = Math.max(0, Number(url.searchParams.get('since')) || 0);
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const encoder = new TextEncoder();
+  const listener: Listener = {
+    viewerId, topics, alerts: url.searchParams.get('alerts') === '1', sent: new Map(),
+    send(name, data) { try { controller?.enqueue(encoder.encode(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`)); } catch { listener.close(); } },
+    close() { if (heartbeat) clearInterval(heartbeat); listeners.delete(listener); try { controller?.close(); } catch {} },
+  };
+  const body = new ReadableStream<Uint8Array>({ start(c) {
+    controller = c;
+    listeners.add(listener);
+    // Replay: everything of these topics above since (what changed between the data read and now).
+    const seed = new Map<string, number>();
+    for (const { topic, target } of topics) {
+      const data = resolve(target, topic.p, viewerId, topic.tz, topic.s);
+      for (const key of Object.keys(data.records)) seed.set(key, since);
+      for (const name of Object.keys(data.sources)) seed.set(`${topic.t.kind === 'screen' ? `${topic.t.screen}/${topic.t.page}` : topic.t.surface}|${JSON.stringify(topic.p)}|${name}`, since);
+    }
+    listener.sent = seed;
+    // A comment first, so the response starts even when nothing is replayed.
+    c.enqueue(encoder.encode(': open\n\n'));
+    push(listener);
+    heartbeat = setInterval(() => { if (!authorized()) listener.close(); else listener.send('heartbeat', {}); }, 25_000);
+    req.signal.addEventListener('abort', () => listener.close(), { once: true });
+  }, cancel: () => listener.close() });
+  return new Response(body, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' } });
+}
+
+// Routes
+
+/** The plugin-screen routes under /vela/v0; undefined for any other path. */
+export async function screensApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail, body?: unknown): Promise<Response | undefined> {
+  if (!sportsEnabled) return undefined;
+  if (method === 'GET' && path === '/live/stream' && screenStream(req, url)) return stream(req, url, viewerId, authorized, fail);
+  const screen = /^\/screens\/([^/]+)\/(?:pages\/([^/]+)\/(document|data)|actions\/([^/]+))$/.exec(path);
+  if (screen) {
+    const id = decodeURIComponent(screen[1]!);
+    if (screen[4]) {
+      if (method !== 'POST') fail('request', 'method_not_allowed', 'POST only', {}, 405);
+      const pageName = typeof (body as { page?: unknown })?.page === 'string' ? (body as { page: string }).page : 'index';
+      const page = PAGES.find(p => p.screen === id && p.page === pageName);
+      const doc = page && load(page.file);
+      if (!page || !doc) fail('not-found', 'screen_not_found', 'Screen not found');
+      return serveAction(req, { kind: 'screen', screen: id, page: pageName, doc }, decodeURIComponent(screen[4]), body, viewerId, fail);
+    }
+    const pageName = decodeURIComponent(screen[2]!);
+    const page = PAGES.find(p => p.screen === id && p.page === pageName);
+    const doc = page && load(page.file);
+    if (!page || !doc || method !== 'GET') fail('not-found', 'screen_not_found', 'Screen not found');
+    if (screen[3] === 'document') return serveDocument(req, url, doc, pageHref(page, doc), fail);
+    return serveData(req, url, { kind: 'screen', screen: id, page: pageName, doc }, viewerId, fail);
+  }
+  const surface = /^\/surfaces\/([^/]+)\/(document|data|setting|actions\/([^/]+))$/.exec(path);
+  if (surface) {
+    const id = decodeURIComponent(surface[1]!);
+    const spec = SURFACES.find(s => s.id === id);
+    const doc = spec && load(spec.file);
+    if (!spec || !doc) fail('not-found', 'surface_not_found', 'Surface not found');
+    const target: SurfaceOwner = { kind: 'surface', surface: id, doc };
+    if (surface[2] === 'document' && method === 'GET') return serveDocument(req, url, doc, surfaceHref(spec, doc), fail);
+    if (surface[2] === 'data' && method === 'GET') return serveData(req, url, target, viewerId, fail);
+    if (surface[2] === 'setting' && method === 'PUT') {
+      const enabled = (body as { enabled?: unknown } | undefined)?.enabled;
+      if (typeof enabled !== 'boolean' || !spec.contribution.setting) fail('request', 'invalid_setting', 'enabled must be true or false');
+      let settings = surfaceSettings.get(viewerId);
+      if (!settings) surfaceSettings.set(viewerId, settings = new Map());
+      settings.set(id, enabled);
+      return new Response(null, { status: 204 });
+    }
+    if (surface[3] && method === 'POST') return serveAction(req, target, decodeURIComponent(surface[3]), body, viewerId, fail);
+    fail('not-found', 'surface_not_found', 'Surface not found');
+  }
+  return undefined;
+}
+
+/** For tests: the topic a data read sealed, opened. */
+export const topicOf = (token: string) => openTopic(token);
+export { localDay, addDays, zone };
