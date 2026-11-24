@@ -1,6 +1,8 @@
 # Plugin screens (design, for approval)
 
-Status: proposal, 2026-11-24. Nothing here is built. The Ether side of the same contract is
+Status: approved by the owner on 2026-11-24, with the decisions recorded under
+[Owner decisions](#owner-decisions), including a hard cut and plugin-described player overlays and
+surfaces. Being built on `plugin-screens/main`. The Ether side of the same contract is
 written by the Ether plugin-screens lead (`plugin-screens/ether-design.md` in the Ether
 coordinator's thread storage); the two documents describe one contract and must agree.
 
@@ -32,13 +34,17 @@ The proposal in five decisions:
    state, play, add to multiview, open a link (never on TV), go back, and call a plugin action
    through Ether. A plugin never runs code on the client and never makes its own requests.
 5. **Old clients degrade by negotiation.** Vela sends its renderer version. Ether serves the
-   newest document variant the client can draw, or leaves the screen out of navigation. For a
-   time-boxed transition, Ether also keeps serving today's `/screens/:id` sections to builds that
-   predate plugin screens.
+   newest document variant the client can draw, or leaves the screen out of navigation. There is
+   no legacy path: when plugin screens ship, Sports exists only as plugin documents, and builds
+   that predate them show no Sports screen (the owner's hard cut).
+6. **Surfaces beyond screens.** The same documents fill other host slots: player overlays (the
+   score bug, the ticker), alert toasts, a Home row and a title-page panel. They are bound to
+   what the host is showing and bounded in size, placement and focus. See
+   [Surfaces](#surfaces-player-overlays-alerts-home-rows).
 
 Migration in four phases: renderer support behind a flag, Sports re-expressed with checked pixel
 parity on web, phone and TV, removal of the hard-coded Sports code, then opening the system to
-third-party plugins. Estimated effort on the Vela side is 29 to 40 worker-days, about 5 calendar weeks with parallel workers. The main
+third-party plugins. Estimated effort on the Vela side is 37 to 50 worker-days including surfaces, built by five workers in parallel. The main
 risks are TV performance, fine pixel parity, and keeping the shared schema in step with Ether.
 See [Migration](#migration-plan), [Effort](#effort) and [Risks](#risks). The decisions the owner
 needs to make are listed under [Owner decisions](#owner-decisions).
@@ -147,7 +153,7 @@ export interface ScreenDocument {
   title: Template;
   /** section: a top-level section inside the active shell. page: opened over the page it came from:
    *  a framed modal on web, desktop and tablets, the whole screen on TV and phone (today's game page). */
-  presentation: 'section' | 'page';
+  presentation: 'section' | 'page' | 'playerOverlay' | 'toast' | 'homeRow' | 'titlePanel';
   /** Ether's: typed page parameters ({param.league}); the URL carries them. */
   params?: Record<string, ParamSpec>;
   /** Ether's: named data, resolved per viewer; served with `deps` (the params each one reads). */
@@ -377,9 +383,10 @@ which today means a quarter larger on TV and Android TV's pixel scale. This is t
   (the same rule skins follow, and the `renderer-bump` test fixture rule). An unknown block or
   kit template inside an accepted document draws its `fallback` node, or nothing, inside its
   boundary.
-- Builds without plugin screens keep reading `GET /screens/:id` sections while the plugin still
-  declares legacy `sections`. The length of that window is an owner decision. Removing the Sports
-  code (phase 3) does not need that window to close, because the new client never reads sections.
+- Hard cut (owner decision): there is no legacy window. Ether deletes `sections`, `GET /screens/:id`
+  and the screens-only live routes in the same release that ships plugin screens. Vela deletes the
+  hard-coded Sports, the score bug, the ticker and the alerts code in the same release. Builds
+  that predate plugin screens show no Sports screen.
 - A schema change is additive within a renderer version. Anything else bumps the version.
   Ether's `plugin-screen.v1.json` is generated from `packages/protocol/screen.ts` by a tool in
   this repository (`tools/screen-schema.ts`, phase 0), and its digest is recorded beside
@@ -1008,6 +1015,95 @@ shows, and plugin actions for launching, following or saving.
 `then:a,b` is the one conditional pipe (`a` when the value is truthy, else `b`). It is included
 in the pipe list above.
 
+## Surfaces: player overlays, alerts, Home rows
+
+A screen is one kind of **surface**: a host slot that Vela owns and a plugin's document fills.
+Every surface uses the same document language, the same sources, records, actions and limits,
+and the same skin-owned look. What differs per surface is three things:
+
+- the **context** the host hands the document (`{context.*}`);
+- the **box** the document may draw in;
+- the **focus** rules.
+
+### Kinds
+
+| `presentation` | Host | Context (`{context.*}`, also usable as source arguments) | Box | Focus |
+| --- | --- | --- | --- | --- |
+| `section` | A top-level section | none | The section | As above |
+| `page` | Over the page it came from | its params | Framed modal on wide screens, full screen on TV and phone | As above |
+| `playerOverlay` | The player, on top of the picture and under the chrome's own controls | `channel` (record key), `event` (the `liveEvent` on air), `title` (`item:`), `kind` (`channel \| programme \| title`), `chrome` (shown), `pictureTime` (the wall-clock time of the frame on screen; behind live when timeshifted), `delayed` | One of the anchors `topLeft`, `topRight`, `bottom` (a band), up to `maxWidth`/`maxHeight` (anchors default to 34% × 22% for corners and 100% × 12% for the band). Content is clipped. The anchor moves clear of the chrome's top and bottom bars while they show, as the score bug does today. | No focus while the chrome is hidden. While it shows, the overlay's pressable boxes join the chrome's focus order after its own controls. Never on top of subtitles: the band lifts subtitles by its height. |
+| `toast` | The alert stack: top right, over any page and the player | `alert` (the alert record: `{id, kind, title, body, at, ref}`) | 360 × 120 px per toast (a quarter larger on TV), at most 3 stacked | Takes no focus by itself. On TV the remote's Up reaches the newest toast. A toast dismisses itself after `ttl` (8 to 30 s; held while focused). |
+| `homeRow` | A row in Home, where Ether lists it among the rows | none | The row's width; height at most 1.5 × the skin's card row | One focus row, as every shelf |
+| `titlePanel` | A panel on title pages for the plugin's own kinds | `title` (`item:`) | The title page's content width | As in a section |
+
+### Contributions
+
+Ether serves the surfaces a client may show in bootstrap, beside navigation:
+
+```jsonc
+"surfaces": [
+  { "id": "sports.scorebug", "presentation": "playerOverlay", "anchor": "topLeft",
+    "when": { "event": { "feed": "org.ether.sports:sports" } },
+    "visibility": "always",
+    "setting": { "id": "scorebug", "label": "Score", "default": true },
+    "document": { "href": "…", "renderer": 19 } },
+  { "id": "sports.ticker", "presentation": "playerOverlay", "anchor": "bottom",
+    "when": { "kind": "channel" },
+    "visibility": "toggle",
+    "setting": { "id": "ticker", "label": "Scores ticker", "default": false },
+    "document": { "href": "…", "renderer": 19 } },
+  { "id": "sports.alert", "presentation": "toast",
+    "when": { "alert": { "plugin": "org.ether.sports" } },
+    "document": { "href": "…", "renderer": 19 } },
+  { "id": "sports.tonight", "presentation": "homeRow",
+    "document": { "href": "…", "renderer": 19 } }
+]
+```
+
+- `when` is evaluated by Vela locally, from what it already knows: the playing kind and channel,
+  the session's `liveEvent` and its feed, an alert's plugin, a title's kind. So a surface that
+  does not apply costs no request.
+- `visibility` (player overlays):
+  - `always`: shown whenever `when` holds, as the score bug is today;
+  - `chrome`: shown only with the chrome;
+  - `toggle`: a viewer setting, shown in the player's own menu, remembered per profile, as the
+    ticker's switch is today.
+- Every player overlay has a player menu switch, so a viewer can always remove a plugin's
+  overlay.
+- Data reads take the context as params (`p.event`, `p.channel`, …), and Ether validates them
+  like any param. The page `rev`, `topic` and `since` work exactly as for screens.
+- Ether caps contributions: at most 2 player overlays per anchor across all plugins (the owner
+  orders them), at most 1 `homeRow` per plugin, and at most 1 toast surface per plugin. Vela also
+  enforces the boxes: content outside the box is clipped, and an overlay that fails to draw is
+  dropped silently. A failing surface never breaks the player.
+
+### Language additions for surfaces (renderer 19)
+
+| Addition | Why |
+| --- | --- |
+| `{context.<name>}` holes and conditions | Bind to what the host shows |
+| `repeat.asOf: { at: "<path>", time: "{context.pictureTime}" }`: only items whose `at` is at or before the time, newest last | A timeshifted viewer sees the score as of the picture. Today the score bug replays `plays[].at` and `score` (`live-overlay/model.ts` `delayedEvent`). With the play's `score` map, `{p.score}` of the last such play is the score on screen. |
+| `{src.x.<path>\|asOf:<pathOfTimes>}` pipe | The same for a single value |
+| `marquee` block: a horizontal run of an item template that scrolls continuously (paused under reduced motion and while focused) | The ticker |
+| Actions `dismiss` (a toast) and `watch` (tune the context's channel or an event's primary target from an overlay or toast) | The alert's actions today |
+
+### Sports' overlays as documents
+
+| Today (`widgets/live-overlay`) | Becomes |
+| --- | --- |
+| `ScoreBug` | `sports.scorebug`: a `playerOverlay` at `topLeft`, `always`. Source `game` = `liveEvent {id: "{context.event}"}`. Crests, the score (with `asOf` when `context.delayed`), the clock, the LIVE badge, and the reveal pill under spoilers. |
+| `LiveTicker` | `sports.ticker`: a `playerOverlay` `bottom` band, `toggle`. Source `live` = `liveEvents {state: [in]}`. A `marquee` of mini scores, with the playing game left out by `exclude: "{context.event}"`. |
+| `PlayerAlertToasts` | `sports.alert`: a `toast`. Context `alert`. Source `game` = `liveEvent {id: "{context.alert.ref}"}`. Watch (`watch` with the event) and Dismiss. |
+| (new) | `sports.tonight`: a `homeRow` of tonight's games for the viewer's teams |
+
+`widgets/live-overlay` and `live-alerts.tsx` are deleted in the same release (hard cut). The
+generic player-side hosts replace them:
+
+- the overlay host (anchors, chrome avoidance, subtitle lift, the player-menu switches);
+- the toast host (stacking, ttl, TV reach);
+- the Home-row host;
+- the title-panel host.
+
 ## What stays built in
 
 - **Music.** It stays built in. Separate work makes it available to plugins as a presentation,
@@ -1016,11 +1112,8 @@ in the pipe list above.
   surfaces. Plugin screens reach them through `navigate`, `play` and `multiview`. The multiview
   stays the app's own route because of its playback budget, provider caps and tile sizing. Only
   the `multiview` action is open to documents.
-- **The player's score bug, ticker and alerts** (`widgets/live-overlay`). They keep reading
-  `event:` records, now from the shared pool. Making them plugin-described is a later,
-  separately approved phase (an `overlay` presentation bound to the playing channel's
-  `liveEvent`). Until then they are the last Sports-aware code in Vela, and they are generic
-  live-event code rather than Sports code.
+- The player's score bug, ticker and alerts are **not** built in any more. They become plugin
+  surfaces (above).
 
 ## Migration plan
 
@@ -1053,8 +1146,9 @@ The Vela work, roughly in this order. Each step has behaviour tests (Bun, beside
    `lineGraph` (built on `model.ts` `probabilityPath` and `graph.tsx`), `player`, `paramInput`,
    `titleCard`, and the `vela:*` templates (built on `parts.tsx`).
 5. Routes: `screen/[id]` and a new `screen/[id]/[page]`, both choosing between document and
-   legacy rendering by `features.pluginScreens` and a client flag (`EXPO_PUBLIC_VELA_SCREENS=1`,
-   or `?screens=1` on the web). `RENDERER_VERSION` becomes 19 when the flag ships. Over-version
+   legacy rendering by a development flag (`EXPO_PUBLIC_VELA_SCREENS=1`, or `?screens=1` on the
+   web). The flag exists only for parity work on the integration branch. It is removed before
+   merge (hard cut). `RENDERER_VERSION` becomes 19 when the flag ships. Over-version
    fixtures are refused on version, not half-loaded.
 
 Exit criterion: the Sports fixtures draw end to end against the mock on web, iOS, tvOS and
@@ -1062,8 +1156,7 @@ Android TV. The legacy path is untouched while the flag is off.
 
 ### Phase 2: Sports re-expressed, with checked parity (Vela V2, with Ether E4; 8 to 12 worker-days)
 
-- The Sports plugin 2.0 (Ether E4) ships the documents and keeps legacy `sections` for the
-  transition. Vela iterates on the documents in its fixtures until they match, and the fixtures
+- The Sports plugin 2.0 (Ether E4) ships the documents and drops `sections` (hard cut). Vela iterates on the documents in its fixtures until they match, and the fixtures
   and the plugin's files are kept identical.
 - Parity method: with the frozen mock, capture the legacy screen and the document screen at the
   same viewport and compare them.
@@ -1120,10 +1213,17 @@ here, with the SDK docs in Ether), the news-desk example as an SDK sample, and a
 lint report in the validator. On the Vela side: authoring documentation, and the check tool
 accepting a plugin's document path so that authors can lint locally.
 
+### Phase 5: surfaces (Vela, in the same release; about 8 to 10 worker-days)
+
+The player-overlay, toast, Home-row and title-panel hosts, the `context` holes, `asOf`,
+`marquee`, and the `dismiss` and `watch` actions. Sports' score bug, ticker and alert documents
+reach parity with today's (frozen mock, the same rule). `widgets/live-overlay` and
+`apps/vela/src/live-alerts.tsx` are deleted.
+
 ### Later (not in this approval)
 
-Plugin-described player overlays (score bug, ticker). Skins overriding named templates of
-popular screens. Server-driven pages inside other plugin pages (nesting).
+Skins overriding named templates of popular screens. Server-driven pages inside other plugin
+pages (nesting).
 
 ## Effort
 
@@ -1137,7 +1237,8 @@ the two can be added.
 | 2 Sports parity on web, phone, Apple TV and Android TV | 8 to 12 | E4 |
 | 3 Removal | 2 to 3 | E7 |
 | 4 Open to plugins: authoring documentation and local lint | 2 to 3 | E5, E6 |
-| **Total** | **about 29 to 40 worker-days** | |
+| 5 Surfaces: overlays, toasts, Home row, title panel | 8 to 10 | Surface contributions (E8, pulled into this release) |
+| **Total** | **about 37 to 50 worker-days**, built by five workers in parallel | |
 
 Phase 1 splits cleanly into store and stream, resolver and actions, and blocks, so two or three
 workers bring it to about two calendar weeks. Phase 2 is iterative and platform-bound, and takes
@@ -1152,28 +1253,27 @@ two to three calendar weeks.
 | Schema drift between Vela's types and Ether's validator | Documents valid on one side and refused on the other | One generator and a recorded digest. Fixtures checked by both sides' CI. |
 | Blocks drifting into Sports-specific concepts | The general system becomes a Sports system again | The news-desk example must be expressible with every block. New blocks need a second, non-Sports consumer. |
 | Plugin content spoofing Vela UI, or phishing links | Trust | Content is clipped to its slot. There are no secure inputs, links are https only and never on TV, and images are proxied. |
-| Old clients during the transition | A blank Sports section | Variant negotiation. Ether keeps legacy sections for an owner-set window. The screen is left out of navigation when nothing fits. |
+| Old clients after the hard cut | No Sports in builds before plugin screens (accepted by the owner) | The screen is left out of navigation, never drawn blank. The release notes say to update. |
 | Two teams' schedules (Ether and the plugin vs Vela) | Phase 2 waits on documents | Vela develops against fixtures and the mock. Ether's routes land during phase 1. |
 | Larger skin renderer surface (render.tsx is already 1,700 lines) | Maintenance | Blocks live in `packages/skin/src/blocks/*`, and screen resolution in `resolve/screen*`. `render.tsx` gains dispatch only. |
 
 ## Owner decisions
 
-These are the Vela side's decisions. Ether's design lists (a) to (d), and they are cross-referenced
-here.
+The owner approved this design on 2026-11-24 with these decisions:
 
-1. **Approve the approach:** the skin language plus blocks, one renderer version
-   (`RENDERER_VERSION` 19 = the screen renderer), and a skin-owned look with no raw plugin
-   colours.
-2. **Old builds (Ether a):** keep the legacy `sections` for one Ether release after the first
-   store build with plugin screens, as Ether recommends. Vela does not depend on this window,
-   because the new client never reads sections.
-3. **The pixel-parity rule for phase 2:** proposed at most 1% of pixels differing outside moving
-   regions, no element moved by more than 2 px, and every remaining difference reviewed. This
-   rule also governs Ether's E4 screenshot gate.
-4. **The `player` block (a muted live preview) in version 1:** proposed in. It reuses the live
-   home's tile.
-5. **Overlays (Ether b):** the score bug, ticker and alerts become documents right after Sports
-   parity (Ether E8), or stay as generic live-event code in Vela.
+1. **Approach approved:** the skin language plus blocks, one renderer version
+   (`RENDERER_VERSION` 19), and a skin-owned look.
+2. **Hard cut, with no releases of overlap.** When plugin screens ship, Sports exists only as
+   plugin documents. Old builds get no legacy Sports screen. The hard-coded Sports code is
+   removed in the same release, with no compatibility path. Phases 1 to 3 therefore land in one
+   release, and Ether ships its side in the same window.
+3. **Pixel parity:** at most 1% of pixels differ, nothing moves more than 2 px, and every
+   remaining difference is reviewed.
+4. **The muted live preview (`player` block) is in version 1.**
+5. **Overlays and surfaces, made powerful and flexible.** The in-player score bug, ticker and
+   alerts become plugin documents. Plugins can add their own player overlays and other surfaces
+   in general, under the same safety rules: no code, a skin-owned look, bounded data, fixed
+   actions and TV focus. See [Surfaces](#surfaces-player-overlays-alerts-home-rows).
 
 ## Agreement with Ether
 
