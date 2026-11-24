@@ -95,3 +95,6 @@ export const DEVICE_MASKS: Record<string, { x: number; y: number; width: number;
 export const REVIEWED_REGIONS: { selector: string; note: string }[] = [
   { selector: '[data-testid^="sports-day-"]', note: 'Schedule day strip: Ether serves 7 days (-2..+4), legacy showed 8 (-3..+4); decided with Ether' },
 ];
+
+/** Screenshot pixels per point (CSS px) on each capture platform, so a move is judged in points. */
+export const CAPTURE_SCALE: Record<string, number> = { tvos: 2, 'ios-phone': 3, androidtv: 1 };
