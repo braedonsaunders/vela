@@ -474,6 +474,8 @@ function useChangeMotion(node: RNode, still: boolean): Record<string, unknown> |
 function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; changed?: boolean }) {
   // Screens: this node reads records through its own reader, so a push redraws only its readers.
   const ctx = useScopedReads(given);
+  // Development: a probe (tools/perf/screen-record-push.ts) may count which nodes draw.
+  if (__DEV__) (globalThis as { __velaRenderProbe?: (node: RNode, ctx: Ctx) => void }).__velaRenderProbe?.(node, ctx);
   // A row's arrows read its pager: they, and nothing else, redraw when the row reports its ends.
   usePager(readsPager(node) ? ctx.row?.id : undefined);
   const { env } = useHost();
