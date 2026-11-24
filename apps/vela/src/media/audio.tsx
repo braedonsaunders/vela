@@ -1,7 +1,7 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, TVFocusGuideView, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -66,7 +66,27 @@ function attachAudioEngine(store: Store): void {
   if (attached?.store === store) return;
   if (attached) { attached.detach(); attached.engine?.dispose(); }
   const engine = createAudioEngine(() => store.playback.mediaAccess());
-  attached = { store, engine, detach: store.audio.attach(engine) };
+  const detachEngine = store.audio.attach(engine);
+  const unfollow = followMediaSession(store);
+  attached = { store, engine, detach: () => { unfollow(); detachEngine(); } };
+}
+
+/** The system's Now Playing (notification, lock screen, Control Center) follows the queue from the
+ * store, not from a mounted component: with the app's tree unmounted the music goes on to the next
+ * track, and the notification must name it. */
+function followMediaSession(store: Store): () => void {
+  const controls: MediaSessionControls = {
+    play: () => store.audio.resume(), pause: () => store.audio.pause(), next: () => store.audio.next(),
+    previous: () => store.audio.previous(), seek: seconds => store.audio.seek(seconds), skip: delta => store.audio.skip(delta),
+  };
+  let shown = store.getState().audio;
+  syncMediaSession(shown, controls);
+  return store.subscribe(() => {
+    const audio = store.getState().audio;
+    if (audio === shown) return;
+    shown = audio;
+    syncMediaSession(audio, controls);
+  });
 }
 
 export function AudioDock() {
@@ -96,11 +116,6 @@ export function AudioDock() {
     savedSound.current = sound;
     try { preferences.set(SOUND_PREFERENCE, JSON.stringify(sound)); } catch { /* Kept for this run only. */ }
   }, [sound]);
-  const controls = useMemo<MediaSessionControls>(() => ({
-    play: () => store.audio.resume(), pause: () => store.audio.pause(), next: () => store.audio.next(),
-    previous: () => store.audio.previous(), seek: seconds => store.audio.seek(seconds), skip: delta => store.audio.skip(delta),
-  }), [store]);
-  useEffect(() => syncMediaSession(audio, controls), [audio, controls]);
   // The viewer sees plain copy; the cause goes to the console for whoever is debugging.
   useEffect(() => { if (audio.error) console.warn(`Vela audio: ${audio.error}`); }, [audio.error]);
   useEffect(() => { if (!audio.queue) setOpen(false); }, [audio.queue]);
