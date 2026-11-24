@@ -144,7 +144,7 @@ test('a stopped title Home does not show (a track, an audiobook part, a stop bel
 
 const shelfRow = (id: string, positionSeconds: number) => progressBootstrap(id, positionSeconds).rows[0]!;
 
-test('Home that shows its progress shelves reads only those shelves after a stop, never Home itself', async () => {
+test('a stopped title already on Home\'s progress shelves re-reads only those shelves, never Home itself', async () => {
   const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
   const homeCalls: boolean[] = [], rowCalls: string[] = [];
   const first = { ...progressBootstrap('film', 10), rows: [...progressBootstrap('film', 10).rows, ...progressBootstrap().rows] } as Bootstrap;
@@ -162,6 +162,22 @@ test('Home that shows its progress shelves reads only those shelves after a stop
   expect(box.get().home.value!.rows.map(row => row.id)).toEqual(['continue', 'ordinary']);
   expect(box.get().home.value!.rows[0]!.items[0]!.progressSeconds).toBe(55);
   expect(box.get().home.value!.rows[1]).toBe(ordinary);
+  expect(box.get().home.progressRevision).toBe(1);
+});
+
+test('a title not on Home\'s shelves yet (it may need a shelf Home does not show) reads Home once', async () => {
+  const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
+  const homeCalls: boolean[] = [], rowCalls: string[] = [];
+  const api = {
+    home: async (fresh = false) => { homeCalls.push(fresh); return fresh ? progressBootstrap('audiobook', 30) : progressBootstrap('film', 10); },
+    row: async (id: string) => { rowCalls.push(id); return shelfRow('film', 10); },
+  };
+  const session = { epoch: 0, onReset() {}, negotiate: async () => {}, ready: async () => ({ adapter: api, images: async () => undefined }), check() {} };
+  const home = new Home(box, session as unknown as Session, () => 640, HOME_SLOW_MS, 1, 0);
+  await home.ensure();
+  await home.reconcile({ titleId: 'audiobook-part-2', positionSeconds: 30, finished: false });
+  expect(homeCalls).toEqual([false, true]);
+  expect(rowCalls).toEqual([]);
   expect(box.get().home.progressRevision).toBe(1);
 });
 

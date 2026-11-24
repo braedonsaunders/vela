@@ -219,7 +219,7 @@ export class Home {
 
   /**
    * Re-read only the server-owned progress presentation after a confirmed playback stop: the
-   * progress shelves Home shows, each on its own, or (when Home shows none yet) Home itself. A
+   * progress shelves Home shows, each on its own, when the title is on one; otherwise Home. A
    * newer stop replaces one waiting or in flight, and reads are spaced (RECONCILE_SPACING_MS).
    */
   reconcile(watched: Watched): Promise<void> {
@@ -262,8 +262,12 @@ export class Home {
     for (let attempt = 0; attempt <= RECONCILE_RETRIES; attempt++) {
       try {
         const connection = await this.session.ready();
-        const shown = this.box.get().home.value;
-        const shelves = shown ? await this.readShelves(connection, shown.rows.filter(progressRow)) : [];
+        // A title Home already shows on a progress shelf is brought up to date by reading those
+        // shelves alone. Anything else (the first stop of a title, an audiobook part whose book is
+        // the card, a book's reading place) may need a shelf Home does not show yet: Home itself.
+        const shown = this.box.get().home.value?.rows.filter(progressRow) ?? [];
+        const onShelf = watched !== ANY_PROGRESS && shown.some(row => row.items.some(card => card.id === watched.titleId));
+        const shelves = onShelf ? await this.readShelves(connection, shown) : [];
         if (signal.aborted || generation !== this.reconcileGeneration) return;
         let value: Card | undefined;
         let merge: (home: HomeModel) => HomeModel;
@@ -271,7 +275,6 @@ export class Home {
           value = shelves.flatMap(row => row.items).find(card => card.id === watched.titleId);
           merge = home => reconcileShelves(home, shelves);
         } else {
-          // No progress shelf to read on its own (the first title the viewer started): Home itself.
           const bootstrap = await connection.adapter.home(true, signal);
           this.session.check(epoch, 'home progress');
           if (signal.aborted || generation !== this.reconcileGeneration) return;
