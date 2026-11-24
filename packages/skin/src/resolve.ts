@@ -22,7 +22,7 @@ import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 import { compileTemplate, holeValue, makeArg, pathField, singleHole, type Arg, type HoleScope, type Value } from './screen/holes';
 import { text as valueText } from './screen/scope';
 import type { Items } from './screen/items';
-import { fold, halfPoints, lineHeightPoints, screenStyleRow } from './resolve/screen-style';
+import { fold, halfPoints, lineHeightPoints, pointsToPx, screenStyleRow } from './resolve/screen-style';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
  * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
@@ -263,11 +263,13 @@ function tokenValue(raw: string, r: Context): string {
       return value;
     });
   }
-  return mixColours(withUi(raw, r.ui).replace(/\$([A-Za-z0-9_-]+)/g, (_, name: string) => {
+  const value = mixColours(withUi(raw, r.ui).replace(/\$([A-Za-z0-9_-]+)/g, (_, name: string) => {
     const value = r.doc.tokens?.[name];
     if (value === undefined) throw new Error(`Unknown token $${name}`);
     return value;
   }));
+  // Screens: points (`8pt`) are never scaled; written as the px the renderer scales back to them.
+  return r.screen ? pointsToPx(value, r.screen.scale) : value;
 }
 
 /** A `with` value that names a token (`ink: "$ui.ink"`) stands in a style as that token, so it resolves. */

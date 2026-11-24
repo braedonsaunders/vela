@@ -305,6 +305,25 @@ describe('border widths are points', () => {
   });
 });
 
+describe('points', () => {
+  test('pt lengths are points on every platform: never scaled on TV, CSS px on the web', () => {
+    const node: Node = { type: 'box', style: { gap: '8pt', padding: '3pt $gutter', width: '{src.w}', margin: '$tight' } };
+    const extra = { tokens: { gutter: '28px', tight: '4pt' } };
+    const web = resolveScreenDocument(doc(node, extra), { width: 1440 }, 'en', {});
+    expect(style(web.tree, 'gap')).toBe('8px');
+    expect(style(web.tree, 'padding')).toBe('3px 28px');
+    const tv = resolveScreenDocument(doc(node, extra), { width: 1920, tv: true, scale: 1.25 }, 'en', {});
+    expect(style(tv.tree, 'gap')).toBe('6.4px');
+    expect(style(tv.tree, 'padding')).toBe('2.4px 28px');
+    expect(style(tv.tree, 'margin')).toBe('3.2px');
+    // From data, validated as a length and converted for this scale.
+    expect(style(tv.tree, 'width', root({ w: '10pt' }))).toBe('8px');
+    expect(style(tv.tree, 'width', root({ w: '10pt; x' }))).toBe('0');
+    const sections = resolveScreenDocument(doc({ type: 'sections', gap: '8pt', children: [] }), { width: 1920, tv: true, scale: 1.25 }, 'en', {}).tree as Extract<RNode, { kind: 'sections' }>;
+    expect(sections.gap).toBe('6.4px');
+  });
+});
+
 describe('half points', () => {
   test('a unitless line height beside a px font size draws as px(size x line), on half points everywhere', async () => {
     const { lineHeightPoints } = await import('../src/resolve/screen-style');

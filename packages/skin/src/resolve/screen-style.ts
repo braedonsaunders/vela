@@ -9,12 +9,22 @@ import { parseColour } from '../screen/colour';
 import { mixColours } from './colour-mix';
 
 const COLOUR_ROWS = /colou?r$|^background-image$|^border$|^border-(top|bottom|left|right)?-?color$|^box-shadow$|^text-shadow$|^outline$/;
-const LENGTH = /^-?\d*\.?\d+(px|%|vw|vh|deg|em|rem)?$/;
+const LENGTH = /^-?\d*\.?\d+(px|pt|%|vw|vh|deg|em|rem)?$/;
+
+/**
+ * Points (`8pt`, renderer 19 screens): a length the platform's px scaling never touches, 8 points on
+ * a TV and on Android TV as on a phone (on the web, 8 CSS px): rows the hard-coded screens laid out
+ * in raw points. Written for the renderer as the px that its scaling turns back into those points.
+ */
+export function pointsToPx(text: string, scale = 1): string {
+  return text.replace(/(^|[^\w.#-])(-?\d*\.?\d+)pt\b/g, (_, lead: string, n: string) => `${lead}${Math.round((Number(n) / scale) * 10_000) / 10_000}px`);
+}
 
 /** A filled hole's text in a style: a length, percentage, number or colour; anything else draws as
- * `transparent` (a colour row) or `0` (any other row). */
-export function styleHole(row: string, value: string): string {
+ * `transparent` (a colour row) or `0` (any other row). Points become px for this scale. */
+export function styleHole(row: string, value: string, scale = 1): string {
   const v = value.trim();
+  if (/pt$/.test(v) && LENGTH.test(v)) return pointsToPx(v, scale);
   if (LENGTH.test(v)) return v;
   if (parseColour(v)) return v;
   return COLOUR_ROWS.test(row) ? 'transparent' : '0';
@@ -133,7 +143,7 @@ export function lineHeightPoints(fontSize: string | undefined, lineHeight: strin
 
 /** A screen document's style row, tokens already substituted: holes compiled and validated as filled. */
 export function screenStyleRow(row: string, text: string, scope: HoleScope, scale = 1, step = 0.5): Template {
-  const template = compileTemplate(text, scope, (hole: Accessor): Accessor => (c, e) => styleHole(row, hole(c, e)));
+  const template = compileTemplate(text, scope, (hole: Accessor): Accessor => (c, e) => styleHole(row, hole(c, e), scale));
   // Each length rounds, and so does what folding makes of them (min($ui.radiusPanel * 0.6, 22px) is
   // 17px, as look.px rounded each radius); a border's computed width stays as computed (Crest's
   // max(1.5, size * 0.05) was never rounded).
