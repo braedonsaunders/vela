@@ -147,7 +147,16 @@ function welch(x: Float32Array, from: number, length: number, size = 65_536): Fl
         const limit = f >= 16_000 ? 1 : 0.5;
         row(`M3 EQ response (${preset})`, { case: `${f} Hz`, expected: `${round(expected, 2)} dB`, measured: `${round(got, 2)} dB`, error: `${round(error, 3)} dB`, pass: Math.abs(error) <= limit });
       }
-      raw[`m3-${preset}`] = measured;
+      // For plots: the response on 60 log-spaced points, measured and expected.
+      const curve: number[][] = [];
+      for (let i = 0; i < 60; i++) {
+        const f = 25 * (18_000 / 25) ** (i / 59);
+        const lo = Math.max(1, Math.floor((f / 2 ** (1 / 24)) * size / rate)), hi = Math.max(lo, Math.ceil((f * 2 ** (1 / 24)) * size / rate));
+        let a = 0, b = 0;
+        for (let k = lo; k <= hi; k++) { a += shaped[k]!; b += base[k]!; }
+        curve.push([round(f, 1), round(10 * Math.log10(a / b), 3), round(chainResponseDb(chain, f, rate), 3)]);
+      }
+      raw[`m3-${preset}`] = { bands: measured, curve };
     }
   }
 }
@@ -181,7 +190,9 @@ function envelope(x: Float32Array, rate: number, frequency: number, from: number
       const p = 10 * Math.log10((a[i]!.a ** 2 + b[i]!.a ** 2) / 0.25 ** 2);
       lo = Math.min(lo, p); hi = Math.max(hi, p);
     }
-    raw['m4-crossfade'] = { onset: s0, start, overlap, powerDb: [lo, hi] };
+    // For plots: both tones' levels (dBFS) every 50 ms around the fade.
+    const series = a.filter((_, i) => i % 5 === 0).map((p, i) => [round((p.t - s0) / rate, 3), round(db(Math.max(1e-6, p.a)), 2), round(db(Math.max(1e-6, b[i * 5]!.a)), 2)]);
+    raw['m4-crossfade'] = { onset: s0, start, overlap, powerDb: [lo, hi], series };
     row('M4 crossfade', { case: 'start', expected: '20.000 s', measured: `${round(start, 3)} s`, error: `${round((start - 20) * 1000, 1)} ms`, pass: Math.abs(start - 20) <= 0.02 });
     row('M4 crossfade', { case: 'overlap', expected: '6.000 s', measured: `${round(overlap, 3)} s`, error: `${round((overlap - 6) * 1000, 1)} ms`, pass: Math.abs(overlap - 6) <= 0.05 });
     row('M4 crossfade', { case: 'equal power across the fade', expected: '0 dB', measured: `${round(lo, 2)} … ${round(hi, 2)} dB`, error: `${round(Math.max(Math.abs(lo), Math.abs(hi)), 2)} dB`, pass: Math.abs(lo) <= 0.5 && Math.abs(hi) <= 0.5 });
