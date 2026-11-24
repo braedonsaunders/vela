@@ -13,6 +13,7 @@ import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
 import { heroSegmentDestination, isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
+import { heroButtonRank, heroFocusCarry } from './hero-focus';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -660,6 +661,9 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
   </RNAnimated.View>;
 });
 
+/** The one focus the hero's buttons hand on (there is one focus, and one hero on show). */
+const heroFocus = heroFocusCarry<Focusable>();
+
 function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; measure?: FitMeasure }) {
   const host = useHost();
   const measuring = useContext(Measuring);
@@ -938,6 +942,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     // focus (keyboard, tvOS focus engine, D-pad) and carries the label; the box keeps its motion.
     // The button registers under the box's id, so Escape's returnFocus can land on it.
     const press = node.press;
+    const heroButton = Platform.isTV && !!ctx.hero && !!press && !isHeroControl(press.action, fill(press.arg, ctx, env));
     const registerButton = focusTarget(a11y.nativeID);
     const bindButton = (target: Focusable | null) => {
       // React Native Web's merged refs discard callback return values and detach with null.
@@ -945,6 +950,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       releaseButton.current?.();
       if (!target) return;
       buttonRef.current = target;
+      const heroRank = heroButton ? heroButtonRank(press!.action, fill(press!.arg, ctx, env)) : -1;
+      if (heroRank >= 0) heroFocus.add(target, heroRank);
       const unregister = registerButton(target);
       const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
       const contextTarget = web && cardPrimary ? target as unknown as HTMLElement : undefined;
@@ -958,6 +965,11 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         if (releaseButton.current !== release) return;
         releaseButton.current = undefined;
         buttonRef.current = null;
+        // On TV a hero button (Play, More info, Restart; not the pager) leaving while focused,
+        // because the title now on show has other buttons, hands focus to the hero's primary one.
+        if (heroRank >= 0 && heroFocus.remove(target)) {
+          requestAnimationFrame(() => heroFocus.take()?.requestTVFocus?.());
+        }
         unregister?.();
         untrack?.();
         if (contextTarget && contextHandler) contextTarget.removeEventListener('contextmenu', contextHandler);
@@ -1024,12 +1036,13 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
+          if (heroButton && buttonRef.current) heroFocus.focused(buttonRef.current, true);
           if (inHero || (heroControl && visible)) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => { set('focus', false); if (inHero || heroControl) holdHero(host.setFlag, false, Platform.isTV); }}
+        onBlur={() => { set('focus', false); if (heroButton && buttonRef.current) heroFocus.focused(buttonRef.current, false); if (inHero || heroControl) holdHero(host.setFlag, false, Platform.isTV); }}
         onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
