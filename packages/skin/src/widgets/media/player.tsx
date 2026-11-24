@@ -215,6 +215,7 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   const audio = { ...live, queue: live.queue ?? queue ?? null };
   const item = currentInQueue(audio.queue);
   const [panel, setPanel] = useState<'' | 'speed' | 'sleep'>('');
+  const source = useInteraction();
   const shownPanel = useLast(panel || undefined);
   const [list, setList] = useState<'queue' | 'chapters' | 'lyrics'>(opening === 'lyrics' ? 'lyrics' : 'queue');
   const book = spoken(item);
@@ -317,10 +318,15 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }}>
         <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
-        <Pressable disabled={!audio.queue.source} onPress={() => { const s = audio.queue?.source; if (s) { onClose(); actions.openTitle({ id: s.id, kind: parentId === s.id ? 'album' : (item.media?.class === 'audiobook' ? 'audiobook' : 'album') }); } }}
+        {/* The link spans the header, so a TV's remote reaches it from the Up Next tabs below; its
+            focus ring is drawn around the words. */}
+        <Pressable {...source.handlers} disabled={!audio.queue.source} onPress={() => { const s = audio.queue?.source; if (s) { onClose(); actions.openTitle({ id: s.id, kind: parentId === s.id ? 'album' : (item.media?.class === 'audiobook' ? 'audiobook' : 'album') }); } }}
           accessibilityRole="link" style={[NO_RING, { flex: 1, alignItems: 'center' }]} testID="now-playing-source">
-          <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>{msg('media.player.nowPlaying')}</Text>
-          {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
+          <View style={[{ alignItems: 'center', maxWidth: '100%' },
+            Platform.isTV ? { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2, borderWidth: 2, borderColor: source.state.focus ? m.ui.ink : 'transparent' } : {}]}>
+            <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>{msg('media.player.nowPlaying')}</Text>
+            {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
+          </View>
         </Pressable>
         <View style={{ width: 42 }} />
       </View>

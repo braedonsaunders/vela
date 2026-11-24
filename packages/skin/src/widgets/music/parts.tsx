@@ -77,7 +77,9 @@ export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, 
     ?.measureInWindow?.((x, y, w, h) => onMenu?.({ kind: 'card', rect: { left: x, top: y, right: x + w, bottom: y + h } }, mode, opener()));
   useTVMenuEvent(event => {
     if (!Platform.isTV || !focused.current || !onMenu) return;
-    if (event.eventType === 'longSelect' || event.eventType === 'menu') atCard('tv');
+    // Android TV's Menu key opens the card's menu; tvOS's Menu is Back (it reaches here while a page
+    // holds Back), so there only a long select does.
+    if (event.eventType === 'longSelect' || (event.eventType === 'menu' && Platform.OS !== 'ios')) atCard('tv');
   });
   const menu = onMenu ? {
     onLongPress: (event: GestureResponderEvent) => (Platform.isTV ? atCard('tv') : onMenu({ kind: 'point', point: { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY } }, 'touch', opener())),
@@ -197,6 +199,11 @@ export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card
   );
 }
 
+/** A TV's focused tile grows and wears a ring; a shelf scrolls and clips to its bounds, so on a TV
+ * it has room around its tiles, laid out where it would be without it. */
+const SHELF_TV_ROOM: ViewStyle = { padding: 12 };
+const SHELF_TV_BLEED: ViewStyle = { margin: -12 };
+
 export function Shelf({ title, detail, children, onMore }: { title: string; detail?: string; children: ReactNode; onMore?(): void }) {
   const m = useMediaLook();
   return (
@@ -206,7 +213,7 @@ export function Shelf({ title, detail, children, onMore }: { title: string; deta
         {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
       </View>
       {detail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginBottom: 4 }]}>{detail}</Text> : null}
-      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 0 }}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
+      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView horizontal showsHorizontalScrollIndicator={false} style={musicTV() ? SHELF_TV_BLEED : undefined} contentContainerStyle={musicTV() ? SHELF_TV_ROOM : { gap: 0 }}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
     </View>
   );
 }
