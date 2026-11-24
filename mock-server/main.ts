@@ -18,6 +18,7 @@ import { downloadSubtitle, foundSubtitleVtt, searchSubtitles, subtitleLanguages 
 import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
 import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
+import { screensApi, screensBootstrap } from './screens';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
@@ -53,7 +54,6 @@ const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_
 // Sports (0.3.19): live events, the plugin screen it lists in navigation, and multiview.
 if (sportsEnabled) Object.assign(capabilities.features, { liveEvents: { available: true }, multiview: { available: true, maxTiles: 4 } });
 Object.assign(capabilities.features, catchUpFeature());
-const navigation: V.NavigationEntry[] = sportsEnabled ? [{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }] : [];
 if (mediaEnabled) Object.assign(capabilities.features, {
   mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook'] },
   reading: { available: true, formats: ['epub', 'pdf', 'cbz'] },
@@ -652,7 +652,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, ...(longHeroes ? { title: { ...hero.title, name: `${hero.title.name}: The Long Way Round to the Edge of Everything` } } : {}), receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
     const home = homeRows(g, firstPage);
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation.length ? { navigation } : {}) } satisfies V.Bootstrap, g.id);
+    // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
+    const { navigation, surfaces, homeRow } = screensBootstrap(req, g.viewer.id);
+    const homeItems: V.Bootstrap['rows'] = homeRow ? [...home.items.slice(0, 1), homeRow, ...home.items.slice(1)] : home.items;
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: homeItems, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}`);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
@@ -834,6 +837,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!Array.isArray(body.interactions) || body.interactions.length > 100 || body.interactions.some((i: V.Interaction) => !validReceipt(g, i.receiptToken) || !['visible', 'selected', 'played'].includes(i.kind))) fail('request', 'invalid_receipt', 'Invalid interaction receipt');
     return json({ accepted: true });
   }
+  const screens = await screensApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail, body);
+  if (screens) return screens;
   const sports = sportsApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail, body);
   if (sports) return sports;
   if (sportsEnabled && method === 'POST' && path === '/multiview') {
@@ -1083,6 +1088,9 @@ async function dispatch(req: Request): Promise<Response> {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('request', 'invalid_json', 'JSON object required');
     return api(req, url, body);
   }
+  // Plugin-screen mutations may carry the key as Ether's Idempotency-Key header (the header wins).
+  const headerKey = req.headers.get('idempotency-key');
+  if (headerKey && body && typeof body === 'object' && /^\/vela\/v0\/(screens|surfaces)\//.test(url.pathname)) body.idempotencyKey = headerKey;
   if (!body || typeof body.idempotencyKey !== 'string' || !body.idempotencyKey || body.idempotencyKey.length > 200) fail('request', 'idempotency_required', 'Nonempty idempotencyKey required');
   if (url.pathname !== '/vela/v0/negotiate' && !/^\/vela\/v0\/auth\/(plex(?:\/profile)?|sign-in|refresh|device(?:\/poll)?|quick-connect(?:\/poll)?|web-code\/redeem)$/.test(url.pathname)) authenticate(req);
   const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? body.client?.device?.id ?? 'anonymous';
@@ -1102,7 +1110,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 
