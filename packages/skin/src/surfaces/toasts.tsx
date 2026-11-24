@@ -3,8 +3,9 @@
 // contributes (the frame names it), at the top right over any page and over the player. At most
 // three stand, oldest first; a newer alert about the same event replaces the older one. A toast
 // leaves after its ttl (8 to 30 s), held while the pointer is on it or focus is inside it, sooner
-// when dismissed. Toasts take no focus by themselves; on TV the remote reaches them by moving up,
-// and the play/pause key takes the newest toast's Watch (over a channel with a multiview, its Add).
+// when dismissed. Toasts take no focus by themselves. On TV they take none at all for now (a
+// floating toast in the focus order traps Android TV's D-pad; deliberate entry is to come): the
+// play/pause key takes the newest toast's Watch (over a channel with a multiview, its Add).
 //
 // One host draws at a time: an open player draws its own (above the picture and its chrome, which
 // a native full-screen presentation would otherwise cover) and the app's steps aside.
@@ -175,7 +176,7 @@ function Toast({ alert, surface, look, maxHeight, playingChannelId, onDismiss }:
       // Clipped to its box, with room beside it for its shadow.
       style={{ margin: -SHADE, padding: SHADE, maxHeight: maxHeight + SHADE * 2, overflow: 'hidden' }}
     >
-      {surface ? <SurfaceView surface={surface} context={context} host={host} overPicture dismiss={onDismiss} /> : <Plain alert={alert} look={look} />}
+      {surface ? <SurfaceView surface={surface} context={context} host={host} overPicture dismiss={onDismiss} unfocusable={Platform.isTV} /> : <Plain alert={alert} look={look} />}
     </View>
   );
 }

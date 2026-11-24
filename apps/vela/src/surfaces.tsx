@@ -10,6 +10,8 @@ import { HostContext } from '@vela/skin/src/host';
 import { usePlayerLook } from '@vela/skin/src/widgets/player/look';
 import { SurfaceAppContext, type SurfaceApp } from '@vela/skin/src/surfaces/view';
 import { AppToasts } from '@vela/skin/src/surfaces/toasts';
+import { HomeRowSurface, TitlePanels } from '@vela/skin/src/surfaces/slots';
+import { SurfaceSlots, type SurfaceSlotViews } from '@vela/skin/src/render';
 import { claimPlayPause } from '@vela/player';
 import { useAppScreenActions } from './screen-actions';
 import { screenDocuments } from './screens-flag';
@@ -34,8 +36,15 @@ export function SurfaceProvider({ children }: { children: ReactNode }) {
   }, [core]);
   const enabled = screenDocuments();
   const value = useMemo<SurfaceApp>(() => ({ enabled, actions: { ...screen, watch }, claimPlayPause }), [enabled, screen, watch]);
-  return <SurfaceAppContext.Provider value={value}>{children}</SurfaceAppContext.Provider>;
+  return (
+    <SurfaceAppContext.Provider value={value}>
+      <SurfaceSlots.Provider value={enabled ? SLOTS : null}>{children}</SurfaceSlots.Provider>
+    </SurfaceAppContext.Provider>
+  );
 }
+
+/** Home rows and title panels that plugins fill, drawn by the skin's pages in their places. */
+const SLOTS: SurfaceSlotViews = { row: HomeRowSurface, titlePanels: TitlePanels };
 
 const SIGNED_OUT = ['/sign-in', '/connect'];
 
