@@ -8,7 +8,7 @@ import { auditRecordPushIsolation } from './record-push';
 import { meetsPreviewScreensGate } from './data-reads';
 
 describe('tools/perf/gfxinfo', () => {
-  test('parses PROFILEDATA CSV blocks and computes p50, p95, max, and jank counts', () => {
+  test('parses 14-column PROFILEDATA CSV blocks and computes p50, p95, max, and jank counts', () => {
     const sampleOutput = `
 Applications Graphics Acceleration Info:
 Uptime: 123456 Realtime: 123456
@@ -41,6 +41,20 @@ Flags,IntendedVsync,Vsync,OldestInputEvent,NewestInputEvent,HandleInputStart,Ani
     expect(summary.p50Ms).toBe(11);
     expect(summary.p95Ms).toBe(22.83);
     expect(summary.jankCount).toBe(1);
+  });
+
+  test('parses 24-column Android TV API 36 FrameTimelineVsyncId PROFILEDATA CSV blocks', () => {
+    const api36Output = `
+---PROFILEDATA---
+Flags,FrameTimelineVsyncId,IntendedVsync,Vsync,InputEventId,HandleInputStart,AnimationStart,PerformTraversalsStart,DrawStart,FrameDeadline,FrameStartTime,FrameInterval,WorkloadTarget,SyncQueued,SyncStart,IssueDrawCommandsStart,SwapBuffers,FrameCompleted,DequeueBufferDuration,QueueBufferDuration,GpuCompleted,SwapBuffersCompleted,DisplayPresentTime,CommandSubmissionCompleted,
+0,223767,1261433162848,1261433162848,0,1261433370701,1261433371152,1261435103470,1261435238537,1261449829514,1261433369749,16666666,16666666,1261435885705,1261436005902,1261436183389,1261441209178,1261538641633,5580,451477,1261538526013,1261538641633,0,1261441209178,
+0,224832,1264583162722,1264583162722,0,1264583411300,1264583411650,1264612153088,1264612329432,1264599829388,1264583410077,16666666,16666666,1264612825724,1264612910473,1264612986267,1264613863192,1264631986975,2705,315639,1264631886685,1264631986975,0,1264613863192,
+---PROFILEDATA---
+`;
+    const frames = parseGfxinfoFramestats(api36Output);
+    expect(frames.length).toBe(2);
+    expect(frames[0]!.totalMs).toBe(105.48);
+    expect(frames[1]!.totalMs).toBe(48.82);
   });
 });
 

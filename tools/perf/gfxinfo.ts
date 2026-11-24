@@ -48,21 +48,8 @@ export function percentile(sortedValues: number[], p: number): number {
 /**
  * Parse the `---PROFILEDATA---` sections from `adb shell dumpsys gfxinfo <pkg> framestats`.
  *
- * Standard Android `PROFILEDATA` column indices (API 23+ / Android TV API 36):
- *   0: Flags
- *   1: IntendedVsync
- *   2: Vsync
- *   3: OldestInputEvent
- *   4: NewestInputEvent
- *   5: HandleInputStart
- *   6: AnimationStart
- *   7: PerformTraversalsStart
- *   8: DrawStart
- *   9: SyncQueued
- *  10: SyncStart
- *  11: IssueDrawCommandsStart
- *  12: SwapBuffers
- *  13: FrameCompleted
+ * Supports both the 14-column API 23+ `PROFILEDATA` layout and the 24-column Android 12+ / API 36
+ * `FrameTimelineVsyncId` layout by matching column names from the `Flags,...` header line.
  */
 export function parseGfxinfoFramestats(output: string): FrameSample[] {
   const lines = output.split(/\r?\n/);
@@ -83,7 +70,8 @@ export function parseGfxinfoFramestats(output: string): FrameSample[] {
     if (parts[0] === 'Flags') {
       colMap = {};
       for (let i = 0; i < parts.length; i++) {
-        colMap[parts[i]!.trim()] = i;
+        const key = parts[i]!.trim();
+        if (key) colMap[key] = i;
       }
       continue;
     }
@@ -105,10 +93,7 @@ export function parseGfxinfoFramestats(output: string): FrameSample[] {
     const frameCompletedNs = Number(parts[idx('FrameCompleted', 13)]);
 
     if (!Number.isFinite(flags) || !Number.isFinite(intendedVsyncNs) || !Number.isFinite(frameCompletedNs)) continue;
-    // Skip unrendered / empty ring-buffer slots or non-drawing flags where timestamps are 0.
     if (intendedVsyncNs <= 0 || frameCompletedNs <= 0 || frameCompletedNs <= intendedVsyncNs) continue;
-    // Bit 0 (FLAG_WINDOW_VISIBILITY_CHANGED = 1) or huge outliers (> 5000 ms idle gap) on first vsync:
-    // keep real drawn frames up to 5000 ms.
     const totalMs = (frameCompletedNs - intendedVsyncNs) / NS_PER_MS;
     if (totalMs <= 0 || totalMs > 5000) continue;
 

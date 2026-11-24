@@ -103,6 +103,12 @@ const DPAD_SEQUENCE: string[] = [
 ];
 
 const APP = 'app.ether.vela';
+const MOCK_TOKEN = 'vela-perf-mock-token';
+const MOCK_DEVICE_ID = 'vela-dev';
+const MOCK_AUTH_HEADERS: Record<string, string> = {
+  Authorization: `Bearer ${MOCK_TOKEN}`,
+  'X-Vela-Device-Id': MOCK_DEVICE_ID,
+};
 
 export function formatComparisonMarkdown(
   legacy: RoutePerfResult,
@@ -167,7 +173,7 @@ if (import.meta.main) {
       'mock-port': { type: 'string', default: '7849' },
       'metro-port': { type: 'string', default: '8149' },
       settle: { type: 'string', default: '9000' },
-      'cpu-quota': { type: 'string', default: process.env.VELA_TV_FLOOR_CPU_QUOTA ?? '100%' },
+      'cpu-quota': { type: 'string', default: process.env.VELA_TV_FLOOR_CPU_QUOTA ?? '200%' },
       out: { type: 'string' },
       json: { type: 'string' },
     },
@@ -214,6 +220,7 @@ if (import.meta.main) {
         ...process.env,
         PORT: mockPort,
         VELA_MOCK_SPORTS_FREEZE: '1',
+        VELA_MOCK_TOKEN: MOCK_TOKEN,
       },
     });
     const started = Date.now();
@@ -329,6 +336,7 @@ if (import.meta.main) {
         headers: {
           'Content-Type': 'application/json',
           'X-Vela-Screen-Renderer': '19',
+          ...MOCK_AUTH_HEADERS,
         },
         body: JSON.stringify({
           page: 'index',
@@ -447,7 +455,9 @@ if (import.meta.main) {
       const pushGfxRaw = runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'framestats');
       const pushSamples = parseGfxinfoFramestats(pushGfxRaw);
       const pushStats = summarizeFrames(pushSamples);
-      const readerAudit = isDocumentRoute ? await auditSportsIndexRecordPush(mockUrl) : undefined;
+      const readerAudit = isDocumentRoute
+        ? await auditSportsIndexRecordPush(mockUrl, MOCK_AUTH_HEADERS)
+        : undefined;
 
       // Restore mock defaults
       await fetch(`${mockUrl}/__admin/sports`, {

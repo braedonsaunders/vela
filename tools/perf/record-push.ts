@@ -169,13 +169,19 @@ export function auditRecordPushIsolation(
 }
 
 /** Run the record-push reader audit against the Sports index fixture and data from a mock server. */
-export async function auditSportsIndexRecordPush(mockOrigin: string): Promise<RecordPushAudit> {
+export async function auditSportsIndexRecordPush(
+  mockOrigin: string,
+  authHeaders: Record<string, string> = {},
+): Promise<RecordPushAudit> {
   const root = resolve(import.meta.dir, '../..');
   const docPath = join(root, 'packages/protocol/fixtures/screens/sports/index.json');
   const rawDoc = JSON.parse(readFileSync(docPath, 'utf8')) as ScreenDocument;
   const doc: ScreenDocument = { ...rawDoc, screen: 'sports', page: 'index', presentation: 'section' };
 
-  const headers = { 'X-Vela-Screen-Renderer': '19' };
+  const headers: Record<string, string> = {
+    'X-Vela-Screen-Renderer': '19',
+    ...authHeaders,
+  };
   const res = await fetch(`${mockOrigin}/vela/v0/screens/sports/pages/index/data?tz=America/New_York`, { headers });
   if (!res.ok) throw new Error(`Sports index data read failed: HTTP ${res.status}`);
   const payload = (await res.json()) as {
