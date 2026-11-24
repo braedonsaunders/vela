@@ -429,9 +429,16 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     if (node.over === 'detail.seasons' && (env.detail?.seasons.length ?? 0) > 8) {
       return <SeasonSelector ctx={ctx} />;
     }
+    // On TV the hero on show keeps one key as the carousel rotates: its buttons update in place, so
+    // focus resting on its Play stays there (a new key remounted them and the focus engine moved
+    // focus to the pager, where Select picked the first title).
+    let shown = 0;
+    const steadyHero = node.over === 'home.hero' && Platform.isTV;
     const items = collection(node.over, ctx, env, node.limit).flatMap(c => {
       const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
-      return holds(node.when, c, env) ? [<SkinNode key={itemKey(c, node.over)} node={node.item} ctx={context} hero={node.over === 'home.hero'} />] : [];
+      if (!holds(node.when, c, env)) return [];
+      const key = steadyHero ? `hero-shown-${shown++}` : itemKey(c, node.over);
+      return [<SkinNode key={key} node={node.item} ctx={context} hero={node.over === 'home.hero'} />];
     });
     const lazy = LAZY_REPEATS[node.over];
     return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{items}</LazyRepeat> : <>{items}</>;
