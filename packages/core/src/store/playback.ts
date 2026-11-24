@@ -10,7 +10,7 @@ import { hasEventStream, hasLibraryLive, hasTrickplaySheets, hasVersions } from 
 import type { TrickplayFrame } from '../protocol/trickplay';
 import { TrickplayCache } from './trickplay';
 import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-retry';
-import { heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
+import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
@@ -517,11 +517,19 @@ export class Playback {
   async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<void> {
     const current = this.box.get().playback;
     if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
+    // The engine recovering on its own (a path switch, a fallback) is not progress (stall.ts).
+    const watch = origin === 'engine' || command.kind === 'prepare-fallback' ? this.stall : undefined;
+    if (watch && current.sessionId === sessionId) this.stall = engineCommandSent(watch);
+    const answered = (plan: V.PlaybackPlan | null) => {
+      if (watch && this.stall && current.sessionId === sessionId && this.box.get().playback.sessionId === sessionId) this.stall = engineCommandAnswered(this.stall, plan);
+    };
     try {
       const connection = await this.session.ready();
       const plan = await this.send(connection, sessionId, command, origin);
+      answered(plan);
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
     } catch (error) {
+      answered(null);
       const words = commandFailure(command, error, origin);
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
       // A paused live position the rewind window left behind resumes at the window's start (spec B2).

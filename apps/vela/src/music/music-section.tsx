@@ -48,8 +48,8 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   }, [libraryId]);
   // tvOS gives Menu to the app only while something holds it (menu-key.ts); a music page is not a
   // screen of its own, so Menu on an album left Vela for the system's Home. Held on every page but
-  // music Home, Menu goes back a page, as Back does on Android TV; on music Home it leaves the
-  // section as it does from any other.
+  // music Home, Menu goes back a page, as Back does on Android TV; on music Home the sections'
+  // fallback hold takes it to Vela's Home, as from any other section's root.
   const home = place.kind === 'home';
   useEffect(() => {
     if (!Platform.isTV || Platform.OS !== 'ios' || home) return;

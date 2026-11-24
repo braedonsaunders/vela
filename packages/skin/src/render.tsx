@@ -734,7 +734,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   }, [cardPrimary?.action, cardPrimary?.arg]);
   useTVMenuEvent(event => {
     if (!Platform.isTV || !ui.focus || !cardPrimary) return;
-    if (event.eventType === 'longSelect' || event.eventType === 'menu') openAnchoredMenu('tv');
+    // Android TV's Menu key opens the card's menu; tvOS's Menu is Back (it reaches here while anything
+    // holds Back, a section's root included), so there only a long select does.
+    if (event.eventType === 'longSelect' || (event.eventType === 'menu' && Platform.OS !== 'ios')) openAnchoredMenu('tv');
   });
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
   const { own, inherited } = split(rows);

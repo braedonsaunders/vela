@@ -51,6 +51,10 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     private var ended = false
     private var info: NowPlaying?
     private var lastSent: (state: String, duration: Double)?
+    /// The item's clock as last sampled, and whether it moved since the sample before: after an advance
+    /// the new item stands still for a moment while the player says it plays.
+    private var clockSample: (item: ObjectIdentifier, time: Double)?
+    private var clockRunning = false
     private var interruptedWhilePlaying = false
     /// Background time between an item's end and the next one's start, while JavaScript asks for its plan.
     private var bridging: UIBackgroundTaskIdentifier = .invalid
@@ -62,6 +66,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         super.init()
         player.actionAtItemEnd = .pause
         player.automaticallyWaitsToMinimizeStalling = true
+        player.isMuted = PlaybackSilence.on
         playerObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.publish() } }
         }
@@ -86,6 +91,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         ended = false
         wantsPlay = false
         lastSent = nil
+        clockSample = nil
+        clockRunning = false
         pendingStart = start > 0 ? start : nil
         self.rate = Float(rate > 0 ? rate : 1)
         let item = Self.item(url: url, access: access)
@@ -158,6 +165,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         ended = false
         pendingStart = nil
         lastSent = nil
+        clockSample = nil
+        clockRunning = false
         observe(next.item)
         holdNowPlaying()
         emit?(["id": next.id, "type": "advanced", "position": position, "duration": duration])
@@ -332,7 +341,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
 
     /// Reports the state to JavaScript when it changed, and every half second while playing.
     private func publish(tick: Bool = false) {
-        guard item != nil else { return }
+        guard let item else { return }
+        sampleClock(item)
         let state = self.state
         let duration = self.duration
         if state == "playing" { endBridging() }
@@ -348,6 +358,22 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         if let failure { body["error"] = failure }
         emit?(body)
         updateNowPlaying()
+    }
+
+    /// Whether the item's clock moved since the last sample. A seek on its way, or a start not yet
+    /// reached, is not the clock moving.
+    private func sampleClock(_ item: AVPlayerItem) {
+        let time = item.currentTime().seconds
+        let id = ObjectIdentifier(item)
+        guard time.isFinite, seekTarget == nil, pendingStart == nil, player.timeControlStatus == .playing else {
+            clockRunning = false
+            clockSample = time.isFinite ? (id, time) : nil
+            return
+        }
+        if let sample = clockSample, sample.item == id, time != sample.time {
+            clockRunning = time > sample.time
+        }
+        clockSample = (id, time)
     }
 
     private func buffered() -> [[String: Double]] {
@@ -388,7 +414,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
             playing: state == "playing",
             album: info?.album.isEmpty == false ? info?.album : nil,
             rate: Double(rate),
-            audio: true
+            audio: true,
+            clockRunning: clockRunning
         )
         SystemMediaControls.shared.update(now, from: self)
     }

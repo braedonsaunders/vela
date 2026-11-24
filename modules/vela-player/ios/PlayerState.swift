@@ -182,3 +182,88 @@ enum LiveTimeline {
         return start + min(5, max(0, edge - 1 - start))
     }
 }
+
+/// Whether what the engine calls playing is moving on screen, and the position to report. The engine's
+/// clock is not proof: the software route's synchronizer keeps its rate through a starved queue, so the
+/// clock runs on over a frozen picture (a 40 kbit/s start reported 12 s → 67 s over a picture stuck at
+/// 12.25 s), and a clock can stand still while the engine still says it plays. Starved, playback is
+/// reported as buffering at the picture's position, so the session's stall policy sees no movement and
+/// counts only the bytes that keep arriving (loadProgress) and frames that are presented.
+struct PresentationProgress {
+    /// How far the clock may run past the newest decoded frame before the picture counts as frozen.
+    static let frameSlack = 0.75
+    /// How long a clock that claims to play may stand still before it counts as starved.
+    static let stillSeconds = 1.5
+
+    struct Reading {
+        /// The engine's clock (`time-pos`, the display axis) and the same instant on the source axis.
+        var clock: Double
+        var sourceClock: Double
+        /// Wall-clock seconds.
+        var now: Double
+        /// The engine is playing, not paused, ended or idle.
+        var playing: Bool
+        var seeking: Bool
+        /// The engine itself says it is waiting (buffering, reconnecting, reloading).
+        var waiting: Bool
+        /// The route reports its video frames (software and loopback; not remote HLS or audio only).
+        var framesExpected: Bool
+        /// The newest video frame decoded for the current run (source axis), or nil before the first.
+        var newestFrame: Double?
+    }
+
+    private var lastClock: Double?
+    private var clockMovedAt: Double?
+    /// Where this run's clock started, for a picture that has not shown a first frame yet.
+    private var startClock: Double?
+    /// The position last reported.
+    private(set) var position: Double?
+
+    /// A new source or a reload: nothing is known about its picture. A reload keeps the position it
+    /// reports until its picture moves.
+    mutating func reset(keepingPosition: Bool = false) {
+        let kept = keepingPosition ? position : nil
+        self = Self()
+        position = kept
+    }
+
+    /// Starved, and the position to report: where the picture is, never ahead of it and never back.
+    mutating func observe(_ reading: Reading) -> (starved: Bool, position: Double) {
+        let clock = reading.clock
+        guard clock.isFinite else { return (reading.waiting, position ?? 0) }
+        defer { lastClock = clock }
+        if !reading.playing || reading.seeking {
+            // Paused, ended or seeking: the clock is the position (a seek's target), and the next
+            // run's wait starts when it plays again.
+            clockMovedAt = reading.now
+            startClock = nil
+            position = clock
+            return (reading.waiting && reading.playing, clock)
+        }
+        if lastClock == nil || abs(clock - (lastClock ?? clock)) > 0.01 || clockMovedAt == nil { clockMovedAt = reading.now }
+        if startClock == nil { startClock = reading.sourceClock }
+        let still = reading.now - (clockMovedAt ?? reading.now) >= Self.stillSeconds
+        // On the clock's own axis: the picture shows the newest frame decoded, at most the clock.
+        let shift = clock - reading.sourceClock
+        var picture: Double?
+        var frozen = false
+        if reading.framesExpected {
+            if let frame = reading.newestFrame, frame.isFinite {
+                frozen = reading.sourceClock > frame + Self.frameSlack
+                picture = min(clock, frame + shift)
+            } else if let start = startClock {
+                frozen = reading.sourceClock > start + Self.frameSlack
+                picture = start + shift
+            }
+        }
+        let starved = reading.waiting || still || frozen
+        guard starved else {
+            position = clock
+            return (false, clock)
+        }
+        let held = position ?? picture ?? clock
+        let next = max(held, min(picture ?? held, clock))
+        position = next
+        return (true, next)
+    }
+}

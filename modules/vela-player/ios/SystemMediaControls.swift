@@ -101,7 +101,7 @@ final class SystemMediaControls {
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: state.title,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: state.position,
-            MPNowPlayingInfoPropertyPlaybackRate: state.playing ? state.rate : 0.0,
+            MPNowPlayingInfoPropertyPlaybackRate: state.playing && state.clockRunning ? state.rate : 0.0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: state.rate,
             MPNowPlayingInfoPropertyMediaType: (state.audio ? MPNowPlayingInfoMediaType.audio : .video).rawValue,
         ]
@@ -121,9 +121,10 @@ final class SystemMediaControls {
 
     /// A change of title, rate or duration, or a jump the system's extrapolation would not reach.
     private static func differs(_ old: NowPlayingState, _ new: NowPlayingState, elapsed: TimeInterval) -> Bool {
-        let expected = old.position + (old.playing ? elapsed * old.rate : 0)
+        let expected = old.position + (old.playing && old.clockRunning ? elapsed * old.rate : 0)
         return old.title != new.title || old.subtitle != new.subtitle || old.album != new.album || old.artworkURL != new.artworkURL
             || old.duration != new.duration || old.playing != new.playing || old.rate != new.rate || old.audio != new.audio
+            || old.clockRunning != new.clockRunning
             || abs(new.position - expected) > (new.audio ? 2 : 5)
     }
 

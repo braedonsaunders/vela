@@ -1,6 +1,6 @@
 // Exact engine, LGPL FFmpeg and LibTrueHD pins, the engine's package traits and the background audio mode
 // survive every Expo prebuild.
-const { withInfoPlist, withPodfile, withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
+const { withAppDelegate, withInfoPlist, withPodfile, withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
 
 // AetherEngine's optional components are SwiftPM package traits, off by default. React Native's
 // spm_dependency cannot name traits, and CocoaPods' project model has no key for them, so the Podfile
@@ -24,14 +24,37 @@ post_integrate do |installer|
   project.save
 end
 `;
+// React Native drops JavaScript's console.warn and console.info in Release builds (its log threshold
+// there is error), so playback's own diagnostics ("Vela playback: session ... stalled; restart 1 of 2")
+// never reached a device's console on Apple while Android's logcat shows them. A Release build logs
+// warnings through the same RCTLog path, into the unified log (subsystem com.facebook.react.log).
+const LOG_MARKER = '// @vela/apple-player: JavaScript warnings in the device log';
+const logThreshold = `    ${LOG_MARKER}
+#if !DEBUG
+    RCTSetLogThreshold(.warning)
+#endif
+`;
+function withReleaseWarnings(contents) {
+  if (contents.includes(LOG_MARKER)) return contents;
+  const launch = contents.match(/didFinishLaunchingWithOptions[^{]*\{\n/);
+  if (!launch) throw new Error('apple-player: AppDelegate has no didFinishLaunchingWithOptions to log warnings from');
+  const at = launch.index + launch[0].length;
+  return contents.slice(0, at) + logThreshold + contents.slice(at);
+}
 module.exports = withApplePlayer;
 module.exports.AETHER_TRAITS = AETHER_TRAITS;
+module.exports.withReleaseWarnings = withReleaseWarnings;
 function withApplePlayer(config) {
   config = withPodfile(config, mod => {
     const podfile = mod.modResults;
     const start = podfile.contents.indexOf(TRAITS_MARKER);
     const kept = start < 0 ? podfile.contents : podfile.contents.slice(0, start).trimEnd() + '\n';
     podfile.contents = `${kept.trimEnd()}\n\n${traitsHook}`;
+    return mod;
+  });
+  config = withAppDelegate(config, mod => {
+    if (mod.modResults.language !== 'swift') throw new Error('apple-player: expected a Swift AppDelegate');
+    mod.modResults.contents = withReleaseWarnings(mod.modResults.contents);
     return mod;
   });
   config = withPodfileProperties(config, mod => {

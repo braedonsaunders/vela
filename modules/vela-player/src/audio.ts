@@ -71,7 +71,18 @@ interface Status {
   error: string;
   /** When `position` was true, on the engine's clock (ms). */
   at: number;
+  /**
+   * The native clock was seen moving: a playing report ahead of the one before it. A new item (a
+   * load, a gapless advance) or a seek is not moving until a report shows it: a queue player's next
+   * item stands still for a moment after it takes over, and extrapolating over that ran a second
+   * ahead and then jumped back.
+   */
+  moving?: boolean;
 }
+
+/** How far the position may run on past the native player's last report (it reports twice a second
+ * while playing): a clock that stops without saying so is not extrapolated for long. */
+const EXTRAPOLATE_SECONDS = 1.5;
 
 /** The store events a native status implies, given the previous one. */
 export function audioEvents(previous: Pick<Status, 'state' | 'duration' | 'position'>, next: Pick<Status, 'state' | 'duration' | 'position'>): AudioEngineEvent[] {
@@ -85,12 +96,17 @@ export function audioEvents(previous: Pick<Status, 'state' | 'duration' | 'posit
   return events;
 }
 
-/** The playing position between the native player's reports: it moves at the rate while playing. */
-export function extrapolatedPosition(status: Pick<Status, 'state' | 'position' | 'duration' | 'rate' | 'at'>, now: number): number {
-  if (status.state !== 'playing') return status.position;
-  const moved = status.position + Math.max(0, now - status.at) / 1000 * status.rate;
+/** The playing position between the native player's reports: it moves at the rate while playing and
+ * the clock is known to move, for a little beyond the last report. */
+export function extrapolatedPosition(status: Pick<Status, 'state' | 'position' | 'duration' | 'rate' | 'at' | 'moving'>, now: number): number {
+  if (status.state !== 'playing' || status.moving === false) return status.position;
+  const moved = status.position + Math.min(EXTRAPOLATE_SECONDS, Math.max(0, now - status.at) / 1000) * status.rate;
   return status.duration > 0 ? Math.min(moved, status.duration) : moved;
 }
+
+/** A report this little behind the position already shown is the extrapolation running a touch ahead,
+ * not a move: the shown position holds until the clock passes it. */
+const JITTER_SECONDS = 1.5;
 
 /**
  * The store's engine over the native player. `authorize` resolves the media authorization a URL needs
@@ -110,7 +126,9 @@ export function createNativeAudioEngine(
   let id = 0;
   let queued = 0;
   let loaded = false;
-  let status: Status = { state: 'idle', position: 0, duration: 0, rate: 1, buffered: [], error: '', at: now() };
+  let status: Status = { state: 'idle', position: 0, duration: 0, rate: 1, buffered: [], error: '', at: now(), moving: false };
+  /** The position last given to the store, for this item and since its last seek: it never goes back. */
+  let shown = 0;
   let queue: Promise<void> = Promise.resolve();
   const send = (step: () => void | Promise<void>) => {
     queue = queue.then(step).catch(error => {
@@ -128,21 +146,27 @@ export function createNativeAudioEngine(
       queued = 0;
       const { position, duration } = event;
       status = { state: 'playing', position: position !== undefined && Number.isFinite(position) ? Math.max(0, position) : 0,
-        duration: duration !== undefined && Number.isFinite(duration) && duration > 0 ? duration : 0, rate: status.rate, buffered: [], error: '', at: now() };
+        duration: duration !== undefined && Number.isFinite(duration) && duration > 0 ? duration : 0, rate: status.rate, buffered: [], error: '', at: now(), moving: false };
+      shown = status.position;
       emit('advanced');
       if (event.type === 'advanced') return;
     }
     if (event.type === 'advanced' || event.id !== id || !loaded) return;
     const previous = status;
+    const position = Number.isFinite(event.position) ? Math.max(0, event.position) : previous.position;
     status = {
       state: event.state,
-      position: Number.isFinite(event.position) ? Math.max(0, event.position) : previous.position,
+      position,
       duration: Number.isFinite(event.duration) && event.duration > 0 ? event.duration : previous.duration,
       rate: event.rate && event.rate > 0 ? event.rate : previous.rate,
       buffered: event.buffered ?? previous.buffered,
       error: event.state === 'failed' ? event.error || 'Playback failed' : '',
       at: now(),
+      moving: event.state === 'playing' && (position > previous.position || (!!previous.moving && position === previous.position && previous.state === 'playing')),
     };
+    // Stopped (paused, buffering, ended), nothing is extrapolated and the report is the position; a
+    // real move back while playing (beyond jitter) is the native player's truth too.
+    if (event.state !== 'playing' || position < shown - JITTER_SECONDS) shown = position;
     for (const change of audioEvents(previous, status)) emit(change);
   });
   return {
@@ -151,7 +175,8 @@ export function createNativeAudioEngine(
       id = load;
       queued = 0;
       loaded = true;
-      status = { state: 'loading', position: Math.max(0, startSeconds), duration: 0, rate, buffered: [], error: '', at: now() };
+      status = { state: 'loading', position: Math.max(0, startSeconds), duration: 0, rate, buffered: [], error: '', at: now(), moving: false };
+      shown = status.position;
       send(async () => {
         const access = options.authorize ? await options.authorize(url) : null;
         if (load !== id) return;
@@ -161,7 +186,8 @@ export function createNativeAudioEngine(
     play() { send(() => bridge.play()); },
     pause() { send(() => bridge.pause()); },
     seek(seconds) {
-      status = { ...status, position: Math.max(0, seconds), at: now() };
+      status = { ...status, position: Math.max(0, seconds), at: now(), moving: false };
+      shown = status.position;
       send(() => bridge.seek(Math.max(0, seconds)));
     },
     setRate(rate) {
@@ -185,10 +211,14 @@ export function createNativeAudioEngine(
       loaded = false;
       id = ++serial;
       queued = 0;
-      status = { state: 'idle', position: 0, duration: 0, rate: status.rate, buffered: [], error: '', at: now() };
+      status = { state: 'idle', position: 0, duration: 0, rate: status.rate, buffered: [], error: '', at: now(), moving: false };
+      shown = 0;
       send(() => bridge.unload());
     },
-    position: () => extrapolatedPosition(status, now()),
+    position: () => {
+      shown = Math.max(shown, extrapolatedPosition(status, now()));
+      return shown;
+    },
     duration: () => status.duration,
     buffered: () => status.buffered,
     error: () => status.error,

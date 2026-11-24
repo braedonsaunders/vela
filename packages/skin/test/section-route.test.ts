@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { sectionRoute, sectionPathVisible, sectionIsActive } from '../../../apps/vela/src/section-route';
+import { sectionBack, sectionRoute, sectionPathVisible, sectionIsActive } from '../../../apps/vela/src/section-route';
 
 test('section selection follows the active navigator route when returning to Home', () => {
   expect(sectionRoute('library/[id]', 'movies')).toEqual({ route: 'library', entry: 'movies' });
@@ -27,4 +27,23 @@ test('direct touch sections follow their path while TV retains native focus gati
   expect(sectionIsActive('/', false, true)).toBe(false);
   expect(sectionIsActive('/', true, true)).toBe(true);
   expect(sectionIsActive('/watch/channel', true, true)).toBe(false);
+});
+
+test("tvOS Menu from a section goes back inside it, then Home, and Home leaves the app", () => {
+  const home = { name: 'index' };
+  const movies = { name: 'library/[id]', params: { id: 'movies' } };
+  const music = { name: 'library/[id]', params: { id: 'music' } };
+  const album = { name: 'library/[id]', params: { id: 'music', m: 'album:1' } };
+  expect(sectionBack([home], 0)).toBeNull();
+  expect(sectionBack([home, movies], 1)).toBe('home');
+  expect(sectionBack([home, music, album], 2)).toBe('back');
+  expect(sectionBack([home, music, album], 1)).toBe('home');
+  // Reached through other sections (Live, then Music): Menu on Music's root is Home, not Live.
+  expect(sectionBack([home, { name: 'live' }, music], 2)).toBe('home');
+  expect(sectionBack([home, { name: 'live' }], 1)).toBe('home');
+  // Opened without Home under it (a deep link): Home too.
+  expect(sectionBack([movies], 0)).toBe('home');
+  expect(sectionBack([{ name: 'screen/[id]', params: { id: 'sports' } }], 0)).toBe('home');
+  // A navigator that reports no usable route takes no part.
+  expect(sectionBack([], 0)).toBeNull();
 });
