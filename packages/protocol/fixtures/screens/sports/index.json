@@ -40,7 +40,7 @@
     "radiusPanel": "min($ui.radiusPanel * 0.6, 22px)",
     "gutter": "max(28px, 4vw)"
   },
-  "palette": { "onTeam": "#ffd7dc", "homeShare": "#9fc0ff", "shadeTop": "#05070d26", "shadeBottom": "#05070d8c" },
+  "palette": { "onTeam": "#ffd7dc", "homeShare": "#9fc0ff", "shadeTop": "#05070d26", "shadeBottom": "#05070d8c", "fieldA": "#18264a", "fieldB": "#3a1020" },
   "templates": {
     "metaText": {
       "type": "text", "text": "{arg.text}",
@@ -79,15 +79,15 @@
 
     "ranking": {
       "type": "box", "style": { "gap": "3px" }, "children": [
-        { "type": "text", "text": "{s:resultHidden}", "when": [{ "test": "e.spoiler" }], "style": { "font-size": "13px", "line-height": "1.25", "color": "{arg.quiet}" } },
+        { "type": "text", "text": "{s:resultHidden}", "when": [{ "test": "e.spoiler" }], "style": { "font-size": "13px", "line-height": "1.25", "color": "$ui.inkQuiet" } },
         { "type": "repeat", "over": "e.ranking", "as": "entry", "limit": 2, "when": [{ "test": "e.spoiler", "not": true }],
           "item": { "type": "box", "style": { "flex-direction": "row", "align-items": "baseline", "gap": "8px" }, "children": [
-            { "type": "text", "text": "{entry.place}", "style": { "width": "23px", "font-size": "12px", "line-height": "1.25", "font-weight": "800", "color": "{arg.quiet}", "font-variant-numeric": "tabular-nums", "line-clamp": "1" },
+            { "type": "text", "text": "{entry.place}", "style": { "width": "23px", "font-size": "12px", "line-height": "1.25", "font-weight": "800", "color": "$ui.inkQuiet", "font-variant-numeric": "tabular-nums", "line-clamp": "1" },
               "states": [{ "when": [{ "test": "entry.pos", "is": "eq", "value": "1" }], "style": { "width": "23px", "font-size": "12px", "line-height": "1.25", "font-weight": "800", "color": "$ui.highlight", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } }] },
-            { "type": "text", "text": "{entry.name}", "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "560", "color": "{arg.ink}", "line-clamp": "1", "text-overflow": "ellipsis" },
-              "states": [{ "when": [{ "test": "entry.pos", "is": "eq", "value": "1" }], "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "700", "color": "{arg.ink}", "line-clamp": "1", "text-overflow": "ellipsis" } }] },
-            { "type": "text", "text": "{entry.secondary}", "when": [{ "test": "entry.secondary" }], "style": { "flex-shrink": "1", "font-size": "11.5px", "line-height": "1.25", "font-weight": "500", "color": "{arg.quiet}", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } },
-            { "type": "text", "text": "{entry.detail}", "when": [{ "test": "entry.detail" }], "style": { "flex-shrink": "0", "max-width": "38%", "text-align": "right", "font-size": "13px", "line-height": "1.25", "font-weight": "750", "color": "{arg.ink}", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" } }
+            { "type": "text", "text": "{entry.name}", "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "560", "color": "$ui.ink", "line-clamp": "1", "text-overflow": "ellipsis" },
+              "states": [{ "when": [{ "test": "entry.pos", "is": "eq", "value": "1" }], "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "700", "color": "$ui.ink", "line-clamp": "1", "text-overflow": "ellipsis" } }] },
+            { "type": "text", "text": "{entry.secondary}", "when": [{ "test": "entry.secondary" }], "style": { "flex-shrink": "1", "font-size": "11.5px", "line-height": "1.25", "font-weight": "500", "color": "$ui.inkQuiet", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } },
+            { "type": "text", "text": "{entry.detail}", "when": [{ "test": "entry.detail" }], "style": { "flex-shrink": "0", "max-width": "38%", "text-align": "right", "font-size": "13px", "line-height": "1.25", "font-weight": "750", "color": "$ui.ink", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" } }
           ] } }
       ]
     },
@@ -108,7 +108,7 @@
           { "type": "repeat", "over": "e.sides", "as": "side", "item": { "type": "use", "template": "sideLine" } } ] },
         { "type": "box", "when": [{ "test": "e.sides", "not": true }], "style": { "gap": "6px" }, "children": [
           { "type": "text", "text": "{e.title}", "style": { "font-size": "14px", "line-height": "1.25", "font-weight": "700", "color": "$ui.ink", "line-clamp": "1", "text-overflow": "ellipsis" } },
-          { "type": "use", "template": "ranking", "with": { "ink": "$ui.ink", "quiet": "$ui.inkQuiet" } } ] },
+          { "type": "use", "template": "ranking" } ] },
         { "type": "use", "template": "cardLine" }
       ]
     },
@@ -134,7 +134,7 @@
             "style": { "font-size": "14px", "line-height": "1.12", "font-weight": "800", "color": "$ui.ink", "font-variant-numeric": "tabular-nums" } },
           { "type": "text", "text": "{side.record}", "when": [{ "test": "e.scored", "not": true }, { "test": "e.phase", "is": "eq", "value": "upcoming" }, { "test": "side.record" }],
             "style": { "font-size": "12.5px", "line-height": "1.25", "font-weight": "650", "color": "$ui.inkSecondary", "font-variant-numeric": "tabular-nums" } } ] } },
-        { "type": "use", "template": "ranking", "when": [{ "test": "e.sides", "not": true }], "with": { "ink": "$ui.ink", "quiet": "$ui.inkQuiet" } }
+        { "type": "use", "template": "ranking", "when": [{ "test": "e.sides", "not": true }] }
       ]
     },
 
@@ -162,6 +162,9 @@
       "above": { "1600": { "background-image": "linear-gradient(180deg, $palette.shadeTop, $palette.shadeBottom), linear-gradient(98deg, {e.sides.0|tint}, {e.sides.1|tint})" } },
       "below": { "1200": { "background-image": "linear-gradient(180deg, $palette.shadeTop, $palette.shadeBottom), linear-gradient(105deg, {e.sides.0|tint}, {e.sides.1|tint})" } },
       "children": [
+        { "type": "box", "when": [{ "test": "e.sides", "not": true }], "a11y": { "hidden": true },
+          "style": { "position": "absolute", "inset": "0px", "background-image": "linear-gradient(180deg, $palette.shadeTop, $palette.shadeBottom), linear-gradient(101deg, $palette.fieldA, $palette.fieldB)" },
+          "small": { "background-image": "linear-gradient(180deg, $palette.shadeTop, $palette.shadeBottom), linear-gradient(117deg, $palette.fieldA, $palette.fieldB)" } },
         { "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "9px" }, "children": [
           { "type": "use", "template": "vela:liveBadge", "when": [{ "test": "e.phase", "is": "eq", "value": "live" }, { "test": "e.spoiler", "not": true }] },
           { "type": "use", "template": "heroEyebrow", "with": { "text": "{e.league.label} · {s:yourTeam}" }, "when": [{ "test": "e.phase", "is": "eq", "value": "live" }, { "test": "e.favourite" }] },

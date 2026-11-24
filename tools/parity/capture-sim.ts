@@ -20,6 +20,8 @@ const { values } = parseArgs({ options: {
   udid: { type: 'string' }, platform: { type: 'string', default: 'tvos' }, variant: { type: 'string', default: 'legacy' }, out: { type: 'string' },
   mock: { type: 'string', default: 'http://127.0.0.1:7841' }, views: { type: 'string' }, settle: { type: 'string', default: '9000' },
   'metro-port': { type: 'string', default: '8142' },
+  /** The simulator display to shoot (a foldable iPhone shows the app on its cover display, "1"). */
+  display: { type: 'string' },
 } });
 if (!values.udid || !values.out) throw new Error('--udid and --out are required');
 const variant = values.variant as Variant, platform = values.platform!, udid = values.udid;
@@ -76,7 +78,7 @@ const apple: Device = {
   // simctl cannot write into ~/.scratch (TCC), so shoot to /tmp and copy.
   shoot(file) {
     const temporary = `/tmp/w4-parity-${process.pid}.png`;
-    simctl('io', udid, 'screenshot', '--type=png', temporary);
+    simctl('io', udid, 'screenshot', '--type=png', ...(values.display ? [`--display=${values.display}`] : []), temporary);
     copyFileSync(temporary, file);
     rmSync(temporary);
   },
