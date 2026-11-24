@@ -7,7 +7,16 @@ export function mediaPlan(plan: PlaybackPlan, origin: string): PlaybackPlan {
     if (parsed.origin !== origin || !parsed.pathname.startsWith('/sessions/media/') || parsed.username || parsed.password) throw new Error('Media URL outside bound session broker');
     return parsed.href;
   };
-  const track = (value: PlaybackPlan['audioTracks'][number]) => value.url ? { ...value, url: url(value.url) } : value;
+  // A sidecar's delivery URL (a subtitle downloaded mid-session too) is made absolute against the server
+  // as the track URL is, so a native player can fetch it; one elsewhere is left exactly as it came.
+  const delivery = (value: string) => {
+    const parsed = new URL(value, `${origin.replace(/\/$/, '')}/`);
+    return parsed.origin === origin && !parsed.username && !parsed.password ? parsed.href : value;
+  };
+  const track = (value: PlaybackPlan['audioTracks'][number]) => {
+    const resolved = value.url ? { ...value, url: url(value.url) } : value;
+    return resolved.delivery?.kind === 'external' ? { ...resolved, delivery: { ...resolved.delivery, url: delivery(resolved.delivery.url) } } : resolved;
+  };
   return { ...plan, paths: plan.paths.map(path => {
     const normalized = {
       ...(path.audioRenditions ? { audioRenditions: path.audioRenditions.map(audio => ({ ...audio, url: url(audio.url) })) } : {}),

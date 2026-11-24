@@ -24,6 +24,14 @@ fun main() {
   check(playbackBuffering(true, true).maximumMs == 20000)
   check(playbackBuffering(true, false).maximumMs == 5000)
 
+  // A subtitle downloaded mid-session is a new renderable sidecar: the prepared item is rebuilt with it.
+  val sidecar = { id: String, format: String -> mapOf("id" to id, "name" to id, "kind" to "subtitle", "delivery" to mapOf("kind" to "external", "format" to format, "url" to "https://media.example/$id")) }
+  val withSidecars = { tracks: List<Map<String, Any?>> -> PlaybackPlan.from(mapOf("sessionId" to "s", "revision" to 2, "sourceGeneration" to 1, "seekGeneration" to 1, "selectedPathId" to "original", "paths" to emptyList<Any>(), "subtitleTracks" to tracks))!! }
+  val before = withSidecars(listOf(sidecar("sub-en", "webvtt"), mapOf("id" to "embedded", "name" to "embedded", "streamIndex" to 3)))
+  val after = withSidecars(listOf(sidecar("sub-en", "webvtt"), sidecar("found-nl", "webvtt"), sidecar("found-pgs", "pgs")))
+  check(after.renderableSidecarIds() - before.renderableSidecarIds() == setOf("found-nl"))
+  check((before.renderableSidecarIds() - before.renderableSidecarIds()).isEmpty())
+
   val livePlan = PlaybackPlan.from(mapOf("sessionId" to "live-window", "revision" to 1, "sourceGeneration" to 1, "seekGeneration" to 1, "selectedPathId" to "live", "channelId" to "channel", "paths" to emptyList<Any>()))!!
   val windowRecovery = PathRecovery()
   check(windowRecovery.liveWindowPosition(livePlan, 60.0, 0) == 6.0)

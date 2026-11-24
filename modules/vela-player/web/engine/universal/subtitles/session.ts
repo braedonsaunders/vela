@@ -9,6 +9,7 @@ import { PGSDecoder, type PGSDisplay } from './pgs';
 import { decodeVobSub, joinVobSubPackets, parseVobSubIdx, type VobSubCue } from './vobsub';
 import { createAssOutput, type AssOutput } from './ass';
 import { streamingPGS } from './streaming-pgs';
+import { externalTrack, withDescribed } from './described';
 import {
   readSubtitlePreferences,
   validateSubtitlePreferences,
@@ -68,27 +69,6 @@ function wait<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
     );
   });
 }
-function externalCodec(description: SubtitleDescription): SubtitleTrack['codec'] | null {
-  const format =
-    description.delivery?.kind === 'external'
-      ? description.delivery.format
-      : description.codec?.toLowerCase();
-  return format === 'webvtt-window' || format === 'vtt'
-    ? 'webvtt'
-    : format === 'sup' || format === 'hdmv_pgs_subtitle'
-      ? 'pgs'
-      : format === 'dvd_subtitle' || format === 'dvdsub'
-        ? 'vobsub'
-      : format === 'subrip'
-        ? 'srt'
-        : format === 'mov_text'
-          ? 'tx3g'
-          : ['srt', 'webvtt', 'ass', 'ssa', 'pgs', 'vobsub', 'tx3g'].includes(format ?? '')
-            ? (format as SubtitleTrack['codec'])
-            : description.delivery?.kind === 'burn-in'
-              ? 'unknown'
-              : null;
-}
 function supPackets(bytes: Uint8Array): SubtitlePacket[] {
   const result: SubtitlePacket[] = [];
   for (let at = 0; at < bytes.length; ) {
@@ -124,19 +104,23 @@ export class SubtitleSession {
   private disposed = false;
   private preferences = readSubtitlePreferences();
   private documents = new Map<string, Uint8Array>();
+  /** Described after the session was created (see describe), and whether it has listed its tracks. */
+  private added: SubtitleDescription[] = [];
+  private opened = false;
   private fonts: Uint8Array[] | null = null;
   constructor(private options: SubtitleSessionOptions) {
     this.epoch = options.epoch;
     options.signal.addEventListener('abort', this.dispose, { once: true });
     if (options.signal.aborted) this.dispose();
   }
+  /** The tracks, once the source is open: the current list, with any described since (see describe). */
   discover(): Promise<readonly SubtitleTrack[]> {
     if (!this.discovery)
       this.discovery = this.open().catch((error) => {
         this.discovery = null;
         throw error;
       });
-    return this.discovery;
+    return this.discovery.then(() => this.tracks);
   }
   private async open(): Promise<readonly SubtitleTrack[]> {
     const signal = AbortSignal.any([this.root.signal, AbortSignal.timeout(8000)]),
@@ -161,33 +145,40 @@ export class SubtitleSession {
       signal.throwIfAborted();
       this.container = container;
       const tracks = [...(container?.tracks ?? [])];
-      for (const description of descriptions) {
+      for (const description of [...descriptions, ...this.added]) {
         if (tracks.some((track) => track.serverId === description.id)) continue;
-        const codec = externalCodec(description);
-        if (!codec || !description.delivery || description.delivery.kind === 'embedded') continue;
-        tracks.push({
-          id: description.id,
-          serverId: description.id,
-          streamIndex: description.streamIndex ?? null,
-          containerTrackId: null,
-          codec,
-          label: (description.label ?? `${description.language ?? 'und'} ${codec.toUpperCase()}`).slice(
-            0,
-            512,
-          ),
-          language: (description.language ?? 'und').slice(0, 64),
-          default: false,
-          forced: false,
-          delivery: description.delivery,
-        });
+        const track = externalTrack(description);
+        if (track) tracks.push(track);
       }
       this.tracks = tracks;
+      this.opened = true;
       this.options.onTracks?.(tracks);
       return tracks;
     } catch (error) {
       container?.dispose();
       throw error;
     }
+  }
+  /** External tracks a newer plan of the same source added (a subtitle downloaded mid-session):
+   * they join the list without reopening the source, so the running selection is undisturbed.
+   * Whether any track was new. */
+  describe(descriptions: readonly SubtitleDescription[]): boolean {
+    if (this.disposed) return false;
+    const fresh = descriptions.filter(
+      (description) =>
+        !this.added.some((known) => known.id === description.id) &&
+        !this.tracks.some((track) => track.serverId === description.id) &&
+        !!externalTrack(description),
+    );
+    if (!fresh.length) return false;
+    // A discovery still opening the source reads these when it lists its tracks.
+    this.added.push(...fresh);
+    const tracks = this.opened ? withDescribed(this.tracks, fresh) : null;
+    if (tracks) {
+      this.tracks = tracks;
+      this.options.onTracks?.(tracks);
+    }
+    return true;
   }
   async select(trackId: string | null): Promise<void> {
     return this.activate(trackId);

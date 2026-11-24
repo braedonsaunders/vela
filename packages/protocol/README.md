@@ -57,6 +57,8 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /sessions/:id/events | cursor (query), Last-Event-ID (header) | SSE SessionEvent |
 | POST | /sessions/:id/commands | SessionCommand | PlaybackPlan |
 | POST | /sessions/:id/observations | PlayerObservation | Ack |
+| GET | /sessions/:id/subtitles/search | language (query, optional) | SubtitleSearchResponse (features.subtitleSearch) |
+| POST | /sessions/:id/subtitles/:offerId | Mutation | PlaybackPlan, or 202 PlaybackPreparing (features.subtitleSearch) |
 | GET | /sessions/:id/trickplay/:width/:sheet.jpg | bearer + device; optional If-None-Match | private JPEG sprite sheet or 304 |
 | GET | /live/channels | cursor, limit (query) | Page<Channel> |
 | GET | /live/guide | GuideQuery (query) | GuideResponse |
@@ -380,6 +382,36 @@ and cursor are session scoped; deduplicate repeats and ignore older revisions.
 Comments are heartbeat keepalives, never state changes. Recheck authorization on
 reconnect and while streaming; revoked credentials close the stream. Ended sessions
 retain a final snapshot for bounded reconnection; `ended` closes the stream.
+
+### Subtitle search
+
+`features.subtitleSearch: {available, languages}` lets a running session add a subtitle
+the title lacks, from a subtitle site or as the server's AI translation. Absent or
+unavailable means no search; clients show nothing for it. `languages` are the codes a
+search accepts, ISO 639-1 (`nl`) or a BCP 47 tag where the region matters (`pt-BR`).
+
+`GET /sessions/:id/subtitles/search?language=nl` answers `{language, offers,
+preferredLanguages?}`. Without `language` the server searches the viewer's first
+preferred subtitle language; `language` always says what was searched.
+`preferredLanguages` is the viewer's subtitle languages, most preferred first, which a
+client lists first in its language picker. An offer is `{id, language, name, provider,
+format?, author?, downloads?, rating? (0–10), releaseMatch?, hearingImpaired?, forced?,
+aiTranslated?}`; `releaseMatch` means made for the release the session plays (a file
+hash or release-name match) and `aiTranslated` a track the server makes with its
+language model once chosen. Offer ids are opaque and valid for the session that
+searched; an unknown language is 400 `invalid_language`.
+
+`POST /sessions/:id/subtitles/:offerId` with `{idempotencyKey}` adds the offer to the
+session without a source change: the same session and generations, the new track
+appended to `subtitleTracks` with external WebVTT delivery, `selectedSubtitleTrackId`
+set to it, the revision raised and the plan published on the session stream. While a
+track is still being made (an AI translation) the answer is 202 `{state: 'preparing',
+retryAfterSeconds}`, which is not a final answer and is not replayed. The client posts
+again, each time as a new mutation (a new key), until it gets the plan. The server makes
+an offer's track once per session: a post while it prepares joins that work, and one after
+it is ready answers the plan with the existing track selected.
+An offer the session was not shown is 404 `offer_not_found` (search again); an ended
+session is 409 `session_ended`.
 
 ### Scrub thumbnails (trickplay)
 

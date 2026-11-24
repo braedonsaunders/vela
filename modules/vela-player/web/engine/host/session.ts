@@ -11,7 +11,7 @@ import { canRetainOriginal, seekRetainedOriginal } from './file-retention';
 import { readPosition, readDuration, readFrameMetrics } from './position';
 import { failPlayback } from './recovery';
 import { requestSwitch, sendQueuedSeek } from './authorizations';
-import { applySubtitle } from './subtitles';
+import { applySubtitle, describeAddedSubtitles } from './subtitles';
 import { applyNativeAudio } from './platform';
 import { playMedia, pauseMedia, retirePlayIntent } from './transport';
 export function retireMediaAuthorization(context: HostContext) {
@@ -197,6 +197,7 @@ export function updateSession(context: HostContext, session: PlaybackSession) {
   }
   const previousState = context.session.current?.serverState;
   context.session.current = session;
+  describeAddedSubtitles(context, session);
   if (
     context.tracks.pendingTracks &&
     (context.tracks.pendingTracks.audio === undefined ||

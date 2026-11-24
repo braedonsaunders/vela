@@ -47,7 +47,8 @@ export type { ServerKind } from './session/servers';
 export type { Credentials, MediaAccess, ServerAdapter } from './adapter';
 export { sendCommand } from './adapter/commands';
 
-export type { TitleActions, MediaVersion, RemoteSubtitle } from './adapter/media-actions';
+export type { TitleActions, MediaVersion, RemoteSubtitle, SubtitleSearchResult, SubtitleLanguages } from './adapter/media-actions';
+export { languageLabel, orderSubtitleLanguages, type SubtitleLanguage } from './subtitle-languages';
 export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';
 
 export { canSeeAll } from './store/rows';

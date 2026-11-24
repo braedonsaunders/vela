@@ -181,7 +181,10 @@ internal sealed class Playback : IDisposable
         if (list.ValueKind != JsonValueKind.Array) return;
         var track = list.EnumerateArray().FirstOrDefault(t => Str(t,"id") == id);
         var native = mpv.Node("track-list");
-        if (native is JsonElement items && items.ValueKind == JsonValueKind.Array)
+        // Only a subtitle stream of the source has an index to match; a sidecar (one downloaded
+        // mid-session too) has none, and must not take the first sidecar's ff-index 0.
+        bool indexed = kind == "audio" || Get(track,"streamIndex").ValueKind == JsonValueKind.Number && Str(Get(track,"delivery"),"kind") != "external";
+        if (indexed && native is JsonElement items && items.ValueKind == JsonValueKind.Array)
             foreach (var item in items.EnumerateArray())
                 if (Str(item,"type") == (kind == "audio" ? "audio" : "sub") && Num(item,"ff-index") == Num(track,"streamIndex")) { mpv.Command("set",property,Format(Num(item,"id"))); if (kind == "audio") appliedAudio=id; else appliedSubtitle=id; return; }
         var delivery = Get(track,"delivery");

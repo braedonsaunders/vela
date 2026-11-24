@@ -3,7 +3,8 @@ import type { OriginalVideo, Track } from '../packages/protocol/types';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 export const fixtureDurationSeconds = 180;
-export const mediaRoot = join(homedir(), '.scratch/tmp/vela/media');
+/** VELA_MOCK_MEDIA_ROOT moves the generated fixture (when the scratch drive is away). */
+export const mediaRoot = process.env.VELA_MOCK_MEDIA_ROOT ?? join(homedir(), '.scratch/tmp/vela/media');
 /** Format-matrix fixtures (scripts/make-format-matrix.ts), served one at a time as sessions' original file. */
 export const formatsRoot = process.env.VELA_MOCK_FORMATS_ROOT ?? join(homedir(), '.scratch/tmp/vela/formats');
 export const originalFixture: { name: string | null; durationSeconds: number; video?: OriginalVideo; audio?: Track[]; subtitles?: Track[]; selectSubtitle?: boolean } = { name: null, durationSeconds: 30 };

@@ -13,6 +13,7 @@ import { appearance, packAsset, serverEvents, setAppearance } from './appearance
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
 import { renderCover } from './covers';
+import { downloadSubtitle, foundSubtitleVtt, searchSubtitles, subtitleLanguages } from './subtitle-search';
 
 import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
@@ -62,6 +63,9 @@ if (mediaEnabled) Object.assign(capabilities.features, {
 // a server from before them: no capability, no Concerts tab, no childCounts and no video children.
 const levelsEnabled = mediaEnabled && process.env.VELA_MOCK_NO_LEVELS !== '1';
 if (levelsEnabled) capabilities.features.pluginLevels = { available: true, tabRows: true, childRoles: true };
+// Subtitle search, as a newer Ether advertises it; VELA_MOCK_OLD or VELA_MOCK_NO_SUBTITLE_SEARCH=1 is an Ether without it.
+const subtitleSearchEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_NO_SUBTITLE_SEARCH !== '1';
+if (subtitleSearchEnabled) capabilities.features.subtitleSearch = { available: true, languages: subtitleLanguages };
 if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
 const labPreset = process.env.VELA_MOCK_LAB === '1';
 const videoLibraries: V.Library[] = labPreset ? [
@@ -925,6 +929,26 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const sheet = /^\/sessions\/([^/]+)\/trickplay\/([^/]+)\/([^/]+)\.jpg$/.exec(path);
   if (sheet && method === 'GET') return trickplaySheet(currentSession(sheet[1]!, g).plan, sheet[2]!, sheet[3]!, req);
+  const subtitles = /^\/sessions\/([^/]+)\/subtitles\/([^/]+)$/.exec(path);
+  if (subtitles) {
+    if (!subtitleSearchEnabled) fail('policy', 'feature_unavailable', 'Subtitle search is unavailable');
+    const s = currentSession(subtitles[1]!, g);
+    if (s.plan.state === 'ended') fail('conflict', 'session_ended', 'Session ended');
+    if (method === 'GET' && subtitles[2] === 'search') {
+      const language = url.searchParams.get('language');
+      if (language !== null && !subtitleLanguages.includes(language)) fail('request', 'invalid_language', 'Not a searchable subtitle language');
+      return json(searchSubtitles(s.plan, language));
+    }
+    if (method === 'POST') {
+      const offerId = decodeURIComponent(subtitles[2]!);
+      const before = JSON.stringify([s.plan.subtitleTracks.length, s.plan.selectedSubtitleTrackId]);
+      const reply = downloadSubtitle(s.plan, `/sessions/media/${s.plan.sessionId}/${s.mediaToken}`, offerId);
+      if (!reply) fail('not-found', 'offer_not_found', 'Search again: that subtitle is no longer offered');
+      if (!('sessionId' in reply)) return Response.json(reply, { status: 202, headers: { 'Cache-Control': 'no-store' } });
+      if (JSON.stringify([s.plan.subtitleTracks.length, s.plan.selectedSubtitleTrackId]) !== before) publish(s);
+      return json(s.plan);
+    }
+  }
   const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
   if (match) {
     const preview = previewSessions.get(match[1]);
@@ -1005,6 +1029,11 @@ async function dispatch(req: Request): Promise<Response> {
     const s = sessions.get(media[1]), g = s && grants.get(s.owner);
     if (!s || !g || g.revoked || g.expires < Date.now() || s.expires <= Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant');
     if (s.plan.media === 'audio') return serveAudioSession(req, s, media[3]);
+    const found = /^found-subtitles\/([^/]+)\.vtt$/.exec(media[3]);
+    if (found) {
+      const vtt = foundSubtitleVtt(s.plan.sessionId, decodeURIComponent(found[1]!));
+      return vtt ? new Response(vtt, { headers: { 'Content-Type': 'text/vtt; charset=utf-8', 'Cache-Control': 'private, no-store' } }) : new Response('Not found', { status: 404 });
+    }
     const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]));
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;

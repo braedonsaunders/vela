@@ -1,6 +1,7 @@
 import type { SubtitleSession } from '../universal/subtitles/session';
 import type { SubtitleFailure } from '../universal/subtitles/types';
 import type { HostContext } from './state';
+import type { PlaybackSession } from '../model';
 import { readPosition } from './position';
 import { publishHostState, emitHostEvent } from './events';
 import { requestTracks } from './authorizations';
@@ -11,6 +12,26 @@ export function releaseOverlay(context: HostContext) {
   context.tracks.overlay = undefined;
   context.tracks.overlayLoading = undefined;
   context.tracks.overlayEpoch++;
+}
+function describedSubtitles(session: PlaybackSession) {
+  return session.subtitleTracks.map((track) => ({
+    id: track.id,
+    streamIndex: track.streamIndex,
+    codec: track.codec,
+    label: track.label,
+    language: track.language,
+    delivery:
+      track.delivery ?? (track.url ? ({ kind: 'external', format: 'webvtt', url: track.url } as const) : undefined),
+  }));
+}
+/** A newer plan of the running source can carry a subtitle the server just added (one searched
+ * for and downloaded); a live or loading overlay takes it without reopening the source. */
+export function describeAddedSubtitles(context: HostContext, session: PlaybackSession) {
+  if (context.tracks.overlay) context.tracks.overlay.describe(describedSubtitles(session));
+  else
+    void context.tracks.overlayLoading
+      ?.then((overlay) => overlay.describe(describedSubtitles(session)))
+      .catch(() => {});
 }
 export async function ensureOverlay(context: HostContext): Promise<SubtitleSession> {
   if (context.tracks.overlay) return context.tracks.overlay;
@@ -40,15 +61,7 @@ export async function ensureOverlay(context: HostContext): Promise<SubtitleSessi
       epoch: ++context.tracks.overlayEpoch,
       clock: () => readPosition(context),
       signal: job.signal,
-      describedTracks: session.subtitleTracks.map((track) => ({
-        id: track.id,
-        streamIndex: track.streamIndex,
-        codec: track.codec,
-        label: track.label,
-        language: track.language,
-        delivery:
-          track.delivery ?? (track.url ? { kind: 'external', format: 'webvtt', url: track.url } : undefined),
-      })),
+      describedTracks: describedSubtitles(session),
       getViewport: () => {
         const rect = surface.getBoundingClientRect();
         const video = original?.supportsSubtitles ? original.videoSize : undefined;

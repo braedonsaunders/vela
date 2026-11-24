@@ -2,7 +2,7 @@
 // contract (packages/player-api). Props are typed objects; events carry the shapes of
 // modules/vela-player/web/engine/model.ts. Media credentials go to the native side through VelaPlayer only.
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
-import { createElement, useEffect, useState, useSyncExternalStore } from 'react';
+import { createElement, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { redactMediaError } from './media-error';
 import { withAudioPlayback } from './audio';
 import { Platform } from 'react-native';
@@ -175,13 +175,21 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
       if (key) nativeModule.detachPlaybackURL(key, generation);
     };
   }, [props.plan, version, request]);
+  // The plan reaches the Apple view a tick after its prop (authorization first); a subtitle the
+  // newer plan added (one just downloaded) is chosen only once the view has that plan.
+  const sent = useRef(props.command);
+  const command = props.command;
+  const waitsForPlan = apple && command?.type === 'subtitle' && !!command.trackId &&
+    !nativePlan?.subtitleTracks.some(track => track.id === command.trackId) &&
+    !!props.plan?.subtitleTracks.some(track => track.id === command.trackId);
+  if (!waitsForPlan) sent.current = command;
   return createElement(NativeView, {
     plan: apple ? nativePlan : props.plan,
     ...(apple ? { mediaAuthorization: result, onMediaAuthorization: () => setRequest(value => value + 1) } : {}),
     preview: props.preview,
     active: props.active,
     metadata: props.metadata,
-    command: props.command,
+    command: sent.current,
     ambient: props.ambient,
     tile: props.tile,
     serverError: props.serverError ? { ...props.serverError, message: redactMediaError(props.serverError.message) } : null,

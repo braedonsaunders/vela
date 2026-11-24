@@ -1,4 +1,5 @@
-import type { TitleActions } from '../media-actions';
+import type { RemoteSubtitle, SubtitleLanguages, SubtitleSearchResult, TitleActions } from '../media-actions';
+import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguage } from '../../subtitle-languages';
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
@@ -471,12 +472,17 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (change.played !== undefined) await this.request(change.played ? '/:/scrobble' : '/:/unscrobble', { key: id, identifier: 'com.plexapp.plugins.library' }, 'PUT');
     if (change.continueWatching === false) await this.request('/actions/removeFromContinueWatching', { ratingKey: id }, 'PUT');
   }
-  async searchSubtitles(sessionId: string, language: string) {
-    const s = this.session(sessionId);
-    const result = await this.request(`/library/metadata/${enc(s.plan.titleId!)}/subtitles`, { language });
-    return (result.Stream || []).map((t: Node) => ({ id: String(t.key), name: t.displayTitle || t.title || t.language || language, language: t.languageCode || language }));
+  /** Plex publishes no list: its search takes ISO 639-1 codes, so the ones Vela can name. */
+  async subtitleLanguages(_sessionId: string): Promise<SubtitleLanguages> {
+    return { languages: KNOWN_SUBTITLE_LANGUAGES.map(code => ({ code })), preferred: [] };
   }
-  async downloadSubtitle(sessionId: string, id: string): Promise<V.PlaybackPlan> {
+  async searchSubtitles(sessionId: string, language?: string): Promise<SubtitleSearchResult> {
+    const s = this.session(sessionId);
+    const searched = iso6391(language ?? pickSubtitleLanguage(KNOWN_SUBTITLE_LANGUAGES.map(code => ({ code })), deviceLanguages()) ?? 'en');
+    const result = await this.request(`/library/metadata/${enc(s.plan.titleId!)}/subtitles`, { language: searched });
+    return { language: searched, preferred: [], offers: (result.Stream || []).map((t: Node) => plexSubtitleOffer(t, searched)) };
+  }
+  async downloadSubtitle(sessionId: string, id: string, _idempotencyKey?: string): Promise<V.PlaybackPlan> {
     const s = this.session(sessionId);
     // The selected provider key is opaque and sent as a parameter, never followed as a URL.
     await this.request(`/library/metadata/${enc(s.plan.titleId!)}/subtitles`, { key: id }, 'PUT');
@@ -799,4 +805,17 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     this.sessions.set(sessionId, { plan, part, metadata: { ...n, subscriptionId: String(sub.key) }, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]) });
     return structuredClone(plan);
   }
+}
+
+/** A Plex subtitle search result: the stream key is the offer, with the provider's facts. */
+export function plexSubtitleOffer(t: Node, searched: string): RemoteSubtitle {
+  const offer: RemoteSubtitle = { id: String(t.key), name: t.title || t.displayTitle || t.language || searched, language: t.languageCode || searched };
+  const flag = (value: unknown) => value === true || value === 1 || value === '1' || value === 'true';
+  if (t.providerTitle) offer.provider = String(t.providerTitle);
+  const format = t.format || t.codec;
+  if (format) offer.format = String(format);
+  if (flag(t.perfectMatch)) offer.releaseMatch = true;
+  if (flag(t.hearingImpaired)) offer.hearingImpaired = true;
+  if (flag(t.forced)) offer.forced = true;
+  return offer;
 }

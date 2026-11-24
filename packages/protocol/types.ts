@@ -93,7 +93,11 @@ export interface ServerCapabilities {
     liveCatchUp?: Feature & { maxDays?: number; timeshift: Feature & { maxMinutes?: number } };
     /** Plugin branching levels: GET /libraries/:id/rows?tab= for any recommended tab, and
      * GET /titles/:id/children?role= (or ?level=) with TitleMedia.childCounts. */
-    pluginLevels?: Feature & { tabRows?: boolean; childRoles?: boolean } };
+    pluginLevels?: Feature & { tabRows?: boolean; childRoles?: boolean };
+    /** Subtitle search for a running session: GET /sessions/:id/subtitles/search and
+     * POST /sessions/:id/subtitles/:offerId. `languages` are the codes a search accepts
+     * (ISO 639-1, or a BCP 47 tag such as pt-BR where a region matters), in the server's order. */
+    subtitleSearch?: Feature & { languages: string[] } };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -225,6 +229,18 @@ export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle
   channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string;
   /** Subtitle delivery only; streamIndex remains the full source stream index. */
   delivery?: SubtitleDelivery }
+/** One subtitle a search found: a file from a subtitle site, or a track Ether makes (aiTranslated). */
+export interface SubtitleOffer { id: ID; language: string; name: string; provider: string;
+  format?: string; author?: string; downloads?: number;
+  /** 0 to 10, as the subtitle site rates it. */ rating?: number;
+  /** Made for this release (a file hash or release-name match). */ releaseMatch?: boolean;
+  hearingImpaired?: boolean; forced?: boolean;
+  /** Ether translates the title's own subtitles with its language model once chosen. */ aiTranslated?: boolean }
+/** GET /sessions/:id/subtitles/search?language= (features.subtitleSearch). Without `language` the
+ * server searches the viewer's first preferred subtitle language; `language` says what it searched. */
+export interface SubtitleSearchResponse { language: string; offers: SubtitleOffer[];
+  /** The viewer's subtitle languages, most preferred first; listed first in a language picker. */
+  preferredLanguages?: string[] }
 export interface AudioRendition { trackId: ID; groupId: ID; url: string; mimeType: string; bitrate?: number }
 export interface QualityTarget { width: number; height: number;
   /** Total peak bits/second, including audio. */ bitrate: number;

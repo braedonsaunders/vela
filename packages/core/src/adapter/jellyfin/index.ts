@@ -1,4 +1,5 @@
-import type { TitleActions } from '../media-actions';
+import type { RemoteSubtitle, SubtitleLanguages, SubtitleSearchResult, TitleActions } from '../media-actions';
+import { deviceLanguages, iso6392, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguage, type SubtitleLanguage } from '../../subtitle-languages';
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
@@ -824,12 +825,24 @@ export class JellyfinAdapter
             });
         return { accepted: true };
     }
-    async searchSubtitles(sessionId: string, language: string) {
-        const s = this.session(sessionId);
-        const results = await this.request<{ Id: string; Name: string; Language: string }[]>('GET', `Items/${e(s.itemId)}/RemoteSearch/Subtitles/${e(language)}`);
-        return results.map(t => ({ id: t.Id, name: t.Name, language: t.Language }));
+    private cultures?: Promise<SubtitleLanguage[]>;
+    /** The server's cultures (three-letter codes, its own names); the viewer's subtitle language preference first. */
+    async subtitleLanguages(_sessionId: string): Promise<SubtitleLanguages> {
+        this.cultures ??= this.request<{ DisplayName?: string; ThreeLetterISOLanguageName?: string }[]>('GET', 'Localization/Cultures')
+            .then(list => list.flatMap(c => c.ThreeLetterISOLanguageName ? [{ code: c.ThreeLetterISOLanguageName, ...(c.DisplayName ? { name: c.DisplayName } : {}) }] : []))
+            .catch(() => KNOWN_SUBTITLE_LANGUAGES.map(code => ({ code: iso6392(code) })));
+        const [languages, user] = await Promise.all([this.cultures, this.userPath().then(path => this.request<User>('GET', path)).catch(() => undefined)]);
+        const preferred = user?.Configuration?.SubtitleLanguagePreference;
+        return { languages: languages.length ? languages : KNOWN_SUBTITLE_LANGUAGES.map(code => ({ code: iso6392(code) })), preferred: preferred ? [preferred] : [] };
     }
-    async downloadSubtitle(sessionId: string, id: string): Promise<V.PlaybackPlan> {
+    async searchSubtitles(sessionId: string, language?: string): Promise<SubtitleSearchResult> {
+        const s = this.session(sessionId);
+        const { languages, preferred } = await this.subtitleLanguages(sessionId);
+        const searched = language ?? pickSubtitleLanguage(languages, [...preferred, ...deviceLanguages()]) ?? 'eng';
+        const results = await this.request<RemoteSubtitleInfo[]>('GET', `Items/${e(s.itemId)}/RemoteSearch/Subtitles/${e(searched)}`);
+        return { language: searched, preferred, offers: results.map(t => jellyfinSubtitleOffer(t, searched)) };
+    }
+    async downloadSubtitle(sessionId: string, id: string, _idempotencyKey?: string): Promise<V.PlaybackPlan> {
         const s = this.session(sessionId);
         await this.request('POST', `Items/${e(s.itemId)}/RemoteSearch/Subtitles/${e(id)}`);
         const item = await this.request<Item>('GET', `${await this.userPath()}/Items/${e(s.itemId)}`);
@@ -1185,4 +1198,21 @@ export function bookFraction(i: Item): number {
 function query(values: object): string {
     const params = Object.entries(values).filter(([, v]) => v !== undefined).map(([k, v]) => `${e(k)}=${e(String(v))}`);
     return params.length ? `?${params.join('&')}` : '';
+}
+
+/** Jellyfin's and Emby's RemoteSubtitleInfo. */
+interface RemoteSubtitleInfo { Id: string; Name?: string; Language?: string; ThreeLetterISOLanguageName?: string; ProviderName?: string; Format?: string; Author?: string;
+    DownloadCount?: number; CommunityRating?: number; IsHashMatch?: boolean; HearingImpaired?: boolean; Forced?: boolean; AiTranslated?: boolean; MachineTranslated?: boolean }
+export function jellyfinSubtitleOffer(t: RemoteSubtitleInfo, searched: string): RemoteSubtitle {
+    const offer: RemoteSubtitle = { id: t.Id, name: t.Name || t.ProviderName || searched, language: t.ThreeLetterISOLanguageName || t.Language || searched };
+    if (t.ProviderName) offer.provider = t.ProviderName;
+    if (t.Format) offer.format = t.Format;
+    if (t.Author) offer.author = t.Author;
+    if (typeof t.DownloadCount === 'number' && t.DownloadCount >= 0) offer.downloads = t.DownloadCount;
+    if (typeof t.CommunityRating === 'number' && t.CommunityRating > 0) offer.rating = Math.min(10, t.CommunityRating);
+    if (t.IsHashMatch) offer.releaseMatch = true;
+    if (t.HearingImpaired) offer.hearingImpaired = true;
+    if (t.Forced) offer.forced = true;
+    if (t.AiTranslated || t.MachineTranslated) offer.aiTranslated = true;
+    return offer;
 }
