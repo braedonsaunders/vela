@@ -7,7 +7,7 @@
 // Section routes, pages and W5's surface hosts all draw through ScreenView.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, Text, View } from 'react-native';
-import { useRecordReader, useScreenDocument, useScreenPage, useVela, useVelaState } from '@vela/core/react';
+import { useScreenDocument, useScreenPage, useVela, useVelaState } from '@vela/core/react';
 import { msg, screenDocumentHref, type ScreenTarget } from '@vela/core';
 import type { ScreenDocument, SurfaceContext } from '../../../protocol/screen';
 import type { ScreenPageState } from '../../../core/src/screens/types';
@@ -18,7 +18,7 @@ import { fill, type RNode } from '../resolve';
 import { resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
 import { resolveUi } from '../resolve/ui';
 import { SkinNodeFor, SkinRoot, SkinRoute } from '../render';
-import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, useBlockLook, type ScreenBlockRuntime } from '../blocks';
+import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, samePageWithoutRev, useBlockLook, type ScreenBlockRuntime } from '../blocks';
 import { screenRoot } from './items';
 
 /** Where a `navigate` goes: a page of a plugin screen, or one of the app's built-in routes. */
@@ -129,7 +129,10 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [held, JSON.stringify(local ?? null)]);
   const pageKey = key || last.current?.key || '';
-  const record = useRecordReader();
+  // The page root's reader subscribes to nothing: each node drawing a hole reads through its own
+  // tracked reader over this pool (screen/scoped-reads.ts), so a pushed record redraws only its readers.
+  const pool = vela.screens.records;
+  const record = useCallback((key: string) => pool.get(key), [pool]);
   // A section's loading and failure nodes start below a shell bar that floats over the page.
   const look = useBlockLook();
   const [state, setState] = useState<Record<string, string>>({});
@@ -140,7 +143,12 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     const timer = setTimeout(() => setToast(''), 4000);
     return () => clearTimeout(timer);
   }, [toast]);
-  const ctx = useMemo(() => (page ? screenRoot(page, record, state) : undefined), [page, record, state]);
+  // A records frame moves only the page's rev: the page drawn stays the same object, so nothing
+  // redraws but the nodes that read the pushed records (they subscribe themselves).
+  const steady = useRef<ScreenPageState | undefined>(undefined);
+  if (!page || !steady.current || !samePageWithoutRev(steady.current, page)) steady.current = page;
+  const drawnPage = steady.current;
+  const ctx = useMemo(() => (drawnPage ? screenRoot(drawnPage, record, state, pool) : undefined), [drawnPage, record, state, pool]);
 
   const doc = document.value;
   const navigate = useCallback((args: Record<string, string>) => {
@@ -163,8 +171,8 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
       case 'setParam': {
         // `name` (documents), `param` (the tabs block) or the plain argument.
         const name = args.name || args.param || p.arg;
-        if (!name || !page) return;
-        const next = { ...page.params, [name]: args.value ?? '' };
+        if (!name || !drawnPage) return;
+        const next = { ...drawnPage.params, [name]: args.value ?? '' };
         for (const cleared of (args.clear ?? '').split(',').filter(Boolean)) delete next[cleared];
         if (!next[name]) delete next[name];
         actions.setParams(next);
@@ -221,7 +229,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
         // A skin action pressed inside a screen (none in documents Ether validates).
         host.dispatch(p.action, p.arg);
     }
-  }, [actions, doc, host, navigate, page, pageKey, vela]);
+  }, [actions, doc, host, navigate, drawnPage, pageKey, vela]);
 
   const screenHost = useMemo<SkinHost>(() => ({
     ...host,
@@ -247,7 +255,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   if (quiet && (!resolved || !ctx || !page || page.load !== 'ready')) return null;
   if (!resolved || !ctx || !page) {
     // Before the document or the first read: the document's own skeleton once it is resolved.
-    return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} status={statusTop} /> : <View style={{ flex: 1 }} />;
+    return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state, pool)} runtime={runtime} route={route} status={statusTop} /> : <View style={{ flex: 1 }} />;
   }
   // The skeleton starts below the shell's bar; the failure centres in the whole section, as the hard-coded screens drew them.
   const status = page.load !== 'ready';
@@ -300,3 +308,4 @@ function Refused({ host, reason, expired = false }: { host: SkinHost; reason: st
     </View>
   );
 }
+
