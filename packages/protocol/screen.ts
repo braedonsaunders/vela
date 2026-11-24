@@ -94,8 +94,12 @@ export interface ScreenData {
 
 /** /live/stream?topic=&since= `event: records`. */
 export interface StreamRecords { records: Record<string, RecordEntry> }
-/** /live/stream `event: source`: a whole-source replace. */
-export interface StreamSource { screen: ID; page: ID; source: string; rev: number; value: unknown }
+/** /live/stream `event: source`: a whole-source replace, owned by a screen page or by a surface
+ * (exactly one of the two). One stream carries at most 4 topics: ?topic=A&topic=B&since=<lowest page
+ * rev>&tz=&alerts=1 (a 5th answers 400 too_many_topics). */
+export type StreamSource =
+  | { screen: ID; page: ID; surface?: undefined; source: string; rev: number; value: unknown }
+  | { surface: ID; screen?: undefined; page?: undefined; source: string; rev: number; value: unknown };
 
 // Actions
 
