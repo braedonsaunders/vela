@@ -240,6 +240,39 @@ Watch, or rides along with step 1's surfaces if the owner wants it earlier.
   answer the same sources where their servers can.
 - Hosting and vendoring the one schema, with Studio preview through Vela's preview mode.
 
+### Agreed with Ether's plugin-screens lead (2026-11-24)
+
+- **`Library.experience`:**
+  - One field on every library, and `mediaKinds[].experience` in the manifest.
+  - Ether validates it as an open-set slug (`^[a-z][a-z0-9-]{0,31}$`).
+  - When a kind leaves it out, Ether infers it: video → `watch`; music, audiobook and podcast →
+    `listen`; book → `read`; photo → `gallery`; a live tab → `live`. Existing plugins keep
+    working unchanged.
+  - The music lead owns the Library model side. The plugin-screens lead owns manifest validation
+    and the inference table.
+- **Slot surfaces:**
+  - Presentation `slot` with a slot id. `homeRow`, `titlePanel` and `playerOverlay` stay as
+    aliases for the Sports release, then fold in.
+  - The slot list is data in the generated schema, in `$defs.Slots`:
+    `[{id, context: [{name, ref?: event|channel|item}], cap: {perPlugin?, perSlot?}, version}]`.
+    Ether reads it from the vendored schema, so a new slot is a re-vendor and needs no Ether
+    code change.
+  - Caps across plugins follow the owner's order (2 per `player.overlay.*` anchor). Caps per
+    plugin come from the list.
+- **`vela.*` sources:**
+  - These are resolved by the client. Ether accepts `from: "vela.<name>"` only for names in the
+    schema's published list, derives `deps` as usual, and skips them in data reads, with no value
+    and no error.
+  - Plugin documents in slots may read them, read-only.
+  - In a **plugin** document, a `vela.*` source's arguments may only be `{context.*}` holes, so a
+    plugin can never name another title or plugin. Ether enforces this at compile time.
+    Built-in documents, which Ether never serves, take any arguments (route params).
+- **The schema:** `vela-document.v1.json`, with its digest. Ether re-vendors it, and plugin
+  documents are still validated as `kind: "screen"` against it.
+- **Studio preview:** through Vela's preview mode (Ether E6). Drafts are served to the owner only,
+  uncached, and re-validated on every save.
+- Neither side builds past Sports before the owner approves.
+
 ## 6. Effort and risks
 
 | Step | Vela effort (worker-days) |
