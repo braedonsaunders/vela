@@ -57,6 +57,7 @@ export function Previews({ store, state, onHome, heroIndex, still, searchFocused
     (card: string, row: string, on: boolean) => store.previews.intent(card, row, on),
     [store],
   );
+  const heroEnded = useCallback((id: string) => store.previews.heroDone(id), [store]);
   const { cardId, url } = state.previews;
   const source = useMemo(() => {
     if (!PreviewSurface) return null;
@@ -65,9 +66,10 @@ export function Previews({ store, state, onHome, heroIndex, still, searchFocused
       heroUrl: cardId ? '' : url,
       intent,
       heroVisible,
+      heroEnded,
       Surface: PreviewSurface,
     };
-  }, [intent, heroVisible, cardId, url]);
+  }, [intent, heroVisible, heroEnded, cardId, url]);
 
   if (!source) return <>{children}</>;
   return <PreviewProvider value={source}>{children}</PreviewProvider>;

@@ -9,7 +9,7 @@
 // its overlay through a state on `card.previewing` (opacity, scale), not a `when` on it.
 // A `heroPreview` reports whether its hero is on screen: a hero trailer is asked for only while
 // one is, so a hero scrolled away (or a document that draws no `heroPreview`) plays nothing.
-import { createContext, useContext, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 import { StyleSheet, View, type HostInstance } from 'react-native';
 import { GroupContext, useHost, type WidgetProps } from '../../host';
 import { useVisibility, type Reach } from './in-view';
@@ -23,8 +23,10 @@ export interface PreviewSource {
   intent(cardId: string, rowId: string, on: boolean): void;
   /** A hero's art came on screen (true) or left it, was hidden or unmounted (false). */
   heroVisible(heroId: string, visible: boolean): void;
-  /** Plays a preview URL, muted, filling its box. */
-  Surface: ComponentType<{ url: string }>;
+  /** The hero's trailer ended or failed: the carousel may move on. */
+  heroEnded?(heroId: string): void;
+  /** Plays a preview URL, muted, filling its box; `onEnded` when it ends or fails. */
+  Surface: ComponentType<{ url: string; onEnded?: () => void }>;
 }
 
 const PreviewContext = createContext<PreviewSource | null>(null);
@@ -33,11 +35,11 @@ export function PreviewProvider({ value, children }: { value: PreviewSource; chi
   return <PreviewContext.Provider value={value}>{children}</PreviewContext.Provider>;
 }
 
-function Playing({ Surface, url }: { Surface: PreviewSource['Surface']; url: string }) {
+function Playing({ Surface, url, onEnded }: { Surface: PreviewSource['Surface']; url: string; onEnded?: () => void }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants">
-      <Surface url={url} />
+      <Surface url={url} onEnded={onEnded} />
     </View>
   );
 }
@@ -74,9 +76,11 @@ export function HeroPreview({ ctx }: WidgetProps) {
     return () => report(heroId, false);
   }, [report, heroId]);
   const playing = source && heroId !== '' && env.preview?.heroId === heroId ? source.heroUrl : '';
+  const heroEnded = source?.heroEnded;
+  const ended = useCallback(() => heroEnded?.(heroId), [heroEnded, heroId]);
   return (
     <View ref={box} style={StyleSheet.absoluteFill} pointerEvents="none">
-      {source && playing ? <Playing Surface={source.Surface} url={playing} /> : null}
+      {source && playing ? <Playing Surface={source.Surface} url={playing} onEnded={ended} /> : null}
     </View>
   );
 }

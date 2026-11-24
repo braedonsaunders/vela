@@ -32,6 +32,8 @@ export interface PreviewContext {
 const CARD_DWELL_MS = 700;
 const HERO_DWELL_MS = 3000;
 const MAX_ATTEMPTS = 3;
+/** A hero trailer holds the carousel at most this long; then the hero counts as played. */
+export const HERO_PLAY_MS = 35_000;
 
 export class Previews {
   private coordinator: PreviewCoordinator | undefined;
@@ -40,6 +42,9 @@ export class Previews {
   private target = { cardId: '', rowId: '' };
   private context: PreviewContext = { allowed: false, heroId: '' };
   private timer: ReturnType<typeof setTimeout> | undefined;
+  /** Heroes whose trailer has played (ended, failed or reached HERO_PLAY_MS) while on show: not
+   * asked for again until the carousel moves on, so the carousel can rotate. */
+  private readonly played = new Set<string>();
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -58,6 +63,7 @@ export class Previews {
   setContext(context: PreviewContext): void {
     const previous = this.context;
     const wanted = this.desired();
+    if (previous.heroId && previous.heroId !== context.heroId) this.played.delete(previous.heroId);
     this.context = context;
     // Only a change in what should play restarts: the hero carousel moving on while a card's
     // trailer plays must not stop that trailer.
@@ -94,7 +100,15 @@ export class Previews {
 
   private desired(): string {
     if (!this.context.allowed) return '';
-    return this.target.cardId || this.context.heroId;
+    if (this.target.cardId) return this.target.cardId;
+    return this.played.has(this.context.heroId) ? '' : this.context.heroId;
+  }
+
+  /** The hero's trailer ended or failed: it has played, and the carousel may move on. */
+  heroDone(heroId: string): void {
+    if (!heroId || this.target.cardId || this.context.heroId !== heroId || this.played.has(heroId)) return;
+    this.played.add(heroId);
+    this.restart(0);
   }
 
   /** A change of mind: stop what plays, and ask for what is wanted after the dwell. */
@@ -128,7 +142,9 @@ export class Previews {
         url: preview.url,
         expiresAt: preview.expiresAt,
       }));
-      this.timer = setTimeout(() => this.restart(0), Math.max(0, preview.expiresAt - Date.now()));
+      const expiry = Math.max(0, preview.expiresAt - Date.now());
+      this.timer = card ? setTimeout(() => this.restart(0), expiry)
+        : setTimeout(() => this.heroDone(wanted), Math.min(expiry, HERO_PLAY_MS));
       return;
     }
     if (preview.retryAfterSeconds > 0 && this.attempts < MAX_ATTEMPTS) {
