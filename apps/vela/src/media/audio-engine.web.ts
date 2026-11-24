@@ -1,52 +1,91 @@
-// The web's audio engine: one HTMLAudioElement for the whole app, so music keeps playing while
-// the viewer browses, and the Media Session API for the browser's and the OS's media controls
-// (lock screen, keyboard media keys, headset buttons).
-import type { AudioEngine, AudioEngineEvent, AudioState } from '@vela/core';
+// The web's audio engine, one for the whole app so music keeps playing while the viewer browses, with
+// the Media Session API for the browser's and the OS's media controls (lock screen, keyboard media
+// keys, headset buttons). Two players behind it:
+// - the gapless player (@vela/player/src/gapless-audio: WebCodecs decoding into Web Audio), which joins
+//   consecutive tracks sample to sample. It needs a secure context, a decoder for the track's codec,
+//   and 1x speed (Web Audio cannot keep pitch at speed);
+// - otherwise <audio> elements: the current one and the next, ready, started the moment the current one
+//   ends (close, but not sample-exact: the element's own start-up sits between the tracks).
+import type { AudioEngine, AudioEngineEvent, AudioPreload, AudioState } from '@vela/core';
 import { currentInQueue } from '@vela/core';
+import { createGaplessPlayer, gaplessSupported } from '@vela/player/src/gapless-audio';
 
-/** The browser plays only URLs that carry their own authorization, so it takes no authorizer. */
-export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
-  if (typeof document === 'undefined' || typeof Audio === 'undefined') return null;
-  const element = new Audio();
-  element.preload = 'auto';
-  // Spoken word keeps its pitch at speed.
-  (element as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true;
+type ElementEngine = AudioEngine & { preload(next: AudioPreload | null): void };
+
+/** One <audio> element for the item playing and one holding the next, swapped at the end. */
+function createElementEngine(): ElementEngine {
   const listeners = new Set<(event: AudioEngineEvent) => void>();
   const emit = (event: AudioEngineEvent) => { for (const listener of [...listeners]) listener(event); };
+  let rate = 1;
+  let volume = 1;
   let start = 0;
   let loaded = false;
-  const on = (name: string, event: AudioEngineEvent) => element.addEventListener(name, () => { if (loaded) emit(event); });
-  on('playing', 'playing');
-  on('pause', 'paused');
-  on('waiting', 'waiting');
-  on('ended', 'ended');
-  on('error', 'error');
-  on('durationchange', 'duration');
-  on('timeupdate', 'time');
-  element.addEventListener('loadedmetadata', () => {
-    if (loaded && start > 0 && Number.isFinite(element.duration)) element.currentTime = Math.min(start, Math.max(0, element.duration - 1));
-    start = 0;
-  });
+  let spare: { element: HTMLAudioElement; url: string; start: number } | null = null;
+  const make = () => {
+    const created = new Audio();
+    created.preload = 'auto';
+    // Spoken word keeps its pitch at speed.
+    (created as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true;
+    const on = (name: string, event: AudioEngineEvent) => created.addEventListener(name, () => { if (loaded && created === element) emit(event); });
+    on('playing', 'playing');
+    on('pause', 'paused');
+    on('waiting', 'waiting');
+    on('error', 'error');
+    on('durationchange', 'duration');
+    on('timeupdate', 'time');
+    created.addEventListener('ended', () => { if (loaded && created === element) finished(); });
+    created.addEventListener('loadedmetadata', () => {
+      if (created !== element || !loaded) return;
+      if (start > 0 && Number.isFinite(created.duration)) created.currentTime = Math.min(start, Math.max(0, created.duration - 1));
+      start = 0;
+    });
+    return created;
+  };
+  let element = make();
+  const clear = (old: HTMLAudioElement) => { old.pause(); old.removeAttribute('src'); old.load(); };
+  /** The item ended: the next one, already buffered, starts at once and takes over. */
+  const finished = () => {
+    const next = spare;
+    if (!next) { emit('ended'); return; }
+    spare = null;
+    const old = element;
+    element = next.element;
+    element.playbackRate = rate; element.defaultPlaybackRate = rate; element.volume = volume;
+    if (next.start > 0 && element.readyState > 0) element.currentTime = next.start;
+    void element.play().catch(() => emit('paused'));
+    clear(old);
+    emit('advanced');
+  };
   return {
-    load(url, startSeconds, rate) {
+    load(url, startSeconds, value) {
+      if (spare) { clear(spare.element); spare = null; }
       loaded = true;
       start = startSeconds;
+      rate = value;
       element.src = url;
       element.playbackRate = rate;
       element.defaultPlaybackRate = rate;
       element.load();
     },
+    preload(next) {
+      if (spare && next && spare.url === next.url) return;
+      if (spare) { clear(spare.element); spare = null; }
+      if (!next || !loaded) return;
+      const held = make();
+      held.src = next.url;
+      held.load();
+      spare = { element: held, url: next.url, start: next.startSeconds };
+    },
     play() { void element.play().catch(() => emit('paused')); },
     pause() { element.pause(); },
     seek(seconds) { if (element.readyState > 0) element.currentTime = seconds; else start = seconds; },
-    setRate(rate) { element.playbackRate = rate; element.defaultPlaybackRate = rate; },
-    setVolume(volume) { element.volume = volume; },
+    setRate(value) { rate = value; element.playbackRate = value; element.defaultPlaybackRate = value; },
+    setVolume(value) { volume = value; element.volume = value; },
     unload() {
+      if (spare) { clear(spare.element); spare = null; }
       if (!loaded) return;
       loaded = false;
-      element.pause();
-      element.removeAttribute('src');
-      element.load();
+      clear(element);
     },
     position: () => (start > 0 && element.readyState === 0 ? start : element.currentTime || 0),
     duration: () => (Number.isFinite(element.duration) ? element.duration : 0),
@@ -56,6 +95,99 @@ export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
       return ranges;
     },
     error: () => element.error?.message || (element.error ? `Media error ${element.error.code}` : ''),
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+  };
+}
+
+/**
+ * Browsers give media controls (keys, lock screen, the OS's Now Playing) only to a playing media
+ * element. While Web Audio plays, a silent looping one stands in for it.
+ */
+function silentKeepAlive(): { play(): void; pause(): void } {
+  let element: HTMLAudioElement | null = null;
+  const make = () => {
+    // Ten seconds of 8 kHz mono silence (a media session needs a few seconds of media).
+    const frames = 80_000, bytes = new DataView(new ArrayBuffer(44 + frames * 2));
+    const text = (at: number, value: string) => [...value].forEach((ch, i) => bytes.setUint8(at + i, ch.charCodeAt(0)));
+    text(0, 'RIFF'); bytes.setUint32(4, 36 + frames * 2, true); text(8, 'WAVEfmt '); bytes.setUint32(16, 16, true);
+    bytes.setUint16(20, 1, true); bytes.setUint16(22, 1, true); bytes.setUint32(24, 8000, true); bytes.setUint32(28, 16000, true);
+    bytes.setUint16(32, 2, true); bytes.setUint16(34, 16, true); text(36, 'data'); bytes.setUint32(40, frames * 2, true);
+    const created = new Audio(URL.createObjectURL(new Blob([bytes.buffer], { type: 'audio/wav' })));
+    created.loop = true;
+    return created;
+  };
+  return {
+    play() { element ??= make(); void element.play().catch(() => undefined); },
+    pause() { element?.pause(); },
+  };
+}
+
+const HLS = /\.m3u8(?:[?#]|$)/i;
+
+/** The browser plays only URLs that carry their own authorization, so it takes no authorizer. */
+export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
+  if (typeof document === 'undefined' || typeof Audio === 'undefined') return null;
+  const element = createElementEngine();
+  const gapless = gaplessSupported() ? createGaplessPlayer() : null;
+  const keepAlive = silentKeepAlive();
+  const listeners = new Set<(event: AudioEngineEvent) => void>();
+  const emit = (event: AudioEngineEvent) => { for (const listener of [...listeners]) listener(event); };
+  let active: 'element' | 'gapless' = 'element';
+  let rate = 1;
+  let wanted = false;
+  let url = '';
+  let start = 0;
+  let next: AudioPreload | null = null;
+  const fits = (candidate: string) => !!gapless && rate === 1 && !HLS.test(candidate);
+  /** Hand the item to the <audio> element at `at` seconds (speed changed, or the track cannot be decoded here). */
+  const toElement = (at: number) => {
+    gapless?.unload();
+    keepAlive.pause();
+    active = 'element';
+    element.load(url, at, rate);
+    element.preload(next);
+    if (wanted) element.play();
+  };
+  element.subscribe(event => { if (active === 'element') emit(event); });
+  gapless?.subscribe(event => {
+    if (active !== 'gapless') return;
+    switch (event) {
+      case 'unsupported': toElement(start); return;
+      case 'playing': keepAlive.play(); break;
+      case 'paused': case 'ended': case 'error': keepAlive.pause(); break;
+      case 'advanced': url = gapless.url(); start = 0; next = null; break;
+    }
+    emit(event);
+  });
+  const engine = () => (active === 'gapless' && gapless ? gapless : element);
+  return {
+    load(value, startSeconds, speed) {
+      rate = speed; url = value; start = startSeconds; next = null; wanted = false;
+      element.unload();
+      gapless?.unload();
+      keepAlive.pause();
+      if (fits(value)) { active = 'gapless'; gapless!.load(value, startSeconds); }
+      else { active = 'element'; element.load(value, startSeconds, speed); }
+    },
+    preload(value) {
+      next = value;
+      if (active === 'element') element.preload(value);
+      else gapless!.preload(value && fits(value.url) ? value : null);
+    },
+    play() { wanted = true; engine().play(); },
+    pause() { wanted = false; engine().pause(); },
+    seek(seconds) { engine().seek(seconds); },
+    setRate(speed) {
+      rate = speed;
+      if (active === 'gapless' && speed !== 1) toElement(gapless!.position());
+      else element.setRate(speed);
+    },
+    setVolume(volume) { element.setVolume?.(volume); gapless?.setVolume(volume); },
+    unload() { wanted = false; next = null; element.unload(); gapless?.unload(); keepAlive.pause(); },
+    position: () => engine().position(),
+    duration: () => engine().duration(),
+    buffered: () => engine().buffered(),
+    error: () => engine().error(),
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   };
 }

@@ -8,5 +8,5 @@
     "types": ["@webgpu/types", "node"],
     "paths": { "mediabunny": ["../../../node_modules/mediabunny/src/index.ts"] }
   },
-  "include": ["../src/VelaPlayerView.web.tsx", "./*.ts"]
+  "include": ["../src/VelaPlayerView.web.tsx", "../src/gapless-audio.web.ts", "./*.ts"]
 }

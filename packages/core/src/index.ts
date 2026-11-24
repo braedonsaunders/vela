@@ -54,7 +54,7 @@ export { canSeeAll } from './store/rows';
 export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFlowEvent, type AuthStep } from './store/auth-flow';
 export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, mediaCardKind, opensMediaPage, podcastOrder, shapeOf, videoParents, videoRole, MEDIA_PAGE_KINDS, MEDIA_PAGE_ROLES, type CardMedia, type CardShape, type MediaCredit, type MediaParent } from './media';
 export type { ChildrenModel, MediaFeatures } from './store/media';
-export { AUDIO_RATES, chapterEnd, type AudioEngine, type AudioEngineEvent, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
+export { AUDIO_RATES, chapterEnd, preloadLead, type AudioEngine, type AudioEngineEvent, type AudioPreload, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
 export { current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf } from './audio/cards';
 export type { LikedList, Lyrics as MusicLyrics, RecentContext } from './store/music';
