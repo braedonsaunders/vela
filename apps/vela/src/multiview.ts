@@ -62,7 +62,7 @@ export function useMultiviewController(store: Store, session: number | null, liv
       else router.push('/multiview');
     },
   } : null, [controller]);
-  // Plugin screens (and the hard-coded Sports) offer "Add to multiview" for a Live TV channel.
+  // Plugin screens offer "Add to multiview" for a Live TV channel.
   useEffect(() => value ? registerMultiview(channelId => value.open(channelId)) : undefined, [value]);
   return value;
 }
