@@ -15,6 +15,7 @@ import { PX } from '../css';
 import { tvPixelScale } from '../tv-pixel-scale';
 import type { ScreenPress, SkinHost } from '../host';
 import { fill, type RNode } from '../resolve';
+import { focusElement } from '../escape';
 import { resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
 import { resolveUi } from '../resolve/ui';
 import { SkinNodeFor, SkinRoot, SkinRoute } from '../render';
@@ -246,6 +247,15 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     },
   ), [pageKey, vela, title, doc?.presentation]);
 
+  // The element the document names first (focus.initial) takes focus once the page draws; without
+  // it (a final game has no Watch button) route focus gives the first control or reading stop.
+  const initial = resolved?.focusInitial && ctx && page?.load === 'ready' ? fill(resolved.focusInitial, ctx, screenHost.env) : '';
+  useEffect(() => {
+    if (!initial || !active) return;
+    let tries = 0;
+    const timer = setInterval(() => { if (focusElement(initial) || ++tries > 20) clearInterval(timer); }, 100);
+    return () => clearInterval(timer);
+  }, [initial, active]);
   // A Studio preview whose token is no longer live: one message for the whole tab (core's flag).
   if (previewExpired) return quiet ? null : <Refused host={host} reason="" expired />;
   // A document that failed to read again keeps drawing the one it had (core keeps it ready).
