@@ -31,6 +31,9 @@ struct NowPlayingState: Equatable {
     /// The speed while playing (Now Playing extrapolates the position at it).
     var rate: Double = 1
     var audio = false
+    /// The player's clock is moving. A queue player's next item stands still for a moment after it
+    /// takes over; Now Playing must not extrapolate over that, or it stays ahead for the whole track.
+    var clockRunning = true
 }
 
 @MainActor
@@ -43,6 +46,12 @@ extension SystemMediaOwner {
     var systemMediaStyle: SystemMediaStyle { .video }
 }
 
+
+/// A test launch silences every player (`-VelaSilent YES` among the launch arguments): a simulator
+/// plays through the Mac's speakers, and the app's own mute is the viewer's to undo.
+enum PlaybackSilence {
+    static let on = UserDefaults.standard.bool(forKey: "VelaSilent")
+}
 
 @MainActor
 protocol PlaybackHost: AnyObject {

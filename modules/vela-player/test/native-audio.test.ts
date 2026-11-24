@@ -40,10 +40,14 @@ test('native states become the store events the web element fires', () => {
 
 test('the position moves at the rate between reports while playing, and stops at the end', () => {
   const base = { state: 'playing' as const, position: 10, duration: 100, rate: 1.5, at: 1000 };
-  expect(extrapolatedPosition(base, 3000)).toBe(13);
+  expect(extrapolatedPosition(base, 2000)).toBe(11.5);
   expect(extrapolatedPosition({ ...base, state: 'paused' }, 3000)).toBe(10);
-  expect(extrapolatedPosition({ ...base, position: 99 }, 5000)).toBe(100);
+  expect(extrapolatedPosition({ ...base, position: 99 }, 2000)).toBe(100);
   expect(extrapolatedPosition({ ...base, duration: 0 }, 2000)).toBe(11.5);
+  // At most a second and a half past the last report (the native players report twice a second),
+  // and not at all before the clock was seen moving.
+  expect(extrapolatedPosition(base, 9000)).toBe(12.25);
+  expect(extrapolatedPosition({ ...base, moving: false }, 2000)).toBe(10);
 });
 
 test('a load waits for its authorization, and play follows it in order', async () => {
@@ -131,11 +135,11 @@ test('a seek and a speed change move the clock at once', async () => {
   engine.load('https://ether.example/book.m4b', 0, 1);
   await flush();
   send(status(1, 'playing', 10, 3600));
-  now = 2000;
-  expect(engine.position()).toBe(12);
+  now = 1000;
+  expect(engine.position()).toBe(11);
   engine.setRate(2);
-  now = 3000;
-  expect(engine.position()).toBe(14);
+  now = 2000;
+  expect(engine.position()).toBe(13);
   engine.seek(600);
   expect(engine.position()).toBe(600);
   await flush();
@@ -203,13 +207,50 @@ test('an advance switches the engine to the preloaded item: its events reach the
   send({ id: 2, type: 'advanced', position: 0.02, duration: 240 });
   expect(events).toEqual(['advanced']);
   expect(engine.duration()).toBe(240);
+  // The new item's clock stands still for a moment after it takes over: the position waits for it.
   now = 1000;
-  expect(engine.position()).toBeCloseTo(1.02, 5);
+  expect(engine.position()).toBeCloseTo(0.02, 5);
   // A late report from the finished item is not the new one's.
   send(status(1, 'ended', 200, 200));
   expect(events).toEqual(['advanced']);
-  send(status(2, 'playing', 1.5, 240));
+  send(status(2, 'playing', 0.42, 240));
   expect(events).toEqual(['advanced', 'time']);
+  expect(engine.position()).toBeCloseTo(0.42, 5);
+  // Moving now: it runs on between reports.
+  now = 1500;
+  expect(engine.position()).toBeCloseTo(0.92, 5);
+});
+
+test('the position never runs ahead of a clock that stands still, and never goes back while playing', async () => {
+  const { bridge, send } = gaplessBridge();
+  let now = 0;
+  const engine = createNativeAudioEngine(bridge, { now: () => now });
+  engine.load('https://ether.example/1.flac', 0, 1);
+  engine.preload({ url: 'https://ether.example/2.flac', startSeconds: 0 });
+  await flush();
+  send(status(1, 'playing', 199.5, 200));
+  // The advance as iOS and tvOS played it: the clock stood at 0 for about a second.
+  send({ id: 2, type: 'advanced', position: 0, duration: 240 });
+  const seen: number[] = [];
+  for (; now <= 1600; now += 100) {
+    if (now === 600) send(status(2, 'playing', 0, 240));
+    if (now === 1400) send(status(2, 'playing', 0.42, 240));
+    seen.push(engine.position());
+  }
+  for (let i = 1; i < seen.length; i++) expect(seen[i]!).toBeGreaterThanOrEqual(seen[i - 1]!);
+  expect(Math.max(...seen)).toBeLessThan(0.7);
+  // Reports a little behind what was shown (the extrapolation a touch ahead) do not move it back.
+  send(status(2, 'playing', 0.9, 240));
+  now += 400;
+  const shown = engine.position();
+  send(status(2, 'playing', shown - 0.2, 240));
+  expect(engine.position()).toBeGreaterThanOrEqual(shown);
+  // A clock that stops without saying so is extrapolated for a moment only.
+  now += 10_000;
+  expect(engine.position()).toBeLessThan(shown + 2);
+  // Paused, the report is the position.
+  send(status(2, 'paused', 3, 240));
+  expect(engine.position()).toBe(3);
 });
 
 test("a status naming the preloaded item before its advance is the advance", async () => {
