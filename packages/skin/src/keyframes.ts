@@ -1,7 +1,7 @@
 // The motion vocabulary as data: the library's keyframes presets (tools/renderer.ts KEYFRAMES),
 // a document's own keyframes, and a preset's shape. Free of React Native, so the resolver and the
 // document checker run under Bun.
-export type Frame = { opacity?: number; transform?: Record<string, number | string>[] };
+export type Frame = { opacity?: number; transform?: Record<string, number | string>[]; /** Renderer 19 (screens): a colour to a `$ui` token. */ color?: string };
 export type Keyframes = Record<string, Frame>;
 
 export interface Motion {
@@ -13,6 +13,8 @@ export interface Motion {
   iterations?: number | 'infinite';
   direction?: 'normal' | 'alternate';
   still?: { keyframes: string; duration: number };
+  /** Screens: the preset's own keyframes by name, carried with it (a screen's `doc:*` names are its own). */
+  frames?: Record<string, Keyframes>;
 }
 
 function frame(text: string): Frame {
@@ -68,7 +70,7 @@ export function documentKeyframes(own: Record<string, Record<string, { opacity?:
 export function settledFrame(preset: Motion, own: Record<string, Keyframes>, still: boolean): Frame | undefined {
   if (preset.iterations === 'infinite') return undefined;
   const name = still ? preset.still?.keyframes : preset.keyframes;
-  const frames = name && name !== 'none' ? library[name] ?? own[name] : undefined;
+  const frames = name && name !== 'none' ? preset.frames?.[name] ?? library[name] ?? own[name] : undefined;
   return frames?.to ?? frames?.['100%'];
 }
 

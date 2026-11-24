@@ -27,6 +27,10 @@ export const uiDefaults = {
   skeletonLight: '#ffffff12',
   alert: '#c0703f1f',
   live: '#e8513f',
+  // Content colours (renderer 19, plugin screens): a highlight (Sports' gold: close games, the
+  // leader, favourites) and a positive mark.
+  highlight: '#f5c451',
+  positive: '#4cc38a',
   font: 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif',
   fontDisplay: '"Instrument Serif", "Iowan Old Style", Georgia, serif',
   controlHeight: 44,
