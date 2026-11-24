@@ -41,6 +41,8 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   const duration = options.duration ?? DURATION;
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
   const requests: { titleId: string; queued?: boolean }[] = [];
+  /** Reports and stops in the order the server receives them. */
+  const wire: string[] = [];
   const preloads: (AudioPreload | null)[] = [];
   const reports: { sessionId: string; state: string; position: number }[] = [];
   const titles = new Map<string, string>();
@@ -58,9 +60,12 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
       return plan(id, request.titleId);
     },
     sessionSnapshot: async (id: string) => ({ plan: plan(id, titles.get(id) ?? 'x') }),
-    command: async (id: string, command: { kind: string }) => { if (command.kind === 'stop') stops.push(id); return plan(id, titles.get(id) ?? 'x'); },
+    command: async (id: string, command: { kind: string }) => { if (command.kind === 'stop') { stops.push(id); wire.push(`stop ${id}`); } return plan(id, titles.get(id) ?? 'x'); },
     reportObservation: async (sessionId: string, observation: { state: string; positionSeconds: number }) => {
       reports.push({ sessionId, state: observation.state, position: observation.positionSeconds });
+      // A report takes a moment to land; the wire records when it has.
+      await new Promise(resolve => setTimeout(resolve, 40));
+      wire.push(`${observation.state} ${sessionId}`);
       return { ok: true };
     },
     detail: async (id: string) => ({ title: { id, watch: { positionSeconds: 0 } } }),
@@ -105,7 +110,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   };
   const seek = (seconds: number) => { position = seconds; };
   const fail = () => { playing = false; emit('error'); };
-  return { audio, box, starts, stops, loads, preloads, reports, requests, play, seek, fail, held: () => queued, isPlaying: () => playing };
+  return { audio, box, starts, stops, loads, preloads, reports, requests, wire, play, seek, fail, held: () => queued, isPlaying: () => playing };
 }
 
 const track = (id: string, cls = 'music') => ({ id, kind: 'episode', name: id, durationSeconds: DURATION, media: { class: cls } } as unknown as Card);
@@ -362,7 +367,10 @@ test('stop releases the prepared session with the playing one', async () => {
   h.audio.play({ items: tracks('t1', 't2'), index: 0 });
   await settle();
   await h.play(185);
-  await h.audio.stop();
+  const stopped = h.audio.stop();
+  await settle();
+  await advance(100);
+  await stopped;
   await settle();
   expect([...h.stops].sort()).toEqual(['s1', 's2']);
   await advance(60_000);
@@ -397,4 +405,14 @@ test('a server with queued sessions gets the next plan as queued, twenty seconds
   await settle();
   await plain.play(185);
   expect(plain.requests.every(r => r.queued === undefined)).toBe(true);
+});
+
+test("the finished item's session has its end report before it is stopped", async () => {
+  const h = harness({ queued: true });
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await h.play(DURATION + 1);
+  const s1 = h.wire.filter(line => / s1$/.test(line));
+  expect(s1.slice(-2)).toEqual(['ended s1', 'stop s1']);
+  expect(h.wire).toContain('playing s2');
 });

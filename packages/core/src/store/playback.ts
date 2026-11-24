@@ -578,8 +578,8 @@ export class Playback {
   async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
-    const connection = await this.session.ready();
-    const sent = connection.adapter.reportObservation(sessionId, observation);
+    // Known as in flight at once, so a stop issued right after (an advance, Stop) waits for it.
+    const sent = this.session.ready().then(connection => connection.adapter.reportObservation(sessionId, observation));
     this.reporting = sent.catch(() => undefined);
     // A session may go on past the player's end (a multi-part title's next part): show its plan at once.
     if (ended) void sent.then(() => this.followNow?.(sessionId), () => undefined);
