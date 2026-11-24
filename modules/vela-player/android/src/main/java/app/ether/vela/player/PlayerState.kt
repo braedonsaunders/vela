@@ -24,6 +24,8 @@ internal class PlayerState {
   var cacheAhead: Double? = null
   /** Bytes per second the cache fills at. */
   var cacheSpeed: Long? = null
+  /** Media bytes received so far; grows while a slow start is still getting somewhere. */
+  var receivedBytes: Long? = null
   var droppedFrames: Long? = null
   var totalFrames: Long? = null
   var tracks: List<Map<String, Any?>> = emptyList()

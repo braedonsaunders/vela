@@ -9,11 +9,20 @@ struct ScopedMediaResponse {
     let totalSize: Int64?
 }
 
+/// Media bytes received through the scoped transport, as they arrive (the snapshot's loadProgress).
+final class ReceivedBytes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count: Int64 = 0
+    func add(_ bytes: Int) { lock.lock(); count += Int64(bytes); lock.unlock() }
+    var total: Int64 { lock.lock(); defer { lock.unlock() }; return count }
+}
+
 final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let url: URL
     private let access: VelaMediaAuth
     private let offset: Int64
     private let count: Int
+    private let received: ReceivedBytes?
     private let lock = NSLock()
     private let finished = DispatchSemaphore(value: 0)
     private var session: URLSession?
@@ -24,11 +33,12 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
     private var totalSize: Int64?
     private var failure: Error?
 
-    init(url: URL, access: VelaMediaAuth, offset: Int64, count: Int) {
+    init(url: URL, access: VelaMediaAuth, offset: Int64, count: Int, received: ReceivedBytes? = nil) {
         self.url = url
         self.access = access
         self.offset = offset
         self.count = count
+        self.received = received
     }
 
     func run() throws -> ScopedMediaResponse {
@@ -137,7 +147,7 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
         if oversized { failure = URLError(.dataLengthExceedsMaximum) }
         else { body.append(data) }
         lock.unlock()
-        if oversized { dataTask.cancel() }
+        if oversized { dataTask.cancel() } else { received?.add(data.count) }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
@@ -152,6 +162,7 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
 final class ScopedMediaByteReader: @unchecked Sendable {
     private let url: URL
     private let access: VelaMediaAuth
+    private let received: ReceivedBytes?
     private let lock = NSLock()
     private var operation: ScopedMediaRequest?
     private var closed = false
@@ -164,9 +175,10 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     private var cacheStart: Int64 = 0
     var discImageProbeEnabled: Bool { false }
 
-    init(url: URL, access: VelaMediaAuth) {
+    init(url: URL, access: VelaMediaAuth, received: ReceivedBytes? = nil) {
         self.url = url
         self.access = access
+        self.received = received
     }
 
     private func fetch(at offset: Int64, count: Int, epoch: UInt64) throws -> ScopedMediaResponse {
@@ -197,7 +209,7 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     }
 
     private func fetchOnce(at offset: Int64, count: Int, epoch: UInt64) throws -> ScopedMediaResponse {
-        let request = ScopedMediaRequest(url: url, access: access, offset: offset, count: count)
+        let request = ScopedMediaRequest(url: url, access: access, offset: offset, count: count, received: received)
         lock.lock()
         guard !closed && !interrupted && epoch == cancellationEpoch else { lock.unlock(); throw URLError(.cancelled) }
         operation = request
@@ -283,5 +295,5 @@ final class ScopedMediaByteReader: @unchecked Sendable {
         request?.cancel()
     }
 
-    func makeSiblingReader() -> ScopedMediaByteReader { ScopedMediaByteReader(url: url, access: access) }
+    func makeSiblingReader() -> ScopedMediaByteReader { ScopedMediaByteReader(url: url, access: access, received: received) }
 }

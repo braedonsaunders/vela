@@ -10,9 +10,11 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.atomic.AtomicLong
 
-/** Each player captures one immutable grant. Manifests, segments, seeks and subtitles all use it. */
-internal class ScopedMediaDataSource(private val grant: MediaAccess?) : BaseDataSource(true) {
+/** Each player captures one immutable grant. Manifests, segments, seeks and subtitles all use it.
+ * `received` counts the media bytes read, as they arrive (the snapshot's loadProgress). */
+internal class ScopedMediaDataSource(private val grant: MediaAccess?, private val received: AtomicLong? = null) : BaseDataSource(true) {
   private var connection: HttpURLConnection? = null
   private var input: InputStream? = null
   private var remaining = C.LENGTH_UNSET.toLong()
@@ -86,6 +88,7 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?) : BaseData
       return C.RESULT_END_OF_INPUT
     }
     if (remaining >= 0) remaining -= count
+    received?.addAndGet(count.toLong())
     bytesTransferred(count)
     return count
   }
@@ -100,8 +103,8 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?) : BaseData
     if (opened) { opened = false; transferEnded() }
   }
 
-  class Factory(private val grant: MediaAccess?) : DataSource.Factory {
-    override fun createDataSource(): DataSource = ScopedMediaDataSource(grant)
+  class Factory(private val grant: MediaAccess?, private val received: AtomicLong? = null) : DataSource.Factory {
+    override fun createDataSource(): DataSource = ScopedMediaDataSource(grant, received)
   }
 }
 

@@ -24,6 +24,10 @@ export function snapshotCore(context: CoreContext): CoreState {
     bufferAheadSeconds: run ? Math.max(0, (bufferedEnd - position) / 1e6) : null,
     throughputBps: network?.bps ?? null,
     throughputHistory: network?.history ?? [],
+    loadProgress:
+      (context.session.source ? (context.session.source.kind === 'file' ? context.session.source.reader : context.session.source.segments).metrics.receivedBytes : 0) +
+      context.decode.decodedBeforeEpoch +
+      (run ? run.packetBytes.video + run.packetBytes.audio + run.decoder.metrics.decoded : 0),
     state: context.lifecycle.state,
     epoch: context.decode.epoch?.id ?? context.session.nextEpoch,
     positionUs: context.clock.time(),

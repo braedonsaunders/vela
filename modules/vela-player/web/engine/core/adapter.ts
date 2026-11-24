@@ -199,6 +199,7 @@ export class UniversalRuntime implements OriginalBackend {
       bufferAheadSeconds: state.bufferAheadSeconds,
       throughputBps: state.throughputBps,
       throughputHistory: state.throughputHistory,
+      loadProgress: state.loadProgress,
       state: state.state === 'idle' ? 'loading' : state.state,
       position: state.positionUs / 1e6,
       duration: state.durationUs === null ? null : state.durationUs / 1e6,

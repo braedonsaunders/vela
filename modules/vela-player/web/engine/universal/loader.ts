@@ -20,6 +20,8 @@ export interface UniversalReadout {
   bufferAheadSeconds?: number | null;
   throughputBps?: number | null;
   throughputHistory?: number[];
+  /** Snapshot.loadProgress, where the runtime can tell. */
+  loadProgress?: number | null;
   position: number;
   duration: number | null;
   frames: number;

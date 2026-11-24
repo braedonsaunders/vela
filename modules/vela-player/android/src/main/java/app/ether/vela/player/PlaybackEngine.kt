@@ -63,6 +63,8 @@ internal class Media3Engine(
   private val main = Handler(Looper.getMainLooper())
   private val selector = DefaultTrackSelector(context)
   private val grant = MediaAccessStore.current
+  /** Media bytes this engine has received (the snapshot's loadProgress). */
+  private val received = java.util.concurrent.atomic.AtomicLong()
   private val buffering = playbackBuffering(preview || shared, live)
   private val subtitleDelay = SubtitleDelay()
   /** A full-screen player on a TV tunnels its video at 1× (a tunneled AudioTrack cannot change speed). */
@@ -120,7 +122,7 @@ internal class Media3Engine(
     // Media3 releases both locks on pause, background pause and engine release.
     .setWakeMode(C.WAKE_MODE_NETWORK)
     .setTrackSelector(selector)
-    .setMediaSourceFactory(DefaultMediaSourceFactory(ScopedMediaDataSource.Factory(grant), extractors))
+    .setMediaSourceFactory(DefaultMediaSourceFactory(ScopedMediaDataSource.Factory(grant, received), extractors))
     .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(
       buffering.minimumMs, buffering.maximumMs, buffering.startMs, buffering.resumeMs)
       .setPrioritizeTimeOverSizeThresholds(buffering.prioritizeTime)
@@ -297,6 +299,7 @@ internal class Media3Engine(
     state.speed = player.playbackParameters.speed.toDouble()
     state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let(timeline::titleTime)
     state.cacheAhead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000.0
+    state.receivedBytes = received.get()
     player.videoDecoderCounters?.let { counters ->
       counters.ensureUpdated()
       state.droppedFrames = counters.droppedBufferCount.toLong()

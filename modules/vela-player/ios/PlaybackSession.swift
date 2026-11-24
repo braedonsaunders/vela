@@ -359,6 +359,11 @@ final class PlaybackSession {
             guard let self else {
                 return
             }
+            // A start that is still receiving bytes says so, though no property of the player moved.
+            if let progress = self.player?.loadProgress, progress != self.state.loadProgress {
+                self.state.loadProgress = progress
+                self.report.publish(self.state, seekTarget: self.pendingSeek)
+            }
             self.report.heartbeat(self.state)
         }
         RunLoop.main.add(heartbeat, forMode: .common)

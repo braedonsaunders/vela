@@ -57,6 +57,7 @@ export function createHostContext(
       everPlayed: false,
       lastPosition: 0,
       lastAdvance: 0,
+      loadEvents: 0,
     },
     quality: {
       automatic: coreQuality,

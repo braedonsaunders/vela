@@ -42,6 +42,9 @@ export function bindMedia(context: HostContext, token: Generation) {
       )
         context.playback.status = 'paused';
     },
+    progress: () => {
+      context.watchdog.loadEvents++;
+    },
     waiting: () => {
       if (!['recovering', 'ended', 'failed'].includes(context.playback.status))
         context.playback.status = 'buffering';
