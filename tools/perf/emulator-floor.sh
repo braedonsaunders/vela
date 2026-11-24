@@ -50,6 +50,7 @@ export ANDROID_ADB_SERVER_PORT="${ANDROID_ADB_SERVER_PORT:-5041}"
 ADB="$ANDROID_SDK_ROOT/platform-tools/adb"
 EMULATOR="$ANDROID_SDK_ROOT/emulator/emulator"
 SERIAL="emulator-${PORT}"
+ADB_PORT="$((PORT + 1))"
 UNIT_NAME="vela-tv-floor-${PORT}"
 ADB_UNIT_NAME="vela-tv-floor-adb-${ANDROID_ADB_SERVER_PORT}"
 
@@ -199,6 +200,11 @@ start_emulator() {
       echo "error: emulator process ${emu_pid} exited prematurely. Last log lines:" >&2
       tail -n 40 "$LOG_FILE" >&2 || true
       exit 1
+    fi
+    # Register custom emulator port with non-default ADB server port if not yet visible, then drop duplicate transport.
+    if ! timeout 5 "$ADB" devices < /dev/null 2>/dev/null | grep -q "^${SERIAL}[[:space:]]"; then
+      timeout 5 "$ADB" connect "localhost:${ADB_PORT}" < /dev/null >/dev/null 2>&1 || true
+      timeout 5 "$ADB" disconnect "localhost:${ADB_PORT}" < /dev/null >/dev/null 2>&1 || true
     fi
     timeout 5 "$ADB" reconnect offline < /dev/null >/dev/null 2>&1 || true
     local boot_completed
