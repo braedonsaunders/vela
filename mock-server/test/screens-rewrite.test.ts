@@ -86,4 +86,8 @@ test('plugin action arguments: raw JSON of the declared type, or text coerced to
   expect(() => checkArg({ type: 'string', enum: ['top'] }, 'tech')).toThrow();
   expect(() => checkArg({ type: 'string' }, true)).toThrow();
   expect(() => checkArg({ type: 'date' }, '2026-13')).toThrow();
+  expect(checkArg({ type: 'ref' }, 'entity:sports:sports:team:nfl-phi')).toBe('entity:sports:sports:team:nfl-phi');
+  for (const key of ['event:a', 'item:b', 'channel:c', 'p:story:s1']) expect(checkArg({ type: 'ref' }, key)).toBe(key);
+  expect(() => checkArg({ type: 'ref' }, 'sports:sports:nfl-nyg-phi')).toThrow();
+  expect(() => checkArg({ type: 'ref' }, 'detail:x')).toThrow();
 });

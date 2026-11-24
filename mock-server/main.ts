@@ -668,7 +668,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
     const { navigation, surfaces, homeRow } = screensBootstrap(req, g.viewer.id);
     const homeItems: V.Bootstrap['rows'] = homeRow ? [...home.items.slice(0, 1), homeRow, ...home.items.slice(1)] : home.items;
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: homeItems, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}`);
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: homeItems, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
@@ -1124,7 +1124,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, X-Vela-Screen-Preview, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 

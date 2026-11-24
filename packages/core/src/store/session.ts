@@ -49,6 +49,8 @@ export class Session {
 
   /** The skin renderer this client draws, sent to Ether with screen reads (RENDERER_VERSION). */
   readonly rendererVersion: number | undefined;
+  /** The Studio live preview token while this tab previews (screens.setPreview). */
+  screenPreview: string | undefined;
 
   constructor(platform: VelaPlatform & { rendererVersion?: number }) {
     this.platform = platform;
@@ -142,7 +144,7 @@ export class Session {
         ? new SessionCredentials(this.platform.secrets, this.device, () => this.key())
         : new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);
       const context = this.clientValue ? JSON.stringify(this.clientValue) : '';
-      const adapter = new EtherAdapter(record.origin, credentials, context, rejected, this.rendererVersion);
+      const adapter = new EtherAdapter(record.origin, credentials, context, rejected, this.rendererVersion, () => this.screenPreview);
       made = etherConnection(record, adapter, credentials, this.registry.standalone);
     } else {
       const credentials = new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);
