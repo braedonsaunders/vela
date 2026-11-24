@@ -21,6 +21,9 @@ export interface ScreenViewport {
   width: number;
   /** A TV: `tv` variants and per-class values apply. */
   tv?: boolean;
+  /** Points per CSS px on this device (css.ts: 1.25 on Apple TV, tvPixelScale on Android TV). Lengths
+   * then land on half points, as the hard-coded screens' look.px did. Default 1 (no rounding). */
+  scale?: number;
 }
 
 export interface ResolvedScreen {
@@ -190,7 +193,7 @@ export function resolveScreenDocument(doc: ScreenDocument, viewport: ScreenViewp
   };
   const r: Context = {
     doc: pseudo, ui: tokens, strings, width: viewport.width, tv: viewport.tv === true, count: 0, unsupported: new Set(),
-    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens), palette, warnings },
+    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens), palette, warnings, scale: viewport.scale ?? 1 },
   };
   const tree = convertNode(held(doc.tree), r);
   const loading = doc.loading ? convertNode(held(doc.loading), r) : undefined;
