@@ -144,7 +144,7 @@ async function tickerSetting(enabled: boolean): Promise<void> {
 }
 
 const runs = RUNS.filter(r => !values.runs || values.runs.split(',').includes(r.name));
-let metro: { key: string; stop(): void } | null = null;
+let metro = null as { key: string; stop(): void } | null;
 try {
   for (const r of runs) {
     const key = JSON.stringify([r.route, r.env ?? {}]);
