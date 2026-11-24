@@ -124,6 +124,8 @@ describe('the Sports game document', () => {
     const t = await draw('game.json', 'data-game.json', 1440);
     expect(t.slice(0, 13)).toEqual(['LIVE', 'NFL · Lincoln Financial Field, Philadelphia', 'Close game',
       'New York Giants', '4-7', '24', '–', '27', 'Q4 · 2:14', 'Philadelphia Eagles', '9-2', 'Down', '3rd & 6']);
+    // Possession comes from the side (sides[].possession), drawn last like legacy's third chip.
+    expect(t.slice(t.indexOf('Ball'), t.indexOf('Ball') + 4)).toEqual(['Ball', 'NYG 38', 'Possession', 'PHI']);
     expect(t).toContain('Where to watch');
     expect(t).toContain('Watch on Matchday · 107');
     expect(t).toContain('Watch on Metro Sports 1 · 120');
@@ -135,9 +137,51 @@ describe('the Sports game document', () => {
     expect(plays.slice(0, 2)).toEqual(['2:14', 'Barkley rush right for 7 yards']);
   });
 
+  test("the game's own tables are not lit (legacy lights only standings)", async () => {
+    const doc = await json<ScreenDocument>('game.json');
+    const tables: RNode[] = [];
+    const visit = (n: RNode) => {
+      const node = n as RNode & { children?: RNode[]; item?: RNode };
+      if (n.kind === 'table') tables.push(n);
+      node.children?.forEach(visit);
+      if (node.item) visit(node.item);
+    };
+    visit(resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {}).tree);
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(t => (t as RNode & { highlight?: boolean }).highlight === false)).toBe(true);
+  });
+
   test('a phone names the teams short', async () => {
     const t = await draw('game.json', 'data-game.json', 390);
     expect(t).toContain('Giants');
     expect(t).not.toContain('New York Giants');
+  });
+});
+
+describe('tabs pin', () => {
+  test('an empty bound param takes the shown default once; nothing else is written', async () => {
+    const { pinnedParamValue } = await import('../src/blocks/layout-math');
+    const base = { pin: true, param: 'teamsLeague', paramValue: '', defaultValue: 'nfl', optionValues: ['nfl', 'nba'] };
+    expect(pinnedParamValue(base)).toBe('nfl');
+    expect(pinnedParamValue({ ...base, pin: false })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, paramValue: 'nba' })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, defaultValue: '' })).toBeUndefined();
+    // A default that is not one of the shown options is not pinned (nothing is shown for it).
+    expect(pinnedParamValue({ ...base, defaultValue: 'mlb' })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, param: undefined })).toBeUndefined();
+  });
+
+  test('the team picker pins its league; the schedule days do not', async () => {
+    const doc = await json<ScreenDocument>('index.json');
+    const tabs: (RNode & { pin?: boolean; bind: { param?: string } })[] = [];
+    const visit = (n: RNode) => {
+      const node = n as RNode & { children?: RNode[]; item?: RNode };
+      if (n.kind === 'tabs') tabs.push(n as never);
+      node.children?.forEach(visit);
+      if (node.item) visit(node.item);
+    };
+    visit(resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {}).tree);
+    const byParam = Object.fromEntries(tabs.map(t => [t.bind.param, t.pin === true]));
+    expect(byParam).toEqual({ league: false, date: false, teamsLeague: true });
   });
 });

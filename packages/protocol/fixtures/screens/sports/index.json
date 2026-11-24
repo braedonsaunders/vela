@@ -101,7 +101,7 @@
       "small": { "width": "min(272px, 74vw)" }, "above": { "1600": { "width": "300px" } },
       "hover": { "background-color": "$cardHover", "scale": "1.04" },
       "focus": { "background-color": "$cardHover", "scale": "1.04" },
-      "states": [{ "when": [{ "test": "e.close" }], "style": { "width": "286px", "min-height": "128px", "padding": "13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $closeEdge" } }],
+      "states": [{ "when": [{ "test": "e.close" }], "style": { "border": "1px solid $closeEdge" } }],
       "children": [
         { "type": "use", "template": "cardMeta" },
         { "type": "box", "when": [{ "test": "e.sides" }], "children": [
@@ -116,7 +116,7 @@
     "miniCard": {
       "type": "box", "role": "button", "label": "{e.title}", "testId": "sports-mini-{e.id}",
       "press": { "action": "navigate", "args": { "page": "game", "event": "{e.$key}" } },
-      "style": { "flex": "1", "justify-content": "center", "padding": "10px 13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $hairline" },
+      "style": { "padding": "10px 13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $hairline" },
       "hover": { "background-color": "$cardHover", "scale": "1.03" },
       "focus": { "background-color": "$cardHover", "scale": "1.03" },
       "children": [
@@ -259,13 +259,15 @@
       "children": [
         { "type": "use", "template": "vela:crest", "with": { "logo": "{t.logo}", "abbr": "{t.abbr}", "color": "{t|crest}", "size": "36px" } },
         { "type": "text", "text": "{t.name}", "style": { "font-size": "13.5px", "line-height": "1.25", "font-weight": "620", "color": "$ui.ink", "line-clamp": "1", "text-overflow": "ellipsis" } },
-        { "type": "icon", "symbol": "star", "style": { "width": "16px", "height": "16px", "color": "$ui.inkQuiet", "opacity": "0.55", "scale": "0.85" },
-          "states": [{ "when": [{ "test": "t.favourite" }], "style": { "width": "16px", "height": "16px", "color": "$ui.highlight" } }] }
+        { "type": "icon", "symbol": "star", "when": [{ "test": "t.favourite", "not": true }], "style": { "width": "16px", "height": "16px", "color": "$ui.inkQuiet", "opacity": "0.55", "scale": "0.85" } },
+        { "type": "icon", "when": [{ "test": "t.favourite" }], "viewBox": "0 0 24 24",
+          "paths": ["M12 2.6l3.2 6.5 7.1 1-5.2 5 1.2 7.1L12 18.8l-6.3 3.4 1.2-7.1-5.2-5 7.1-1z"],
+          "style": { "width": "16px", "height": "16px", "color": "$ui.highlight" } }
       ]
     },
 
     "eventShelf": {
-      "type": "shelf", "over": "{arg.over}", "as": "e", "key": "{e.id}", "itemWidth": { "default": "286px", "small": "min(272px, 74vw)", "tv": "300px" }, "gap": "14px",
+      "type": "shelf", "over": "{arg.over}", "as": "e", "key": "{e.id}", "gap": "14px",
       "style": { "padding": "8px $gutter" }, "small": { "padding": "8px 18px" },
       "item": { "type": "use", "template": "eventCard", "with": { "prefix": "{arg.prefix}" } }
     },
@@ -369,7 +371,7 @@
 
       { "type": "box", "id": "teams", "needs": ["teams"], "when": [{ "test": "src.teams.entities.0" }], "children": [
         { "type": "use", "template": "heading", "with": { "text": "{s:pickTeams}" } },
-        { "type": "tabs", "over": "src.teams.leagues", "as": "l", "value": "{l.id}", "label": "{l.label}", "bind": { "param": "teamsLeague" }, "default": "{src.teams.opening}",
+        { "type": "tabs", "over": "src.teams.leagues", "as": "l", "value": "{l.id}", "label": "{l.label}", "bind": { "param": "teamsLeague" }, "default": "{src.teams.opening}", "pin": true,
           "chip": "vela:chip", "size": "small", "when": [{ "test": "src.teams.leagues.1" }], "testId": "sports-teams-league-{l.id}",
           "style": { "padding": "0 $gutter 6px", "gap": "8px" }, "small": { "padding": "0 18px 6px" } },
         { "type": "shelf", "over": "src.teams.entities", "as": "t", "key": "{t.key}", "stableOrder": true, "gap": "10px",

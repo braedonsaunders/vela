@@ -55,7 +55,7 @@
     "score": {
       "type": "text", "testId": "{arg.testId}", "text": "{arg.value}", "onChange": { "value": "{arg.value}", "motion": "scoreFlash" },
       "style": { "font-size": "72px", "line-height": "1.12", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "44px" },
-      "states": [{ "when": [{ "test": "arg.loser" }], "style": { "font-size": "72px", "line-height": "1.12", "font-weight": "800", "color": "#ffffff", "opacity": "0.55", "font-variant-numeric": "tabular-nums" } }]
+      "states": [{ "when": [{ "test": "arg.loser" }], "style": { "opacity": "0.55" } }]
     },
     "metaLine": {
       "type": "text", "text": "{arg.text}",
@@ -74,13 +74,18 @@
         { "type": "text", "text": "{entry.detail}", "when": [{ "test": "entry.detail" }], "style": { "flex-shrink": "0", "max-width": "38%", "text-align": "right", "font-size": "14px", "line-height": "1.25", "font-weight": "750", "color": "$ui.ink", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" } }
       ]
     },
+    "situationChip": {
+      "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "7px", "padding": "0 12px", "height": "30px", "border-radius": "15px", "background-color": "#ffffff1f" }, "children": [
+        { "type": "text", "text": "{arg.label}", "style": { "font-size": "11.5px", "line-height": "1.25", "font-weight": "600", "color": "#ffffffb3" } },
+        { "type": "text", "text": "{arg.value}", "style": { "font-size": "13px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "font-variant-numeric": "tabular-nums" } } ]
+    },
     "probabilityPanel": {
       "type": "use", "template": "vela:panel", "with": { "focusable": "true" }, "children": [
         { "type": "box", "style": { "flex-direction": "row", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px" }, "children": [
           { "type": "use", "template": "panelTitle", "with": { "text": "{s:probability}" } },
           { "type": "box", "when": [{ "test": "src.game.event.probability.leader.abbr" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "14px" }, "children": [
             { "type": "repeat", "over": "src.game.event.sides", "as": "side", "item": { "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "6px", "opacity": "0.7" },
-              "states": [{ "when": [{ "test": "side.share", "is": "gt", "value": "49" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "6px" } }], "children": [
+              "states": [{ "when": [{ "test": "side.share", "is": "gt", "value": "49" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "6px", "opacity": "1" } }], "children": [
               { "type": "box", "style": { "width": "9px", "height": "9px", "border-radius": "5px", "background-color": "{side|readable}" } },
               { "type": "text", "text": "{side.abbr} {side.share}%", "style": { "font-size": "13.5px", "line-height": "1.25", "font-weight": "600", "color": "$ui.ink", "font-variant-numeric": "tabular-nums" },
                 "states": [{ "when": [{ "test": "side.share", "is": "gt", "value": "49" }], "style": { "font-size": "13.5px", "line-height": "1.25", "font-weight": "800", "color": "$ui.ink", "font-variant-numeric": "tabular-nums" } }] } ] } } ] } ] },
@@ -96,7 +101,7 @@
         { "type": "repeat", "over": "src.game.detail.playsNewest", "as": "p", "key": "{p.period}-{p.clock}-{p.text}", "limit": 30, "motion": "rise", "stagger": { "step": 70, "cap": 3 }, "item": {
           "type": "box", "readingStop": true,
           "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px", "border-top-width": "1px", "border-top-color": "$hairline" },
-          "states": [{ "when": [{ "test": "$index", "is": "eq", "value": "0" }], "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px" } }],
+          "states": [{ "when": [{ "test": "$index", "is": "eq", "value": "0" }], "style": { "border-top-width": "0px" } }],
           "focus": { "background-color": "color-mix(in srgb, $ui.ink 7%, transparent)", "scale": "1.015" },
           "children": [
             { "type": "box", "style": { "width": "3px", "align-self": "stretch", "border-radius": "2px" },
@@ -140,7 +145,7 @@
             { "type": "use", "template": "metaLine", "with": { "text": "{src.game.event.league.name}{src.game.event.detail| · }{src.game.event.venue| · }" },
               "when": [{ "test": "src.game.event.phase", "is": "ne", "value": "live" }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }] },
             { "type": "text", "text": "{s:closeGame}", "when": [{ "test": "src.game.event.close" }], "style": { "font-size": "12.5px", "line-height": "1.25", "font-weight": "800", "color": "$ui.highlight" } },
-            { "type": "box", "role": "button", "label": "{s:close}", "testId": "sports-game-close", "when": [{ "test": "env.tv", "not": true }], "press": { "action": "back" },
+            { "type": "box", "role": "button", "label": "{s:close}", "testId": "sports-game-close", "when": [{ "test": "env.isTV", "not": true }], "press": { "action": "back" },
               "style": { "width": "38px", "height": "38px", "border-radius": "19px", "align-items": "center", "justify-content": "center", "background-color": "#ffffff24" },
               "hover": { "background-color": "#ffffff47", "scale": "1.08" }, "focus": { "background-color": "#ffffff47", "scale": "1.08" },
               "children": [{ "type": "icon", "symbol": "close", "style": { "width": "18px", "height": "18px", "color": "#ffffff" } }] } ] },
@@ -169,10 +174,12 @@
             "style": { "font-size": "40px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "line-clamp": "2", "text-overflow": "ellipsis" }, "small": { "font-size": "26px" } },
 
           { "type": "box", "when": [{ "test": "src.game.event.situation.0" }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "justify-content": "center", "gap": "10px" }, "children": [
-            { "type": "repeat", "over": "src.game.event.situation", "as": "s", "item": { "type": "box",
-              "style": { "flex-direction": "row", "align-items": "center", "gap": "7px", "padding": "0 12px", "height": "30px", "border-radius": "15px", "background-color": "#ffffff1f" }, "children": [
-              { "type": "text", "text": "{s.label}", "style": { "font-size": "11.5px", "line-height": "1.25", "font-weight": "600", "color": "#ffffffb3" } },
-              { "type": "text", "text": "{s.value}", "style": { "font-size": "13px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "font-variant-numeric": "tabular-nums" } } ] } } ] }
+            { "type": "repeat", "over": "src.game.event.situation", "as": "s", "item": { "type": "use", "template": "situationChip", "with": { "label": "{s.label}", "value": "{s.value}" } } },
+            { "type": "repeat", "over": "src.game.event.sides", "as": "side", "item": { "type": "use", "template": "situationChip", "when": [{ "test": "side.possession" }], "with": { "label": "{src.game.event.possessionLabel}", "value": "{side.abbr}" } } } ] },
+          { "type": "box", "when": [{ "test": "src.game.event.situation.0", "not": true }, { "test": "src.game.event.sides.0.possession" }], "style": { "flex-direction": "row", "justify-content": "center" }, "children": [
+            { "type": "use", "template": "situationChip", "with": { "label": "{src.game.event.possessionLabel}", "value": "{src.game.event.sides.0.abbr}" } } ] },
+          { "type": "box", "when": [{ "test": "src.game.event.situation.0", "not": true }, { "test": "src.game.event.sides.1.possession" }], "style": { "flex-direction": "row", "justify-content": "center" }, "children": [
+            { "type": "use", "template": "situationChip", "with": { "label": "{src.game.event.possessionLabel}", "value": "{src.game.event.sides.1.abbr}" } } ] }
         ] },
 
       { "type": "box", "id": "body", "style": { "padding": "0 $gutter", "margin-top": "-2px", "gap": "22px" }, "small": { "padding": "0 18px" }, "children": [
@@ -193,7 +200,7 @@
               "with": { "label": "{s:watchOn|with:name=w.name,number=w.number}", "glyph": "play-fill", "primary": "{$index|first}" }, "press": { "action": "play", "args": { "channel": "{w.channelId}" } } } },
             { "type": "use", "template": "vela:pill", "testId": "sports-watch-from-start", "when": [{ "test": "src.game.event.watch.targets.0.fromStart" }], "with": { "label": "{s:fromStart}", "glyph": "replay" },
               "press": { "action": "play", "args": { "programme": "{src.game.event.watch.targets.0.programme.id}", "channel": "{src.game.event.watch.targets.0.channelId}", "from": "{src.game.event.watch.targets.0.fromStart}" } } },
-            { "type": "use", "template": "vela:pill", "testId": "sports-game-multiview", "when": [{ "test": "env.canMultiview" }], "with": { "label": "{s:addToMultiview}", "glyph": "tiles" },
+            { "type": "use", "template": "vela:pill", "testId": "sports-game-multiview", "when": [{ "test": "env.canMultiview" }], "with": { "label": "{s:addToMultiview}", "glyph": "tiles", "glyphSize": "15px" },
               "press": { "action": "multiview", "args": { "channel": "{src.game.event.watch.targets.0.channelId}" } } },
             { "type": "box", "testId": "sports-airing", "when": [{ "test": "src.game.event.watch.airing.0.name" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "8px", "height": "42px", "padding": "0 8px" }, "children": [
               { "type": "icon", "symbol": "tv", "style": { "width": "16px", "height": "16px", "color": "$ui.inkQuiet" } },
@@ -210,7 +217,7 @@
           { "type": "box", "when": [{ "test": "src.game.detail.tables.0" }], "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "small": { "flex": "none" }, "children": [
             { "type": "use", "template": "probabilityPanel", "when": [{ "test": "src.game.event.sides" }, { "test": "src.game.detail.probabilitySeries.1" }, { "test": "src.game.event.spoiler", "not": true }] },
             { "type": "repeat", "over": "src.game.detail.tables", "as": "t", "item": { "type": "use", "template": "vela:panel", "with": { "focusable": "{t.rows|count|lt:11}" }, "children": [
-              { "type": "table", "data": "t", "testId": "sports-table-{$index}", "focusRows": 10 } ] } } ] },
+              { "type": "table", "data": "t", "testId": "sports-table-{$index}", "focusRows": 10, "highlight": false } ] } } ] },
           { "type": "box", "when": [{ "test": "src.game.detail.tables.0", "not": true }, { "test": "src.game.event.sides" }, { "test": "src.game.detail.probabilitySeries.1" }, { "test": "src.game.event.spoiler", "not": true }],
             "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "small": { "flex": "none" }, "children": [{ "type": "use", "template": "probabilityPanel" }] },
           { "type": "box", "when": [{ "test": "src.game.detail.tables.0", "not": true }, { "test": "src.game.event.sides", "not": true }, { "test": "src.game.event.ranking.0" }],
@@ -225,7 +232,7 @@
           { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0", "not": true }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }, { "test": "src.game.event.spoiler" }], "style": { "flex": "1", "align-self": "stretch" }, "small": { "flex": "none" }, "children": [{ "type": "use", "template": "plays" }] }
         ] },
 
-        { "type": "box", "id": "links", "when": [{ "test": "src.game.detail.links.0" }, { "test": "env.tv", "not": true }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px" }, "children": [
+        { "type": "box", "id": "links", "when": [{ "test": "src.game.detail.links.0" }, { "test": "env.isTV", "not": true }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px" }, "children": [
           { "type": "repeat", "over": "src.game.detail.links", "as": "link", "item": { "type": "use", "template": "vela:pill", "with": { "label": "{link.label}", "glyph": "external", "small": "true" },
             "press": { "action": "openLink", "args": { "href": "{link.url.href}" } } } } ] }
       ] }
