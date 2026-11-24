@@ -86,3 +86,32 @@ test('bootstrap carries the renderer header', async () => {
   await new EtherAdapter(ORIGIN, new FakeCredentials(), '').home(true);
   expect(seen[1]!.headers.has('x-vela-screen-renderer')).toBe(false);
 });
+
+test('while previewing, X-Vela-Screen-Preview rides on bootstrap and screen calls, and documents are not cached', async () => {
+  let token: string | undefined = 'tok-9';
+  const api = new EtherAdapter(ORIGIN, new FakeCredentials(), '', undefined, 19, () => token);
+  const seen = routeFetch({
+    'GET /vela/v0/bootstrap': { viewer: { id: 'v', name: 'V' }, capabilities: { features: {} }, defaultSkinId: 'x', rows: [] },
+    'GET /vela/v0/screens/sports/pages/index/document': () => Response.json(DOC, { headers: { ETag: '"d"', 'Cache-Control': 'no-store' } }),
+    'GET /vela/v0/screens/sports/pages/index/data': { rev: 1, sources: {}, records: {} },
+  });
+  await api.home(true);
+  await api.screenDocument('/vela/v0/screens/sports/pages/index/document?v=1');
+  await api.screenDocument('/vela/v0/screens/sports/pages/index/document?v=1');
+  await api.screenData({ kind: 'screen', id: 'sports', page: 'index' }, { params: {}, tz: 'UTC' });
+  expect(seen.map(r => r.headers.get('x-vela-screen-preview'))).toEqual(['tok-9', 'tok-9', 'tok-9', 'tok-9']);
+  expect(seen[2]!.headers.has('if-none-match')).toBe(false);
+  token = undefined;
+  await api.screenData({ kind: 'screen', id: 'sports', page: 'index' }, { params: {}, tz: 'UTC' });
+  expect(seen.at(-1)!.headers.has('x-vela-screen-preview')).toBe(false);
+});
+
+test('an expired preview token is not taken for an expired session (no token rotation)', async () => {
+  const seen = routeFetch({
+    'GET /vela/v0/screens/sports/pages/index/data': Response.json({ error: { class: 'auth', code: 'preview_expired', message: 'Preview expired', retry: { allowed: false } } }, { status: 401 }),
+  });
+  const api = new EtherAdapter(ORIGIN, new FakeCredentials(), '', undefined, 19, () => 'old');
+  const failure = await api.screenData({ kind: 'screen', id: 'sports', page: 'index' }, { params: {}, tz: 'UTC' }).catch(error => error);
+  expect(failure.detail.code).toBe('preview_expired');
+  expect(seen.map(r => r.url.pathname)).toEqual(['/vela/v0/screens/sports/pages/index/data']);
+});

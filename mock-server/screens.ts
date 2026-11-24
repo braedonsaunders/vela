@@ -7,7 +7,10 @@
 //
 // Knobs: VELA_MOCK_FROM_START=1 adds programme/fromStart to watch targets (not in Ether E1/E2);
 // VELA_MOCK_SCREEN_FIXTURES=<dir> reads the documents from another directory (same layout);
-// VELA_MOCK_NEWS=1 adds the news-desk example (a plugin with plugin sources and a plugin action).
+// VELA_MOCK_NEWS=1 adds the news-desk example (a plugin with plugin sources and a plugin action);
+// Studio's live preview: X-Vela-Screen-Preview equal to VELA_MOCK_SCREEN_PREVIEW_TOKEN (default
+// preview-test) reads drafts from VELA_MOCK_SCREEN_DRAFTS=<dir> (same layout; a page without a draft
+// is the published one), never cached; any other token is 403 preview_expired.
 // A client that sends no X-Vela-Screen-Renderer gets no screens and no surfaces (hard cut).
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
@@ -44,7 +47,7 @@ const SURFACES: SurfaceSpec[] = [
   { id: 'sports.tonight', file: 'sports/surfaces/tonight.json', contribution: { presentation: 'homeRow' } },
 ];
 
-interface Compiled { document: V.ScreenDocument; hash: string; mtime: number }
+interface Compiled { document: V.ScreenDocument; hash: string; mtime: number; draft?: boolean }
 const compiled = new Map<string, Compiled>();
 
 /** As Ether serves it: a screen's index is a section and its other pages are pages; a surface's
@@ -57,17 +60,34 @@ function served(file: string): Partial<V.ScreenDocument> {
 }
 
 /** A fixture with `deps` added to each source (its {param.x} holes), hashed; read again when the file changes. */
-function load(file: string): Compiled | undefined {
-  const path = join(FIXTURES, file);
+const DRAFTS = process.env.VELA_MOCK_SCREEN_DRAFTS || '';
+const PREVIEW_TOKEN = process.env.VELA_MOCK_SCREEN_PREVIEW_TOKEN || 'preview-test';
+
+/** Whether this request previews drafts: no header, published; the live token, drafts; any other token is refused. */
+function previewOf(req: Request, fail: Fail): boolean {
+  const token = req.headers.get('x-vela-screen-preview');
+  if (!token) return false;
+  if (token !== PREVIEW_TOKEN) fail('policy', 'preview_expired', 'Preview expired, reload from Studio', {}, 403);
+  return true;
+}
+
+function load(file: string, draft = false): Compiled | undefined {
+  const drafted = draft && DRAFTS ? join(DRAFTS, file) : '';
+  let path = drafted || join(FIXTURES, file);
   let mtime: number;
-  try { mtime = statSync(path).mtimeMs; } catch { return undefined; }
-  const known = compiled.get(file);
+  try { mtime = statSync(path).mtimeMs; } catch {
+    if (!drafted) return undefined;
+    path = join(FIXTURES, file);
+    try { mtime = statSync(path).mtimeMs; } catch { return undefined; }
+  }
+  const key = path;
+  const known = compiled.get(key);
   if (known && known.mtime === mtime) return known;
   const document = { ...JSON.parse(readFileSync(path, 'utf8')), ...served(file) } as V.ScreenDocument;
   for (const spec of Object.values(document.sources ?? {})) spec.deps = holes(spec, 'param');
   const hash = createHash('sha256').update(JSON.stringify(document)).digest('hex').slice(0, 16);
-  const entry = { document, hash, mtime };
-  compiled.set(file, entry);
+  const entry = { document, hash, mtime, draft: path !== join(FIXTURES, file) };
+  compiled.set(key, entry);
   return entry;
 }
 
@@ -100,13 +120,15 @@ export function screensBootstrap(req: Request, viewerId: string): { navigation?:
   const renderer = rendererOf(req);
   if (!sportsEnabled || !renderer) return {};
   const language = languageOf(req);
+  // A live preview token lists the drafts (an expired one is ignored here: bootstrap still answers).
+  const draft = req.headers.get('x-vela-screen-preview') === PREVIEW_TOKEN;
   const navigation = NAVIGATION.flatMap(entry => {
     const page = PAGES.find(p => p.screen === entry.id && p.page === entry.page)!;
-    const doc = load(page.file);
+    const doc = load(page.file, draft);
     return doc && !hidden.has(entry.id) && doc.document.renderer <= renderer ? [{ kind: 'screen' as const, ...entry, document: { href: pageHref(page, doc, language), renderer: doc.document.renderer } }] : [];
   });
   const surfaces = SURFACES.flatMap(spec => {
-    const doc = load(spec.file);
+    const doc = load(spec.file, draft);
     if (!doc || hidden.has(spec.id) || doc.document.renderer > renderer) return [];
     const setting = spec.contribution.setting ? { ...spec.contribution.setting, enabled: settingOf(viewerId, spec) } : undefined;
     return [{ id: spec.id, ...spec.contribution, ...(setting ? { setting } : {}), document: { href: surfaceHref(spec, doc, language), renderer: doc.document.renderer } } as V.SurfaceContribution];
@@ -122,7 +144,9 @@ function serveDocument(req: Request, url: URL, doc: Compiled, fail: Fail): Respo
   // served (200, its ETag) and may change. There is no redirect.
   const current = url.searchParams.get('v') === doc.hash;
   const etag = `"${doc.hash}"`;
-  const headers = { ETag: etag, 'Cache-Control': current ? 'private, max-age=31536000, immutable' : 'private, no-cache', 'Content-Type': 'application/json' };
+  // A draft (Studio preview) is never cached, whatever v says.
+  const headers = { ETag: etag, 'Cache-Control': doc.draft ? 'no-store' : current ? 'private, max-age=31536000, immutable' : 'private, no-cache', 'Content-Type': 'application/json' };
+  if (doc.draft) return new Response(JSON.stringify(doc.document), { headers });
   if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers });
   return new Response(JSON.stringify(doc.document), { headers });
 }
@@ -648,16 +672,16 @@ interface SurfaceOwner { kind: 'surface'; surface: string; doc: Compiled }
 type Target = Owner | SurfaceOwner;
 
 /** What a sealed topic binds: viewer, page or surface, canonical params and context, time zone, live sources. */
-interface Topic { v: string; t: { kind: 'screen'; screen: string; page: string } | { kind: 'surface'; surface: string }; p: Record<string, string>; tz: string; s: string[]; l?: string }
+interface Topic { v: string; t: { kind: 'screen'; screen: string; page: string } | { kind: 'surface'; surface: string }; p: Record<string, string>; tz: string; s: string[]; l?: string; d?: 1 }
 
-function targetOf(t: Topic['t']): Target | undefined {
+function targetOf(t: Topic['t'], draft = false): Target | undefined {
   if (t.kind === 'screen') {
     const page = PAGES.find(p => p.screen === t.screen && p.page === t.page);
-    const doc = page && load(page.file);
+    const doc = page && load(page.file, draft);
     return doc ? { kind: 'screen', screen: t.screen, page: t.page, doc } : undefined;
   }
   const spec = SURFACES.find(s => s.id === t.surface);
-  const doc = spec && load(spec.file);
+  const doc = spec && load(spec.file, draft);
   return doc ? { kind: 'surface', surface: t.surface, doc } : undefined;
 }
 const sealTopic = (topic: Topic) => `lt1.${Buffer.from(JSON.stringify(topic)).toString('base64url')}`;
@@ -747,7 +771,7 @@ async function serveData(req: Request, url: URL, target: Target, viewerId: strin
   // The topic covers what the page shows: its eager sources and any lazy one read now.
   const live = [...new Set([...Object.entries(specs).filter(([, spec]) => !spec.lazy).map(([name]) => name), ...names])].sort();
   const t = target.kind === 'screen' ? { kind: 'screen' as const, screen: target.screen, page: target.page } : { kind: 'surface' as const, surface: target.surface };
-  const answer: V.ScreenData = { ...data, live: { topic: sealTopic({ v: viewerId, t, p: values, tz, s: live, l: locale }) } };
+  const answer: V.ScreenData = { ...data, live: { topic: sealTopic({ v: viewerId, t, p: values, tz, s: live, l: locale, ...(target.doc.draft ? { d: 1 as const } : {}) }) } };
   const body = JSON.stringify(answer);
   const etag = `"${createHash('sha1').update(body).digest('base64url')}"`;
   const headers = { ETag: etag, 'Cache-Control': 'private, no-cache', 'Content-Type': 'application/json' };
@@ -888,11 +912,12 @@ export const screenStream = (req: Request, url: URL) => url.searchParams.has('to
 
 function stream(req: Request, url: URL, viewerId: string, authorized: () => boolean, fail: Fail): Response {
   hook();
+  const draft = previewOf(req, fail);
   const tokens = url.searchParams.getAll('topic');
   if (tokens.length > 4) fail('request', 'too_many_topics', 'At most 4 topics');
   const topics = tokens.map(token => {
     const topic = openTopic(token);
-    const target = topic && topic.v === viewerId ? targetOf(topic.t) : undefined;
+    const target = topic && topic.v === viewerId ? targetOf(topic.t, draft && topic.d === 1) : undefined;
     if (!topic || !target) fail('request', 'invalid_topic', 'Unknown or expired topic');
     return { token, topic, target };
   });
@@ -931,6 +956,7 @@ function stream(req: Request, url: URL, viewerId: string, authorized: () => bool
 export async function screensApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail, body?: unknown): Promise<Response | undefined> {
   if (!sportsEnabled) return undefined;
   if (method === 'GET' && path === '/live/stream' && screenStream(req, url)) return stream(req, url, viewerId, authorized, fail);
+  const preview = /^\/(screens|surfaces)\//.test(path) ? previewOf(req, fail) : false;
   const screen = /^\/screens\/([^/]+)\/(?:pages\/([^/]+)\/(document|data)|actions\/([^/]+))$/.exec(path);
   if (screen) {
     const id = decodeURIComponent(screen[1]!);
@@ -939,13 +965,13 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
       if (method !== 'POST') fail('request', 'method_not_allowed', 'POST only', {}, 405);
       const pageName = typeof (body as { page?: unknown })?.page === 'string' ? (body as { page: string }).page : 'index';
       const page = PAGES.find(p => p.screen === id && p.page === pageName);
-      const doc = page && load(page.file);
+      const doc = page && load(page.file, preview);
       if (!page || !doc) fail('not-found', 'screen_not_found', 'Screen not found');
       return serveAction(req, { kind: 'screen', screen: id, page: pageName, doc }, decodeURIComponent(screen[4]), body, viewerId, fail);
     }
     const pageName = decodeURIComponent(screen[2]!);
     const page = PAGES.find(p => p.screen === id && p.page === pageName);
-    const doc = page && load(page.file);
+    const doc = page && load(page.file, preview);
     if (!page || !doc || method !== 'GET') fail('not-found', 'screen_not_found', 'Screen not found');
     if (screen[3] === 'document') return serveDocument(req, url, doc, fail);
     return serveData(req, url, { kind: 'screen', screen: id, page: pageName, doc }, viewerId, fail);
@@ -954,7 +980,7 @@ export async function screensApi(req: Request, url: URL, method: string, path: s
   if (surface) {
     const id = decodeURIComponent(surface[1]!);
     const spec = SURFACES.find(s => s.id === id);
-    const doc = spec && load(spec.file);
+    const doc = spec && load(spec.file, preview);
     if (!spec || !doc || hidden.has(id)) fail('not-found', 'surface_not_found', 'Surface not found');
     const target: SurfaceOwner = { kind: 'surface', surface: id, doc };
     if (surface[2] === 'document' && method === 'GET') return serveDocument(req, url, doc, fail);
