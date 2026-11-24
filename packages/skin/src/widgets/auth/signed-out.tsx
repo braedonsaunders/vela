@@ -21,11 +21,15 @@ export interface SessionAuth {
   retryAt?: number;
   /** Offline: an attempt to restore the session is in flight. */
   restoring?: boolean;
+  /** Offline: restore attempts that have failed in a row. */
+  failures?: number;
   quick: null | { code: string; expiresLabel: string; status: 'pending' | 'expired' | 'denied' };
 }
 
 export interface AuthActions {
   retry?(): Promise<void>;
+  /** Leave a session that will not restore: forget it here and show sign-in. */
+  signInAgain?(): Promise<void>;
   signIn(username: string, password: string): Promise<unknown>;
   startPlex(): Promise<void>;
   cancelPlex(): void;

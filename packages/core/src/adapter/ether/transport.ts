@@ -33,6 +33,12 @@ export class EtherTransport {
    * transient failure leaves the same refresh token, and it must be tried again later.
    */
   private refreshFailure?: { token: string; error: unknown; until: number };
+  /**
+   * Refresh tokens whose idempotency key the server may hold for a rotation it never finished (it
+   * answered 409 `mutation_outcome_unknown`, or this client gave up waiting): how many keys each
+   * has used up. Asking again under the same key would only replay that unknown outcome forever.
+   */
+  private spentRefreshKeys = new Map<string, number>();
 
   constructor(
     private readonly origin: string,
@@ -153,26 +159,36 @@ export class EtherTransport {
     if (!current) throw new Error('Session ended');
     const failed = this.refreshFailure;
     if (!restore && failed?.token === current.refreshToken && Date.now() < failed.until) throw failed.error;
-    const request: V.RefreshRequest = {
-      refreshToken: current.refreshToken,
-      device: this.credentials.device,
-      // One key per refresh token: two requests rotating the same token (a retry, another window
-      // that raced this one) are the same operation to the server, never a reuse of a rotated token.
-      idempotencyKey: refreshIdempotencyKey(current.refreshToken),
-    };
+    const token = current.refreshToken;
     let next: V.Tokens | undefined;
+    let freshKeyAsked = false;
     for (let attempt = 0; attempt < (restore ? 1 : 3); attempt++) {
       try {
-        next = await this.refreshOnce(request);
+        // One key per refresh token: two requests rotating the same token (a retry, another window
+        // that raced this one) are the same operation to the server, never a reuse of a rotated
+        // token. Only a key the server cannot answer for is replaced, deterministically, so other
+        // windows that hit the same dead key converge on the same new one.
+        next = await this.refreshOnce({ refreshToken: token, device: this.credentials.device, idempotencyKey: this.refreshKey(token) });
         break;
       } catch (error) {
         if (refusesSession(error)) {
+          this.spentRefreshKeys.delete(token);
           await this.forgetRejected(current);
           throw error;
         }
+        if (outcomeUnknown(error)) {
+          this.spendRefreshKey(token);
+          // The server will never replay that key: one immediate ask under the new key, even for
+          // a restore, because the 409 itself proves the server is answering.
+          if (!freshKeyAsked) {
+            freshKeyAsked = true;
+            attempt--;
+            continue;
+          }
+        }
         const delay = retryDelay(error, attempt);
         if (restore || delay === undefined) {
-          this.refreshFailure = { token: current.refreshToken, error, until: Date.now() + (serverWait(error) || REFRESH_FAILURE_HOLD_MS) };
+          this.refreshFailure = { token, error, until: Date.now() + (serverWait(error) || REFRESH_FAILURE_HOLD_MS) };
           throw error;
         }
         await new Promise<void>(resolve => setTimeout(resolve, delay));
@@ -180,6 +196,7 @@ export class EtherTransport {
     }
     if (!next) throw new Error('Refresh unavailable');
     this.refreshFailure = undefined;
+    this.spentRefreshKeys.delete(token);
     const latest = await this.credentials.get();
     if (!latest || latest.refreshToken !== current.refreshToken) throw new Error('Session changed during refresh');
     await this.credentials.set(next);
@@ -193,11 +210,23 @@ export class EtherTransport {
     try {
       return await this.request<V.Tokens>('POST', '/auth/refresh', request, { auth: false, signal: abort.signal });
     } catch (error) {
-      if (abort.signal.aborted) throw new Error(`The server did not answer within ${REFRESH_ATTEMPT_TIMEOUT_MS / 1000} seconds`);
+      if (abort.signal.aborted) {
+        // The server may still hold this key for a rotation it will never finish: the next ask uses a new one.
+        this.spendRefreshKey(request.refreshToken);
+        throw new Error(`The server did not answer within ${REFRESH_ATTEMPT_TIMEOUT_MS / 1000} seconds`);
+      }
       throw error;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private refreshKey(token: string): string {
+    return refreshIdempotencyKey(token, this.spentRefreshKeys.get(token) ?? 0);
+  }
+
+  private spendRefreshKey(token: string): void {
+    this.spentRefreshKeys.set(token, (this.spentRefreshKeys.get(token) ?? 0) + 1);
   }
 
   /** The server rejected this session: clear it, unless a newer one already replaced it. */
@@ -293,6 +322,14 @@ export function serverWait(error: unknown): number {
   return Math.max(headerDelay, Number.isFinite(after) && after > 0 ? after * 1000 : 0);
 }
 
+/**
+ * Whether the server could not say what became of a refresh under this idempotency key (Ether
+ * stored the key for a rotation that never committed) and will not replay it: only a new key helps.
+ */
+export function outcomeUnknown(error: unknown): boolean {
+  return error instanceof VelaError && error.detail.code === 'mutation_outcome_unknown';
+}
+
 /** How long to wait before the next refresh attempt, or undefined when the server forbids another. */
 function retryDelay(error: unknown, attempt: number): number | undefined {
   const policy = error instanceof VelaError ? error.detail.retry : undefined;
@@ -337,12 +374,16 @@ export function acrossWindows<T>(name: string, work: () => Promise<T>): Promise<
   return locks ? locks.request(name, work) : work();
 }
 
-/** A stable, non-reversible idempotency key for rotating one refresh token (two FNV-1a 64 passes). */
-export function refreshIdempotencyKey(refreshToken: string): string {
+/**
+ * A stable, non-reversible idempotency key for rotating one refresh token (two FNV-1a 64 passes).
+ * `generation` counts the keys already spent on rotations whose outcome the server lost.
+ */
+export function refreshIdempotencyKey(refreshToken: string, generation = 0): string {
+  const input = generation > 0 ? `${refreshToken}\u0000${generation}` : refreshToken;
   const pass = (seed: bigint) => {
     let hash = seed;
-    for (let i = 0; i < refreshToken.length; i++) {
-      hash ^= BigInt(refreshToken.charCodeAt(i));
+    for (let i = 0; i < input.length; i++) {
+      hash ^= BigInt(input.charCodeAt(i));
       hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn;
     }
     return hash.toString(16).padStart(16, '0');

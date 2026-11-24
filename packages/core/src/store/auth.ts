@@ -25,6 +25,8 @@ import type { VelaState } from './index';
  *   tried again with backoff (`retryAt`) until the server answers or refuses the session.
  */
 export const SESSION_RESTORE_TIMEOUT_MS = 10_000;
+/** How long Sign in again waits for the server to revoke the session it is leaving. */
+export const SIGN_IN_AGAIN_REVOKE_MS = 3_000;
 
 /** Seconds before the next automatic restore after `attempt` earlier failures: 5, 10, 20, 40, then every 60. */
 export function reconnectDelaySeconds(attempt: number): number {
@@ -62,6 +64,8 @@ export interface AuthState {
   retryAt: number;
   /** Offline: an attempt to restore the session is in flight. */
   restoring: boolean;
+  /** Offline: restore attempts that have failed in a row (manual Retry included); 0 once settled. */
+  failures: number;
   /** Moves on with every session change, so views can key on it. */
   revision: number;
   /** Seconds between snapshot reads for a server without session events (0: it streams them). */
@@ -83,6 +87,7 @@ export const initialAuth: AuthState = {
   error: '',
   retryAt: 0,
   restoring: false,
+  failures: 0,
   revision: 0,
   pollSeconds: 0,
   quick: null,
@@ -192,7 +197,7 @@ export class Auth {
         // An unreadable stored registry must not break the recovery path too.
       }
       this.patch({ phase: 'offline', error: message(error, msg('server.unreachable')),
-        ...server, revision: this.session.epoch });
+        ...server, failures: this.box.get().auth.failures + 1, revision: this.session.epoch });
       this.scheduleReconnect(this.reconnect?.attempt ?? 0);
     } finally {
       clearTimeout(timer);
@@ -325,6 +330,7 @@ export class Auth {
       ...options,
       error,
       retryAt: 0,
+      failures: settled === 'offline' ? this.box.get().auth.failures + 1 : 0,
       revision: this.session.epoch,
       pollSeconds: hasEventStream(connection.adapter) ? 0 : SNAPSHOT_POLL_SECONDS,
     });
@@ -595,6 +601,29 @@ export class Auth {
     } catch (error) {
       return { url: '', error: message(error, 'Secure connection unavailable') };
     }
+  }
+
+  /**
+   * The way out of a session that will not restore: forget it on this device and show sign-in.
+   * The server is asked to revoke it, but only briefly, since it is the server that is not
+   * answering; the session is forgotten here whatever it says.
+   */
+  async signInAgain(): Promise<void> {
+    if (this.box.get().auth.phase !== 'offline') return;
+    this.linkGeneration++;
+    this.cancelReconnect();
+    const connection = this.session.selected();
+    const epoch = this.session.epoch;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      endSession(connection, this.session).catch(() => {}),
+      new Promise<void>(resolve => { timer = setTimeout(resolve, SIGN_IN_AGAIN_REVOKE_MS); }),
+    ]);
+    clearTimeout(timer);
+    if (epoch !== this.session.epoch) return;
+    await connection.credentials.set(null);
+    this.cancelQuick();
+    this.session.resetSession();
   }
 
   /** Revoke the selected server's session, then forget it here. */

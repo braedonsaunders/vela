@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, jest, test } from 'bun:test';
 import { VelaError } from '../src/adapter/errors';
-import { Auth, initialAuth, reconnectDelaySeconds, SESSION_RESTORE_TIMEOUT_MS } from '../src/store/auth';
+import { Auth, initialAuth, reconnectDelaySeconds, SESSION_RESTORE_TIMEOUT_MS, SIGN_IN_AGAIN_REVOKE_MS } from '../src/store/auth';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import { Session } from '../src/store/session';
@@ -115,12 +115,12 @@ test('an unreadable saved server leaves startup even when recovery cannot read i
 function reconnectHarness() {
   let available = false, rejected = false, saved: ReturnType<typeof tokens> | null = tokens();
   let failure: Error = new Error('Offline');
-  let validations = 0, selected = 'saved';
+  let validations = 0, selected = 'saved', revokes = 0, revokeHangs = false;
   const listeners: ((kind: 'session' | 'server') => void)[] = [];
   const connection = { record: { id: 'saved', kind: 'plex', name: 'Saved server' },
     credentials: { set: async (value: typeof saved) => { saved = value; } },
     adapter: { describe: async () => { if (!available) throw new Error('Offline'); return { server: { name: 'Saved server' }, features: {} }; },
-      revokeSession: async () => {} } };
+      revokeSession: () => { revokes++; return revokeHangs ? new Promise<never>(() => {}) : Promise.resolve(); } } };
   const session = { epoch: 0, names: new Map(), onReset: (listener: typeof listeners[number]) => listeners.push(listener),
     hasServer: () => true, servers: { standalone: true }, selected: () => ({ ...connection, record: { ...connection.record, id: selected } }),
     demoSignIn: () => false, key: () => 'key', tokens: async () => saved,
@@ -130,6 +130,7 @@ function reconnectHarness() {
   const auth = new Auth(box, session as unknown as Session, {} as VelaPlatform);
   return { auth, state: () => box.get().auth, validations: () => validations, saved: () => saved,
     online: () => { available = true; }, reject: () => { rejected = true; }, failWith: (error: Error) => { failure = error; },
+    revokes: () => revokes, hangRevoke: () => { revokeHangs = true; },
     switch: () => { selected = 'other'; listeners.forEach(listener => listener('server')); } };
 }
 
@@ -256,4 +257,61 @@ test('Retry after the restore deadline gave up starts a fresh attempt', async ()
   void h.auth.retry();
   await settle();
   expect(h.validations()).toBe(before + 1);
+});
+
+test('failed restore attempts are counted, manual Retry included, and the count clears once restored', async () => {
+  const h = reconnectHarness();
+  await h.auth.start();
+  expect(h.state()).toMatchObject({ phase: 'offline', failures: 1 });
+  await h.auth.retry();
+  expect(h.state().failures).toBe(2);
+  jest.advanceTimersByTime(5000); await settle();
+  expect(h.state().failures).toBe(3);
+  h.online();
+  await h.auth.retry();
+  expect(h.state()).toMatchObject({ phase: 'signed-in', failures: 0 });
+});
+
+test('a restore that times out counts as a failure too', async () => {
+  const h = harness('validation');
+  const starting = h.auth.start();
+  await settle();
+  jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+  await starting;
+  expect(h.state()).toMatchObject({ phase: 'offline', failures: 1 });
+});
+
+test('Sign in again revokes and forgets the stuck session, stops reconnecting and shows sign-in', async () => {
+  const h = reconnectHarness();
+  await h.auth.start(); await h.auth.retry();
+  await h.auth.signInAgain(); await settle();
+  expect(h.revokes()).toBe(1);
+  expect(h.saved()).toBeNull();
+  expect(h.state()).toMatchObject({ phase: 'signed-out', failures: 0, viewer: '' });
+  const count = h.validations();
+  jest.advanceTimersByTime(120_000); await settle();
+  expect(h.validations()).toBe(count);
+});
+
+test('Sign in again does not wait long for a server that will not answer its revocation', async () => {
+  const h = reconnectHarness();
+  h.hangRevoke();
+  await h.auth.start();
+  const leaving = h.auth.signInAgain();
+  await settle();
+  expect(h.saved()).not.toBeNull();
+  jest.advanceTimersByTime(SIGN_IN_AGAIN_REVOKE_MS);
+  await leaving; await settle();
+  expect(h.saved()).toBeNull();
+  expect(h.state().phase).toBe('signed-out');
+});
+
+test('Sign in again does nothing once the session is no longer offline', async () => {
+  const h = reconnectHarness();
+  h.online();
+  await h.auth.start();
+  expect(h.state().phase).toBe('signed-in');
+  await h.auth.signInAgain();
+  expect(h.revokes()).toBe(0);
+  expect(h.saved()).not.toBeNull();
 });
