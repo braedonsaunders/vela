@@ -25,7 +25,8 @@ import type { StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
-  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext;
+  /** `audio`: the app's audio engine plays it (music, audiobooks, podcasts), so the request declares what that engine plays. */
+  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
     /** The title's media class when the caller knows it (the audio queue does): a class that never
      * enters Continue (music) is not followed by a read of Home's progress shelves. Not sent. */
     media?: V.MediaClass }
@@ -251,7 +252,7 @@ export class Playback {
           ...(target.kind === 'title' && target.versionId ? { versionId: target.versionId } : {}),
           ...(target.kind === 'title' && target.context && this.session.features?.playContexts?.available ? { context: target.context } : {}),
           ...(target.kind === 'title' && target.audioTrackId && !this.recovering ? { audioTrackId: target.audioTrackId } : {}),
-          client: this.session.client,
+          client: target.kind === 'title' && target.audio ? this.session.audioClient : this.session.client,
           idempotencyKey: intent.key,
         });
     } catch (error) {
@@ -716,7 +717,7 @@ export class Playback {
       ...(target.context && this.session.features?.playContexts?.available ? { context: target.context } : {}),
       // A server with queued sessions keeps the playing one until this one is first observed playing.
       ...(this.queuedPlayback ? { queued: true } : {}),
-      client: this.session.client,
+      client: target.audio ? this.session.audioClient : this.session.client,
       idempotencyKey: `prepare-title-${target.id}-${randomId()}`,
     });
     if (!('sessionId' in reply)) return null;

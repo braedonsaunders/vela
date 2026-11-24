@@ -33,7 +33,16 @@ export async function serveGeneratedFile(req: Request, path: string, mimeType: s
 export const musicGenerator = 'mock-server/scripts/make-music-media.ts';
 export const bookGenerator = 'mock-server/scripts/make-book-media.ts';
 
-/** An audio-only plan: one direct, range-capable original file. Tracks never resume; audiobooks and parts do. */
+/** The transcode a client that does not declare the original's codec gets, as Ether names it. */
+export const AUDIO_TRANSCODE = 'stream.m4a';
+/** How many times faster than real time the mock produces a transcode (Ether's lab: about 20). */
+const transcodeSpeed = Math.max(0.5, Number(process.env.VELA_MOCK_TRANSCODE_SPEED) || 4);
+
+/**
+ * An audio-only plan: the original file, direct and range-capable, when the client declares its codec;
+ * otherwise a live AAC transcode (`stream.m4a`), produced as it is read the way Ether serves one it has
+ * not finished. Tracks never resume; audiobooks and parts do.
+ */
 export async function createAudioSession(owner: string, request: PlaybackRequest, title: Title): Promise<Session | undefined> {
   const source = audioSourceFor(title.id);
   if (!source) return undefined;
@@ -42,12 +51,17 @@ export async function createAudioSession(owner: string, request: PlaybackRequest
   const id = crypto.randomUUID(), token = crypto.randomUUID();
   const resume = title.media?.role === 'track' ? 0 : title.watch?.played ? 0 : title.watch?.positionSeconds ?? 0;
   const timelineId = `audio-${title.id}`;
+  // VELA_MOCK_AUDIO_TRANSCODE=1 transcodes every track, whatever the client plays (the live-stream path in a browser).
+  const direct = request.client.audioCodecs.includes(source.codec) && process.env.VELA_MOCK_AUDIO_TRANSCODE !== '1';
+  const path: PlaybackPlan['paths'][number] = direct
+    ? { id: 'direct', kind: 'direct', transport: 'file', url: `/sessions/media/${id}/${token}/${source.file}`, mimeType: source.mimeType, original: true, range: true,
+      byteLength: file.size, sourceId: `source-${title.id}`, timelineId, readiness: 'ready', qualities: [], boundaries: [] }
+    : { id: 'transcode', kind: 'transcode', transport: 'file', url: `/sessions/media/${id}/${token}/${AUDIO_TRANSCODE}`, mimeType: 'audio/mp4', range: false,
+      sourceId: `source-${title.id}`, timelineId, readiness: 'ready', qualities: [], boundaries: [] };
   const plan: PlaybackPlan = { sessionId: id, revision: 1, sourceGeneration: 1, seekGeneration: 1, titleId: title.id, state: 'ready', media: 'audio',
     positionSeconds: request.positionSeconds ?? resume, durationSeconds: source.durationSeconds,
-    paths: [{ id: 'direct', kind: 'direct', transport: 'file', url: `/sessions/media/${id}/${token}/${source.file}`, mimeType: source.mimeType, original: true, range: true,
-      byteLength: file.size, sourceId: `source-${title.id}`, timelineId, readiness: 'ready', qualities: [], boundaries: [] }],
-    selectedPathId: 'direct', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null, chapters: mediaChapters(title.id),
-    fallback: { state: 'unsupported', reason: 'The mock serves the original audio file only.' } };
+    paths: [path], selectedPathId: path.id, audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null, chapters: mediaChapters(title.id),
+    fallback: { state: 'unsupported', reason: 'The mock serves the original audio file or one AAC transcode.' } };
   const session: Session = { owner, mediaToken: token, plan, history: [], listeners: new Map(), sequence: 0, expires: Date.now() + 86_400_000 };
   sessions.set(id, session);
   return session;
@@ -55,8 +69,32 @@ export async function createAudioSession(owner: string, request: PlaybackRequest
 /** The single file an audio session may read through its media grant. */
 export function serveAudioSession(req: Request, session: Session, resource: string): Promise<Response> {
   const source = session.plan.titleId ? audioSourceFor(session.plan.titleId) : undefined;
-  if (!source || resource !== source.file) return Promise.resolve(new Response('Not found', { status: 404 }));
+  const transcode = session.plan.selectedPathId === 'transcode';
+  if (!source || resource !== (transcode ? AUDIO_TRANSCODE : source.file)) return Promise.resolve(new Response('Not found', { status: 404 }));
+  if (transcode) return Promise.resolve(serveTranscode(req, join(musicRoot, source.file)));
   return serveGeneratedFile(req, join(musicRoot, source.file), source.mimeType, musicGenerator);
+}
+
+/**
+ * A live transcode as Ether serves one it is still producing: 200 whatever the Range, chunked, no
+ * Content-Length, Accept-Ranges: none. Fragmented MP4 (AAC), its header first and the audio as ffmpeg
+ * makes it, at `VELA_MOCK_TRANSCODE_SPEED` times real time.
+ */
+function serveTranscode(req: Request, path: string): Response {
+  const headers = { 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'none', 'Cache-Control': 'no-store' };
+  if (req.method === 'HEAD') return new Response(null, { headers });
+  const ffmpeg = Bun.spawn(['ffmpeg', '-nostdin', '-loglevel', 'error', '-readrate', String(transcodeSpeed), '-i', path, '-vn', '-c:a', 'aac', '-b:a', '192k',
+    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-frag_duration', '1000000', 'pipe:1'], { stdout: 'pipe', stderr: 'ignore' });
+  req.signal.addEventListener('abort', () => ffmpeg.kill());
+  const output = ffmpeg.stdout.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await output.read().catch(() => ({ done: true as const, value: undefined }));
+      if (done) controller.close(); else controller.enqueue(value);
+    },
+    cancel() { ffmpeg.kill(); },
+  });
+  return new Response(body, { headers });
 }
 
 // Reading grants: opaque, short-lived, fetched without the bearer (like Ether's kind-media ticket).

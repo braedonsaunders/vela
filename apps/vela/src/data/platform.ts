@@ -50,6 +50,7 @@ export function platform(): VelaPlatform {
     device: device(),
     appVersion: config.appVersion,
     media: VelaPlayer.capabilities(),
+    audio: VelaPlayer.audioCapabilities(),
     mock: config.mock,
     artWidth: screenArtWidth(),
   };

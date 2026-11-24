@@ -41,7 +41,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   const gapless = options.gapless ?? true;
   const duration = options.duration ?? DURATION;
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
-  const requests: { titleId: string; queued?: boolean }[] = [];
+  const requests: { titleId: string; queued?: boolean; client?: unknown }[] = [];
   /** Reports and stops in the order the server receives them. */
   const wire: string[] = [];
   const preloads: (AudioPreload | null)[] = [];
@@ -54,7 +54,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
     selectedPathId: 'direct', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null,
   } as unknown as PlaybackPlan);
   const adapter = {
-    startPlayback: async (request: { titleId: string; queued?: boolean }) => {
+    startPlayback: async (request: { titleId: string; queued?: boolean; client?: unknown }) => {
       starts.push(request.titleId);
       requests.push(request);
       const id = `s${starts.length}`;
@@ -72,7 +72,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
     },
     detail: async (id: string) => ({ title: { id, watch: { positionSeconds: 0 } } }),
   };
-  const session = { epoch: 0, features: options.queued || options.handover ? { queuedPlayback: { available: true, ...(options.handover ? { handoverSeconds: options.handover } : {}) } } : {}, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
+  const session = { epoch: 0, features: options.queued || options.handover ? { queuedPlayback: { available: true, ...(options.handover ? { handoverSeconds: options.handover } : {}) } } : {}, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: { engine: 'video' }, audioClient: { engine: 'audio' } };
   const box = new StateBox({ playback: initialPlayback, audio: initialAudio, auth: { phase: 'signed-in' } } as unknown as VelaState);
   /** What each stop asked to reconcile: the title and the media class the queue gave it. */
   const reconciled: string[] = [];
@@ -124,6 +124,15 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
 const track = (id: string, cls = 'music') => ({ id, kind: 'episode', name: id, durationSeconds: DURATION, media: { class: cls } } as unknown as Card);
 const tracks = (...ids: string[]) => ids.map(id => track(id));
 const at = (h: ReturnType<typeof harness>) => h.box.get().audio;
+
+test("every item's request, the first and the ones prepared ahead, declares the audio engine", async () => {
+  const h = harness();
+  h.audio.play({ items: tracks('t1', 't2', 't3'), index: 0 });
+  await settle();
+  await h.play(DURATION * 2 + 5);
+  expect(h.requests.map(request => request.titleId)).toEqual(['t1', 't2', 't3']);
+  expect(h.requests.every(request => (request.client as { engine: string }).engine === 'audio')).toBe(true);
+});
 
 test('the lead is twenty seconds, half a short item, never under four; six for spoken word', () => {
   expect(preloadLead(240)).toBe(20);

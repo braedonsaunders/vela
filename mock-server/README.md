@@ -278,3 +278,9 @@ duration against the fixture. `bun mock-server/scripts/make-book-media.ts` write
 books, the PDF field guide and the CBZ comic into `~/.scratch/tmp/vela/media-books/` without
 dependencies. Both take an output directory argument; `VELA_MOCK_MUSIC_ROOT` and
 `VELA_MOCK_BOOKS_ROOT` point the mock (and the scripts' defaults) elsewhere.
+
+A track plays as its original file when the client declares its codec. Otherwise the mock
+serves a live AAC transcode (`stream.m4a`) the way Ether serves one it has not finished: 200
+whatever the Range, chunked, no Content-Length, `Accept-Ranges: none`, produced by ffmpeg at
+`VELA_MOCK_TRANSCODE_SPEED` times real time (default 4). `VELA_MOCK_AUDIO_TRANSCODE=1` transcodes
+every track, to exercise that path in a browser that plays every original.
