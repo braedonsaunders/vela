@@ -373,7 +373,7 @@ function ListHead({ title, time }: { title: string; time: string }) {
 
 /** A book's parts or a show's episodes: each a title of its own, with the heart, its menu and
  * where the viewer is in it. An episode shows its date, what is left or that it was played. */
-function ItemList({ role, items, source }: { role: 'part' | 'episode'; items: Card[]; source: { id: string; name: string; kind: 'title' } }) {
+export function ItemList({ role, items, source }: { role: 'part' | 'episode'; items: Card[]; source?: { id: string; name: string; kind: 'title' } }) {
   const app = useMusic();
   const m = useMediaLook();
   const columns = listColumns(role);
@@ -383,7 +383,7 @@ function ItemList({ role, items, source }: { role: 'part' | 'episode'; items: Ca
   return (
     <View testID={`spoken-${role}s`} accessibilityRole="list">
       {role === 'part' ? <ListHead title={msg(columns.title)} time={msg('music.time')} /> : null}
-      <FocusScope.Provider value={`${role}s:${source.id}`}><FocusGroup>
+      <FocusScope.Provider value={`${role}s:${source?.id ?? ''}`}><FocusGroup>
         {items.map((item, i) => {
           const current = nowId === item.id;
           // A book plays on from a part; an episode plays alone.

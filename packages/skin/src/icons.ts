@@ -48,6 +48,7 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   'speaker-mute': { paths: ['M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5'], stroke: true },
   layers: { paths: ['M12 3.5l9 4.5-9 4.5L3 8zM3 12.5l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5'], stroke: true },
   filter: { paths: ['M4 7h16M7 12h10M10 17h4'], stroke: true },
+  sliders: { paths: ['M4 6h10M18 6h2M14 4v4M4 12h4M12 12h8M8 10v4M4 18h12M16 16v4'], stroke: true },
   sparkles: {
     paths: ['M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z'],
     stroke: true,
