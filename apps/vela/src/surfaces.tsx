@@ -1,8 +1,7 @@
 // Plugin surfaces in the app frame (docs/plugin-screens.md: Surfaces): what their presses do here
 // (the screen actions, and `watch`: tune a channel, or the primary target of an event the surface
 // shows), the remote's play/pause for a standing toast, and the toast stack over every screen. The
-// player draws its own overlays and toasts (packages/skin/src/surfaces). While the hard-coded
-// Sports overlays still exist, plugin surfaces draw only with the screens flag (screens-flag.ts).
+// player draws its own overlays and toasts (packages/skin/src/surfaces).
 import { router, usePathname } from 'expo-router';
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { useVela as useCore } from '@vela/core/react';
@@ -14,7 +13,6 @@ import { HomeRowSurface, TitlePanels } from '@vela/skin/src/surfaces/slots';
 import { SurfaceSlots, type SurfaceSlotViews } from '@vela/skin/src/render';
 import { claimPlayPause } from '@vela/player';
 import { useAppScreenActions } from './screen-actions';
-import { screenDocuments } from './screens-flag';
 import { useVela } from './vela';
 
 /** A record key's id (`channel:ch-1` -> `ch-1`). */
@@ -34,7 +32,7 @@ export function SurfaceProvider({ children }: { children: ReactNode }) {
     const channel = args.channel ? bare(args.channel) : primary ?? '';
     if (channel) router.navigate({ pathname: '/watch/[id]', params: { id: channel, kind: 'channel' } });
   }, [core]);
-  const enabled = screenDocuments();
+  const enabled = true;
   const value = useMemo<SurfaceApp>(() => ({ enabled, actions: { ...screen, watch }, claimPlayPause }), [enabled, screen, watch]);
   return (
     <SurfaceAppContext.Provider value={value}>
