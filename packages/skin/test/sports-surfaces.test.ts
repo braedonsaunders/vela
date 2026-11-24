@@ -1,4 +1,4 @@
-// Sports' surface documents say what today's overlays say (widgets/live-overlay): the score bug
+// Sports' surface documents say what the hard-coded overlays said (the score bug, ticker and toasts): the score bug
 // live, behind live (the score as of the picture from timed plays, hidden for untimed ones), under
 // spoilers and for a field; the ticker's items; the alert toast's Watch or "On this channel now".
 import { describe, expect, test } from 'bun:test';

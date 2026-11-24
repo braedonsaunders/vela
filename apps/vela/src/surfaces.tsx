@@ -32,11 +32,10 @@ export function SurfaceProvider({ children }: { children: ReactNode }) {
     const channel = args.channel ? bare(args.channel) : primary ?? '';
     if (channel) router.navigate({ pathname: '/watch/[id]', params: { id: channel, kind: 'channel' } });
   }, [core]);
-  const enabled = true;
-  const value = useMemo<SurfaceApp>(() => ({ enabled, actions: { ...screen, watch }, claimPlayPause }), [enabled, screen, watch]);
+  const value = useMemo<SurfaceApp>(() => ({ actions: { ...screen, watch }, claimPlayPause }), [screen, watch]);
   return (
     <SurfaceAppContext.Provider value={value}>
-      <SurfaceSlots.Provider value={enabled ? SLOTS : null}>{children}</SurfaceSlots.Provider>
+      <SurfaceSlots.Provider value={SLOTS}>{children}</SurfaceSlots.Provider>
     </SurfaceAppContext.Provider>
   );
 }

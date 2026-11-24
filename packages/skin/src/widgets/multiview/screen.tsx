@@ -18,9 +18,7 @@ import type { Focusable } from '../../escape';
 import { useGuideLook, type GuideLook, alpha } from '../guide/look';
 import { Line, LogoTile, Press } from '../guide/parts';
 import { PlayerIcon } from '../player/icons';
-import { ScoreBug } from '../live-overlay/score-bug';
 import { TileOverlays } from '../../surfaces/player';
-import { useSurfacesEnabled } from '../../surfaces/view';
 import { refusalTitle } from './refusal';
 import type { LiveEventRef, MultiviewController, MultiviewTile, MultiviewView } from './controller';
 import { featureBand, placement, slotRects, type MultiviewLayout, type Rect, type Size } from './layout';
@@ -205,7 +203,6 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
   focused: boolean; channel: GuideChannel | undefined; Player: ComponentType<VelaPlayerViewProps>;
   controller: MultiviewController;
 }) {
-  const surfaces = useSurfacesEnabled();
   const target = placement(rect, size);
   const values = useRef<{ x: Animated.Value; y: Animated.Value; scale: Animated.Value; opacity: Animated.Value; picture: Animated.Value; ring: Animated.Value } | null>(null);
   if (!values.current) {
@@ -266,8 +263,7 @@ function TilePicture({ tile, rect, size, look, still, fullscreen, hidden, focuse
         {tile.liveEvent && playing ? (
           <Animated.View style={{ position: 'absolute', left: 0, top: 0, transformOrigin: 'left top', transform: [{ scale: counter }] } as never}>
             <View style={{ padding: TV ? 18 : 10 }}>
-              {surfaces ? <TileOverlays channelId={tile.channelId} eventId={tile.liveEvent.id} feed={tile.liveEvent.feed} width={fullscreen ? size.width : Math.min(rect.width, 600)} />
-                : <ScoreBug eventId={tile.liveEvent.id} size={fullscreen ? 'full' : 'tile'} />}
+              <TileOverlays channelId={tile.channelId} eventId={tile.liveEvent.id} feed={tile.liveEvent.feed} width={fullscreen ? size.width : Math.min(rect.width, 600)} />
             </View>
           </Animated.View>
         ) : null}
@@ -395,7 +391,6 @@ function Captions({ look, still, view, rects, size, gap, byId }: {
 function Caption({ look, tile, channel, focused }: {
   look: GuideLook; tile: MultiviewTile; channel: GuideChannel | undefined; focused: boolean;
 }) {
-  const surfaces = useSurfacesEnabled();
   const ring = useRef(new Animated.Value(focused ? 1 : 0)).current;
   useEffect(() => {
     Animated.timing(ring, { toValue: focused ? 1 : 0, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
@@ -414,8 +409,7 @@ function Caption({ look, tile, channel, focused }: {
         </View>
         {channel?.now ? <Line look={look} size={TV ? 12 : 11} color={look.inkQuiet}>{channel.now}</Line> : null}
         {tile.liveEvent ? <View style={{ marginTop: TV ? 4 : 2, alignSelf: 'flex-start' }}>
-          {surfaces ? <TileOverlays channelId={tile.channelId} eventId={tile.liveEvent.id} feed={tile.liveEvent.feed} width={320} />
-            : <ScoreBug eventId={tile.liveEvent.id} size="compact" />}
+          <TileOverlays channelId={tile.channelId} eventId={tile.liveEvent.id} feed={tile.liveEvent.feed} width={320} />
         </View> : null}
       </View>
     </View>

@@ -14,7 +14,7 @@ import { useHost } from '../host';
 import { EASE_OUT } from '../presence';
 import type { PlayerLook } from '../widgets/player/look';
 import { bandLift, overlayBox, overlayContext, overlayVisible, playerOverlays, type Anchor, type PlayerFacts } from './model';
-import { SurfaceView, useSurfacesEnabled } from './view';
+import { SurfaceView } from './view';
 
 export interface OverlaySwitch {
   id: string;
@@ -26,8 +26,6 @@ export interface OverlaySwitch {
 }
 
 export interface PlayerSurfaces {
-  /** Plugin overlays draw in this player (the app enables them). */
-  enabled: boolean;
   shown: SurfaceContribution[];
   switches: OverlaySwitch[];
   context: { server: SurfaceContext; local: SurfaceContext };
@@ -41,14 +39,13 @@ const NO_SETTINGS: Record<string, boolean> = {};
 
 export function usePlayerSurfaces(facts: PlayerFacts): PlayerSurfaces {
   const vela = useVela();
-  const enabled = useSurfacesEnabled();
   const { viewport } = useHost();
   const surfaces = useVelaState(state => state.home.value?.surfaces ?? NO_SURFACES);
   const settings = useVelaState(state => state.screens?.settings ?? NO_SETTINGS);
   const [band, setBandHeight] = useState(0);
   const { shown, switchable } = useMemo(
-    () => (enabled ? playerOverlays(surfaces, { kind: facts.kind, eventFeed: facts.feed }, settings) : { shown: NO_SURFACES, switchable: NO_SURFACES }),
-    [enabled, surfaces, facts.kind, facts.feed, settings]);
+    () => playerOverlays(surfaces, { kind: facts.kind, eventFeed: facts.feed }, settings),
+    [surfaces, facts.kind, facts.feed, settings]);
   const context = overlayContext(facts);
   const switches = useMemo(() => switchable.map(surface => {
     const on = shown.includes(surface);
@@ -57,7 +54,7 @@ export function usePlayerSurfaces(facts: PlayerFacts): PlayerSurfaces {
   }), [switchable, shown, vela]);
   const banded = shown.some(surface => surface.anchor === 'bottom');
   const setBand = useCallback((height: number) => setBandHeight(h => (Math.abs(h - height) < 0.5 ? h : height)), []);
-  return { enabled, shown, switches, context, lift: banded ? bandLift(band, { height: viewport.height }) : 0, setBand };
+  return { shown, switches, context, lift: banded ? bandLift(band, { height: viewport.height }) : 0, setBand };
 }
 
 interface Props {
@@ -74,7 +71,7 @@ const SHADE = 24;
 export function PlayerOverlays({ look, surfaces, chrome, top }: Props) {
   const host = useHost();
   const { viewport } = host;
-  if (!surfaces.enabled || !surfaces.shown.length) return null;
+  if (!surfaces.shown.length) return null;
   const frame = { width: viewport.width, height: viewport.height, small: look.small, size: look.size, chrome, top };
   const anchors: Anchor[] = ['topLeft', 'topRight', 'bottom'];
   const unfocusable = Platform.isTV && !chrome;
@@ -118,12 +115,11 @@ export function PlayerOverlays({ look, surfaces, chrome, top }: Props) {
  * The tile is the overlay's slot: its width picks the document's viewport class (a narrow tile draws
  * the small variant). Bands stay in the full player; nothing in a tile takes the remote's focus. */
 export function TileOverlays({ channelId, eventId, feed, width, anchor = 'topLeft' }: { channelId: string; eventId: string; feed?: string; width: number; anchor?: Anchor }) {
-  const enabled = useSurfacesEnabled();
   const host = useHost();
   const surfaces = useVelaState(state => state.home.value?.surfaces ?? NO_SURFACES);
   const settings = useVelaState(state => state.screens?.settings ?? NO_SETTINGS);
-  const shown = useMemo(() => (enabled ? playerOverlays(surfaces, { kind: 'channel', eventFeed: feed }, settings).shown : NO_SURFACES)
-    .filter(surface => (surface.anchor ?? 'topLeft') === anchor && surface.visibility !== 'chrome'), [enabled, surfaces, feed, settings, anchor]);
+  const shown = useMemo(() => playerOverlays(surfaces, { kind: 'channel', eventFeed: feed }, settings).shown
+    .filter(surface => (surface.anchor ?? 'topLeft') === anchor && surface.visibility !== 'chrome'), [surfaces, feed, settings, anchor]);
   const slot = useMemo(() => ({ ...host, viewport: { ...host.viewport, width } }), [host, width]);
   const context = useMemo(() => overlayContext({ channelId, eventId, feed, kind: 'channel', chrome: false, behindSeconds: 0, pictureAt: 0 }), [channelId, eventId, feed]);
   if (!shown.length) return null;

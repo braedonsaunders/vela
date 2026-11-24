@@ -18,19 +18,12 @@ import { playerPalette } from '../widgets/player/palette';
  * the multiview, open a link, confirm), `watch` (tune a channel, or an event's primary target), and
  * the remote's play/pause key, which a standing toast may take from a playing player. */
 export interface SurfaceApp {
-  /** Plugin surfaces draw (while the hard-coded overlays still exist, the development flag). */
-  enabled: boolean;
   actions: Omit<ScreenAppActions, 'setParams' | 'back' | 'dismiss'>;
   claimPlayPause?(onPress: () => void): () => void;
 }
 
 export const SurfaceAppContext = createContext<SurfaceApp | null>(null);
 export const useSurfaceApp = () => useContext(SurfaceAppContext);
-
-/** Whether plugin surfaces draw here (the app says so). */
-export function useSurfacesEnabled(): boolean {
-  return useContext(SurfaceAppContext)?.enabled === true;
-}
 
 const COLOUR_KEYS = Object.keys(uiDefaults).filter(k => typeof uiDefaults[k as keyof typeof uiDefaults] === 'string' && k !== 'font' && k !== 'fontDisplay');
 

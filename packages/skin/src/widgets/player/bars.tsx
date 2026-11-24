@@ -12,7 +12,6 @@ import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
 import { LiveDial, LiveMark, LiveMultiview, LiveStatusLine, LiveZap, type LiveWatch } from './live';
 import type { CommandInput, PlayerChromeState } from './context';
-import type { PlayerLiveOverlay } from '../live-overlay/player';
 import type { OverlaySwitch } from '../../surfaces/player';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
@@ -128,11 +127,14 @@ interface BottomProps {
   toggleInfo(): void;
   onActive(active: boolean): void;
   live: LiveWatch;
-  /** Sports over a live channel: the ticker's toggle. */
-  overlay?: PlayerLiveOverlay;
+  /** A plugin overlay the viewer toggles from the chrome (the scores ticker): its button. */
+  overlay?: TickerToggle;
   /** Plugin overlays that apply here, each with its switch (the subtitles menu lists them). */
   overlaySwitches?: OverlaySwitch[];
 }
+
+/** The chrome's button for a `toggle` player overlay (surfaces/player.tsx). */
+export interface TickerToggle { available: boolean; ticker: boolean; toggleTicker(): void; /** The overlay's name (its setting's label). */ label: string }
 
 export function BottomBar(props: BottomProps) {
   const { look, state, view, visible, blocked, opened } = props;
@@ -369,7 +371,7 @@ function Controls({
             look={look}
             icon={overlay.ticker ? 'tickerOn' : 'ticker'}
             compact
-            label={overlay.ticker ? msg('liveOverlay.hideTicker') : msg('liveOverlay.showTicker')}
+            label={msg(overlay.ticker ? 'player.hideOverlay' : 'player.showOverlay', { name: overlay.label })}
             selected={overlay.ticker}
             testID="player-ticker-button"
             onPress={overlay.toggleTicker}
