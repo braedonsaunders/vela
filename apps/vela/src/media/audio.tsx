@@ -1,7 +1,7 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, TVFocusGuideView, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,10 +11,10 @@ import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '@vela/skin/src/widge
 import { MOTION, Presence } from '@vela/skin/src/presence';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
-import { soundSettings } from '@vela/core';
+import { soundSettings, type Vela as Store } from '@vela/core';
 import { useVela } from '../vela';
 import { preferences } from '../data/preferences';
-import { audioDiagnostics, createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
+import { audioDiagnostics, createAudioEngine, syncMediaSession, type AppAudioEngine, type MediaSessionControls } from './audio-engine';
 import { useMediaPageActions } from './actions';
 import { musicTV, onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
 import { useMediaPlayerActions } from './player-actions';
@@ -53,6 +53,42 @@ const SOUND_PREFERENCE = 'sound';
 const NOW_PLAYING_ENTER = 420;
 const NOW_PLAYING_EXIT = 280;
 
+/**
+ * The audio engine and its native player belong to the process, like the store (vela.tsx), not to a
+ * mount of the app's tree: Android's Back out of the app unmounts the tree while music plays on, with
+ * its notification, and opening the app mounts it again over the same queue. So one engine is attached
+ * per store and kept, never detached (which would stop the music) or made again (whose subscription
+ * would pass each system command on a second time).
+ */
+let attached: { store: Store; engine: AppAudioEngine | null; detach: () => void } | undefined;
+
+function attachAudioEngine(store: Store): void {
+  if (attached?.store === store) return;
+  if (attached) { attached.detach(); attached.engine?.dispose(); }
+  const engine = createAudioEngine(() => store.playback.mediaAccess());
+  const detachEngine = store.audio.attach(engine);
+  const unfollow = followMediaSession(store);
+  attached = { store, engine, detach: () => { unfollow(); detachEngine(); } };
+}
+
+/** The system's Now Playing (notification, lock screen, Control Center) follows the queue from the
+ * store, not from a mounted component: with the app's tree unmounted the music goes on to the next
+ * track, and the notification must name it. */
+function followMediaSession(store: Store): () => void {
+  const controls: MediaSessionControls = {
+    play: () => store.audio.resume(), pause: () => store.audio.pause(), next: () => store.audio.next(),
+    previous: () => store.audio.previous(), seek: seconds => store.audio.seek(seconds), skip: delta => store.audio.skip(delta),
+  };
+  let shown = store.getState().audio;
+  syncMediaSession(shown, controls);
+  return store.subscribe(() => {
+    const audio = store.getState().audio;
+    if (audio === shown) return;
+    shown = audio;
+    syncMediaSession(audio, controls);
+  });
+}
+
 export function AudioDock() {
   const vela = useVela();
   const store = vela.store;
@@ -63,13 +99,7 @@ export function AudioDock() {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<NowPlayingPanel | undefined>(undefined);
   useEffect(() => onOpenNowPlaying(next => { setPanel(next); setOpen(true); }), []);
-  // The engine belongs to this mount: unmounted (the tree can mount again in the same runtime), it stops
-  // listening, so a system media command (notification, lock screen, headset) reaches the queue once.
-  useEffect(() => {
-    const engine = createAudioEngine(() => store.playback.mediaAccess());
-    const detach = store.audio.attach(engine);
-    return () => { detach(); engine?.dispose(); };
-  }, [store]);
+  useEffect(() => attachAudioEngine(store), [store]);
   // Development checks read what the audio did (docs/sound.md): the store's audio and the engine's last crossfade.
   useEffect(() => {
     if (!__DEV__) return;
@@ -86,11 +116,6 @@ export function AudioDock() {
     savedSound.current = sound;
     try { preferences.set(SOUND_PREFERENCE, JSON.stringify(sound)); } catch { /* Kept for this run only. */ }
   }, [sound]);
-  const controls = useMemo<MediaSessionControls>(() => ({
-    play: () => store.audio.resume(), pause: () => store.audio.pause(), next: () => store.audio.next(),
-    previous: () => store.audio.previous(), seek: seconds => store.audio.seek(seconds), skip: delta => store.audio.skip(delta),
-  }), [store]);
-  useEffect(() => syncMediaSession(audio, controls), [audio, controls]);
   // The viewer sees plain copy; the cause goes to the console for whoever is debugging.
   useEffect(() => { if (audio.error) console.warn(`Vela audio: ${audio.error}`); }, [audio.error]);
   useEffect(() => { if (!audio.queue) setOpen(false); }, [audio.queue]);

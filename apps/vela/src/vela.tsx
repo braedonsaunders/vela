@@ -105,12 +105,29 @@ const ABOUT_APP = aboutApp();
 /** Routes a signed-out viewer may stay on. */
 const SIGNED_OUT_ROUTES = ['/sign-in', '/connect'];
 
+/**
+ * The core store belongs to the JavaScript runtime, not to a mount of the app's tree. On Android,
+ * Back out of the app destroys its Activity but keeps the process and the runtime, and opening it
+ * again mounts the tree anew: it finds the same store (the session, the sign-in, the queue that is
+ * still playing) rather than starting a second one beside the first, which nothing would stop.
+ */
+let runtime: { boot: ReturnType<typeof platform>; store: Store } | undefined;
+/** Stores whose session has been settled (`start`): once each, however often the tree mounts. */
+const started = new WeakSet<Store>();
+
+function runtimeStore(): NonNullable<typeof runtime> {
+  if (!runtime) {
+    const boot = platform();
+    runtime = { boot, store: createVela({ ...boot, rendererVersion: RENDERER_VERSION }) };
+  }
+  return runtime;
+}
+
 export function VelaProvider({ children }: { children: ReactNode }) {
-  const [boot] = useState(platform);
-  const [store] = useState(() => createVela({ ...boot, rendererVersion: RENDERER_VERSION }));
+  const [{ boot, store }] = useState(runtimeStore);
   const [consoleUrl, setConsoleUrl] = useState(boot.page?.consoleUrl);
   useEffect(() => {
-    void start(store);
+    if (!started.has(store)) { started.add(store); void start(store); }
     return listenWebHandoff(link => {
       setConsoleUrl(link.consoleUrl);
       if (link.code !== undefined) void store.auth.signInWithWebCode(link.code).then(signedIn => {
