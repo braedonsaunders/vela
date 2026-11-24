@@ -8,8 +8,10 @@
 # - Never runs on macOS (exits immediately if uname != Linux).
 # - Uses its own dedicated AVD (`vela-tv-floor`) and console port (default 5584 -> `emulator-5584`).
 # - Records the exact PID it starts in `$PID_FILE` and stops ONLY that PID (never pkill/killall).
-# - Throttles the 4 emulator cores to Cortex-A55 class via `systemd-run --user --scope -p CPUQuota=...`
+# - Throttles the 4 emulator cores to Cortex-A55 class via `systemd-run --user -u <unit> -p CPUQuota=...`
 #   (default `100%` of one host Zen 5 core across the 4 guest vCPUs, configurable via `--cpu-quota`).
+#   Using `systemd-run --user --unit=...` (detached service unit) ensures the emulator survives
+#   across non-interactive SSH sessions without WSL's PAM session teardown killing `--scope` units.
 #
 # Usage:
 #   bash tools/perf/emulator-floor.sh setup
@@ -48,6 +50,7 @@ export ANDROID_ADB_SERVER_PORT="${ANDROID_ADB_SERVER_PORT:-5039}"
 ADB="$ANDROID_SDK_ROOT/platform-tools/adb"
 EMULATOR="$ANDROID_SDK_ROOT/emulator/emulator"
 SERIAL="emulator-${PORT}"
+UNIT_NAME="vela-tv-floor-${PORT}"
 
 WORK_DIR="${VELA_TV_FLOOR_DIR:-$HOME/.scratch/tmp/vela-tv-floor}"
 mkdir -p "$WORK_DIR"
@@ -98,7 +101,7 @@ hw.gpu.enabled=yes
 hw.gpu.mode=swiftshader_indirect
 hw.initialOrientation=landscape
 hw.keyboard=yes
-hw. keyboard.lid=no
+hw.keyboard.lid=no
 hw.lcd.density=320
 hw.lcd.height=1080
 hw.lcd.width=1920
@@ -124,7 +127,7 @@ EOF
   if [[ -f "$base_avd/userdata.img" && ! -f "$target_avd/userdata.img" ]]; then
     cp "$base_avd/userdata.img" "$target_avd/userdata.img"
   fi
-  if [[ -f "$base_avd/ encryptionkey.img" && ! -f "$target_avd/encryptionkey.img" ]]; then
+  if [[ -f "$base_avd/encryptionkey.img" && ! -f "$target_avd/encryptionkey.img" ]]; then
     cp "$base_avd/encryptionkey.img" "$target_avd/encryptionkey.img"
   fi
 
@@ -149,37 +152,47 @@ start_emulator() {
     return 0
   fi
 
-  # Remove stale lock files if no process owns this AVD.
   rm -f "$ANDROID_AVD_HOME/${AVD_NAME}.avd/"*.lock 2>/dev/null || true
+  "$ADB" start-server >/dev/null 2>&1 || true
 
   echo "Starting ${AVD_NAME} on ${SERIAL} (2048 MB RAM, 4 cores, CPUQuota=${CPU_QUOTA}, AllowedCPUs=${ALLOWED_CPUS})..."
 
-  if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope -p CPUQuota="$CPU_QUOTA" true 2>/dev/null; then
-    nohup systemd-run --user --scope \
+  systemctl --user stop "$UNIT_NAME" >/dev/null 2>&1 || true
+  systemctl --user reset-failed "$UNIT_NAME" >/dev/null 2>&1 || true
+
+  if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --unit="${UNIT_NAME}-probe" -p CPUQuota="$CPU_QUOTA" true 2>/dev/null; then
+    systemctl --user reset-failed "${UNIT_NAME}-probe" >/dev/null 2>&1 || true
+    systemd-run --user --unit="$UNIT_NAME" \
+      --setenv="ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" \
+      --setenv="ANDROID_AVD_HOME=${ANDROID_AVD_HOME}" \
+      --setenv="ANDROID_ADB_SERVER_PORT=${ANDROID_ADB_SERVER_PORT}" \
       -p "CPUQuota=${CPU_QUOTA}" \
       -p "AllowedCPUs=${ALLOWED_CPUS}" \
-      "$EMULATOR" -avd "$AVD_NAME" \
-      -port "$PORT" \
-      -no-window -no-audio -no-snapshot -no-boot-anim \
-      -gpu swiftshader_indirect \
-      -memory 2048 -cores 4 \
-      >"$LOG_FILE" 2>&1 &
+      /bin/bash -c "exec \"$EMULATOR\" -avd \"$AVD_NAME\" -port \"$PORT\" -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 >\"$LOG_FILE\" 2>&1"
+    sleep 1
+    local emu_pid
+    emu_pid="$(systemctl --user show -p MainPID --value "$UNIT_NAME" 2>/dev/null || true)"
+    if [[ -z "$emu_pid" || "$emu_pid" == "0" ]]; then
+      echo "error: failed to get MainPID for systemd unit ${UNIT_NAME}" >&2
+      exit 1
+    fi
+    echo "$emu_pid" > "$PID_FILE"
   else
-    echo "warning: systemd-run --user not available; falling back to taskset -c ${ALLOWED_CPUS}" >&2
-    nohup taskset -c "$ALLOWED_CPUS" \
+    echo "warning: systemd-run --user not available; falling back to setsid + taskset -c ${ALLOWED_CPUS}" >&2
+    setsid taskset -c "$ALLOWED_CPUS" \
       "$EMULATOR" -avd "$AVD_NAME" \
       -port "$PORT" \
       -no-window -no-audio -no-snapshot -no-boot-anim \
       -gpu swiftshader_indirect \
       -memory 2048 -cores 4 \
-      >"$LOG_FILE" 2>&1 &
+      >"$LOG_FILE" 2>&1 < /dev/null &
+    local emu_pid=$!
+    echo "$emu_pid" > "$PID_FILE"
   fi
 
-  local emu_pid=$!
-  echo "$emu_pid" > "$PID_FILE"
+  local emu_pid
+  emu_pid="$(cat "$PID_FILE")"
   echo "Launched ${SERIAL} with PID ${emu_pid}. Waiting for boot completion..."
-
-  "$ADB" start-server >/dev/null 2>&1 || true
 
   local elapsed=0
   local timeout=180
@@ -189,6 +202,7 @@ start_emulator() {
       tail -n 40 "$LOG_FILE" >&2 || true
       exit 1
     fi
+    "$ADB" connect "localhost:$((PORT + 1))" >/dev/null 2>&1 || true
     local boot_completed
     boot_completed="$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)"
     if [[ "$boot_completed" == "1" ]]; then
@@ -253,6 +267,9 @@ stop_emulator() {
   if kill -0 "$pid" 2>/dev/null; then
     kill -KILL "$pid" 2>/dev/null || true
   fi
+
+  systemctl --user stop "$UNIT_NAME" >/dev/null 2>&1 || true
+  systemctl --user reset-failed "$UNIT_NAME" >/dev/null 2>&1 || true
 
   rm -f "$PID_FILE"
   rm -f "$ANDROID_AVD_HOME/${AVD_NAME}.avd/"*.lock 2>/dev/null || true
