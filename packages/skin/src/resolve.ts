@@ -312,6 +312,10 @@ function convert(node: Node, depth: number, r: Context): RNode {
       if (params.placeholderColor) params.placeholderColor = tokenValue(params.placeholderColor, r);
       return { ...common, kind: 'widget', widget: node.widget, params };
     }
+    default:
+      // Renderer 19 blocks (docs/plugin-screens.md) are not resolved yet: drawn as nothing.
+      r.unsupported.add(`block ${node.type}`);
+      return { ...common, kind: 'box', children: [], controlStates: false };
   }
 }
 

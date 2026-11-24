@@ -1,6 +1,7 @@
 /** Vela v0. All durations/positions are seconds, rates bits/second, timestamps RFC3339 UTC. */
 import type { LiveEventRef, MultiviewTile, NavigationEntry, ProviderCapDetails } from './live-events';
 export type * from './live-events';
+export type * from './screen';
 export type ID = string;
 export type Timestamp = string;
 export type Cursor = string;

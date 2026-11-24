@@ -1,0 +1,169 @@
+{
+ "rev": 1764003123456,
+ "live": {
+  "topic": "lt1.eyJ…"
+ },
+ "sources": {
+  "hero": {
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nhl-tor-mtl"
+    }
+   ]
+  },
+  "also": {
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nhl-tor-mtl"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:nba-lal-gsw"
+    }
+   ]
+  },
+  "leagues": {
+   "leagues": [
+    {
+     "id": "nfl",
+     "name": "NFL",
+     "label": "NFL"
+    },
+    {
+     "id": "epl",
+     "name": "Premier League",
+     "abbr": "EPL",
+     "label": "EPL"
+    }
+   ],
+   "selected": ""
+  },
+  "viewer": {
+   "spoilerFree": false,
+   "canSetSpoilerFree": true,
+   "locale": "en",
+   "favouriteCount": 2
+  },
+  "schedule": {
+   "date": "2026-11-24",
+   "previous": "2026-11-23",
+   "next": "2026-11-25",
+   "days": [
+    {
+     "date": "2026-11-23",
+     "count": 3
+    },
+    {
+     "date": "2026-11-24",
+     "count": 8
+    }
+   ],
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nhl-tor-mtl"
+    }
+   ]
+  }
+ },
+ "errors": {
+  "live": {
+   "code": "timeout",
+   "retry": true
+  }
+ },
+ "records": {
+  "event:org.ether.sports:sports:nhl-tor-mtl": {
+   "rev": 1764003120001,
+   "value": {
+    "id": "org.ether.sports:sports:nhl-tor-mtl",
+    "phase": "live",
+    "state": "in",
+    "detail": "2nd · 4:40",
+    "spoiler": false,
+    "close": false,
+    "scored": true,
+    "favourite": true,
+    "title": "Canadiens at Maple Leafs",
+    "start": "2026-11-24T00:00:00Z",
+    "league": {
+     "id": "nhl",
+     "name": "NHL",
+     "label": "NHL"
+    },
+    "sides": [
+     {
+      "id": "mtl",
+      "name": "Montréal Canadiens",
+      "short": "Canadiens",
+      "abbr": "MTL",
+      "logo": "/vela/v0/images/p/…",
+      "color": "#af1e2d",
+      "score": "1",
+      "record": "11-9-3",
+      "winner": false,
+      "loser": false
+     },
+     {
+      "id": "tor",
+      "name": "Toronto Maple Leafs",
+      "short": "Maple Leafs",
+      "abbr": "TOR",
+      "logo": "/vela/v0/images/p/…",
+      "color": "#00205b",
+      "score": "2",
+      "record": "14-6-2",
+      "winner": false,
+      "loser": false
+     }
+    ],
+    "situation": [
+     {
+      "label": "Shots",
+      "value": "MTL 17 · TOR 24"
+     },
+     {
+      "label": "Power play",
+      "value": "TOR 1:12"
+     }
+    ],
+    "probability": {
+     "home": 0.82,
+     "away": 0.18,
+     "subjectSide": 1,
+     "leader": {
+      "abbr": "TOR",
+      "share": 82
+     }
+    },
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-129",
+       "name": "Vista Sports 1",
+       "number": "129",
+       "live": true,
+       "fromStart": "startOver",
+       "programme": {
+        "id": "pg-77"
+       }
+      }
+     ],
+     "primary": {
+      "channelId": "ch-129",
+      "name": "Vista Sports 1",
+      "number": "129",
+      "fromStart": "startOver",
+      "programme": {
+       "id": "pg-77"
+      }
+     },
+     "airing": [
+      {
+       "name": "Sportsnet"
+      }
+     ]
+    }
+   }
+  }
+ }
+}
