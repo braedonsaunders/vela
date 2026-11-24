@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { HostContext, type SkinHost } from '../../host';
 import { PlayerChrome } from './chrome';
 import { PlayerChromeContext, type PlayerChromeState } from './context';
+import { watchFrames } from './fold-layout';
 
 interface Props {
   host: SkinHost;
@@ -14,20 +15,17 @@ interface Props {
 }
 
 export function WatchSurface({ host, state, children }: Props) {
+  const picture = watchFrames(host.viewport).picture;
   return (
     <HostContext.Provider value={host}>
       <PlayerChromeContext.Provider value={state}>
         <View style={styles.stage} testID="watch-stage">
-          {children}
-          {/* Only interactive chrome respects cutouts and system bars. The video and its
-              aspect-ratio letterbox fill the stage, including on a folding display. */}
-          <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, {
-            zIndex: 1,
-            top: host.viewport.insets.top,
-            bottom: host.viewport.insets.bottom,
-            left: host.viewport.sides?.left ?? host.viewport.insets.left,
-            right: host.viewport.sides?.right ?? host.viewport.insets.right,
-          }]}>
+          {/* The video and its aspect-ratio letterbox fill the stage, including on a folding
+              display held flat; a tabletop fold gives it the upper half (fold-layout.ts). */}
+          <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, picture]}>{children}</View>
+          {/* The chrome spans the stage for taps on the picture; its controls keep to the safe
+              area and clear of a tabletop's fold (chrome.tsx). */}
+          <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 1 }]}>
             <PlayerChrome />
           </View>
         </View>

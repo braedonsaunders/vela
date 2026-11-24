@@ -12,6 +12,7 @@ support is under active development; a build does not establish device parity.
 | `packages/protocol` | Wire types, skin schema and fixtures |
 | `packages/player-api` | Shared player view contract |
 | `modules/vela-player` | Native playback module and web player |
+| `modules/vela-fold` | A foldable's posture and fold (iPhone Duo); flat elsewhere |
 | `mock-server` | Fixture-backed Bun protocol server |
 | `tools/release` | Web export, inventory, signing and distribution tooling |
 

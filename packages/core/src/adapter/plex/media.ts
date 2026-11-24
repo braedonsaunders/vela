@@ -43,6 +43,9 @@ function count(n: unknown, key: 'childCount' | 'index' | 'disc' = 'childCount') 
   return Number.isFinite(value) && value > 0 ? { [key]: value } : {};
 }
 
+/** Plex names DTS audio `dca` (DTS-HD MA `dca-ma`); the protocol's FFmpeg-style codec token for it is `dts`. */
+export const decoderAudioCodec = (codec: string) => codec === 'dca' || codec === 'dca-ma' ? 'dts' : codec;
+
 /** Audio Vela plays as the file (what every platform's audio player decodes); the rest is transcoded to MP3. */
 const DIRECT_AUDIO = ['mp3', 'mp4', 'm4a', 'm4b', 'aac', 'flac', 'wav'];
 export function directAudio(media: Node): boolean {

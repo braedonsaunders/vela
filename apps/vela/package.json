@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-native-masked-view/masked-view": "0.3.2",
     "@vela/core": "workspace:*",
+    "@vela/fold": "workspace:*",
     "@vela/guide-native": "workspace:*",
     "@vela/player": "workspace:*",
     "@vela/search-native": "workspace:*",

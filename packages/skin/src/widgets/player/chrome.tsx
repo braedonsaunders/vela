@@ -20,6 +20,7 @@ import { usePlayerLook } from './look';
 import { present, type PlayerView } from './present';
 import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
+import { watchFrames } from './fold-layout';
 import { Status, type Failed } from './status';
 import { useVelaState } from '@vela/core/react';
 import { PlayerOverlays, usePlayerSurfaces } from '../../surfaces/player';
@@ -217,6 +218,9 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     else idle.wake();
   };
   const top = look.small ? 76 : look.size(108);
+  // The chrome spans the stage, so a tap anywhere on the picture wakes it; its controls keep to
+  // the safe area (and to a tabletop's lower half: fold-layout.ts).
+  const frame = watchFrames(viewport).chrome;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="player-chrome">
       {/* On TV remove the picture's focus destination on reveal, rather than leaving a
@@ -231,6 +235,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         focusable={Platform.isTV ? !idle.visible : Platform.OS === 'android'}
         hasTVPreferredFocus={Platform.isTV}
       />}
+      <View style={[StyleSheet.absoluteFill, frame]} pointerEvents="box-none">
       {/* Each bar holds its own edge: on a short screen they overlap at the middle rather than
           push the controls off the bottom. On TV, moving focus along a bar keeps the chrome up:
           the focus engine takes those presses, so they never reach the remote's event stream,
@@ -294,6 +299,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         </View>
       ) : null}
       {info && !failed ? <InfoCard look={look} view={view} top={top} /> : null}
+      </View>
     </View>
   );
 }

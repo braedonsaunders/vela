@@ -17,6 +17,7 @@ import { Arrive, MOTION, Presence, useLast } from '../../presence';
 import { LyricsPanel } from '../music/lyrics';
 import { SoundBlock } from '../../blocks/sound';
 import { musicTV } from '../music/layout';
+import { nowPlayingSideBySide } from './window-layout';
 
 const web = Platform.OS === 'web';
 /** A TV's focus engine moves by geometry: Now Playing's column and transport row are focus guides, so
@@ -238,7 +239,7 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   }, [onClose, store]);
   if (!item || !audio.queue) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
-  const sideBySide = m.width >= 900;
+  const sideBySide = nowPlayingSideBySide(m.width, m.height);
   const coverSize = sideBySide ? Math.min(480, m.height - 360, (m.width - m.gutter * 2) * 0.42) : Math.min(m.width - m.gutter * 2 - 24, m.height * 0.42, 420);
   const tint = item.accent || m.ui.accent;
   const parentId = item.media?.parent?.id;

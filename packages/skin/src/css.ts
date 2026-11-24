@@ -20,6 +20,19 @@ export interface Viewport {
   pxScale?: number;
   /** With pxScale: the points lengths round to (the player look rounds each size to whole points). */
   pxStep?: number;
+  /** A foldable's posture (an iPhone Duo; Android foldables can report the same): `flat` unless the
+   * device is partly open, when `division` is where the window divides (the fold and the margins
+   * interactive content keeps clear of), in window points from the top left like `insets`. */
+  fold?: Fold;
+}
+
+/** See Viewport.fold. `book`: the fold upright, held like a book; `tabletop`: the fold across,
+ * the lower half resting like a laptop's keyboard. */
+export interface Fold {
+  posture: 'flat' | 'book' | 'tabletop';
+  /** The hinge angle in degrees (180 fully open), where the platform reports it. */
+  angle?: number;
+  division?: { x: number; y: number; width: number; height: number };
 }
 
 /** What a length is measured against: the font size in force, and which viewport axis a
