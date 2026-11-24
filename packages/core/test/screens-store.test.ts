@@ -34,7 +34,7 @@ class FakeApi implements PluginScreens {
   document: V.ScreenDocument = DOC;
   /** Answer data reads at once with this, unless null (then they wait for resolve). */
   auto: ((read: ScreenDataRead) => Partial<V.ScreenData>) | null = null;
-  async screenDocument(href: string) { return { document: this.document, href }; }
+  async screenDocument() { return this.document; }
   screenData(target: ScreenTarget, read: ScreenDataRead): Promise<V.ScreenData> {
     return new Promise((resolve, reject) => {
       const call: Call = { target, read, resolve: data => resolve({ rev: 0, sources: {}, records: {}, ...data } as V.ScreenData), reject };

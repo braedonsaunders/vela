@@ -280,7 +280,7 @@ sections 3b, 5.4, 6 and 7), built on the Sports simulation in `sports.ts`:
   `Accept-Language`, first tag) is the locale.
 - `GET /screens/{id}/pages/{page}/document?v=&r=&l=` and `/surfaces/{id}/document`: the documents in
   `packages/protocol/fixtures/screens/` with `deps` added, immutable with an ETag when `v` matches
-  (a stale `v` answers 301; no `v`, `no-cache`); no variant for the client's renderer is 404
+  (no `v` or a stale one: the current document, 200, `no-cache`, its ETag; never a redirect); no variant for the client's renderer is 404
   `update_required`. Surfaces are offered once `sports/surfaces/{scorebug,ticker,alert,tonight}.json`
   exists; the Home row surface sits after the first Home row.
 - `GET …/data?sources=&p.<param>=&tz=`: the section 5.4 view models as `event:`, `detail:` and
