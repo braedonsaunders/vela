@@ -197,7 +197,7 @@ describe('on a frozen clock', () => {
   test('event records: upcoming, final, spoiler-free and N-competitor', async () => {
     const data = await c.json(`/screens/sports/pages/index/data${query({ sources: 'schedule,yours' })}`) as V.ScreenData;
     const read = async (id: string) => {
-      const game = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `sports:sports:${id}` })}`) as V.ScreenData;
+      const game = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `event:sports:sports:${id}` })}`) as V.ScreenData;
       return game.records[`event:sports:sports:${id}`]!.value as Json;
     };
     void data;
@@ -219,7 +219,7 @@ describe('on a frozen clock', () => {
   });
 
   test('the game page: an event and a detail record (plays both ways, tables with lit rows, series, links)', async () => {
-    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': NFL })}`) as V.ScreenData;
+    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`) as V.ScreenData;
     expect(data.sources.game).toEqual({ event: { $record: `event:${NFL}` }, detail: { $record: `detail:${NFL}` } });
     const detail = data.records[`detail:${NFL}`]!.value as Json;
     expect(detail.id).toBe(NFL);
@@ -234,7 +234,7 @@ describe('on a frozen clock', () => {
     expect(detail.playsNewest.find((p: Json) => p.clock === '3:30').scores).toEqual(['24', '27']);
     const ats = detail.plays.map((p: Json) => Date.parse(p.at));
     expect(ats).toEqual([...ats].sort((a, b) => a - b));
-    const hockey = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nhl-tor-mtl' })}`) as V.ScreenData;
+    const hockey = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'event:sports:sports:nhl-tor-mtl' })}`) as V.ScreenData;
     expect(((hockey.records['detail:sports:sports:nhl-tor-mtl']!.value as Json).plays as Json[]).every(p => p.at === undefined && p.score === undefined && p.scores === undefined)).toBe(true);
     const scoring = detail.tables[0];
     expect(scoring.title).toBe('Scoring');
@@ -243,9 +243,14 @@ describe('on a frozen clock', () => {
     expect(detail.probabilitySeries.length).toBeGreaterThan(2);
     expect(detail.links).toEqual([{ label: 'Game centre', url: { href: `https://example.invalid/sports/${encodeURIComponent(NFL)}`, host: 'example.invalid' } }]);
     // A record key works as the ref too; an unknown event is a 404 for the whole read.
-    expect((await c.get(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`)).status).toBe(200);
+    // A ref param is a record key: a bare id is 400 invalid_request.
+    const bare = await c.get(`/screens/sports/pages/game/data${query({ 'p.event': NFL })}`);
+    expect(bare.status).toBe(400);
+    expect(((await bare.json()) as Json).error.code).toBe('invalid_request');
+    expect((await c.get(`/surfaces/sports.scorebug/data${query({ 'p.event': NFL })}`)).status).toBe(400);
+    expect((await c.get(`/surfaces/sports.scorebug/data${query({ 'p.channel': 'ch-1' })}`)).status).toBe(400);
     // An event the viewer cannot read is that source's not_found, not a 404 (a 404 is only a page the viewer may not see).
-    const missing = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nope' })}`) as V.ScreenData;
+    const missing = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'event:sports:sports:nope' })}`) as V.ScreenData;
     expect(missing.errors).toEqual({ game: { code: 'not_found' } });
     expect(missing.sources.viewer).toBeDefined();
   });
@@ -322,11 +327,13 @@ describe('on a frozen clock', () => {
     expect(extra.status).toBe(400);
     expect(((await extra.json()) as Json).error.code).toBe('invalid_request');
     expect((await c.action('/screens/sports/actions/nope', { page: 'index', params: {}, args: {} })).status).toBe(404);
+    // ref must be an entity: record key.
+    expect((await c.action('/screens/sports/actions/ether.favorite', { page: 'index', params: {}, args: { ref: 'sports:sports:team:nfl-dal', on: 'true' } })).status).toBe(400);
   });
 
   test('reveal and spoiler-free change the event records the viewer reads', async () => {
     const id = 'sports:sports:epl-che-mci';
-    const revealed = await (await c.action('/screens/sports/actions/ether.reveal', { page: 'game', params: { event: id }, args: { event: id } })).json() as V.ScreenActionAnswer;
+    const revealed = await (await c.action('/screens/sports/actions/ether.reveal', { page: 'game', params: { event: `event:${id}` }, args: { event: `event:${id}` } })).json() as V.ScreenActionAnswer;
     expect(revealed.records![`event:${id}`]!.value).toMatchObject({ spoiler: false, scored: true });
     expect(revealed.records![`detail:${id}`]).toBeDefined();
     const on = await (await c.action('/screens/sports/actions/ether.spoilerFree', { page: 'index', params: {}, args: { on: 'true' } })).json() as V.ScreenActionAnswer;
@@ -454,7 +461,7 @@ describe('with the clock running', () => {
   afterAll(async () => { await mock?.stop(); });
 
   test('a live game pushes newer event records on its page topic', async () => {
-    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': NFL })}`) as V.ScreenData;
+    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`) as V.ScreenData;
     const stream = await readStream(mock, `/live/stream?topic=${data.live!.topic}&since=${data.rev}`, c.headers(),
       events => events.some(e => e.event === 'records' && e.data.records[`event:${NFL}`]), 8000);
     const pushed = stream.events.find(e => e.event === 'records' && e.data.records[`event:${NFL}`])!.data.records as Record<string, V.RecordEntry>;
