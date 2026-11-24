@@ -83,7 +83,10 @@ interface Common {
 export interface RPress {
   action: Action; arg?: Template; focus?: Template;
   args?: Record<string, Template>;
-  optimistic?: { record?: Template; source?: string; path: string; value: Template };
+  /** Screens: the raw value of each argument written as one hole (`{t.favourite|not}` is false, not
+   * 'false'), so typed plugin action arguments keep their type. */
+  argValues?: Record<string, Value>;
+  optimistic?: { record?: Template; source?: string; path: string; value: Template; raw?: Value };
 }
 
 export type RNode = Common & (
@@ -432,8 +435,13 @@ function pressOf(press: NonNullable<BoxNode['press']>, r: Context): RPress {
   return {
     action: press.action, arg: compile(press.arg, r), focus: compile(press.focus, r),
     ...(r.screen && press.args ? { args: Object.fromEntries(Object.entries(press.args).map(([k, v]) => [k, compile(v, r)!])) } : {}),
+    ...(r.screen && press.args ? { argValues: Object.fromEntries(Object.entries(press.args).flatMap(([k, v]) => {
+      const hole = singleHole(v);
+      return hole && !hole.startsWith('s:') ? [[k, holeValue(hole, r.screen!.scope)]] : [];
+    })) } : {}),
     ...(r.screen && press.optimistic ? { optimistic: { record: compile(press.optimistic.record, r), source: press.optimistic.source,
-      path: press.optimistic.path, value: compile(press.optimistic.value, r)! } } : {}),
+      path: press.optimistic.path, value: compile(press.optimistic.value, r)!,
+      ...(singleHole(press.optimistic.value) && !singleHole(press.optimistic.value)!.startsWith('s:') ? { raw: holeValue(singleHole(press.optimistic.value)!, r.screen.scope) } : {}) } } : {}),
   };
 }
 

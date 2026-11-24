@@ -61,7 +61,12 @@ export interface ScreenViewProps {
 }
 
 const BOOL = /^(true|false)$/;
-const patchValue = (value: string): unknown => (BOOL.test(value) ? value === 'true' : value);
+/** `name=value` or `name:value`: a state value, not a flag. */
+function stateValue(flag: string): [string, string] | undefined {
+  const m = /^([\w-]+)[=:](.*)$/.exec(flag);
+  return m ? [m[1]!, m[2]!] : undefined;
+}
+const patchValue = (value: unknown): unknown => (typeof value === 'string' && BOOL.test(value) ? value === 'true' : value);
 
 /** The arguments of a press without the ones that name the action itself. */
 function without(args: Record<string, string>, ...names: string[]): Record<string, string> {
@@ -123,12 +128,14 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   }, [actions, href, target]);
 
   const press = useCallback((p: ScreenPress) => {
-    const args = p.args;
+    // Text for the app's own actions; plugin actions get the typed values (ScreenActionArg).
+    const args: Record<string, string> = Object.fromEntries(Object.entries(p.args).map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : String(v)]));
     const flag = args.flag ?? p.arg;
     switch (p.action) {
       case 'navigate': navigate(args); return;
       case 'setParam': {
-        const name = args.name ?? '';
+        // `name` (documents), `param` (the tabs block) or the plain argument.
+        const name = args.name || args.param || p.arg;
         if (!name || !page) return;
         const next = { ...page.params, [name]: args.value ?? '' };
         for (const cleared of (args.clear ?? '').split(',').filter(Boolean)) delete next[cleared];
@@ -139,13 +146,19 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
       case 'toggle': setState(s => ({ ...s, [flag]: s[flag] === 'true' ? '' : 'true' })); return;
       case 'open': {
         // `open name=value` sets a state value (tabs bound to state); `open name` sets a flag.
-        const at = flag.indexOf('=');
-        if (at > 0) setState(s => ({ ...s, [flag.slice(0, at)]: flag.slice(at + 1) }));
+        const value = stateValue(flag);
+        if (value) setState(s => ({ ...s, [value[0]]: value[1] }));
         else setState(s => ({ ...s, [flag]: 'true' }));
         return;
       }
       case 'close': setState(s => ({ ...s, [flag]: '' })); return;
-      case 'only': setState(s => (s[flag] === 'true' ? { ...s, [flag]: '' } : { ...Object.fromEntries(Object.keys(s).map(k => [k, ''])), [flag]: 'true' })); return;
+      case 'only': {
+        // The tabs block sets a state-bound tab as `only name:value`.
+        const value = stateValue(flag);
+        if (value) setState(s => ({ ...s, [value[0]]: value[1] }));
+        else setState(s => (s[flag] === 'true' ? { ...s, [flag]: '' } : { ...Object.fromEntries(Object.keys(s).map(k => [k, ''])), [flag]: 'true' }));
+        return;
+      }
       case 'play': actions.play(args); return;
       case 'multiview': if (args.channel || p.arg) actions.multiview?.(args.channel || p.arg); return;
       case 'openLink': {
@@ -166,7 +179,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
           const o = p.optimistic;
           try {
             const answer = await vela.screens.action(pageKey, {
-              name, args: without(args, 'name'), control: p.control,
+              name, args: Object.fromEntries(Object.entries(p.args).filter(([k]) => k !== 'name')), control: p.control,
               ...(o ? { optimistic: { ...(o.record ? { record: o.record } : {}), ...(o.source ? { source: o.source } : {}), path: o.path, value: patchValue(o.value) } } : {}),
             });
             if (answer?.toast) { setToast(answer.toast.slice(0, 200)); actions.toast(answer.toast.slice(0, 200)); }

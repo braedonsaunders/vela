@@ -172,7 +172,7 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
       ],
     },
     'vela:switch': {
-      type: 'box', role: 'switch', label: '{arg.label}', a11y: { checked: on('on') }, style: switchBox(false),
+      type: 'box', role: 'button', label: '{arg.label}', a11y: { pressed: on('on') }, style: switchBox(false),
       focus: { scale: '1.06', 'background-color': 'color-mix(in srgb, $ui.ink 18%, transparent)' },
       states: [{ when: on('on'), style: switchBox(true), focus: { scale: '1.06', 'background-color': 'color-mix(in srgb, $ui.accent 30%, transparent)' } }],
       children: [
