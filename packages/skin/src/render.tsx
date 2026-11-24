@@ -12,6 +12,7 @@ import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
 import { heroSegmentDestination, isHeroControl, isHeroSegment } from './hero-pager';
+import { holdHero } from './hero-hold';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -1016,12 +1017,12 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
-          if (inHero || (heroControl && visible)) holdHero(host.setFlag, true);
+          if (inHero || (heroControl && visible)) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => { set('focus', false); if (inHero || heroControl) holdHero(host.setFlag, false); }}
+        onBlur={() => { set('focus', false); if (inHero || heroControl) holdHero(host.setFlag, false, Platform.isTV); }}
         onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
@@ -1103,17 +1104,6 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   );
   // A navigation row measures a hidden copy of itself in its parent's box (the room it has).
   return node.fit === 'nav' && reportNav ? <>{drawnBox}<NavFitMeasure node={node} ctx={ctx} report={reportNav} /></> : drawnBox;
-}
-
-/** Focus moving between the hero's controls blurs one and focuses the next: releasing the hold at
- * once and taking it again changed the flags twice, and each change redrew the routes reading them.
- * The release waits a turn, and a focus in the hero within it keeps the hold. */
-let heroRelease: ReturnType<typeof setTimeout> | undefined;
-function holdHero(setFlag: (flag: string, on: boolean) => void, on: boolean): void {
-  if (heroRelease !== undefined) clearTimeout(heroRelease);
-  heroRelease = undefined;
-  if (on) setFlag('hero-interacting', true);
-  else heroRelease = setTimeout(() => { heroRelease = undefined; setFlag('hero-interacting', false); }, 0);
 }
 
 const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretch', alignSelf: 'stretch', gap: 10 };
