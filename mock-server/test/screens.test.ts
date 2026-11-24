@@ -65,7 +65,7 @@ describe('on a frozen clock', () => {
   let fixtures: string;
   let c: ReturnType<typeof client>;
   beforeAll(async () => {
-    // The real Sports documents, plus one test surface (W5 adds Sports' own).
+    // The real Sports documents and surfaces, with two test surfaces in place of the overlays.
     fixtures = mkdtempSync(join(tmpdir(), 'vela-screens-'));
     cpSync(join(import.meta.dir, '../../packages/protocol/fixtures/screens'), fixtures, { recursive: true });
     mkdirSync(join(fixtures, 'sports/surfaces'), { recursive: true });
@@ -87,7 +87,7 @@ describe('on a frozen clock', () => {
     const boot = await c.json('/bootstrap') as V.Bootstrap;
     expect(boot.navigation).toEqual([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports', page: 'index',
       document: { href: expect.stringMatching(/^\/vela\/v0\/screens\/sports\/pages\/index\/document\?v=[0-9a-f]{16}&r=19&l=en$/), renderer: 19 } }]);
-    expect(boot.surfaces!.map(surface => surface.id)).toEqual(['sports.scorebug', 'sports.ticker']);
+    expect(boot.surfaces!.map(surface => surface.id)).toEqual(['sports.scorebug', 'sports.ticker', 'sports.alert', 'sports.tonight']);
     expect(boot.surfaces!.slice(0, 1)).toEqual([{ id: 'sports.scorebug', presentation: 'playerOverlay', anchor: 'topLeft', when: { event: { feed: 'sports' } }, visibility: 'always',
       setting: { id: 'scorebug', label: 'Score', default: true, enabled: true }, document: { href: expect.stringContaining('/vela/v0/surfaces/sports.scorebug/document?v='), renderer: 19 } }]);
   });
@@ -465,6 +465,6 @@ describe('with the clock running', () => {
     await Bun.sleep(300);
     await fetch(`${mock.url}/__admin/sports`, { method: 'POST', body: JSON.stringify({ alert: { kind: 'close', eventId: NFL } }) });
     const alert = (await stream).events.find(e => e.event === 'alert')!.data as V.AlertFrame;
-    expect(alert).toEqual({ id: expect.any(String), kind: 'close', title: 'Close game', body: expect.stringContaining('–'), at: expect.any(String), ref: `event:${NFL}`, plugin: 'sports' });
+    expect(alert).toEqual({ id: expect.any(String), kind: 'close', title: 'Close game', body: expect.stringContaining('–'), at: expect.any(String), ref: `event:${NFL}`, plugin: 'sports', surface: 'sports.alert' });
   });
 });

@@ -9,7 +9,7 @@
   "scripts": {
     "test": "bun test ./packages ./modules ./mock-server ./apps/vela-desktop/test ./tools/parity",
     "typecheck": "bun tools/typecheck.ts",
-    "check:skins": "for document in packages/protocol/fixtures/skins/cinematic.ts packages/protocol/fixtures/skins/*/document.ts packages/protocol/fixtures/screens/*/*.json; do case \"$document\" in */data*.json) continue;; esac; bun tools/skin.ts check \"$document\" || exit 1; done"
+    "check:skins": "for document in packages/protocol/fixtures/skins/cinematic.ts packages/protocol/fixtures/skins/*/document.ts packages/protocol/fixtures/screens/*/*.json packages/protocol/fixtures/screens/*/*/*.json; do case \"$document\" in */data*.json) continue;; esac; bun tools/skin.ts check \"$document\" || exit 1; done"
   },
   "patchedDependencies": {
     "@react-native-masked-view/masked-view@0.3.2": "patches/@react-native-masked-view%2Fmasked-view@0.3.2.patch",

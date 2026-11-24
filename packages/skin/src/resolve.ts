@@ -41,7 +41,9 @@ const MAX_DEPTH = 32;
 export type Template = string | { parts: (string | Accessor)[] };
 export type CssT = Record<string, Template>;
 
-export interface Test { read: Accessor | ((c: Ctx, e: Env) => string); is: NonNullable<Condition['is']>; value: string; not: boolean }
+export interface Test { read: Accessor | ((c: Ctx, e: Env) => string); is: NonNullable<Condition['is']>; value: string; not: boolean;
+  /** Screens: a `value` holding holes (`channel:{src.game.event.watch.primary.channelId}`), filled when tested. */
+  valueHole?: (c: Ctx, e: Env) => string }
 
 export interface Layer { style: CssT; hover?: CssT; focus?: CssT; groupHover?: CssT; groupFocus?: CssT; label?: Template }
 
@@ -210,7 +212,13 @@ export function fill(template: Template | undefined, c: Ctx, e: Env): string {
 }
 
 function tests(list: Condition[] | undefined, r?: Context): Test[] {
-  return (list ?? []).map(k => ({ read: r?.screen ? screenRead(k.test, r.screen.scope) : read(k.test), is: k.is ?? 'set', value: k.value ?? '', not: k.not ?? false }));
+  return (list ?? []).map(k => {
+    const value = k.value ?? '';
+    // A screen compares two values by writing the other as a hole in `value` (a surface's channel against an event's).
+    const holed = r?.screen && /\{[^{]/.test(value) ? compileTemplate(value, r.screen.scope) : undefined;
+    return { read: r?.screen ? screenRead(k.test, r.screen.scope) : read(k.test), is: k.is ?? 'set', value, not: k.not ?? false,
+      ...(holed !== undefined && typeof holed !== 'string' ? { valueHole: (c: Ctx, e: Env) => fill(holed, c, e) } : {}) };
+  });
 }
 
 /** A condition's key in a screen document: a binding path (pipes allowed, braces optional), read as text. */
@@ -223,14 +231,15 @@ function screenRead(key: string, scope: HoleScope): Accessor {
 export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
   for (const k of list ?? []) {
     const v = k.read(c, e);
+    const value = k.valueHole ? k.valueHole(c, e) : k.value;
     const num = (s: string) => Number(s) || 0;
     let ok: boolean;
     switch (k.is) {
-      case 'eq': ok = v === k.value; break;
-      case 'ne': ok = v !== k.value; break;
-      case 'gt': ok = num(v) > num(k.value); break;
-      case 'lt': ok = num(v) < num(k.value); break;
-      case 'mod': { const [n, rem] = k.value.split(':').map(Number); ok = n ? num(v) % n === rem : false; break; }
+      case 'eq': ok = v === value; break;
+      case 'ne': ok = v !== value; break;
+      case 'gt': ok = num(v) > num(value); break;
+      case 'lt': ok = num(v) < num(value); break;
+      case 'mod': { const [n, rem] = value.split(':').map(Number); ok = n ? num(v) % n === rem : false; break; }
       default: ok = !['', 'false', '0'].includes(v);
     }
     if (ok === k.not) return false;
