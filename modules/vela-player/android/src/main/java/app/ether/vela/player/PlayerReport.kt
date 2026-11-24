@@ -186,6 +186,7 @@ internal class PlayerReport(
       "currentBitrateBps" to null,
       "requiredBandwidthBps" to null,
       "bufferAheadSeconds" to state.cacheAhead,
+      "loadProgress" to state.receivedBytes,
       "pendingSubtitleTrackId" to null,
       "subtitleError" to null,
       "subtitleStyle" to if (previewing) null else subtitleLook.snapshot,

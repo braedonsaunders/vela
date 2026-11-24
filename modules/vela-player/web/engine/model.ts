@@ -145,6 +145,12 @@ export interface Snapshot {
   currentBitrateBps: number | null;
   requiredBandwidthBps: number | null;
   bufferAheadSeconds: number | null;
+  /**
+   * A count that grows while the engine gets somewhere with loading (media bytes received, packets
+   * demuxed or decoded, startup steps passed), never on a timer; absent or null where the engine
+   * cannot tell. Only its growth means anything: the host keeps waiting on a slow start while it grows.
+   */
+  loadProgress?: number | null;
   throughputHistory: number[];
   speed: number;
   speeds: number[];

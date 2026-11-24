@@ -129,6 +129,9 @@ export function snapshotHost(context: HostContext): Snapshot {
     currentBitrateBps,
     requiredBandwidthBps: currentBitrateBps === null ? null : currentBitrateBps * QUALITY_HEADROOM,
     bufferAheadSeconds: ahead,
+    loadProgress: context.media.runtime
+      ? (readout?.loadProgress ?? null)
+      : (context.media.pipeline?.receivedBytes ?? 0) + context.watchdog.loadEvents,
     throughputHistory: context.media.pipeline?.bandwidth.history ?? readout?.throughputHistory ?? [],
     speed: context.session.current?.live ? 1 : context.playback.speed,
     speeds:

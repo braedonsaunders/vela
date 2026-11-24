@@ -10,6 +10,7 @@ import { hasEventStream, hasLibraryLive, hasTrickplaySheets, hasVersions } from 
 import type { TrickplayFrame } from '../protocol/trickplay';
 import { TrickplayCache } from './trickplay';
 import { finalRefusal, startRefusal, startRetry } from './start-retry';
+import { heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
@@ -112,8 +113,14 @@ export class Playback {
   private recovering = false;
   /** The current playback reached a session: a later drop is recovered patiently. */
   private established = false;
+  /** Backoff for asking the server again while a recovery's start requests fail. */
   private recoveryAttempt = 0;
+  /** Progress of the current session (stall.ts): when it is stalled, and how many restarts it has had. */
+  private stall: StallWatch | undefined;
+  /** The attempt number the next session starts at: 0 for a viewer's start, one more for each restart. */
+  private restarts = 0;
   private watchdog: ReturnType<typeof setTimeout> | undefined;
+  private watchdogAt = 0;
   private cursor = 0;
   private localTracks = false;
   private audio: string | undefined;
@@ -190,6 +197,7 @@ export class Playback {
     if (this.run !== run) return;
     const plan = connection.plan(existing);
     this.established = true;
+    this.stall = stallWatch(Date.now());
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
@@ -283,6 +291,8 @@ export class Playback {
     this.abandoned = null;
     this.recovering = false;
     this.established = true;
+    this.recoveryAttempt = 0;
+    this.stall = stallWatch(Date.now(), this.restarts);
     this.cursor = plan.positionSeconds ?? 0;
     this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
@@ -330,6 +340,10 @@ export class Playback {
     const show = (plan: V.PlaybackPlan) => {
       if (this.run !== run || controller.signal.aborted || plan.sessionId !== sessionId) return;
       plan = this.withLocalTracks(plan);
+      if (this.stall && !this.recovering) {
+        this.stall = heardServer(this.stall, plan, Date.now());
+        this.armWatchdog(sessionId);
+      }
       const ended = plan.state === 'ended' && this.box.get().playback.phase !== 'ended';
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
       if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
@@ -373,12 +387,25 @@ export class Playback {
     };
   }
 
-  /** Session-level recovery follows exhausted media read retries. One intent owns all triggers. */
-  recover(sessionId: string): void {
+  /**
+   * Session-level recovery: the session stalled (stall.ts), its media reads failed past the
+   * engine's own retries, or the server lost it. One intent owns all triggers. A session that has
+   * had its last restart without playing again is not restarted: the viewer is told instead.
+   */
+  recover(sessionId: string, reason = 'failed'): void {
     const current = this.box.get().playback;
     // Only an established session is recovered: a start that never reached one (no session id)
     // already ended in its own failed or retrying state.
     if (!this.run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
+    const attempt = this.stall?.attempt ?? this.restarts;
+    if (stallVerdict({ attempt }) === 'give-up') {
+      console.warn(`Vela playback: session ${sessionId} ${reason} after ${attempt} restart(s); giving up`);
+      this.giveUp();
+      return;
+    }
+    console.warn(`Vela playback: session ${sessionId} ${reason}; restart ${attempt + 1} of ${QUIET_SECONDS.length - 1}`);
+    this.restarts = attempt + 1;
+    this.stall = undefined;
     this.recovering = true;
     this.follow?.abort();
     if (this.watchdog) clearTimeout(this.watchdog);
@@ -587,26 +614,20 @@ export class Playback {
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
-  snapshot(snapshot: LiveObservation & { position?: number; state?: string; audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
-    if (snapshot.sessionId !== this.box.get().playback.sessionId || this.recovering) return;
-    const progressed = snapshot.position !== undefined && snapshot.position !== this.cursor;
+  snapshot(snapshot: LiveObservation & StallSample & { audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
+    const current = this.box.get().playback;
+    if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
     if (snapshot.state === 'playing' || snapshot.state === 'paused') {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
     }
-    if (progressed) this.recoveryAttempt = 0;
-    if (progressed || snapshot.state === 'paused' || snapshot.state === 'ended') {
-      if (this.watchdog) clearTimeout(this.watchdog);
-      this.watchdog = undefined;
-    }
-    if (!this.watchdog && snapshot.state !== 'paused' && snapshot.state !== 'ended') {
-      const id = snapshot.sessionId;
-      this.watchdog = setTimeout(() => { if (id) this.recover(id); }, 5500);
+    if (this.stall && snapshot.sessionId && current.phase === 'playing') {
+      this.stall = heardEngine(this.stall, snapshot, Date.now());
+      this.armWatchdog(snapshot.sessionId);
     }
     const live = liveStatus(snapshot);
-    const current = this.box.get().playback.live;
-    if (JSON.stringify(live) !== JSON.stringify(current)) this.patch({ live });
+    if (JSON.stringify(live) !== JSON.stringify(current.live)) this.patch({ live });
   }
 
   /**
@@ -674,6 +695,52 @@ export class Playback {
     const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
     this.end();
     this.box.update('playback', () => initialPlayback);
+    await this.release(plan, target, phase);
+  }
+
+  /** The current session's stall deadline, armed again whenever it moves (stall.ts). */
+  private armWatchdog(sessionId: string): void {
+    const deadline = this.stall ? stallDeadline(this.stall) : null;
+    if (this.watchdog && deadline === this.watchdogAt) return;
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = undefined;
+    if (deadline === null) return;
+    this.watchdogAt = deadline;
+    this.watchdog = setTimeout(() => {
+      this.watchdog = undefined;
+      const now = Date.now(), stall = this.stall;
+      const reason = stall ? `stalled (nothing moved for ${Math.round((now - stall.heard) / 1000)} s, not played for ${Math.round((now - stall.moved) / 1000)} s)` : 'stalled';
+      this.recover(sessionId, reason);
+    }, Math.max(0, deadline - Date.now()));
+  }
+
+  /**
+   * The session stalled through its last restart: playback ends in the failed state (the
+   * chrome's error with Try again, which starts afresh where the viewer was) and the server
+   * releases the session, instead of the player being re-created forever.
+   */
+  private giveUp(): void {
+    const current = this.box.get().playback;
+    const plan = current.plan ?? this.abandoned;
+    this.follow?.abort();
+    this.follow = undefined;
+    this.followNow = undefined;
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = undefined;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    this.stall = undefined;
+    this.restarts = 0;
+    this.recovering = false;
+    this.established = false;
+    this.abandoned = null;
+    this.patch({ phase: 'failed', plan: null, sessionId: '', error: '', errorCode: 'playback_stalled', errorClass: 'transient',
+      retryAfterSeconds: 0, retryAttempt: 0, versions: null, live: null });
+    void this.release(plan, current.target, current.phase);
+  }
+
+  /** The server releases the session at the plan's generations, and resume state is published. */
+  private async release(plan: V.PlaybackPlan | null, target: PlaybackTarget | null, phase: PlaybackPhase): Promise<void> {
     if (!plan || plan.state === 'ended') return;
     await this.finish(plan, target, phase, last, this.reporting);
   }
@@ -727,6 +794,8 @@ export class Playback {
     this.recovering = false;
     this.established = false;
     this.recoveryAttempt = 0;
+    this.stall = undefined;
+    this.restarts = 0;
     this.cursor = 0;
     this.localTracks = false;
     this.audio = undefined;

@@ -119,6 +119,8 @@ export class SegmentPipeline {
   private buffer?: SourceBuffer;
   private dropPrevious = { dropped: 0, total: 0 };
   private dropRatio = 0;
+  /** Media bytes this pipeline has received, as they arrive (Snapshot.loadProgress). */
+  receivedBytes = 0;
   constructor(
     private video: HTMLVideoElement,
     private onRendition: (r: Rendition) => void,
@@ -171,6 +173,7 @@ export class SegmentPipeline {
           const { done, value } = await reader.read();
           if (done) break;
           size += value.byteLength;
+          this.receivedBytes += value.byteLength;
           if (size > 64 * 1024 * 1024) throw new PlaybackFault('Segment exceeds 64 MiB budget', 'source');
           chunks.push(value);
           progress?.(size, performance.now() - started);

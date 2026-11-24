@@ -157,6 +157,7 @@ final class PlayerReport {
             "currentBitrateBps": nil,
             "requiredBandwidthBps": nil,
             "bufferAheadSeconds": state.cacheAhead,
+            "loadProgress": state.loadProgress,
             "pendingSubtitleTrackId": nil,
             "subtitleError": nil,
             "subtitleStyle": SubtitleAppearance.current.snapshot.merging(["offsetSeconds": state.subtitleOffset]) { $1 },

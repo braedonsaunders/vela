@@ -18,6 +18,8 @@ struct PlayerState {
     var cacheAhead: Double?
     /// Bytes per second the cache fills at.
     var cacheSpeed: Int64?
+    /// Grows while loading gets somewhere (PlaybackClient.loadProgress).
+    var loadProgress: Int64?
     var droppedFrames: Int64?
     var tracks: [[String: Any]] = []
     var audioId: Int64?

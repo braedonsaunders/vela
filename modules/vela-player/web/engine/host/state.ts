@@ -62,6 +62,8 @@ export interface HostWatchdogState {
   everPlayed: boolean;
   lastPosition: number;
   lastAdvance: number;
+  /** The media element's `progress` events: the browser is still fetching (Snapshot.loadProgress). */
+  loadEvents: number;
 }
 export interface HostQualityState {
   readonly automatic: CoreQuality;

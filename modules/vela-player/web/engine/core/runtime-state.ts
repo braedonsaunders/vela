@@ -38,6 +38,8 @@ export interface CoreState {
   readAheadSeconds: number | null;
   throughputBps: number | null;
   throughputHistory: number[];
+  /** Grows with every byte received, packet demuxed and frame decoded (Snapshot.loadProgress). */
+  loadProgress: number;
   startBuffer: StartBufferResult | null;
   bufferAudit: {
     source: SourceBufferAudit;

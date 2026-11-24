@@ -37,6 +37,11 @@ final class PlaybackClient {
     private var readRetryStarted: Date?
     private var readRetryAttempt = 0
     private var engine: AetherEngine?
+    /// Bytes through the scoped reader, and Aether's startup checkpoints passed: they grow while a
+    /// slow start still gets somewhere (the snapshot's loadProgress). Aether's own HTTP is not counted.
+    private let received = ReceivedBytes()
+    private var startupSteps: Int64 = 0
+    var loadProgress: Int64 { received.total + startupSteps }
     private var subscriptions = Set<AnyCancellable>()
     private var liveRateObservation: NSKeyValueObservation?
     private var liveItemObservation: NSKeyValueObservation?
@@ -262,13 +267,14 @@ final class PlaybackClient {
                 }.store(in: &self.subscriptions)
                 engine.$isSeeking.sink { [weak self] in self?.emit("seeking", $0) }.store(in: &self.subscriptions)
                 engine.clock.$bufferedPosition.sink { [weak self] in self?.emit("demuxer-cache-time", $0) }.store(in: &self.subscriptions)
+                engine.$startupProgress.sink { [weak self] progress in if progress != nil { self?.startupSteps += 1 } }.store(in: &self.subscriptions)
                 let source: MediaSource
                 if self.headers.isEmpty {
                     source = .url(url)
                 } else {
                     guard let access = VelaMediaAccessStore.snapshot,
                           !access.headers(for: url).isEmpty else { throw PlaybackError("Media access expired") }
-                    source = .custom(ScopedAetherReader(url: url, access: access))
+                    source = .custom(ScopedAetherReader(url: url, access: access, received: self.received))
                 }
                 self.onBackend?("aether")
                 // All grant headers stay in the scoped byte reader. Aether's own requests,
