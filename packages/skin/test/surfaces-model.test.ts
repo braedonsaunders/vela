@@ -120,6 +120,7 @@ describe('toasts', () => {
     expect(toastBox(false, false, 1440, 40).width).toBe(360);
     expect(toastBox(true, false, 1920, 56).width).toBe(450);
     expect(toastBox(false, true, 390, 16).width).toBe(358);
+    expect(toastBox(false, false, 1440, 40).maxHeight).toBe(168);
   });
   test('an alert draws with the surface it names, else its plugin\'s toast', () => {
     const other: SurfaceContribution = { ...toast, id: 'news.alert', when: { alert: { plugin: 'org.ether.news' } } };

@@ -64,13 +64,13 @@
           {
             "type": "box",
             "a11y": { "hidden": true },
-            "style": { "width": "3px", "height": "17.5px", "border-radius": "2px", "background-color": "$ui.accent" },
-            "small": { "height": "14.5px" }
+            "style": { "width": "3px", "height": "18px", "border-radius": "2px", "background-color": "$ui.accent" },
+            "small": { "height": "15px" }
           },
           {
             "type": "text",
             "text": "{s:scores}",
-            "style": { "font-size": "11px", "font-weight": "800", "color": "$ui.ink", "letter-spacing": "1.6px", "text-transform": "uppercase" }
+            "style": { "font-size": "11px", "font-weight": "800", "color": "$ui.ink", "letter-spacing": "2px", "text-transform": "uppercase" }
           }
         ]
       },
@@ -109,7 +109,7 @@
                   "type": "text",
                   "text": "{game.league.label}",
                   "when": [{ "test": "game.league.label" }],
-                  "style": { "font-size": "11px", "font-weight": "700", "color": "$ui.inkQuiet", "letter-spacing": "0.6px" }
+                  "style": { "font-size": "11px", "font-weight": "700", "color": "$ui.inkQuiet", "letter-spacing": "1px" }
                 },
                 {
                   "type": "box",
@@ -130,7 +130,7 @@
                         {
                           "type": "text",
                           "text": "{game.sides.0.abbr}",
-                          "style": { "font-size": "13px", "font-weight": "650", "color": "$ui.ink", "letter-spacing": "0.3px" },
+                          "style": { "font-size": "13px", "font-weight": "650", "color": "$ui.ink" },
                           "states": [{ "when": [{ "test": "game.sides.0.winner" }], "style": { "font-weight": "800" } }]
                         }
                       ]
@@ -157,7 +157,7 @@
                         {
                           "type": "text",
                           "text": "{game.sides.1.abbr}",
-                          "style": { "font-size": "13px", "font-weight": "650", "color": "$ui.ink", "letter-spacing": "0.3px" },
+                          "style": { "font-size": "13px", "font-weight": "650", "color": "$ui.ink" },
                           "states": [{ "when": [{ "test": "game.sides.1.winner" }], "style": { "font-weight": "800" } }]
                         }
                       ]

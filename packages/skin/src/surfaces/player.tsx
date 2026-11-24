@@ -113,3 +113,23 @@ export function PlayerOverlays({ look, surfaces, chrome, top }: Props) {
     </View>
   );
 }
+
+/** A multiview tile's corner overlays (the score bug per tile), for its channel and the event on it.
+ * The tile is the overlay's slot: its width picks the document's viewport class (a narrow tile draws
+ * the small variant). Bands stay in the full player; nothing in a tile takes the remote's focus. */
+export function TileOverlays({ channelId, eventId, feed, width, anchor = 'topLeft' }: { channelId: string; eventId: string; feed?: string; width: number; anchor?: Anchor }) {
+  const enabled = useSurfacesEnabled();
+  const host = useHost();
+  const surfaces = useVelaState(state => state.home.value?.surfaces ?? NO_SURFACES);
+  const settings = useVelaState(state => state.screens?.settings ?? NO_SETTINGS);
+  const shown = useMemo(() => (enabled ? playerOverlays(surfaces, { kind: 'channel', eventFeed: feed }, settings).shown : NO_SURFACES)
+    .filter(surface => (surface.anchor ?? 'topLeft') === anchor && surface.visibility !== 'chrome'), [enabled, surfaces, feed, settings, anchor]);
+  const slot = useMemo(() => ({ ...host, viewport: { ...host.viewport, width } }), [host, width]);
+  const context = useMemo(() => overlayContext({ channelId, eventId, feed, kind: 'channel', chrome: false, behindSeconds: 0, pictureAt: 0 }), [channelId, eventId, feed]);
+  if (!shown.length) return null;
+  return (
+    <View pointerEvents="box-none" testID="tile-overlays" style={{ gap: 8 }}>
+      {shown.map(surface => <SurfaceView key={`${surface.id}|${channelId}|${eventId}`} surface={surface} context={context} host={slot} overPicture unfocusable={Platform.isTV} />)}
+    </View>
+  );
+}
