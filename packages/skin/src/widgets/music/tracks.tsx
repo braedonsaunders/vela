@@ -23,7 +23,7 @@ export interface TrackListOptions {
   /** Number by position instead of track number. */
   position?: boolean;
   /** Where these tracks are listed, for Now Playing's "Playing from". */
-  source?: { id: string; name: string };
+  source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
   /** Playlist entries: entry ids for Remove from this playlist. */
   playlist?: { id: string; entryIds: string[] };
 }

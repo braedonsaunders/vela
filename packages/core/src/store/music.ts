@@ -3,22 +3,26 @@
 // the server advertises them (features.favoritesList, features.lyrics).
 import type * as V from '../wire';
 import { hasMusicLibrary } from '../adapter/capabilities';
-import { card } from '../discovery/models';
+import { card, entry } from '../discovery/models';
 import type { Card } from '../models';
 import type { Session } from './session';
-import { failed, loading, ready, type Loadable, type StateBox } from './state';
+import { failed, idle, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
 
 export interface LikedList { items: (Card & { likedAt: string })[]; total: number; cursor: string; more: boolean }
 export interface Lyrics { lines: { startMs: number; text: string }[]; plain: string; instrumental: boolean; source: string }
 
+/** One thing the viewer played from: a title (album, artist), a playlist, or a liked list. */
+export type RecentContext = { kind: 'title'; card: Card; playedAt: string } | { kind: 'playlist'; card: Card; playedAt: string } | { kind: 'favorites'; role: string; playedAt: string };
+
 export interface MusicState {
+  recent: Loadable<RecentContext[]>;
   liked: Record<string, Loadable<LikedList>>;
   /** null: the title has no lyrics. */
   lyrics: Record<string, Loadable<Lyrics | null>>;
 }
 
-export const initialMusic: MusicState = { liked: {}, lyrics: {} };
+export const initialMusic: MusicState = { recent: idle(), liked: {}, lyrics: {} };
 
 export class Music {
   constructor(private readonly box: StateBox<VelaState>, private readonly session: Session, private readonly artWidth: () => number) {
@@ -27,6 +31,29 @@ export class Music {
 
   get likedAvailable(): boolean { return this.session.features?.favoritesList?.available === true; }
   get lyricsAvailable(): boolean { return this.session.features?.lyrics?.available === true; }
+  get recentAvailable(): boolean { return this.session.features?.playContexts?.available === true; }
+
+  /** What the viewer last played from (Home's Recently played and quick tiles). */
+  async recent(refresh = false): Promise<void> {
+    if (!this.recentAvailable) return;
+    const current = this.box.get().music.recent;
+    if (current.load === 'loading' || (current.value && !refresh)) return;
+    this.box.update('music', music => ({ ...music, recent: loading(current) }));
+    try {
+      const connection = await this.session.ready();
+      if (!hasMusicLibrary(connection.adapter)) throw new Error('Recently played is unavailable');
+      const answer = await connection.adapter.recentPlayContexts(20);
+      const images = await connection.images();
+      const items: RecentContext[] = answer.items.map(item => item.kind === 'title'
+        ? { kind: 'title', card: card(item.title, '', images, this.artWidth()), playedAt: item.playedAt }
+        : item.kind === 'playlist'
+          ? { kind: 'playlist', card: entry({ id: item.playlist.id, kind: 'playlist', name: item.playlist.name, artwork: item.playlist.artwork, targetId: item.playlist.id, itemCount: item.playlist.itemCount, receiptToken: '' }, images, this.artWidth()), playedAt: item.playedAt }
+          : { kind: 'favorites', role: item.role, playedAt: item.playedAt });
+      this.box.update('music', music => ({ ...music, recent: ready(items) }));
+    } catch (error) {
+      this.box.update('music', music => ({ ...music, recent: failed(error, current) }));
+    }
+  }
 
   /** The viewer's likes of `role`; `more` reads the next page, `refresh` the first again. */
   async liked(role: string, more = false, refresh = false): Promise<void> {
@@ -64,7 +91,7 @@ export class Music {
     }
   }
 
-  private set<K extends keyof MusicState>(field: K, key: string, value: MusicState[K][string]): void {
+  private set<K extends 'liked' | 'lyrics'>(field: K, key: string, value: MusicState[K][string]): void {
     this.box.update('music', music => ({ ...music, [field]: { ...music[field], [key]: value } }));
   }
 }

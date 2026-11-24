@@ -13,7 +13,7 @@ export interface MediaQueueRequest {
   positionSeconds?: number;
   shuffle?: boolean;
   /** What the queue came from, for Now Playing's "Playing from". */
-  source?: { id: string; name: string };
+  source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
 }
 
 export interface MediaActions {

@@ -22,7 +22,7 @@ import type { StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
-  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string }
+  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext }
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string }
   /** A programme from the channel's archive (features.liveCatchUp): ended, or with `from: 'start'` on air from its start. */
@@ -221,6 +221,7 @@ export class Playback {
           ...(position !== undefined ? { positionSeconds: position } : {}),
           ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
           ...(target.kind === 'title' && target.versionId ? { versionId: target.versionId } : {}),
+          ...(target.kind === 'title' && target.context && this.session.features?.playContexts?.available ? { context: target.context } : {}),
           ...(target.kind === 'title' && target.audioTrackId && !this.recovering ? { audioTrackId: target.audioTrackId } : {}),
           client: this.session.client,
           idempotencyKey: intent.key,

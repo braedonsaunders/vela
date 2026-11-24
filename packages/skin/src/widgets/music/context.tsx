@@ -16,7 +16,7 @@ export interface MusicApp {
   place: MusicPlace;
   go(place: MusicPlace): void;
   /** Play `items` from `index`, saying where they came from. */
-  play(items: Card[], index: number, source?: { id: string; name: string }, shuffle?: boolean): void;
+  play(items: Card[], index: number, source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' }, shuffle?: boolean): void;
   /** Play what a tile stands for: a track, an album's or a playlist's tracks. */
   playCard(card: Card, shuffle?: boolean): void;
   menu(request: MusicMenuRequest): void;

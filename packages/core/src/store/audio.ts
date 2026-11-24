@@ -61,7 +61,7 @@ export interface AudioRequest {
   index: number;
   positionSeconds?: number;
   shuffle?: boolean;
-  source?: { id: string; name: string };
+  source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
 }
 
 export const AUDIO_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
@@ -230,7 +230,9 @@ export class Audio {
     this.sessionId = ''; this.url = '';
     this.patch({ phase: this.engine ? 'loading' : 'failed', positionSeconds: startSeconds, durationSeconds: item.durationSeconds, error: '' });
     if (!this.engine) return;
-    await this.playback.start({ kind: 'title', id: item.id, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}) });
+    const source = this.state.queue?.source;
+    const context = source?.kind ? { kind: source.kind, id: source.id } : undefined;
+    await this.playback.start({ kind: 'title', id: item.id, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}), ...(context ? { context } : {}) });
     if (this.loadToken !== token) return;
     this.loadToken = undefined;
     const playback = this.box.get().playback;

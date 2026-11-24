@@ -48,7 +48,8 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     go,
     play: (items: Card[], index: number, source, shuffle) => store.audio.play({ items, index: Math.max(0, index), source, shuffle }),
     playCard: (card: Card, shuffle?: boolean) => {
-      void audioCardsOf(store, card).then(items => store.audio.play({ items, index: 0, shuffle, source: card.media?.role === 'track' ? undefined : { id: card.id, name: card.name } }));
+      const source = card.media?.role === 'track' ? undefined : { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' as const : 'title' as const };
+      void audioCardsOf(store, card).then(items => store.audio.play({ items, index: 0, shuffle, source }));
     },
     menu: setMenu,
     toggle: () => store.audio.toggle(),

@@ -1030,5 +1030,6 @@
   "music.removeFromQueue": "Remove from queue",
   "music.lyricsNone": "No lyrics for this song yet.",
   "music.lyricsLoading": "Finding the lyrics…",
-  "music.lyricsSource": "Lyrics: {source}"
+  "music.lyricsSource": "Lyrics: {source}",
+  "music.recentlyPlayed": "Recently played"
 }

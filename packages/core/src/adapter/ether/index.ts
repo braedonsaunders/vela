@@ -333,6 +333,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.FavoriteTitlesPage>('GET', `/favorites/titles${query({ role, cursor, limit })}`);
   }
 
+  recentPlayContexts(limit?: number) {
+    return this.http.request<V.RecentPlayContexts>('GET', `/recent${query({ limit })}`);
+  }
+
   async titleLyrics(id: string): Promise<V.TitleLyrics | null> {
     try {
       return await this.http.request<V.TitleLyrics>('GET', `/titles/${segment(id)}/lyrics`, undefined, CACHED);

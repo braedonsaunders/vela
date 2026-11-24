@@ -93,3 +93,14 @@ export function useLiked(): Liked {
     };
   }, [byRole, listed, list, store]);
 }
+
+/** What the viewer last played from (features.playContexts); empty on servers without it. */
+export function useRecent(): { items: import('@vela/core').RecentContext[]; available: boolean } {
+  const store = useVela();
+  const recent = useVelaState(state => state.music.recent);
+  const phase = useVelaState(state => state.audio.queue?.source?.id);
+  const available = store.music.recentAvailable;
+  // Read on open and whenever a new source starts playing, so Home reflects it.
+  useEffect(() => { if (available) void store.music.recent(true); }, [store, available, phase]);
+  return { items: recent.value ?? [], available };
+}

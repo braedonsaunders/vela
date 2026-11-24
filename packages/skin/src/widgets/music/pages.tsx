@@ -11,7 +11,7 @@ import { useHost } from '../../host';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
-import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useTitle } from './data';
+import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
 type FacetValue = { id: string; label: string; count: number };
 import { Byline, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
 import { TrackList } from './tracks';
@@ -71,8 +71,15 @@ export function MusicHome() {
   const { playlists, liked } = usePlaylists();
   const likedTotal = useLiked().trackTotal;
   const jump = rows.find(r => r.id.endsWith(':jump-back-in'))?.items ?? [];
-  const quick: (Card | 'liked')[] = [...(liked ? ['liked' as const] : []), ...playlists.map(playlistCard), ...jump].slice(0, 8);
-  const shelves = rows.filter(r => !r.id.endsWith(':jump-back-in') && r.items.length);
+  const recent = useRecent();
+  const recentCards = recent.items.flatMap(item => (item.kind === 'favorites' ? [] : [item.card]));
+  const likedRecently = recent.items.some(item => item.kind === 'favorites');
+  // Quick tiles: what you played from most recently (Liked Songs among it), then your playlists.
+  const seen = new Set<string>();
+  const quick: (Card | 'liked')[] = [...(liked || likedRecently ? ['liked' as const] : []), ...recentCards, ...playlists.map(playlistCard), ...jump]
+    .filter(item => (item === 'liked' ? true : !seen.has(item.id) && !!seen.add(item.id))).slice(0, 8);
+  // The plugin's Recently played (tracks) gives way to the server's play contexts when it has them.
+  const shelves = rows.filter(r => !r.id.endsWith(':jump-back-in') && !(recent.available && r.id.endsWith(':recently-played')) && r.items.length);
   const accent = typeof quick[1] === 'object' ? quick[1].accent : '';
   return (
     <View>
@@ -86,6 +93,7 @@ export function MusicHome() {
         </View>
       </View>
       <View style={{ paddingHorizontal: 8 }}>
+        {recentCards.length ? <Shelf title={msg('music.recentlyPlayed')}>{recentCards.map(card => <MusicTile key={card.id} card={card} size={176} subtitle={card.kind === 'playlist' ? msg('music.playlist') : undefined} />)}</Shelf> : null}
         {jump.length ? <Shelf title={msg('music.jumpBackIn')}>{jump.map(card => <MusicTile key={card.id} card={card} size={176} />)}</Shelf> : null}
         {shelves.map(row => <RowShelf key={row.id} row={row} />)}
         <Genres />
@@ -182,7 +190,7 @@ function AlbumView({ card }: { card: Card }) {
   const children = useChildren(card.id);
   const tracks = useMemo(() => albumOrder(children?.value?.items ?? []), [children?.value]);
   const playing = usePlayingFrom(card.id);
-  const source = { id: card.id, name: card.name };
+  const source = { id: card.id, name: card.name, kind: 'title' as const };
   const artist = card.media?.parents.find(p => p.role === 'artist');
   const kind = (card.media?.childCount ?? tracks.length) <= 3 ? msg('music.single') : (card.media?.childCount ?? tracks.length) <= 6 ? msg('music.ep') : msg('media.ui.album');
   return (
@@ -234,7 +242,7 @@ function ArtistView({ card }: { card: Card }) {
   const shown = section === 'albums' && full.length ? full : short.length ? short : full;
   const liked = useLiked().tracks.filter(t => t.media?.byline === card.name);
   const playing = usePlayingFrom(card.id);
-  const source = { id: card.id, name: card.name };
+  const source = { id: card.id, name: card.name, kind: 'title' as const };
   const art = card.backdrop || card.poster;
   const following = app.liked(card.id);
   return (
@@ -364,7 +372,7 @@ export function MusicPlaylist({ id }: { id: string }) {
   const entryIds = useMemo(() => (list?.value?.items ?? []).filter(i => i.media?.audio).map(i => (i as Card & { entryId?: string }).entryId ?? ''), [list?.value]);
   const name = list?.value?.name ?? meta?.name ?? '';
   const playing = usePlayingFrom(id);
-  const source = { id, name };
+  const source = { id, name, kind: 'playlist' as const };
   const accent = tracks[0]?.accent ?? '';
   return (
     <View>
@@ -395,10 +403,10 @@ export function MusicLiked() {
   const liked = useLiked();
   const { tracks } = liked;
   const viewer = useVelaState(s => s.auth.viewer);
-  // Now Playing's "Playing from" names Liked Songs; the id only has to be stable.
-  const id = 'liked-songs';
+  // Recently played's context for Liked Songs is the liked list of tracks.
+  const id = 'track';
   const playing = usePlayingFrom(id);
-  const source = { id, name: msg('music.liked') };
+  const source = { id, name: msg('music.liked'), kind: 'favorites' as const };
   return (
     <View>
       <Wash accent={m.ui.accent} height={460} />

@@ -159,7 +159,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
       const op = item.command.op;
       dismiss(false);
       const cards = await audioCardsOf(vela, card);
-      if (op === 'play') vela.audio.play({ items: cards, index: 0, source: card.media?.role === 'track' ? undefined : { id: card.id, name: card.name } });
+      if (op === 'play') vela.audio.play({ items: cards, index: 0, source: card.media?.role === 'track' ? undefined : { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' : 'title' } });
       else if (op === 'next') vela.audio.playNext(cards);
       else vela.audio.addToQueue(cards);
       return;

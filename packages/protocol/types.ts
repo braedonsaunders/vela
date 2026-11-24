@@ -68,6 +68,8 @@ export interface ServerCapabilities {
     favoritesList?: Feature;
     /** GET /titles/:id/lyrics for playable titles whose source has lyrics. */
     lyrics?: Feature;
+    /** PlaybackRequest.context is remembered; GET /recent lists what the viewer played from. */
+    playContexts?: Feature;
     /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
     mediaClasses?: Feature & { classes: MediaClass[] };
     /** POST /titles/:id/read and reading progress, for these formats. */
@@ -294,7 +296,9 @@ export type PlaybackTarget = { titleId: ID; channelId?: never; extraId?: never }
    * from 'start' the programme on air from its beginning. */ programmeId?: ID; from?: 'start';
     /** features.liveCatchUp: an explicit archive range instead of a programme. */ startAt?: Timestamp; durationSeconds?: number } |
   { extraId: ID; titleId?: never; channelId?: never };
-export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabilities; positionSeconds?: number; mediaSourceId?: ID;
+/** What a play started from, for Recently played (features.playContexts): a title (album, artist), a playlist, or a liked list by role. */
+export interface PlayContext { kind: 'title' | 'playlist' | 'favorites'; id: string }
+export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabilities; positionSeconds?: number; mediaSourceId?: ID; context?: PlayContext;
   versionId?: ID; audioTrackId?: ID; subtitleTrackId?: ID | null; allowTranscode?: boolean; liveMode?: 'adaptive' | 'low-delay';
   /** A live-channel tile of a multiview group (features.multiview). */ multiview?: MultiviewTile };
 export type SessionCommand = Mutation & Generations & (
@@ -357,6 +361,8 @@ export interface CollectionContents extends Page<RowEntry> { collection: Collect
 
 /** One page of a viewer's likes of one role, newest first (or the viewer's own order). */
 export interface FavoriteTitlesPage extends Page<{ id: ID; kind: 'title'; title: Title; likedAt: Timestamp; receiptToken: string }> { total: number }
+/** GET /recent: what the viewer last played from, newest first. */
+export interface RecentPlayContexts { items: ({ kind: 'title'; title: Title; playedAt: Timestamp } | { kind: 'playlist'; playlist: PlaylistCard; playedAt: Timestamp } | { kind: 'favorites'; role: string; playedAt: Timestamp })[] }
 /** A playable title's lyrics: timed lines when the source has them, else plain text. */
 export interface TitleLyrics { lines: { startMs: number; text: string }[]; plain?: string; instrumental: boolean; source?: string }
 export interface PlaylistCard { id: ID; kind: 'playlist'; name: string; artwork: ArtworkRef[]; itemCount: number; smart: boolean; updatedAt: Timestamp }

@@ -12,7 +12,9 @@ export interface AudioQueue {
   at: number;
   shuffle: boolean;
   repeat: RepeatMode;
-  source?: { id: string; name: string };
+  /** Where the queue came from: Now Playing's "Playing from", and Recently played's context
+   * (`kind`: an album or artist title, a playlist, or a liked list whose id is its role). */
+  source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
   /** Items (indices into items) the viewer queued with Play next or Add to queue that have not
    * played yet: they play before the rest of the source, and Now Playing lists them apart. */
   queued?: number[];
