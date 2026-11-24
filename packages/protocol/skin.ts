@@ -158,7 +158,8 @@ export interface GridNode extends ItemsBase { type: 'grid'; columns: PerClass<nu
 export interface TabsNode extends NodeBase { type: 'tabs'; over: string; as: string; value: Template; label: Template; count?: Template;
   bind: { param?: string; state?: string; clear?: string[] }; default?: Template; all?: Template; chip?: string; size?: 'small';
   /** Nodes drawn after the options inside the same scroll and focus row (Sports' Hide scores switch). */ after?: Node[] }
-export interface TableNode extends NodeBase { type: 'table'; data: string; compact?: boolean; focusRows?: number }
+export interface TableNode extends NodeBase { type: 'table'; data: string; compact?: boolean; focusRows?: number;
+  /** false: ignore rows' `highlight` (a game's own tables are not lit, as standings are). Default true. */ highlight?: boolean }
 export interface LineGraphNode extends NodeBase { type: 'lineGraph'; series: string; sides?: string; subject?: Template; live?: Template; height?: PerClass<string> }
 export interface PlayerNode extends NodeBase { type: 'player'; channel: Template }
 export interface ParamInputNode extends NodeBase { type: 'paramInput'; param: string; placeholder?: Template }

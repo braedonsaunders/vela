@@ -171,7 +171,7 @@ export interface SurfaceContext {
 /** /live/stream `event: alert` (alerts=1), the frame a toast surface draws. */
 export interface AlertFrame { id: ID; kind: string; title: string; body: string; at: Timestamp; ref?: string; plugin?: string; surface?: ID }
 
-/** A Home row that is a surface (bootstrap and home rows), placed after the first row: id `surface:<surface id>`, e.g. `surface:sports.tonight`. */
+/** A Home row that is a surface (bootstrap and home rows), placed after the first row: id `surface:<pluginID>:<id>` (`surface:org.ether.sports:tonight`), surface the surface id (`sports.tonight`). */
 export interface SurfaceRow { kind: 'surface'; id: ID; surface: ID }
 
 /** The navigation entry of a plugin screen (bootstrap `navigation`). */
