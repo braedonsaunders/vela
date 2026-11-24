@@ -787,3 +787,34 @@ titles open with `POST /titles/:id/read` (a short-lived range-capable URL) and
 save `{locator, fraction}` with `POST /titles/:id/reading-progress`; the progress
 returns as `WatchState.reading`. Clients gate on `features.mediaClasses`,
 `features.audioPlayback` and `features.reading`.
+
+### Library experience
+
+`Library.presentation.experience` says how a client presents the whole library:
+
+| Value | Vela draws |
+| --- | --- |
+| `audio` | the audio app: Your Library down the side, the page in the middle, the now-playing bar, the queue and Now Playing |
+| `standard` | the ordinary library pages (tabs, grid, list, filters) |
+
+```jsonc
+{ "id": "audiobooks", "media": "audiobook", "presentation": { "card": "square", "experience": "audio" } }
+```
+
+A server advertising `features.libraryExperiences` (`{ available, experiences: ["audio",
+"standard"] }`) sends it on every library and its word is final: a plugin can ask for
+the audio app on an audiobook or podcast library, or keep a music library on the
+standard pages. Without the feature, or for a library without the field, the client
+chooses by `Library.media`: `audio` for `music`, `standard` for everything else, which
+is what every Vela build did before. Unknown values read as absent. Older clients
+ignore the field and show the standard pages, which carry every class.
+
+It is per library: the audio app replaces the library's tab strip, so there is no
+`LibraryTab` counterpart (`LibraryTab.layout`, grid/list/timeline, is unrelated). In
+the audio app Vela words pages, rows and the player by the library's class and each
+title's role (`docs/media-kinds.md`): albums and tracks for music, books, authors,
+narrators and chapters for audiobooks, shows, hosts and episodes for podcasts, with
+15/30 s skips, speed and the sleep timer for spoken word. It reads only existing
+fields: the library's home rows (a `continue` row is Continue listening), children,
+`TitleDetail.chapters`, credits and watch state. Ether's plugins set it as
+`mediaKinds[].library.experience` in the manifest; Ether defaults music to `audio`.

@@ -206,3 +206,23 @@ test('the library list never waits on probing a server for library views (a coll
   expect(box.get().libraries.value).not.toBe(listed.value);
   expect(box.get().libraries.value).toEqual(listed.value);
 });
+
+test("libraries listed before the server's features are known choose by class, then again by the server's word", async () => {
+  const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
+  const library = (id: string, media: string, experience?: string) => ({ id, name: id, kind: 'mixed', media, artwork: [], ...(experience ? { presentation: { card: 'square', experience } } : {}) });
+  const features = { libraryExperiences: { available: true, experiences: ['audio', 'standard'] } };
+  const api = {
+    libraries: async () => ({ items: [library('music', 'music', 'standard'), library('books', 'audiobook', 'audio'), library('shows', 'podcast')], continuation: 'exhausted' }),
+    home: async () => ({ ...bootstrap, capabilities: { ...bootstrap.capabilities, features } }),
+  };
+  const session = { epoch: 0, features: undefined as unknown, onReset() {}, negotiate: async () => {},
+    ready: async () => ({ adapter: api, images: async () => ({ origin: 'https://fixture.test' }) }), check: () => {} };
+  const home = new Home(box, session as unknown as Session, () => 640);
+  await home.libraries();
+  expect(box.get().libraries.value?.map(l => [l.id, l.experience])).toEqual([['music', 'audio'], ['books', 'standard'], ['shows', 'standard']]);
+  await home.ensure();
+  expect(box.get().libraries.value?.map(l => [l.id, l.experience])).toEqual([['music', 'standard'], ['books', 'audio'], ['shows', 'standard']]);
+  // Listed again with the features known, the server's word stands from the start.
+  await home.libraries();
+  expect(box.get().libraries.value?.map(l => [l.id, l.experience])).toEqual([['music', 'standard'], ['books', 'audio'], ['shows', 'standard']]);
+});

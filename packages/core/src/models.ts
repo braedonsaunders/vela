@@ -184,6 +184,8 @@ export interface Destination {
   media?: V.MediaClass;
   /** The library's declared card shape (a landscape library's thumbnails). */
   presentation?: V.Library['presentation'];
+  /** How it opens: the audio app or the standard pages (libraryExperience); absent reads as standard. */
+  experience?: V.LibraryExperience;
   dateDisplay: 'year' | 'date';
   backdrop: string;
 }

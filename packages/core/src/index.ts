@@ -49,7 +49,7 @@ export { sendCommand } from './adapter/commands';
 
 export type { TitleActions, MediaVersion, RemoteSubtitle, SubtitleSearchResult, SubtitleLanguages } from './adapter/media-actions';
 export { languageLabel, orderSubtitleLanguages, type SubtitleLanguage } from './subtitle-languages';
-export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';
+export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, libraryExperience, libraryTabs } from './library-presentation';
 
 export { canSeeAll } from './store/rows';
 export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFlowEvent, type AuthStep } from './store/auth-flow';
