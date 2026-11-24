@@ -269,3 +269,35 @@ duration against the fixture. `bun mock-server/scripts/make-book-media.ts` write
 books, the PDF field guide and the CBZ comic into `~/.scratch/tmp/vela/media-books/` without
 dependencies. Both take an output directory argument; `VELA_MOCK_MUSIC_ROOT` and
 `VELA_MOCK_BOOKS_ROOT` point the mock (and the scripts' defaults) elsewhere.
+
+## Plugin screens and surfaces (Sports)
+
+`screens.ts` serves Sports as Ether serves plugin screens (docs/plugin-screens.md; Ether design
+sections 3b, 5.4, 6 and 7), built on the Sports simulation in `sports.ts`:
+
+- Bootstrap lists `navigation` (with the document href) and `surfaces` only to a client that sends
+  `X-Vela-Screen-Renderer` at or above the document's renderer (hard cut). `X-Vela-Language` (else
+  `Accept-Language`, first tag) is the locale.
+- `GET /screens/{id}/pages/{page}/document?v=&r=&l=` and `/surfaces/{id}/document`: the documents in
+  `packages/protocol/fixtures/screens/` with `deps` added, immutable with an ETag when `v` matches
+  (a stale `v` answers 301; no `v`, `no-cache`); no variant for the client's renderer is 404
+  `update_required`. Surfaces are offered once `sports/surfaces/{scorebug,ticker,alert,tonight}.json`
+  exists; the Home row surface sits after the first Home row.
+- `GET …/data?sources=&p.<param>=&tz=`: the section 5.4 view models as `event:`, `detail:` and
+  `entity:` records (a rev moves only when content changes), with `liveEvents` windows `today`,
+  `week`, `recent` and `ticker`. An unknown key, param or bad value is 400 `invalid_request`; an
+  event the viewer cannot read is that source's `errors.<id> = not_found`.
+- `POST …/actions/ether.favorite|ether.reveal|ether.spoilerFree` (`Idempotency-Key`; body fields
+  page, params, args, context, tz, idempotencyKey only) answer the changed records and every source
+  of the page re-read; `PUT /surfaces/{id}/setting {enabled}`.
+- `/live/stream?topic=…&since=&tz=&alerts=1` (or any stream request with the renderer header):
+  replays what changed above `since`, then `records`, `source` and `alert` frames as the
+  simulation or the viewer's choices change; at most 4 topics.
+
+Knobs: `VELA_MOCK_SPORTS_FREEZE=1` (with `VELA_MOCK_SPORTS_NOW`) freezes the Sports clock for
+parity captures; `VELA_MOCK_FROM_START=1` adds programme/fromStart to watch targets (not in Ether
+E1/E2); `VELA_MOCK_SCREEN_FIXTURES=<dir>` reads the documents from another directory;
+`POST /__admin/screens {hide: [id], show: [id]}` hides a screen or surface from viewers (404, and
+the streams following it end); `POST /__admin/sports {screenDelayMs, screenFail, favourites,
+spoilerFree, alert}` as in `sports.ts`. The legacy Sports routes (`/screens/{id}`, `/live/events*`,
+`/live/ticker`, `/live/entities`, `/live/preferences`, `/favorites/entities`) stay until the hard cut.

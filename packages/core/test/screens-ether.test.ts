@@ -47,6 +47,8 @@ test('data reads: sources, params and context as p.<name>, the time zone; surfac
   expect(seen[2]!.url.searchParams.get('p.event')).toBe('event:a');
   expect(seen[2]!.url.searchParams.get('p.alert.ref')).toBe('event:b');
   expect(seen.every(r => r.headers.get('x-vela-screen-renderer') === '19')).toBe(true);
+  // Ether localises documents and data to the display language.
+  expect(seen.every(r => !!r.headers.get('x-vela-language'))).toBe(true);
 });
 
 test('actions post {page, params, args} with an idempotency key; settings put {enabled}', async () => {
