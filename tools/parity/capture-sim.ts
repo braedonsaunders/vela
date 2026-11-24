@@ -22,6 +22,8 @@ const { values } = parseArgs({ options: {
   'metro-port': { type: 'string', default: '8142' },
   /** The simulator display to shoot (a foldable iPhone shows the app on its cover display, "1"). */
   display: { type: 'string' },
+  /** Apple: reinstall this Vela.app first (fresh data; an earlier mock's ended session stops the demo sign-in). */
+  app: { type: 'string' },
 } });
 if (!values.udid || !values.out) throw new Error('--udid and --out are required');
 const variant = values.variant as Variant, platform = values.platform!, udid = values.udid;
@@ -100,6 +102,10 @@ const android: Device = {
 const device = platform === 'androidtv' ? android : apple;
 // Start from a fresh install's data: an earlier session's sign-out would stop the mock's demo sign-in.
 if (platform === 'androidtv') adb('shell', 'pm', 'clear', APP);
+else {
+  simctl('keychain', udid, 'reset');
+  if (values.app) { try { simctl('uninstall', udid, APP); } catch {} simctl('install', udid, values.app); }
+}
 async function admin(knobs: Knobs): Promise<{ now: string; frozen: boolean }> {
   const response = await fetch(`${values.mock}/__admin/sports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(knobs) });
   return response.json() as Promise<{ now: string; frozen: boolean }>;
