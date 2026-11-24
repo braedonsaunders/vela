@@ -22,7 +22,7 @@ export function animation(preset: Motion | undefined, own: Record<string, Keyfra
   if (!preset) return undefined;
   if (!runs(preset, active, Platform.isTV)) return undefined;
   const name = still ? preset.still?.keyframes : preset.keyframes;
-  const keyframes = name && name !== 'none' ? library[name] ?? own[name] : undefined;
+  const keyframes = name && name !== 'none' ? preset.frames?.[name] ?? library[name] ?? own[name] : undefined;
   if (!keyframes) return undefined;
   if (instant && preset.iterations !== 'infinite') return settledFrame(preset, own, still);
   const delay = (still ? 0 : preset.delay ?? 0) + (stagger && !still ? Math.min(index, stagger.cap) * stagger.step : 0);

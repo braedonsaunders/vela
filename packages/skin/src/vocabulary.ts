@@ -17,6 +17,7 @@ import type { LiveView } from './widgets/guide/controller';
 import { LIVE_VOCABULARY, liveCollection } from './widgets/guide/vocabulary';
 import type { CollectionPage, LibraryOption, LibraryPage } from './widgets/library/model';
 import { LIBRARY_VOCABULARY, libraryCollection } from './widgets/library/vocabulary';
+import type { ScreenScope } from './screen/scope';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export type Card = ReturnType<typeof entry>;
@@ -47,6 +48,9 @@ export interface Env {
   /** Scores are hidden (spoiler-free). */
   hideScores?: boolean;
   width: number;
+  /** Screen documents (env.canMultiview, env.canPlay): multiview is available here; playback is (default true). */
+  canMultiview?: boolean;
+  canPlay?: boolean;
   home?: HomeModel;
   heroIndex: number;
   libraries: Destination[];
@@ -112,6 +116,8 @@ export interface Ctx {
   opt?: LibraryOption;
   /** The identity of a row or card in a shelf (identityKeys): kept when the shelf reorders. */
   key?: string;
+  /** A screen or surface document's data, records, local state and item aliases (screen/scope.ts). */
+  screen?: ScreenScope;
   index: number;
 }
 
