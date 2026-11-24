@@ -622,16 +622,16 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   // stream keeps it current and a stale answer would show an old score.
 
   async screen(id: string, screenQuery: ScreenQuery = {}, signal?: AbortSignal) {
-    return normaliseScreen(await this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal }));
+    return normaliseScreen(await this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal }), this.origin);
   }
 
   async liveEvents(ids: string[]): Promise<V.LiveEventsResponse> {
     const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/events${query({ ids: ids.length ? ids.join(',') : undefined })}`);
-    return { ...response, events: normaliseEvents(response?.events) };
+    return { ...response, events: normaliseEvents(response?.events, this.origin) };
   }
 
   async liveEvent(id: string): Promise<V.LiveEventDetail> {
-    const detail = normaliseDetail(await this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`));
+    const detail = normaliseDetail(await this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`), this.origin);
     if (!detail) throw new VelaError({ class: 'source', code: 'invalid_live_event', message: 'The server sent an unreadable live event.', retry: { allowed: true } }, 502);
     return detail;
   }
@@ -658,7 +658,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async liveTicker(screen?: string): Promise<V.LiveEventsResponse> {
     const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
-    return { ...response, events: normaliseEvents(response?.events) };
+    return { ...response, events: normaliseEvents(response?.events, this.origin) };
   }
 
   streamLive(live: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {

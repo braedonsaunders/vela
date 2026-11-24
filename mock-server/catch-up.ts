@@ -89,7 +89,7 @@ export function refreshLive(plan: V.PlaybackPlan): void {
   }
   if (!timeshiftMinutes) return;
   const window = liveWindow();
-  Object.assign(plan.live, { windowStartSeconds: window.windowStartSeconds, liveEdgeSeconds: window.liveEdgeSeconds, edgeAt: window.edgeAt, timeshift: window.timeshift,
+  Object.assign(plan.live, { anchor: window.anchor, windowStartSeconds: window.windowStartSeconds, liveEdgeSeconds: window.liveEdgeSeconds, edgeAt: window.edgeAt, timeshift: window.timeshift,
     behindLiveSeconds: Math.max(0, window.liveEdgeSeconds - plan.positionSeconds) });
 }
 

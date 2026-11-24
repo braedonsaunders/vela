@@ -1,5 +1,5 @@
-// Music, book and audiobook fixtures for the media-kinds contract (docs/media-kinds.md).
-// Every artist, album, track, book, author, narrator and label here is fictional.
+// Music, book, audiobook and podcast fixtures for the media-kinds contract (docs/media-kinds.md).
+// Every artist, album, track, book, author, narrator, show, host and label here is fictional.
 import type { ArtworkRef, Chapter, Library, LibraryBrowseOptions, MediaRole, ReadingFormat, RowEntry, Title, TitleDetail, WatchState } from '../types';
 
 /** Stable 32-bit FNV-1a hash; seeds cover art, palettes and chapter layouts. */
@@ -80,7 +80,7 @@ function person(slug: string, name: string, role: string, knownFor: string, biog
   people.set(id, { id, name, roles: [role], knownFor, biography });
   return id;
 }
-const roleLabel: Record<string, string> = { artist: 'Artist', albumArtist: 'Album artist', author: 'Author', narrator: 'Narrator', composer: 'Composer', illustrator: 'Illustrator' };
+const roleLabel: Record<string, string> = { artist: 'Artist', albumArtist: 'Album artist', author: 'Author', narrator: 'Narrator', composer: 'Composer', illustrator: 'Illustrator', host: 'Host' };
 
 // ---------------------------------------------------------------------------------------------
 // Music: artist → album → track. Title.kind keeps the show/season/episode projection.
@@ -415,9 +415,94 @@ for (const spec of audiobookSpecs) {
 }
 
 // ---------------------------------------------------------------------------------------------
-export const mediaGroups = { artists, albums, tracks, concerts, series, books, audiobooks, parts };
+// Podcasts: show → episode, newest first. Episodes play the audiobook generator's spoken-word
+// stand-ins (no files of their own), with podcast chapter names over the same chimes. One episode
+// is under way, older ones are played, the newest of each show is new.
+const hostBios: Record<string, string> = {
+  'wren-alcott': 'Wren Alcott is a fictional radio maker who has never once finished a cup of tea while it was still warm.',
+  'dev-marchetti': 'Dev Marchetti is an invented science writer who keeps a shed full of instruments that measure nothing in particular.',
+  'oona-fairweather': 'Oona Fairweather is a made-up walker and storyteller who records every episode outdoors, whatever the weather.',
+  'teo-brannigan': 'Teo Brannigan is an imaginary co-host whose questions are always better than his answers.',
+};
+interface ShowSpec { slug: string; name: string; hosts: [string, string][]; genres: string[]; publisher: string; summary: string; episodes: { name: string; summary: string; daysAgo: number; positionFraction?: number; played?: boolean }[] }
+const showSpecs: ShowSpec[] = [
+  { slug: 'kettle-and-compass', name: 'Kettle & Compass', hosts: [['wren-alcott', 'Wren Alcott']], genres: ['Society & Culture'], publisher: 'Lamplit Radio',
+    summary: 'Small stories from far-off kitchens: every week, one recipe, one journey and the person who carried it home.',
+    episodes: [
+      { name: 'The Lighthouse Keeper’s Porridge', summary: 'Oats, salt and a very long night on a rock in the middle of the sea.', daysAgo: 2 },
+      { name: 'A Samovar on the Night Train', summary: 'Tea, glass holders and the conductor who kept everyone awake.', daysAgo: 9, positionFraction: 0.42 },
+      { name: 'Bread from the Saltglass Bakery', summary: 'A recipe that changes with the tide, and the baker who never writes it down.', daysAgo: 16, played: true },
+      { name: 'Picnic at the Edge of the Map', summary: 'What three cartographers ate on the last unsurveyed hill.', daysAgo: 23, played: true },
+      { name: 'Soup for a Snowed-in Village', summary: 'One pot, forty neighbours and a week without roads.', daysAgo: 30, played: true },
+    ] },
+  { slug: 'small-instruments', name: 'Small Instruments', hosts: [['dev-marchetti', 'Dev Marchetti'], ['teo-brannigan', 'Teo Brannigan']], genres: ['Science'], publisher: 'Fieldfare Audio',
+    summary: 'Two friends take apart one ordinary measuring device each week and find the universe inside it.',
+    episodes: [
+      { name: 'The Rain Gauge', summary: 'How much is a millimetre of rain, and who decided?', daysAgo: 4 },
+      { name: 'The Kitchen Scale', summary: 'Springs, strain gauges and the weight of a single grain of rice.', daysAgo: 11 },
+      { name: 'The Sundial', summary: 'Telling time with a shadow, and why it is always a little wrong.', daysAgo: 18, played: true },
+      { name: 'The Barometer', summary: 'A column of mercury that predicts picnics.', daysAgo: 25 },
+    ] },
+  { slug: 'long-way-round', name: 'The Long Way Round', hosts: [['oona-fairweather', 'Oona Fairweather']], genres: ['Travel', 'Nature'], publisher: 'Gull & Lantern Audio',
+    summary: 'Slow walks along old paths, recorded as they happen: footsteps, weather and whoever we meet on the way.',
+    episodes: [
+      { name: 'The Coffin Road', summary: 'A path the dead were carried along, now walked by hikers and sheep.', daysAgo: 6 },
+      { name: 'Along the Old Canal', summary: 'Locks, herons and a narrowboat that has not moved in twenty years.', daysAgo: 20 },
+      { name: 'Over the Saltmarsh at Dawn', summary: 'Tides, mud and the loudest birds in the county.', daysAgo: 34, played: true },
+    ] },
+];
+const shows: Title[] = [], episodes: Title[] = [];
+const podcastSegments = ['This week', 'The story', 'Out in the field', 'A word from a listener', 'The long answer', 'What we got wrong', 'One more thing', 'Coming up', 'The quick round', 'Letters', 'Postscript', 'Notes from the road', 'Housekeeping'];
+const podcastChapterNames = (count: number) => Array.from({ length: count }, (_, index) => index === 0 ? 'Cold open' : index === count - 1 ? 'Outro and thanks' : podcastSegments[(index - 1) % podcastSegments.length]!);
+let episodeOrdinal = 0;
+for (const spec of showSpecs) {
+  const id = variant(`podcast-${spec.slug}`, shows.length * 2 + 1, 5);
+  const credits = spec.hosts.map(([slug, name]) => ({ name, role: 'host', personId: person(slug, name, 'Host', 'Podcasts', hostBios[slug]!) }));
+  const children = spec.episodes.map((episode, index): Title => {
+    const file = audiobookFiles.filter(f => !/-part-/.test(f.titleId))[episodeOrdinal++ % audiobookSpecs.length]!;
+    const episodeId = `${id}-episode-${spec.episodes.length - index}`;
+    audioSources.set(episodeId, { file: file.file, durationSeconds: file.durationSeconds, mimeType: 'audio/mp4', codec: 'aac' });
+    const names = podcastChapterNames(file.chapters.length);
+    chaptersOf.set(episodeId, file.chapters.map((chapter, n) => ({ ...chapter, id: `${episodeId}-chapter-${n + 1}`, name: names[n]! })));
+    const airDate = new Date(fixtureNow - episode.daysAgo * 86_400_000).toISOString().slice(0, 10);
+    const position = episode.positionFraction ? Math.round(file.durationSeconds * episode.positionFraction) : 0;
+    return { id: episodeId, kind: 'episode', name: episode.name, summary: episode.summary, year: Number(airDate.slice(0, 4)), airDate, genres: spec.genres,
+      durationSeconds: file.durationSeconds, artwork: [mediaArtwork(id, 'square')], showId: id, showName: spec.name, seasonNumber: 1, episodeNumber: spec.episodes.length - index,
+      ...(episode.played ? { watch: { positionSeconds: 0, played: true, favorite: false, watchlisted: false, lastViewedAt: new Date(fixtureNow - (episode.daysAgo - 1) * 86_400_000).toISOString() } } : {}),
+      ...(position ? { watch: { positionSeconds: position, played: false, favorite: false, watchlisted: false, lastViewedAt: new Date(fixtureNow - 5_400_000).toISOString() } } : {}),
+      media: { class: 'podcast', role: 'episode', index: spec.episodes.length - index, parents: [{ id, name: spec.name, role: 'show' }], credits } };
+  });
+  childrenOf.set(id, children);
+  episodes.push(...children);
+  shows.push({ id, kind: 'show', name: spec.name, summary: spec.summary, year: Number(children[children.length - 1]!.airDate!.slice(0, 4)), airDate: children[0]!.airDate, genres: spec.genres,
+    artwork: [mediaArtwork(id, 'square')],
+    media: { class: 'podcast', role: 'show', childCount: children.length, credits, facts: [{ label: 'Publisher', value: spec.publisher }, { label: 'Episodes', value: String(children.length) }] } });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Photos: one level of pictures (class photo), drawn as procedural scenes by the mock.
+const photoSpecs: { slug: string; name: string; daysAgo: number; place: string }[] = [
+  { slug: 'harbour-at-dawn', name: 'Harbour at dawn', daysAgo: 3, place: 'North Quay' },
+  { slug: 'orchard-in-fog', name: 'Orchard in fog', daysAgo: 9, place: 'Ashby' },
+  { slug: 'saltmarsh-evening', name: 'Saltmarsh, evening', daysAgo: 14, place: 'Saltmarsh' },
+  { slug: 'lighthouse-path', name: 'The lighthouse path', daysAgo: 21, place: 'Gull Point' },
+  { slug: 'first-snow', name: 'First snow on the hill', daysAgo: 40, place: 'Vell' },
+  { slug: 'summer-meadow', name: 'Summer meadow', daysAgo: 120, place: 'Long Field' },
+  { slug: 'night-ferry', name: 'From the night ferry', daysAgo: 160, place: 'The crossing' },
+  { slug: 'garden-wall', name: 'The walled garden', daysAgo: 200, place: 'Fieldfare House' },
+];
+const photos: Title[] = photoSpecs.map((spec, index) => {
+  const id = variant(`photo-${spec.slug}`, index * 5 + 2, 7);
+  const airDate = new Date(fixtureNow - spec.daysAgo * 86_400_000).toISOString().slice(0, 10);
+  return { id, kind: 'movie', name: spec.name, summary: '', year: Number(airDate.slice(0, 4)), airDate, genres: [],
+    artwork: [mediaArtwork(id, 'square'), mediaArtwork(id, 'wide', 'backdrop'), mediaArtwork(id, 'wide', 'thumb')],
+    media: { class: 'photo', role: 'item', facts: [{ label: 'Place', value: spec.place }, { label: 'Taken', value: airDate }] } };
+});
+
+// ---------------------------------------------------------------------------------------------
+export const mediaGroups = { artists, albums, tracks, concerts, series, books, audiobooks, parts, shows, episodes, photos };
 /** Shared, mutable fixture titles; the mock updates their watch state in place, like the video catalogue. */
-export const mediaTitles: Title[] = [...artists, ...albums, ...tracks, ...concerts, ...series, ...books, ...audiobooks, ...parts];
+export const mediaTitles: Title[] = [...artists, ...albums, ...tracks, ...concerts, ...series, ...books, ...audiobooks, ...parts, ...shows, ...episodes, ...photos];
 const byId = new Map(mediaTitles.map(title => [title.id, title]));
 export const mediaTitle = (id: string): Title | undefined => byId.get(id);
 /** A title's children; `level` (a role, or the level key for a role-less level) keeps one child level. */
@@ -433,7 +518,7 @@ export const mediaPersonArtwork = (id: string): ArtworkRef => mediaArtwork(id, '
 export const creditLabel = (role: string): string => roleLabel[role] ?? role;
 /** Titles that credit a person, with the credit as a role label. Artists credit their albums. */
 export function mediaPersonTitles(personId: string): { title: Title; role: string }[] {
-  return [...artists, ...albums, ...series, ...books, ...audiobooks].flatMap(title => {
+  return [...artists, ...albums, ...series, ...books, ...audiobooks, ...shows].flatMap(title => {
     const credit = title.media?.credits?.find(value => value.personId === personId);
     if (!credit || title.media?.role === 'artist') return [];
     return [{ title, role: creditLabel(credit.role) }];
@@ -456,7 +541,9 @@ export function mediaDetail(id: string): TitleDetail | undefined {
 const sorts: LibraryBrowseOptions['sorts'] = [{ id: 'index', directions: ['asc'] }, { id: 'title', directions: ['asc', 'desc'] }, { id: 'year', directions: ['asc', 'desc'] }];
 const genresOf = (items: Title[]) => [...new Set(items.flatMap(title => title.genres))];
 export const mediaLibraries: Library[] = [
-  { id: 'music', name: 'Music', kind: 'shows', media: 'music', presentation: { card: 'square' }, artwork: [mediaArtwork(artists[0]!.id, 'wide')],
+  // Every library names how it opens (features.libraryExperiences): music and the spoken-word
+  // libraries listen, books read, photos are a gallery.
+  { id: 'music', name: 'Music', kind: 'shows', media: 'music', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(artists[0]!.id, 'wide')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
       // A second recommended tab with its own shelves and card (features.pluginLevels).
@@ -466,7 +553,7 @@ export const mediaLibraries: Library[] = [
       { id: 'tracks', label: 'Tracks', kind: 'library', level: 'track', layout: 'list' },
     ],
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc', filters: { genre: true, genres: genresOf(artists), year: true, favorite: true } } },
-  { id: 'books', name: 'Books', kind: 'mixed', media: 'book', presentation: { card: 'poster' }, artwork: [mediaArtwork(books[0]!.id, 'book')],
+  { id: 'books', name: 'Books', kind: 'mixed', media: 'book', experience: 'read', presentation: { card: 'poster' }, artwork: [mediaArtwork(books[0]!.id, 'book')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
       { id: 'library', label: 'Library', kind: 'library' },
@@ -476,7 +563,7 @@ export const mediaLibraries: Library[] = [
     ],
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'author', label: 'Author', type: 'people', multi: true }], genre: true, genres: genresOf(books), year: true, played: true, favorite: true } } },
-  { id: 'audiobooks', name: 'Audiobooks', kind: 'mixed', media: 'audiobook', presentation: { card: 'square' }, artwork: [mediaArtwork(audiobooks[0]!.id, 'square')],
+  { id: 'audiobooks', name: 'Audiobooks', kind: 'mixed', media: 'audiobook', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(audiobooks[0]!.id, 'square')],
     tabs: [
       { id: 'recommended', label: 'Recommended', kind: 'recommended' },
       { id: 'library', label: 'Library', kind: 'library' },
@@ -486,12 +573,26 @@ export const mediaLibraries: Library[] = [
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'author', label: 'Author', type: 'people', multi: true }, { id: 'narrator', label: 'Narrator', type: 'people', multi: true }],
         genre: true, genres: genresOf(audiobooks), year: true, played: true, favorite: true } } },
+  { id: 'podcasts', name: 'Podcasts', kind: 'shows', media: 'podcast', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(shows[0]!.id, 'square')],
+    tabs: [
+      { id: 'recommended', label: 'Recommended', kind: 'recommended' },
+      { id: 'shows', label: 'Shows', kind: 'library' },
+      { id: 'episodes', label: 'Episodes', kind: 'library', level: 'episode', layout: 'list' },
+      { id: 'hosts', label: 'Hosts', kind: 'people', facet: 'host', order: 'name' },
+    ],
+    browse: { sorts, defaultSort: 'index', defaultDirection: 'asc',
+      filters: { facets: [{ id: 'host', label: 'Host', type: 'people', multi: true }], genre: true, genres: genresOf(shows), year: true, played: true, favorite: true } } },
+  { id: 'photos', name: 'Photos', kind: 'mixed', media: 'photo', experience: 'gallery', presentation: { card: 'square' }, artwork: [mediaArtwork(photos[0]!.id, 'wide')],
+    tabs: [{ id: 'library', label: 'All photos', kind: 'library' }],
+    browse: { sorts: [{ id: 'released', directions: ['desc', 'asc'] }, { id: 'title', directions: ['asc', 'desc'] }], defaultSort: 'released', defaultDirection: 'desc', filters: { year: true, favorite: true } } },
 ];
 export const isMediaLibrary = (id: string): boolean => mediaLibraries.some(library => library.id === id);
 const levels: Record<string, Record<string, Title[]>> = {
   music: { '': artists, artist: artists, album: albums, track: tracks, concert: concerts },
   books: { '': [...series, ...books.filter(book => !book.media?.parents?.length)], series, book: books },
   audiobooks: { '': audiobooks, audiobook: audiobooks, part: parts },
+  podcasts: { '': shows, show: shows, episode: episodes },
+  photos: { '': photos },
 };
 /** Root level by default; a level key lists that level. Undefined for an unknown library or level. */
 export function mediaLibraryEntries(libraryId: string, level = ''): RowEntry[] | undefined {

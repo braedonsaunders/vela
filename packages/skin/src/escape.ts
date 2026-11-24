@@ -1,4 +1,4 @@
-import { openScopeFlags } from './escape-policy';
+import { openScopeFlags, pressTakesFocus, successor } from './escape-policy';
 import { ScreenActive } from './screen-active';
 // Escape on a document's menus (docs/skin-schema.md, `escape`): Escape anywhere on the page, or
 // Back on a TV remote or Android (Menu on tvOS), clears the open flags of the innermost node that
@@ -97,6 +97,36 @@ export function focusPressDoing(does: readonly string[]): boolean {
 /** Remember the button pressed last: a route it opens returns focus to it when it closes. */
 export function notePress(button: Focusable | null, does: string): void {
   lastPressed = button ? { target: button, does } : null;
+  pressedAt = Date.now();
+}
+
+/** On the web a pressed button holds focus as Chromium leaves it, so the keyboard carries on from
+ * it: PageDown and Space scroll the page it is on (escape-policy.ts, pressTakesFocus). */
+export function focusPressed(button: Focusable | null): void {
+  if (!button || Platform.OS !== 'web' || typeof document === 'undefined') return;
+  if (!pressTakesFocus(document.activeElement, document.body) || !(button as { isConnected?: boolean }).isConnected) return;
+  (button as { focus?(options?: { preventScroll?: boolean }): void }).focus?.({ preventScroll: true });
+}
+
+/** How soon after its press a button that leaves is taken to have been redrawn by that press. */
+const REDRAW_MS = 1000;
+let pressedAt = 0;
+
+/** On the web, the button just pressed leaving as its own press redraws it hands focus to the
+ * button drawn in its place. A season tab is drawn anew as the chosen one: its element left, focus
+ * fell to the body, Enter's next press had nothing to act on, and Firefox and Safari scrolled the
+ * body, which does not scroll, so PageDown, Space and the arrows did nothing on the title page
+ * (Safari does not focus a clicked link, so this follows the press, not the focus). */
+export function leaveButton(target: Focusable): void {
+  if (Platform.OS !== 'web' || typeof document === 'undefined' || typeof requestAnimationFrame === 'undefined') return;
+  const pressed = lastPressed;
+  if (pressed?.target !== target || Date.now() - pressedAt > REDRAW_MS) return;
+  requestAnimationFrame(() => {
+    const next = successor(pressed, mounted, document.activeElement, document.body);
+    if (!next) return;
+    if (lastPressed === pressed) lastPressed = { target: next, does: pressed.does };
+    (next as { focus?(options?: { preventScroll?: boolean }): void }).focus?.({ preventScroll: true });
+  });
 }
 
 /** The pressed button if it is still drawn, else a drawn button that does the same. */

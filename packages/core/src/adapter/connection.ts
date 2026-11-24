@@ -26,7 +26,7 @@ export interface Connection {
 
 /** `crossOrigin`: the page is not on this server's origin (a standalone app), so the player is
  * told the broker's scope; its grant paths carry no credentials, so the scope adds no headers. */
-export function etherConnection(record: ServerRecord, adapter: EtherAdapter, credentials: Credentials, crossOrigin = false, fitProxyWidth = false): Connection {
+export function etherConnection(record: ServerRecord, adapter: EtherAdapter, credentials: Credentials, crossOrigin = false, fitProxyWidth = true): Connection {
   const media: MediaAccess | undefined = crossOrigin
     ? { origin: record.origin, pathPrefix: '/sessions/', headers: async () => ({}), nativeURL: async url => url } : undefined;
   return { record, adapter, credentials, ...(media ? { media } : {}),
