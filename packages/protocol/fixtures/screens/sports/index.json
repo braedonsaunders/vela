@@ -267,7 +267,7 @@
     },
 
     "eventShelf": {
-      "type": "shelf", "over": "{arg.over}", "as": "e", "key": "{e.id}", "itemWidth": { "default": "286px", "small": "min(272px, 74vw)", "tv": "300px" }, "gap": "14px",
+      "type": "shelf", "over": "{arg.over}", "as": "e", "key": "{e.id}", "gap": "14px",
       "style": { "padding": "8px $gutter" }, "small": { "padding": "8px 18px" },
       "item": { "type": "use", "template": "eventCard", "with": { "prefix": "{arg.prefix}" } }
     },
