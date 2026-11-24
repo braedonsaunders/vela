@@ -4,7 +4,8 @@
 // the server advertises it (features.favoritesList, features.lyrics, features.historyRecap,
 // features.playlistImport, features.duplicates).
 import type * as V from '../wire';
-import { hasHistoryRecap, hasLibraryDuplicates, hasMusicLibrary, hasPlaylistImports } from '../adapter/capabilities';
+import { hasHistoryRecap, hasLibraryDuplicates, hasMusicLibrary, hasPlaylistImports, importLinkFromSources, playlistImportSources, type PlaylistImportSources } from '../adapter/capabilities';
+import { VelaError } from '../adapter/errors';
 import { card, entry } from '../discovery/models';
 import { durationLabel } from '../media';
 import { localeContext, msg, number, plural } from '../i18n';
@@ -266,6 +267,8 @@ export class Music {
   get playlistImportFeature(): V.ServerCapabilities['features']['playlistImport'] {
     return this.session.features?.playlistImport;
   }
+  /** The link sources, file formats and track limit this server's import reads; null when it has none. */
+  get playlistImportSources(): PlaylistImportSources | null { return playlistImportSources(this.session.features?.playlistImport); }
   get duplicatesAvailable(): boolean { return this.session.features?.duplicates?.available === true; }
 
   /** What plays after a title when its queue ends (autoplay); [] when the server has none. */
@@ -381,13 +384,23 @@ export class Music {
     }
   }
 
-  /** Start a playlist import from a Spotify/Deezer URL or M3U/CSV text, then read its initial state. */
+  /** Start a playlist import from a link to one of the advertised sources or M3U/CSV text, then read
+   * its initial state. A link that cannot come from an advertised source, or a format the server does
+   * not list, is refused here exactly as the server would refuse it, without asking. */
   async startPlaylistImport(
     library: string,
     source: { url: string } | { file: { name: string; format: V.PlaylistImportFormat; text: string } },
   ): Promise<PlaylistImportModel | null> {
     if (!this.playlistImportAvailable) return null;
     const current = this.box.get().music.playlistImport;
+    const sources = this.playlistImportSources;
+    const refusal = 'url' in source
+      ? (sources && !importLinkFromSources(source.url, sources.links) ? 'unsupported_link' : '')
+      : (sources && !sources.files.includes(source.file.format) ? 'unsupported_file' : '');
+    if (refusal) {
+      this.box.update('music', music => ({ ...music, playlistImport: { ...failed<PlaylistImportModel | null>(importRefusal(refusal)), value: null } }));
+      return null;
+    }
     this.box.update('music', music => ({ ...music, playlistImport: loading(current) }));
     try {
       const connection = await this.session.ready();
@@ -399,7 +412,7 @@ export class Music {
       });
       return await this.pollPlaylistImport(job.id);
     } catch (error) {
-      this.box.update('music', music => ({ ...music, playlistImport: failed(error, current) }));
+      this.box.update('music', music => ({ ...music, playlistImport: { ...failed<PlaylistImportModel | null>(error), value: null } }));
       return null;
     }
   }
@@ -412,6 +425,12 @@ export class Music {
       const connection = await this.session.ready();
       if (!hasPlaylistImports(connection.adapter)) throw new Error('Playlist import is unavailable');
       const answer = await connection.adapter.playlistImport(id);
+      if (answer.state === 'failed') {
+        // A job the server gave up on ("unsupported_link" from a source that could not read the
+        // link) reads like the same refusal answered at once, and leaves the form to try again.
+        this.box.update('music', music => ({ ...music, playlistImport: { ...failed<PlaylistImportModel | null>(importRefusal(answer.error || 'import_failed')), value: null } }));
+        return null;
+      }
       const images = await connection.images();
       const width = this.artWidth();
       const art = answer.artwork?.length
@@ -578,4 +597,10 @@ export class Music {
   private set<K extends 'liked' | 'lyrics' | 'recaps' | 'duplicates' | 'recordings'>(field: K, key: string, value: MusicState[K][string]): void {
     this.box.update('music', music => ({ ...music, [field]: { ...music[field], [key]: value } }));
   }
+}
+
+/** A playlist import refusal in the server's own shape, so a refusal decided before sending, a
+ * 400 and a job that failed while reading all reach the screen the same way. */
+function importRefusal(code: string): VelaError {
+  return new VelaError({ class: 'request', code, message: code.replace(/_/g, ' '), retry: { allowed: false } }, 400);
 }
