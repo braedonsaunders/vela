@@ -6,6 +6,8 @@
 import type * as V from '../wire';
 import type { Card } from '../models';
 import { appendAutoplay, clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, removeAt, toggleShuffle, type AudioQueue, type Random } from '../audio/queue';
+import { albumInOrder, DEFAULT_SOUND, levellingGain, loudnessOf, soundSettings, transitionBetween, type SoundSettings } from '../audio/sound';
+import { eqChain, type EqChain } from '../audio/eq';
 import type { Playback, PlaybackTarget } from './playback';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -13,8 +15,14 @@ import type { VelaState } from './index';
 
 export type AudioEngineEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration' | 'advanced';
 
-/** The item an engine readies to play straight after the current one (gapless playback). */
-export interface AudioPreload { url: string; startSeconds: number }
+/** The item an engine readies to play straight after the current one (gapless playback). `gain` is its
+ * levelling (linear); `crossfade` (AutoMix) starts it `seconds` before the current one's audible end,
+ * at `at` seconds into the current item, from `startSeconds`, fading equal-power across. Without it
+ * the join is gapless. */
+export interface AudioPreload { url: string; startSeconds: number; gain?: number; crossfade?: { seconds: number; at: number } }
+
+/** What the engine applies to the playing item: its levelling gain (linear) and the EQ (all items). */
+export interface AudioSound { gain: number; eq: EqChain | null }
 
 /** The platform's audio element: web's HTMLAudioElement, a native player on devices. */
 export interface AudioEngine {
@@ -25,6 +33,8 @@ export interface AudioEngine {
   setRate(rate: number): void;
   /** 0..1; engines without one leave volume to the device. */
   setVolume?(volume: number): void;
+  /** Levelling and the EQ (docs/sound.md); engines without it play at unity with no EQ. */
+  setSound?(sound: AudioSound): void;
   unload(): void;
   position(): number;
   duration(): number;
@@ -59,11 +69,13 @@ export interface AudioState {
   /** The app's own volume, 0..1, and mute (the device's volume still applies). */
   volume: number;
   muted: boolean;
+  /** AutoMix, loudness levelling and the equalizer (audio/sound.ts); this device's own. */
+  sound: SoundSettings;
 }
 
 export const initialAudio: AudioState = {
   queue: null, phase: 'idle', positionSeconds: 0, durationSeconds: 0, rate: 1,
-  sleep: { mode: 'off', endsAt: 0 }, chapters: [], error: '', unsupported: false, volume: 1, muted: false,
+  sleep: { mode: 'off', endsAt: 0 }, chapters: [], error: '', unsupported: false, volume: 1, muted: false, sound: DEFAULT_SOUND,
 };
 
 export interface AudioRequest {
@@ -103,6 +115,9 @@ interface Prepared {
   start: number;
   /** The engine holds it (`preload`). */
   handed: boolean;
+  /** Its loudness (the plan's, else the card's), and what was handed: its gain and the crossfade. */
+  loudness?: V.Loudness;
+  handover?: AudioPreload;
 }
 
 export class Audio {
@@ -127,6 +142,8 @@ export class Audio {
   private autoplayAsked = '';
   /** The queue item already played on afresh after it failed while the next was prepared (once each). */
   private retried = '';
+  /** The playing item's loudness: its plan's (measured on the file playing), else its card's. */
+  private loudness: V.Loudness | undefined;
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -135,7 +152,7 @@ export class Audio {
     private readonly random: Random = Math.random,
   ) {
     // A prepared session belongs to the old sign-in: dropped, never released through the new one.
-    session.onReset(() => { this.prepared = undefined; this.halt(); this.box.update('audio', () => initialAudio); });
+    session.onReset(() => { this.prepared = undefined; this.halt(); this.box.update('audio', audio => ({ ...initialAudio, sound: audio.sound })); });
     // A session that is no longer ours (a video started, the server replaced it) stops the engine;
     // a recovered plan for our session reloads at the same place.
     box.subscribe(() => this.follow());
@@ -279,6 +296,56 @@ export class Audio {
     this.patch({ muted });
   }
 
+  /** Replace the sound settings (checked, so a stored or partial value cannot break the engines). The
+   * playing item and the prepared one follow at once. */
+  setSound(next: SoundSettings): void {
+    this.patch({ sound: soundSettings(next) });
+    this.applySound();
+    const prepared = this.prepared;
+    if (prepared?.handed && prepared.handover && this.engine?.preload) {
+      prepared.handover = this.handover(prepared, prepared.handover.url);
+      this.engine.preload(prepared.handover);
+    }
+  }
+
+  /** The playing item's levelling gain (linear) for the current settings. */
+  private gainOf(item: Card | undefined, loudness: V.Loudness | undefined): number {
+    return levellingGain(loudness, this.state.sound.levelling, { albumInOrder: albumInOrder(this.state.queue, item) }).linear;
+  }
+
+  /** Hand the engine the playing item's gain and the EQ. */
+  private applySound(): void {
+    this.engine?.setSound?.({ gain: this.gainOf(current(this.state.queue), this.loudness), eq: eqChain(this.state.sound.eq) });
+  }
+
+  /**
+   * What the engine is handed for the prepared item: its gain, and AutoMix's crossfade where one is
+   * allowed. Two sessions overlap in a crossfade, so it needs a server that keeps the outgoing one
+   * serving (features.queuedPlayback.handoverSeconds), or the outgoing item already all in the engine;
+   * it plays at 1x, and never into the same item again (repeat one).
+   */
+  private handover(prepared: Prepared, url: string): AudioPreload {
+    const queue = this.state.queue;
+    const item = current(queue);
+    const after = queue && next(queue, true);
+    const nextItem = current(after);
+    const level = this.gainOf(nextItem, prepared.loudness);
+    const gain = level === 1 ? {} : { gain: level };
+    const duration = this.state.durationSeconds;
+    const overlap = this.playback.handoverSeconds > 0 || this.bufferedToEnd(duration);
+    if (!item || !nextItem || nextItem.id === item.id || this.state.rate !== 1 || !overlap || prepared.start > 0) return { url, startSeconds: prepared.start, ...gain };
+    const transition = transitionBetween(
+      { card: item, durationSeconds: duration, loudness: this.loudness },
+      { card: nextItem, durationSeconds: prepared.plan?.durationSeconds ?? nextItem.durationSeconds, loudness: prepared.loudness },
+      this.state.sound.automix,
+    );
+    if (transition.kind !== 'crossfade') return { url, startSeconds: prepared.start, ...gain };
+    // The server keeps the outgoing session for its handover only: a fade never runs past it.
+    const handoverCap = this.playback.handoverSeconds > 0 && !this.bufferedToEnd(duration) ? this.playback.handoverSeconds - 1 : Infinity;
+    const seconds = Math.min(transition.seconds, handoverCap);
+    return { url, startSeconds: transition.nextFrom, ...gain, crossfade: { seconds, at: transition.at + (transition.seconds - seconds) } };
+  }
+
   toggleShuffle(): void { if (this.state.queue) this.requeue(toggleShuffle(this.state.queue, this.random)); }
   cycleRepeat(): void { if (this.state.queue) this.requeue(cycleRepeat(this.state.queue)); }
 
@@ -294,7 +361,7 @@ export class Audio {
     // Asked before the queue and session are cleared: they are how the playback is known as ours.
     const owns = this.ownsPlayback();
     this.halt();
-    this.box.update('audio', audio => ({ ...initialAudio, rate: audio.rate, unsupported: audio.unsupported, volume: audio.volume, muted: audio.muted }));
+    this.box.update('audio', audio => ({ ...initialAudio, rate: audio.rate, unsupported: audio.unsupported, volume: audio.volume, muted: audio.muted, sound: audio.sound }));
     if (owns) await this.playback.stop();
   }
 
@@ -350,6 +417,7 @@ export class Audio {
     this.url = path;
     this.sequence = 0;
     this.lastObservation = 0;
+    this.loudness = loudnessOf(plan.loudness) ?? current(this.state.queue)?.media?.loudness;
     const start = plan.positionSeconds > 0 ? plan.positionSeconds : startSeconds;
     this.patch({ chapters: plan.chapters ?? [], durationSeconds: plan.durationSeconds ?? this.state.durationSeconds, positionSeconds: start });
     this.loadEngine(path, start, () => {
@@ -371,6 +439,7 @@ export class Audio {
       if (!this.engine || this.sessionId !== sessionId || this.url !== url) return;
       this.engine.load(resolved, start, this.state.rate);
       this.engine.setVolume?.(this.state.muted ? 0 : this.state.volume);
+      this.applySound();
       then();
     })();
   }
@@ -416,8 +485,17 @@ export class Audio {
     this.autoplayNext(remaining);
     const upcoming = this.upcoming();
     const cls = current(this.state.queue)?.media?.class;
-    const lead = preloadLead(duration, !this.playback.queuedPlayback && (cls === 'audiobook' || cls === 'podcast'));
+    // AutoMix starts a crossfade before the audible end: the plan is asked for that much earlier.
+    const tail = this.state.sound.automix.on && this.loudness?.trim ? Math.min(30, Math.max(0, duration - this.loudness.trim.endMs / 1000)) : 0;
+    const lead = preloadLead(duration, !this.playback.queuedPlayback && (cls === 'audiobook' || cls === 'podcast')) + (this.state.sound.automix.on ? tail + 12 : 0);
     if (this.prepared && (this.prepared.id !== upcoming?.id || remaining > lead + PRELOAD_RELEASE_MARGIN)) this.forget();
+    // Handed gapless only because the outgoing item was not all in the engine yet (a server without the
+    // queued handover): now that it is, AutoMix's crossfade can still be handed.
+    const held = this.prepared;
+    if (held?.handed && held.handover && !held.handover.crossfade && this.state.sound.automix.on && this.engine.preload && this.bufferedToEnd(duration)) {
+      const again = this.handover(held, held.handover.url);
+      if (again.crossfade && again.crossfade.at > position + 1) { held.handover = again; this.engine.preload(again); }
+    }
     if (!upcoming || this.prepared || remaining > lead || this.declined === `${this.sessionId}:${upcoming.id}`) return;
     if (this.state.phase !== 'playing' && this.state.phase !== 'buffering') return;
     if (!this.playback.queuedPlayback && remaining > PRELOAD_LAST_CALL && !this.bufferedToEnd(duration)) return;
@@ -451,10 +529,13 @@ export class Audio {
     prepared.plan = plan;
     prepared.url = url;
     prepared.start = plan.positionSeconds > 0 ? plan.positionSeconds : 0;
+    const queue = this.state.queue;
+    prepared.loudness = loudnessOf(plan.loudness) ?? current(queue && next(queue, true))?.media?.loudness;
     if (!this.engine?.preload) return;
     const resolved = await this.resolve(url);
     if (this.prepared !== prepared || !this.engine?.preload) return;
-    this.engine.preload({ url: resolved, startSeconds: prepared.start });
+    prepared.handover = this.handover(prepared, resolved);
+    this.engine.preload(prepared.handover);
     prepared.handed = true;
   }
 
@@ -479,20 +560,27 @@ export class Audio {
     }
     this.prepared = undefined;
     this.retried = '';
-    // The finished item's last report, at its end; its session then stops as the next one starts.
-    this.observe('ended', this.state.durationSeconds);
+    const fade = prepared.handover?.crossfade;
+    // A crossfade with a server that keeps the outgoing session (handover): it is still playing out,
+    // and the takeover counts it as played; it stops once the fade is over. Otherwise the finished
+    // item's last report is its end, and its session stops as the next one starts.
+    const overlapping = !!fade && this.playback.handoverSeconds > 0;
+    if (overlapping) this.observe('playing', fade.at);
+    else this.observe('ended', this.state.durationSeconds);
     const plan = prepared.plan;
     this.sessionId = plan.sessionId;
     this.url = prepared.url!;
     this.sequence = 0;
     this.lastObservation = 0;
     this.lastPatch = 0;
-    this.playback.adopt(this.target(item.id), plan);
+    this.playback.adopt(this.target(item.id), plan, overlapping ? { finishAfterMs: Math.ceil(fade.seconds * 1000) + 250 } : {});
+    this.loudness = prepared.loudness;
     this.patch({
       queue: after, phase: 'playing', error: '', chapters: plan.chapters ?? [],
       durationSeconds: plan.durationSeconds ?? item.durationSeconds, positionSeconds: this.engine?.position() ?? prepared.start,
     });
     this.observe('playing');
+    this.applySound();
   }
 
   private follow(): void {

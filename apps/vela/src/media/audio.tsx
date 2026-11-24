@@ -11,8 +11,10 @@ import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '@vela/skin/src/widge
 import { MOTION, Presence } from '@vela/skin/src/presence';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
+import { soundSettings } from '@vela/core';
 import { useVela } from '../vela';
-import { createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
+import { preferences } from '../data/preferences';
+import { audioDiagnostics, createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
 import { useMediaPageActions } from './actions';
 import { musicTV, onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
 import { useMediaPlayerActions } from './player-actions';
@@ -45,6 +47,8 @@ function TVFocusTrap({ open, children }: { open: boolean; children: ReactNode })
     </FocusGuide>
   );
 }
+const SOUND_PREFERENCE = 'sound';
+
 /** Now Playing's rise is a long move, so a little longer than a section; its fall is quicker. */
 const NOW_PLAYING_ENTER = 420;
 const NOW_PLAYING_EXIT = 280;
@@ -60,6 +64,22 @@ export function AudioDock() {
   const [panel, setPanel] = useState<NowPlayingPanel | undefined>(undefined);
   useEffect(() => onOpenNowPlaying(next => { setPanel(next); setOpen(true); }), []);
   useEffect(() => store.audio.attach(createAudioEngine(() => store.playback.mediaAccess())), [store]);
+  // Development checks read what the audio did (docs/sound.md): the store's audio and the engine's last crossfade.
+  useEffect(() => {
+    if (!__DEV__) return;
+    (globalThis as { __velaSound?: unknown }).__velaSound = { audio: () => store.getState().audio, engine: audioDiagnostics };
+  }, [store]);
+  // The sound settings belong to this device: read once, written back whenever they change.
+  useEffect(() => {
+    try { store.audio.setSound(soundSettings(JSON.parse(preferences.get(SOUND_PREFERENCE) ?? 'null'))); } catch { /* Unreadable: the defaults. */ }
+  }, [store]);
+  const sound = audio.sound;
+  const savedSound = useRef(sound);
+  useEffect(() => {
+    if (savedSound.current === sound) return;
+    savedSound.current = sound;
+    try { preferences.set(SOUND_PREFERENCE, JSON.stringify(sound)); } catch { /* Kept for this run only. */ }
+  }, [sound]);
   const controls = useMemo<MediaSessionControls>(() => ({
     play: () => store.audio.resume(), pause: () => store.audio.pause(), next: () => store.audio.next(),
     previous: () => store.audio.previous(), seek: seconds => store.audio.seek(seconds), skip: delta => store.audio.skip(delta),

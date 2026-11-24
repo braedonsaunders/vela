@@ -93,10 +93,39 @@ public final class VelaPlayerModule: Module {
             MainActor.assumeIsolated {
                 let audio = self?.audio() ?? AudioPlayback.shared
                 let url = (request?["url"] as? String).flatMap(URL.init(string:)).flatMap { $0.scheme == "http" || $0.scheme == "https" ? $0 : nil }
+                // AutoMix: `crossfade = { seconds, at }` (docs/sound.md); without it the join is gapless.
+                let fade = (request?["crossfade"] as? [String: Any]).flatMap { fade -> (seconds: Double, at: Double)? in
+                    guard let seconds = (fade["seconds"] as? NSNumber)?.doubleValue, let at = (fade["at"] as? NSNumber)?.doubleValue,
+                          seconds.isFinite, at.isFinite else { return nil }
+                    return (seconds, at)
+                }
                 audio.preload(id: (request?["id"] as? NSNumber)?.intValue, url: url,
                               access: (request?["access"] as? [String: Any]).flatMap { try? VelaMediaAuth($0) },
-                              start: (request?["start"] as? NSNumber)?.doubleValue ?? 0)
+                              start: (request?["start"] as? NSNumber)?.doubleValue ?? 0,
+                              gain: (request?["gain"] as? NSNumber)?.doubleValue ?? 1, crossfade: fade)
             }
+        }.runOnQueue(.main)
+        // Levelling and the EQ: the playing item's gain (linear) and the EQ for every item (null: none).
+        AsyncFunction("audioSound") { [weak self] (sound: [String: Any]) in
+            MainActor.assumeIsolated {
+                let audio = self?.audio() ?? AudioPlayback.shared
+                let eq = (sound["eq"] as? [String: Any]).map { eq in
+                    SoundEQ(preGainDb: (eq["preGainDb"] as? NSNumber)?.doubleValue ?? 0,
+                            filters: (eq["filters"] as? [[String: Any]] ?? []).compactMap { filter -> SoundFilter? in
+                                let kinds: [String: SoundFilter.Kind] = ["lowshelf": .lowshelf, "peaking": .peaking, "highshelf": .highshelf]
+                                guard let kind = (filter["type"] as? String).flatMap({ kinds[$0] }),
+                                      let frequency = (filter["frequency"] as? NSNumber)?.doubleValue else { return nil }
+                                return SoundFilter(kind: kind, frequency: frequency, q: (filter["q"] as? NSNumber)?.doubleValue ?? 2.0.squareRoot(),
+                                                   gainDb: (filter["gainDb"] as? NSNumber)?.doubleValue ?? 0)
+                            })
+                }
+                audio.setSound(gain: (sound["gain"] as? NSNumber)?.doubleValue ?? 1, eq: eq)
+            }
+        }.runOnQueue(.main)
+        // Debug builds: capture every tap's processed output to `path` (.f32 + .json) and silence the
+        // output for the rest of the process; null writes the capture. Release builds ignore it.
+        AsyncFunction("audioCapture") { [weak self] (path: String?) in
+            MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).capture(path: path) }
         }.runOnQueue(.main)
         AsyncFunction("audioPlay") { [weak self] in
             MainActor.assumeIsolated { (self?.audio() ?? AudioPlayback.shared).play() }

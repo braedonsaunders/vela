@@ -254,6 +254,8 @@ export class Music {
 
   get likedAvailable(): boolean { return this.session.features?.favoritesList?.available === true; }
   get lyricsAvailable(): boolean { return this.session.features?.lyrics?.available === true; }
+  /** features.loudness: tracks carry measured loudness for levelling and AutoMix's markers. */
+  get loudnessAvailable(): boolean { return this.session.features?.loudness?.available === true; }
   get recentAvailable(): boolean { return this.session.features?.playContexts?.available === true; }
   get recapAvailable(): boolean { return this.session.features?.historyRecap?.available === true; }
   get recapPeriods(): V.HistoryRecapPeriod[] {

@@ -3,10 +3,22 @@
 // their native players (audio.ts), so here there is none.
 export type GaplessEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration' | 'advanced' | 'unsupported';
 
+/** The EQ as filters (packages/core/src/audio/eq.ts, restated so this module needs no @vela/core). */
+export interface GaplessEq { preGainDb: number; filters: { type: 'lowshelf' | 'peaking' | 'highshelf'; frequency: number; q: number; gainDb: number }[] }
+/** The playing track's levelling gain (linear) and the EQ (every track). */
+export interface GaplessSound { gain: number; eq: GaplessEq | null }
+/** The next track: its levelling gain, and AutoMix's crossfade (start `seconds` before the current track's
+ * audible end, at `at` seconds into it); without one the join is gapless. */
+export interface GaplessNext { url: string; startSeconds: number; gain?: number; crossfade?: { seconds: number; at: number } }
+
 export interface GaplessPlayer {
   load(url: string, startSeconds: number): void;
-  /** The next track, joined to the current one with no gap ('advanced'); null forgets it. */
-  preload(next: { url: string; startSeconds: number } | null): void;
+  /** The next track, joined to the current one ('advanced' when it takes over); null forgets it. */
+  preload(next: GaplessNext | null): void;
+  /** Levelling and the EQ (docs/sound.md). */
+  setSound(sound: GaplessSound): void;
+  /** What the last crossfade did: where it started on the outgoing track, its beat shift and tempo. */
+  diagnostics(): { crossfade: { at: number; shift: number; bpm: number; start: number; seconds: number } | null };
   play(): void;
   pause(): void;
   seek(seconds: number): void;

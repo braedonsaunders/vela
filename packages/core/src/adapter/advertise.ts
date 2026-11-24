@@ -79,6 +79,8 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(hasLibraryDuplicates(adapter) && description.features.duplicates ? { duplicates: description.features.duplicates } : {}),
       // Queued (gapless next-track) sessions are a property of the server's playback: stated by it.
       ...(description.features.queuedPlayback ? { queuedPlayback: description.features.queuedPlayback } : {}),
+      // Loudness describes fields on existing answers (track cards, audio plans): stated by the server.
+      ...(description.features.loudness ? { loudness: description.features.loudness } : {}),
       // Plugin levels describe answers to existing reads (rows per tab, children per role): stated by the server.
       ...(description.features.pluginLevels ? { pluginLevels: description.features.pluginLevels } : {}),
     },
