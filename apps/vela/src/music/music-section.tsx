@@ -53,6 +53,23 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     return ids;
   }, [favorites, roleLists]);
 
+  // One like or unlike, from a heart, Follow or a card's menu: the hearts change at once, the
+  // title leaves Liked Songs and Your Library at once (the store's optimistic watch change), and
+  // the lists that show it read again. A refusal puts the heart back and rejects.
+  const setLike = useCallback((card: Card, on: boolean): Promise<void> => {
+    setLikes(current => ({ ...current, [card.id]: on }));
+    return store.catalogue.setTitleWatch(card.id, { favorite: on })
+      .then(() => {
+        const role = card.media?.role;
+        if (store.music.likedAvailable && role) { void store.music.liked(role, false, true); return; }
+        const liked = store.getState().playlists.list.value?.find(p => p.name === 'Favorites');
+        if (liked) void store.playlists.open(liked.id, false, true);
+      }, (error: unknown) => {
+        setLikes(current => ({ ...current, [card.id]: !on }));
+        throw error;
+      });
+  }, [store]);
+
   const go = useCallback((next: MusicPlace) => {
     router.push({ pathname: '/library/[id]', params: { id: libraryId, m: placeParam(next) } });
   }, [libraryId]);
@@ -89,23 +106,12 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     menu: setMenu,
     toggle: () => store.audio.toggle(),
     drawer: setDrawer,
-    like: (card: Card, on: boolean) => {
-      setLikes(current => ({ ...current, [card.id]: on }));
-      void store.catalogue.setTitleWatch(card.id, { favorite: on })
-        .then(() => {
-          // A row heart, a menu or Follow anywhere: the lists that show it read again.
-          const role = card.media?.role;
-          if (store.music.likedAvailable && role) { void store.music.liked(role, false, true); return; }
-          const liked = store.getState().playlists.list.value?.find(p => p.name === 'Favorites');
-          if (liked) void store.playlists.open(liked.id, false, true);
-        })
-        .catch(() => setLikes(current => ({ ...current, [card.id]: !on })));
-    },
+    like: (card: Card, on: boolean) => { void setLike(card, on).catch(() => undefined); },
     liked: (id: string) => likes[id] ?? likedIds.has(id),
     searches,
     noteSearch: (query: string) => keepSearches(list => rememberSearch(list, query)),
     dropSearch: (query?: string) => keepSearches(list => (query === undefined ? [] : forgetSearch(list, query))),
-  }), [libraryId, listening, place, go, store, likes, likedIds, searches, keepSearches]);
+  }), [libraryId, listening, place, go, store, setLike, likes, likedIds, searches, keepSearches]);
 
   const keyActions = useMemo(() => ({ toggleQueue: () => setQueueOpen(open => !open), help: () => setKeysOpen(true) }), []);
   useMusicKeys(store, app, keyActions);
@@ -132,6 +138,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
           {menu ? (
             <CardContextMenu card={menu.card} primary={{ action: 'select', arg: `${menu.card.id}|${menu.card.media?.role ?? menu.card.kind}|` }}
               anchor={menu.anchor} mode={menu.mode ?? 'pointer'} opener={menu.opener ?? null} playlistEntry={menu.entry} close={() => setMenu(null)}
+              favorite={{ on: app.liked(menu.card.id), set: on => setLike(menu.card, on) }}
               href={`/library/${libraryId}?m=${encodeURIComponent(placeParam(placeOf(menu.card)))}`} />
           ) : null}
         </View>

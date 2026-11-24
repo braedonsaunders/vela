@@ -58,3 +58,18 @@ test('a refused mutation restores an optimistically removed Continue Watching ca
   expect(box.get()).toBe(state);
   expect(box.get().home.value!.rows[0]!.items.map(value => value.id)).toEqual(['target', 'keep']);
 });
+
+test('an unlike takes the title out of the liked lists at once; a like waits for their next read', () => {
+  const liked = (id: string) => ({ ...card(id), likedAt: '' });
+  const state = { ...stateWithCards(), music: { liked: {
+    track: { load: 'ready', error: '', value: { items: [liked('target'), liked('keep')], total: 140, cursor: 'next', more: true } },
+    album: { load: 'ready', error: '', value: { items: [liked('album')], total: 1, cursor: '', more: false } },
+  } } } as unknown as VelaState;
+  const removed = optimisticWatchState(state, 'target', { favorite: false });
+  expect(removed.music.liked.track!.value!.items.map(item => item.id)).toEqual(['keep']);
+  expect(removed.music.liked.track!.value!.total).toBe(139);
+  expect(removed.music.liked.album).toBe(state.music.liked.album);
+  expect(state.music.liked.track!.value!.items).toHaveLength(2);
+  expect(optimisticWatchState(state, 'target', { favorite: true }).music.liked).toBe(state.music.liked);
+  expect(optimisticWatchState(state, 'other', { favorite: false }).music.liked).toBe(state.music.liked);
+});

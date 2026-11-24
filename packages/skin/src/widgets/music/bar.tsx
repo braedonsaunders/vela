@@ -13,7 +13,7 @@ import { Cover, useMediaLook } from '../media/parts';
 import { MediaGlyph } from '../media/icons';
 import { placeOf, useMusic } from './context';
 import { isSpoken, listeningWords } from './listening';
-import { Heart, IconButton, transition } from './parts';
+import { Heart, IconButton, menuHandlers, transition } from './parts';
 import { openNowPlaying } from './hub';
 import { Chip } from './pages';
 
@@ -38,21 +38,24 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
   const chapter = spoken ? [...audio.chapters].reverse().find(c => c.startSeconds <= audio.positionSeconds) : undefined;
   const container = item?.media?.parent;
   const sleeping = audio.sleep.mode !== 'off';
+  // What is playing has its card's menu too (Remove from Liked Songs, Go to album): a right-click
+  // or a long press on its cover or its title.
+  const menu = item ? menuHandlers(point => app.menu({ card: item, anchor: { kind: 'point', point }, mode: 'pointer' })) : {};
   return (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 }} testID="now-playing-bar" accessibilityRole="toolbar" accessibilityLabel={msg('media.player.nowPlaying')}>
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         {item ? (
           <>
-            <Pressable onPress={() => openNowPlaying()} accessibilityRole="button" accessibilityLabel={msg('media.player.open')} style={NO_RING}>
+            <Pressable {...menu} onPress={() => openNowPlaying()} accessibilityRole="button" accessibilityLabel={msg('media.player.open')} style={NO_RING} testID="bar-cover">
               <Cover uri={item.poster} shape="square" size={58} title={item.name} accent={item.accent} lift={0.5} />
             </Pressable>
             <View style={{ minWidth: 0, flexShrink: 1 }}>
               {spoken ? <>
                 {/* A book or episode opens its page; the line under it is the chapter, else the book or show it is from. */}
-                <Link label={item.name} strong onPress={() => app.go(placeOf(item))} testID="bar-title" />
+                <Link label={item.name} strong onPress={() => app.go(placeOf(item))} menu={menu} testID="bar-title" />
                 <Link label={chapter?.name || container?.name || item.media?.byline || ''} onPress={() => app.go(placeOf(item))} testID="bar-subtitle" />
               </> : <>
-                <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} testID="bar-title" />
+                <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} menu={menu} testID="bar-title" />
                 <Link label={item.media?.byline ?? ''} onPress={() => artist && app.go({ kind: 'title', id: artist.id })} testID="bar-subtitle" />
               </>}
             </View>
@@ -156,11 +159,11 @@ function Transport({ icon, label, onPress }: { icon: string; label: string; onPr
   );
 }
 
-function Link({ label, strong = false, onPress, testID }: { label: string; strong?: boolean; onPress(): void; testID?: string }) {
+function Link({ label, strong = false, onPress, menu, testID }: { label: string; strong?: boolean; onPress(): void; menu?: object; testID?: string }) {
   const m = useMediaLook();
   const [hover, setHover] = useState(false);
   return (
-    <Pressable onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link" style={NO_RING} testID={testID}>
+    <Pressable {...menu} onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link" style={NO_RING} testID={testID}>
       <Text numberOfLines={1} style={m.text({ 'font-size': strong ? '15px' : '13px', 'font-weight': strong ? '650' : '450', color: strong ? '$ui.ink' : '$ui.inkQuiet', 'text-decoration-line': hover ? 'underline' : 'none' })}>{label}</Text>
     </Pressable>
   );
