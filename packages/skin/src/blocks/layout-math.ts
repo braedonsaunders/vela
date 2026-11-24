@@ -1,4 +1,4 @@
-// Pure layout, streaming, ordering, and tab-selection helpers for renderer-19 layout blocks.
+// Pure layout, streaming, ordering, tab-selection, and marquee helpers for renderer-19 layout blocks.
 // Tested without a React renderer via `bun:test`.
 
 export type ParsedItemWidth =
@@ -144,4 +144,65 @@ export function chunkGridRows<T>(items: readonly T[], columns: number): T[][] {
     rows.push(items.slice(i, i + cols));
   }
   return rows;
+}
+
+/**
+ * Checks whether a resolved `RNode` subtree contains at least one potentially focusable control or
+ * reading stop. An empty `TVFocusGuideView` on Android TV is still treated as a focus destination
+ * by the platform focus search, which would trap focus on a section with no focusable descendants.
+ */
+export function hasFocusableChild(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as {
+    kind?: string;
+    press?: unknown;
+    readingStop?: boolean;
+    readingStopWhen?: unknown[];
+    focusRows?: number;
+    children?: unknown[];
+    item?: unknown;
+    after?: unknown[];
+  };
+  switch (n.kind) {
+    case 'box':
+      return (
+        Boolean(n.press) ||
+        n.readingStop === true ||
+        Boolean(n.readingStopWhen && n.readingStopWhen.length > 0) ||
+        (Array.isArray(n.children) && n.children.some(hasFocusableChild))
+      );
+    case 'repeat':
+    case 'shelf':
+    case 'grid':
+    case 'marquee':
+      return hasFocusableChild(n.item);
+    case 'tabs':
+      return true;
+    case 'table':
+      return Boolean(n.focusRows && n.focusRows > 0);
+    case 'player':
+    case 'paramInput':
+    case 'titleCard':
+      return true;
+    case 'sections':
+      return Array.isArray(n.children) && n.children.some(hasFocusableChild);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Advances a continuous marquee offset by `speed` points/sec for `ms` milliseconds, wrapping
+ * seamlessly at `width` so a second copy takes over without a gap or reset when content width shifts.
+ */
+export function marqueeStep(offset: number, ms: number, speed: number, width: number): number {
+  'worklet';
+  if (!(width > 0) || !Number.isFinite(offset)) return 0;
+  const next = offset + (Math.max(0, ms) * speed) / 1000;
+  return next >= width ? next % width : next;
+}
+
+/** A marquee scrolls continuously only when one copy of its content is wider than its viewport. */
+export function marqueeScrolls(contentWidth: number, viewportWidth: number): boolean {
+  return contentWidth > 0 && viewportWidth > 0 && contentWidth > viewportWidth;
 }

@@ -149,6 +149,7 @@ export function TabsBlock({ node, ctx }: { node: TabsBlockNode; ctx: Ctx }) {
                 action: 'setParam',
                 arg: literalTemplate(paramName),
                 args: {
+                  name: literalTemplate(paramName),
                   param: literalTemplate(paramName),
                   value: literalTemplate(opt.value),
                   ...(clearStr ? { clear: literalTemplate(clearStr) } : {}),
@@ -156,8 +157,8 @@ export function TabsBlock({ node, ctx }: { node: TabsBlockNode; ctx: Ctx }) {
               }
             : stateName
               ? {
-                  action: 'only',
-                  arg: literalTemplate(opt.value ? `${stateName}:${opt.value}` : stateName),
+                  action: 'open',
+                  arg: literalTemplate(`${stateName}=${opt.value}`),
                 }
               : undefined;
           const chipObj =

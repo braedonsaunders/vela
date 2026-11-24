@@ -22,13 +22,15 @@ export {
   type ValidateActionContext,
   type ValidatedScreenAction,
 } from './action-validation';
-export { FocusBand, FocusableTableRow } from './focus';
+export { FocusBand, FocusableTableRow, hasFocusableChild } from './focus';
 export { luminance, normalizeSeriesPoints, pathLength, probabilityPath, readableSeriesColor } from './graph-math';
 export {
   FIRST_SECTIONS,
   applyStableOrder,
   chunkGridRows,
   initialStreamedCount,
+  marqueeScrolls,
+  marqueeStep,
   nextStreamedCount,
   parseItemWidth,
   parsePoints,
