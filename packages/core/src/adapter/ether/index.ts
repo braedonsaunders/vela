@@ -680,9 +680,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     await this.http.request<unknown>('PUT', `/surfaces/${segment(id)}/setting`, { enabled, idempotencyKey: mutation.idempotencyKey }, { headers: { ...this.screenHeaders, 'Idempotency-Key': mutation.idempotencyKey } });
   }
 
-  streamScreens(live: ScreenStreamQuery, tz: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
-    return this.http.stream(`/live/stream${streamSearch(live, tz)}`, this.screenHeaders, onEvent, signal);
+  streamScreens(live: ScreenStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+    return this.http.stream(`/live/stream${streamSearch(live)}`, this.screenHeaders, onEvent, signal);
   }
+
 
   createMultiview(request: V.MultiviewRequest) {
     return this.http.request<V.MultiviewGroup>('POST', '/multiview', request);

@@ -122,9 +122,10 @@ test('the stream follows the 4 most recently shown topics, since the lowest of t
   expect(chosen[0]!.rev).toBe(35);
   const query = streamQuery(chosen, true);
   expect(query).toEqual({ topics: ['b', 'c', 'd', 'e'], since: 10, alerts: true });
-  expect(streamSearch(query, 'America/Toronto')).toBe('?topic=b&topic=c&topic=d&topic=e&since=10&tz=America%2FToronto&alerts=1');
-  expect(streamSearch(streamQuery([], true), '')).toBe('?alerts=1');
-  expect(streamSearch(streamQuery([{ topic: 't', rev: 0, shownAt: 1 }], false), 'UTC')).toBe('?topic=t&tz=UTC');
+  // No tz: each topic seals its own, and Ether refuses any key beyond topic, since and alerts.
+  expect(streamSearch(query)).toBe('?topic=b&topic=c&topic=d&topic=e&since=10&alerts=1');
+  expect(streamSearch(streamQuery([], true))).toBe('?alerts=1');
+  expect(streamSearch(streamQuery([{ topic: 't', rev: 0, shownAt: 1 }], false))).toBe('?topic=t');
   // A moving rev is not a new connection.
   expect(connectionKey({ ...query, since: 99 } as never)).toBe(connectionKey(query));
 });

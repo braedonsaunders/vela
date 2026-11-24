@@ -54,6 +54,8 @@ const SETTLE_MS = 120;
 const MAX_ALERTS = 5;
 const MIN_REFRESH_S = 60;
 const MAX_SOURCES = 16;
+/** The open pages are read again for fresh topics at most this often after the stream ends or is refused. */
+const RENEW_MIN_MS = 60_000;
 /** A source that timed out (Ether: retry allowed) is read again after these waits, then keeps its error. */
 export const TIMEOUT_RETRY_MS = [1500, 3000, 6000];
 
@@ -91,6 +93,7 @@ export class Screens {
   private connected = '';
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private failures = 0;
+  private renewedAt = 0;
   private gcQueued = false;
 
   constructor(
@@ -629,7 +632,8 @@ export class Screens {
     this.connected = key;
     const controller = new AbortController();
     this.controller = controller;
-    this.failures = 0;
+    // Failures carry over: a new topic after a refusal waits its backoff (Ether issues a fresh
+    // topic token on every read, so a refused stream must never reconnect at once).
     void this.run(controller);
   }
 
@@ -644,12 +648,17 @@ export class Screens {
   private async run(controller: AbortController): Promise<void> {
     const epoch = this.session.epoch;
     while (!controller.signal.aborted && epoch === this.session.epoch) {
+      if (this.failures) {
+        this.set('stream', () => 'retrying');
+        await sleep(this.backoff(this.failures), controller.signal);
+        if (controller.signal.aborted || epoch !== this.session.epoch) return;
+      }
       this.set('stream', () => this.failures ? 'retrying' : 'connecting');
       try {
         const api = await this.api();
         const query = this.query();
         if (emptyQuery(query)) return;
-        await api.streamScreens(query, localeContext().timeZone, event => {
+        await api.streamScreens(query, event => {
           if (controller.signal.aborted) return;
           if (this.box.get().screens.stream !== 'open') this.set('stream', () => 'open');
           this.failures = 0;
@@ -658,7 +667,7 @@ export class Screens {
         // Ether ends the stream when a topic's page is no longer visible to the viewer: read the
         // open pages again (fresh topics, or their failure) and reopen.
         if (controller.signal.aborted) return;
-        for (const [key, entry] of this.entries) if (entry.opened) this.refresh(key);
+        this.renewPages();
         this.failures = Math.max(this.failures, 1);
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -666,12 +675,18 @@ export class Screens {
         this.failures++;
         // A topic Ether no longer honours (expired, the page gone): read the pages again for fresh ones.
         const status = (error as { status?: number })?.status;
-        if (status === 400 || status === 404 || status === 410) for (const [key, entry] of this.entries) if (entry.opened) this.refresh(key);
+        if (status === 400 || status === 404 || status === 410) this.renewPages();
       }
-      if (controller.signal.aborted) return;
-      this.set('stream', () => 'retrying');
-      await sleep(this.backoff(this.failures), controller.signal);
     }
+  }
+
+  /** Read the open pages again for fresh topics after the stream ended or was refused: at most once
+   * a minute, so a stream Ether keeps refusing never turns into a loop of data reads. */
+  private renewPages(): void {
+    const now = Date.now();
+    if (now - this.renewedAt < RENEW_MIN_MS) return;
+    this.renewedAt = now;
+    for (const [key, entry] of this.entries) if (entry.opened) this.refresh(key);
   }
 
   /** One frame: records into the pool (the pages reaching them move their rev), a source into

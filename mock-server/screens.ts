@@ -917,6 +917,8 @@ function hook(): void {
 function stream(req: Request, url: URL, viewerId: string, authorized: () => boolean, fail: Fail): Response {
   hook();
   const draft = previewOf(req, fail);
+  // As Ether: topic, since and alerts only (each topic seals its time zone); anything else is 400.
+  for (const name of url.searchParams.keys()) if (name !== 'topic' && name !== 'since' && name !== 'alerts') fail('request', 'invalid_request', `Unknown query ${name}`);
   const tokens = url.searchParams.getAll('topic');
   if (tokens.length > 4) fail('request', 'too_many_topics', 'At most 4 topics');
   const topics = tokens.map(token => {

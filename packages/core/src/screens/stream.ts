@@ -31,12 +31,12 @@ export function streamQuery(topics: readonly TopicInterest[], alerts: boolean): 
 export const connectionKey = (query: Pick<ScreenStreamQuery, 'topics' | 'alerts'>) => JSON.stringify([query.topics, query.alerts]);
 export const emptyQuery = (query: Pick<ScreenStreamQuery, 'topics' | 'alerts'>) => !query.topics.length && !query.alerts;
 
-/** The query string: `topic=A&topic=B&since=<lowest>&tz=<IANA>&alerts=1`. */
-export function streamSearch(query: ScreenStreamQuery, tz: string): string {
+/** The query string: `topic=A&topic=B&since=<lowest>&alerts=1`. No tz: each topic seals its own
+ * (Ether refuses any other key with 400 invalid_request). */
+export function streamSearch(query: ScreenStreamQuery): string {
   const params = new URLSearchParams();
   for (const topic of query.topics) params.append('topic', topic);
   if (query.topics.length && query.since > 0) params.set('since', String(query.since));
-  if (tz) params.set('tz', tz);
   if (query.alerts) params.set('alerts', '1');
   const text = params.toString();
   return text ? `?${text}` : '';

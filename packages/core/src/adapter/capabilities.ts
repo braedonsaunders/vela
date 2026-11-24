@@ -422,7 +422,7 @@ export interface PluginScreens {
   screenAction(target: ScreenTarget, action: string, request: V.ScreenActionRequest, mutation: V.Mutation): Promise<V.ScreenActionAnswer>;
   setSurfaceSetting(id: string, enabled: boolean, mutation: V.Mutation): Promise<void>;
   /** One connection to `/live/stream` for page topics (and alerts); resolves when the server closes it. */
-  streamScreens(query: ScreenStreamQuery, tz: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
+  streamScreens(query: ScreenStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
 }
 export function hasPluginScreens(adapter: ServerAdapter): adapter is ServerAdapter & PluginScreens {
   return ['screenDocument', 'screenData', 'screenAction', 'setSurfaceSetting', 'streamScreens'].every(name =>

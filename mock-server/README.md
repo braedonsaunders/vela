@@ -304,7 +304,7 @@ sections 3b, 5.4, 6 and 7), built on the Sports simulation in `sports.ts`:
 - `POST …/actions/ether.favorite|ether.reveal|ether.spoilerFree` (`Idempotency-Key`; body fields
   page, params, args, context, tz, idempotencyKey only) answer the changed records and every source
   of the page re-read; `PUT /surfaces/{id}/setting {enabled}`.
-- `/live/stream?topic=…&since=&tz=&alerts=1`: replays what changed above `since`, then `records`, `source` and `alert` frames as the
+- `/live/stream?topic=…&since=&alerts=1` (any other key, `tz` included, is 400 `invalid_request`): replays what changed above `since`, then `records`, `source` and `alert` frames as the
   simulation or the viewer's choices change; at most 4 topics.
 
 Studio live preview: `X-Vela-Screen-Preview` equal to `VELA_MOCK_SCREEN_PREVIEW_TOKEN` (default

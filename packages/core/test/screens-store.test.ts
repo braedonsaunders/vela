@@ -31,7 +31,9 @@ interface Call { target: ScreenTarget; read: ScreenDataRead; resolve(data: Parti
 class FakeApi implements PluginScreens {
   calls: Call[] = [];
   actions: { action: string; request: V.ScreenActionRequest; key: string; resolve(answer: V.ScreenActionAnswer): void; reject(error: unknown): void }[] = [];
-  streams: { query: ScreenStreamQuery; tz: string; onEvent: EventHandler; close(): void }[] = [];
+  streams: { query: ScreenStreamQuery; onEvent: EventHandler; close(): void }[] = [];
+  /** Refuse every stream with this status (Ether's 400 to a query it does not accept). */
+  refuseStreams = 0;
   document: V.ScreenDocument = DOC;
   /** Answer data reads at once with this, unless null (then they wait for resolve). */
   auto: ((read: ScreenDataRead) => Partial<V.ScreenData>) | null = null;
@@ -55,9 +57,13 @@ class FakeApi implements PluginScreens {
   settings: { id: string; enabled: boolean }[] = [];
   failSetting = false;
   async setSurfaceSetting(id: string, enabled: boolean) { if (this.failSetting) throw new Error('nope'); this.settings.push({ id, enabled }); }
-  streamScreens(query: ScreenStreamQuery, tz: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+  streamScreens(query: ScreenStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+    if (this.refuseStreams) {
+      this.streams.push({ query, onEvent, close: () => {} });
+      return Promise.reject(Object.assign(new Error('invalid request'), { status: this.refuseStreams }));
+    }
     return new Promise(resolve => {
-      const stream = { query, tz, onEvent, close: () => resolve() };
+      const stream = { query, onEvent, close: () => resolve() };
       this.streams.push(stream);
       signal?.addEventListener('abort', () => resolve(), { once: true });
     });
@@ -535,4 +541,32 @@ test('an expired preview token is one flag for the tab: the page fails with prev
   await flush();
   await settle();
   expect(h.page(key).sources.hero).toBe('h2');
+});
+
+test('a stream Ether keeps refusing never becomes a loop of data reads, even though every read issues a fresh topic', async () => {
+  const h = harness();
+  let n = 0;
+  // Ether's topic tokens carry an expiry, so every data read answers a different topic.
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' }, live: { topic: `t${++n}` } });
+  h.api.refuseStreams = 400;
+  open(h);
+  await new Promise(resolve => setTimeout(resolve, 600));
+  // The first read, and at most one renewal a minute; reconnects back off instead of re-reading.
+  expect(h.api.calls.length).toBeLessThanOrEqual(2);
+  const attempts = h.api.streams.length;
+  expect(attempts).toBeGreaterThan(1); // it does keep trying, with backoff
+  expect(h.box.get().screens.stream).toBe('retrying');
+});
+
+test('a stream that ends renews the pages at most once a minute too', async () => {
+  const h = harness();
+  let n = 0;
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' }, live: { topic: `t${++n}` } });
+  open(h);
+  await settle();
+  for (let i = 0; i < 5; i++) {
+    h.api.streams.at(-1)!.close();
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  expect(h.api.calls.length).toBeLessThanOrEqual(2);
 });

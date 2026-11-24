@@ -68,10 +68,11 @@ test('actions post {page, params, args} with an idempotency key; settings put {e
 test('the stream follows repeated topics since the lowest rev, with the time zone and alerts', async () => {
   const seen = routeFetch({ 'GET /vela/v0/live/stream': new Response('event: heartbeat\ndata: {}\n\n', { headers: { 'Content-Type': 'text/event-stream' } }) });
   const events: string[] = [];
-  await adapter().streamScreens({ topics: ['lt1.a', 'lt1.b'], since: 41, alerts: true }, 'Europe/London', event => { events.push(event.event); });
+  await adapter().streamScreens({ topics: ['lt1.a', 'lt1.b'], since: 41, alerts: true }, event => { events.push(event.event); });
   expect(seen[0]!.url.searchParams.getAll('topic')).toEqual(['lt1.a', 'lt1.b']);
   expect(seen[0]!.url.searchParams.get('since')).toBe('41');
-  expect(seen[0]!.url.searchParams.get('tz')).toBe('Europe/London');
+  // Only topic, since and alerts: Ether answers 400 to anything else (tz included; topics seal it).
+  expect([...new Set(seen[0]!.url.searchParams.keys())].sort()).toEqual(['alerts', 'since', 'topic']);
   expect(seen[0]!.url.searchParams.get('alerts')).toBe('1');
   expect(seen[0]!.url.searchParams.has('events')).toBe(false);
   expect(seen[0]!.headers.get('x-vela-screen-renderer')).toBe('19');

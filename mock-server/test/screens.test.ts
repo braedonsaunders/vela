@@ -369,7 +369,10 @@ describe('on a frozen clock', () => {
     const data = await c.json(`/screens/sports/pages/index/data${query({})}`) as V.ScreenData;
     const topic = data.live!.topic;
     // since=0: every record and source of the topic.
-    const all = await readStream(mock, `/live/stream?topic=${topic}&since=0&tz=${encodeURIComponent(TZ)}`, c.headers(), events => events.some(e => e.event === 'source') && events.filter(e => e.event === 'source').length >= 7, 3000);
+    // tz is not a stream key (the topic seals it): Ether refuses it.
+    const withTz = await readStream(mock, `/live/stream?topic=${topic}&since=0&tz=${encodeURIComponent(TZ)}`, c.headers(), () => true);
+    expect([withTz.status, withTz.body.error.code]).toEqual([400, 'invalid_request']);
+    const all = await readStream(mock, `/live/stream?topic=${topic}&since=0`, c.headers(), events => events.some(e => e.event === 'source') && events.filter(e => e.event === 'source').length >= 7, 3000);
     const records = all.events.find(e => e.event === 'records')!.data.records as Record<string, V.RecordEntry>;
     expect(Object.keys(records).sort()).toEqual(Object.keys(data.records).sort());
     const sources = all.events.filter(e => e.event === 'source').map(e => e.data);
