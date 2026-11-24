@@ -1,7 +1,7 @@
 // The music app's pages: Home, an album, an artist, a playlist, Liked Songs. Built from the
 // store's ordinary reads; every page takes the document's `ui` look and the artwork's colour.
 import { Image } from 'expo-image';
-import { useEffect, useMemo, useRef, useState, type ReactNode, type ComponentRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { albumOrder, durationLabel, msg, number, type Card, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -88,6 +88,7 @@ export function MusicHome() {
   const likedTotal = useLiked().trackTotal;
   const jump = rows.find(r => r.id.endsWith(':jump-back-in'))?.items ?? [];
   const recent = useRecent();
+  const [quickWidth, setQuickWidth] = useState(0);
   const recentCards = recent.items.flatMap(item => (item.kind === 'favorites' ? [] : [item.card]));
   const likedRecently = recent.items.some(item => item.kind === 'favorites');
   // Quick tiles: what you played from most recently (Liked Songs among it), then your playlists.
@@ -102,11 +103,11 @@ export function MusicHome() {
       <Wash accent={accent} height={360} />
       <View style={{ paddingHorizontal: m.small ? 16 : 20, paddingTop: m.small ? 16 : 28 }}>
         <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '30px' : '38px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { marginBottom: m.small ? 14 : 20 }]}>{greeting()}</Text>
-        <FocusScope.Provider value="quick"><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 8 : 10, marginBottom: m.small ? 24 : 36 }} testID="music-quick">
+        <FocusScope.Provider value="quick"><QuickColumns.Provider value={quickColumns(quickWidth || m.width)}><View onLayout={e => setQuickWidth(e.nativeEvent.layout.width)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 8 : 10, marginBottom: m.small ? 24 : 36 }} testID="music-quick">
           {quick.map(item => item === 'liked'
             ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={musicTV() ? 72 : m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'liked' })} />
             : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={musicTV() ? 72 : m.small ? 52 : 64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
-        </View></FocusScope.Provider>
+        </View></QuickColumns.Provider></FocusScope.Provider>
       </View>
       <View style={{ paddingHorizontal: m.small ? 4 : 8 }}>
         {recentCards.length ? <Shelf title={msg('music.recentlyPlayed')}>{recentCards.map(card => <MusicTile key={card.id} card={card} size={176} subtitle={card.kind === 'playlist' ? msg('music.playlist') : undefined} />)}</Shelf> : null}
@@ -134,18 +135,24 @@ export function playlistCard(p: { id: string; name: string; poster: string; item
   return { id: p.id, kind: 'playlist', name: p.name, poster: p.poster, backdrop: '', accent: '', receipt: '', yearLabel: '', summary: '', genres: [], durationSeconds: 0, progressSeconds: 0, played: false } as unknown as Card;
 }
 
+/** How many quick tiles fit a row of the page's measured width. */
+const QuickColumns = createContext(2);
+function quickColumns(width: number): number {
+  return musicTV() ? 4 : width >= 940 ? 4 : width >= 600 ? 3 : 2;
+}
+
 function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; title: string; subtitle?: string; cover: ReactNode; onPress(): void }) {
   const app = useMusic();
   const m = useMediaLook();
-  const columns = m.width >= 1000 || musicTV() ? 4 : 2;
+  const columns = useContext(QuickColumns);
   // A percentage every platform lays out (native has no calc()): the gaps take the rest.
-  const width = `${100 / columns - (columns === 4 ? 1.2 : 1.6)}%`;
+  const width = `${100 / columns - (columns === 4 ? 1.2 : columns === 3 ? 1.4 : 1.6)}%`;
   const tv = musicTV();
   return (
     <Surface onPress={onPress} onMenu={card ? (anchor, mode, opener) => app.menu({ card, anchor, mode, opener }) : undefined} focusId={card?.id ?? 'liked'} label={title}
       style={(lit, focus) => [{ width: width as never, height: tv ? 76 : m.small ? 52 : 64, borderRadius: tv ? 12 : 8, overflow: 'hidden', backgroundColor: lit ? m.ui.controlHover : alpha(m.ui.ink, 0.07) },
         tv ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.03 : 1 }] } : {}, transition('background-color, transform', 140)]}
-      contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: m.small ? 10 : 14, paddingRight: m.small ? 8 : 0 }}>
+      contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: m.small ? 10 : 14, paddingRight: m.small ? 8 : 12 }}>
       {lit => (
         <>
           <View pointerEvents="none">{cover}</View>
@@ -153,7 +160,7 @@ function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; tit
             <Text numberOfLines={2} style={m.text({ 'font-size': musicTV() ? '19px' : m.small ? '13px' : '15px', 'font-weight': '700', color: '$ui.ink' })}>{title}</Text>
             {subtitle ? <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet' })}>{subtitle}</Text> : null}
           </View>
-          {m.small || musicTV() ? null : <View pointerEvents={lit ? 'auto' : 'none'} style={[{ marginRight: 10, opacity: lit ? 1 : 0 }, transition('opacity', 160)]}>
+          {m.small || musicTV() ? null : <View pointerEvents={lit ? 'auto' : 'none'} style={[{ position: 'absolute', right: 10, opacity: lit ? 1 : 0 }, transition('opacity', 160)]}>
             <PlayFab playing={false} size={38} onPress={card ? () => app.playCard(card) : onPress} />
           </View>}
         </>

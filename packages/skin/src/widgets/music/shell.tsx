@@ -33,24 +33,33 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   const top = `calc(${m.small ? inset.small : inset.wide} + 6px)`;
   if (musicTV()) return <TVShell top={top} />;
   if (compactMusic(m)) return <CompactShell top={top} />;
-  const panel = (children: ReactNode, style: object = {}) => (
-    <View style={[{ backgroundColor: m.ui.raised, borderRadius: Number(m.ui.radiusPanel) || 14, overflow: 'hidden' }, m.box({ border: '1px solid $ui.glassEdge' }), style]}>{children}</View>
+  // Flush to the window: no rounded inset panels and no gaps. The sidebar and the queue sit on
+  // the raised tone and a hairline divides each from the page; the bar has a hairline above it.
+  const hairline = m.box({ 'background-color': '$ui.glassEdge' });
+  const side = (children: ReactNode, width: number, edge: 'left' | 'right') => (
+    <View style={[{ width, backgroundColor: m.ui.raised, flexDirection: 'row' }]}>
+      {edge === 'left' ? <View style={[{ width: 1 }, hairline]} /> : null}
+      <View style={{ flex: 1, minWidth: 0 }}>{children}</View>
+      {edge === 'right' ? <View style={[{ width: 1 }, hairline]} /> : null}
+    </View>
   );
   return (
-    <View pointerEvents="box-none" style={[{ flex: 1, paddingHorizontal: 10, gap: 8 }, m.box({ 'padding-top': top })]} testID="music-shell">
-      <View style={{ flex: 1, flexDirection: 'row', gap: 8, minHeight: 0 }}>
-        {panel(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, { width: rail ? 84 : 316 })}
-        {panel(
+    <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': top })]} testID="music-shell">
+      <View style={[{ height: 1 }, hairline]} />
+      <View style={{ flex: 1, flexDirection: 'row', minHeight: 0 }}>
+        {side(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, rail ? 84 : 316, 'right')}
+        {flush(
           <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main">
             {page.kind === 'home' ? <MusicHome />
               : page.kind === 'liked' ? <MusicLiked />
               : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
               : page.kind === 'title' ? <MusicTitle id={page.id} />
               : <MusicHome />}
-          </ScrollView>, { flex: 1 })}
-        {queueOpen ? panel(<QueuePanel onClose={() => onQueue(false)} />, { width: 340 }) : null}
+          </ScrollView>)}
+        {queueOpen ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
       </View>
-      <View style={{ height: NOW_PLAYING_BAR_HEIGHT }}><NowPlayingBar queueOpen={queueOpen} onQueue={() => onQueue(!queueOpen)} /></View>
+      <View style={[{ height: 1 }, hairline]} />
+      <View style={{ height: NOW_PLAYING_BAR_HEIGHT, backgroundColor: m.ui.raised }}><NowPlayingBar queueOpen={queueOpen} onQueue={() => onQueue(!queueOpen)} /></View>
     </View>
   );
 }
@@ -109,6 +118,11 @@ function TVShell({ top }: { top: string }) {
       </ScrollView>
     </View>
   );
+}
+
+/** The page column: the rest of the width, straight to the edges. */
+function flush(children: ReactNode): ReactNode {
+  return <View style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>{children}</View>;
 }
 
 function pageKey(place: MusicPlace): string {
