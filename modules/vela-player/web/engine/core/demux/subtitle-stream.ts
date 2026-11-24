@@ -190,6 +190,9 @@ export class MatroskaSubtitleStream implements SubtitleClusterStream {
     const bytes = await this.reader.read(fragment.start, fragment.length, signal);
     signal.throwIfAborted();
     if (this.epoch !== epoch) throw new DOMException('Subtitle fragment retired', 'AbortError');
+    this.emitFragment(hint, fragment, bytes, prefix, epoch);
+  }
+  private emitFragment(hint: Hint, fragment: Fragment, bytes: Uint8Array, prefix: Uint8Array, epoch: number) {
     const joined = new Uint8Array(prefix.length + bytes.length);
     joined.set(prefix);
     joined.set(bytes, prefix.length);
@@ -251,6 +254,8 @@ export class MatroskaSubtitleStream implements SubtitleClusterStream {
       ...(covering ? [covering] : []),
       ...ordered.filter((hint) => hint.time > position && hint.time <= position + 4).slice(0, 2),
     ];
+    const subscribed = (track: number) =>
+      [...this.listeners.values()].some((l) => l.track === undefined || l.track === track);
     let total = 0;
     for (const hint of selected) {
       operation.throwIfAborted();
@@ -258,8 +263,7 @@ export class MatroskaSubtitleStream implements SubtitleClusterStream {
       if (hint.unavailable) throw new Error('Exact subtitle fragment history is unavailable');
       if (hint.fragments) {
         for (const fragment of hint.fragments.slice().sort((a, b) => a.start - b.start)) {
-          if (![...this.listeners.values()].some((l) => l.track === undefined || l.track === fragment.track))
-            continue;
+          if (!subscribed(fragment.track)) continue;
           total += fragment.length;
           if (total > 48 * 1024 * 1024) throw new Error('Subtitle fragment replay exceeds bound');
           await this.readFragment(hint, fragment, operation, epoch);
@@ -270,6 +274,32 @@ export class MatroskaSubtitleStream implements SubtitleClusterStream {
         const bytes = await this.reader.read(hint.payloadStart, hint.length, operation);
         operation.throwIfAborted();
         if (this.epoch !== epoch) throw new DOMException('Subtitle replay retired', 'AbortError');
+        this.emit({ ...hint, bytes });
+      }
+    }
+    // The demux may have parsed well past the window before this listener subscribed (a
+    // low-bitrate file, a delay change). Those blocks are never offered again, so offer
+    // them now, but only from bytes the reader still holds: no new reads at start-up.
+    if (!this.reader.peek) return;
+    for (const hint of ordered) {
+      if (hint.time <= position || selected.includes(hint) || hint.unavailable) continue;
+      operation.throwIfAborted();
+      if (this.epoch !== epoch) throw new DOMException('Subtitle replay retired', 'AbortError');
+      if (hint.fragments) {
+        if (!hint.prefix) continue;
+        for (const fragment of hint.fragments.slice().sort((a, b) => a.start - b.start)) {
+          if (!subscribed(fragment.track)) continue;
+          if (total + fragment.length > 48 * 1024 * 1024) return;
+          const bytes = this.reader.peek(fragment.start, fragment.length);
+          if (!bytes) continue;
+          total += fragment.length;
+          this.emitFragment(hint, fragment, bytes, hint.prefix, epoch);
+        }
+      } else {
+        if (total + hint.length > 48 * 1024 * 1024) return;
+        const bytes = this.reader.peek(hint.payloadStart, hint.length);
+        if (!bytes) continue;
+        total += hint.length;
         this.emit({ ...hint, bytes });
       }
     }

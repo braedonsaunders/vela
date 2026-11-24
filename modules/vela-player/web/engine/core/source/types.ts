@@ -19,6 +19,8 @@ export interface ByteReader {
     settle(actualCluster: number): void;
     cancel(): void;
   };
+  /** Bytes the reader already holds, or null. Never a network read, a demand or a cursor. */
+  peek?(offset: number, length: number): Uint8Array | null;
   /** Protect a parser's still-needed source span; release after copying it. */
   retain?(offset: number, length: number): () => void;
   dispose(): void;

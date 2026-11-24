@@ -615,6 +615,31 @@ export class RangeReader implements ByteReader {
     }
   }
 
+  peek(offset: number, length: number): Uint8Array | null {
+    if (
+      this.lifetime.signal.aborted ||
+      this.total === null ||
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(length) ||
+      offset < 0 ||
+      length < 0 ||
+      length > MAX_READ ||
+      offset + length > this.total
+    )
+      return null;
+    const output = new Uint8Array(length);
+    for (let cursor = offset; cursor < offset + length; ) {
+      const index = Math.floor(cursor / PAGE),
+        page = this.pages.get(index),
+        start = index * PAGE;
+      if (!page || start + page.length <= cursor) return null;
+      const end = Math.min(offset + length, start + page.length);
+      output.set(page.subarray(cursor - start, end - start), cursor - offset);
+      cursor = end;
+    }
+    return output;
+  }
+
   private page(index: number): Promise<Uint8Array> {
     this.lifetime.signal.throwIfAborted();
     const cached = this.pages.get(index);
