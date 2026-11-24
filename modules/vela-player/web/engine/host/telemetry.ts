@@ -1,5 +1,5 @@
 import { QUALITY_HEADROOM } from '../video-info';
-import { bufferAhead } from '../pipeline';
+import { bufferAhead, STREAM_RENDITION } from '../pipeline';
 import type { Snapshot } from '../model';
 import type { HostContext } from './state';
 import { nativeAudio, pipAvailable, fullscreenAvailable } from './platform';
@@ -92,9 +92,12 @@ export function snapshotHost(context: HostContext): Snapshot {
           }
         : undefined,
     backend: context.media.backend,
-    renditionId:
-      context.media.pipeline?.current?.id ??
-      (context.media.backend === 'webgpu'
+    // A stream played without a ladder is no quality the plan names.
+    renditionId: context.media.pipeline?.current
+      ? context.media.pipeline.current.id === STREAM_RENDITION
+        ? null
+        : context.media.pipeline.current.id
+      : (context.media.backend === 'webgpu'
         ? context.quality.automatic.id
         : context.media.backend === 'native-hls'
           ? (context.quality.manual ?? context.media.source?.initialRenditionId ?? null)

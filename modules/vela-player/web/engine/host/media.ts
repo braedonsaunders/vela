@@ -11,7 +11,7 @@ import { releaseOverlay, applySubtitle } from './subtitles';
 import { resetProgress, recordPlaybackProgress } from './watchdog';
 import { bindMedia } from './native-events';
 import { publishHostState, emitHostEvent } from './events';
-import { usesPacketRuntime, useNativeHls } from './quality';
+import { usesPacketRuntime, backendFor } from './quality';
 import { recoverPlayback } from './recovery';
 import { applyNativeAudio } from './platform';
 import { playMedia, retirePlayIntent } from './transport';
@@ -114,7 +114,7 @@ export async function activateSource(
       await activatePacketRuntime(context, source, position, token, retry);
       return;
     }
-    if (source.delivery === 'hls' && !useNativeHls(context, source)) {
+    if (source.delivery === 'hls' && backendFor(context, source) === 'mse') {
       context.media.backend = 'mse';
       const pipeline = (context.media.pipeline = new SegmentPipeline(
         context.surface.video,
@@ -135,7 +135,7 @@ export async function activateSource(
       pipeline.maxLiveDrift = context.session.current?.liveMaxDrift ?? 45;
       pipeline.abr.manual = context.quality.manual;
       void pipeline
-        .run(source.renditions ?? [], position, !!context.session.current?.live, token.signal)
+        .run(source.renditions ?? [], position, !!context.session.current?.live, token.signal, source.url)
         .catch((e) => {
           if (context.session.controller.current(token)) void recoverPlayback(context, e, token);
         });
