@@ -213,7 +213,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
 
   const screenHost = useMemo<SkinHost>(() => ({
     ...host,
-    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true },
+    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true, isTV: Platform.isTV },
     screenPress: press,
   }), [host, actions.multiview, press]);
   const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';

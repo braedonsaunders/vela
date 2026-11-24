@@ -69,9 +69,9 @@ describe('paths', () => {
   });
   test('env keys read the viewport and capabilities, and the skeleton ranges', () => {
     const c = ctx();
-    const t = compileTemplate('{env.small}{env.wide}{env.tv}{env.canMultiview}{env.canPlay}{env.range5.length}', scope());
-    expect(typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, { ...env, canMultiview: true }))).join(''))
-      .toBe('falsetruefalsetruetrue5');
+    const t = compileTemplate('{env.small}{env.wide}{env.tv}{env.isTV}{env.canMultiview}{env.canPlay}{env.range5.length}', scope());
+    expect(typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, { ...env, tv: true, canMultiview: true }))).join(''))
+      .toBe('falsetruetruefalsetruetrue5');
   });
 });
 

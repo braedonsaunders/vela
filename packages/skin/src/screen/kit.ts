@@ -88,8 +88,11 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
       type: 'box', role: 'button', label: '{arg.label}', style: pill('quiet', false), focus: pillFocus('quiet'), hover: pillFocus('quiet'),
       states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pill(tone, small), focus: pillFocus(tone), hover: pillFocus(tone) })),
       children: [
-        { type: 'icon', symbol: '{arg.glyph}', when: on('glyph'), style: glyph('quiet', false),
+        { type: 'icon', symbol: '{arg.glyph}', when: [...on('glyph'), ...off('glyphSize')], style: glyph('quiet', false),
           states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: glyph(tone, small) })) },
+        // `glyphSize` draws the glyph at its own size (Sports' GridMark is 15px beside 16px glyphs).
+        { type: 'icon', symbol: '{arg.glyph}', when: [...on('glyph'), ...on('glyphSize')], style: { ...glyph('quiet', false), width: '{arg.glyphSize}', height: '{arg.glyphSize}' },
+          states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: { ...glyph(tone, small), width: '{arg.glyphSize}', height: '{arg.glyphSize}' } })) },
         { type: 'text', text: '{arg.label}', style: pillLabel('quiet', false),
           states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pillLabel(tone, small) })) },
       ],
@@ -148,7 +151,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
       style: { width: '{arg.size}', height: '{arg.size}', 'border-radius': '999px', 'background-color': '#f4f5f7', 'align-items': 'center', 'justify-content': 'center',
         overflow: 'hidden', border: 'max(1.5px, calc({arg.size} * 0.05)) solid {arg.color}' },
       children: [
-        { type: 'image', src: '{arg.logo}', alt: '', fade: true, style: { width: '70%', height: '70%', 'object-fit': 'contain' },
+        // The logo is centred at 0.7 of the crest's size over the border, as Crest drew it.
+        { type: 'image', src: '{arg.logo}', alt: '', fade: true, style: { position: 'absolute', width: 'calc({arg.size} * 0.7)', height: 'calc({arg.size} * 0.7)', 'object-fit': 'contain' },
           fallback: {
             type: 'box', style: { position: 'absolute', inset: 'calc(max(1.5px, calc({arg.size} * 0.05)) * -1)', 'border-radius': '999px', 'background-color': '{arg.color}',
               'align-items': 'center', 'justify-content': 'center', border: '0px solid transparent' },
