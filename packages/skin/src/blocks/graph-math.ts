@@ -4,6 +4,7 @@
 
 export interface ProbabilityPoint {
   readonly x?: number;
+  readonly t?: number;
   readonly p?: number;
   readonly value?: number;
   readonly home?: number;
@@ -27,7 +28,7 @@ export function normalizeSeriesPoints(
       valid.push(Math.max(0, Math.min(1, subject === 0 ? 1 - p : p)));
       rawX.push(undefined);
     } else if (item && typeof item === 'object') {
-      const obj = item as { p?: unknown; home?: unknown; value?: unknown; y?: unknown; x?: unknown };
+      const obj = item as { p?: unknown; home?: unknown; value?: unknown; y?: unknown; x?: unknown; t?: unknown };
       const rawVal = typeof obj.p === 'number'
         ? obj.p
         : typeof obj.home === 'number'
@@ -40,14 +41,22 @@ export function normalizeSeriesPoints(
       if (rawVal !== undefined && Number.isFinite(rawVal)) {
         const p = rawVal > 1 ? rawVal / 100 : rawVal;
         valid.push(Math.max(0, Math.min(1, subject === 0 ? 1 - p : p)));
-        rawX.push(typeof obj.x === 'number' && Number.isFinite(obj.x) ? Math.max(0, Math.min(1, obj.x)) : undefined);
+        const xVal = typeof obj.x === 'number' && Number.isFinite(obj.x)
+          ? obj.x
+          : typeof obj.t === 'number' && Number.isFinite(obj.t)
+            ? obj.t
+            : undefined;
+        rawX.push(xVal !== undefined && xVal >= 0 && xVal <= 1 ? xVal : undefined);
       }
     }
   }
   const n = valid.length;
   if (!n) return [];
+  // Matches `@vela/core`'s `seriesPoints`: if the first/last points don't span 0..1 or lack t, spread evenly when needed,
+  // or use `t` directly when `t` is in `[0..1]`.
+  const hasExplicitT = rawX.every((x): x is number => x !== undefined) && (n === 1 || rawX[n - 1]! > rawX[0]!);
   return valid.map((p, i) => ({
-    x: rawX[i] ?? (n === 1 ? 0 : i / (n - 1)),
+    x: hasExplicitT ? rawX[i]! : (n === 1 ? 0 : i / (n - 1)),
     y: 1 - p,
   }));
 }

@@ -28,9 +28,30 @@ import {
   numericColumn,
   tableNaturalWidth,
   textWidth,
+  type RawTableData,
 } from '../src/blocks/table-fit';
 
 const idPx = (n: number) => n;
+
+const nfl: RawTableData = {
+  title: 'AFC',
+  columns: ['#', 'Team', 'W', 'L', 'T', 'PCT', 'PF', 'PA', 'DIFF', 'STRK'],
+  rows: [
+    ['1', 'Buffalo Bills', '8', '1', '0', '.889', '287', '199', '+88', 'W5'],
+    ['2', 'Kansas City Chiefs', '7', '2', '0', '.778', '237', '156', '+81', 'W2'],
+    ['3', 'Jacksonville Jaguars', '7', '2', '0', '.778', '269', '144', '+125', 'W3'],
+  ],
+};
+const soccer: RawTableData = {
+  title: 'Premier League',
+  columns: ['#', 'Team', 'GP', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'P'],
+  rows: [
+    ['1', 'Arsenal', '12', '9', '2', '1', '25', '8', '+17', '29'],
+    ['2', 'Manchester City', '12', '8', '2', '2', '27', '12', '+15', '26'],
+  ],
+};
+const text = { size: 13.5, headerSize: 11.5, gap: 10 };
+const colNames = (fit: ReturnType<typeof fitTable>, table: RawTableData) => fit.columns.map(c => table.columns[c.index]);
 
 describe('table-fit (textWidth, numericColumn, fitTable, normalizeTableData)', () => {
   test('textWidth scales with font size and bold weight', () => {
@@ -38,24 +59,110 @@ describe('table-fit (textWidth, numericColumn, fitTable, normalizeTableData)', (
     const bold = textWidth('Arsenal', 13, true);
     expect(plain).toBeGreaterThan(40);
     expect(bold).toBeCloseTo(plain * 1.06, 5);
-    // Tabular digits have uniform width
     expect(textWidth('1234', 13)).toBeCloseTo(textWidth('5678', 13), 5);
   });
 
-  test('numericColumn identifies numbers, records, percentages, even par E, and dashes', () => {
-    const rows = [
-      ['1', 'Kansas City Chiefs', '11', '1', '.917', '-', '+84', 'W5'],
-      ['2', 'Buffalo Bills', '10', '2', '.833', '1.0', '+112', 'L1'],
-      ['3', 'Baltimore Ravens', '8', '4', '.667', '3.0', '+59', 'E'],
-    ];
-    expect(numericColumn(rows, 0)).toBe(true); // position
-    expect(numericColumn(rows, 1)).toBe(false); // team names
-    expect(numericColumn(rows, 2)).toBe(true); // W
-    expect(numericColumn(rows, 3)).toBe(true); // L
-    expect(numericColumn(rows, 4)).toBe(true); // PCT
-    expect(numericColumn(rows, 5)).toBe(true); // GB with dash
-    expect(numericColumn(rows, 6)).toBe(true); // DIFF with +/-
-    expect(numericColumn(rows, 7)).toBe(true); // STRK / E
+  test('numbers, percentages, differences and streaks are numeric; names are not', () => {
+    expect(nfl.columns.map((_, n) => numericColumn(nfl.rows as readonly (readonly string[])[], n))).toEqual([
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  test('a table with room keeps every column and gives the names their full width', () => {
+    const fit = fitTable(nfl, Infinity, text);
+    expect(fit.dropped).toEqual([]);
+    const team = fit.columns.find(c => c.name)!;
+    expect(nfl.columns[team.index]).toBe('Team');
+    expect(team.width).toBeGreaterThanOrEqual(Math.floor(textWidth('Jacksonville Jaguars', 13.5, true)));
+    for (const c of fit.columns.filter(c => !c.name && c.index > 0)) expect(c.width).toBeLessThan(team.width / 2);
+  });
+
+  test('a narrow table drops the least useful columns from the right before cutting a name', () => {
+    const natural = fitTable(nfl, Infinity, text).natural;
+    const fit = fitTable(nfl, natural - 150, text);
+    expect(fit.dropped.length).toBeGreaterThan(0);
+    expect(fit.dropped).toContain(9); // STRK goes first
+    expect(colNames(fit, nfl).slice(0, 4)).toEqual(['#', 'Team', 'W', 'L']);
+    const team = fit.columns.find(c => c.name)!;
+    expect(team.width).toBeGreaterThanOrEqual(Math.floor(textWidth('Jacksonville Jaguars', 13.5, true)));
+  });
+
+  test('a phone keeps position, names, wins and losses; points stay over goals', () => {
+    const nflFit = fitTable(nfl, 300, text);
+    expect(colNames(nflFit, nfl)).toEqual(expect.arrayContaining(['#', 'Team', 'W', 'L', 'PCT']));
+    expect(colNames(nflFit, nfl)).not.toContain('STRK');
+    expect(nflFit.columns.find(c => c.name)!.width).toBeGreaterThanOrEqual(
+      Math.floor(textWidth('Jacksonville Jaguars', 13.5, true)),
+    );
+    const soccerFit = fitTable(soccer, 300, text);
+    expect(colNames(soccerFit, soccer)).toEqual(expect.arrayContaining(['#', 'Team', 'W', 'D', 'L', 'GD', 'P']));
+    expect(colNames(soccerFit, soccer)).not.toContain('GA');
+    expect(soccerFit.columns.reduce((s, c) => s + c.width, 0)).toBeLessThanOrEqual(300);
+  });
+
+  test('position aligns left, numbers right, names left', () => {
+    const fit = fitTable(nfl, Infinity, text);
+    expect(fit.columns[0]!.align).toBe('left');
+    expect(fit.columns.find(c => c.name)!.align).toBe('left');
+    expect(fit.columns.at(-1)!.align).toBe('right');
+  });
+
+  test('a box score names its first column even when it is short', () => {
+    const box: RawTableData = {
+      title: 'Linescore',
+      columns: ['', '1', '2', 'T'],
+      rows: [
+        ['NYG', '7', '3', '10'],
+        ['PHI', '0', '14', '14'],
+      ],
+    };
+    const fit = fitTable(box, 280, text);
+    expect(fit.dropped).toEqual([]);
+    expect(fit.columns[0]!.name).toBe(true);
+    expect(fit.columns[0]!.width).toBeGreaterThan(100);
+  });
+
+  test('short words align left like words, and a wide table keeps its numbers near the names', () => {
+    const f1: RawTableData = {
+      title: 'Race',
+      columns: ['Pos', 'Driver', 'Code', 'Country'],
+      rows: [
+        ['1', 'Max Verstappen', 'VER', 'Netherlands'],
+        ['2', 'Lando Norris', 'NOR', 'Britain'],
+      ],
+    };
+    const fit = fitTable(f1, 1200, text);
+    expect(fit.columns.map(c => c.align)).toEqual(['left', 'left', 'left', 'left']);
+    const wide = fitTable(nfl, 1200, text);
+    const team = wide.columns.find(c => c.name)!;
+    expect(wide.columns.reduce((s, c) => s + c.width, 0)).toBe(1200);
+    expect(wide.columns[2]!.width).toBeGreaterThan(fitTable(nfl, Infinity, text).columns[2]!.width);
+    expect(team.width).toBeLessThan(1200 - 9 * 20);
+  });
+
+  test('with room, number columns share one width', () => {
+    const golf: RawTableData = {
+      title: 'Leaderboard',
+      columns: ['Pos', 'Player', 'Score', 'R1', 'R2', 'R3', 'R4'],
+      rows: [
+        ['1', 'Michael Thorbjornsen', '-10', '-6', '-3', '-1', '-'],
+        ['2', 'Max Greyserman', '-9', '-7', 'E', '-2', '-'],
+      ],
+    };
+    const fit = fitTable(golf, 1500, text);
+    const widths = fit.columns
+      .filter(c => ['R1', 'R2', 'R3', 'R4'].includes(golf.columns[c.index]!))
+      .map(c => c.width);
+    expect(new Set(widths).size).toBe(1);
   });
 
   test('normalizeTableData accepts both string[] and { cells, highlight, entityId } rows', () => {
@@ -76,38 +183,6 @@ describe('table-fit (textWidth, numericColumn, fitTable, normalizeTableData)', (
       highlight: true,
       entityId: 'team:mia',
     });
-  });
-
-  test('fitTable preserves the names column, position, and key columns while dropping lower-priority columns on narrow widths', () => {
-    const table = {
-      columns: ['#', 'Team', 'W', 'L', 'PCT', 'GB', 'HOME', 'AWAY', 'STRK'],
-      rows: [
-        { cells: ['1', 'Boston Celtics', '48', '12', '.800', '-', '26-4', '22-8', 'W8'], highlight: true },
-        { cells: ['2', 'Cleveland Cavaliers', '44', '16', '.733', '4.0', '24-6', '20-10', 'W3'] },
-        { cells: ['3', 'Milwaukee Bucks', '41', '19', '.683', '7.0', '23-7', '18-12', 'L1'] },
-      ],
-    };
-    const metrics = fitTextMetrics(idPx, true);
-    const full = fitTable(table, Infinity, metrics);
-    expect(full.dropped).toEqual([]);
-    expect(full.columns).toHaveLength(9);
-    const nameCol = full.columns.find(c => c.name);
-    expect(nameCol?.index).toBe(1);
-    expect(nameCol?.align).toBe('left');
-    // Leading position column aligns left even though numeric
-    expect(full.columns[0]?.align).toBe('left');
-    // Numeric W column aligns right
-    expect(full.columns[2]?.align).toBe('right');
-
-    // Constrain width tightly: non-key columns (STRK, AWAY, HOME) drop from the right before key columns (W, L, PCT, GB)
-    const tight = fitTable(table, 280, metrics);
-    expect(tight.dropped.length).toBeGreaterThan(0);
-    // Names column (1) and position column (0) are never dropped
-    expect(tight.columns.some(c => c.index === 0)).toBe(true);
-    expect(tight.columns.some(c => c.index === 1)).toBe(true);
-    // Total fitted width matches available width
-    const sumWidth = tight.columns.reduce((s, c) => s + c.width, 0);
-    expect(sumWidth).toBe(280);
   });
 
   test('tableNaturalWidth matches fitTable natural column sum', () => {
@@ -136,13 +211,9 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
 
     const fit = parseItemWidth('fit 320px..640px', idPx, 1200);
     expect(fit).toEqual({ kind: 'fit', min: 320, max: 640 });
-    // Clamps to min when natural is smaller
     expect(resolveShelfItemWidth(fit, 1200, 250)).toBe(320);
-    // Uses natural when within [320, 640]
     expect(resolveShelfItemWidth(fit, 1200, 480.4)).toBe(480);
-    // Clamps to max when natural exceeds 640
     expect(resolveShelfItemWidth(fit, 1200, 790)).toBe(640);
-    // Clamps to availableInnerWidth on a small phone screen (e.g. 339px wide)
     expect(resolveShelfItemWidth(fit, 339, 520)).toBe(339);
   });
 
@@ -171,7 +242,6 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
     const firstPass = applyStableOrder(initial, x => x.id, seen);
     expect(firstPass.map(x => x.id)).toEqual(['team:bos', 'team:nyk', 'team:phi']);
 
-    // Server re-sorts phi to front after user favourites it; shelf keeps order stable while mounted
     const reshuffledFromServer = [
       { id: 'team:bos', fav: true },
       { id: 'team:phi', fav: true },
@@ -182,7 +252,6 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
   });
 
   test('resolveActiveTabValue selects param, default, all, or first option', () => {
-    // Explicit param wins
     expect(
       resolveActiveTabValue({
         paramValue: 'nba',
@@ -192,7 +261,6 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
       }),
     ).toBe('nba');
 
-    // Empty param with no default selects All ("") when hasAllOption is true
     expect(
       resolveActiveTabValue({
         paramValue: '',
@@ -202,7 +270,6 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
       }),
     ).toBe('');
 
-    // Empty param with default (e.g. schedule date or teams opening league) selects default
     expect(
       resolveActiveTabValue({
         paramValue: '',
@@ -212,7 +279,6 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
       }),
     ).toBe('2026-11-24');
 
-    // Empty param with no default and no All selects first option
     expect(
       resolveActiveTabValue({
         paramValue: '',
@@ -229,7 +295,22 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
 });
 
 describe('graph-math (probabilityPath, pathLength, luminance, readableSeriesColor)', () => {
-  test('normalizeSeriesPoints and probabilityPath produce clamped cubic Bézier SVG paths', () => {
+  test('the probability path is a smooth curve inside its box', () => {
+    const series = [{ t: 0, value: 0.5 }, { t: 0.25, value: 0.9 }, { t: 0.5, value: 0.1 }, { t: 1, value: 0.6 }];
+    const { line, area, end } = probabilityPath(series, 300, 100);
+    expect(line.startsWith('M0,50 C')).toBe(true);
+    expect(line.split('C').length - 1).toBe(3);
+    for (const n of line.match(/-?\d+(\.\d+)?/g)!.map(Number)) {
+      expect(n).toBeGreaterThanOrEqual(0);
+      expect(n).toBeLessThanOrEqual(300);
+    }
+    expect(area.endsWith('Z')).toBe(true);
+    expect(end).toEqual({ x: 300, y: 40 });
+    expect(pathLength(series, 300, 100)).toBeGreaterThan(300);
+    expect(probabilityPath([], 300, 100).line).toBe('');
+  });
+
+  test('normalizeSeriesPoints and probabilityPath support subject 0 and 1', () => {
     const series = [{ p: 0.5 }, { p: 0.65 }, { p: 0.42 }, { p: 0.88 }];
     const res = probabilityPath(series, 400, 120, 1);
     expect(res.line.startsWith('M0,60 C')).toBe(true);
@@ -238,7 +319,6 @@ describe('graph-math (probabilityPath, pathLength, luminance, readableSeriesColo
     expect(res.end!.x).toBe(400);
     expect(res.end!.y).toBeCloseTo(120 * (1 - 0.88), 2);
 
-    // Subject 0 flips the vertical coordinate (1 - p)
     const flipped = probabilityPath(series, 400, 120, 0);
     expect(flipped.end!.y).toBeCloseTo(120 * 0.88, 2);
 
@@ -249,7 +329,6 @@ describe('graph-math (probabilityPath, pathLength, luminance, readableSeriesColo
   test('luminance and readableSeriesColor adjust low-contrast colours', () => {
     expect(luminance('#000000')).toBeCloseTo(0, 4);
     expect(luminance('#ffffff')).toBeCloseTo(1, 4);
-    // Very dark navy on dark surface gets lightened or falls back to altColor
     const adjusted = readableSeriesColor({ color: '#040507', altColor: '#3b82f6' }, false, '#dcb998');
     expect(adjusted).toBe('#3b82f6');
   });
@@ -284,7 +363,6 @@ describe('action-validation (navigate, setParam, play, multiview, plugin, openLi
       query: undefined,
     });
 
-    // Built-in title route without id is rejected
     expect(validateScreenAction('navigate', undefined, { route: 'title' })).toBeNull();
   });
 
@@ -331,18 +409,12 @@ describe('action-validation (navigate, setParam, play, multiview, plugin, openLi
   test('validateOpenLinkHref enforces https, non-TV, and presence in the page $link envelope set', () => {
     const allowed = new Set(['https://www.espn.com/nfl/game/_/gameId/401']);
 
-    // Allowed $link href on web/mobile
     expect(validateOpenLinkHref('https://www.espn.com/nfl/game/_/gameId/401', allowed, false)).toBe(
       'https://www.espn.com/nfl/game/_/gameId/401',
     );
-
-    // Refused on TV even when in allowed set
     expect(validateOpenLinkHref('https://www.espn.com/nfl/game/_/gameId/401', allowed, true)).toBeNull();
-
-    // Refused when literal URL is not in the server's $link envelope set
     expect(validateOpenLinkHref('https://evil.example.com/phish', allowed, false)).toBeNull();
 
-    // Refused when non-https scheme even if somehow in set
     const withHttp = new Set(['http://www.espn.com/nfl']);
     expect(validateOpenLinkHref('http://www.espn.com/nfl', withHttp, false)).toBeNull();
   });
