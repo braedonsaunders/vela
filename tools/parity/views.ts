@@ -62,6 +62,8 @@ export const VIEWS: View[] = [
 export const REVIEWED_VIEWS: { viewports: RegExp; views: string[]; reason: string }[] = [
   { viewports: /^web-390$/, views: ['index-top', 'index-spoiler-free', 'index-no-favourites'],
     reason: 'Phone hero: names wrap under the crests (legacy truncated them), and without Watch from start (Ether v1) the hero is one button shorter, so the page below moves up' },
+  { viewports: /^ios-phone$/, views: ['game-spoiler'],
+    reason: 'Watch from start is absent (Ether v1 sends no catch-up targets); legacy showed it for this archived final, so the pills after it sit one button to the left' },
 ];
 
 export function reviewed(view: View | { name: string; review?: string }, viewport: string): string | undefined {
