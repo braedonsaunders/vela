@@ -822,6 +822,7 @@ final class PlaybackSession {
             // Off for a sidecar is the player's own on any path: the server has nothing to change, and its
             // answer on its HLS would be a new source, restarting playback.
             guard SidecarSubtitle.offIsLocal(playsOriginal: playsOriginal, current: plan?.subtitleTrack(report.subtitleTrackId)) else {
+                report.requestSubtitle(nil)
                 report.sessionCommand(["kind": "tracks", "subtitleTrackId": NSNull()])
                 return nil
             }
@@ -841,6 +842,11 @@ final class PlaybackSession {
         }
         let index = track.streamIndex
         guard playsOriginal, let index, let trackId = state.trackId(type: "sub", streamIndex: index) else {
+            // The server applies it (over its HLS, with a new source). A sidecar on screen goes now, and the
+            // report takes the server's answer rather than keeping the viewer's earlier sidecar choice, which
+            // the new source would otherwise add again on top of the server's subtitle.
+            report.requestSubtitle(id)
+            applySidecar()
             report.sessionCommand(["kind": "tracks", "subtitleTrackId": id])
             return nil
         }
