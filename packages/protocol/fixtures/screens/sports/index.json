@@ -80,45 +80,19 @@
     "ranking": {
       "type": "box", "style": { "gap": "3px" }, "children": [
         { "type": "text", "text": "{s:resultHidden}", "when": [{ "test": "e.spoiler" }], "style": { "font-size": "13px", "line-height": "1.25", "color": "{arg.quiet}" } },
-        { "type": "repeat", "over": "e.ranking", "as": "row", "limit": 2, "when": [{ "test": "e.spoiler", "not": true }],
+        { "type": "repeat", "over": "e.ranking", "as": "entry", "limit": 2, "when": [{ "test": "e.spoiler", "not": true }],
           "item": { "type": "box", "style": { "flex-direction": "row", "align-items": "baseline", "gap": "8px" }, "children": [
-            { "type": "text", "text": "{row.place}", "style": { "width": "23px", "font-size": "12px", "line-height": "1.25", "font-weight": "800", "color": "{arg.quiet}", "font-variant-numeric": "tabular-nums", "line-clamp": "1" },
-              "states": [{ "when": [{ "test": "row.pos", "is": "eq", "value": "1" }], "style": { "width": "23px", "font-size": "12px", "line-height": "1.25", "font-weight": "800", "color": "$ui.highlight", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } }] },
-            { "type": "text", "text": "{row.name}", "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "560", "color": "{arg.ink}", "line-clamp": "1", "text-overflow": "ellipsis" },
-              "states": [{ "when": [{ "test": "row.pos", "is": "eq", "value": "1" }], "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "700", "color": "{arg.ink}", "line-clamp": "1", "text-overflow": "ellipsis" } }] },
-            { "type": "text", "text": "{row.secondary}", "when": [{ "test": "row.secondary" }], "style": { "flex-shrink": "1", "font-size": "11.5px", "line-height": "1.25", "font-weight": "500", "color": "{arg.quiet}", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } },
-            { "type": "text", "text": "{row.detail}", "when": [{ "test": "row.detail" }], "style": { "flex-shrink": "0", "max-width": "38%", "text-align": "right", "font-size": "13px", "line-height": "1.25", "font-weight": "750", "color": "{arg.ink}", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" } }
+            { "type": "text", "text": "{entry.place}", "style": { "width": "23px", "font-size": "12px", "line-height": "1.25", "font-weight": "800", "color": "{arg.quiet}", "font-variant-numeric": "tabular-nums", "line-clamp": "1" },
+              "states": [{ "when": [{ "test": "entry.pos", "is": "eq", "value": "1" }], "style": { "width": "23px", "font-size": "12px", "line-height": "1.25", "font-weight": "800", "color": "$ui.highlight", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } }] },
+            { "type": "text", "text": "{entry.name}", "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "560", "color": "{arg.ink}", "line-clamp": "1", "text-overflow": "ellipsis" },
+              "states": [{ "when": [{ "test": "entry.pos", "is": "eq", "value": "1" }], "style": { "flex": "1", "min-width": "40%", "font-size": "13.5px", "line-height": "1.25", "font-weight": "700", "color": "{arg.ink}", "line-clamp": "1", "text-overflow": "ellipsis" } }] },
+            { "type": "text", "text": "{entry.secondary}", "when": [{ "test": "entry.secondary" }], "style": { "flex-shrink": "1", "font-size": "11.5px", "line-height": "1.25", "font-weight": "500", "color": "{arg.quiet}", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } },
+            { "type": "text", "text": "{entry.detail}", "when": [{ "test": "entry.detail" }], "style": { "flex-shrink": "0", "max-width": "38%", "text-align": "right", "font-size": "13px", "line-height": "1.25", "font-weight": "750", "color": "{arg.ink}", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" } }
           ] } }
       ]
     },
 
-    "cardLineRow": {
-      "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "6px", "margin-top": "auto", "padding-top": "9px" },
-      "children": [
-        { "type": "icon", "symbol": "{arg.glyph}", "style": { "width": "12px", "height": "12px", "color": "$ui.accent" } },
-        { "type": "text", "text": "{arg.text}", "style": { "flex": "1", "font-size": "12px", "line-height": "1.25", "font-weight": "650", "color": "$ui.accent", "line-clamp": "1", "text-overflow": "ellipsis" } }
-      ]
-    },
-    "cardLineQuiet": {
-      "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "6px", "margin-top": "auto", "padding-top": "9px" },
-      "children": [
-        { "type": "icon", "symbol": "{arg.glyph}", "style": { "width": "12px", "height": "12px", "color": "$ui.inkQuiet" } },
-        { "type": "text", "text": "{arg.text}", "style": { "flex": "1", "font-size": "12px", "line-height": "1.25", "font-weight": "520", "color": "$ui.inkQuiet", "line-clamp": "1", "text-overflow": "ellipsis" } }
-      ]
-    },
-    "cardLine": {
-      "type": "box", "children": [
-        { "type": "use", "template": "cardLineQuiet", "with": { "glyph": "eye-off", "text": "{s:spoilersHidden}" }, "when": [{ "test": "e.spoiler" }] },
-        { "type": "use", "template": "cardLineRow", "with": { "glyph": "play-fill", "text": "{s:watchOn|with:name=e.watch.primary.name,number=e.watch.primary.number}" },
-          "when": [{ "test": "e.spoiler", "not": true }, { "test": "e.phase", "is": "eq", "value": "live" }, { "test": "e.watch.primary.channelId" }] },
-        { "type": "use", "template": "cardLineRow", "with": { "glyph": "calendar", "text": "{e.watch.primary.name}{e.watch.primary.number| · }" },
-          "when": [{ "test": "e.spoiler", "not": true }, { "test": "e.phase", "is": "eq", "value": "upcoming" }, { "test": "e.watch.primary.channelId" }] },
-        { "type": "use", "template": "cardLineRow", "with": { "glyph": "forward-chevron", "text": "{s:recap}" },
-          "when": [{ "test": "e.spoiler", "not": true }, { "test": "e.phase", "is": "eq", "value": "final" }] },
-        { "type": "use", "template": "cardLineQuiet", "with": { "glyph": "tv", "text": "{s:onBroadcast|with:name=e.watch.airing.0.name,more=e.watch.airing.1.name}" },
-          "when": [{ "test": "e.spoiler", "not": true }, { "test": "e.watch.primary.channelId", "not": true }, { "test": "e.watch.airing.0.name" }, { "test": "e.phase", "is": "ne", "value": "final" }, { "test": "e.phase", "is": "ne", "value": "off" }] }
-      ]
-    },
+    "cardLine": {"type": "box", "style": {"flex-direction": "row", "align-items": "center", "gap": "6px", "margin-top": "auto", "padding-top": "9px"}, "children": [{"type": "icon", "symbol": "eye-off", "when": [{"test": "e.spoiler"}], "style": {"width": "12px", "height": "12px", "color": "$ui.inkQuiet"}}, {"type": "icon", "symbol": "play-fill", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.phase", "is": "eq", "value": "live"}, {"test": "e.watch.primary.channelId"}], "style": {"width": "12px", "height": "12px", "color": "$ui.accent"}}, {"type": "icon", "symbol": "calendar", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.phase", "is": "eq", "value": "upcoming"}, {"test": "e.watch.primary.channelId"}], "style": {"width": "12px", "height": "12px", "color": "$ui.accent"}}, {"type": "icon", "symbol": "forward-chevron", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.phase", "is": "eq", "value": "final"}], "style": {"width": "12px", "height": "12px", "color": "$ui.accent"}}, {"type": "icon", "symbol": "tv", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.watch.primary.channelId", "not": true}, {"test": "e.watch.airing.0.name"}, {"test": "e.phase", "is": "ne", "value": "final"}, {"test": "e.phase", "is": "ne", "value": "off"}], "style": {"width": "12px", "height": "12px", "color": "$ui.inkQuiet"}}, {"type": "text", "text": "{s:spoilersHidden}", "when": [{"test": "e.spoiler"}], "style": {"flex": "1", "font-size": "12px", "line-height": "1.25", "font-weight": "520", "color": "$ui.inkQuiet", "line-clamp": "1", "text-overflow": "ellipsis"}}, {"type": "text", "text": "{s:watchOn|with:name=e.watch.primary.name,number=e.watch.primary.number}", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.phase", "is": "eq", "value": "live"}, {"test": "e.watch.primary.channelId"}], "style": {"flex": "1", "font-size": "12px", "line-height": "1.25", "font-weight": "650", "color": "$ui.accent", "line-clamp": "1", "text-overflow": "ellipsis"}}, {"type": "text", "text": "{e.watch.primary.name}{e.watch.primary.number| · }", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.phase", "is": "eq", "value": "upcoming"}, {"test": "e.watch.primary.channelId"}], "style": {"flex": "1", "font-size": "12px", "line-height": "1.25", "font-weight": "650", "color": "$ui.accent", "line-clamp": "1", "text-overflow": "ellipsis"}}, {"type": "text", "text": "{s:recap}", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.phase", "is": "eq", "value": "final"}], "style": {"flex": "1", "font-size": "12px", "line-height": "1.25", "font-weight": "650", "color": "$ui.accent", "line-clamp": "1", "text-overflow": "ellipsis"}}, {"type": "text", "text": "{s:onBroadcast|with:name=e.watch.airing.0.name,more=e.watch.airing.1.name}", "when": [{"test": "e.spoiler", "not": true}, {"test": "e.watch.primary.channelId", "not": true}, {"test": "e.watch.airing.0.name"}, {"test": "e.phase", "is": "ne", "value": "final"}, {"test": "e.phase", "is": "ne", "value": "off"}], "style": {"flex": "1", "font-size": "12px", "line-height": "1.25", "font-weight": "520", "color": "$ui.inkQuiet", "line-clamp": "1", "text-overflow": "ellipsis"}}]},
 
     "eventCard": {
       "type": "box", "role": "button", "testId": "sports-{arg.prefix}-{e.id}", "label": "{e.title}",
@@ -229,14 +203,14 @@
           { "type": "text", "text": "{e.title}", "style": { "font-size": "24px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "line-clamp": "1", "text-overflow": "ellipsis" } },
           { "type": "box", "style": { "gap": "3px" }, "children": [
             { "type": "text", "text": "{s:resultHidden}", "when": [{ "test": "e.spoiler" }], "style": { "font-size": "13px", "line-height": "1.25", "color": "#ffffff9e" } },
-            { "type": "repeat", "over": "e.ranking", "as": "row", "limit": 3, "when": [{ "test": "e.spoiler", "not": true }],
+            { "type": "repeat", "over": "e.ranking", "as": "entry", "limit": 3, "when": [{ "test": "e.spoiler", "not": true }],
               "item": { "type": "box", "style": { "flex-direction": "row", "align-items": "baseline", "gap": "8px" }, "children": [
-                { "type": "text", "text": "{row.place}", "style": { "width": "25.5px", "font-size": "13.5px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff9e", "font-variant-numeric": "tabular-nums", "line-clamp": "1" },
-                  "states": [{ "when": [{ "test": "row.pos", "is": "eq", "value": "1" }], "style": { "width": "25.5px", "font-size": "13.5px", "line-height": "1.25", "font-weight": "800", "color": "$ui.highlight", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } }] },
-                { "type": "text", "text": "{row.name}", "style": { "flex": "1", "min-width": "40%", "font-size": "15px", "line-height": "1.25", "font-weight": "560", "color": "#ffffff", "line-clamp": "1", "text-overflow": "ellipsis" },
-                  "states": [{ "when": [{ "test": "row.pos", "is": "eq", "value": "1" }], "style": { "flex": "1", "min-width": "40%", "font-size": "15px", "line-height": "1.25", "font-weight": "700", "color": "#ffffff", "line-clamp": "1", "text-overflow": "ellipsis" } }] },
-                { "type": "text", "text": "{row.secondary}", "when": [{ "test": "row.secondary" }], "style": { "flex-shrink": "1", "font-size": "13px", "line-height": "1.25", "font-weight": "500", "color": "#ffffff9e", "line-clamp": "1" } },
-                { "type": "text", "text": "{row.detail}", "when": [{ "test": "row.detail" }], "style": { "flex-shrink": "0", "max-width": "38%", "text-align": "right", "font-size": "14.5px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" } }
+                { "type": "text", "text": "{entry.place}", "style": { "width": "25.5px", "font-size": "13.5px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff9e", "font-variant-numeric": "tabular-nums", "line-clamp": "1" },
+                  "states": [{ "when": [{ "test": "entry.pos", "is": "eq", "value": "1" }], "style": { "width": "25.5px", "font-size": "13.5px", "line-height": "1.25", "font-weight": "800", "color": "$ui.highlight", "font-variant-numeric": "tabular-nums", "line-clamp": "1" } }] },
+                { "type": "text", "text": "{entry.name}", "style": { "flex": "1", "min-width": "40%", "font-size": "15px", "line-height": "1.25", "font-weight": "560", "color": "#ffffff", "line-clamp": "1", "text-overflow": "ellipsis" },
+                  "states": [{ "when": [{ "test": "entry.pos", "is": "eq", "value": "1" }], "style": { "flex": "1", "min-width": "40%", "font-size": "15px", "line-height": "1.25", "font-weight": "700", "color": "#ffffff", "line-clamp": "1", "text-overflow": "ellipsis" } }] },
+                { "type": "text", "text": "{entry.secondary}", "when": [{ "test": "entry.secondary" }], "style": { "flex-shrink": "1", "font-size": "13px", "line-height": "1.25", "font-weight": "500", "color": "#ffffff9e", "line-clamp": "1" } },
+                { "type": "text", "text": "{entry.detail}", "when": [{ "test": "entry.detail" }], "style": { "flex-shrink": "0", "max-width": "38%", "text-align": "right", "font-size": "14.5px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" } }
               ] } } ] } ] },
 
         { "type": "box", "style": { "gap": "10px" }, "children": [
@@ -254,7 +228,7 @@
               "with": { "label": "{s:fromStart}", "glyph": "replay" },
               "press": { "action": "play", "args": { "programme": "{e.watch.primary.programme.id}", "channel": "{e.watch.primary.channelId}", "from": "{e.watch.primary.fromStart}" } } },
             { "type": "use", "template": "heroButton", "testId": "sports-hero-multiview", "when": [{ "test": "e.watch.primary.channelId" }, { "test": "env.canMultiview" }],
-              "with": { "label": "{s:addToMultiview}", "glyph": "multiview" },
+              "with": { "label": "{s:addToMultiview}", "glyph": "tiles" },
               "press": { "action": "multiview", "args": { "channel": "{e.watch.primary.channelId}" } } },
             { "type": "use", "template": "heroButton", "testId": "sports-hero-details", "with": { "label": "{s:gameDetails}", "glyph": "list" },
               "press": { "action": "navigate", "args": { "page": "game", "event": "{e.id}" } } },
