@@ -14,9 +14,19 @@ export type RecordReader = (key: string) => RecordEntry | undefined;
  * may be a record reference, followed when read) and its position. */
 export interface Bound { value: unknown; index: number }
 
+/** The shared record pool, with per-key listeners (core's RecordStore). */
+export interface RecordSource {
+  get(key: string): RecordEntry | undefined;
+  subscribeKeys(keys: Iterable<string>, listener: () => void): () => void;
+}
+
 export interface ScreenScope {
   page: ScreenPageState;
+  /** How holes read records here: the node drawing them reads through its own tracked reader
+   * (useScopedReads), so a pushed record redraws only the nodes that read it. */
   record: RecordReader;
+  /** The pool itself, for those per-node readers to subscribe to exactly the keys they read. */
+  source?: RecordSource;
   /** Local state: flags (`toggle`, `only`, `open`, `close`: 'true' while set) and tabs bound to state. */
   state: Record<string, string>;
   /** The enclosing items by alias (`as`). */

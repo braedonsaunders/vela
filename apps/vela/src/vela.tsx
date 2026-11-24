@@ -109,6 +109,8 @@ const SIGNED_OUT_ROUTES = ['/sign-in', '/connect'];
 export function VelaProvider({ children }: { children: ReactNode }) {
   const [boot] = useState(platform);
   const [store] = useState(() => createVela({ ...boot, rendererVersion: RENDERER_VERSION }));
+  // Development: probes (tools/perf/screen-record-push.ts) push records through the real store.
+  if (__DEV__ && typeof globalThis !== 'undefined') (globalThis as { __velaStore?: unknown }).__velaStore = store;
   const [consoleUrl, setConsoleUrl] = useState(boot.page?.consoleUrl);
   useEffect(() => {
     // A Studio preview (screen-preview.tsx) enters preview mode before bootstrap is read.
