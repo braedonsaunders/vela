@@ -42,6 +42,9 @@ function inside(url: string, scope: { origin: string; pathPrefix: string }): boo
   }
 }
 
+/** What the engine last did with sound; the native players keep it to themselves. */
+export function audioDiagnostics(): unknown { return null; }
+
 export function createAudioEngine(authorize?: AudioAuthorizer): AudioEngine | null {
   return createNativeAudioEngine(nativeAudioBridge(), {
     onRemote: remote,

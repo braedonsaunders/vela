@@ -488,12 +488,18 @@ test('AutoMix with a server that keeps the outgoing session: a crossfade at the 
 });
 
 test('AutoMix without the handover crossfades only when the outgoing item is all in the engine, and ends it as gapless does', async () => {
-  const partly = harness({ queued: true, buffered: () => 120, loudness: { t1: measured(-6) } });
+  let buffered = 120;
+  const partly = harness({ queued: true, buffered: () => buffered, loudness: { t1: measured(-6) } });
   partly.audio.setSound({ ...DEFAULT_SOUND, automix: { ...DEFAULT_SOUND.automix, on: true } });
   partly.audio.play({ items: tracks('t1', 't2'), index: 0 });
   await settle();
   await partly.play(185);
   expect(partly.held()?.crossfade).toBeUndefined();
+
+  // Once it is all there, the crossfade is handed after all.
+  buffered = 200;
+  await partly.play(1);
+  expect(partly.held()?.crossfade).toEqual({ seconds: 7, at: 192 });
 
   const whole = harness({ queued: true, loudness: { t1: measured(-6) } });
   whole.audio.setSound({ ...DEFAULT_SOUND, automix: { ...DEFAULT_SOUND.automix, on: true } });

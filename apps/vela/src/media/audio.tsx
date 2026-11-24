@@ -14,7 +14,7 @@ import { useVelaState } from '@vela/core/react';
 import { soundSettings } from '@vela/core';
 import { useVela } from '../vela';
 import { preferences } from '../data/preferences';
-import { createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
+import { audioDiagnostics, createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
 import { useMediaPageActions } from './actions';
 import { musicTV, onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
 import { useMediaPlayerActions } from './player-actions';
@@ -64,6 +64,11 @@ export function AudioDock() {
   const [panel, setPanel] = useState<NowPlayingPanel | undefined>(undefined);
   useEffect(() => onOpenNowPlaying(next => { setPanel(next); setOpen(true); }), []);
   useEffect(() => store.audio.attach(createAudioEngine(() => store.playback.mediaAccess())), [store]);
+  // Development checks read what the audio did (docs/sound.md): the store's audio and the engine's last crossfade.
+  useEffect(() => {
+    if (!__DEV__) return;
+    (globalThis as { __velaSound?: unknown }).__velaSound = { audio: () => store.getState().audio, engine: audioDiagnostics };
+  }, [store]);
   // The sound settings belong to this device: read once, written back whenever they change.
   useEffect(() => {
     try { store.audio.setSound(soundSettings(JSON.parse(preferences.get(SOUND_PREFERENCE) ?? 'null'))); } catch { /* Unreadable: the defaults. */ }

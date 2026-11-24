@@ -489,6 +489,13 @@ export class Audio {
     const tail = this.state.sound.automix.on && this.loudness?.trim ? Math.min(30, Math.max(0, duration - this.loudness.trim.endMs / 1000)) : 0;
     const lead = preloadLead(duration, !this.playback.queuedPlayback && (cls === 'audiobook' || cls === 'podcast')) + (this.state.sound.automix.on ? tail + 12 : 0);
     if (this.prepared && (this.prepared.id !== upcoming?.id || remaining > lead + PRELOAD_RELEASE_MARGIN)) this.forget();
+    // Handed gapless only because the outgoing item was not all in the engine yet (a server without the
+    // queued handover): now that it is, AutoMix's crossfade can still be handed.
+    const held = this.prepared;
+    if (held?.handed && held.handover && !held.handover.crossfade && this.state.sound.automix.on && this.engine.preload && this.bufferedToEnd(duration)) {
+      const again = this.handover(held, held.handover.url);
+      if (again.crossfade && again.crossfade.at > position + 1) { held.handover = again; this.engine.preload(again); }
+    }
     if (!upcoming || this.prepared || remaining > lead || this.declined === `${this.sessionId}:${upcoming.id}`) return;
     if (this.state.phase !== 'playing' && this.state.phase !== 'buffering') return;
     if (!this.playback.queuedPlayback && remaining > PRELOAD_LAST_CALL && !this.bufferedToEnd(duration)) return;

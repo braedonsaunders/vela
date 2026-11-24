@@ -128,11 +128,17 @@ function silentKeepAlive(): { play(): void; pause(): void } {
 
 const HLS = /\.m3u8(?:[?#]|$)/i;
 
+let diagnose: () => unknown = () => null;
+
+/** What the engine last did with sound (the last crossfade: where, its beat shift and tempo), for checks. */
+export function audioDiagnostics(): unknown { return diagnose(); }
+
 /** The browser plays only URLs that carry their own authorization, so it takes no authorizer. */
 export function createAudioEngine(_authorize?: unknown): AudioEngine | null {
   if (typeof document === 'undefined' || typeof Audio === 'undefined') return null;
   const element = createElementEngine();
   const gapless = gaplessSupported() ? createGaplessPlayer() : null;
+  diagnose = () => gapless?.diagnostics() ?? null;
   const keepAlive = silentKeepAlive();
   const listeners = new Set<(event: AudioEngineEvent) => void>();
   const emit = (event: AudioEngineEvent) => { for (const listener of [...listeners]) listener(event); };
