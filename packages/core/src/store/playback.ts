@@ -18,6 +18,7 @@ import { randomId } from '../protocol/id';
 import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
 import { VelaError } from '../adapter/errors';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
+import { serverEnd } from './server-end';
 import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
@@ -356,6 +357,12 @@ export class Playback {
         this.armWatchdog(sessionId);
       }
       const ended = plan.state === 'ended' && this.box.get().playback.phase !== 'ended';
+      // A live session the server stopped under the viewer is a failure (Try again), not an end.
+      if (ended && serverEnd(this.box.get().playback.target, this.lastPosition?.sessionId === sessionId && this.lastPosition.ended) === 'stopped') {
+        console.warn(`Vela playback: session ${sessionId} stopped by the server; giving up`);
+        this.giveUp(true);
+        return;
+      }
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
       if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
     };
@@ -574,7 +581,15 @@ export class Playback {
       const connection = await this.session.ready();
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
       if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
-      if (snapshot.plan.state === 'ended') return false;
+      if (snapshot.plan.state === 'ended') {
+        const current = this.box.get().playback;
+        const playerEnded = this.lastPosition?.sessionId === sessionId && this.lastPosition.ended;
+        if (this.recovering || current.sessionId !== sessionId || current.phase !== 'playing' || serverEnd(current.target, playerEnded) !== 'stopped') return false;
+        // A live session the server stopped: the viewer is told (Try again), as when its events say so.
+        console.warn(`Vela playback: session ${sessionId} stopped by the server; giving up`);
+        this.giveUp(true);
+        return true;
+      }
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
       return true;
     } catch {
@@ -731,9 +746,10 @@ export class Playback {
   /**
    * The session stalled through its last restart: playback ends in the failed state (the
    * chrome's error with Try again, which starts afresh where the viewer was) and the server
-   * releases the session, instead of the player being re-created forever.
+   * releases the session, instead of the player being re-created forever. `serverEnded`: the
+   * server itself stopped a live session (serverEnd), so there is nothing left to release.
    */
-  private giveUp(): void {
+  private giveUp(serverEnded = false): void {
     const current = this.box.get().playback;
     const plan = current.plan ?? this.abandoned;
     const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
@@ -751,7 +767,7 @@ export class Playback {
     this.abandoned = null;
     this.patch({ phase: 'failed', plan: null, sessionId: '', error: '', errorCode: 'playback_stalled', errorClass: 'transient',
       retryAfterSeconds: 0, retryAttempt: 0, versions: null, live: null });
-    if (plan && plan.state !== 'ended') void this.finish(plan, current.target, current.phase, last, this.reporting);
+    if (plan && plan.state !== 'ended' && !serverEnded) void this.finish(plan, current.target, current.phase, last, this.reporting);
   }
 
   /** Release a session that played, then publish the resume state the server kept for it. */
