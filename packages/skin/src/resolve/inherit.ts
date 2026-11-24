@@ -90,9 +90,16 @@ export function overlayHeaderOffset(shell: Node | undefined): { wide: string; sm
     if (found || node.type !== 'box') return;
     const style = node.style ?? {};
     if (node.role === 'navigation' && style.position === 'absolute' && style.top === '0px') {
-      const wide = style.height;
+      // A bar without a height of its own is as tall as its in-flow content (Lounge's bar row).
+      const row = style.height === undefined
+        ? (node.children ?? []).find((child): child is Extract<Node, { type: 'box' }> => child.type === 'box' && child.style?.position !== 'absolute' && child.style?.height !== undefined)
+        : undefined;
+      // The bar's own top padding (the safe area, under a notch) sits above that row.
+      const withPadding = (height: unknown, padding: unknown) => (typeof height === 'string' && typeof padding === 'string' && padding !== '0px' ? `calc(${height} + ${padding})` : height);
       const compact = { ...style, ...node.small };
-      const small = compact.display === 'none' ? undefined : compact.height;
+      const rowCompact = row ? { ...row.style, ...row.small } : undefined;
+      const wide = style.height ?? withPadding(row?.style?.height, style['padding-top']);
+      const small = compact.display === 'none' ? undefined : compact.height ?? withPadding(rowCompact?.height, compact['padding-top']);
       if (typeof wide === 'string' && typeof (small ?? wide) === 'string') found = { wide, small: (small ?? wide) as string };
     }
     for (const child of node.children ?? []) walk(child);
