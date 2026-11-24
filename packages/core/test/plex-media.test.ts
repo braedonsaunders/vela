@@ -101,7 +101,7 @@ describe('Plex audio and stacked titles', () => {
   test('a movie in two parts plays them in turn on one timeline, and a seek moves between them', async () => {
     const seen = routeFetch({
       'GET /library/metadata/1': { MediaContainer: { Metadata: [twofold] } },
-      'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {}, 'PUT /:/scrobble': {},
+      'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {}, 'PUT /:/scrobble': {}, 'GET /video/:/transcode/universal/decision': {},
     });
     const adapter = plex();
     const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'm', positionSeconds: 0 } as never);
@@ -180,5 +180,30 @@ describe('Plex watchlist', () => {
       await expect(adapter.setTitleWatch('10', { idempotencyKey: 'w', watchlisted: true })).rejects.toThrow('watchlist is unavailable');
       expect((await adapter.rows({})).items).toEqual([]);
     } finally { r.restore(); }
+  });
+});
+
+describe('Plex transcode decisions', () => {
+  // Plex's own clients ask /decision before the stream; Ether refuses a video start.m3u8 it was not asked one for.
+  const single = { ratingKey: '3', type: 'movie', title: 'Single', duration: 60000, Media: [{ id: 3, container: 'mkv', videoCodec: 'h264', audioCodec: 'ac3', duration: 60000,
+    Part: [{ id: 3, key: '/library/parts/3/1/file.mkv', duration: 60000 }] }] };
+  const mp4 = { ...single, Media: [{ ...single.Media[0]!, container: 'mp4', audioCodec: 'aac' }] };
+
+  test('the stream is offered only after the server was asked its decision for that very stream', async () => {
+    const seen = routeFetch({ 'GET /library/metadata/3': { MediaContainer: { Metadata: [single] } }, 'GET /video/:/transcode/universal/decision': { MediaContainer: {} } });
+    const plan = await plex().startPlayback({ titleId: '3', client, idempotencyKey: 'd' } as never);
+    const stream = new URL(plan.paths[0]!.url!);
+    expect(stream.pathname).toBe('/video/:/transcode/universal/start.m3u8');
+    const decision = seen.find(r => r.url.pathname === '/video/:/transcode/universal/decision')!;
+    expect(Object.fromEntries(decision.url.searchParams)).toEqual(Object.fromEntries(stream.searchParams));
+    expect(decision.headers.get('X-Plex-Token')).toBe('token-1');
+  });
+
+  test('a refused decision fails the start, unless the original file can play instead', async () => {
+    routeFetch({ 'GET /library/metadata/3': { MediaContainer: { Metadata: [single] } }, 'GET /video/:/transcode/universal/decision': new Response('', { status: 400 }) });
+    await expect(plex().startPlayback({ titleId: '3', client, idempotencyKey: 'r' } as never)).rejects.toThrow('Plex request failed (400)');
+    routeFetch({ 'GET /library/metadata/3': { MediaContainer: { Metadata: [mp4] } }, 'GET /video/:/transcode/universal/decision': new Response('', { status: 400 }) });
+    const plan = await plex().startPlayback({ titleId: '3', client, idempotencyKey: 'o' } as never);
+    expect(plan.paths.map(p => p.id)).toEqual(['original']);
   });
 });
