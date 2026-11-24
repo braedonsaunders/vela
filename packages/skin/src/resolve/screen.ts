@@ -196,7 +196,7 @@ export function resolveScreenDocument(doc: ScreenDocument, viewport: ScreenViewp
   };
   const r: Context = {
     doc: pseudo, ui: tokens, strings, width: viewport.width, tv: viewport.tv === true, count: 0, unsupported: new Set(),
-    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens), palette, warnings, scale: viewport.scale ?? 1, step: viewport.step ?? 0.5 },
+    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens, viewport.scale ?? 1), palette, warnings, scale: viewport.scale ?? 1, step: viewport.step ?? 0.5 },
   };
   const tree = convertNode(held(doc.tree), r);
   // Without its own, a page draws a generic skeleton while loading and the kit's failure.

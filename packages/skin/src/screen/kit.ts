@@ -37,12 +37,16 @@ const text = (size: number, weight: number, color: string, extra: Style = {}): S
   ({ 'font-size': `${size}px`, 'line-height': '1.25', 'font-weight': String(weight), color, ...extra });
 
 /** The kit for a skin's look and the viewer's locale. */
-export function kitTemplates(ui: UiTokens): Record<string, Node> {
+export function kitTemplates(ui: UiTokens, scale = 1): Record<string, Node> {
+  // Border widths in screen styles are points (resolve/screen-style.ts). The library tab pill scaled
+  // its border with the rest (look.box); a crest's border followed its scaled size with a 1.5 point floor.
+  const scaledHairline = `${scale}px`;
+  const crestBorder = (factor: number, floor: number) => `max(${floor}px, calc({arg.size} * ${factor * scale}))`;
   const liveInk = readableInk(String(ui.live));
   const card = 'color-mix(in srgb, $ui.page 8%, $ui.raised 92%)';
   // A focused surface's ring in the accent and its lifted shadow (parts.tsx Surface: a 2.5px ring
-  // round the surface, shadow 0.45 over 18px, 10px down).
-  const ring: Style = { outline: '2.5px solid $ui.accent', 'box-shadow': '0px 10px 18px #00000073' };
+  // drawn 3px outside the surface, so 0.5px clear of it; shadow 0.45 over 18px, 10px down).
+  const ring: Style = { outline: '2.5px solid $ui.accent', 'outline-offset': '0.5px', 'box-shadow': '0px 10px 18px #00000073' };
   const cardHover = 'color-mix(in srgb, $ui.raised 94%, $ui.ink 6%)';
   const radiusCard = 'min($ui.radiusCard, 18px)';
   type Tone = 'quiet' | 'primary' | 'onColor';
@@ -78,7 +82,7 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
     text(small ? 12.5 : 14, lit ? 700 : 500, lit ? '$ui.onAccent' : small ? '$ui.inkSecondary' : '$ui.ink', { 'line-clamp': '1' });
   const tab = (lit: boolean): Style => ({
     height: '$ui.controlHeight', padding: '0px 12px', 'border-radius': '$ui.radiusControl', 'background-color': lit ? '$ui.accent' : '$ui.control',
-    border: '1px solid $ui.glassEdge', 'justify-content': 'center', 'flex-shrink': '0',
+    border: `${scaledHairline} solid $ui.glassEdge`, 'justify-content': 'center', 'flex-shrink': '0',
   });
   const switchBox = (lit: boolean): Style => ({
     'flex-direction': 'row', 'align-items': 'center', gap: '9px', height: '36px', 'padding-left': '14px', 'padding-right': '10px', 'margin-left': '10px',
@@ -153,15 +157,15 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
       // the abbreviation until the logo loads, or when there is none (the image's fallback).
       type: 'box', a11y: { hidden: true },
       style: { width: '{arg.size}', height: '{arg.size}', 'border-radius': '999px', 'background-color': '#f4f5f7', 'align-items': 'center', 'justify-content': 'center',
-        overflow: 'hidden', border: 'max(1.5px, calc({arg.size} * 0.05)) solid {arg.color}' },
+        overflow: 'hidden', border: `${crestBorder(0.05, 1.5)} solid {arg.color}` },
       children: [
         // The logo is centred at 0.7 of the crest's size over the border, as Crest drew it.
         { type: 'image', src: '{arg.logo}', alt: '', fade: true, style: { position: 'absolute', width: 'calc({arg.size} * 0.7)', height: 'calc({arg.size} * 0.7)', 'object-fit': 'contain' },
           fallback: {
-            type: 'box', style: { position: 'absolute', inset: 'calc(max(1.5px, calc({arg.size} * 0.05)) * -1)', 'border-radius': '999px', 'background-color': '{arg.color}',
+            type: 'box', style: { position: 'absolute', inset: `calc(max(${1.5 / scale}px, calc({arg.size} * 0.05)) * -1)`, 'border-radius': '999px', 'background-color': '{arg.color}',
               'align-items': 'center', 'justify-content': 'center', border: '0px solid transparent' },
-            states: [{ when: on('ring'), style: { position: 'absolute', inset: 'calc(max(1.5px, calc({arg.size} * 0.05)) * -1)', 'border-radius': '999px', 'background-color': '{arg.color}',
-              'align-items': 'center', 'justify-content': 'center', border: 'max(1px, calc({arg.size} * 0.04)) solid #ffffff59' } }],
+            states: [{ when: on('ring'), style: { position: 'absolute', inset: `calc(max(${1.5 / scale}px, calc({arg.size} * 0.05)) * -1)`, 'border-radius': '999px', 'background-color': '{arg.color}',
+              'align-items': 'center', 'justify-content': 'center', border: `${crestBorder(0.04, 1)} solid #ffffff59` } }],
             children: [{ type: 'text', text: '{arg.abbr}', style: { color: '#ffffff', 'font-weight': '800', 'font-size': 'calc({arg.size} * 0.32)', 'letter-spacing': '0.3px', 'line-clamp': '1' } }],
           } },
       ],
