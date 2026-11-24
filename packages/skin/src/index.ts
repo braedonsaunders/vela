@@ -12,3 +12,7 @@ export type { Hit, SearchView } from './widgets/search/model';
 export { LiveProvider, useLiveContext, useLiveSurface, useLiveView } from './widgets/guide';
 export { focusElement, useReturnFocus } from './escape';
 export { SkipToContent } from './widgets/skip-to-content';
+export { BLOCK_KINDS, type BlockKind, type RPress } from './resolve';
+export { resolveScreenDocument, checkScreenDocument, type ResolvedScreen, type ScreenViewport } from './resolve/screen';
+export { screenRoot, screenItems, screenItemKey, tabCtx, bind, type Items } from './screen/items';
+export type { ScreenScope, Bound, RecordReader } from './screen/scope';

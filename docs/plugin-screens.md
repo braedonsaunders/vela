@@ -857,7 +857,7 @@ Notes on this document:
 
       { "type": "box", "id": "columns", "style": { "flex-direction": "row", "gap": "22px", "align-items": "flex-start", "padding": "0 $gutter" }, "small": { "flex-direction": "column" }, "children": [
         { "type": "box", "style": { "flex": "1.25", "align-self": "stretch", "gap": "22px" }, "small": { "flex": "none" }, "children": [
-          { "type": "use", "template": "vela:panel", "with": { "focusable": "true" }, "when": [{ "test": "src.game.event.probabilitySeries.1" }, { "test": "src.game.event.sides" }, { "test": "src.game.event.spoiler", "not": true }], "children": [
+          { "type": "use", "template": "vela:panel", "with": { "focusable": "true" }, "when": [{ "test": "src.game.detail.probabilitySeries.1" }, { "test": "src.game.event.sides" }, { "test": "src.game.event.spoiler", "not": true }], "children": [
             { "type": "box", "style": { "flex-direction": "row", "justify-content": "space-between", "margin-bottom": "12px" }, "children": [
               { "type": "use", "template": "panelTitle", "with": { "text": "{s:probability}" } },
               { "type": "box", "style": { "flex-direction": "row", "gap": "14px" }, "children": [
@@ -865,14 +865,14 @@ Notes on this document:
                   { "type": "box", "style": { "width": "9px", "height": "9px", "border-radius": "5px", "background-color": "{side|readable}" } },
                   { "type": "text", "text": "{side.abbr} {side.share}%", "style": { "font-size": "13.5px", "font-weight": "600", "font-variant-numeric": "tabular-nums" },
                     "states": [{ "when": [{ "test": "side.leads" }], "style": { "font-size": "13.5px", "font-weight": "800", "font-variant-numeric": "tabular-nums" } }] } ] } } ] } ] },
-            { "type": "lineGraph", "series": "src.game.event.probabilitySeries", "live": "{src.game.event.phase|eq:live}", "height": { "default": "132px", "small": "96px" },
+            { "type": "lineGraph", "series": "src.game.detail.probabilitySeries", "live": "{src.game.event.phase|eq:live}", "height": { "default": "132px", "small": "96px" },
               "sides": "src.game.event.sides", "subject": "{src.game.event.probability.subjectSide}" },
             { "type": "box", "style": { "flex-direction": "row", "height": "5px", "margin-top": "12px", "border-radius": "3px", "overflow": "hidden" }, "children": [
               { "type": "box", "style": { "width": "{src.game.event.probability.away|percent}%", "background-color": "{src.game.event.sides.0|readable}" } },
               { "type": "box", "style": { "flex": "1", "background-color": "{src.game.event.sides.1|readable}" } } ] } ] },
-          { "type": "repeat", "over": "src.game.event.tables", "as": "t", "item": { "type": "use", "template": "vela:panel", "with": { "focusable": "{t.rows|count|lt:11}" }, "children": [
+          { "type": "repeat", "over": "src.game.detail.tables", "as": "t", "item": { "type": "use", "template": "vela:panel", "with": { "focusable": "{t.rows|count|lt:11}" }, "children": [
             { "type": "table", "data": "t", "testId": "sports-table-{$index}", "focusRows": 10 } ] } },
-          { "type": "use", "template": "vela:panel", "when": [{ "test": "src.game.event.sides", "not": true }, { "test": "src.game.event.ranking.0" }, { "test": "src.game.event.tables.0", "not": true }], "children": [
+          { "type": "use", "template": "vela:panel", "when": [{ "test": "src.game.event.sides", "not": true }, { "test": "src.game.event.ranking.0" }, { "test": "src.game.detail.tables.0", "not": true }], "children": [
             { "type": "use", "template": "panelTitle", "with": { "text": "{s:standings}" } },
             { "type": "repeat", "over": "src.game.event.ranking", "as": "row", "item": { "type": "box", "readingStop": true,
               "style": { "flex-direction": "row", "align-items": "baseline", "gap": "8px", "padding": "6px" }, "focus": { "background-color": "color-mix(in srgb, $ui.ink 8%, transparent)" }, "children": [
@@ -884,9 +884,9 @@ Notes on this document:
         { "type": "box", "style": { "flex": "1", "align-self": "stretch" }, "small": { "flex": "none" }, "children": [
           { "type": "use", "template": "vela:panel", "children": [
             { "type": "use", "template": "panelTitle", "with": { "text": "{s:plays}" } },
-            { "type": "text", "text": "{s:noPlays}", "when": [{ "test": "src.game.event.plays.0", "not": true }, { "test": "src.game.event.spoiler", "not": true }], "style": { "font-size": "14px", "color": "$ui.inkQuiet" } },
+            { "type": "text", "text": "{s:noPlays}", "when": [{ "test": "src.game.detail.plays.0", "not": true }, { "test": "src.game.event.spoiler", "not": true }], "style": { "font-size": "14px", "color": "$ui.inkQuiet" } },
             { "type": "text", "text": "{s:spoilersHidden}", "when": [{ "test": "src.game.event.spoiler" }], "style": { "font-size": "14px", "color": "$ui.inkQuiet" } },
-            { "type": "repeat", "over": "src.game.event.plays", "as": "p", "key": "{p.period}-{p.clock}-{p.text}", "limit": 30, "motion": "rise", "stagger": { "step": 40, "cap": 3 }, "item": {
+            { "type": "repeat", "over": "src.game.detail.playsNewest", "as": "p", "key": "{p.period}-{p.clock}-{p.text}", "limit": 30, "motion": "rise", "stagger": { "step": 40, "cap": 3 }, "item": {
               "type": "box", "readingStop": true, "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-top": "1px solid $hairline", "border-radius": "8px" },
               "states": [{ "when": [{ "test": "$index", "is": "eq", "value": "0" }], "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px" } }],
               "focus": { "background-color": "color-mix(in srgb, $ui.ink 7%, transparent)", "scale": "1.015" },
@@ -898,13 +898,19 @@ Notes on this document:
                   "states": [{ "when": [{ "test": "p.emphasis", "is": "eq", "value": "score" }], "style": { "flex": "1", "font-size": "14px", "font-weight": "700", "color": "$ui.ink" } },
                              { "when": [{ "test": "p.emphasis", "is": "eq", "value": "key" }], "style": { "flex": "1", "font-size": "14px", "font-weight": "650", "color": "$ui.ink" } }] } ] } } ] } ] } ] },
 
-      { "type": "box", "id": "links", "when": [{ "test": "src.game.event.links.0" }, { "test": "env.tv", "not": true }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px", "padding": "0 $gutter" }, "children": [
-        { "type": "repeat", "over": "src.game.event.links", "as": "link", "item": { "type": "use", "template": "vela:pill", "with": { "label": "{link.label}", "glyph": "external" },
+      { "type": "box", "id": "links", "when": [{ "test": "src.game.detail.links.0" }, { "test": "env.tv", "not": true }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px", "padding": "0 $gutter" }, "children": [
+        { "type": "repeat", "over": "src.game.detail.links", "as": "link", "item": { "type": "use", "template": "vela:pill", "with": { "label": "{link.label}", "glyph": "external" },
           "press": { "action": "openLink", "args": { "href": "{link.url.href}" } } } } ] }
     ]
   }
 }
 ```
+
+The `liveEvent` source answers `{event: {$record: "event:<id>"}, detail: {$record: "detail:<id>"}}`.
+An `event:` record is always the summary shape. The detail (plays oldest first with `at` and
+`score`, `playsNewest`, `tables`, `probabilitySeries`, `links`) is its own `detail:` record, so a
+list push never wipes an open game page. Tables everywhere are
+`{title, columns, rows: [{cells, highlight?, entityId?}]}`.
 
 Ether's `liveEvent` view model (its section 5.4) carries almost everything this page reads.
 These additions were sent to the Ether lead, because they are facts and documents have no

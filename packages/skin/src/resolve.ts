@@ -9,7 +9,9 @@ import { mediaTitleTree } from './resolve/media-title';
 // inlined, viewport variants applied for the current width class, tokens substituted, client
 // and document strings filled, templates and conditions compiled to accessors. Done once per
 // document, viewport width and locale; drawing never re-parses a document.
-import type { Action, Condition, Node, SkinDocument, Style } from '../../protocol/skin';
+import type { Action, BoxNode, Condition, Node, PerClass, SkinDocument, Style, TabsNode, UseNode } from '../../protocol/skin';
+import { SCREEN_LIMITS } from '../../protocol/screen';
+import { kitDefaults } from './screen/kit';
 import { velaBase } from './resolve/base';
 import { withBase } from './resolve/inherit';
 import { resolveUi, withUi } from './resolve/ui';
@@ -17,11 +19,22 @@ import { mixColours } from './resolve/colour-mix';
 import { withClientStrings } from './resolve/client-strings';
 import { documentKeyframes, type Motion } from './keyframes';
 import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
+import { compileTemplate, holeValue, makeArg, pathField, singleHole, type Arg, type HoleScope, type Value } from './screen/holes';
+import { text as valueText } from './screen/scope';
+import type { Items } from './screen/items';
+import { fold, screenStyleRow } from './resolve/screen-style';
 
-/** The highest document renderer version this renderer draws (docs/skin-schema.md). */
-export const RENDERER_VERSION = 18;
+/** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
+ * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
+export const RENDERER_VERSION = 19;
+
+/** The renderer 19 blocks (docs/plugin-screens.md: Building blocks), drawn by ./blocks. */
+export const BLOCK_KINDS = ['sections', 'shelf', 'grid', 'tabs', 'table', 'lineGraph', 'player', 'paramInput', 'titleCard', 'marquee'] as const;
+export type BlockKind = (typeof BLOCK_KINDS)[number];
 
 const MAX_NODES = 4000;
+/** Items one screen collection draws at most. */
+const SCREEN_ARRAY_ITEMS = SCREEN_LIMITS.arrayItems;
 const MAX_DEPTH = 32;
 
 /** A template: literal text, or text with compiled holes. */
@@ -57,19 +70,45 @@ interface Common {
   returnFocus?: Template;
   /** The static `order` row, used to reorder siblings. */
   order: number;
+  /** Screens: play a motion when the filled value changes (a score pops). */
+  onChange?: { value: Template; motion: Motion };
+  /** Screens: lazy sources to read when this node is about to draw. */
+  needs?: string[];
   /** Drawn only while a navigation row has destinations it cannot fit (`when` holds `nav.more`): the
    * row's More control, which its measuring copy counts as shown. */
   navMore?: boolean;
 }
 
+/** A press: an action and its argument, or (screens) named arguments and an optimistic patch. */
+export interface RPress {
+  action: Action; arg?: Template; focus?: Template;
+  args?: Record<string, Template>;
+  optimistic?: { record?: Template; source?: string; path: string; value: Template };
+}
+
 export type RNode = Common & (
-  | { kind: 'box'; children: RNode[]; press?: { action: Action; arg?: Template; focus?: Template }; pager?: { inset?: number; peek?: number }; fit?: 'nav'; readingStop?: true; controlStates: boolean }
+  | { kind: 'box'; children: RNode[]; press?: RPress; pager?: { inset?: number; peek?: number }; fit?: 'nav'; readingStop?: true;
+    /** Screens: a reading stop only while these hold (`vela:panel` with a bound `focusable`). */
+    readingStopWhen?: Test[]; controlStates: boolean }
   | { kind: 'text'; text: Template; summary?: boolean; avatar?: boolean }
-  | { kind: 'image'; src: Template; alt?: Template; fade: boolean }
+  | { kind: 'image'; src: Template; alt?: Template; fade: boolean; /** Screens: drawn until the image loads, and instead of an empty, refused or failed one. */ fallback?: RNode }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
-  | { kind: 'repeat'; over: string; limit: number; implicitLimit?: boolean; item: RNode }
+  | { kind: 'repeat'; over: string; limit: number; implicitLimit?: boolean; item: RNode; /** Screens: a data collection (screen/items.ts). */ items?: Items }
   | { kind: 'slot'; slot: 'children' | 'searchField'; inner?: CssT }
   | { kind: 'widget'; widget: string; params: Record<string, string> }
+  // Renderer 19 blocks (docs/plugin-screens.md), drawn by ./blocks. Per-class values are already
+  // picked for the viewport; `Value`s read raw data (record references followed).
+  | { kind: 'sections'; children: RNode[]; gap?: string }
+  | { kind: 'shelf'; items: Items; item: RNode; itemWidth?: string; gap?: string; stableOrder: boolean; empty?: RNode }
+  | { kind: 'grid'; items: Items; item: RNode; columns: number; gap?: string }
+  | { kind: 'marquee'; items: Items; item: RNode; gap?: string; speed?: number }
+  | { kind: 'tabs'; items: Items; value: Template; label: Template; count?: Template; bind: { param?: string; state?: string; clear?: string[] };
+    default?: Template; all?: Template; /** The chip each option is drawn with (a box, its args bound to `{$tab.*}`). */ chip: RNode; small: boolean }
+  | { kind: 'table'; data: Value; compact: boolean; focusRows?: number }
+  | { kind: 'lineGraph'; series: Value; sides?: Value; subject?: Template; live?: Template; height?: string }
+  | { kind: 'player'; channel: Template }
+  | { kind: 'paramInput'; param: string; placeholder?: Template }
+  | { kind: 'titleCard'; item: Template }
 );
 
 export type RouteName = 'home' | 'title' | 'person' | 'search' | 'collection' | 'library' | 'live' | 'watch' | 'auth'
@@ -100,13 +139,30 @@ export interface ResolvedDocument {
 const URL_KEYS = /^(card|hero|detail|dest|person|personPage|ch|tile|hit)\.(poster|backdrop|logo|portrait|nowArt|artwork)$/;
 const UNSAFE = /expression\(|javascript:|@import|[;{}<>\\]/i;
 
-interface Context {
+/** Resolving a screen or surface document (resolve/screen.ts): holes read its data, not the vocabulary. */
+export interface ScreenMode {
+  /** Strings, `{arg.*}`, item aliases and the page colour the holes compile against. */
+  scope: HoleScope;
+  /** The kit's templates in the skin's look (screen/kit.ts). */
+  kit: Record<string, Node>;
+  /** `$palette.<name>` values. */
+  palette: Record<string, string>;
+  /** Children of the `use` whose template is being resolved: they draw at its `children` slot. */
+  slot?: RNode[];
+  /** Problems that do not refuse the document: an unknown kit template, a refused literal colour. */
+  warnings: Set<string>;
+}
+
+export interface Context {
   doc: SkinDocument;
   ui: ReturnType<typeof resolveUi>;
   strings: Record<string, string>;
   width: number;
+  /** The viewport is a TV: `tv` variants apply (after `small`, `wide` and breakpoints). */
+  tv?: boolean;
   count: number;
   unsupported: Set<string>;
+  screen?: ScreenMode;
 }
 
 /** Client strings (`{t:…}`), the document's own (`{s:…}`) and its name, filled for the viewer's locale. */
@@ -118,6 +174,7 @@ function strings(text: string, r: Context): string {
 
 function compile(text: string | undefined, r: Context, urls = false): Template | undefined {
   if (text === undefined) return undefined;
+  if (r.screen) return compileTemplate(text, r.screen.scope);
   const filled = strings(text, r);
   const parts: (string | Accessor)[] = [];
   let at = 0;
@@ -149,8 +206,14 @@ export function fill(template: Template | undefined, c: Ctx, e: Env): string {
   return template.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
 }
 
-function tests(list: Condition[] | undefined): Test[] {
-  return (list ?? []).map(k => ({ read: read(k.test), is: k.is ?? 'set', value: k.value ?? '', not: k.not ?? false }));
+function tests(list: Condition[] | undefined, r?: Context): Test[] {
+  return (list ?? []).map(k => ({ read: r?.screen ? screenRead(k.test, r.screen.scope) : read(k.test), is: k.is ?? 'set', value: k.value ?? '', not: k.not ?? false }));
+}
+
+/** A condition's key in a screen document: a binding path (pipes allowed), read as text. */
+function screenRead(key: string, scope: HoleScope): Accessor {
+  const value = holeValue(key, scope);
+  return (c, e) => valueText(value(c, e), c.screen?.record);
 }
 
 export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
@@ -173,6 +236,14 @@ export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
 
 /** Concrete values shared by styles and colour-valued widget parameters. */
 function tokenValue(raw: string, r: Context): string {
+  if (r.screen) {
+    const palette = r.screen.palette;
+    raw = raw.replace(/\$palette\.([A-Za-z0-9_-]+)/g, (_, name: string) => {
+      const value = palette[name];
+      if (value === undefined) throw new Error(`Unknown palette colour $palette.${name}`);
+      return value;
+    });
+  }
   return mixColours(withUi(raw, r.ui).replace(/\$([A-Za-z0-9_-]+)/g, (_, name: string) => {
     const value = r.doc.tokens?.[name];
     if (value === undefined) throw new Error(`Unknown token $${name}`);
@@ -186,6 +257,12 @@ function css(style: Style | undefined, r: Context): CssT {
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
     const text = tokenValue(String(raw), r);
+    if (r.screen) {
+      // Any row may hold a hole; each is validated once filled (resolve/screen-style.ts).
+      if (UNSAFE.test(text.replace(/\{[^{}]*\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
+      out[row] = screenStyleRow(row, text, r.screen.scope);
+      continue;
+    }
     if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
     out[row] = compile(text, r, row === 'background-image')!;
   }
@@ -204,7 +281,8 @@ function variant(node: Node & { below?: Record<string, Style>; above?: Record<st
     ...marks.filter(m => !m.below && m.px <= r.width).sort((a, b) => a.px - b.px),
     ...marks.filter(m => m.below && m.px > r.width).sort((a, b) => b.px - a.px),
   ];
-  return Object.assign({}, base, ...applied.map(m => m.style));
+  // A TV is a class of its own (renderer 19): its variant applies last.
+  return Object.assign({}, base, ...applied.map(m => m.style), r.tv && node.tv ? node.tv : {});
 }
 
 /** A node's states, at most 16 (docs/skin-schema.md): more is refused, never silently cut. */
@@ -217,6 +295,7 @@ function statesOf(node: Node): NonNullable<Node['states']> {
 function convert(node: Node, depth: number, r: Context): RNode {
   if (++r.count > MAX_NODES) throw new Error(`A skin document draws at most ${MAX_NODES} nodes`);
   if (depth > MAX_DEPTH) throw new Error(`A skin document nests at most ${MAX_DEPTH} deep`);
+  if (node.type === 'use' && r.screen) return useScreen(node, depth, r);
   if (node.type === 'use') {
     const template = r.doc.templates?.[node.template];
     if (!template) throw new Error(`Unknown template ${node.template}`);
@@ -225,7 +304,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
     const breakpoints = (a?: Record<string, Style>, b?: Record<string, Style>) => Object.fromEntries(
       [...new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])].map(key => [key, { ...a?.[key], ...b?.[key] }]));
     return convert({ ...template, ...overrides, style: { ...template.style, ...node.style },
-      small: { ...template.small, ...node.small }, wide: { ...template.wide, ...node.wide },
+      small: { ...template.small, ...node.small }, wide: { ...template.wide, ...node.wide }, tv: { ...template.tv, ...node.tv },
       below: breakpoints(template.below, node.below), above: breakpoints(template.above, node.above),
       when: [...(template.when ?? []), ...(node.when ?? [])],
       motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r);
@@ -258,30 +337,37 @@ function convert(node: Node, depth: number, r: Context): RNode {
   });
   const motion = node.motion ? r.doc.motion?.[node.motion] as Motion | undefined : undefined;
   if (node.motion && !motion) throw new Error(`Unknown motion ${node.motion}`);
+  const onChange = r.screen && node.onChange ? { value: compile(node.onChange.value, r)!, motion: r.doc.motion?.[node.onChange.motion] as Motion | undefined } : undefined;
+  if (onChange && !onChange.motion) throw new Error(`Unknown motion ${node.onChange!.motion}`);
+  // A tabs block's `label` and `testId` belong to each option's chip (screens: tabsNode()).
+  const named = node.type === 'tabs' ? undefined : node.label;
+  const testId = node.type === 'tabs' ? undefined : node.testId;
   const common: Common = {
-    when: tests(node.when),
-    base: layer(style, node),
-    states: statesOf(node).map(s => ({ when: tests(s.when), layer: layer({ ...style, ...s.style }, s) })),
+    when: tests(node.when, r),
+    base: layer(style, { ...node, label: named }),
+    states: statesOf(node).map(s => ({ when: tests(s.when, r), layer: layer({ ...style, ...s.style }, s) })),
     active: node.active && css(node.active, r),
-    disabled: node.disabled && tests(node.disabled),
+    disabled: node.disabled && tests(node.disabled, r),
     disabledStyle: node.disabledStyle && css(node.disabledStyle, r),
     motion,
     stagger: node.stagger,
     role: node.role ?? node.a11y?.role,
-    label: compile(node.label, r),
+    label: compile(named, r),
     brand: 'press' in node && node.press?.action === 'home' && typeof node.label === 'string' && /\{[st]:(ui\.)?velaHome\}/.test(node.label),
     level: node.level,
-    testId: compile(node.testId, r),
+    testId: compile(testId, r),
     id: compile(node.id, r),
     hidden: node.a11y?.hidden,
-    a11y: node.a11y && { selected: node.a11y.selected && tests(node.a11y.selected), expanded: node.a11y.expanded && tests(node.a11y.expanded),
-      current: node.a11y.current && tests(node.a11y.current), pressed: node.a11y.pressed && tests(node.a11y.pressed), checked: node.a11y.checked && tests(node.a11y.checked),
+    a11y: node.a11y && { selected: node.a11y.selected && tests(node.a11y.selected, r), expanded: node.a11y.expanded && tests(node.a11y.expanded, r),
+      current: node.a11y.current && tests(node.a11y.current, r), pressed: node.a11y.pressed && tests(node.a11y.pressed, r), checked: node.a11y.checked && tests(node.a11y.checked, r),
       haspopup: node.a11y.haspopup, title: compile(node.a11y.title, r) },
     group: node.group === true,
     escape: node.escape ? node.escape.split(/\s+/).filter(Boolean) : undefined,
     returnFocus: compile(node.returnFocus, r),
     order: Number(style.order) || 0,
     ...(node.when?.some(test => test.test === 'nav.more' && !test.not && (test.is ?? 'set') === 'set') ? { navMore: true } : {}),
+    ...(onChange ? { onChange: onChange as { value: Template; motion: Motion } } : {}),
+    ...(r.screen && node.needs?.length ? { needs: [...node.needs] } : {}),
   };
   for (const row of ['grid-row', 'grid-column', 'grid-template-rows', '-webkit-text-stroke']) if (style[row as keyof Style]) r.unsupported.add(row);
   if (style['box-sizing'] === 'content-box') r.unsupported.add('box-sizing: content-box');
@@ -289,10 +375,10 @@ function convert(node: Node, depth: number, r: Context): RNode {
 
   switch (node.type) {
     case 'box': {
-      const children = (node.children ?? []).map(child => convert(child, depth + 1, r));
+      const children = r.screen ? screenChildren(node.children ?? [], depth, r) : (node.children ?? []).map(child => convert(child, depth + 1, r));
       if (children.some(child => child.order !== 0)) children.sort((a, b) => a.order - b.order);
       return { ...common, kind: 'box', children, controlStates: node.controlStates !== false,
-        press: node.press && { action: node.press.action, arg: compile(node.press.arg, r), focus: compile(node.press.focus, r) }, pager: node.pager,
+        press: node.press && pressOf(node.press, r), pager: node.pager,
         ...(node.fit === 'nav' ? { fit: 'nav' as const } : {}), ...(node.readingStop && !node.press ? { readingStop: true as const } : {}) };
     }
     // Legacy and new documents get the same safe synopsis control from this binding.
@@ -300,10 +386,17 @@ function convert(node: Node, depth: number, r: Context): RNode {
     // in whatever shape the skin gives the badge, so every document's profile control shows it.
     case 'text': return { ...common, kind: 'text', text: compile(node.text, r)!, summary: ['{detail.summary}', '{personPage.biography}'].includes(node.text.trim()),
       avatar: node.text.trim() === '{env.viewerInitial}' };
-    case 'image': return { ...common, kind: 'image', src: compile(node.src, r, true)!, alt: compile(node.alt, r), fade: node.fade === true };
-    case 'icon': return { ...common, kind: 'icon', symbol: node.symbol, paths: node.paths, viewBox: node.viewBox, fillRule: node.fillRule };
-    case 'repeat': return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000,
-      ...(node.limit === undefined ? { implicitLimit: true } : {}), item: convert(node.item, depth + 1, r) };
+    case 'image': return { ...common, kind: 'image', src: compile(node.src, r, true)!, alt: compile(node.alt, r), fade: node.fade === true,
+      ...(r.screen && node.fallback ? { fallback: convert(node.fallback, depth + 1, r) } : {}) };
+    case 'icon': return { ...common, kind: 'icon', symbol: r.screen ? screenSymbol(node.symbol, r) : node.symbol, paths: node.paths, viewBox: node.viewBox, fillRule: node.fillRule };
+    case 'repeat': {
+      if (r.screen) {
+        const items = itemsOf(node, r);
+        return { ...common, kind: 'repeat', over: items.path, limit: items.limit, items, item: withAlias(r, items.as, () => convert(node.item, depth + 1, r)) };
+      }
+      return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000,
+        ...(node.limit === undefined ? { implicitLimit: true } : {}), item: convert(node.item, depth + 1, r) };
+    }
     case 'slot': return { ...common, kind: 'slot', slot: node.slot, inner: node.inner && css(node.inner, r) };
     case 'widget': {
       // Parameters are text: client and document strings are filled now; holes (`{value}`, bindings) stay for the widget.
@@ -313,10 +406,203 @@ function convert(node: Node, depth: number, r: Context): RNode {
       return { ...common, kind: 'widget', widget: node.widget, params };
     }
     default:
-      // Renderer 19 blocks (docs/plugin-screens.md) are not resolved yet: drawn as nothing.
-      r.unsupported.add(`block ${node.type}`);
+      if (r.screen) return blockNode(node, common, depth, r);
+      // Blocks read a screen's data: a skin document has none, so they draw nothing there.
+      r.unsupported.add(`block ${(node as { type: string }).type}`);
       return { ...common, kind: 'box', children: [], controlStates: false };
   }
+}
+
+// Screens (docs/plugin-screens.md). Resolved with the same convert(), holes reading ScreenScope.
+
+/** A press with its named arguments and optimistic patch compiled. */
+function pressOf(press: NonNullable<BoxNode['press']>, r: Context): RPress {
+  return {
+    action: press.action, arg: compile(press.arg, r), focus: compile(press.focus, r),
+    ...(r.screen && press.args ? { args: Object.fromEntries(Object.entries(press.args).map(([k, v]) => [k, compile(v, r)!])) } : {}),
+    ...(r.screen && press.optimistic ? { optimistic: { record: compile(press.optimistic.record, r), source: press.optimistic.source,
+      path: press.optimistic.path, value: compile(press.optimistic.value, r)! } } : {}),
+  };
+}
+
+/** A box's children; a `children` slot inside a template draws the `use`'s children there. */
+function screenChildren(children: Node[], depth: number, r: Context): RNode[] {
+  return children.flatMap(child => child.type === 'slot' && child.slot === 'children'
+    ? r.screen!.slot ?? []
+    : [convert(child, depth + 1, r)]);
+}
+
+/** An icon symbol; `{arg.glyph}` stands for a literal argument. */
+function screenSymbol(symbol: string | undefined, r: Context): string | undefined {
+  if (!symbol?.includes('{')) return symbol;
+  const filled = compileTemplate(symbol, r.screen!.scope);
+  if (typeof filled === 'string') return filled || undefined;
+  r.screen!.warnings.add(`An icon symbol must be literal: ${symbol}`);
+  return undefined;
+}
+
+/** Run with an item alias in scope (a repeat's or block's `as`). */
+function withAlias<T>(r: Context, as: string, run: () => T): T {
+  const screen = r.screen!;
+  const saved = screen.scope;
+  screen.scope = { ...saved, aliases: new Set([...saved.aliases, as]) };
+  try { return run(); } finally { screen.scope = saved; }
+}
+
+const ROOTS = new Set(['src', 'param', 'state', 'context', 'env', 'arg', '$index', '$tab']);
+
+/** A collection's fields compiled: `over` and `exclude` in the enclosing scope, `key` per item. */
+function itemsOf(node: { over: string; as?: string; skip?: number; limit?: number; exclude?: string; key?: string; asOf?: { at: string; time: string } }, r: Context): Items {
+  const scope = r.screen!.scope;
+  const as = node.as ?? 'item';
+  if (!/^[A-Za-z_]\w*$/.test(as) || ROOTS.has(as)) throw new Error(`A collection's "as" is a name that is not a binding root: ${as}`);
+  const limit = Math.min(node.limit ?? SCREEN_ARRAY_ITEMS, SCREEN_ARRAY_ITEMS);
+  const key = node.key === undefined ? undefined : node.key.includes('{') ? node.key : `{${as}.${node.key}}`;
+  const at = node.asOf?.at.split('.') ?? [];
+  return {
+    over: pathField(node.over, scope),
+    path: singleHole(node.over) === undefined ? node.over.trim() : (scope.args[singleHole(node.over)!.replace(/^arg\./, '')]?.path ?? node.over),
+    as,
+    skip: Math.max(0, node.skip ?? 0),
+    limit,
+    ...(node.exclude ? { exclude: compile(node.exclude, r) } : {}),
+    ...(key ? { key: withAlias(r, as, () => compile(key, r)) } : {}),
+    ...(node.asOf ? { asOf: { at: at[0] === as ? at.slice(1) : at, time: compile(node.asOf.time, r)! } } : {}),
+  };
+}
+
+/** Of a per-class value, the one for this viewport. */
+function perClass<T>(value: PerClass<T> | undefined, r: Context): T | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object') return value as T;
+  const v = value as { default: T; small?: T; wide?: T; tv?: T };
+  if (r.tv && v.tv !== undefined) return v.tv;
+  if (r.width < 640 && v.small !== undefined) return v.small;
+  if (r.width >= 1200 && v.wide !== undefined) return v.wide;
+  return v.default;
+}
+
+/** A length field (`gap`, `itemWidth`, `height`): tokens substituted and folded. */
+function lengthField(value: string | undefined, r: Context): string | undefined {
+  if (value === undefined) return undefined;
+  const text = fold(tokenValue(value, r));
+  if (UNSAFE.test(text)) throw new Error(`Unsafe length: ${value}`);
+  return text;
+}
+
+/** A renderer 19 block. */
+function blockNode(node: Node, common: Common, depth: number, r: Context): RNode {
+  switch (node.type) {
+    case 'sections':
+      return { ...common, kind: 'sections', children: screenChildren(node.children ?? [], depth, r), gap: lengthField(node.gap, r) };
+    case 'shelf': {
+      const items = itemsOf(node, r);
+      return { ...common, kind: 'shelf', items, item: withAlias(r, items.as, () => convert(node.item, depth + 1, r)),
+        itemWidth: lengthField(perClass(node.itemWidth, r), r), gap: lengthField(node.gap, r), stableOrder: node.stableOrder === true,
+        ...(node.empty ? { empty: convert(node.empty, depth + 1, r) } : {}) };
+    }
+    case 'grid': {
+      const items = itemsOf(node, r);
+      const columns = Number(perClass(node.columns, r) ?? 1);
+      if (!Number.isInteger(columns) || columns < 1 || columns > 12) throw new Error(`A grid has 1 to 12 columns (${columns})`);
+      return { ...common, kind: 'grid', items, item: withAlias(r, items.as, () => convert(node.item, depth + 1, r)), columns, gap: lengthField(node.gap, r) };
+    }
+    case 'marquee': {
+      const items = itemsOf(node, r);
+      return { ...common, kind: 'marquee', items, item: withAlias(r, items.as, () => convert(node.item, depth + 1, r)), gap: lengthField(node.gap, r),
+        ...(node.speed !== undefined ? { speed: node.speed } : {}) };
+    }
+    case 'tabs': return tabsNode(node, common, depth, r);
+    case 'table': return { ...common, kind: 'table', data: pathField(node.data, r.screen!.scope), compact: node.compact === true,
+      ...(node.focusRows !== undefined ? { focusRows: node.focusRows } : {}) };
+    case 'lineGraph': return { ...common, kind: 'lineGraph', series: pathField(node.series, r.screen!.scope),
+      ...(node.sides ? { sides: pathField(node.sides, r.screen!.scope) } : {}), subject: compile(node.subject, r), live: compile(node.live, r),
+      height: lengthField(perClass(node.height, r), r) };
+    case 'player': return { ...common, kind: 'player', channel: compile(node.channel, r)! };
+    case 'paramInput': return { ...common, kind: 'paramInput', param: node.param, placeholder: compile(node.placeholder, r) };
+    case 'titleCard': return { ...common, kind: 'titleCard', item: compile(node.item, r)! };
+    default:
+      // An unknown block inside an accepted document draws nothing (docs/plugin-screens.md: Versioning).
+      r.screen!.warnings.add(`Unknown node type ${(node as { type: string }).type}: drawn as nothing`);
+      return { ...common, kind: 'box', children: [], controlStates: false };
+  }
+}
+
+/** Tabs: the options' value, label and count per item, and the chip each is drawn with. */
+function tabsNode(node: TabsNode, common: Common, depth: number, r: Context): RNode {
+  const items = itemsOf(node, r);
+  if (!node.bind || (!node.bind.param) === (!node.bind.state)) throw new Error('A tabs block binds exactly one of a param or a state');
+  const chipName = node.chip ?? 'vela:tab';
+  const chip = withAlias(r, items.as, () => withAlias(r, '$tab', () => {
+    const drawn = convert({ type: 'use', template: chipName, testId: node.testId,
+      with: { label: '{$tab.label}', count: '{$tab.count}', on: '{$tab.on}', ...(node.size === 'small' ? { small: 'true' } : {}) } }, depth + 1, r);
+    if (drawn.kind !== 'box') throw new Error(`A tabs chip is a box template (${chipName})`);
+    return drawn;
+  }));
+  return withAlias(r, items.as, () => ({
+    ...common, kind: 'tabs' as const, items, value: compile(node.value, r)!, label: compile(node.label, r)!, count: compile(node.count, r),
+    bind: { ...(node.bind.param ? { param: node.bind.param } : { state: node.bind.state }), ...(node.bind.clear ? { clear: [...node.bind.clear] } : {}) },
+    default: compile(node.default, r), all: compile(node.all, r), chip, small: node.size === 'small',
+  }));
+}
+
+/** Rewrite a caller's `{arg.*}` so it still reads the caller's arguments inside the template (`arg.^name`). */
+function callerArgs<T>(value: T): T {
+  if (typeof value === 'string') return value.replace(/(^|[{=,|])arg\./g, '$1arg.^') as T;
+  if (Array.isArray(value)) return value.map(callerArgs) as T;
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, callerArgs(v)])) as T;
+  return value;
+}
+
+/** A `use` in a screen: a document or kit template inlined, its `with` read as {arg.*} and its
+ * `children` drawn at the template's `children` slot. The caller's own fields (style, when,
+ * press, testId…) keep reading the caller's arguments. */
+function useScreen(node: UseNode, depth: number, r: Context): RNode {
+  const screen = r.screen!;
+  const kit = node.template.startsWith('vela:');
+  const template = kit ? screen.kit[node.template] : r.doc.templates?.[node.template];
+  if (!template) {
+    if (!kit) throw new Error(`Unknown template ${node.template}`);
+    // An unknown kit template in an accepted document draws nothing (its name is not in `requires`).
+    screen.warnings.add(`Unknown kit template ${node.template}: drawn as nothing`);
+    return convert({ type: 'box', when: node.when }, depth, r);
+  }
+  const args: Record<string, Arg> = {};
+  for (const [name, raw] of Object.entries({ ...kitDefaults(node.template), ...node.with })) args[name] = makeArg(raw, screen.scope);
+  const slot = node.children ? screenChildren(node.children, depth, r) : undefined;
+  const { type: _type, template: _name, with: _with, children: _children, ...own } = node;
+  const overrides = callerArgs(own);
+  const breakpoints = (a?: Record<string, Style>, b?: Record<string, Style>) => Object.fromEntries(
+    [...new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])].map(key => [key, { ...a?.[key], ...b?.[key] }]));
+  const merged = { ...template, ...overrides, style: { ...template.style, ...overrides.style },
+    small: { ...template.small, ...overrides.small }, wide: { ...template.wide, ...overrides.wide }, tv: { ...template.tv, ...overrides.tv },
+    below: breakpoints(template.below, overrides.below), above: breakpoints(template.above, overrides.above),
+    when: [...(template.when ?? []), ...(overrides.when ?? [])],
+    motion: overrides.motion ?? template.motion, stagger: overrides.stagger ?? template.stagger } as Node;
+  const saved = { scope: screen.scope, slot: screen.slot };
+  const inherited = Object.fromEntries(Object.entries(saved.scope.args).map(([name, arg]) => [`^${name}`, arg]));
+  screen.scope = { ...saved.scope, args: { ...inherited, ...args } };
+  screen.slot = slot;
+  try {
+    const drawn = convert(merged, depth, r);
+    // vela:panel takes focus on TV only when asked (`focusable`), which data may decide.
+    if (node.template === 'vela:panel' && drawn.kind === 'box') {
+      const focusable = args.focusable;
+      const { readingStop: _stop, ...rest } = drawn;
+      if (!focusable) return rest;
+      if (typeof focusable.template === 'string') return ['', 'false', '0'].includes(focusable.template) ? rest : drawn;
+      return { ...rest, readingStopWhen: tests([{ test: 'arg.focusable' }], r) };
+    }
+    return drawn;
+  } finally {
+    screen.scope = saved.scope;
+    screen.slot = saved.slot;
+  }
+}
+
+/** A node resolved in a context (resolve/screen.ts resolves screen documents through this). */
+export function convertNode(node: Node, r: Context): RNode {
+  return convert(node, 1, r);
 }
 
 /** Older collection documents omitted continuation; row grids must always scroll through all pages. */
