@@ -548,6 +548,8 @@ export class Screens {
     if (message.kind === 'records') {
       const changed = this.records.merge(message.records);
       if (!changed.length) return;
+      // A pushed record no page reaches is not kept.
+      this.gcSoon();
       const highest = Math.max(...changed.map(key => this.records.get(key)?.rev ?? 0));
       for (const [key, entry] of this.entries) {
         if (!changed.some(changedKey => entry.refs.has(changedKey))) continue;
