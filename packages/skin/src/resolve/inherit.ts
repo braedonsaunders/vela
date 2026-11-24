@@ -104,6 +104,12 @@ export function overlayHeaderOffset(shell: Node | undefined): { wide: string; sm
   };
 }
 
+/** Where a section page drawn by the app (the music app) starts below the shell's navigation:
+ * nothing when the nav is in flow, the overlay nav's height when it floats over the page. */
+export function headerInsetOf(shell: Node | undefined): { wide: string; small: string } {
+  return hasFlowHeader(shell) ? { wide: '0px', small: '0px' } : overlayHeaderOffset(shell);
+}
+
 /** All documents share the same accessible cast control and capability rule. */
 function sharedCast(node: Node): Node {
   if (node.type === 'repeat') return node.over === 'detail.cast'
@@ -209,6 +215,6 @@ export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocume
     status: ownHome ? doc.status : base.status,
     // The title page's presentation belongs to whoever draws the title page.
     detail: doc.routes?.title ? doc.detail : base.detail ?? doc.detail,
-    traits: { ...base.traits, ...doc.traits, barMask },
+    traits: { ...base.traits, ...doc.traits, barMask, headerInset: headerInsetOf(doc.slots?.shell) },
   };
 }

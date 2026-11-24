@@ -185,6 +185,15 @@ test('inherited library reserves header space only for overlay navigation', asyn
   expect(topPadding(kids)).toEqual(['100px', '68px']);
 });
 
+test('app-drawn section pages read where the shell navigation ends from the document', async () => {
+  const { withBase } = await import('../src/resolve/inherit');
+  const { velaBase } = await import('../src/resolve/base');
+  const inset = (name: string) => withBase(documents.find(([n]) => n === name)![1], velaBase).traits?.headerInset;
+  expect(inset('broadcast')).toEqual({ wide: '0px', small: '0px' });
+  expect(inset('latenight')).toEqual({ wide: 'calc(56px + env(safe-area-inset-top))', small: 'calc(56px + env(safe-area-inset-top))' });
+  expect(inset('kids')).toEqual({ wide: '100px', small: '68px' });
+});
+
 test('live library tabs use the catalogue grid without an empty alternative-view spacer', async () => {
   const { holds, resolveDocument } = await import('../src/resolve');
   const { velaBase } = await import('../src/resolve/base');

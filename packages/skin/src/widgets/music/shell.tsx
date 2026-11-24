@@ -6,6 +6,8 @@ import { ScrollView, Text, View } from 'react-native';
 import { msg, number, type Card, type PlaylistModel } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
+import { useHost } from '../../host';
+import { headerInsetOf } from '../../resolve/inherit';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { useLiked, usePlaylists } from './data';
@@ -18,6 +20,9 @@ import { QueuePanel } from './queue';
 export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
   const app = useMusic();
   const m = useMediaLook();
+  const host = useHost();
+  // Below the shell's navigation, wherever this document draws it (overlay or in flow).
+  const inset = host.doc.document.traits?.headerInset ?? headerInsetOf(host.doc.document.slots?.shell);
   const [collapsed, setCollapsed] = useState(false);
   const narrow = m.width < 1180;
   const rail = collapsed || narrow;
@@ -26,7 +31,7 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
     <View style={[{ backgroundColor: m.ui.raised, borderRadius: Number(m.ui.radiusPanel) || 14, overflow: 'hidden' }, m.box({ border: '1px solid $ui.glassEdge' }), style]}>{children}</View>
   );
   return (
-    <View pointerEvents="box-none" style={{ flex: 1, paddingHorizontal: 10, paddingTop: 62, gap: 8 }} testID="music-shell">
+    <View pointerEvents="box-none" style={[{ flex: 1, paddingHorizontal: 10, gap: 8 }, m.box({ 'padding-top': `calc(${m.small ? inset.small : inset.wide} + 6px)` })]} testID="music-shell">
       <View style={{ flex: 1, flexDirection: 'row', gap: 8, minHeight: 0 }}>
         {panel(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, { width: rail ? 84 : 316 })}
         {panel(
