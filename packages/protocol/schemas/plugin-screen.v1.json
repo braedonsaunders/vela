@@ -4693,7 +4693,7 @@
     },
     "SurfaceRow": {
       "additionalProperties": false,
-      "description": "A Home row that is a surface (bootstrap and home rows): row id `surface:<pluginID>:<id>`.",
+      "description": "A Home row that is a surface (bootstrap and home rows), placed after the first row: id `surface:<surface id>`, e.g. `surface:sports.tonight`.",
       "properties": {
         "id": {
           "type": "string"
