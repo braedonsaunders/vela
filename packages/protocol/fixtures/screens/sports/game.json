@@ -80,7 +80,7 @@
           { "type": "use", "template": "panelTitle", "with": { "text": "{s:probability}" } },
           { "type": "box", "when": [{ "test": "src.game.event.probability.leader.abbr" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "14px" }, "children": [
             { "type": "repeat", "over": "src.game.event.sides", "as": "side", "item": { "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "6px", "opacity": "0.7" },
-              "states": [{ "when": [{ "test": "side.share", "is": "gt", "value": "49" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "6px" } }], "children": [
+              "states": [{ "when": [{ "test": "side.share", "is": "gt", "value": "49" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "6px", "opacity": "1" } }], "children": [
               { "type": "box", "style": { "width": "9px", "height": "9px", "border-radius": "5px", "background-color": "{side|readable}" } },
               { "type": "text", "text": "{side.abbr} {side.share}%", "style": { "font-size": "13.5px", "line-height": "1.25", "font-weight": "600", "color": "$ui.ink", "font-variant-numeric": "tabular-nums" },
                 "states": [{ "when": [{ "test": "side.share", "is": "gt", "value": "49" }], "style": { "font-size": "13.5px", "line-height": "1.25", "font-weight": "800", "color": "$ui.ink", "font-variant-numeric": "tabular-nums" } }] } ] } } ] } ] },
@@ -96,7 +96,7 @@
         { "type": "repeat", "over": "src.game.detail.playsNewest", "as": "p", "key": "{p.period}-{p.clock}-{p.text}", "limit": 30, "motion": "rise", "stagger": { "step": 70, "cap": 3 }, "item": {
           "type": "box", "readingStop": true,
           "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px", "border-top-width": "1px", "border-top-color": "$hairline" },
-          "states": [{ "when": [{ "test": "$index", "is": "eq", "value": "0" }], "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px" } }],
+          "states": [{ "when": [{ "test": "$index", "is": "eq", "value": "0" }], "style": { "border-top-width": "0px" } }],
           "focus": { "background-color": "color-mix(in srgb, $ui.ink 7%, transparent)", "scale": "1.015" },
           "children": [
             { "type": "box", "style": { "width": "3px", "align-self": "stretch", "border-radius": "2px" },

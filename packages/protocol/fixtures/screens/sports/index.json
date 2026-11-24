@@ -260,7 +260,7 @@
         { "type": "use", "template": "vela:crest", "with": { "logo": "{t.logo}", "abbr": "{t.abbr}", "color": "{t|crest}", "size": "36px" } },
         { "type": "text", "text": "{t.name}", "style": { "font-size": "13.5px", "line-height": "1.25", "font-weight": "620", "color": "$ui.ink", "line-clamp": "1", "text-overflow": "ellipsis" } },
         { "type": "icon", "symbol": "star", "style": { "width": "16px", "height": "16px", "color": "$ui.inkQuiet", "opacity": "0.55", "scale": "0.85" },
-          "states": [{ "when": [{ "test": "t.favourite" }], "style": { "width": "16px", "height": "16px", "color": "$ui.highlight" } }] }
+          "states": [{ "when": [{ "test": "t.favourite" }], "style": { "width": "16px", "height": "16px", "color": "$ui.highlight", "opacity": "1", "scale": "1" } }] }
       ]
     },
 

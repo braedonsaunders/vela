@@ -30,9 +30,9 @@ const env = { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR ?? '/Appl
 
 /** The app route a variant opens a page at (expo-router path). */
 export function appRoute(variant: Variant, page: View['page']): string {
-  if ('index' in page) return variant === 'legacy' ? '/screen/sports' : '/screen/sports';
+  if ('index' in page) return variant === 'legacy' ? '/screen/sports?screens=0' : '/screen/sports?screens=1';
   const event = encodeURIComponent(page.game);
-  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}`;
+  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}&screens=1`;
 }
 
 const root = resolve(import.meta.dir, '../..');
