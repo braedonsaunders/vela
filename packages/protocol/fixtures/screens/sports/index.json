@@ -180,7 +180,7 @@
 
         { "type": "box", "when": [{ "test": "e.sides" }], "style": { "flex-direction": "row", "align-items": "center", "justify-content": "space-between", "gap": "10px" }, "children": [
           { "type": "repeat", "over": "e.sides", "as": "side", "limit": 1, "item": { "type": "use", "template": "heroSide" } },
-          { "type": "box", "style": { "align-items": "center", "min-width": "170px" }, "small": { "min-width": "110px" }, "children": [
+          { "type": "box", "testId": "sports-hero-centre", "style": { "align-items": "center", "min-width": "170px", "max-width": "50%", "flex-shrink": "1" }, "small": { "min-width": "110px", "max-width": "60%" }, "children": [
             { "type": "box", "when": [{ "test": "e.scored" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "12px" }, "children": [
               { "type": "text", "testId": "sports-hero-away-score", "text": "{e.sides.0.score}", "onChange": { "value": "{e.sides.0.score}", "motion": "scoreFlash" },
                 "style": { "font-size": "52px", "line-height": "1.12", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "38px" } },
@@ -191,7 +191,7 @@
               { "type": "icon", "symbol": "eye-off", "style": { "width": "18px", "height": "18px", "color": "#ffffffcc" } },
               { "type": "text", "text": "{s:spoilersHidden}", "style": { "font-size": "15px", "line-height": "1.25", "font-weight": "650", "color": "#ffffffd9" } } ] },
             { "type": "text", "text": "{e.start|start}", "when": [{ "test": "e.scored", "not": true }, { "test": "e.spoiler", "not": true }, { "test": "e.phase", "is": "eq", "value": "upcoming" }],
-              "style": { "font-size": "32px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "24px" } },
+              "style": { "font-size": "32px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" }, "small": { "font-size": "24px" } },
             { "type": "text", "text": "{e.detail}{e.situation.0.value| · }{e.situation.1.value| · }", "when": [{ "test": "e.phase", "is": "ne", "value": "upcoming" }],
               "style": { "margin-top": "4px", "font-size": "12.5px", "line-height": "1.25", "font-weight": "650", "color": "$palette.onTeam", "line-clamp": "1", "text-overflow": "ellipsis" } },
             { "type": "text", "text": "{e.situation.0.value}{e.situation.1.value| · }", "when": [{ "test": "e.phase", "is": "eq", "value": "upcoming" }, { "test": "e.situation.0.value" }],
