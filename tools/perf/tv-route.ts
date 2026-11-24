@@ -13,8 +13,8 @@
 //      hero, filter chips, shelves, and cards, and computes `p50`, `p95`, `max`, and jank count from
 //      `dumpsys gfxinfo app.ether.vela framestats`.
 //   3. Single live record push cost (`recordPush.frames`, budget <= 2 frames, re-rendering only its readers):
-//      Resets `gfxinfo`, triggers a single live record update on the mock server (toggling one team's
-//      `favorite` record / event record push over `/vela/v0/live/stream`), waits 1200 ms, and counts
+//      Resets `gfxinfo`, pushes a single live event record update (`event:sports:sports:nfl-nyg-phi`
+//      score 27 -> 28, clock 2:14 -> 2:11) over `/vela/v0/live/stream`, waits 1200 ms, and counts
 //      the frames rendered on the TV emulator, paired with the structural reader isolation audit from
 //      `tools/perf/record-push.ts`.
 //
@@ -251,13 +251,67 @@ if (import.meta.main) {
   }
 
   /** Start an isolated frozen mock server in `repoDir` on `mockPort` if `--mock` was not externally supplied.
+   *  Wraps `Bun.serve` in-memory to expose `POST /__perf/bump-event`, which increments the score/clock of
+   *  `sports:sports:nfl-nyg-phi` by 1 play so a single live event record push can be measured deterministically.
    *  Returns the mock URL and a cleanup callback that kills ONLY its own child PID. */
   async function ensureMockServer(repoDir: string): Promise<{ url: string; stop: () => void }> {
     if (values.mock) {
       return { url: values.mock, stop: () => {} };
     }
     const url = `http://127.0.0.1:${mockPort}`;
-    const child = Bun.spawn(['bun', 'mock-server/main.ts'], {
+    const bootScript = `
+      import { sportsModel } from './mock-server/sports.ts';
+      const legacyStreamControllers = new Set();
+      const encoder = new TextEncoder();
+      const origServe = Bun.serve.bind(Bun);
+      Bun.serve = (opts) => origServe({
+        ...opts,
+        async fetch(req, server) {
+          const u = new URL(req.url);
+          if (req.method === 'POST' && u.pathname === '/__perf/bump-event') {
+            const sim = sportsModel.sim('sports:sports:nfl-nyg-phi');
+            if (sim) {
+              sim.scores[1] += 1;
+              sim.clock = Math.max(1, sim.clock - 3);
+              const ev = sportsModel.event(sim, 'viewer-demo');
+              const frame = encoder.encode('event: update\\ndata: ' + JSON.stringify({ events: [ev] }) + '\\n\\n');
+              for (const c of legacyStreamControllers) {
+                try { c.enqueue(frame); } catch { legacyStreamControllers.delete(c); }
+              }
+            }
+            return Response.json({ ok: true, scores: sim?.scores });
+          }
+          const res = await opts.fetch.call(this, req, server);
+          if (u.pathname === '/vela/v0/live/stream' && !u.searchParams.has('topic') && res.body) {
+            const reader = res.body.getReader();
+            let ctrl;
+            const wrapped = new ReadableStream({
+              start(c) {
+                ctrl = c;
+                legacyStreamControllers.add(c);
+                (async () => {
+                  try {
+                    for (let next = await reader.read(); !next.done; next = await reader.read()) {
+                      c.enqueue(next.value);
+                    }
+                  } catch {} finally {
+                    legacyStreamControllers.delete(c);
+                  }
+                })();
+              },
+              cancel() {
+                if (ctrl) legacyStreamControllers.delete(ctrl);
+                try { reader.cancel(); } catch {}
+              },
+            });
+            return new Response(wrapped, { status: res.status, headers: res.headers });
+          }
+          return res;
+        },
+      });
+      await import('./mock-server/main.ts');
+    `;
+    const child = Bun.spawn(['bun', '-e', bootScript], {
       cwd: repoDir,
       stdin: 'ignore',
       stdout: 'pipe',
@@ -371,30 +425,31 @@ if (import.meta.main) {
     };
   }
 
-  /** Trigger a single live record push on the mock server while the Sports route is open.
-   *  For document routes, calls `POST /vela/v0/screens/sports/actions/ether.favorite`
-   *  which pushes the updated `entity:sports:sports:team:nfl-phi` and `event:sports:sports:nfl-nyg-phi`
-   *  records over `/vela/v0/live/stream`.
-   *  For legacy routes, triggers an event update over `/vela/v0/live/stream`. */
+  /** Trigger a single live record push (`event:sports:sports:nfl-nyg-phi` home score 27 -> 28, clock 2:14 -> 2:11)
+   *  on the mock server while the Sports route is open.
+   *  - Both legacy and document builds increment `nfl-nyg-phi` via `POST /__perf/bump-event`.
+   *  - For document routes, `POST /vela/v0/screens/sports/actions/ether.reveal` then calls `pump('viewer-demo')`,
+   *    which pushes a single `event: records` SSE frame containing only `event:sports:sports:nfl-nyg-phi` over
+   *    `/vela/v0/live/stream`.
+   *  - For legacy routes, `POST /__perf/bump-event` enqueues a single `event: update` SSE frame containing only
+   *    `sports:sports:nfl-nyg-phi` over `/vela/v0/live/stream`. */
   async function triggerSingleRecordPush(mockUrl: string, isDocumentVariant: boolean): Promise<void> {
+    await fetch(`${mockUrl}/__perf/bump-event`, { method: 'POST' });
     if (isDocumentVariant) {
-      await fetch(`${mockUrl}/vela/v0/screens/sports/actions/ether.favorite`, {
+      const idempotencyKey = crypto.randomUUID();
+      await fetch(`${mockUrl}/vela/v0/screens/sports/actions/ether.reveal`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Vela-Screen-Renderer': '19',
+          'Idempotency-Key': idempotencyKey,
           ...MOCK_AUTH_HEADERS,
         },
         body: JSON.stringify({
           page: 'index',
-          args: { ref: 'entity:sports:sports:team:nfl-phi', on: false },
+          args: { event: 'event:sports:sports:nfl-nyg-phi' },
+          idempotencyKey,
         }),
-      });
-    } else {
-      await fetch(`${mockUrl}/__admin/sports`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spoilerFree: true }),
       });
     }
   }
