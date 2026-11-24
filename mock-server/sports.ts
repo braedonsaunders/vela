@@ -4,6 +4,9 @@
 // scores, and the change is pushed on /live/stream. A finished replay restarts its script.
 //
 // Knobs: VELA_MOCK_NO_SPORTS=1 hides it all (no features, navigation or endpoints);
+// VELA_MOCK_SPORTS_FREEZE=1 stops the clock for screenshot parity: nothing ticks, and "now" is
+// VELA_MOCK_SPORTS_NOW (an ISO instant) or 15:00 local on the day the mock started, so scores,
+// clocks, plays, probability and start times are identical in every capture;
 // VELA_MOCK_SPOILER_FREE=1 makes the viewer spoiler-free for every started event;
 // VELA_MOCK_PROVIDER_CAP=n refuses a multiview tile past n channels of one provider.
 // POST /__admin/sports {providerCap, spoilerFree, alert} changes them at runtime.
@@ -18,7 +21,29 @@ const tickMs = Math.max(20, Number(process.env.VELA_MOCK_LIVE_TICK_MS) || 3000);
 export const sportsKnobs = {
   providerCap: Math.max(0, Math.floor(Number(process.env.VELA_MOCK_PROVIDER_CAP) || 0)),
   spoilerFree: process.env.VELA_MOCK_SPOILER_FREE === '1',
+  /** Sports screen and game reads answer this late (the loading views), or fail (the failure views). */
+  screenDelayMs: 0,
+  screenFail: false,
 };
+
+/** The frozen instant, when VELA_MOCK_SPORTS_FREEZE=1. */
+export function frozenNow(env: Record<string, string | undefined>, started = Date.now()): number | undefined {
+  if (env.VELA_MOCK_SPORTS_FREEZE !== '1') return undefined;
+  const given = Date.parse(env.VELA_MOCK_SPORTS_NOW ?? '');
+  if (Number.isFinite(given)) return given;
+  const day = new Date(started);
+  day.setHours(15, 0, 0, 0);
+  return day.getTime();
+}
+const frozen = frozenNow(process.env);
+export const sportsFrozen = frozen !== undefined;
+/** The Sports clock: the frozen instant, or the real time. Everything in Sports reads time here. */
+export const sportsNow = () => frozen ?? Date.now();
+/** Await before answering a Sports screen or game read: honours screenDelayMs and screenFail. */
+export async function sportsGate(fail: Fail): Promise<void> {
+  if (sportsKnobs.screenDelayMs > 0) await Bun.sleep(sportsKnobs.screenDelayMs);
+  if (sportsKnobs.screenFail) fail('transient', 'sports_unavailable', 'Sports is unavailable (mock fault)', {}, 503);
+}
 
 // Deterministic randomness, so a run is repeatable.
 let seed = 0x5eed;
@@ -65,6 +90,8 @@ const LEAGUES: Record<string, V.LiveLeague & { category: string }> = {
   f1: { id: 'f1', name: 'Formula 1', abbr: 'F1', category: 'f1' },
 };
 const DEFAULT_FAVOURITES = ['nfl-phi', 'nhl-tor', 'nba-tor', 'mlb-tor', 'epl-mci'];
+/** Every viewer's starting favourites (team ids); /__admin/sports {favourites} replaces them. */
+let startingFavourites = DEFAULT_FAVOURITES;
 
 /** One sport's rules for the simulation and the score page. */
 interface Rules { periods: number; periodSeconds: number; countUp?: boolean; tick: number; scoreChance: number; points: number[]; periodName: (n: number) => string; columns: (n: number) => string }
@@ -86,13 +113,13 @@ interface Sim {
   updatedAt: string; initial?: string; postedAt?: number;
 }
 const sims = new Map<string, Sim>();
-const H = 3600_000, now0 = Date.now();
+const H = 3600_000, now0 = sportsNow();
 const dayStart = (offset: number) => { const d = new Date(now0); d.setHours(0, 0, 0, 0); return d.getTime() + offset * 24 * H; };
 
 function makeSim(id: string, league: string, away: string, home: string, start: number, state: V.LiveEventState, more: Partial<Sim> = {}): Sim {
   const lines: [number[], number[]] = [[], []];
   const sim: Sim = { id: ns(id), league, start, state, period: 0, clock: 0, home: `${league}-${home.toLowerCase()}`, away: `${league}-${away.toLowerCase()}`,
-    scores: [0, 0], lines, probability: 0.5, series: [], plays: [], broadcasts: [], channels: [], updatedAt: new Date().toISOString(), ...more };
+    scores: [0, 0], lines, probability: 0.5, series: [], plays: [], broadcasts: [], channels: [], updatedAt: new Date(sportsNow()).toISOString(), ...more };
   if (more.lines) sim.scores = [sum(more.lines[0]), sum(more.lines[1])];
   sims.set(sim.id, sim);
   return sim;
@@ -262,7 +289,7 @@ function tablesFor(sim: Sim): V.LiveTable[] {
 
 const favourites = new Map<string, Set<string>>();
 const revealed = new Map<string, Set<string>>();
-const favouritesOf = (viewerId: string) => { let set = favourites.get(viewerId); if (!set) favourites.set(viewerId, set = new Set(DEFAULT_FAVOURITES.map(entityKey))); return set; };
+const favouritesOf = (viewerId: string) => { let set = favourites.get(viewerId); if (!set) favourites.set(viewerId, set = new Set(startingFavourites.map(entityKey))); return set; };
 const DEFAULT_SPOILERS = new Set([ns('epl-che-mci')]);
 /** A viewer's own spoiler-free choice (PUT /live/preferences); the admin knob otherwise. */
 const spoilerPreference = new Map<string, boolean>();
@@ -340,10 +367,10 @@ const FILLER: Record<string, string[]> = {
 };
 function step(sim: Sim): boolean {
   const league = LEAGUES[sim.league]!;
-  if (sim.state === 'post' && sim.postedAt && Date.now() - sim.postedAt > 20 * tickMs && sim.initial) {
+  if (sim.state === 'post' && sim.postedAt && sportsNow() - sim.postedAt > 20 * tickMs && sim.initial) {
     // A finished replay starts its script again, so live UI always has something moving.
     const fresh = JSON.parse(sim.initial) as Sim;
-    Object.assign(sim, fresh, { initial: sim.initial, postedAt: undefined, updatedAt: new Date().toISOString() });
+    Object.assign(sim, fresh, { initial: sim.initial, postedAt: undefined, updatedAt: new Date(sportsNow()).toISOString() });
     return true;
   }
   if (sim.state !== 'in') return false;
@@ -354,7 +381,7 @@ function step(sim: Sim): boolean {
       const swap = 1 + Math.floor(random() * (ranking.length - 1));
       if (random() < 0.4) [ranking[swap - 1], ranking[swap]] = [{ ...ranking[swap]!, pos: swap }, { ...ranking[swap - 1]!, pos: swap + 1 }];
       ranking.forEach((row, n) => { row.detail = n ? `+${(n * 2.41 + random()).toFixed(3)}` : 'Leader'; });
-      if (sim.laps[0] >= sim.laps[1]) { sim.state = 'post'; sim.postedAt = Date.now(); }
+      if (sim.laps[0] >= sim.laps[1]) { sim.state = 'post'; sim.postedAt = sportsNow(); }
       return true;
     }
     return false;
@@ -382,7 +409,7 @@ function step(sim: Sim): boolean {
   if (rules.countUp && sim.period === 1 && sim.clock >= 45 * 60) { sim.period = 2; changed = true; }
   const ended = rules.countUp ? sim.clock >= 93 * 60 : sim.clock <= 0;
   if (ended) {
-    if (rules.countUp || sim.period >= rules.periods && sim.scores[0] !== sim.scores[1]) { sim.state = 'post'; sim.postedAt = Date.now(); }
+    if (rules.countUp || sim.period >= rules.periods && sim.scores[0] !== sim.scores[1]) { sim.state = 'post'; sim.postedAt = sportsNow(); }
     else { sim.period++; sim.clock = rules.countUp ? sim.clock : rules.periodSeconds; for (const line of sim.lines) line[sim.period - 1] ??= 0; }
     changed = true;
   }
@@ -447,7 +474,7 @@ function tick(): void {
     const wasClose = sim.state === 'in' && LEAGUES[sim.league]!.category !== 'f1' && isClose(sim, RULES[LEAGUES[sim.league]!.category]!);
     const wasState = sim.state;
     if (!step(sim)) continue;
-    sim.updatedAt = new Date().toISOString();
+    sim.updatedAt = new Date(sportsNow()).toISOString();
     changed.push(sim);
     const category = LEAGUES[sim.league]!.category;
     const close = sim.state === 'in' && category !== 'f1' && isClose(sim, RULES[category]!);
@@ -473,7 +500,7 @@ function alert(kind: V.LiveAlertKind, sim: Sim, force = false): void {
     const detail = statusOf(sim).detail;
     const title = { started: 'Starting now', close: 'Close game', final: 'Final' }[kind];
     const body = kind === 'started' ? `${away?.short} at ${home?.short} · ${LEAGUES[sim.league]!.name}` : `${score}, ${detail}`;
-    listener.send('alert', { id: `alert-${++alerts}`, kind, eventId: sim.id, entityKey: entityKey(favourite ?? sim.home), title, body, at: new Date().toISOString() } satisfies V.LiveAlert);
+    listener.send('alert', { id: `alert-${++alerts}`, kind, eventId: sim.id, entityKey: entityKey(favourite ?? sim.home), title, body, at: new Date(sportsNow()).toISOString() } satisfies V.LiveAlert);
   }
 }
 
@@ -509,18 +536,18 @@ export function initSports(channels: V.Channel[]): void {
   lineup = channels;
   if (!sportsEnabled || sims.size) return;
   seedFixtures();
-  setInterval(tick, tickMs);
+  if (!sportsFrozen) setInterval(tick, tickMs);
 }
 
 /** The Sports routes under /vela/v0; undefined for any other path. */
-export function sportsApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail, body?: unknown): Response | undefined {
+export function sportsApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail, body?: unknown): Response | Promise<Response> | undefined {
   if (!sportsEnabled) return undefined;
   logoOrigin ||= url.origin;
   const screenMatch = /^\/screens\/([^/]+)$/.exec(path);
   if (method === 'GET' && screenMatch) {
     const value = screen(decodeURIComponent(screenMatch[1]!), viewerId, url.searchParams.get('league'), url.searchParams.get('date'));
     if (!value) fail('not-found', 'screen_not_found', 'Screen not found');
-    return json(value);
+    return sportsGate(fail).then(() => json(value));
   }
   if (method === 'GET' && path === '/live/events') {
     const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean);
@@ -531,7 +558,7 @@ export function sportsApi(req: Request, url: URL, method: string, path: string, 
   if (eventMatch) {
     const sim = sims.get(decodeURIComponent(eventMatch[1]!));
     if (!sim) fail('not-found', 'event_not_found', 'Live event not found');
-    if (method === 'GET' && !eventMatch[2]) return json(presentDetail(sim, viewerId));
+    if (method === 'GET' && !eventMatch[2]) return sportsGate(fail).then(() => json(presentDetail(sim, viewerId)));
     if (method === 'POST' && eventMatch[2]) {
       let set = revealed.get(viewerId);
       if (!set) revealed.set(viewerId, set = new Set());
@@ -550,7 +577,7 @@ export function sportsApi(req: Request, url: URL, method: string, path: string, 
   }
   if (method === 'GET' && path === '/live/stream') return liveStream(req, url, viewerId, authorized);
   if (method === 'GET' && path === '/live/ticker') {
-    const events = [...sims.values()].filter(sim => sim.state === 'in' || sim.state === 'post' && now0 - sim.start < 30 * H || sim.state === 'pre' && sim.start - Date.now() < 6 * H)
+    const events = [...sims.values()].filter(sim => sim.state === 'in' || sim.state === 'post' && now0 - sim.start < 30 * H || sim.state === 'pre' && sim.start - sportsNow() < 6 * H)
       .sort(byInterest(viewerId)).map(sim => presentEvent(sim, viewerId));
     return json({ events } satisfies V.LiveEventsResponse);
   }
@@ -581,12 +608,19 @@ export function liveEventOnChannel(channelId: string | undefined): V.LiveEventRe
 }
 
 /** Admin: change the knobs, or push an alert for an event to every alert listener. */
-export function sportsAdmin(body: { providerCap?: number; spoilerFree?: boolean; alert?: { kind: V.LiveAlertKind; eventId: string } }): typeof sportsKnobs {
+export function sportsAdmin(body: { providerCap?: number; spoilerFree?: boolean; screenDelayMs?: number; screenFail?: boolean; favourites?: string[] | null; alert?: { kind: V.LiveAlertKind; eventId: string } }): typeof sportsKnobs & { now: string; frozen: boolean } {
   if (Number.isFinite(body.providerCap) && body.providerCap! >= 0) sportsKnobs.providerCap = Math.floor(body.providerCap!);
+  if (Number.isFinite(body.screenDelayMs) && body.screenDelayMs! >= 0) sportsKnobs.screenDelayMs = Math.min(600_000, Math.floor(body.screenDelayMs!));
+  if (typeof body.screenFail === 'boolean') sportsKnobs.screenFail = body.screenFail;
+  // Every viewer starts again from these favourites (null: the defaults); reveals are forgotten too.
+  if (body.favourites === null || Array.isArray(body.favourites)) {
+    startingFavourites = body.favourites?.filter(id => TEAMS.some(t => t.id === id)) ?? DEFAULT_FAVOURITES;
+    favourites.clear(); revealed.clear();
+  }
   if (typeof body.spoilerFree === 'boolean') { sportsKnobs.spoilerFree = body.spoilerFree; spoilerPreference.clear(); }
   const sim = body.alert && sims.get(body.alert.eventId);
   if (sim && body.alert) alert(body.alert.kind, sim, true);
-  return sportsKnobs;
+  return { ...sportsKnobs, now: new Date(sportsNow()).toISOString(), frozen: sportsFrozen };
 }
 
 /** A team crest for the mock's logos: the abbreviation on transparent, drawn over the team colour. */
