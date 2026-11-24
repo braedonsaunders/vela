@@ -156,7 +156,8 @@ export interface SectionsNode extends NodeBase { type: 'sections'; children: Nod
 export interface ShelfNode extends ItemsBase { type: 'shelf'; itemWidth?: PerClass<string>; gap?: string; stableOrder?: boolean; empty?: Node }
 export interface GridNode extends ItemsBase { type: 'grid'; columns: PerClass<number>; gap?: string }
 export interface TabsNode extends NodeBase { type: 'tabs'; over: string; as: string; value: Template; label: Template; count?: Template;
-  bind: { param?: string; state?: string; clear?: string[] }; default?: Template; all?: Template; chip?: string; size?: 'small' }
+  bind: { param?: string; state?: string; clear?: string[] }; default?: Template; all?: Template; chip?: string; size?: 'small';
+  /** Nodes drawn after the options inside the same scroll and focus row (Sports' Hide scores switch). */ after?: Node[] }
 export interface TableNode extends NodeBase { type: 'table'; data: string; compact?: boolean; focusRows?: number }
 export interface LineGraphNode extends NodeBase { type: 'lineGraph'; series: string; sides?: string; subject?: Template; live?: Template; height?: PerClass<string> }
 export interface PlayerNode extends NodeBase { type: 'player'; channel: Template }
@@ -179,7 +180,7 @@ export interface SkinFont { family: string; /** weight: a number, or a range "30
 /** The keys of a document's `ui` block (packages/skin/src/resolve/ui-defaults.ts holds Cinematic's values). */
 export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'inkHover' | 'accent' | 'onAccent'
   | 'control' | 'controlHover' | 'glass' | 'glassEdge' | 'glassEdgeStrong' | 'popover' | 'scrim' | 'track' | 'trackStrong'
-  | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'font' | 'fontDisplay'
+  | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'highlight' | 'positive' | 'font' | 'fontDisplay'
   | 'radiusControl' | 'radiusCard' | 'radiusPanel';
 
 export interface SkinDocument {
