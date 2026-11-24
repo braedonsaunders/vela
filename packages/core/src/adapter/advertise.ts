@@ -10,7 +10,7 @@ import {
   hasLiveTv,
   hasLibraryLive,
   hasMusicLibrary,
-  hasLiveEvents,
+  
   hasMultiview,
   hasPasswordSignIn,
   hasPlaylistImports,
@@ -66,8 +66,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(description.features.audioPlayback ? { audioPlayback: description.features.audioPlayback } : {}),
       ...(description.features.libraryExperiences ? { libraryExperiences: description.features.libraryExperiences } : {}),
       ...(hasReading(adapter) && description.features.reading ? { reading: description.features.reading } : {}),
-      // Live events and multiview (Sports): operations, so the adapter must offer them too.
-      ...(hasLiveEvents(adapter) && description.features.liveEvents ? { liveEvents: description.features.liveEvents } : {}),
+      // Multiview: an operation, so the adapter must offer it too.
       ...(hasMultiview(adapter) && description.features.multiview ? { multiview: description.features.multiview } : {}),
       // Music (docs/media-kinds.md): liked lists, lyrics and play contexts are operations the adapter must offer.
       ...(hasMusicLibrary(adapter) && description.features.favoritesList ? { favoritesList: description.features.favoritesList } : {}),

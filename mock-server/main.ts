@@ -18,7 +18,7 @@ import { downloadSubtitle, foundSubtitleVtt, searchSubtitles, subtitleLanguages 
 
 import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
-import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
+import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsEnabled, sportsLogo } from './sports';
 import { screensAdmin, screensApi, screensBootstrap } from './screens';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
@@ -52,8 +52,8 @@ const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds:
 // Music, books and audiobooks (docs/media-kinds.md). VELA_MOCK_OLD=1 is a server from before them,
 // and the VELA_MOCK_LAB=1 preset mirrors a lab server's video-only libraries.
 const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
-// Sports (0.3.19): live events, the plugin screen it lists in navigation, and multiview.
-if (sportsEnabled) Object.assign(capabilities.features, { liveEvents: { available: true }, multiview: { available: true, maxTiles: 4 } });
+// Sports: its plugin screens and surfaces (screens.ts) and multiview.
+if (sportsEnabled) Object.assign(capabilities.features, { multiview: { available: true, maxTiles: 4 } });
 Object.assign(capabilities.features, catchUpFeature());
 if (mediaEnabled) Object.assign(capabilities.features, {
   mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast', 'photo'] },
@@ -942,8 +942,6 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const screens = await screensApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail, body);
   if (screens) return screens;
-  const sports = sportsApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail, body);
-  if (sports) return sports;
   if (sportsEnabled && method === 'POST' && path === '/multiview') {
     if (!body.device?.id) fail('request', 'device_required', 'Device required');
     return json(createGroup(g.id));

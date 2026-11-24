@@ -69,19 +69,20 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /sessions/:id/trickplay/:width/:sheet.jpg | bearer + device; optional If-None-Match | private JPEG sprite sheet or 304 |
 | GET | /live/channels | cursor, limit (query) | Page<Channel> |
 | GET | /live/guide | GuideQuery (query) | GuideResponse |
-| GET | /screens/:id | league, date (query) | Screen (features.liveEvents) |
-| GET | /live/events | ids (query, comma-separated) | LiveEventsResponse |
-| GET | /live/events/:id | — | LiveEventDetail |
-| POST | /live/events/:id/reveal | Mutation | LiveEventDetail (spoiler-free viewers) |
-| GET | /live/stream | events, screens (comma-separated), alerts=1 (query) | SSE `update` LiveStreamUpdate, `alert` LiveAlert, `heartbeat` (25 s) |
-| GET | /live/ticker | screen (query) | LiveEventsResponse |
-| GET | /live/entities | feed, league, q (query) | LiveEntitiesResponse |
-| PUT, DELETE | /favorites/entities/:key | Mutation | Ack or 204 |
+| GET | /screens/:id/pages/:page/document | v, r, l (query); X-Vela-Screen-Renderer | ScreenDocument (screen.ts) |
+| GET | /screens/:id/pages/:page/data | sources, p.<param>, tz (query) | ScreenData |
+| POST | /screens/:id/actions/:action | ScreenActionRequest; Idempotency-Key | ScreenActionAnswer |
+| GET | /surfaces/:id/document, /surfaces/:id/data | as screens; context as p.<name> | ScreenDocument, ScreenData |
+| POST | /surfaces/:id/actions/:action | ScreenActionRequest | ScreenActionAnswer |
+| PUT | /surfaces/:id/setting | {enabled} | 204 |
+| GET | /live/stream | topic (repeated), since, tz, alerts=1 (query) | SSE `records` StreamRecords, `source` StreamSource, `alert` AlertFrame, `heartbeat` (25 s) |
 | POST | /multiview | MultiviewRequest | MultiviewGroup (features.multiview) |
 | DELETE | /multiview/:groupId | Mutation | Ack or 204 |
 
-Live events, plugin screens and multiview are in [live-events.ts](live-events.ts). Bootstrap
-`navigation` lists plugin screens (`{kind: 'screen', id, title, icon}`) as top-level sections.
+Plugin screens and surfaces are in [screen.ts](screen.ts) (docs/plugin-screens.md); multiview and
+the session's live event are in [live-events.ts](live-events.ts). Bootstrap `navigation` lists
+plugin screens (`{kind: 'screen', id, title, icon, page, document}`) as top-level sections, and
+`surfaces` the plugin surfaces this client may show.
 A live-channel session's snapshot carries `liveEvent` (`{id, feed}` or null) and its event
 stream sends `event: liveEvent` with `{liveEvent}` when the programme on air changes. A
 multiview tile past an IPTV provider's connection cap is refused with HTTP 409

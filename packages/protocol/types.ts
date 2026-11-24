@@ -1,5 +1,5 @@
 /** Vela v0. All durations/positions are seconds, rates bits/second, timestamps RFC3339 UTC. */
-import type { LiveEventRef, MultiviewTile, NavigationEntry, ProviderCapDetails } from './live-events';
+import type { LiveEventRef, MultiviewTile, ProviderCapDetails } from './live-events';
 import type { ScreenNavigationEntry, SurfaceContribution, SurfaceRow } from './screen';
 export type * from './live-events';
 export type * from './screen';
@@ -96,8 +96,6 @@ export interface ServerCapabilities {
     /** Library.experience is sent on every library and is final (a plugin names how its library opens);
      * `experiences` lists the ids the server sends. Without it a client chooses by media class. */
     libraryExperiences?: Feature & { experiences: LibraryExperience[] };
-    /** Live events: /live/events, /live/stream, screens and entity favourites (live-events.ts). */
-    liveEvents?: Feature;
     /** Live TV multiview groups: POST /multiview, PlaybackRequest.multiview. */
     multiview?: Feature & { maxTiles: number };
     /** Live TV catch-up and timeshift. `available`: some channel the viewer sees has a provider archive
@@ -115,8 +113,7 @@ export interface ServerCapabilities {
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
 export interface NegotiateResponse { capabilities: ServerCapabilities; client: ClientCapabilities }
-export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef;
-  /** Live events: scores are withheld until revealed (bootstrap only; GET /live/preferences otherwise). */ spoilerFree?: boolean }
+export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef }
 export interface Tokens { accessToken: string; refreshToken: string; expiresAt: Timestamp; viewer: Viewer }
 export interface PlexHomeProfile {
   id: ID; name: string; protected: boolean;
@@ -219,7 +216,7 @@ export interface Hero { title: Title; receiptToken: string; reason: HeroReason; 
 export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[];
   /** Feed rows, and `surface` rows (a plugin's homeRow surface) in the place Ether lists them. */ rows: (Row | SurfaceRow)[]; nextCursor?: Cursor;
   /** Plugin screens the viewer may open, as top-level sections after Live TV. An entry without a
-   * `document` (an Ether before plugin screens) is not drawn (hard cut). */ navigation?: (ScreenNavigationEntry | NavigationEntry)[];
+   * `document` is not drawn. */ navigation?: ScreenNavigationEntry[];
   /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels), filtered, capped and ordered by Ether. */
   surfaces?: SurfaceContribution[] }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }

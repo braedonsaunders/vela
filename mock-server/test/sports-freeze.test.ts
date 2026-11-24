@@ -17,7 +17,9 @@ beforeAll(async () => {
 });
 afterAll(async () => { await mock?.stop(); });
 
-const get = (path: string) => fetch(`${mock.url}/vela/v0${path}`, { headers: { Authorization: `Bearer ${tokens.accessToken}`, 'X-Vela-Device-Id': device.id } });
+const get = (path: string) => fetch(`${mock.url}/vela/v0${path}`, { headers: { Authorization: `Bearer ${tokens.accessToken}`, 'X-Vela-Device-Id': device.id, 'X-Vela-Screen-Renderer': '19' } });
+const INDEX = '/screens/sports/pages/index/data?tz=UTC';
+const GAME = '/screens/sports/pages/game/data?tz=UTC&p.event=event:sports:sports:nfl-nyg-phi';
 const admin = (body: object) => fetch(`${mock.url}/__admin/sports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 
 describe('frozenNow', () => {
@@ -35,30 +37,29 @@ describe('frozenNow', () => {
 
 describe('mock server: frozen sports', () => {
   test('the screen and a live game read the same however long apart', async () => {
-    const first = await (await get('/screens/sports')).text();
-    const game = await (await get('/live/events/sports:sports:nfl-nyg-phi')).text();
+    const first = await (await get(INDEX)).text();
+    const game = await (await get(GAME)).text();
     await Bun.sleep(300); // fifteen ticks, were the clock running
-    expect(await (await get('/screens/sports')).text()).toBe(first);
-    expect(await (await get('/live/events/sports:sports:nfl-nyg-phi')).text()).toBe(game);
-    const live = JSON.parse(game) as V.LiveEventDetail;
-    expect(live.status.detail).toBe('Q4 · 2:14');
-    expect(live.updatedAt).toBe(NOW);
+    expect(await (await get(INDEX)).text()).toBe(first);
+    expect(await (await get(GAME)).text()).toBe(game);
+    const live = (JSON.parse(game) as V.ScreenData).records['event:sports:sports:nfl-nyg-phi']!.value as { detail: string };
+    expect(live.detail).toBe('Q4 · 2:14');
   });
 
   test('admin reports the frozen instant and can delay or fail the reads', async () => {
     expect(await admin({})).toMatchObject({ now: NOW, frozen: true, screenDelayMs: 0, screenFail: false });
     await admin({ screenFail: true });
-    expect((await get('/screens/sports')).status).toBe(503);
-    expect((await get('/live/events/sports:sports:nfl-nyg-phi')).status).toBe(503);
+    expect((await get(INDEX)).status).toBe(503);
+    expect((await get(GAME)).status).toBe(503);
     await admin({ screenFail: false, screenDelayMs: 250 });
     const started = Date.now();
-    expect((await get('/screens/sports')).status).toBe(200);
+    expect((await get(INDEX)).status).toBe(200);
     expect(Date.now() - started).toBeGreaterThanOrEqual(240);
     await admin({ screenDelayMs: 0 });
   });
 
   test('admin can start every viewer from no favourite teams, and back', async () => {
-    const yours = async () => ((await (await get('/screens/sports')).json()) as V.Screen).sections.find(s => s.id === 'favorites') as V.EventsSection;
+    const yours = async () => ((await (await get(`${INDEX}&sources=yours`)).json()) as V.ScreenData).sources.yours as { events: unknown[] };
     expect((await yours()).events.length).toBeGreaterThan(0);
     await admin({ favourites: [] });
     expect((await yours()).events).toEqual([]);
