@@ -42,11 +42,29 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
   const card = 'color-mix(in srgb, $ui.page 8%, $ui.raised 92%)';
   const cardHover = 'color-mix(in srgb, $ui.raised 94%, $ui.ink 6%)';
   const radiusCard = 'min($ui.radiusCard, 18px)';
-  const pill = (primary: boolean): Style => ({
-    'flex-direction': 'row', 'align-items': 'center', gap: '8px', height: '42px', padding: '0 18px', 'border-radius': '21px',
-    'background-color': primary ? '$ui.ink' : 'color-mix(in srgb, $ui.ink 12%, transparent)', transition: 'scale 160ms, background-color 160ms',
+  type Tone = 'quiet' | 'primary' | 'onColor';
+  const fills: Record<Tone, [string, string]> = {
+    quiet: ['color-mix(in srgb, $ui.ink 12%, transparent)', 'color-mix(in srgb, $ui.ink 22%, transparent)'],
+    primary: ['$ui.ink', '$ui.accent'],
+    onColor: ['#ffffff24', '#ffffff4d'],
+  };
+  const inks: Record<Tone, string> = { quiet: '$ui.ink', primary: '$ui.inkInverse', onColor: '#ffffff' };
+  const pill = (tone: Tone, small: boolean): Style => ({
+    'flex-direction': 'row', 'align-items': 'center', gap: '8px', height: small ? '34px' : '42px', padding: small ? '0 14px' : '0 18px',
+    'border-radius': small ? '17px' : '21px', 'background-color': fills[tone][0], transition: 'scale 160ms, background-color 160ms',
   });
-  const pillFocus = (primary: boolean): Style => ({ scale: '1.06', 'background-color': primary ? '$ui.accent' : 'color-mix(in srgb, $ui.ink 22%, transparent)' });
+  const pillFocus = (tone: Tone): Style => ({ scale: '1.06', 'background-color': fills[tone][1] });
+  const glyph = (tone: Tone, small: boolean): Style => {
+    const size = small ? '14px' : tone === 'onColor' ? '15px' : '16px';
+    return { width: size, height: size, color: inks[tone] };
+  };
+  const pillLabel = (tone: Tone, small: boolean): Style => text(small ? 13 : 14.5, 650, inks[tone], { 'line-clamp': '1' });
+  // The first state that holds draws: the combinations, most specific first.
+  const pillStates: [Tone, boolean][] = [['primary', true], ['primary', false], ['onColor', true], ['onColor', false], ['quiet', true]];
+  const pillWhen = (tone: Tone, small: boolean) => [
+    ...(tone === 'primary' ? on('primary') : tone === 'onColor' ? [{ test: 'arg.tone', is: 'eq' as const, value: 'onColor' }] : []),
+    ...(small ? on('small') : []),
+  ];
   const chip = (lit: boolean, small: boolean): Style => ({
     'flex-direction': 'row', 'align-items': 'center', gap: '8px', height: small ? '32px' : '40px', padding: small ? '0 13px' : '0 16px',
     'border-radius': small ? '16px' : '20px', 'background-color': lit ? '$ui.accent' : '$ui.control',
@@ -65,13 +83,15 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
   });
   return {
     'vela:pill': {
-      type: 'box', role: 'button', label: '{arg.label}', style: pill(false), focus: pillFocus(false), hover: pillFocus(false),
-      states: [{ when: on('primary'), style: pill(true), focus: pillFocus(true), hover: pillFocus(true) }],
+      // Quiet (translucent ink), primary (ink fill), or onColor (white on a data colour, the hero's
+      // buttons); `small` is the compact size.
+      type: 'box', role: 'button', label: '{arg.label}', style: pill('quiet', false), focus: pillFocus('quiet'), hover: pillFocus('quiet'),
+      states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pill(tone, small), focus: pillFocus(tone), hover: pillFocus(tone) })),
       children: [
-        { type: 'icon', symbol: '{arg.glyph}', when: on('glyph'), style: { width: '16px', height: '16px', color: '$ui.ink' },
-          states: [{ when: on('primary'), style: { width: '16px', height: '16px', color: '$ui.inkInverse' } }] },
-        { type: 'text', text: '{arg.label}', style: text(14.5, 650, '$ui.ink', { 'line-clamp': '1' }),
-          states: [{ when: on('primary'), style: text(14.5, 650, '$ui.inkInverse', { 'line-clamp': '1' }) }] },
+        { type: 'icon', symbol: '{arg.glyph}', when: on('glyph'), style: glyph('quiet', false),
+          states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: glyph(tone, small) })) },
+        { type: 'text', text: '{arg.label}', style: pillLabel('quiet', false),
+          states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pillLabel(tone, small) })) },
       ],
     },
     'vela:chip': {
@@ -110,7 +130,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
     'vela:heading': {
       type: 'box', style: { 'flex-direction': 'row', 'align-items': 'baseline', 'justify-content': 'space-between', 'margin-bottom': '12px' },
       children: [
-        { type: 'text', text: '{arg.text}', role: 'heading', level: 2, style: text(17, 700, '$ui.ink'), tv: { 'font-size': '19px' } },
+        // A TV, or a window as wide as one (Sports' look.tv), reads the larger heading.
+        { type: 'text', text: '{arg.text}', role: 'heading', level: 2, style: text(17, 700, '$ui.ink'), above: { 1600: { 'font-size': '19px' } }, tv: { 'font-size': '19px' } },
         { type: 'text', text: '{arg.aside}', when: on('aside'), style: text(13, 600, '$ui.inkQuiet') },
       ],
     },

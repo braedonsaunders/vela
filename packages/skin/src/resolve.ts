@@ -22,7 +22,7 @@ import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 import { compileTemplate, holeValue, makeArg, pathField, singleHole, type Arg, type HoleScope, type Value } from './screen/holes';
 import { text as valueText } from './screen/scope';
 import type { Items } from './screen/items';
-import { fold, screenStyleRow } from './resolve/screen-style';
+import { fold, halfPoints, screenStyleRow } from './resolve/screen-style';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
  * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
@@ -103,7 +103,8 @@ export type RNode = Common & (
   | { kind: 'grid'; items: Items; item: RNode; columns: number; gap?: string }
   | { kind: 'marquee'; items: Items; item: RNode; gap?: string; speed?: number }
   | { kind: 'tabs'; items: Items; value: Template; label: Template; count?: Template; bind: { param?: string; state?: string; clear?: string[] };
-    default?: Template; all?: Template; /** The chip each option is drawn with (a box, its args bound to `{$tab.*}`). */ chip: RNode; small: boolean }
+    default?: Template; all?: Template; /** The chip each option is drawn with (a box, its args bound to `{$tab.*}`). */ chip: RNode; small: boolean;
+    /** Drawn after the options in the same scroll and focus row. */ after?: RNode[] }
   | { kind: 'table'; data: Value; compact: boolean; focusRows?: number }
   | { kind: 'lineGraph'; series: Value; sides?: Value; subject?: Template; live?: Template; height?: string }
   | { kind: 'player'; channel: Template }
@@ -151,6 +152,8 @@ export interface ScreenMode {
   slot?: RNode[];
   /** Problems that do not refuse the document: an unknown kit template, a refused literal colour. */
   warnings: Set<string>;
+  /** Points per CSS px where lengths round to half points (TVs), else 1. */
+  scale: number;
 }
 
 export interface Context {
@@ -210,9 +213,10 @@ function tests(list: Condition[] | undefined, r?: Context): Test[] {
   return (list ?? []).map(k => ({ read: r?.screen ? screenRead(k.test, r.screen.scope) : read(k.test), is: k.is ?? 'set', value: k.value ?? '', not: k.not ?? false }));
 }
 
-/** A condition's key in a screen document: a binding path (pipes allowed), read as text. */
+/** A condition's key in a screen document: a binding path (pipes allowed, braces optional), read as text. */
 function screenRead(key: string, scope: HoleScope): Accessor {
-  const value = holeValue(key, scope);
+  // `{arg.loser}` reads as `arg.loser`: a test may be written as a hole.
+  const value = holeValue(singleHole(key) ?? key, scope);
   return (c, e) => valueText(value(c, e), c.screen?.record);
 }
 
@@ -260,7 +264,7 @@ function css(style: Style | undefined, r: Context): CssT {
     if (r.screen) {
       // Any row may hold a hole; each is validated once filled (resolve/screen-style.ts).
       if (UNSAFE.test(text.replace(/\{[^{}]*\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
-      out[row] = screenStyleRow(row, text, r.screen.scope);
+      out[row] = screenStyleRow(row, text, r.screen.scope, r.screen.scale);
       continue;
     }
     if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
@@ -485,7 +489,7 @@ function perClass<T>(value: PerClass<T> | undefined, r: Context): T | undefined 
 /** A length field (`gap`, `itemWidth`, `height`): tokens substituted and folded. */
 function lengthField(value: string | undefined, r: Context): string | undefined {
   if (value === undefined) return undefined;
-  const text = fold(tokenValue(value, r));
+  const text = fold(halfPoints(tokenValue(value, r), r.screen!.scale));
   if (UNSAFE.test(text)) throw new Error(`Unsafe length: ${value}`);
   return text;
 }
@@ -539,10 +543,11 @@ function tabsNode(node: TabsNode, common: Common, depth: number, r: Context): RN
     if (drawn.kind !== 'box') throw new Error(`A tabs chip is a box template (${chipName})`);
     return drawn;
   }));
+  const after = node.after ? screenChildren(node.after, depth, r) : undefined;
   return withAlias(r, items.as, () => ({
     ...common, kind: 'tabs' as const, items, value: compile(node.value, r)!, label: compile(node.label, r)!, count: compile(node.count, r),
     bind: { ...(node.bind.param ? { param: node.bind.param } : { state: node.bind.state }), ...(node.bind.clear ? { clear: [...node.bind.clear] } : {}) },
-    default: compile(node.default, r), all: compile(node.all, r), chip, small: node.size === 'small',
+    default: compile(node.default, r), all: compile(node.all, r), chip, small: node.size === 'small', ...(after ? { after } : {}),
   }));
 }
 
