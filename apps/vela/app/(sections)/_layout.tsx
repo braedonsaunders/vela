@@ -1,4 +1,4 @@
-import { Navigator, useIsFocused, usePathname } from 'expo-router';
+import { Navigator, router, useIsFocused, usePathname } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Platform, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
@@ -13,7 +13,9 @@ import { SectionFocusContext, SectionShellHostContext } from '../../src/section-
 import { SectionScene } from '../../src/section-scene';
 import { SECTION_SLIDE_MS, sectionDirection, type SectionDirection } from '../../src/section-motion';
 import { trimSectionCache } from '../../src/section-cache';
-import { sectionRoute, sectionIsActive, type SectionRoute as Section } from '../../src/section-route';
+import { sectionBack, sectionRoute, sectionIsActive, type SectionRoute as Section } from '../../src/section-route';
+import { switchSection } from '../../src/browse/open';
+import { holdBack } from '@vela/skin/src/menu-key';
 import { screenDestinationId } from '../../src/plugin-screens';
 
 export default function SectionsLayout() {
@@ -69,6 +71,21 @@ function SectionsContent() {
   useLayoutEffect(() => {
     previousOrder.current = order;
   }, [key, order]);
+
+  // tvOS gives Menu to the app only while something holds it (menu-key.ts); otherwise Menu leaves
+  // Vela for the system's Home, from any section. Android TV's Back goes to Vela's Home first, so on
+  // tvOS each section but Home holds it too, as a fallback for whatever else is open (a menu, Now
+  // Playing, a music page going back a page): Menu on a page inside the section goes back, on the
+  // section's root to Home, and on Home it leaves Vela.
+  const menuBack = Platform.isTV && Platform.OS === 'ios' && focused ? sectionBack(state.routes, state.index) : null;
+  useEffect(() => {
+    if (!menuBack) return;
+    return holdBack(() => {
+      if (menuBack === 'back' && router.canGoBack()) router.back();
+      else switchSection(options => router.dismissTo('/', options));
+      return true;
+    }, { fallback: true });
+  }, [menuBack]);
 
   const session = useVelaState(state => state.auth.revision);
   const content = useMemo(() => (
