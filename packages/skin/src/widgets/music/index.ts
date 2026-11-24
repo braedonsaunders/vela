@@ -5,3 +5,4 @@ export { NOW_PLAYING_BAR_HEIGHT } from './bar';
 export { onOpenNowPlaying, openNowPlaying, type NowPlayingPanel } from './hub';
 export { LyricsPanel } from './lyrics';
 export { musicTV, compactMusic } from './layout';
+export { PlaylistDrawer, type PlaylistDrawerRequest } from './playlist-drawer';

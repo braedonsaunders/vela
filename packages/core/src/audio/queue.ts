@@ -18,6 +18,9 @@ export interface AudioQueue {
   /** Items (indices into items) the viewer queued with Play next or Add to queue that have not
    * played yet: they play before the rest of the source, and Now Playing lists them apart. */
   queued?: number[];
+  /** Autoplay: from this play position on, the items came from the server's continuation of
+   * `seed` (radio after the queue ran out); Up Next lists them apart. */
+  autoplay?: { from: number; seed: string };
 }
 
 /** A uniform random number in [0, 1): injectable so tests are deterministic. */
@@ -92,7 +95,8 @@ export function queuedNext(queue: AudioQueue): Card[] {
 /** What plays after the viewer's queue: the rest of the source (and, with repeat all, its start). */
 export function sourceNext(queue: AudioQueue): Card[] {
   const waiting = new Set(queue.queued ?? []);
-  return upNext(queue).filter(card => !waiting.has(queue.items.indexOf(card)));
+  const auto = new Set(autoplayNext(queue));
+  return upNext(queue).filter(card => !waiting.has(queue.items.indexOf(card)) && !auto.has(card));
 }
 
 /**
@@ -125,6 +129,7 @@ export function removeAt(queue: AudioQueue, position: number): AudioQueue {
     order: queue.order.filter((_, p) => p !== position).map(shift),
     at: position < queue.at ? queue.at - 1 : queue.at,
     ...(queue.queued ? { queued: queue.queued.filter(i => i !== gone).map(shift) } : {}),
+    ...(queue.autoplay ? { autoplay: { ...queue.autoplay, from: position < queue.autoplay.from ? queue.autoplay.from - 1 : queue.autoplay.from } } : {}),
   };
 }
 
@@ -184,4 +189,24 @@ export function jumpTo(queue: AudioQueue, itemIndex: number): AudioQueue {
   // Jumping ahead plays past whatever the viewer had queued before that item.
   const skipped = new Set(at > queue.at ? queue.order.slice(queue.at + 1, at) : []);
   return played({ ...queue, at, ...(queue.queued ? { queued: queue.queued.filter(i => !skipped.has(i)) } : {}) });
+}
+
+/** Autoplay: append the server's continuation after the last item (the queue ran out). */
+export function appendAutoplay(queue: AudioQueue, cards: Card[], seed: string): AudioQueue {
+  const known = new Set(queue.items.map(card => card.id));
+  const fresh = cards.filter(card => !known.has(card.id));
+  if (!fresh.length) return queue;
+  const base = queue.items.length;
+  return {
+    ...queue,
+    items: [...queue.items, ...fresh],
+    order: [...queue.order, ...fresh.map((_, i) => base + i)],
+    autoplay: queue.autoplay ?? { from: queue.order.length, seed },
+  };
+}
+
+/** The autoplay items still to play, and the source items before them. */
+export function autoplayNext(queue: AudioQueue): Card[] {
+  if (!queue.autoplay) return [];
+  return queue.order.slice(Math.max(queue.at + 1, queue.autoplay.from)).map(i => queue.items[i]!);
 }

@@ -148,7 +148,7 @@ export class Playlists {
       const items = [...(previous?.items ?? []), ...answer.items];
       this.reads.set(id, { items, cursor: answer.nextCursor, continuation: answer.continuation });
       const images = await connection.images();
-      const model: CollectionModel = { id, kind: 'playlist', name: answer.collection.name, smart: !!answer.collection.smart,
+      const model: CollectionModel = { id, kind: 'playlist', name: answer.collection.name, smart: !!answer.collection.smart, summary: answer.collection.summary ?? '',
         entryCount: answer.collection.entryCount ?? items.length, items: items.map(item => ({ ...entry(item, images, this.artWidth()), entryId: item.entryId })),
         more: answer.continuation === 'more', complete: answer.continuation === 'exhausted' };
       this.box.update('collections', collections => ({ ...collections, [id]: ready(model) }));
@@ -167,6 +167,22 @@ export class Playlists {
     catch (error) {
       this.box.update('playlists', state => ({ ...state, list: beforeList, notice: failureMessage(error) }));
       this.box.update('collections', collections => ({ ...collections, [id]: beforeCollection! }));
+    }
+  }
+
+  /** Edit a playlist's name and description in one save. */
+  async edit(id: string, change: { name: string; summary: string }): Promise<boolean> {
+    const name = change.name.trim(); if (!name) return false;
+    const summary = change.summary.trim();
+    const beforeList = this.box.get().playlists.list;
+    const beforeCollection = this.box.get().collections[id];
+    this.box.update('playlists', state => ({ ...state, list: ready((state.list.value ?? []).map(item => item.id === id ? { ...item, name } : item)) }));
+    if (beforeCollection?.value) this.box.update('collections', collections => ({ ...collections, [id]: ready({ ...beforeCollection.value!, name, summary }) }));
+    try { await (await this.api()).renamePlaylist(id, { idempotencyKey: this.session.key(), name, summary }); return true; }
+    catch (error) {
+      this.box.update('playlists', state => ({ ...state, list: beforeList, notice: failureMessage(error) }));
+      if (beforeCollection) this.box.update('collections', collections => ({ ...collections, [id]: beforeCollection }));
+      return false;
     }
   }
 

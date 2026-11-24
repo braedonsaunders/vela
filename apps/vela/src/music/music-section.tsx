@@ -8,8 +8,10 @@ import { useVelaState } from '@vela/core/react';
 import type { SkinHost } from '@vela/skin';
 import { HostContext } from '@vela/skin/src/host';
 import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
-import { MusicContext, MusicShell, parsePlace, placeOf, placeParam, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
+import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
 import { useVela } from '../vela';
+import { useMusicKeys } from './keys';
+import { MusicKeysSheet } from './keys-sheet';
 
 /** Whether this library draws as the music app: every music library, in the shell's wide,
  * compact (below 980px) or TV form. */
@@ -25,6 +27,8 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const place = parsePlace(at);
   const [menu, setMenu] = useState<MusicMenuRequest | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [drawer, setDrawer] = useState<PlaylistDrawerRequest | null>(null);
+  const [keysOpen, setKeysOpen] = useState(false);
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   const favorites = useVelaState(state => state.collections);
   const roleLists = useVelaState(state => state.music.liked);
@@ -52,6 +56,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     },
     menu: setMenu,
     toggle: () => store.audio.toggle(),
+    drawer: setDrawer,
     like: (card: Card, on: boolean) => {
       setLikes(current => ({ ...current, [card.id]: on }));
       void store.catalogue.setTitleWatch(card.id, { favorite: on })
@@ -66,6 +71,9 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     },
     liked: (id: string) => likes[id] ?? likedIds.has(id),
   }), [libraryId, place, go, store, likes, likedIds]);
+
+  const keyActions = useMemo(() => ({ toggleQueue: () => setQueueOpen(open => !open), help: () => setKeysOpen(true) }), []);
+  useMusicKeys(store, app, keyActions);
 
   // In the music app a title opens in place, not as the title page above it.
   const host = useMemo<SkinHost | null>(() => base ? {
@@ -84,6 +92,8 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
       <MusicContext.Provider value={app}>
         <View pointerEvents="box-none" style={{ flex: 1 }}>
           <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />
+          <PlaylistDrawer request={drawer} close={() => setDrawer(null)} />
+          <MusicKeysSheet open={keysOpen} close={() => setKeysOpen(false)} />
           {menu ? (
             <CardContextMenu card={menu.card} primary={{ action: 'select', arg: `${menu.card.id}|${menu.card.media?.role ?? menu.card.kind}|` }}
               anchor={menu.anchor} mode={menu.mode ?? 'pointer'} opener={menu.opener ?? null} playlistEntry={menu.entry} close={() => setMenu(null)}

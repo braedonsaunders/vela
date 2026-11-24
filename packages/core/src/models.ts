@@ -265,6 +265,8 @@ export interface CollectionModel {
   more: boolean;
   smart?: boolean;
   entryCount?: number;
+  /** A playlist's description. */
+  summary?: string;
   /** True only when the server says the list is exhausted. */
   complete: boolean;
 }

@@ -1,7 +1,7 @@
 // The music app's pieces in the document's `ui` look: tiles with a play button that rises on
 // hover, shelves, the heart, the big play button, a byline whose names open their pages.
 import { Image } from 'expo-image';
-import { createContext, useContext, useRef, useState, type ReactNode, type ComponentRef } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import type { CardMenuAnchor, CardMenuOpenMode } from '../card-context-menu';
 import type { Focusable } from '../../escape';
@@ -84,13 +84,24 @@ export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, 
     ...(web ? { onContextMenu: (event: { preventDefault(): void; nativeEvent: { pageX: number; pageY: number } }) => { event.preventDefault(); onMenu({ kind: 'point', point: { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY } }, 'pointer', opener()); } } : {}),
   } : {};
   const h = handlers as { onFocus?(e: unknown): void; onBlur?(e: unknown): void };
+  // React Native Web drops onDoubleClick: listen on the element itself.
+  const double = useRef(onDoubleClick);
+  double.current = onDoubleClick;
+  const wantsDouble = web && !!onDoubleClick;
+  useEffect(() => {
+    const node = ref.current as unknown as HTMLElement | null;
+    if (!wantsDouble || !node?.addEventListener) return;
+    const handle = () => double.current?.();
+    node.addEventListener('dblclick', handle);
+    return () => node.removeEventListener('dblclick', handle);
+  }, [wantsDouble]);
   return (
     <View {...hoverProps} style={style(lit, state.focus)}>
       <Pressable ref={ref} {...handlers} {...menu} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }}
         onFocus={(e: unknown) => { focused.current = true; if (memoryId) remembered.set(page, memoryId); h.onFocus?.(e); }}
         onBlur={(e: unknown) => { focused.current = false; h.onBlur?.(e); }}
         {...(Platform.isTV && memoryId && remembered.get(page) === memoryId ? { hasTVPreferredFocus: true } : {})}
-        {...(web && onDoubleClick ? { onDoubleClick, onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') onDoubleClick(); } } as object : {})}
+        {...(web && onDoubleClick ? { onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') onDoubleClick(); } } as object : {})}
         style={[NO_RING, StyleSheet.absoluteFill]} />
       <View pointerEvents="box-none" style={contentStyle}>{children(lit)}</View>
     </View>

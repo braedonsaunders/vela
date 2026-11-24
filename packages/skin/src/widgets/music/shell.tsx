@@ -144,7 +144,7 @@ function Sidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle
           <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
           {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text> : null}
         </Pressable>
-        {!rail ? <IconButton symbol="playlist-add" label={msg('music.newPlaylist')} size={34} iconSize={19} onPress={() => undefined} testID="music-new-playlist" /> : null}
+        {!rail ? <IconButton symbol="playlist-add" label={msg('music.newPlaylist')} size={34} iconSize={19} onPress={() => app.drawer({ mode: 'create' })} testID="music-new-playlist" /> : null}
       </View>
       {!rail ? (
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }} accessibilityRole="radiogroup">

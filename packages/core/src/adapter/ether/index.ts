@@ -333,6 +333,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.FavoriteTitlesPage>('GET', `/favorites/titles${query({ role, cursor, limit })}`);
   }
 
+  async titleContinuation(id: string, limit?: number): Promise<V.Page<V.RowEntry>> {
+    try {
+      return await this.http.request<V.Page<V.RowEntry>>('GET', `/titles/${segment(id)}/continuation${query({ limit })}`);
+    } catch (error) {
+      if (error instanceof VelaError && error.status === 404) return { items: [], continuation: 'exhausted' } as unknown as V.Page<V.RowEntry>;
+      throw error;
+    }
+  }
+
   recentPlayContexts(limit?: number) {
     return this.http.request<V.RecentPlayContexts>('GET', `/recent${query({ limit })}`);
   }
