@@ -178,6 +178,7 @@ describe('on a frozen clock', () => {
     // Possession names PHI exactly: it moves onto the side and out of the situation ("NYG 38" only mentions a side).
     expect(e.situation).toEqual([{ label: 'Down', value: '3rd & 6' }, { label: 'Ball', value: 'NYG 38' }]);
     expect(e.sides.map((s: Json) => s.possession)).toEqual([false, true]);
+    expect(e.possessionLabel).toBe('Possession');
     const p = e.probability;
     expect(p.subjectSide).toBe(1);
     expect(p.away).toBeCloseTo(1 - p.home, 3);
@@ -211,6 +212,7 @@ describe('on a frozen clock', () => {
     const hidden = await read('epl-che-mci');
     expect(hidden).toMatchObject({ phase: 'final', spoiler: true, scored: false, close: false, situation: [] });
     expect(hidden.probability).toBeUndefined();
+    expect(hidden.possessionLabel).toBeUndefined();
     expect(hidden.sides.every((s: Json) => s.score === '' && !s.winner)).toBe(true);
     const race = await read('f1-las-vegas');
     expect(race.sides).toBeUndefined();
