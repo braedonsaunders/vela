@@ -207,3 +207,41 @@ describe('Plex transcode decisions', () => {
     expect(plan.paths.map(p => p.id)).toEqual(['original']);
   });
 });
+
+describe('Plex DTS audio', () => {
+  // Plex names DTS `dca` (and DTS-HD MA `dca-ma`); the protocol's codec token is `dts`. The client is a synthetic, Apple-shaped fixture.
+  const streams: Record<string, Record<string, string>> = { 'dca-ma': { codec: 'dca', profile: 'ma + dts:x' }, dca: { codec: 'dca' }, wmapro: { codec: 'wmapro' } };
+  const movie = (audioCodec: string) => ({ ratingKey: '4', type: 'movie', title: 'Loud', duration: 60000, Media: [{ id: 4, container: 'mkv', videoCodec: 'hevc', audioCodec, duration: 60000,
+    Part: [{ id: 4, key: '/library/parts/4/1/file.mkv', size: 1000, duration: 60000, Stream: [{ id: 41, index: 1, streamType: 2, ...streams[audioCodec], selected: true }] }] }] });
+  const decoders = ['aac', 'ac3', 'eac3', 'dts', 'truehd', 'flac', 'opus', 'mp3'];
+  const withoutDts = decoders.filter(c => c !== 'dts');
+  const appleClient = (original: string[], native: string[]) => ({ device: { id: 'd', name: 'd', platform: 'ios', appVersion: '1' }, containers: ['mp4', 'mkv'], videoCodecs: ['h264', 'hevc'], audioCodecs: native,
+    subtitleFormats: [], hls: true, originalPlayback: { version: 1, range: true, demuxContainers: ['mkv', 'mp4'], videoDecoders: ['h264', 'hevc'], audioDecoders: original, webgpu: false } }) as never;
+  const start = (audioCodec: string, client: never, allowTranscode?: boolean) => {
+    routeFetch({ 'GET /library/metadata/4': { MediaContainer: { Metadata: [movie(audioCodec)] } }, 'GET /video/:/transcode/universal/decision': { MediaContainer: {} } });
+    return plex().startPlayback({ titleId: '4', client, idempotencyKey: `dts-${audioCodec}`, ...(allowTranscode === undefined ? {} : { allowTranscode }) } as never);
+  };
+
+  for (const codec of ['dca-ma', 'dca']) test(`a ${codec} file is offered as the original to a client that declares dts`, async () => {
+    const plan = await start(codec, appleClient(decoders, decoders));
+    expect(plan.selectedPathId).toBe('original');
+    expect(new URL(plan.paths[0]!.url!).pathname).toBe('/library/parts/4/1/file.mkv');
+  });
+
+  test('with transcoding off, a DTS file is offered as the original instead of failing', async () => {
+    const plan = await start('dca-ma', appleClient(decoders, decoders), false);
+    expect(plan.paths.map(p => p.id)).toEqual(['original']);
+  });
+
+  test.each([
+    ['dts only in originalPlayback.audioDecoders gets the original', decoders, withoutDts, 'original'],
+    ['dts only in the top-level audioCodecs gets the original', withoutDts, decoders, 'original'],
+    ['dts in neither list gets the server\'s stream', withoutDts, withoutDts, 'plex-hls'],
+  ] as const)('a client declaring %s', async (_, original, native, path) => {
+    expect((await start('dca-ma', appleClient([...original], [...native]))).selectedPathId).toBe(path);
+  });
+
+  test('audio the client does not decode still goes to the server\'s stream', async () => {
+    expect((await start('wmapro', appleClient(decoders, decoders))).selectedPathId).toBe('plex-hls');
+  });
+});
