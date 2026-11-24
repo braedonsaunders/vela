@@ -330,20 +330,21 @@ if (import.meta.main) {
   }
 
   function queryDeviceProfile(): RoutePerfResult['deviceProfile'] {
-    const sizeOut = runAdb('shell', 'wm', 'size').trim();
-    const densityOut = runAdb('shell', 'wm', 'density').trim();
-    const memOut = runAdb('shell', 'grep', 'MemTotal', '/proc/meminfo').trim();
-    const coresOut = runAdb('shell', 'grep', '-c', '^processor', '/proc/cpuinfo').trim();
-
-    const sizeMatch = /(\d+x\d+)/.exec(sizeOut);
-    const densityMatch = /(\d+)/.exec(densityOut);
-    const memKbMatch = /(\d+)/.exec(memOut);
+    const out = runAdb(
+      'shell',
+      'wm size; wm density; grep MemTotal /proc/meminfo; grep -c "^processor" /proc/cpuinfo',
+    );
+    const lines = out.trim().split(/\r?\n/);
+    const sizeMatch = /(\d+x\d+)/.exec(out);
+    const densityMatch = /density:\s*(\d+)/i.exec(out);
+    const memKbMatch = /MemTotal:\s*(\d+)/i.exec(out);
+    const coresLine = lines[lines.length - 1]?.trim() ?? '4';
 
     return {
       resolution: sizeMatch ? sizeMatch[1]! : '1920x1080',
       density: densityMatch ? `${densityMatch[1]} dpi` : '320 dpi',
       ramMb: memKbMatch ? Math.round(Number(memKbMatch[1]) / 1024) : 2048,
-      cores: Number(coresOut) || 4,
+      cores: Number(coresLine) || 4,
       cpuQuota,
     };
   }
@@ -376,7 +377,12 @@ if (import.meta.main) {
     }
   }
 
-  async function measureRoute(mockUrl: string, route: string, label: string): Promise<RoutePerfResult> {
+  async function measureRoute(
+    mockUrl: string,
+    route: string,
+    label: string,
+    deviceProfile: RoutePerfResult['deviceProfile'],
+  ): Promise<RoutePerfResult> {
     // Unthrottle emulator during Metro bundling & ADB setup so host Metro doesn't starve the guest adbd
     setEmulatorCpuQuota('400%');
 
@@ -387,16 +393,14 @@ if (import.meta.main) {
       body: JSON.stringify({ spoilerFree: false, screenDelayMs: 0, screenFail: false, favourites: null }),
     });
 
-    const deviceProfile = queryDeviceProfile();
     const stopMetro = await startMetroForRoute(mockUrl, route);
 
     try {
-      runAdb('shell', 'am', 'force-stop', APP);
-      runAdb('shell', 'pm', 'clear', APP);
       runAdb('reverse', `tcp:${metroPort}`, `tcp:${metroPort}`);
       const mPort = new URL(mockUrl).port;
       if (mPort) runAdb('reverse', `tcp:${mPort}`, `tcp:${mPort}`);
 
+      // Single batched shell setup: stop app, clear data, write React Native dev prefs
       const prefs = `<?xml version='1.0' encoding='utf-8' standalone='yes' ?><map><string name="debug_http_host">localhost:${metroPort}</string><boolean name="js_dev_mode_debug" value="false" /></map>`;
       const tmpPrefs = `/tmp/vela-perf-prefs-${process.pid}.xml`;
       writeFileSync(tmpPrefs, prefs);
@@ -405,15 +409,17 @@ if (import.meta.main) {
 
       runAdb(
         'shell',
-        `run-as ${APP} sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/vela-perf-prefs.xml shared_prefs/${APP}_preferences.xml'`,
+        `am force-stop ${APP}; pm clear ${APP} >/dev/null; run-as ${APP} sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/vela-perf-prefs.xml shared_prefs/${APP}_preferences.xml'`,
       );
 
       // Apply target floor CPUQuota right before launching the app and measuring frames!
       setEmulatorCpuQuota(cpuQuota);
 
       // Launch app and wait for homeReady + useStartRoutes (1500ms timer after homeReady) + route settle
-      runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'reset');
-      runAdb('shell', 'monkey', '-p', APP, '-c', 'android.intent.category.LEANBACK_LAUNCHER', '1');
+      runAdb(
+        'shell',
+        `dumpsys gfxinfo ${APP} reset >/dev/null 2>&1; monkey -p ${APP} -c android.intent.category.LEANBACK_LAUNCHER 1 >/dev/null 2>&1`,
+      );
 
       await Bun.sleep(settleMs);
 
@@ -452,14 +458,14 @@ if (import.meta.main) {
         }
       }
 
-      // 2. Measure Focus-Move frame times (p95) across deterministic D-pad traversal
-      runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'reset');
-      for (const key of DPAD_SEQUENCE) {
-        runAdb('shell', 'input', 'keyevent', key);
-        await Bun.sleep(180);
-      }
-      await Bun.sleep(400);
-      const focusGfxRaw = runAdb('shell', 'dumpsys', 'gfxinfo', APP, 'framestats');
+      // 2. Measure Focus-Move frame times (p95) across deterministic D-pad traversal in a single shell invocation
+      const dpadCmd = [
+        `dumpsys gfxinfo ${APP} reset >/dev/null 2>&1`,
+        ...DPAD_SEQUENCE.map(key => `input keyevent ${key}; sleep 0.18`),
+        'sleep 0.4',
+        `dumpsys gfxinfo ${APP} framestats`,
+      ].join('; ');
+      const focusGfxRaw = runAdb('shell', dpadCmd);
       const focusSamples = parseGfxinfoFramestats(focusGfxRaw);
       let focusStats = summarizeFrames(focusSamples);
       if (focusStats.count === 0) {
@@ -539,15 +545,17 @@ if (import.meta.main) {
 
   const mock = await ensureMockServer();
   try {
+    setEmulatorCpuQuota('400%');
+    const deviceProfile = queryDeviceProfile();
     if (values['compare-sports']) {
       console.log(`[tv-route] Measuring legacy Sports route (/screen/sports) on ${udid}...`);
-      const legacy = await measureRoute(mock.url, '/screen/sports', 'legacy');
+      const legacy = await measureRoute(mock.url, '/screen/sports', 'legacy', deviceProfile);
       console.log(
         `[tv-route] Legacy result: firstFrame=${legacy.firstFrame.routeToFirstFrameMs}ms, focusP95=${legacy.focusMove.stats.p95Ms}ms (${legacy.focusMove.stats.count} frames), recordPush=${legacy.recordPush.framesRendered} frames`,
       );
 
       console.log(`[tv-route] Measuring document Sports route (/screen/sports?screens=1) on ${udid}...`);
-      const document = await measureRoute(mock.url, '/screen/sports?screens=1', 'document');
+      const document = await measureRoute(mock.url, '/screen/sports?screens=1', 'document', deviceProfile);
       console.log(
         `[tv-route] Document result: firstFrame=${document.firstFrame.routeToFirstFrameMs}ms, focusP95=${document.focusMove.stats.p95Ms}ms (${document.focusMove.stats.count} frames), recordPush=${document.recordPush.framesRendered} frames (invalidated=${document.recordPush.readerAudit?.currentRootInvalidatedItems}/${document.recordPush.readerAudit?.totalCollectionItems})`,
       );
@@ -570,7 +578,7 @@ if (import.meta.main) {
     } else {
       const targetRoute = values.route ?? '/screen/sports?screens=1';
       console.log(`[tv-route] Measuring ${targetRoute} on ${udid}...`);
-      const result = await measureRoute(mock.url, targetRoute, targetRoute.includes('screens=1') ? 'document' : 'legacy');
+      const result = await measureRoute(mock.url, targetRoute, targetRoute.includes('screens=1') ? 'document' : 'legacy', deviceProfile);
       console.log(JSON.stringify(result, null, 2));
       if (values.json) {
         const jsonPath = resolve(values.json);

@@ -7,7 +7,8 @@
 # Safety invariants:
 # - Never runs on macOS (exits immediately if uname != Linux).
 # - Uses its own dedicated AVD (`vela-tv-floor`), console port (default 5584 -> `emulator-5584`),
-#   and ADB server port (default 5041) so it never collides with other workers.
+#   netsim instance (`--instance=84`), and ADB server port (default 5041) so it never collides
+#   with other workers.
 # - Records the exact PID it starts in `$PID_FILE` and stops ONLY that PID (never pkill/killall).
 # - Boots the emulator at normal host speed so Android system services initialize reliably, then
 #   applies the Cortex-A55 CPU quota (`systemctl --user set-property <unit> CPUQuota=...`, default
@@ -52,6 +53,7 @@ EMULATOR="$ANDROID_SDK_ROOT/emulator/emulator"
 SERIAL="emulator-${PORT}"
 UNIT_NAME="vela-tv-floor-${PORT}"
 ADB_UNIT_NAME="vela-tv-floor-adb-${ANDROID_ADB_SERVER_PORT}"
+NETSIM_INSTANCE="$((PORT - 5500))"
 
 WORK_DIR="${VELA_TV_FLOOR_DIR:-$HOME/.scratch/tmp/vela-tv-floor}"
 mkdir -p "$WORK_DIR"
@@ -59,7 +61,7 @@ PID_FILE="$WORK_DIR/emulator-${PORT}.pid"
 LOG_FILE="$WORK_DIR/emulator-${PORT}.log"
 
 ensure_adb_server() {
-  if ! "$ADB" devices >/dev/null 2>&1; then
+  if ! timeout 5 "$ADB" devices >/dev/null 2>&1; then
     systemctl --user stop "$ADB_UNIT_NAME" >/dev/null 2>&1 || true
     systemctl --user reset-failed "$ADB_UNIT_NAME" >/dev/null 2>&1 || true
     systemd-run --user --unit="$ADB_UNIT_NAME" \
@@ -169,20 +171,18 @@ start_emulator() {
 
   rm -f "$ANDROID_AVD_HOME/${AVD_NAME}.avd/"*.lock 2>/dev/null || true
 
-  echo "Starting ${AVD_NAME} on ${SERIAL} (2048 MB RAM, 4 cores, AllowedCPUs=${ALLOWED_CPUS}; throttling to CPUQuota=${CPU_QUOTA} after boot)..."
+  echo "Starting ${AVD_NAME} on ${SERIAL} (2048 MB RAM, 4 cores, AllowedCPUs=${ALLOWED_CPUS}, netsim=${NETSIM_INSTANCE}; throttling to CPUQuota=${CPU_QUOTA} after boot)..."
 
   systemctl --user stop "$UNIT_NAME" >/dev/null 2>&1 || true
   systemctl --user reset-failed "$UNIT_NAME" >/dev/null 2>&1 || true
 
-  # Boot unthrottled (CPUQuota=400%) on the 4 pinned CPUs so Android OS services finish startup cleanly,
-  # then dial down to CPUQuota=${CPU_QUOTA} once boot completes.
   systemd-run --user --unit="$UNIT_NAME" \
     --setenv="ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" \
     --setenv="ANDROID_AVD_HOME=${ANDROID_AVD_HOME}" \
     --setenv="ANDROID_ADB_SERVER_PORT=${ANDROID_ADB_SERVER_PORT}" \
     -p "CPUQuota=400%" \
     -p "AllowedCPUs=${ALLOWED_CPUS}" \
-    /bin/bash -c "exec \"$EMULATOR\" -avd \"$AVD_NAME\" -port \"$PORT\" -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 >\"$LOG_FILE\" 2>&1"
+    /bin/bash -c "exec \"$EMULATOR\" -avd \"$AVD_NAME\" -port \"$PORT\" -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 -netsim-args --instance=${NETSIM_INSTANCE} >\"$LOG_FILE\" 2>&1"
 
   sleep 1
   local emu_pid
