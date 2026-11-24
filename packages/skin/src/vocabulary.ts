@@ -43,10 +43,6 @@ export interface Env {
   canLive: boolean;
   canPlaylists: boolean;
   canSwitchProfile: boolean;
-  /** Live events: the viewer can hide scores (a plugin screen exists and the preference is known). */
-  canHideScores?: boolean;
-  /** Scores are hidden (spoiler-free). */
-  hideScores?: boolean;
   width: number;
   /** Screen documents (env.canMultiview, env.canPlay): multiview is available here; playback is (default true). */
   canMultiview?: boolean;
@@ -339,8 +335,6 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.canLive': (_, e) => yes(e.canLive),
   'env.canPlaylists': (_, e) => yes(e.canPlaylists),
   'env.canSwitchProfile': (_, e) => yes(e.canSwitchProfile),
-  'env.canHideScores': (_, e) => yes(e.canHideScores === true),
-  'env.hideScores': (_, e) => yes(e.hideScores === true),
   'env.heroCount': (_, e) => (e.home ? String(e.home.hero.length) : ''),
   'env.heroIndex': (_, e) => String(e.heroIndex),
   'env.rowCount': (_, e) => (e.home ? String(e.home.rows.length) : ''),

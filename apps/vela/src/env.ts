@@ -1,7 +1,7 @@
 // The view state a document reads (env) for one route, from the store's state and the app's own
 // view state. A value the store has not read yet is honest about it: loading, or absent.
 import { Platform } from 'react-native';
-import { detailDateDisplay, spoilerFreeOf, type VelaState } from '@vela/core';
+import { detailDateDisplay, type VelaState } from '@vela/core';
 import { aboutOf, searchView, type About, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
@@ -48,8 +48,6 @@ export function environment({ state, view, live, route, entry, library, width, s
     canLive: home.value?.liveAvailable ?? false,
     canPlaylists: home.value?.playlistsAvailable ?? false,
     canSwitchProfile: state.auth.phase === 'signed-in' && state.auth.plexHomeAvailable,
-    canHideScores: !!home.value?.screens.length && spoilerFreeOf(state) !== undefined,
-    hideScores: spoilerFreeOf(state) === true,
     width,
     home: home.value,
     heroIndex: home.value ? view.heroIndex % Math.max(1, home.value.hero.length) : 0,
