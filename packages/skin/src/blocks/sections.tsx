@@ -7,7 +7,9 @@
 //   `min(index, 3) * 70ms`, skipped when `still` is true).
 // - Calls `requestNeeds` when a section with `needs: string[]` is about to mount.
 // - Renders a hidden level-1 heading on the web (`aria-level={1}`) for screen readers.
-// - Wraps each section in a TV `FocusBand` (`TVFocusGuideView autoFocus`) for per-section focus memory.
+// - Wraps each section with focusable children in a TV `FocusBand` (`TVFocusGuideView autoFocus`)
+//   for per-section focus memory, and in `ScopedRecordNode` so a record push only re-renders the
+//   section reading that record.
 import { Component, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View, type TextStyle } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -15,9 +17,10 @@ import { InheritedContext, useHost } from '../host';
 import { fill, holds, type Template } from '../resolve';
 import { inheritText } from '../text-inheritance';
 import type { Ctx, Env } from '../vocabulary';
-import { FocusBand } from './focus';
+import { FocusBand, hasFocusableChild } from './focus';
 import { FIRST_SECTIONS, initialStreamedCount, nextStreamedCount, parsePoints } from './layout-math';
 import { useBlockLook, type BlockLook } from './look';
+import { ScopedRecordNode } from './record-scope';
 import { useScreenBlockRuntime, type BlockRNodeCommon, type SectionsBlockNode } from './types';
 
 const HIDDEN_H1: TextStyle = {
@@ -194,10 +197,11 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
         {shown.map((child, idx) => {
           const rawId = (child as { id?: Template; testId?: Template })?.id ?? (child as { testId?: Template })?.testId;
           const id = (rawId ? fill(rawId, ctx, host.env).trim() : '') || `section-${idx}`;
+          const rendered = <ScopedRecordNode node={child} ctx={ctx} renderNode={runtime.renderNode} />;
           return (
             <SectionBoundary key={id} name={id}>
               <SectionRise look={look} index={Math.min(idx, FIRST_SECTIONS)}>
-                <FocusBand>{runtime.renderNode(child, ctx)}</FocusBand>
+                {hasFocusableChild(child) ? <FocusBand>{rendered}</FocusBand> : rendered}
               </SectionRise>
             </SectionBoundary>
           );
