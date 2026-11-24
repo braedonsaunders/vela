@@ -94,6 +94,10 @@ const PointerInheritance = createContext<PointerMode>('auto');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
+/** A surface over the picture while the player's chrome is hidden: its presses take no focus (a
+ * pointer or touch still reaches them), so the remote never lands on an overlay it cannot see the
+ * controls around. */
+export const Unfocusable = createContext(false);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
 const PressLabelContent = createContext(false);
 const HeroInteraction = createContext(false);
@@ -730,7 +734,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const band = useContext(Band);
   // A section the remote reaches though it presses nothing: below a scroll's last control, or one
   // the document marks (a menu's About line).
-  const stop = useContext(ReadingStop) || (Platform.isTV && node.readingStop === true);
+  const unfocusable = useContext(Unfocusable);
+  const readingStop = useContext(ReadingStop);
+  const stop = !unfocusable && (readingStop || (Platform.isTV && node.readingStop === true));
   const routeFocus = useRouteFocusContext();
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
@@ -1057,7 +1063,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
         {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
-        focusable={selectable(node)}
+        focusable={selectable(node) && !unfocusable}
         {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}), ...(heroSegment ? { velaHeroSegment: String(ctx.index) } : {}) }, onKeyDown: (event) => {
           const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
           const heroTo = heroSegment ? heroSegmentDestination(key, ctx.index, env.home?.hero.length ?? 0) : null;

@@ -58,6 +58,12 @@ export interface ScreenViewProps {
   route?: boolean;
   /** Drawn when the document cannot be drawn by this client (default: an "update the app" line). */
   refused?: (reason: string) => ReactNode;
+  /** Surfaces: the host's client-only context (chrome, pictureTime, delayed, the playing channel under a
+   *  toast), read by the document's {context.*} holes but never sent to Ether nor part of the page key. */
+  local?: SurfaceContext;
+  /** Surfaces: nothing is drawn until the first read answers, and nothing when it fails or the
+   *  document is refused (a surface that cannot draw is left out, never a skeleton or an error). */
+  quiet?: boolean;
 }
 
 const BOOL = /^(true|false)$/;
@@ -85,7 +91,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
   }, [doc, width, height, ui]);
 }
 
-export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused }: ScreenViewProps) {
+export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
   const { resolved, problem } = useResolved(document.value, host);
@@ -97,7 +103,11 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   // Hidden, the page stops following its topic; what it last drew stays until it is shown again.
   const last = useRef<{ key: string; page: ScreenPageState } | null>(null);
   if (shown) last.current = { key, page: shown };
-  const page = shown ?? last.current?.page;
+  const held = shown ?? last.current?.page;
+  // The host's client-only context joins what the page was opened with (it changes without a new read).
+  const page = useMemo(() => (held && local ? { ...held, context: { ...held.context, ...local } } : held),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [held, JSON.stringify(local ?? null)]);
   const pageKey = key || last.current?.key || '';
   const record = useRecordReader();
   const [state, setState] = useState<Record<string, string>>({});
@@ -199,7 +209,8 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   ), [pageKey, vela, title, doc?.presentation]);
 
   const reason = problem || (document.load === 'failed' ? document.error : '');
-  if (reason) return <>{refused ? refused(reason) : <Refused host={host} reason={reason} />}</>;
+  if (reason) return <>{quiet ? null : refused ? refused(reason) : <Refused host={host} reason={reason} />}</>;
+  if (quiet && (!resolved || !ctx || !page || page.load !== 'ready')) return null;
   if (!resolved || !ctx || !page) {
     // Before the document or the first read: the document's own skeleton once it is resolved.
     return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} /> : <View style={{ flex: 1 }} />;

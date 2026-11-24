@@ -170,7 +170,7 @@ if (import.meta.main) {
           }, { mock: ${JSON.stringify(values.app)}, alert: ${JSON.stringify(alertKnob)} });
           ` : ''}
           await page.locator(${JSON.stringify(view.ready)}).first().waitFor({ state: 'visible', timeout: 30000 });
-          ${view.hideChrome ? `await page.waitForTimeout(4200);` : `await page.mouse.move(200, 200); await page.waitForTimeout(800);`}
+          ${view.hideChrome ? `await page.waitForTimeout(${Number(process.env.CAPTURE_HIDE_MS ?? 4200)});` : `await page.mouse.move(200, 200); await page.waitForTimeout(800);`}
           await page.evaluate(${HIDE_MEDIA});
           await page.screenshot({ path: ${JSON.stringify(join(out, file))} });
           await page.waitForTimeout(700);

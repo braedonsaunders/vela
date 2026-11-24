@@ -7,15 +7,19 @@ import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { systemBarStyle } from '../src/system-bar-style';
 import { AudioDock } from '../src/media/audio';
 import { LiveAlerts, LiveOverlayProvider } from '../src/live-alerts';
+import { SurfaceProvider, SurfaceToasts } from '../src/surfaces';
+import { screenDocuments } from '../src/screens-flag';
 
 export default function Layout() {
   return (
     <VelaProvider>
       <LiveOverlayProvider>
-        <SystemBar />
-        <Screens />
-        <AudioDock />
-        <LiveAlerts />
+        <SurfaceProvider>
+          <SystemBar />
+          <Screens />
+          <AudioDock />
+          {screenDocuments() ? <SurfaceToasts /> : <LiveAlerts />}
+        </SurfaceProvider>
       </LiveOverlayProvider>
     </VelaProvider>
   );

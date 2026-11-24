@@ -32,7 +32,7 @@
       "small": { "gap": "4.5px", "padding": "0px 8px" },
       "children": [
         { "type": "use", "template": "ball", "when": [{ "test": "arg.trailing" }, { "test": "arg.ball" }] },
-        { "type": "use", "template": "crest", "when": [{ "test": "arg.trailing", "not": true }] },
+        { "type": "use", "template": "crest", "with": { "logo": "{arg.logo}", "color": "{arg.color}" }, "when": [{ "test": "arg.trailing", "not": true }] },
         {
           "type": "text",
           "text": "{arg.abbr}",
@@ -40,7 +40,7 @@
           "small": { "font-size": "12px" },
           "states": [{ "when": [{ "test": "arg.loser" }], "style": { "opacity": "0.6" } }]
         },
-        { "type": "use", "template": "crest", "when": [{ "test": "arg.trailing" }] },
+        { "type": "use", "template": "crest", "with": { "logo": "{arg.logo}", "color": "{arg.color}" }, "when": [{ "test": "arg.trailing" }] },
         { "type": "use", "template": "ball", "when": [{ "test": "arg.trailing", "not": true }, { "test": "arg.ball" }] },
         {
           "type": "box",
