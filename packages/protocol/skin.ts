@@ -20,7 +20,7 @@ export type StyleProperty =
   | 'grid-template-columns' | 'grid-template-rows' | 'grid-column' | 'grid-row'
   | 'margin' | 'padding' | 'padding-top' | 'padding-right' | 'padding-bottom' | 'padding-left' | 'margin-top' | 'margin-right' | 'margin-bottom' | 'margin-left' | 'overflow' | 'overflow-x' | 'overflow-y' | 'scroll-snap-type' | 'scroll-snap-align' | 'scrollbar-width'
   | 'color' | 'background-color' | 'background-image' | 'opacity'
-  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'corner-shape' | 'border-left-width' | 'border-left-color' | 'column-gap' | 'row-gap' | 'scroll-behavior' | 'scroll-padding-left' | 'color-scheme' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
+  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'corner-shape' | 'border-left-width' | 'border-left-color' | 'column-gap' | 'row-gap' | 'scroll-behavior' | 'scroll-padding-left' | 'color-scheme' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'outline-offset' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
   | 'font-family' | 'font-size' | 'font-weight' | 'font-style' | 'line-height' | 'letter-spacing' | 'text-transform'
   | 'text-align' | 'text-shadow' | '-webkit-text-stroke' | 'text-overflow' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
   | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate' | 'perspective'
