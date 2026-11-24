@@ -177,7 +177,9 @@ commands return policy/feature_unavailable rather than only changing metadata.
 POST `/__admin/sidecar` `{"enabled":true,"selected":true,"pathId":"remux"}` makes new VOD plans of the
 generated fixture a sidecar title: its English WebVTT arrives as an external file (as Jellyfin, Emby
 and Plex text subtitles do), beside a French track embedded in the source (`sub-fr`, which the
-mock's HLS does not actually carry), the sidecar selected from the start when `selected` (a default or remembered
+mock's HLS does not actually carry); its English and Spanish audio carry their stream indexes in the
+MP4, beside an English commentary (`audio-commentary`) the file lacks, so only the server can apply
+it; the sidecar is selected from the start when `selected` (a default or remembered
 subtitle), the direct MP4 is the original file (`original: true`), and plans start on `pathId`
 (`direct`, `remux` or `transcode`). While enabled, track commands are answered as Ether answers
 them: the selection changes and, off the original file, the source generation increases. POST
