@@ -195,3 +195,33 @@ describe('tabs pin', () => {
     expect(byParam).toEqual({ league: false, date: false, teamsLeague: true });
   });
 });
+
+describe('a long status line (Ether puts the last play in detail)', () => {
+  test('the hero and game band centre columns are capped at half the row and the status clamps to one line', async () => {
+    for (const [file, centre] of [['index.json', 'sports-hero-centre'], ['game.json', 'sports-game-centre']] as const) {
+      const doc = await json<ScreenDocument>(file);
+      let found: RNode | undefined;
+      const visit = (n: RNode) => {
+        const node = n as RNode & { children?: RNode[]; item?: RNode };
+        if (n.testId && fill(n.testId, screenRoot(page({}), () => undefined), envAt(390)) === centre) found = n;
+        node.children?.forEach(visit);
+        if (node.item) visit(node.item);
+      };
+      visit(resolveScreenDocument(doc, { width: 390, tv: false }, 'en', {}).tree);
+      expect(found).toBeDefined();
+      const style = found!.base.style as Record<string, unknown>;
+      const value = (k: string) => fill(style[k] as never, screenRoot(page({}), () => undefined), envAt(390));
+      expect(value('max-width')).toBe('60%');
+      expect(value('flex-shrink')).toBe('1');
+      // Every status text in the centre is one line with an ellipsis.
+      const texts: RNode[] = [];
+      const collect = (n: RNode) => { const node = n as RNode & { children?: RNode[] }; if (n.kind === 'text') texts.push(n); node.children?.forEach(collect); };
+      collect(found!);
+      const clamp = (t: RNode) => fill((t.base.style as Record<string, unknown>)['line-clamp'] as never, screenRoot(page({}), () => undefined), envAt(390));
+      const clamped = texts.filter(t => clamp(t) === '1');
+      // The status lines (detail, start) clamp; only the big score and its dash, and the spoiler words, do not.
+      expect(clamped.length).toBeGreaterThan(0);
+      expect(texts.filter(t => clamp(t) !== '1').length).toBeLessThanOrEqual(4);
+    }
+  });
+});

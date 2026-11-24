@@ -159,7 +159,7 @@
 
           { "type": "box", "when": [{ "test": "src.game.event.sides" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "12px" }, "children": [
             { "type": "repeat", "over": "src.game.event.sides", "as": "side", "limit": 1, "item": { "type": "use", "template": "teamBlock" } },
-            { "type": "box", "style": { "align-items": "center", "min-width": "260px" }, "small": { "min-width": "120px" }, "children": [
+            { "type": "box", "testId": "sports-game-centre", "style": { "align-items": "center", "min-width": "260px", "max-width": "50%", "flex-shrink": "1" }, "small": { "min-width": "120px", "max-width": "60%" }, "children": [
               { "type": "box", "when": [{ "test": "src.game.event.scored" }], "style": { "flex-direction": "row", "align-items": "center", "gap": "18px" }, "small": { "gap": "10px" }, "children": [
                 { "type": "use", "template": "score", "with": { "testId": "sports-game-away-score", "value": "{src.game.event.sides.0.score}", "loser": "{src.game.event.sides.0.loser}" } },
                 { "type": "text", "text": "–", "style": { "font-size": "43.2px", "line-height": "1.25", "font-weight": "300", "color": "#ffffff8c" }, "small": { "font-size": "26.4px" } },
@@ -168,9 +168,9 @@
                 { "type": "icon", "symbol": "eye-off", "style": { "width": "28px", "height": "28px", "color": "#ffffffd9" }, "small": { "width": "20px", "height": "20px" } },
                 { "type": "text", "text": "{s:spoilersHidden}", "style": { "font-size": "26px", "line-height": "1.25", "font-weight": "750", "color": "#ffffff" }, "small": { "font-size": "18px" } } ] },
               { "type": "text", "text": "{src.game.event.start|start}", "when": [{ "test": "src.game.event.scored", "not": true }, { "test": "src.game.event.spoiler", "not": true }, { "test": "src.game.event.phase", "is": "eq", "value": "upcoming" }],
-                "style": { "font-size": "34px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "22px" } },
+                "style": { "font-size": "34px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" }, "small": { "font-size": "22px" } },
               { "type": "text", "text": "{src.game.event.detail}", "when": [{ "test": "src.game.event.scored", "not": true }, { "test": "src.game.event.spoiler", "not": true }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }],
-                "style": { "font-size": "34px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "22px" } },
+                "style": { "font-size": "34px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" }, "small": { "font-size": "22px" } },
               { "type": "text", "text": "{s:starts} {src.game.event.start|start}", "when": [{ "test": "src.game.event.phase", "is": "eq", "value": "upcoming" }],
                 "style": { "margin-top": "6px", "font-size": "15px", "line-height": "1.25", "font-weight": "700", "color": "$palette.onTeam", "line-clamp": "1", "text-overflow": "ellipsis" }, "small": { "font-size": "13px" } },
               { "type": "text", "text": "{src.game.event.detail}", "when": [{ "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }],
