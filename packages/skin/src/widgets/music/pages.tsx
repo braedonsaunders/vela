@@ -19,6 +19,7 @@ import { listeningWords } from './listening';
 import { TrackList } from './tracks';
 import { compactMusic, musicTV } from './layout';
 import { RewindCover } from './rewind';
+import { musicHomeRows } from './home-rows';
 export { compactMusic };
 
 /** A page's side margin: tighter on a phone. */
@@ -90,24 +91,23 @@ export function MusicHome() {
   const { rows } = useLibraryRows(app.libraryId);
   const { playlists, liked } = usePlaylists();
   const likedTotal = useLiked().trackTotal;
-  const jump = rows.find(r => r.id.endsWith(':jump-back-in'))?.items ?? [];
   const recent = useRecent();
+  // The page's own rows of play contexts (Jump back in) and liked music replace Vela's.
+  const { ownRecent, ownLiked, jump, shelves } = musicHomeRows(rows, recent.available);
   useVelaState(s => s.home.load);
   const recapAvailable = store.music.recapAvailable;
   const [quickWidth, setQuickWidth] = useState(0);
-  const recentCards = recent.items.flatMap(item => (item.kind === 'favorites' ? [] : [item.card]));
+  const recentCards = ownRecent ? [] : recent.items.flatMap(item => (item.kind === 'favorites' ? [] : [item.card]));
   const likedRecently = recent.items.some(item => item.kind === 'favorites');
   // Quick tiles: what you played from most recently (Liked Songs and Rewind among it), then your playlists.
   const seen = new Set<string>();
   const quick: (Card | 'liked' | 'rewind')[] = [
-    ...(liked || likedRecently ? ['liked' as const] : []),
+    ...(!ownLiked && (liked || likedRecently) ? ['liked' as const] : []),
     ...(recapAvailable ? ['rewind' as const] : []),
     ...recentCards,
     ...playlists.map(playlistCard),
     ...jump,
   ].filter(item => (item === 'liked' || item === 'rewind' ? true : !seen.has(item.id) && !!seen.add(item.id))).slice(0, 8);
-  // The plugin's Recently played (tracks) gives way to the server's play contexts when it has them.
-  const shelves = rows.filter(r => !r.id.endsWith(':jump-back-in') && !(recent.available && r.id.endsWith(':recently-played')) && r.items.length);
   const firstCard = quick.find((x): x is Card => typeof x === 'object');
   const accent = firstCard?.accent ?? '';
   return (
@@ -134,6 +134,12 @@ export function MusicHome() {
 }
 
 function RowShelf({ row }: { row: Row }) {
+  const m = useMediaLook();
+  // layout tracks: track leaves (each with a duration and an album or artist parent) as a track list.
+  if (row.layout === 'tracks') return <View style={{ paddingHorizontal: 12, marginBottom: 28 }} testID={`music-row-tracks-${row.id}`}>
+    <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { marginBottom: 8 }]}>{row.name}</Text>
+    <TrackList tracks={row.items} options={{ covers: true, album: true, position: true, source: { id: row.id, name: row.name } }} />
+  </View>;
   const tracks = row.items.every(item => item.media?.role === 'track');
   // A row of songs shows each song's album once (Recently played reads as albums you came back to).
   const items = tracks ? dedupeAlbums(row.items) : row.items;

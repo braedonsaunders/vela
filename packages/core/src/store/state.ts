@@ -4,7 +4,8 @@
 import { VelaError } from '../adapter/errors';
 
 export type Load = 'idle' | 'loading' | 'ready' | 'failed';
-export type FailureKind = 'not-found' | 'temporary' | 'other';
+/** `preview-expired`: a Studio preview token Ether no longer honours ("reload from Studio"). */
+export type FailureKind = 'not-found' | 'temporary' | 'preview-expired' | 'other';
 
 /** A value read from the server: its load state, the value once read, and why it failed. */
 export interface Loadable<T> {
@@ -23,13 +24,20 @@ export const failed = <T>(error: unknown, previous?: Loadable<T>): Loadable<T> =
   load: 'failed',
   value: previous?.value,
   error: message(error),
-  failure: error instanceof VelaError && (error.status === 404 || error.detail.class === 'not-found')
+  failure: previewExpired(error)
+    ? 'preview-expired'
+    : error instanceof VelaError && (error.status === 404 || error.detail.class === 'not-found')
     ? 'not-found'
     : error instanceof VelaError && (error.status >= 500 || error.detail.class === 'transient' || error.detail.retry.allowed)
       ? 'temporary'
       : 'other',
   ...(error instanceof VelaError && error.detail.code ? { code: error.detail.code } : {}),
 });
+
+/** Ether refused a Studio preview token (401/403 with problem code preview_expired). */
+export function previewExpired(error: unknown): boolean {
+  return error instanceof VelaError && (error.status === 401 || error.status === 403) && error.detail.code === 'preview_expired';
+}
 
 export function message(error: unknown, fallback = 'Something went wrong'): string {
   return error instanceof Error && error.message ? error.message : fallback;

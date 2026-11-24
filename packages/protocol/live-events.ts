@@ -1,6 +1,7 @@
-// Live events, plugin screens and multiview (Ether Sports, 0.3.19). Generic on the wire: nothing
-// here says which sport, league or data provider; a plugin's feed fills these shapes and Ether
-// resolves screens, favourites, spoilers and where to watch for the viewer.
+// Live events and multiview. The LiveEvent shapes are a plugin's feed as Ether reads it (the mock's
+// simulation produces them); Vela itself reads live events only as the view-model records of plugin
+// screens (screen.ts; Ether design section 5.4). The session's liveEvent reference and multiview
+// stay on the wire.
 import type { Device, ID, Mutation, Timestamp } from './types';
 
 export type LiveEventState = 'pre' | 'in' | 'post' | 'delayed' | 'postponed' | 'canceled';
@@ -80,54 +81,13 @@ export interface LiveEventDetail extends LiveEvent {
   probabilitySeries: LiveProbabilityPoint[];
   links: { label: string; url: string }[];
 }
-export interface LiveEventsResponse { events: LiveEvent[] }
-
-/** A favouritable entity (a team). `key` is the favourites key (`pluginID:feed:kind:id`). */
-export interface LiveEntity {
-  id: ID; kind: string; name: string; abbr?: string; logo?: string; league?: string; color?: string;
-  key?: string; favorite?: boolean;
-}
-export interface LiveEntitiesResponse { entities: LiveEntity[] }
-/** The viewer's live-event preferences (GET, PUT /live/preferences). Spoiler-free withholds scores,
- * probability and plays until an event is revealed. */
-export interface LivePreferences { spoilerFree: boolean }
-
-/** `/live/stream` server events. `update` carries only changed events; `heartbeat` every 25 s. */
-export interface LiveStreamUpdate { events: LiveEvent[] }
+/** The kinds of alert Ether raises for a viewer's favourites (the stream's AlertFrame.kind). */
 export type LiveAlertKind = 'started' | 'close' | 'final';
-/** `/live/stream?alerts=1` `alert` events, for the viewer's favourites. */
-export interface LiveAlert { id: ID; kind: LiveAlertKind; eventId: ID; entityKey: string; title: string; body: string; at: Timestamp }
 
 /** The event on air on a playing live channel (session snapshot and the session stream's `liveEvent`). */
 export interface LiveEventRef { id: ID; feed: ID }
 /** Data of the session stream's `event: liveEvent`, sent when the programme on air changes. */
 export interface SessionLiveEvent { liveEvent: LiveEventRef | null }
-
-// Plugin screens
-
-/** A top-level section from bootstrap `navigation`, listed after Live TV. */
-export interface NavigationEntry { kind: 'screen'; id: ID; title: string; icon?: string }
-
-export interface ScreenEventsQuery {
-  state?: LiveEventState[]; league?: ID; favorites?: boolean; window?: 'today' | 'week' | 'recent';
-}
-interface SectionBase { id: ID; title?: string }
-/** The featured event: a favourite's live game, else the biggest live game. `also`: the side list. */
-export interface HeroSection extends SectionBase { type: 'hero'; event: LiveEvent | null; also?: LiveEvent[] }
-export interface EventsSection extends SectionBase { type: 'events'; query?: ScreenEventsQuery; events: LiveEvent[] }
-export interface TableSection extends SectionBase { type: 'table'; feed: ID; league?: ID; tables: LiveTable[] }
-/** A date-paged timeline; `date` is the shown day (YYYY-MM-DD), `previous`/`next` page it. */
-export interface ScheduleSection extends SectionBase {
-  type: 'schedule'; date: string; previous?: string; next?: string;
-  days?: { date: string; label: string; count?: number }[];
-  events: LiveEvent[];
-}
-export interface LeaguesSection extends SectionBase { type: 'leagues'; leagues: LiveLeague[]; selected?: ID }
-/** The favourite picker: the viewer's favourites first, then suggestions. */
-export interface EntitiesSection extends SectionBase { type: 'entities'; feed: ID; entityKind: string; entities: LiveEntity[] }
-export type ScreenSection = HeroSection | EventsSection | TableSection | ScheduleSection | LeaguesSection | EntitiesSection;
-/** GET /screens/:id?league=&date= */
-export interface Screen { id: ID; title: string; icon?: string; league?: ID; date?: string; sections: ScreenSection[] }
 
 // Multiview (spec B)
 

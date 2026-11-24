@@ -20,7 +20,7 @@ export type StyleProperty =
   | 'grid-template-columns' | 'grid-template-rows' | 'grid-column' | 'grid-row'
   | 'margin' | 'padding' | 'padding-top' | 'padding-right' | 'padding-bottom' | 'padding-left' | 'margin-top' | 'margin-right' | 'margin-bottom' | 'margin-left' | 'overflow' | 'overflow-x' | 'overflow-y' | 'scroll-snap-type' | 'scroll-snap-align' | 'scrollbar-width'
   | 'color' | 'background-color' | 'background-image' | 'opacity'
-  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'corner-shape' | 'border-left-width' | 'border-left-color' | 'column-gap' | 'row-gap' | 'scroll-behavior' | 'scroll-padding-left' | 'color-scheme' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
+  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'corner-shape' | 'border-left-width' | 'border-left-color' | 'column-gap' | 'row-gap' | 'scroll-behavior' | 'scroll-padding-left' | 'color-scheme' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'outline-offset' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
   | 'font-family' | 'font-size' | 'font-weight' | 'font-style' | 'line-height' | 'letter-spacing' | 'text-transform'
   | 'text-align' | 'text-shadow' | '-webkit-text-stroke' | 'text-overflow' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
   | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate' | 'perspective'
@@ -38,7 +38,7 @@ export interface Condition {
 
 export type Action =
   | 'select' | 'person' | 'play' | 'pickHero' | 'home' | 'search' | 'live' | 'library'
-  | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'switchProfile' | 'playlists' | 'hideScores' | 'addToPlaylist' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
+  | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'switchProfile' | 'playlists' | 'addToPlaylist' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
   /** A failed route asks again for what failed (`env.canRetry`). */
   | 'retry'
   /** Shell: open this flag alone, closing the others (keep- flags stay); pressed again it closes. */
@@ -58,11 +58,17 @@ export type Action =
   /** Live TV multiview: add the channel (arg: its id) and show multiview; with no arg, show it as it is. */
   | 'multiview'
   /** Search (`routes.search`): open a live hit by its `hit.ref`; ask the descriptive lane again. */
-  | 'searchLibrary' | 'searchSort' | 'searchDirection' | 'searchKind' | 'searchMore' | 'openHit' | 'retryDescriptive';
+  | 'searchLibrary' | 'searchSort' | 'searchDirection' | 'searchKind' | 'searchMore' | 'openHit' | 'retryDescriptive'
+  /** Renderer 19, plugin screens and surfaces (docs/plugin-screens.md): structured `args`. */
+  | 'navigate' | 'setParam' | 'plugin' | 'openLink' | 'dismiss';
 
 interface NodeBase extends Breakpoints {
-  /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px. */
-  style?: Style; small?: Style; wide?: Style;
+  /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px, `tv` on a TV (renderer 19). */
+  style?: Style; small?: Style; wide?: Style; tv?: Style;
+  /** Renderer 19: play a motion preset when the filled value changes (a score pops). */
+  onChange?: { value: Template; motion: string };
+  /** Renderer 19, screens: lazy sources read when this node is about to draw. */
+  needs?: string[];
   /** Pointer hover and keyboard focus overlays (the renderer tracks both). */
   hover?: Style; focus?: Style;
   /** A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`. */
@@ -87,10 +93,17 @@ interface NodeBase extends Breakpoints {
   /** A box's element id (`detail-scroll-{env.entry}`: the route's scroll the navigation restores). */
   id?: Template;
 }
+/** A press: an action with a Template argument, or (renderer 19) named Template arguments. */
+export interface Press {
+  action: Action; arg?: Template; /** Focus this element id after the action. */ focus?: Template;
+  args?: Record<string, Template>;
+  /** Screens: a client-only patch applied until the plugin action answers. */
+  optimistic?: { record?: Template; source?: string; path: string; value: Template };
+}
 export interface BoxNode extends NodeBase {
   type: 'box';
   /** Pressing it: `press` with an optional Template argument (`toggle` and `open`/`close` take a flag name). */
-  press?: { action: Action; arg?: Template; /** Focus this element id after the action. */ focus?: Template };
+  press?: Press;
   /** A row's pager (inside a home row): this box scrolls sideways; `pageNext`/`pagePrev {row.id}` move it by
    *  max(200, width - 2 x inset - peek) px, and `pager.*` say whether it overflows and is at an end. */
   pager?: { inset?: number; peek?: number };
@@ -114,13 +127,19 @@ export interface BoxNode extends NodeBase {
 export interface TextNode extends NodeBase { type: 'text'; text: Template }
 /** Breakpoints at the document's own widths, evaluated against the slot's width. */
 export interface Breakpoints { below?: Record<string, Style>; above?: Record<string, Style> }
-export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?: Template; /** Fade in once loaded. */ fade?: boolean }
+export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?: Template; /** Fade in once loaded. */ fade?: boolean;
+  /** Renderer 19: drawn instead when the source is empty, refused or fails to load. */ fallback?: Node }
 export interface IconNode extends NodeBase { type: 'icon'; /** A platform symbol, */ symbol?: string; /** or the document's own glyph: SVG path data (up to 8) painted in currentColor. */ paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
 /** Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`). */
-export interface RepeatNode extends NodeBase { type: 'repeat'; over: string; limit?: number; item: Node }
+export interface RepeatNode extends NodeBase { type: 'repeat'; over: string; limit?: number; item: Node;
+  /** Renderer 19 (screens): the item's name (`{game.sides.0.score}`), an offset, a record key left out
+   *  before `limit`, an identity template, and a time filter (only items whose `at` <= `time`). */
+  as?: string; skip?: number; exclude?: Template; key?: Template; asOf?: { at: string; time: Template } }
 /** A template from the document's `templates`, inlined where it is used.
  * Renderer 16 supplies velaSummary: an overflow-measured, expandable title synopsis. */
-export interface UseNode extends NodeBase { type: 'use'; template: string }
+export interface UseNode extends NodeBase { type: 'use'; template: string;
+  /** Renderer 19: arguments read as `{arg.<name>}` in the template; children fill its `children` slot. */
+  with?: Record<string, Template>; children?: Node[]; press?: Press }
 /** A foundation slot: `children` (the route content the shell wraps), `searchField`. */
 export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 'searchField'; /** The inner box around the content (`style` is the outer). */ inner?: Style }
 /** A compiled interactive part, styled by `params`: `skinPicker`, `install`, `heroPreview`, `cardPreview`. */
@@ -129,7 +148,27 @@ export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 's
  *  the next page; `select` (params options: library.genres | library.sorts | library.kinds, action, arg with {value},
  *  none: a leading empty option's label, label) is the platform select styled by its node. */
 export interface WidgetNode extends NodeBase { type: 'widget'; widget: string; params?: Record<string, string> }
-export type Node = BoxNode | TextNode | ImageNode | IconNode | RepeatNode | UseNode | SlotNode | WidgetNode;
+/** A value per viewport class (renderer 19 blocks). */
+export type PerClass<T> = T | { default: T; small?: T; wide?: T; tv?: T };
+interface ItemsBase extends NodeBase { over: string; as: string; item: Node; key?: Template; exclude?: Template; limit?: number }
+/** Renderer 19 blocks (docs/plugin-screens.md: Building blocks). */
+export interface SectionsNode extends NodeBase { type: 'sections'; children: Node[]; gap?: string }
+export interface ShelfNode extends ItemsBase { type: 'shelf'; itemWidth?: PerClass<string>; gap?: string; stableOrder?: boolean; empty?: Node }
+export interface GridNode extends ItemsBase { type: 'grid'; columns: PerClass<number>; gap?: string }
+export interface TabsNode extends NodeBase { type: 'tabs'; over: string; as: string; value: Template; label: Template; count?: Template;
+  bind: { param?: string; state?: string; clear?: string[] }; default?: Template; all?: Template; chip?: string; size?: 'small';
+  /** Nodes drawn after the options inside the same scroll and focus row (Sports' Hide scores switch). */ after?: Node[];
+  /** With `bind.param`: on first draw an empty param takes the resolved `default` (history replace, no re-read), so a later
+   *  change of the default does not move the selection. */ pin?: boolean }
+export interface TableNode extends NodeBase { type: 'table'; data: string; compact?: boolean; focusRows?: number;
+  /** false: ignore rows' `highlight` (a game's own tables are not lit, as standings are). Default true. */ highlight?: boolean }
+export interface LineGraphNode extends NodeBase { type: 'lineGraph'; series: string; sides?: string; subject?: Template; live?: Template; height?: PerClass<string> }
+export interface PlayerNode extends NodeBase { type: 'player'; channel: Template }
+export interface ParamInputNode extends NodeBase { type: 'paramInput'; param: string; placeholder?: Template }
+export interface TitleCardNode extends NodeBase { type: 'titleCard'; item: Template }
+export interface MarqueeNode extends ItemsBase { type: 'marquee'; gap?: string; speed?: number }
+export type BlockNode = SectionsNode | ShelfNode | GridNode | TabsNode | TableNode | LineGraphNode | PlayerNode | ParamInputNode | TitleCardNode | MarqueeNode;
+export type Node = BoxNode | TextNode | ImageNode | IconNode | RepeatNode | UseNode | SlotNode | WidgetNode | BlockNode;
 
 export interface MotionPreset {
   /** A compiled keyframes name (docs/skin-schema.md lists them) or `none`. */
@@ -144,7 +183,7 @@ export interface SkinFont { family: string; /** weight: a number, or a range "30
 /** The keys of a document's `ui` block (packages/skin/src/resolve/ui-defaults.ts holds Cinematic's values). */
 export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'inkHover' | 'accent' | 'onAccent'
   | 'control' | 'controlHover' | 'glass' | 'glassEdge' | 'glassEdgeStrong' | 'popover' | 'scrim' | 'track' | 'trackStrong'
-  | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'font' | 'fontDisplay'
+  | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'highlight' | 'positive' | 'font' | 'fontDisplay'
   | 'radiusControl' | 'radiusCard' | 'radiusPanel';
 
 export interface SkinDocument {

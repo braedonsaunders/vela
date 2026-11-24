@@ -1,6 +1,8 @@
 /** Vela v0. All durations/positions are seconds, rates bits/second, timestamps RFC3339 UTC. */
-import type { LiveEventRef, MultiviewTile, NavigationEntry, ProviderCapDetails } from './live-events';
+import type { LiveEventRef, MultiviewTile, ProviderCapDetails } from './live-events';
+import type { ScreenNavigationEntry, SurfaceContribution, SurfaceRow } from './screen';
 export type * from './live-events';
+export type * from './screen';
 export type ID = string;
 export type Timestamp = string;
 export type Cursor = string;
@@ -96,8 +98,6 @@ export interface ServerCapabilities {
     /** Library.experience is sent on every library and is final (a plugin names how its library opens);
      * `experiences` lists the ids the server sends. Without it a client chooses by media class. */
     libraryExperiences?: Feature & { experiences: LibraryExperience[] };
-    /** Live events: /live/events, /live/stream, screens and entity favourites (live-events.ts). */
-    liveEvents?: Feature;
     /** Live TV multiview groups: POST /multiview, PlaybackRequest.multiview. */
     multiview?: Feature & { maxTiles: number };
     /** Live TV catch-up and timeshift. `available`: some channel the viewer sees has a provider archive
@@ -119,8 +119,7 @@ export interface ServerCapabilities {
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
 export interface NegotiateResponse { capabilities: ServerCapabilities; client: ClientCapabilities }
-export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef;
-  /** Live events: scores are withheld until revealed (bootstrap only; GET /live/preferences otherwise). */ spoilerFree?: boolean }
+export interface Viewer { id: ID; name: string; policyRevision: string; avatar?: ArtworkRef }
 export interface Tokens { accessToken: string; refreshToken: string; expiresAt: Timestamp; viewer: Viewer }
 export interface PlexHomeProfile {
   id: ID; name: string; protected: boolean;
@@ -227,15 +226,34 @@ export interface LibraryPersonEntry { id: ID; kind: 'person'; person: Pick<Perso
 export type RowEntry = { id: ID; receiptToken: string; /** Stable playlist member identity when read from playlist contents. */ entryId?: ID } & (
   { kind: 'title'; title: Title; role?: string } | { kind: 'person'; person: LibraryPersonEntry['person']; itemCount: number } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID; itemCount?: number });
-export interface Row { id: ID; name: string; purpose: 'continue' | 'nextUp' | 'recent' | 'recentlyReleased' | 'recentlyAdded' | 'collection' | 'recommendation' | 'live' | 'watchlist';
-  receiptToken: string; style?: string; presentation?: 'ranked'; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown' }
+export type RowPurpose = 'continue' | 'nextUp' | 'recent' | 'recentlyReleased' | 'recentlyAdded' | 'collection' | 'recommendation' | 'live' | 'watchlist'
+  | 'recentContexts' | 'liked';
+/** How a row draws (Ether's Recommendations pages). Unknown values draw as `standard`. */
+export type RowLayout = 'standard' | 'hero' | 'wide' | 'tiles' | 'tracks';
+/** The card a row's items draw with; on library pages Ether falls back to the library's card. Unknown values: the skin's default. */
+export type RowCard = 'poster' | 'landscape' | 'square' | 'round';
+export type RowExperience = 'watch' | 'listen' | 'read' | 'gallery' | 'live';
+/** A row of titles (Home, a library's rows tab, /rows). Each presentation field is sent only when set. */
+export interface Row { id: ID; name: string; purpose: RowPurpose;
+  receiptToken: string; presentation?: 'ranked'; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown';
+  /** `tracks`: the items are track leaves with a duration and an album or artist parent (title.media.parents). */
+  layout?: RowLayout; card?: RowCard;
+  /** The items' media role (movie, show, episode, album, artist, track, playlist, audiobook, book, collection, channel, …). */
+  role?: string;
+  /** The titles differ per viewer. */ personal?: true;
+  /** The library of a one-row-per-library row. */ library?: ID;
+  experience?: RowExperience }
 export type HeroReason = 'resume' | 'nextEpisode' | 'newRelease' | 'forYou' | 'trending' | 'featured';
 export interface HeroAction { kind: 'resume' | 'play' | 'details'; titleId: ID; positionSeconds?: number }
 export interface Hero { title: Title; receiptToken: string; reason: HeroReason; action: HeroAction;
   /** Short supporting/reason text, not the primary action button label. */
   label?: string; previewOnFocus?: boolean; trailer?: Extra }
-export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor;
-  /** Plugin screens the viewer may open, as top-level sections after Live TV. */ navigation?: NavigationEntry[] }
+export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[];
+  /** Feed rows, and `surface` rows (a plugin's homeRow surface) in page order. */ rows: (Row | SurfaceRow)[]; nextCursor?: Cursor;
+  /** Plugin screens the viewer may open, as top-level sections after Live TV. An entry without a
+   * `document` is not drawn. */ navigation?: ScreenNavigationEntry[];
+  /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels), filtered, capped and ordered by Ether. */
+  surfaces?: SurfaceContribution[] }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }
 /** `auto` (only with features.unifiedSearch): one ranked list; the server decides when description matches lead. */
 export interface SearchRequest extends Mutation, SearchOptions { query: string; generation: number; mode: 'fast' | 'descriptive' | 'auto'; cursor?: Cursor; limit?: number }

@@ -1,0 +1,57 @@
+// A page of a plugin screen (the Sports game page), drawn from its document. Like a title page it
+// opens over the page it came from: framed on desktop, web and tablets, the whole screen on a TV and
+// a phone. Back, Menu and Escape close it; on the web so does a click on the dimmed page around it.
+import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo } from 'react';
+import { BackHandler, Platform, View } from 'react-native';
+import { screenDocumentHref } from '@vela/core';
+import { useVelaState } from '@vela/core/react';
+import { ScreenActive } from '@vela/skin';
+import { HostContext } from '@vela/skin/src/host';
+import { ScreenView } from '@vela/skin/src/screen/host';
+import { useVela } from '../../../src/vela';
+import { closeModal } from '../../../src/modal-motion';
+import { PageFrame } from '../../../src/page-frame';
+import { useAppScreenActions } from '../../../src/screen-actions';
+
+export default function ScreenPage() {
+  const { id = '', page = '', ...rest } = useLocalSearchParams<{ id: string; page: string } & Record<string, string>>();
+  const vela = useVela();
+  const host = vela.host('screen', id);
+  const focused = useIsFocused();
+  const entry = useVelaState(state => state.home.value?.screens.find(screen => screen.id === id));
+  const href = entry ? screenDocumentHref(entry.document.href, page) : '';
+  // A Studio preview's token is the address's, not the page's.
+  const params = useMemo(() => Object.fromEntries(Object.entries(rest).filter(([name, v]) => typeof v === 'string' && name !== 'screenPreview')) as Record<string, string>,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(rest)]);
+  const back = useCallback(() => closeModal(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }), []);
+  const setParams = useCallback((next: Record<string, string>) => {
+    router.setParams({ ...Object.fromEntries(Object.keys(params).map(name => [name, undefined])), ...next });
+  }, [params]);
+  const actions = useAppScreenActions({ host, back, setParams });
+  useFocusEffect(useCallback(() => {
+    if (Platform.OS !== 'web') {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => { back(); return true; });
+      return () => subscription.remove();
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) { event.preventDefault(); back(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [back]));
+  if (!host || !id || !page || !href) return <View style={{ flex: 1 }} />;
+  return (
+    <ScreenActive.Provider value={focused}>
+      <HostContext.Provider value={host}>
+        <PageFrame host={host} close={back} active={focused}>
+          <ScreenView target={{ kind: 'screen', id, page }} href={href} params={params} host={host} active={focused} actions={actions} />
+        </PageFrame>
+      </HostContext.Provider>
+    </ScreenActive.Provider>
+  );
+}

@@ -176,7 +176,7 @@ describe('mock server: catalogue and live', () => {
 
   test('title watch mutations persist every supported field', async () => {
     const bootstrap = await get<V.Bootstrap>('/bootstrap');
-    const title = bootstrap.rows.flatMap(row => row.items).find(item => item.kind === 'title')!;
+    const title = bootstrap.rows.flatMap(row => 'items' in row ? row.items : []).find(item => item.kind === 'title')!;
     const response = await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: true, favorite: true, watchlisted: true }, authed(tokens));
     expect(response.status).toBe(200);
     const detail = await get<V.TitleDetail>(`/titles/${title.title.id}`);
@@ -186,7 +186,7 @@ describe('mock server: catalogue and live', () => {
 
   test('Home\'s progress shelves can be read on their own, as Ether serves them after a stop', async () => {
     const bootstrap = await get<V.Bootstrap>('/bootstrap');
-    const shelves = bootstrap.rows.filter(row => row.purpose === 'continue' || row.purpose === 'nextUp');
+    const shelves = bootstrap.rows.filter((row): row is V.Row => 'purpose' in row && (row.purpose === 'continue' || row.purpose === 'nextUp'));
     expect(shelves.length).toBeGreaterThan(0);
     for (const shelf of shelves) {
       const row = await get<V.Row>(`/rows/${shelf.id}?limit=20`);
@@ -253,7 +253,7 @@ describe('mock server: catalogue and live', () => {
     const home = await get<V.Bootstrap>('/bootstrap');
     expect(home.viewer.id).toBe('viewer-demo');
     expect(home.rows.length).toBeGreaterThan(0);
-    expect(home.rows[0]!.receiptToken).toContain('.');
+    expect((home.rows[0] as V.Row).receiptToken).toContain('.');
     const libraries = await get<V.Page<V.Library>>('/libraries');
     expect(libraries.items.length).toBeGreaterThan(0);
     const library = libraries.items[0]!;

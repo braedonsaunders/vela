@@ -356,15 +356,16 @@ const rowItemStyle = (layer: string): Style => ({
   'align-items': 'flex-end',
   'z-index': layer,
 });
-export const rowItem: Node = {
+const rowItemOf = (template: string): Node => ({
   type: 'box',
   motion: 'velaCard',
   stagger: { step: 45, cap: 8 },
   style: rowItemStyle('0'),
   // The previewing card's overlay opens over its neighbours.
   states: [{ when: [previewing], style: rowItemStyle('5') }],
-  children: [numeral(false), numeral(true), { type: 'use', template: 'velaCard' }],
-};
+  children: [...(template === 'velaCardHero' ? [] : [numeral(false), numeral(true)]), { type: 'use', template }],
+});
+export const rowItem: Node = rowItemOf('velaCard');
 // The row's end cell: its next page loads as the end comes near (home rows only).
 export const rowEnd: Node = {
   type: 'box',
@@ -387,7 +388,7 @@ export const rowEnd: Node = {
   ],
 };
 // A shelf scrolls sideways; ranked shelves space their cards wider, room for the numerals.
-export const shelf = (ranked: boolean, paged: boolean): Node => ({
+export const shelf = (ranked: boolean, paged: boolean, template = 'velaCard'): Node => ({
   type: 'box',
   ...(paged ? { pager: { inset: 28, peek: 72 } } : {}),
   when: [{ test: 'row.presentation', is: ranked ? 'eq' : 'ne', value: 'ranked' }],
@@ -405,7 +406,7 @@ export const shelf = (ranked: boolean, paged: boolean): Node => ({
     ...gutter,
   },
   small: { gap: ranked ? '22px' : '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall },
-  children: [{ type: 'repeat', over: 'row.items', item: rowItem }, ...(paged ? [rowEnd] : [])],
+  children: [{ type: 'repeat', over: 'row.items', item: template === 'velaCard' ? rowItem : rowItemOf(template) }, ...(paged ? [rowEnd] : [])],
 });
 
 const pageButton = (direction: 'pagePrev' | 'pageNext'): Node => ({
@@ -438,7 +439,7 @@ const pageButton = (direction: 'pagePrev' | 'pageNext'): Node => ({
   }],
 });
 
-export const shelfRow = (paged: boolean): Node => ({
+export const shelfRow = (paged: boolean, template = 'velaCard'): Node => ({
   type: 'box',
   style: {
     position: 'relative',
@@ -457,8 +458,8 @@ export const shelfRow = (paged: boolean): Node => ({
       style: { 'font-size': '21px', 'font-weight': '650', 'letter-spacing': '-0.012em', ...gutter },
       small: { 'font-size': '18px', ...gutterSmall },
     },
-    shelf(false, paged),
-    shelf(true, paged),
+    shelf(false, paged, template),
+    shelf(true, paged, template),
     ...(paged ? [
       { ...pageButton('pagePrev'), when: [{ test: 'env.small', not: true }, { test: 'pager.overflows' }] },
       { ...pageButton('pageNext'), when: [{ test: 'env.small', not: true }, { test: 'pager.overflows' }] },
@@ -494,3 +495,46 @@ export const gridCard: Node = {
   style: { ...(card as BoxNode).style, width: '100%' },
   small: { width: '100%' },
 } as Node;
+
+// Recommendations rows' layouts on library pages (row.layout, docs: Recommendations wire): `hero`
+// draws large landscape art in place, `wide` landscape cards, `tiles` square tiles; any other
+// layout is the standard poster shelf. The card is the row card at another shape: its frame's
+// aspect and the art it prefers (landscape art first for the landscape shapes).
+function shaped(width: string, small: string, aspect: string, landscape: boolean): Node {
+  const base = card as BoxNode;
+  const [observe, frame, ...rest] = base.children ?? [];
+  const f = frame as BoxNode;
+  const [poster, backdrop, ...art] = f.children ?? [];
+  const pictures = landscape
+    ? [{ ...(backdrop as Node), when: [{ test: 'card.backdrop' }] }, { ...(poster as Node), when: [{ test: 'card.backdrop', not: true }, { test: 'card.poster' }] }]
+    : [poster as Node, backdrop as Node];
+  return {
+    ...base,
+    style: { ...base.style, width },
+    small: { width: small },
+    children: [observe as Node, { ...f, style: { ...f.style, 'aspect-ratio': aspect }, children: [...pictures, ...art] }, ...rest],
+  } as Node;
+}
+export const heroCard = shaped('clamp(420px, 40vw, 760px)', '300px', '16 / 9', true);
+export const wideCard = shaped('clamp(240px, 20vw, 380px)', '220px', '16 / 9', true);
+export const tileCard = shaped('clamp(150px, 12.4vw, 232px)', '112px', '1 / 1', false);
+// A hero row's large art stands alone: no rank numerals, one plain shelf whatever its presentation.
+const heroShelfRow = shelfRow(true, 'velaCardHero') as BoxNode;
+export const heroRow: Node = { ...heroShelfRow, children: (heroShelfRow.children ?? []).flatMap(child => {
+  if ((child as BoxNode).when?.some(test => test.test === 'row.presentation' && test.is === 'eq')) return [];
+  if ((child as BoxNode).when?.some(test => test.test === 'row.presentation')) return [{ ...child, when: [] } as Node];
+  return [child];
+}) } as Node;
+export const wideRow = shelfRow(true, 'velaCardWide');
+export const tileRow = shelfRow(true, 'velaCardTile');
+const layout = (value: string) => ({ test: 'row.layout', is: 'eq' as const, value });
+/** A library page's recommended row: its layout's row, else the standard shelf. */
+export const libraryRow: Node = {
+  type: 'box',
+  children: [
+    { type: 'use', template: 'velaRowHero', when: [layout('hero')] },
+    { type: 'use', template: 'velaRowWide', when: [layout('wide')] },
+    { type: 'use', template: 'velaRowTile', when: [layout('tiles')] },
+    { type: 'use', template: 'velaRow', when: [{ ...layout('hero'), not: true }, { ...layout('wide'), not: true }, { ...layout('tiles'), not: true }] },
+  ],
+};

@@ -10,3 +10,17 @@ export function setQuietPlayback(on: boolean): void {
 export function quietPlayback(): boolean {
   return quiet;
 }
+
+// A plugin screen previewed from Ether Studio (screen-preview in the app) keeps playback muted:
+// the console is an authoring tool in someone's browser tab, never a speaker.
+let forced = false;
+
+export function setForcedMute(on: boolean): void {
+  forced = on;
+  if (on) quiet = true;
+}
+
+/** Playback stays muted: the viewer's unmute is ignored. */
+export function forcedMute(): boolean {
+  return forced;
+}

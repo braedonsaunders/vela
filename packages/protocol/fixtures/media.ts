@@ -593,7 +593,7 @@ export const mediaLibraries: Library[] = [
   // libraries listen, books read, photos are a gallery.
   { id: 'music', name: 'Music', kind: 'shows', media: 'music', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(artists[0]!.id, 'wide')],
     tabs: [
-      { id: 'recommended', label: 'Recommended', kind: 'recommended' },
+      { id: 'recommended', label: 'Recommendations', kind: 'recommended' },
       // A second recommended tab with its own shelves and card (features.pluginLevels).
       { id: 'concerts', label: 'Concerts', kind: 'recommended', card: 'landscape' },
       { id: 'artists', label: 'Artists', kind: 'library' },
@@ -603,7 +603,7 @@ export const mediaLibraries: Library[] = [
     browse: { sorts, defaultSort: 'index', defaultDirection: 'asc', filters: { genre: true, genres: genresOf(artists), year: true, favorite: true } } },
   { id: 'books', name: 'Books', kind: 'mixed', media: 'book', experience: 'read', presentation: { card: 'poster' }, artwork: [mediaArtwork(books[0]!.id, 'book')],
     tabs: [
-      { id: 'recommended', label: 'Recommended', kind: 'recommended' },
+      { id: 'recommended', label: 'Recommendations', kind: 'recommended' },
       { id: 'library', label: 'Library', kind: 'library' },
       { id: 'all-books', label: 'All books', kind: 'library', level: 'book' },
       { id: 'series', label: 'Series', kind: 'library', level: 'series' },
@@ -613,7 +613,7 @@ export const mediaLibraries: Library[] = [
       filters: { facets: [{ id: 'author', label: 'Author', type: 'people', multi: true }], genre: true, genres: genresOf(books), year: true, played: true, favorite: true } } },
   { id: 'audiobooks', name: 'Audiobooks', kind: 'mixed', media: 'audiobook', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(audiobooks[0]!.id, 'square')],
     tabs: [
-      { id: 'recommended', label: 'Recommended', kind: 'recommended' },
+      { id: 'recommended', label: 'Recommendations', kind: 'recommended' },
       { id: 'library', label: 'Library', kind: 'library' },
       { id: 'authors', label: 'Authors', kind: 'people', facet: 'author', order: 'name' },
       { id: 'narrators', label: 'Narrators', kind: 'people', facet: 'narrator', order: 'name' },
@@ -623,7 +623,7 @@ export const mediaLibraries: Library[] = [
         genre: true, genres: genresOf(audiobooks), year: true, played: true, favorite: true } } },
   { id: 'podcasts', name: 'Podcasts', kind: 'shows', media: 'podcast', experience: 'listen', presentation: { card: 'square' }, artwork: [mediaArtwork(shows[0]!.id, 'square')],
     tabs: [
-      { id: 'recommended', label: 'Recommended', kind: 'recommended' },
+      { id: 'recommended', label: 'Recommendations', kind: 'recommended' },
       { id: 'shows', label: 'Shows', kind: 'library' },
       { id: 'episodes', label: 'Episodes', kind: 'library', level: 'episode', layout: 'list' },
       { id: 'hosts', label: 'Hosts', kind: 'people', facet: 'host', order: 'name' },

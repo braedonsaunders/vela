@@ -1,0 +1,102 @@
+// The `paramInput` layout block (`docs/plugin-screens.md` §6): text input bound to a page parameter
+// (`param`), dispatching a debounced `setParam` as the user types. Focusable on TV and never a
+// password field (`secureTextEntry={false}`).
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View } from 'react-native';
+import { useHost } from '../host';
+import { fill, type Template } from '../resolve';
+import type { Ctx } from '../vocabulary';
+import { TextField } from '../widgets/common/text-field';
+import { useBlockLook } from './look';
+import type { ParamInputBlockNode } from './types';
+
+const DEBOUNCE_MS = 220;
+
+export function ParamInputBlock({ node, ctx }: { node: ParamInputBlockNode; ctx: Ctx }) {
+  const host = useHost();
+  const look = useBlockLook();
+  const { px } = look;
+
+  const paramName = node.param;
+  const externalValue =
+    (ctx as { screen?: { page?: { params?: Record<string, string> } } }).screen?.page?.params?.[paramName] ?? '';
+  const [value, setValue] = useState(externalValue);
+  const [focused, setFocused] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setValue(externalValue);
+  }, [externalValue]);
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  const commit = useCallback(
+    (nextValue: string) => {
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      const screenPress = (host as {
+        screenPress?: (p: { action: string; arg: string; args: Record<string, string>; control: string }) => void;
+      }).screenPress;
+      if (screenPress) {
+        screenPress({
+          action: 'setParam',
+          arg: paramName,
+          args: { name: paramName, param: paramName, value: nextValue },
+          control: `param-${paramName}`,
+        });
+      } else {
+        host.dispatch('setParam', `${paramName}=${nextValue}`);
+      }
+    },
+    [host, paramName],
+  );
+
+  const onChangeText = useCallback(
+    (next: string) => {
+      setValue(next);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        commit(next);
+      }, DEBOUNCE_MS);
+    },
+    [commit],
+  );
+
+  const placeholder = node.placeholder ? fill(node.placeholder as Template, ctx, host.env).trim() : '';
+  const id = node.id ? fill(node.id as Template, ctx, host.env).trim() : `param-${paramName}`;
+
+  return (
+    <View style={{ paddingHorizontal: look.gutter }}>
+      <TextField
+        nativeID={id || `param-${paramName}`}
+        testID={id || `param-${paramName}`}
+        value={value}
+        onChangeText={onChangeText}
+        onSubmitEditing={() => commit(value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder={placeholder}
+        placeholderTextColor={look.quiet}
+        secureTextEntry={false}
+        style={{
+          ...look.face(500),
+          fontSize: px(14),
+          color: look.ink,
+          backgroundColor: look.cardFill,
+          borderColor: focused ? look.ink : look.cardEdge,
+          borderWidth: 1,
+          borderRadius: px(10),
+          paddingHorizontal: px(14),
+          paddingVertical: px(10),
+        }}
+      />
+    </View>
+  );
+}

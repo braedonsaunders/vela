@@ -18,7 +18,8 @@ import { downloadSubtitle, foundSubtitleVtt, searchSubtitles, subtitleLanguages 
 
 import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
-import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsApi, sportsEnabled, sportsLogo } from './sports';
+import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsEnabled, sportsLogo } from './sports';
+import { screensAdmin, screensApi, screensBootstrap } from './screens';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
@@ -51,10 +52,9 @@ const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds:
 // Music, books and audiobooks (docs/media-kinds.md). VELA_MOCK_OLD=1 is a server from before them,
 // and the VELA_MOCK_LAB=1 preset mirrors a lab server's video-only libraries.
 const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
-// Sports (0.3.19): live events, the plugin screen it lists in navigation, and multiview.
-if (sportsEnabled) Object.assign(capabilities.features, { liveEvents: { available: true }, multiview: { available: true, maxTiles: 4 } });
+// Sports: its plugin screens and surfaces (screens.ts) and multiview.
+if (sportsEnabled) Object.assign(capabilities.features, { multiview: { available: true, maxTiles: 4 } });
 Object.assign(capabilities.features, catchUpFeature());
-const navigation: V.NavigationEntry[] = sportsEnabled ? [{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }] : [];
 if (mediaEnabled) Object.assign(capabilities.features, {
   mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast', 'photo'] },
   reading: { available: true, formats: ['epub', 'pdf', 'cbz'] },
@@ -209,8 +209,11 @@ function childrenFor(id: string, url: URL): V.Title[] {
   return mediaChildren(id, role || undefined);
 }
 const presentEntry = (g: Grant, entry: V.RowEntry): V.RowEntry => entry.kind === 'title' && entry.title.media ? { ...entry, title: present(g, entry.title) } : entry;
-const titleRow = (id: string, name: string, purpose: V.Row['purpose'], style: string, items: V.Title[]): V.Row[] => items.length ? [{
-  id, name, purpose, style, receiptToken: '', continuation: 'exhausted', items: items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title, receiptToken: '' })) }] : [];
+/** A row's items' media role, as Ether reads it: the declared role, else the title's kind. */
+const roleOf = (title: V.Title) => title.media?.role && title.media.role !== 'item' ? title.media.role : title.kind;
+/** A row of titles with Ether's Recommendations presentation (card, role, and any layout, personal, library, experience). */
+const titleRow = (id: string, name: string, purpose: V.Row['purpose'], card: V.RowCard, items: V.Title[], more: Pick<V.Row, 'layout' | 'personal' | 'library' | 'experience'> = {}): V.Row[] => items.length ? [{
+  id, name, purpose, card, role: roleOf(items[0]!), ...more, receiptToken: '', continuation: 'exhausted', items: items.map(title => ({ id: `${id}:${title.id}`, kind: 'title', title, receiptToken: '' })) }] : [];
 const recentFirst = (a: V.Title, b: V.Title) => (b.watch?.lastViewedAt ?? '').localeCompare(a.watch?.lastViewedAt ?? '');
 const continueReading = (g: Grant) => mediaGroups.books.map(title => present(g, title))
   .filter(title => !!title.watch?.reading && !title.watch.played && !removedContinue.has(title.id)).sort(recentFirst);
@@ -241,9 +244,16 @@ function concertRows(g: Grant): V.Row[] {
 }
 function mediaLibraryRows(g: Grant, libraryId: string, tab?: string): V.Row[] {
   if (libraryId === 'music' && tab === 'concerts') return concertRows(g);
-  if (libraryId === 'music') return [...titleRow('music-recent-albums', 'Recently added albums', 'recentlyAdded', 'square', recentAlbums()),
-    ...titleRow('music-artists', 'Artists to explore', 'recommendation', 'square', mediaGroups.artists),
-    ...titleRow('music-quick-picks', 'Quick picks', 'recommendation', 'square', mediaGroups.tracks.filter((_, index) => index % 7 === 2))];
+  if (libraryId === 'music') {
+    const listen = { experience: 'listen' as const };
+    // A track list carries only track leaves with a duration and an album or artist parent.
+    const leaf = (track: V.Title) => (track.durationSeconds ?? 0) > 0 && !!track.media?.parents?.some(parent => parent.role === 'album' || parent.role === 'artist');
+    return [...titleRow('music-jump-back-in', 'Jump back in', 'recentContexts', 'square', recentAlbums().slice(0, 6), { ...listen, personal: true }),
+      ...titleRow('music-recent-albums', 'Recently added albums', 'recentlyAdded', 'square', recentAlbums(), listen),
+      ...titleRow('music-quick-picks', 'Quick picks', 'recommendation', 'square', mediaGroups.tracks.filter((track, index) => index % 7 === 2 && leaf(track)).slice(0, 8), { ...listen, layout: 'tracks', personal: true }),
+      ...titleRow('music-liked', 'Liked albums', 'liked', 'square', recentAlbums().slice(6, 12), { ...listen, personal: true }),
+      ...titleRow('music-artists', 'Artists to explore', 'recommendation', 'round', mediaGroups.artists, listen)];
+  }
   if (libraryId === 'books') return [...titleRow('books-continue', 'Continue reading', 'continue', 'poster', continueReading(g)),
     ...titleRow('books-series', 'Series to start', 'recommendation', 'poster', mediaGroups.series),
     ...titleRow('books-standalone', 'Standalone reads', 'collection', 'poster', mediaGroups.books.filter(book => !book.media?.parents?.length).map(book => present(g, book)))];
@@ -300,13 +310,15 @@ const labHomeRows: V.Row[] = [
   { ...labRows[3]!, id: 'lab-home-because', name: 'Because You Watched…', items: labRows[3]!.items.slice(0, 12) },
   { ...labRows[0]!, id: 'lab-home-trending', items: labRows[0]!.items.slice(0, 20) },
 ];
-function homeRows(g: Grant, url: URL): V.Page<V.Row> {
-  // Media rows follow the first couple of rows (Continue Watching, Next Up).
-  const ordered = [...progressRows(), ...rows];
-  ordered.splice(2, 0, ...mediaHomeRows(g));
-  const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}`, labPreset ? 5 : 2);
+/** Home's page in order: progress rows, media rows, the catalogue's rows, and a plugin's surface
+ * row where the page places it (after Top 10), as Ether lists them. */
+function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = []): V.Page<V.Row | V.SurfaceRow> {
+  const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows];
+  const top = ordered.findIndex(row => row.id === 'row-top10');
+  ordered.splice(top + 1, 0, ...surfaces);
+  const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
-  return { ...result, items: result.items.map(row => homeRow(g, row, firstItems)) };
+  return { ...result, items: result.items.map(row => 'kind' in row ? row : homeRow(g, row, firstItems)) };
 }
 function cached(req: Request, data: unknown, scope: string): Response {
   const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
@@ -765,8 +777,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (bootstrapDelayMs) await Bun.sleep(bootstrapDelayMs);
     const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, ...(longHeroes ? { title: { ...hero.title, name: `${hero.title.name}: The Long Way Round to the Edge of Everything` } } : {}), receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
-    const home = homeRows(g, firstPage);
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation.length ? { navigation } : {}) } satisfies V.Bootstrap, g.id);
+    // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
+    const { navigation, surfaces, homeRows: surfaceRows } = screensBootstrap(req, g.viewer.id);
+    const home = homeRows(g, firstPage, surfaceRows);
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
@@ -794,7 +808,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (!detail(url.searchParams.get('titleId') ?? '')) fail('not-found', 'title_not_found', 'Detail title not found');
       return cached(req, { items: [], continuation: 'exhausted' }, g.id);
     }
-    return cached(req, placement === 'home' ? homeRows(g, url) : page([], url, g, `rows:${placement}`), g.id);
+    return cached(req, placement === 'home' ? homeRows(g, url, screensBootstrap(req, g.viewer.id).homeRows) : page([], url, g, `rows:${placement}`), `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}`);
   }
   const collectionMatch = /^\/collections\/([^/]+)$/.exec(path);
   if (method === 'GET' && collectionMatch) {
@@ -955,8 +969,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!Array.isArray(body.interactions) || body.interactions.length > 100 || body.interactions.some((i: V.Interaction) => !validReceipt(g, i.receiptToken) || !['visible', 'selected', 'played'].includes(i.kind))) fail('request', 'invalid_receipt', 'Invalid interaction receipt');
     return json({ accepted: true });
   }
-  const sports = sportsApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail, body);
-  if (sports) return sports;
+  const screens = await screensApi(req, url, method, path, g.viewer.id, () => !g.revoked && g.expires > Date.now(), fail, body);
+  if (screens) return screens;
   if (sportsEnabled && method === 'POST' && path === '/multiview') {
     if (!body.device?.id) fail('request', 'device_required', 'Device required');
     return json(createGroup(g.id));
@@ -1151,6 +1165,7 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));
+    if (req.method === 'POST' && url.pathname === '/__admin/screens') return json(screensAdmin(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/appearance') return json(setAppearance(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'); const expires = Date.now() + (url.searchParams.has('expired') ? -1 : 60000); webCodes.set(code, expires); return json({ code, expiresAt: new Date(expires).toISOString() }); }
     fail('not-found', 'endpoint_not_found', 'Admin endpoint not found');
@@ -1204,6 +1219,9 @@ async function dispatch(req: Request): Promise<Response> {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('request', 'invalid_json', 'JSON object required');
     return api(req, url, body);
   }
+  // Plugin-screen mutations may carry the key as Ether's Idempotency-Key header (the header wins).
+  const headerKey = req.headers.get('idempotency-key');
+  if (headerKey && body && typeof body === 'object' && /^\/vela\/v0\/(screens|surfaces)\//.test(url.pathname)) body.idempotencyKey = headerKey;
   if (!body || typeof body.idempotencyKey !== 'string' || !body.idempotencyKey || body.idempotencyKey.length > 200) fail('request', 'idempotency_required', 'Nonempty idempotencyKey required');
   if (url.pathname !== '/vela/v0/negotiate' && !/^\/vela\/v0\/auth\/(plex(?:\/profile)?|sign-in|refresh|device(?:\/poll)?|quick-connect(?:\/poll)?|web-code\/redeem)$/.test(url.pathname)) authenticate(req);
   const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? body.client?.device?.id ?? 'anonymous';
@@ -1224,7 +1242,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, X-Vela-Screen-Preview, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 

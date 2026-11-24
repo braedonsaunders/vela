@@ -1,6 +1,7 @@
 // Projections of the wire's discovery data (home, rows, titles) into the display models of
 // models.ts: labels formatted for the current locale, artwork sized for each slot.
-import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, Title, TitleDetail } from '../wire';
+import type * as V from '../wire';
+import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, ScreenNavigationEntry, SurfaceContribution, SurfaceRow, Title, TitleDetail } from '../wire';
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
@@ -234,20 +235,41 @@ function plainCard(id: string, kind: string, name: string, rating: string, art: 
   };
 }
 
-export function feedRow(row: WireRow, images?: Images, artWidth = 2560): Row {
+const LAYOUTS: readonly V.RowLayout[] = ['standard', 'hero', 'wide', 'tiles', 'tracks'];
+const CARDS: readonly V.RowCard[] = ['poster', 'landscape', 'square', 'round'];
+const EXPERIENCES: readonly V.RowExperience[] = ['watch', 'listen', 'read', 'gallery', 'live'];
+const known = <T extends string>(values: readonly T[], value: unknown): T | undefined => values.includes(value as T) ? value as T : undefined;
+const text = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value.trim() : undefined;
+
+/** A row as the skins read it. Presentation values Vela does not know read as a standard shelf; a
+ * plugin surface's row (a stub in page order) keeps its plugin, surface and library, never its id's parts. */
+export function feedRow(row: WireRow | SurfaceRow, images?: Images, artWidth = 2560): Row {
+  if (isSurfaceRow(row)) {
+    const library = text(row.library);
+    return { id: text(row.id) ?? `surface:${row.surface}`, name: typeof row.name === 'string' ? row.name : '', purpose: 'recommendation', receipt: '', items: [], nextCursor: '',
+      continuation: 'exhausted', previewOnFocus: false, presentation: '', layout: 'standard', personal: false,
+      surface: row.surface, ...(text(row.plugin) ? { plugin: text(row.plugin) } : {}), ...(library ? { library } : {}) };
+  }
+  const card = known(CARDS, row.card), role = text(row.role), library = text(row.library), experience = known(EXPERIENCES, row.experience);
   return {
     id: row.id,
     name: row.name,
     purpose: row.purpose,
     receipt: row.receiptToken,
-    items: row.items.map(item => entry(item, images, artWidth)),
+    items: (row.items ?? []).map(item => entry(item, images, artWidth)),
     nextCursor: row.nextCursor ?? '',
     continuation: row.continuation,
     previewOnFocus: row.previewOnFocus ?? false,
-    presentation: row.presentation ?? '',
-    cardStyle: row.style === 'poster' || row.style === 'landscape' || row.style === 'square' ? row.style : undefined,
+    presentation: row.presentation === 'ranked' ? 'ranked' : '',
+    layout: known(LAYOUTS, row.layout) ?? 'standard',
+    personal: row.personal === true,
+    ...(card ? { card } : {}), ...(role ? { role } : {}), ...(library ? { library } : {}), ...(experience ? { experience } : {}),
   };
 }
+
+/** Whether a wire row is a plugin surface's stub. */
+export const isSurfaceRow = (row: unknown): row is SurfaceRow =>
+  !!row && typeof row === 'object' && (row as { kind?: unknown }).kind === 'surface' && typeof (row as { surface?: unknown }).surface === 'string';
 
 type WireHero = NonNullable<Bootstrap['heroes']>[number];
 
@@ -307,17 +329,20 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
   const heroes = (data.heroes ?? []).slice(0, 6);
   const previews: PreviewGrant[] = [];
   const features = data.capabilities.features;
+  const surfaces = surfaceContributions(data.surfaces);
   return {
     viewer: data.viewer.name,
     viewerAvatar: viewerAvatar(data.viewer.avatar, images),
     defaultSkinId: data.defaultSkinId,
     skins: data.capabilities.skins.map(s => s.id),
     hero: heroes.map(hero => card(hero.title, hero.receiptToken, images, artWidth)),
-    heroActions: heroes.map(hero => heroAction(hero, data.rows)),
+    heroActions: heroes.map(hero => heroAction(hero, data.rows.filter((row): row is WireRow => !isSurfaceRow(row)))),
     heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id),
     previews,
     // A row with nothing in it (no shows to continue, say) is a heading over an empty shelf: left out.
-    rows: data.rows.filter(row => row.items.length > 0).map(row => feedRow(row, images, artWidth)),
+    // A plugin's Home-row surface keeps its place, drawn by the Home-row host from its document.
+    // A plugin's surface row keeps its place in page order; its host draws it (or nothing).
+    rows: data.rows.flatMap(row => isSurfaceRow(row) || row.items?.length > 0 ? [feedRow(row, images, artWidth)] : []),
     nextCursor: data.nextCursor ?? '',
     liveAvailable: features.liveTV.available,
     libraryLiveAvailable: features.libraryLive?.available ?? false,
@@ -326,18 +351,39 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     trailerPreviewAvailable: features.trailerPreview?.available ?? false,
     playlistsAvailable: features.playlists?.available ?? false,
     screens: screenNavigation(data.navigation),
+    surfaces,
     pluginLevels: pluginLevelsOf(features),
-    ...(typeof data.viewer.spoilerFree === 'boolean' ? { spoilerFree: data.viewer.spoilerFree } : {}),
   };
 }
 
-/** Bootstrap navigation's plugin screens, once each, in the server's order. Unknown kinds are skipped. */
+/** Bootstrap navigation's plugin screens, once each, in the server's order. An entry without a
+ * document (an Ether before plugin screens) or of an unknown kind is skipped: hard cut. */
 export function screenNavigation(navigation: Bootstrap['navigation']): HomeModel['screens'] {
   const seen = new Set<string>();
   return (Array.isArray(navigation) ? navigation : []).flatMap(entry => {
     if (entry?.kind !== 'screen' || typeof entry.id !== 'string' || !entry.id || seen.has(entry.id)) return [];
+    const document = (entry as Partial<ScreenNavigationEntry>).document;
+    if (!document || typeof document.href !== 'string' || !document.href || typeof document.renderer !== 'number') return [];
     seen.add(entry.id);
-    return [{ id: entry.id, title: typeof entry.title === 'string' && entry.title ? entry.title : entry.id, icon: typeof entry.icon === 'string' ? entry.icon : '' }];
+    const page = typeof (entry as Partial<ScreenNavigationEntry>).page === 'string' && (entry as ScreenNavigationEntry).page ? (entry as ScreenNavigationEntry).page : 'index';
+    return [{ id: entry.id, title: typeof entry.title === 'string' && entry.title ? entry.title : entry.id, icon: typeof entry.icon === 'string' ? entry.icon : '',
+      page, document: { href: document.href, renderer: document.renderer } }];
+  });
+}
+
+const PRESENTATIONS = new Set(['playerOverlay', 'toast', 'homeRow', 'titlePanel']);
+const ANCHORS = new Set(['topLeft', 'topRight', 'bottom']);
+
+/** Bootstrap's surfaces, each once, in Ether's order (it has capped and ordered them). One that is
+ * unreadable, or a player overlay without an anchor or a switch, is left out. */
+export function surfaceContributions(surfaces: Bootstrap['surfaces']): SurfaceContribution[] {
+  const seen = new Set<string>();
+  return (Array.isArray(surfaces) ? surfaces : []).flatMap(surface => {
+    if (!surface || typeof surface.id !== 'string' || !surface.id || seen.has(surface.id) || !PRESENTATIONS.has(surface.presentation)) return [];
+    if (!surface.document || typeof surface.document.href !== 'string' || !surface.document.href || typeof surface.document.renderer !== 'number') return [];
+    if (surface.presentation === 'playerOverlay' && (!ANCHORS.has(surface.anchor ?? '') || !surface.setting || typeof surface.setting.id !== 'string')) return [];
+    seen.add(surface.id);
+    return [surface];
   });
 }
 

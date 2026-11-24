@@ -69,8 +69,22 @@ export interface Row {
   nextCursor: string;
   continuation: V.Row['continuation'];
   previewOnFocus: boolean;
-  cardStyle?: 'poster' | 'landscape' | 'square';
+  /** A row a plugin surface draws (its id in `HomeModel.surfaces`) and that plugin; the row has no items of its own. */
+  surface?: string;
+  plugin?: string;
+  /** `ranked` (Top 10), else ''. */
   presentation: string;
+  /** How the row draws: `standard` when the server said nothing or something unknown. */
+  layout: V.RowLayout;
+  /** The items' card, when the server chose one (library pages: the library's). */
+  card?: V.RowCard;
+  /** The items' media role (album, track, movie, …), when known. */
+  role?: string;
+  /** The titles differ per viewer. */
+  personal: boolean;
+  /** The library a one-row-per-library row (or a library's surface row) belongs to. */
+  library?: string;
+  experience?: V.RowExperience;
 }
 
 /** What a hero's button does, and how it is labelled. */
@@ -114,15 +128,15 @@ export interface HomeModel {
   playlistsAvailable: boolean;
   /** Plugin screens from bootstrap navigation (Sports), as top-level sections after Live TV. */
   screens: ScreenNav[];
-  /** The viewer's spoiler-free preference when bootstrap carries it (else read from /live/preferences). */
-  spoilerFree?: boolean;
+  /** Plugin surfaces this client may show (player overlays, toasts, Home rows, title panels). */
+  surfaces: V.SurfaceContribution[];
   /** What the server answers for plugin levels (features.pluginLevels), known once bootstrap is: pages
    * that depend on it (a recommended tab's own rows, an artist's sections) wait for it or follow it. */
   pluginLevels?: PluginLevels;
 }
 
-/** A plugin screen the viewer may open (bootstrap `navigation`). */
-export interface ScreenNav { id: string; title: string; icon: string }
+/** A plugin screen the viewer may open (bootstrap `navigation`): its landing page's document. */
+export interface ScreenNav { id: string; title: string; icon: string; page: string; document: { href: string; renderer: number } }
 
 export interface Rating {
   /** `rt-critics`, `rt-audience`, or the wire source (`imdb`, `tmdb`, …). */

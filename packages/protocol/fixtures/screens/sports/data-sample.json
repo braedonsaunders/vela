@@ -1,0 +1,792 @@
+{
+ "rev": 1764003123456,
+ "live": {
+  "topic": "lt1.sample"
+ },
+ "sources": {
+  "viewer": {
+   "spoilerFree": false,
+   "canSetSpoilerFree": true,
+   "locale": "en",
+   "favouriteCount": 5
+  },
+  "leagues": {
+   "leagues": [
+    {
+     "id": "nfl",
+     "name": "NFL",
+     "abbr": "NFL",
+     "label": "NFL"
+    },
+    {
+     "id": "nba",
+     "name": "NBA",
+     "abbr": "NBA",
+     "label": "NBA"
+    },
+    {
+     "id": "nhl",
+     "name": "NHL",
+     "abbr": "NHL",
+     "label": "NHL"
+    },
+    {
+     "id": "mlb",
+     "name": "MLB",
+     "abbr": "MLB",
+     "label": "MLB"
+    },
+    {
+     "id": "epl",
+     "name": "Premier League",
+     "abbr": "EPL",
+     "label": "EPL"
+    },
+    {
+     "id": "f1",
+     "name": "Formula 1",
+     "abbr": "F1",
+     "label": "F1"
+    }
+   ],
+   "selected": ""
+  },
+  "hero": {
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nfl-nyg-phi"
+    }
+   ]
+  },
+  "also": {
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nfl-nyg-phi"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:nhl-tor-mtl"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:f1-las-vegas"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:mlb-nyy-tor"
+    }
+   ]
+  },
+  "yours": {
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nfl-nyg-phi"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:nhl-tor-mtl"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:mlb-nyy-tor"
+    }
+   ]
+  },
+  "live": {
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nfl-nyg-phi"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:nhl-tor-mtl"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:f1-las-vegas"
+    }
+   ]
+  },
+  "schedule": {
+   "date": "2026-11-24",
+   "previous": "2026-11-23",
+   "next": "2026-11-25",
+   "days": [
+    {
+     "date": "2026-11-23",
+     "count": 3
+    },
+    {
+     "date": "2026-11-24",
+     "count": 8
+    },
+    {
+     "date": "2026-11-25",
+     "count": 1
+    }
+   ],
+   "events": [
+    {
+     "$record": "event:org.ether.sports:sports:nfl-nyg-phi"
+    },
+    {
+     "$record": "event:org.ether.sports:sports:nba-mil-tor"
+    }
+   ]
+  },
+  "standings": {
+   "league": {
+    "id": "nfl",
+    "name": "NFL",
+    "abbr": "NFL",
+    "label": "NFL"
+   },
+   "tables": [
+    {
+     "title": "NFC East",
+     "columns": [
+      "Team",
+      "W",
+      "L",
+      "PCT",
+      "PF",
+      "PA",
+      "STRK"
+     ],
+     "rows": [
+      {
+       "cells": [
+        "Eagles",
+        "9",
+        "2",
+        ".818",
+        "298",
+        "201",
+        "W4"
+       ],
+       "highlight": true,
+       "entityId": "nfl-phi"
+      },
+      {
+       "cells": [
+        "Cowboys",
+        "7",
+        "4",
+        ".636",
+        "271",
+        "240",
+        "L1"
+       ]
+      },
+      {
+       "cells": [
+        "Commanders",
+        "5",
+        "6",
+        ".455",
+        "233",
+        "252",
+        "W1"
+       ]
+      },
+      {
+       "cells": [
+        "Giants",
+        "4",
+        "7",
+        ".364",
+        "210",
+        "262",
+        "L2"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "teams": {
+   "opening": "nfl",
+   "leagues": [
+    {
+     "id": "nfl",
+     "name": "NFL",
+     "abbr": "NFL",
+     "label": "NFL"
+    },
+    {
+     "id": "nba",
+     "name": "NBA",
+     "abbr": "NBA",
+     "label": "NBA"
+    },
+    {
+     "id": "nhl",
+     "name": "NHL",
+     "abbr": "NHL",
+     "label": "NHL"
+    }
+   ],
+   "entities": [
+    {
+     "$record": "entity:org.ether.sports:sports:team:nfl-phi"
+    },
+    {
+     "$record": "entity:org.ether.sports:sports:team:nfl-buf"
+    }
+   ]
+  }
+ },
+ "errors": {},
+ "records": {
+  "event:org.ether.sports:sports:nfl-nyg-phi": {
+   "rev": 1764003120000,
+   "value": {
+    "id": "org.ether.sports:sports:nfl-nyg-phi",
+    "feed": "sports",
+    "spoiler": false,
+    "close": true,
+    "favourite": true,
+    "situation": [
+     {
+      "label": "Down",
+      "value": "3rd & 6"
+     },
+     {
+      "label": "Ball",
+      "value": "NYG 38"
+     }
+    ],
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-107",
+       "name": "Matchday",
+       "number": "107",
+       "live": true,
+       "confidence": 0.95
+      },
+      {
+       "kind": "channel",
+       "channelId": "ch-120",
+       "name": "Metro Sports 1",
+       "number": "120",
+       "live": true,
+       "confidence": 0.7
+      }
+     ],
+     "airing": [
+      {
+       "name": "FOX"
+      }
+     ],
+     "primary": {
+      "kind": "channel",
+      "channelId": "ch-107",
+      "name": "Matchday",
+      "number": "107",
+      "live": true,
+      "confidence": 0.95
+     }
+    },
+    "phase": "live",
+    "state": "in",
+    "detail": "Q4 · 2:14",
+    "clock": "2:14",
+    "period": 4,
+    "scored": true,
+    "title": "Giants at Eagles",
+    "start": "2026-11-24T17:00:00.000Z",
+    "league": {
+     "id": "nfl",
+     "name": "NFL",
+     "abbr": "NFL",
+     "label": "NFL"
+    },
+    "venue": "Lincoln Financial Field, Philadelphia",
+    "sides": [
+     {
+      "id": "nfl-nyg",
+      "name": "New York Giants",
+      "short": "Giants",
+      "abbr": "NYG",
+      "logo": "/vela/v0/images/p/sports/nfl-nyg.svg",
+      "color": "#0b2265",
+      "altColor": "#a71930",
+      "record": "4-7",
+      "entityId": "nfl-nyg",
+      "favourite": false,
+      "winner": false,
+      "loser": false,
+      "score": "24",
+      "share": 17,
+      "leads": false
+     },
+     {
+      "id": "nfl-phi",
+      "name": "Philadelphia Eagles",
+      "short": "Eagles",
+      "abbr": "PHI",
+      "logo": "/vela/v0/images/p/sports/nfl-phi.svg",
+      "color": "#004c54",
+      "altColor": "#a5acaf",
+      "record": "9-2",
+      "entityId": "nfl-phi",
+      "favourite": true,
+      "winner": false,
+      "loser": false,
+      "score": "27",
+      "share": 83,
+      "leads": true,
+      "possession": true
+     }
+    ],
+    "probability": {
+     "home": 0.83,
+     "away": 0.17,
+     "subjectSide": 1,
+     "leader": {
+      "abbr": "PHI",
+      "share": 83
+     }
+    }
+   }
+  },
+  "event:org.ether.sports:sports:nhl-tor-mtl": {
+   "rev": 1764003120001,
+   "value": {
+    "id": "org.ether.sports:sports:nhl-tor-mtl",
+    "feed": "sports",
+    "spoiler": false,
+    "close": false,
+    "favourite": true,
+    "situation": [
+     {
+      "label": "Shots",
+      "value": "MTL 17 · TOR 24"
+     },
+     {
+      "label": "Power play",
+      "value": "TOR 1:12"
+     }
+    ],
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-129",
+       "name": "Vista Sports 1",
+       "number": "129",
+       "live": true,
+       "confidence": 0.95
+      }
+     ],
+     "airing": [
+      {
+       "name": "Sportsnet"
+      }
+     ],
+     "primary": {
+      "kind": "channel",
+      "channelId": "ch-129",
+      "name": "Vista Sports 1",
+      "number": "129",
+      "live": true,
+      "confidence": 0.95
+     }
+    },
+    "phase": "live",
+    "state": "in",
+    "detail": "2nd · 8:40",
+    "clock": "8:40",
+    "period": 2,
+    "scored": true,
+    "title": "Canadiens at Maple Leafs",
+    "start": "2026-11-24T18:30:00.000Z",
+    "league": {
+     "id": "nhl",
+     "name": "NHL",
+     "abbr": "NHL",
+     "label": "NHL"
+    },
+    "sides": [
+     {
+      "id": "nhl-mtl",
+      "name": "Montréal Canadiens",
+      "short": "Canadiens",
+      "abbr": "MTL",
+      "logo": "/vela/v0/images/p/sports/nhl-mtl.svg",
+      "color": "#af1e2d",
+      "altColor": "#192168",
+      "record": "11-9-3",
+      "entityId": "nhl-mtl",
+      "favourite": false,
+      "winner": false,
+      "loser": false,
+      "score": "1",
+      "share": 39,
+      "leads": false
+     },
+     {
+      "id": "nhl-tor",
+      "name": "Toronto Maple Leafs",
+      "short": "Maple Leafs",
+      "abbr": "TOR",
+      "logo": "/vela/v0/images/p/sports/nhl-tor.svg",
+      "color": "#00205b",
+      "altColor": "#ffffff",
+      "record": "14-6-2",
+      "entityId": "nhl-tor",
+      "favourite": true,
+      "winner": false,
+      "loser": false,
+      "score": "2",
+      "share": 61,
+      "leads": true
+     }
+    ],
+    "probability": {
+     "home": 0.61,
+     "away": 0.39,
+     "subjectSide": 1,
+     "leader": {
+      "abbr": "TOR",
+      "share": 61
+     }
+    }
+   }
+  },
+  "event:org.ether.sports:sports:mlb-nyy-tor": {
+   "rev": 1764003120002,
+   "value": {
+    "id": "org.ether.sports:sports:mlb-nyy-tor",
+    "feed": "sports",
+    "spoiler": false,
+    "close": false,
+    "favourite": true,
+    "situation": [],
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-129",
+       "name": "Vista Sports 1",
+       "number": "129",
+       "live": false,
+       "confidence": 0.95
+      }
+     ],
+     "airing": [
+      {
+       "name": "Sportsnet"
+      }
+     ],
+     "primary": {
+      "kind": "channel",
+      "channelId": "ch-129",
+      "name": "Vista Sports 1",
+      "number": "129",
+      "live": false,
+      "confidence": 0.95
+     }
+    },
+    "phase": "upcoming",
+    "state": "pre",
+    "detail": "7:00 PM",
+    "scored": false,
+    "title": "Yankees at Blue Jays",
+    "start": "2026-11-26T00:00:00.000Z",
+    "league": {
+     "id": "mlb",
+     "name": "MLB",
+     "abbr": "MLB",
+     "label": "MLB"
+    },
+    "sides": [
+     {
+      "id": "mlb-nyy",
+      "name": "New York Yankees",
+      "short": "Yankees",
+      "abbr": "NYY",
+      "logo": "/vela/v0/images/p/sports/mlb-nyy.svg",
+      "color": "#0c2340",
+      "altColor": "#c4ced3",
+      "record": "0-0",
+      "entityId": "mlb-nyy",
+      "favourite": false,
+      "winner": false,
+      "loser": false
+     },
+     {
+      "id": "mlb-tor",
+      "name": "Toronto Blue Jays",
+      "short": "Blue Jays",
+      "abbr": "TOR",
+      "logo": "/vela/v0/images/p/sports/mlb-tor.svg",
+      "color": "#134a8e",
+      "altColor": "#e8291c",
+      "record": "0-0",
+      "entityId": "mlb-tor",
+      "favourite": true,
+      "winner": false,
+      "loser": false
+     }
+    ]
+   }
+  },
+  "event:org.ether.sports:sports:nba-mil-tor": {
+   "rev": 1764003120003,
+   "value": {
+    "id": "org.ether.sports:sports:nba-mil-tor",
+    "feed": "sports",
+    "spoiler": false,
+    "close": false,
+    "favourite": true,
+    "situation": [],
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-111",
+       "name": "Night Music",
+       "number": "111",
+       "live": false,
+       "confidence": 0.95
+      }
+     ],
+     "airing": [
+      {
+       "name": "TSN"
+      }
+     ],
+     "primary": {
+      "kind": "channel",
+      "channelId": "ch-111",
+      "name": "Night Music",
+      "number": "111",
+      "live": false,
+      "confidence": 0.95
+     }
+    },
+    "phase": "final",
+    "state": "post",
+    "detail": "Final",
+    "period": 4,
+    "scored": true,
+    "title": "Bucks at Raptors",
+    "start": "2026-11-24T00:30:00.000Z",
+    "league": {
+     "id": "nba",
+     "name": "NBA",
+     "abbr": "NBA",
+     "label": "NBA"
+    },
+    "sides": [
+     {
+      "id": "nba-mil",
+      "name": "Milwaukee Bucks",
+      "short": "Bucks",
+      "abbr": "MIL",
+      "logo": "/vela/v0/images/p/sports/nba-mil.svg",
+      "color": "#00471b",
+      "altColor": "#eee1c6",
+      "record": "8-8",
+      "entityId": "nba-mil",
+      "favourite": false,
+      "winner": false,
+      "loser": true,
+      "score": "109"
+     },
+     {
+      "id": "nba-tor",
+      "name": "Toronto Raptors",
+      "short": "Raptors",
+      "abbr": "TOR",
+      "logo": "/vela/v0/images/p/sports/nba-tor.svg",
+      "color": "#ce1141",
+      "altColor": "#000000",
+      "record": "9-7",
+      "entityId": "nba-tor",
+      "favourite": true,
+      "winner": true,
+      "loser": false,
+      "score": "118"
+     }
+    ]
+   }
+  },
+  "event:org.ether.sports:sports:f1-las-vegas": {
+   "rev": 1764003120004,
+   "value": {
+    "id": "org.ether.sports:sports:f1-las-vegas",
+    "feed": "sports",
+    "spoiler": false,
+    "close": false,
+    "favourite": false,
+    "situation": [],
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-120",
+       "name": "Metro Sports 1",
+       "number": "120",
+       "live": true,
+       "confidence": 0.95
+      }
+     ],
+     "airing": [
+      {
+       "name": "ESPN"
+      }
+     ],
+     "primary": {
+      "kind": "channel",
+      "channelId": "ch-120",
+      "name": "Metro Sports 1",
+      "number": "120",
+      "live": true,
+      "confidence": 0.95
+     }
+    },
+    "phase": "live",
+    "state": "in",
+    "detail": "Lap 31/50",
+    "period": 31,
+    "scored": false,
+    "title": "Las Vegas Grand Prix",
+    "start": "2026-11-24T19:06:00.000Z",
+    "league": {
+     "id": "f1",
+     "name": "Formula 1",
+     "abbr": "F1",
+     "label": "F1"
+    },
+    "venue": "Las Vegas Strip Circuit, Las Vegas",
+    "ranking": [
+     {
+      "place": "1",
+      "pos": 1,
+      "name": "Max Verstappen",
+      "abbr": "VER",
+      "detail": "Leader",
+      "secondary": ""
+     },
+     {
+      "place": "2",
+      "pos": 2,
+      "name": "Lando Norris",
+      "abbr": "NOR",
+      "detail": "+2.410",
+      "secondary": ""
+     },
+     {
+      "place": "3",
+      "pos": 3,
+      "name": "Charles Leclerc",
+      "abbr": "LEC",
+      "detail": "+4.820",
+      "secondary": ""
+     }
+    ]
+   }
+  },
+  "event:org.ether.sports:sports:epl-che-mci": {
+   "rev": 1764003120005,
+   "value": {
+    "id": "org.ether.sports:sports:epl-che-mci",
+    "feed": "sports",
+    "spoiler": true,
+    "close": false,
+    "favourite": true,
+    "situation": [],
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-107",
+       "name": "Matchday",
+       "number": "107",
+       "live": false,
+       "confidence": 0.95
+      }
+     ],
+     "airing": [
+      {
+       "name": "NBC"
+      }
+     ],
+     "primary": {
+      "kind": "channel",
+      "channelId": "ch-107",
+      "name": "Matchday",
+      "number": "107",
+      "live": false,
+      "confidence": 0.95
+     }
+    },
+    "phase": "final",
+    "state": "post",
+    "detail": "Final",
+    "scored": false,
+    "title": "Chelsea at Man City",
+    "start": "2026-11-23T17:30:00.000Z",
+    "league": {
+     "id": "epl",
+     "name": "Premier League",
+     "abbr": "EPL",
+     "label": "EPL"
+    },
+    "sides": [
+     {
+      "id": "epl-che",
+      "name": "Chelsea",
+      "short": "Chelsea",
+      "abbr": "CHE",
+      "logo": "/vela/v0/images/p/sports/epl-che.svg",
+      "color": "#034694",
+      "altColor": "#dba111",
+      "record": "6-4-2",
+      "entityId": "epl-che",
+      "favourite": false,
+      "winner": false,
+      "loser": false
+     },
+     {
+      "id": "epl-mci",
+      "name": "Manchester City",
+      "short": "Man City",
+      "abbr": "MCI",
+      "logo": "/vela/v0/images/p/sports/epl-mci.svg",
+      "color": "#6cabdd",
+      "altColor": "#1c2c5b",
+      "record": "7-2-3",
+      "entityId": "epl-mci",
+      "favourite": true,
+      "winner": false,
+      "loser": false
+     }
+    ]
+   }
+  },
+  "entity:org.ether.sports:sports:team:nfl-phi": {
+   "rev": 1,
+   "value": {
+    "key": "entity:org.ether.sports:sports:team:nfl-phi",
+    "id": "nfl-phi",
+    "name": "Philadelphia Eagles",
+    "abbr": "PHI",
+    "logo": "/vela/v0/images/p/sports/nfl-phi.svg",
+    "league": "nfl",
+    "color": "#004c54",
+    "favourite": true
+   }
+  },
+  "entity:org.ether.sports:sports:team:nfl-buf": {
+   "rev": 1,
+   "value": {
+    "key": "entity:org.ether.sports:sports:team:nfl-buf",
+    "id": "nfl-buf",
+    "name": "Buffalo Bills",
+    "abbr": "BUF",
+    "logo": "/vela/v0/images/p/sports/nfl-buf.svg",
+    "league": "nfl",
+    "color": "#00338d",
+    "favourite": false
+   }
+  }
+ }
+}

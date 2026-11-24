@@ -2,6 +2,8 @@ import type * as V from '../wire';
 import type { SkinDocument } from '../wire';
 import type { EventHandler } from '../protocol/sse';
 import type { ServerAdapter } from './index';
+import type { ScreenTarget } from '../screens/keys';
+import type { ScreenStreamQuery } from '../screens/stream';
 
 export interface MediaVersion { id: string; name: string; audioTrackId?: string }
 export interface TitleActions {
@@ -67,7 +69,7 @@ export interface DescriptiveSearch {
 /** Server-provided recommendation rows scoped to a single library. */
 export interface LibraryRecommendations {
   /** `tab`: a recommended tab's own shelves, sent only with features.pluginLevels.tabRows. */
-  libraryRows(id: string, kind: V.Library['kind'], fresh?: boolean, tab?: string): Promise<V.Row[]>;
+  libraryRows(id: string, kind: V.Library['kind'], fresh?: boolean, tab?: string): Promise<(V.Row | V.SurfaceRow)[]>;
   libraryCollections(id: string, cursor?: string, tab?: string, search?: string): Promise<V.Page<V.RowEntry>>;
   libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
 }
@@ -406,30 +408,24 @@ export function supportsLibraryBrowse(adapter: ServerAdapter, library: V.Library
   return hasLibraryFacets(adapter) && (library.tabs !== undefined || library.browse.filters.facets !== undefined);
 }
 
-/** What a live stream connection follows: events by id, whole screens, and the viewer's alerts. */
-export interface LiveStreamQuery { events: string[]; screens: string[]; alerts: boolean }
-export interface ScreenQuery { league?: string; date?: string }
-export interface LiveEntitiesQuery { feed?: string; league?: string; q?: string }
+/** One data read of a screen page or a surface: the sources to read (all that are not lazy when
+ * absent), the page's params and the surface's server context (both sent as `p.<name>`), and the
+ * viewer's time zone. */
+export interface ScreenDataRead { sources?: string[]; params: Record<string, string>; context?: Record<string, string>; tz: string }
 
-/** Live events (Ether Sports): plugin screens, event snapshots and details, the pushed update
- * stream, spoiler reveals and entity favourites. Offered when `features.liveEvents` is. */
-export interface LiveEvents {
-  screen(id: string, query?: ScreenQuery, signal?: AbortSignal): Promise<V.Screen>;
-  liveEvents(ids: string[]): Promise<V.LiveEventsResponse>;
-  liveEvent(id: string): Promise<V.LiveEventDetail>;
-  /** The viewer reveals a spoiler-free event's result; the answer is not relied on. */
-  revealLiveEvent(id: string, request: V.Mutation): Promise<unknown>;
-  liveEntities(query: LiveEntitiesQuery): Promise<V.LiveEntitiesResponse>;
-  setEntityFavorite(key: string, favorite: boolean, request: V.Mutation): Promise<unknown>;
-  liveTicker(screen?: string): Promise<V.LiveEventsResponse>;
-  /** One connection to `/live/stream`; resolves when the server closes it. */
-  streamLive(query: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
-  /** The viewer's live-event preferences (spoiler-free). Optional: a server without them has none. */
-  livePreferences?(): Promise<V.LivePreferences>;
-  setLivePreferences?(preferences: V.LivePreferences, request: V.Mutation): Promise<unknown>;
+/** Plugin screens and surfaces (docs/plugin-screens.md): documents, per-viewer data, actions and
+ * the page topics of `/live/stream`. Every call carries the client's renderer version. */
+export interface PluginScreens {
+  /** A document by its href (immutable for its `v`; a stale `v` is answered with the current document). */
+  screenDocument(href: string, signal?: AbortSignal, fresh?: boolean): Promise<V.ScreenDocument>;
+  screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData>;
+  screenAction(target: ScreenTarget, action: string, request: V.ScreenActionRequest, mutation: V.Mutation): Promise<V.ScreenActionAnswer>;
+  setSurfaceSetting(id: string, enabled: boolean, mutation: V.Mutation): Promise<void>;
+  /** One connection to `/live/stream` for page topics (and alerts); resolves when the server closes it. */
+  streamScreens(query: ScreenStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
 }
-export function hasLiveEvents(adapter: ServerAdapter): adapter is ServerAdapter & LiveEvents {
-  return ['screen', 'liveEvents', 'liveEvent', 'revealLiveEvent', 'liveEntities', 'setEntityFavorite', 'liveTicker', 'streamLive'].every(name =>
+export function hasPluginScreens(adapter: ServerAdapter): adapter is ServerAdapter & PluginScreens {
+  return ['screenDocument', 'screenData', 'screenAction', 'setSurfaceSetting', 'streamScreens'].every(name =>
     name in adapter && typeof (adapter as unknown as Record<string, unknown>)[name] === 'function');
 }
 

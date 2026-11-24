@@ -30,7 +30,7 @@ export function RowLink({ ctx, params }: WidgetProps) {
         event.preventDefault();
       }
       notePress(ref.current, does);
-      host.openRow?.({ ...row, cardStyle: row.cardStyle ?? host.env.library?.model?.presentation?.card });
+      host.openRow?.({ ...row, card: row.card ?? host.env.library?.model?.presentation?.card });
     }}
     style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: end ? 24 : 0,
       ...(end ? { minWidth: 144, height: 120, marginTop: 16, borderRadius: 12, backgroundColor: look.ui.control } : {}),

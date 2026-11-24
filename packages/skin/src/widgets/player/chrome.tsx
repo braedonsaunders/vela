@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
 import { clampSeek, LIVE_SLACK_SECONDS, msg } from '@vela/core';
 import { useHost } from '../../host';
-import { BottomBar, TopBar, type Opened, type Reveal } from './bars';
+import { BottomBar, TopBar, type Opened, type Reveal, type TickerToggle } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
 import { holdsChrome } from './hold';
 import { useIdle } from './idle';
@@ -21,8 +21,9 @@ import { present, type PlayerView } from './present';
 import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
 import { Status, type Failed } from './status';
-import { PlayerLiveOverlays, usePlayerLiveOverlay } from '../live-overlay/player';
-import { takeAlertKey } from '../live-overlay/context';
+import { useVelaState } from '@vela/core/react';
+import { PlayerOverlays, usePlayerSurfaces } from '../../surfaces/player';
+import { PlayerToasts, takeToastKey } from '../../surfaces/toasts';
 
 /** Rapid steps add up from the last target, not from a position the engine has yet to report. */
 const STEP_MEMORY_MS = 1500;
@@ -83,7 +84,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
   const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send);
-  const overlay = usePlayerLiveOverlay(look, live.live);
+  // Plugin overlays and toasts (docs/plugin-screens.md: Surfaces), where the app draws them.
+  const liveEvent = useVelaState(s => s.playback.liveEvent);
   // The session that has played, so a later wait in it reads as a stall rather than a start.
   const playedSession = useRef('');
   const sessionId = state.plan?.sessionId ?? '';
@@ -92,6 +94,15 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     state: view.state, started: !!sessionId && playedSession.current === sessionId,
     menuOpen: opened !== null, active, failed: !!failed,
   }));
+  const chromeUp = idle.visible || !!failed;
+  const surfaces = usePlayerSurfaces({
+    channelId: live.live ? live.channelId : '', eventId: live.live ? liveEvent?.id ?? '' : '', feed: live.live ? liveEvent?.feed : undefined,
+    kind: live.live ? 'channel' : live.archive ? 'programme' : 'title', titleId: !live.live && !live.archive ? state.target?.id : undefined,
+    chrome: chromeUp, behindSeconds: live.behindSeconds, pictureAt: live.pictureAt,
+  });
+  // A `toggle` overlay's switch is the chrome's ticker button (the others are in the subtitles menu).
+  const toggleSwitch = surfaces.switches.find(s => s.button);
+  const overlay: TickerToggle = { available: !!toggleSwitch, ticker: toggleSwitch?.on ?? false, toggleTicker: () => toggleSwitch?.toggle(), label: toggleSwitch?.label ?? '' };
   // No screensaver or display sleep over a playing film (web and desktop; native players hold it themselves).
   useScreenAwake(view.playing);
   const { send } = state;
@@ -170,7 +181,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     closeMenu: () => setOpened(null),
     liveKey: live.live || live.archive ? live.key : undefined,
     liveSteps: !!rewind,
-    alertKey: takeAlertKey,
+    alertKey: takeToastKey,
   });
 
   const tv = look.tv && Platform.isTV;
@@ -227,10 +238,11 @@ function Chrome({ state }: { state: PlayerChromeState }) {
       <View style={styles.top} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
       </View>
-      {/* Sports: the score bug, the ticker and alert toasts, under the bars so a menu always covers them. */}
-      <PlayerLiveOverlays look={look} overlay={overlay} chrome={idle.visible || !!failed} top={top} info={info && !failed} channelId={live.channelId}
-        behindSeconds={live.behindSeconds} pictureAt={live.pictureAt} />
-      <View style={[styles.bottom, { bottom: overlay.lift }, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
+      {/* Plugin overlays (the score bug, the ticker) and alert toasts, under the bars so a menu always covers them. */}
+      <PlayerOverlays look={look} surfaces={surfaces} chrome={chromeUp} top={top} />
+      <PlayerToasts look={look} top={chromeUp ? top : look.small ? 18 : look.size(30)} playingChannelId={live.live ? live.channelId : ''}
+        right={info && !failed && !look.small ? look.gutter + look.size(300) + look.size(14) : undefined} />
+      <View style={[styles.bottom, { bottom: surfaces.lift }, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
         pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <BottomBar
           look={look}
@@ -252,6 +264,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           onActive={setActive}
           live={live}
           overlay={overlay}
+          overlaySwitches={surfaces.switches}
         />
       </View>
       <View
@@ -270,7 +283,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           dial={failed && live.canZap ? <LiveDial channelId={live.channelId} small={look.small} still={look.still} /> : null}
         />
       </View>
-      {!idle.visible && !failed ? <LiveNotice look={look} watch={live} lift={overlay.lift} /> : null}
+      {!idle.visible && !failed ? <LiveNotice look={look} watch={live} lift={surfaces.lift} /> : null}
       {state.versionMessage && !failed ? (
         // A version switch reports here, not only inside the quality menu, which has closed by
         // the time the server answers: a refused switch must never look like a click that did nothing.

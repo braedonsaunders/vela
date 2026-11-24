@@ -6,17 +6,17 @@ import { useSideInsets, useVela, VelaProvider } from '../src/vela';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { systemBarStyle } from '../src/system-bar-style';
 import { AudioDock } from '../src/media/audio';
-import { LiveAlerts, LiveOverlayProvider } from '../src/live-alerts';
+import { SurfaceProvider, SurfaceToasts } from '../src/surfaces';
 
 export default function Layout() {
   return (
     <VelaProvider>
-      <LiveOverlayProvider>
+      <SurfaceProvider>
         <SystemBar />
         <Screens />
         <AudioDock />
-        <LiveAlerts />
-      </LiveOverlayProvider>
+        <SurfaceToasts />
+      </SurfaceProvider>
     </VelaProvider>
   );
 }
@@ -65,6 +65,14 @@ function Screens() {
       {/* A game's page (Sports) opens over its section like a title page. */}
       <Stack.Screen
         name="game/[id]"
+        options={{
+          presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal',
+          contentStyle: { ...bars, backgroundColor: 'transparent' },
+        }}
+      />
+      {/* A plugin screen's page (presentation: page) opens over its section like a title page. */}
+      <Stack.Screen
+        name="screen/[id]/[page]"
         options={{
           presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal',
           contentStyle: { ...bars, backgroundColor: 'transparent' },

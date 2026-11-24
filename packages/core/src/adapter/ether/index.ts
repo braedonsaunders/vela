@@ -15,18 +15,16 @@ import type {
   Interactions,
   LibraryDuplicates,
   LibraryLive,
-  LiveEntitiesQuery,
-  LiveEvents,
-  LiveStreamQuery,
   LiveTv,
   Multiview,
   PlaylistImports,
   TileReplan,
   PasswordSignIn,
   PathSwitching,
+  PluginScreens,
   ProactiveFallback,
+  ScreenDataRead,
   QuickConnectSignIn,
-  ScreenQuery,
   SwitchCommand,
   TrackChanges,
   TrackCommand,
@@ -37,8 +35,10 @@ import type {
 import type { TitleActions } from '../capabilities';
 import type { SubtitleSearch } from '../media-actions';
 import { VelaError } from '../errors';
-import { normaliseDetail, normaliseEvents, normaliseScreen } from '../../live/events';
 import { EtherTransport } from './transport';
+import { localeContext } from '../../i18n';
+import type { ScreenTarget } from '../../screens/keys';
+import { streamSearch, type ScreenStreamQuery } from '../../screens/stream';
 import { plexHomeSelection, plexTokens } from './plex';
 import { etherSubtitleLanguages, etherSubtitleSearch, SUBTITLE_PREPARE_LIMIT_MS, subtitleRetryDelayMs } from './subtitles';
 
@@ -56,7 +56,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  LiveEvents, Multiview, TileReplan, SubtitleSearch, HistoryRecap, PlaylistImports, LibraryDuplicates {
+  Multiview, TileReplan, SubtitleSearch, PluginScreens, HistoryRecap, PlaylistImports, LibraryDuplicates {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -99,7 +99,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
   /** Every shelf of a library, page by page. A cursor the server has expired mid-read restarts
    * the read once from the first page, uncached, so no shelf is skipped or repeated. */
-  async libraryRows(id: string, kind: V.Library['kind'], fresh = false, tab?: string): Promise<V.Row[]> {
+  async libraryRows(id: string, kind: V.Library['kind'], fresh = false, tab?: string): Promise<(V.Row | V.SurfaceRow)[]> {
     try { return await this.readLibraryRows(id, kind, fresh, tab); }
     catch (error) {
       if (!(error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired')) throw error;
@@ -107,15 +107,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     }
   }
   /** `tab` names a recommended tab's own shelves (features.pluginLevels.tabRows); the caller sends it only then. */
-  private async readLibraryRows(id: string, _kind: V.Library['kind'], fresh: boolean, tab?: string): Promise<V.Row[]> {
+  private async readLibraryRows(id: string, _kind: V.Library['kind'], fresh: boolean, tab?: string): Promise<(V.Row | V.SurfaceRow)[]> {
     const tabs = this.declaredLibraries.get(id)?.tabs;
     if (tabs && !tabs.some(tab => tab.kind === 'recommended')) return [];
-    const result: V.Row[] = [];
+    const result: (V.Row | V.SurfaceRow)[] = [];
     const seen = new Set<string>();
     let cursor: string | undefined;
     for (let n = 0; n < 100; n++) {
       const page = this.declaredLibraries.get(id)?.tabs
-        ? await this.http.request<V.Page<V.Row>>('GET', `/libraries/${segment(id)}/rows${query({ tab, cursor, limit: 100 })}`, undefined, fresh ? undefined : CACHED)
+        ? await this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/libraries/${segment(id)}/rows${query({ tab, cursor, limit: 100 })}`, undefined, { ...(fresh ? {} : CACHED), headers: this.screenHeaders })
         : await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 }, fresh);
       result.push(...page.items);
       if (page.continuation !== 'more') return result;
@@ -149,9 +149,22 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return [];
   }
 
-  constructor(private readonly origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void) {
+  /** `rendererVersion`: the skin renderer this client draws (RENDERER_VERSION), sent as
+   * X-Vela-Screen-Renderer on bootstrap and every screen call. Without it Ether lists no screens. */
+  constructor(private readonly origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void, private readonly rendererVersion?: number,
+    /** The Studio live preview token while previewing (sent as X-Vela-Screen-Preview: drafts instead of published documents). */
+    private readonly screenPreview: () => string | undefined = () => undefined) {
     this.credentials = credentials;
     this.http = new EtherTransport(origin, credentials, capabilityContext, onSessionRejected);
+  }
+
+  /** The renderer (Ether lists screens only to a client that says it) and the display language
+   * (Ether localises documents and data to its first tag). */
+  private get screenHeaders(): Record<string, string> {
+    if (!this.rendererVersion) return {};
+    const language = localeContext().locale;
+    const preview = this.screenPreview();
+    return { 'X-Vela-Screen-Renderer': String(this.rendererVersion), ...(language ? { 'X-Vela-Language': language } : {}), ...(preview ? { 'X-Vela-Screen-Preview': preview } : {}) };
   }
 
   setCapabilityContext(context: string): void {
@@ -273,20 +286,21 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   /** A home whose continuation the server has expired is read again without revalidation. */
   async home(fresh = false, signal?: AbortSignal): Promise<Home> {
     try {
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...BOOTSTRAP_CACHED, fresh, signal });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...BOOTSTRAP_CACHED, fresh, signal, headers: this.screenHeaders });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     } catch (error) {
       const expired = error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
       if (!expired) throw error;
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { signal });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { signal, headers: this.screenHeaders });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     }
   }
 
+  /** Rows lists may hold plugin surface rows, which Ether sends only to a client that says its renderer. */
   rows(rowsQuery: V.RowsQuery, fresh = false) {
-    return this.http.request<V.Page<V.Row>>('GET', `/rows${query(rowsQuery)}`, undefined, fresh ? undefined : CACHED);
+    return this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/rows${query(rowsQuery)}`, undefined, { ...(fresh ? {} : CACHED), headers: this.screenHeaders });
   }
 
   row(id: string, cursor?: string, limit?: number) {
@@ -634,53 +648,42 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.GuideWindowResponse>('POST', '/live/guide/window', request, CACHED);
   }
 
-  // Live events and plugin screens (features.liveEvents). Live data is never cached here: the
-  // stream keeps it current and a stale answer would show an old score.
+  // Plugin screens and surfaces (docs/plugin-screens.md; Ether design sections 6 and 7)
 
-  async screen(id: string, screenQuery: ScreenQuery = {}, signal?: AbortSignal) {
-    return normaliseScreen(await this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal }), this.origin);
+  /** A document by its href. Ether serves the current document for a stale `v` (200, no-cache),
+   * never a redirect. `fresh`: read past the cache (a Studio reload); drafts are never cached. */
+  async screenDocument(href: string, signal?: AbortSignal, fresh = false): Promise<V.ScreenDocument> {
+    const path = this.http.boundPath(href);
+    if (!path) throw new VelaError({ class: 'request', code: 'invalid_document_href', message: 'A screen document must come from this server.', retry: { allowed: false } }, 400);
+    return this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: !this.screenPreview() && !fresh, signal, headers: this.screenHeaders });
   }
 
-  async liveEvents(ids: string[]): Promise<V.LiveEventsResponse> {
-    const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/events${query({ ids: ids.length ? ids.join(',') : undefined })}`);
-    return { ...response, events: normaliseEvents(response?.events, this.origin) };
+  screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData> {
+    const params = new URLSearchParams();
+    if (read.sources) params.set('sources', read.sources.join(','));
+    // Context first, then params: both are p.<name>; a page never declares a param a context names.
+    for (const [name, value] of Object.entries(read.context ?? {})) params.set(`p.${name}`, value);
+    for (const [name, value] of Object.entries(read.params)) params.set(`p.${name}`, value);
+    if (read.tz) params.set('tz', read.tz);
+    const search = params.size ? `?${params}` : '';
+    return this.http.request<V.ScreenData>('GET', `${screenBase(target)}/data${search}`, undefined, { signal, headers: this.screenHeaders });
   }
 
-  async liveEvent(id: string): Promise<V.LiveEventDetail> {
-    const detail = normaliseDetail(await this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`), this.origin);
-    if (!detail) throw new VelaError({ class: 'source', code: 'invalid_live_event', message: 'The server sent an unreadable live event.', retry: { allowed: true } }, 502);
-    return detail;
+  screenAction(target: ScreenTarget, action: string, request: V.ScreenActionRequest, mutation: V.Mutation): Promise<V.ScreenActionAnswer> {
+    const base = target.kind === 'screen' ? `/screens/${segment(target.id)}` : `/surfaces/${segment(target.id)}`;
+    // The key travels as the header Ether's design names and, as every other Vela mutation, in the body.
+    return this.http.request<V.ScreenActionAnswer>('POST', `${base}/actions/${segment(action)}`, { ...request, idempotencyKey: mutation.idempotencyKey },
+      { headers: { ...this.screenHeaders, 'Idempotency-Key': mutation.idempotencyKey } }).then(answer => answer ?? {});
   }
 
-  revealLiveEvent(id: string, request: V.Mutation) {
-    return this.http.request<unknown>('POST', `/live/events/${segment(id)}/reveal`, request);
+  async setSurfaceSetting(id: string, enabled: boolean, mutation: V.Mutation): Promise<void> {
+    await this.http.request<unknown>('PUT', `/surfaces/${segment(id)}/setting`, { enabled, idempotencyKey: mutation.idempotencyKey }, { headers: { ...this.screenHeaders, 'Idempotency-Key': mutation.idempotencyKey } });
   }
 
-  liveEntities(entities: LiveEntitiesQuery) {
-    return this.http.request<V.LiveEntitiesResponse>('GET', `/live/entities${query(entities)}`);
+  streamScreens(live: ScreenStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+    return this.http.stream(`/live/stream${streamSearch(live)}`, this.screenHeaders, onEvent, signal);
   }
 
-  setEntityFavorite(key: string, favorite: boolean, request: V.Mutation) {
-    return this.http.request<unknown>(favorite ? 'PUT' : 'DELETE', `/favorites/entities/${segment(key)}`, request);
-  }
-
-  livePreferences() {
-    return this.http.request<V.LivePreferences>('GET', '/live/preferences');
-  }
-
-  setLivePreferences(preferences: V.LivePreferences, request: V.Mutation) {
-    return this.http.request<unknown>('PUT', '/live/preferences', { ...preferences, idempotencyKey: request.idempotencyKey });
-  }
-
-  async liveTicker(screen?: string): Promise<V.LiveEventsResponse> {
-    const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
-    return { ...response, events: normaliseEvents(response?.events, this.origin) };
-  }
-
-  streamLive(live: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
-    const path = `/live/stream${query({ events: live.events.join(',') || undefined, screens: live.screens.join(',') || undefined, alerts: live.alerts ? '1' : undefined })}`;
-    return this.http.stream(path, {}, onEvent, signal);
-  }
 
   createMultiview(request: V.MultiviewRequest) {
     return this.http.request<V.MultiviewGroup>('POST', '/multiview', request);
@@ -703,6 +706,11 @@ export function libraryBrowseQuery(browse: V.LibraryBrowseQuery): string {
 }
 
 const segment = encodeURIComponent;
+
+/** `/screens/{id}/pages/{page}` or `/surfaces/{id}`. */
+function screenBase(target: ScreenTarget): string {
+  return target.kind === 'screen' ? `/screens/${segment(target.id)}/pages/${segment(target.page)}` : `/surfaces/${segment(target.id)}`;
+}
 
 function query(values: object): string {
   const pairs = Object.entries(values)

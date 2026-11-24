@@ -63,20 +63,38 @@ function isBlurry(node: RNode): boolean {
   });
 }
 
+/** What a node draws inside it; the second list is drawn once per item (a repeat's or block's item). */
 function children(node: RNode): RNode[] {
-  if (node.kind === 'box') return node.children;
-  if (node.kind === 'repeat') return [node.item];
-  return [];
+  switch (node.kind) {
+    case 'box': case 'sections': return node.children;
+    // A repeat that draws one item at most (a screen's hero) costs as the page, not per item.
+    case 'repeat': return node.limit <= 1 ? [node.item] : [];
+    case 'image': return node.fallback ? [node.fallback] : [];
+    case 'shelf': return node.empty ? [node.empty] : [];
+    case 'tabs': return node.after ?? [];
+    default: return [];
+  }
+}
+
+/** A block's repeated item (shelf, grid, marquee, tabs' chip), which costs as a repeat's does. */
+function repeated(node: RNode): RNode | undefined {
+  switch (node.kind) {
+    case 'repeat': return node.limit <= 1 ? undefined : node.item;
+    case 'shelf': case 'grid': case 'marquee': return node.item;
+    case 'tabs': return node.chip;
+    default: return undefined;
+  }
 }
 
 function cost(route: string, tree: RNode): PageCost {
   const page: PageCost = { route, nodes: 0, perItem: 0, imagesPerItem: 0, endlessPerItem: 0, blursPerItem: 0, endless: 0, blurs: 0 };
   const walk = (node: RNode, item: Item | null) => {
     if (node.kind === 'slot') return;
-    const repeat = node.kind === 'repeat';
-    const own: Item | null = repeat
-      ? { nodes: 0, images: 0, endless: 0, blurs: 0, many: MANY.has(node.over) || !!item?.many }
-      : item;
+    const each = repeated(node);
+    const repeat = !!each;
+    // A screen's shelves, grids and marquees draw many items; its repeats as many as they are given.
+    const many = node.kind === 'repeat' ? MANY.has(node.over) || !!node.items : node.kind !== 'tabs';
+    const own: Item | null = repeat ? { nodes: 0, images: 0, endless: 0, blurs: 0, many: many || !!item?.many } : item;
     const endless = isEndless(node);
     const blur = isBlurry(node);
     page.nodes++;
@@ -88,7 +106,8 @@ function cost(route: string, tree: RNode): PageCost {
       if (endless) own.endless++;
       if (blur) own.blurs++;
     }
-    for (const child of children(node)) walk(child, own);
+    for (const child of children(node)) walk(child, repeat ? item : own);
+    if (each) walk(each, own);
     if (repeat && own) {
       page.perItem = Math.max(page.perItem, own.nodes);
       page.imagesPerItem = Math.max(page.imagesPerItem, own.images);
@@ -103,10 +122,14 @@ function cost(route: string, tree: RNode): PageCost {
 }
 
 export function perfReport(resolved: ResolvedDocument): PerfReport {
-  const trees = [
-    ...(resolved.shell ? [['shell', resolved.shell] as const] : []),
+  return treesReport([
+    ...(resolved.shell ? [['shell', resolved.shell] as [string, RNode]] : []),
     ...Object.entries(resolved.routes).filter((e): e is [string, RNode] => !!e[1]),
-  ];
+  ]);
+}
+
+/** The report for named trees (a skin's routes, a screen's tree, loading and failure). */
+export function treesReport(trees: readonly (readonly [string, RNode])[]): PerfReport {
   const pages = trees.map(([route, tree]) => cost(route, tree));
   const findings: Finding[] = [];
   for (const page of pages) {

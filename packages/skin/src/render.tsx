@@ -29,7 +29,7 @@ import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
-import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
+import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type ScreenArg, type ScreenPress, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusPressed, focusTarget, leaveButton, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { useFocusStyles } from './focus';
@@ -50,9 +50,13 @@ import { Arrive, EASE_IN, MOTION } from './presence';
 import { needsAnimatedFrame } from './animated-frame';
 import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
-import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
+import { fill, holds, type CssT, type Layer, type RNode, type RPress, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
-import { collection, itemKey, type Card, type Ctx, type Env } from './vocabulary';
+import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocabulary';
+import { itemKey, items } from './screen/items';
+import { deref as derefValue, screenImageSrc } from './screen/scope';
+import { BlockView } from './screen/block-view';
+import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
@@ -60,6 +64,7 @@ import { moveWebRowFocus } from './web-row-navigation';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
+const NOTHING = () => {};
 function contextCard(id: string, kind: string, name: string, image = ''): Card {
   return {
     id, kind, name, summary: '', airDate: '', year: 0, rating: '', durationSeconds: 0,
@@ -91,6 +96,18 @@ const PointerInheritance = createContext<PointerMode>('auto');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
+/** A surface over the picture while the player's chrome is hidden: its presses take no focus (a
+ * pointer or touch still reaches them), so the remote never lands on an overlay it cannot see the
+ * controls around. */
+export const Unfocusable = createContext(false);
+/** Plugin surfaces in skin pages (docs/plugin-screens.md: Surfaces), given by the app: a Home row
+ * whose row is a surface (drawn in place of the skin's row), and title panels after a title's
+ * related rows. Without them (or with surfaces off) those places draw as before. */
+export interface SurfaceSlotViews {
+  row?: ComponentType<{ id: string; surface: string }>;
+  titlePanels?: ComponentType<{ id: string; kind: string }>;
+}
+export const SurfaceSlots = createContext<SurfaceSlotViews | null>(null);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
 const PressLabelContent = createContext(false);
 const HeroInteraction = createContext(false);
@@ -150,7 +167,7 @@ const HOME_SLOW_NODE: Extract<RNode, { kind: 'widget' }> = {
 };
 
 
-export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
+export function SkinRoot({ host, node, ctx = ROOT_CONTEXT }: { host: SkinHost; node: RNode; /** The root binding context (a screen's). */ ctx?: Ctx }) {
   useFocusStyles();
   useEffect(() => {
     if (host.doc.unsupported.length) console.warn(`${host.doc.name}: rows outside the React Native style matrix: ${host.doc.unsupported.join(', ')}`);
@@ -162,7 +179,7 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
   return (
     <TrackedHost host={drawn}>
       <NavFit.Provider value={reportNav}>
-        <SkinNode node={node} ctx={ROOT_CONTEXT} />
+        <SkinNode node={node} ctx={ctx} />
       </NavFit.Provider>
     </TrackedHost>
   );
@@ -235,8 +252,10 @@ function FitCell({ id, fit, measure, children }: { id: string; fit: string | nul
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is
  * open); `lead` is the host's own element drawn first in that scroll (Apple TV search's Back). */
-function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = false, openingFocus = true }: {
+function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = false, openingFocus = true, ctx: rootCtx = ROOT_CONTEXT }: {
   host: SkinHost; node: RNode; after?: RNode; lead?: ReactNode; hideLibraryViews?: boolean;
+  /** The root binding context (a screen document's: screen/items screenRoot). */
+  ctx?: Ctx;
   /** Off where focus belongs elsewhere as the route opens (Apple TV's search keyboard above results). */
   openingFocus?: boolean;
 }) {
@@ -294,8 +313,8 @@ function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = fals
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
               <HiddenLibraryNav.Provider value={hideLibraryViews || floatingLibraryNav}>
                 {floatingLibraryNav && host.env.load !== 'ready' ? (
-                  <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} /></View>
-                ) : <SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} />}
+                  <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={rootCtx} route after={after} /></View>
+                ) : <SkinNode node={node} ctx={rootCtx} route after={after} />}
               </HiddenLibraryNav.Provider>
             </InstantContent.Provider>
           </RouteLead.Provider></RouteLayout.Provider>
@@ -319,7 +338,7 @@ function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = fals
   );
 }
 
-export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after && a.lead === b.lead
+export const SkinRoute = memo(SkinRouteView, (a, b) => a.node === b.node && a.after === b.after && a.lead === b.lead && a.ctx === b.ctx
   && a.hideLibraryViews === b.hideLibraryViews && a.openingFocus === b.openingFocus
   && sameRouteHost(a.host, b.host, [b.node, b.after, b.host.doc.libraryViews]));
 
@@ -375,8 +394,8 @@ function MenuPresence({ shown, still, children }: { shown: boolean; still: boole
  * re-enters. */
 function HeroStage({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx: Ctx }) {
   const { env } = useHost();
-  const current = collection(node.over, ctx, env, node.limit).find(c => holds(node.when, c, env));
-  const key = current ? itemKey(current, node.over) : '';
+  const current = items(node, ctx, env).find(c => holds(node.when, c, env));
+  const key = current ? itemKey(node, current, env) : '';
   const layers = useRef<{ key: string; ctx: Ctx }[]>([]);
   const [, refresh] = useState(0);
   if (!current) layers.current = [];
@@ -395,22 +414,75 @@ function HeroStage({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ct
  * one after it arrives with the shared motion, so the copy never snaps from one title to the next. */
 function HeroCopy({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx: Ctx }) {
   const { env } = useHost();
-  const items = collection(node.over, ctx, env, node.limit).filter(c => holds(node.when, c, env));
+  const drawn = items(node, ctx, env).filter(c => holds(node.when, c, env));
   const first = useRef<string | null>(null);
-  if (first.current === null && items[0]) first.current = itemKey(items[0], node.over);
-  return <>{items.map(c => {
-    const key = itemKey(c, node.over);
+  if (first.current === null && drawn[0]) first.current = itemKey(node, drawn[0], env);
+  return <>{drawn.map(c => {
+    const key = itemKey(node, c, env);
     const item = <SkinNode key={key} node={node.item} ctx={c} hero />;
     return key === first.current ? item : <Arrive key={key} still={env.still}>{item}</Arrive>;
   })}</>;
 }
 
-function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
+/** A screen press with its arguments and optimistic patch filled where it was drawn. */
+function screenPress(press: RPress, arg: string, node: RNode, ctx: Ctx, env: Env): ScreenPress {
+  const args = Object.fromEntries(Object.entries(press.args ?? {}).map(([name, value]) => {
+    const raw = press.argValues?.[name];
+    return [name, raw ? screenArg(raw(ctx, env), fill(value, ctx, env), ctx) : fill(value, ctx, env)];
+  }));
+  const o = press.optimistic;
+  return {
+    action: press.action, arg, args,
+    ...(o ? { optimistic: { ...(o.record ? { record: fill(o.record, ctx, env) } : {}), ...(o.source ? { source: o.source } : {}), path: o.path,
+      value: o.raw ? screenArg(o.raw(ctx, env), fill(o.value, ctx, env), ctx) : fill(o.value, ctx, env) } } : {}),
+    control: fill(node.id, ctx, env) || fill(node.testId, ctx, env) || fill(node.label, ctx, env) || `${press.action}:${arg}`,
+  };
+}
+
+/** A whole-hole argument's raw value when it is one a plugin action takes, else its text. */
+function screenArg(raw: unknown, text: string, ctx: Ctx): ScreenArg {
+  const value = ctx.screen ? derefValue(raw, ctx.screen.record) : raw;
+  if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) return value;
+  if (Array.isArray(value) && value.every(v => typeof v === 'string')) return value as string[];
+  return text;
+}
+
+/** How many times a node's onChange value has changed while drawn (screens). */
+const ChangeCount = createContext(0);
+
+/** Redraws its node afresh each time its onChange value changes, so the node's change motion plays
+ * from the start; the first draw plays nothing. */
+function Changed({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
+  const { env } = useHost();
+  const value = fill(node.onChange!.value, ctx, env);
+  const last = useRef(value);
+  const count = useRef(0);
+  if (last.current !== value) {
+    last.current = value;
+    count.current++;
+  }
+  return <ChangeCount.Provider value={count.current}>
+    <SkinNodeView key={count.current} node={node} ctx={ctx} route={route} after={after} hero={hero} changed />
+  </ChangeCount.Provider>;
+}
+
+/** A node's onChange motion while it plays (after a change), else nothing. */
+function useChangeMotion(node: RNode, still: boolean): Record<string, unknown> | undefined {
+  const changes = useContext(ChangeCount);
+  return node.onChange && changes > 0 ? animation(node.onChange.motion, {}, still, 0) : undefined;
+}
+
+function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; changed?: boolean }) {
+  // Screens: this node reads records through its own reader, so a push redraws only its readers.
+  const ctx = useScopedReads(given);
+  // Development: a probe (tools/perf/screen-record-push.ts) may count which nodes draw.
+  if (__DEV__) (globalThis as { __velaRenderProbe?: (node: RNode, ctx: Ctx) => void }).__velaRenderProbe?.(node, ctx);
   // A row's arrows read its pager: they, and nothing else, redraw when the row reports its ends.
   usePager(readsPager(node) ? ctx.row?.id : undefined);
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
   const hiddenLibraryNav = useContext(HiddenLibraryNav);
+  const surfaceSlots = useContext(SurfaceSlots);
   if (!loadingLibraryNav && node.id === 'vela-library-views' && env.route === 'library' && env.load !== 'ready') return null;
   if (hiddenLibraryNav && node.kind === 'box' && node.base.style.position === 'sticky'
     && node.children.some(child => child.id === 'vela-library-views')) {
@@ -436,14 +508,20 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     // focus to the pager, where Select picked the first title).
     let shown = 0;
     const steadyHero = node.over === 'home.hero' && Platform.isTV;
-    const items = collection(node.over, ctx, env, node.limit).flatMap(c => {
+    const SurfaceRow = node.over === 'home.rows' || node.over === 'library.rows' ? surfaceSlots?.row : undefined;
+    const drawn = items(node, ctx, env).flatMap(c => {
       const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
       if (!holds(node.when, c, env)) return [];
-      const key = steadyHero ? `hero-shown-${shown++}` : itemKey(c, node.over);
+      const key = steadyHero ? `hero-shown-${shown++}` : itemKey(node, c, env);
+      // A plugin's surface row draws its surface in the row's place (Home or a library's rows), or nothing.
+      if (c.row?.surface) return SurfaceRow ? [<SurfaceRow key={key} id={c.row.id} surface={c.row.surface} />] : [];
       return [<SkinNode key={key} node={node.item} ctx={context} hero={node.over === 'home.hero'} />];
     });
-    const lazy = LAZY_REPEATS[node.over];
-    return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{items}</LazyRepeat> : <>{items}</>;
+    const TitlePanels = node.over === 'detail.related' ? surfaceSlots?.titlePanels : undefined;
+    const title = TitlePanels ? env.detail?.title[0] : undefined;
+    if (TitlePanels && title) drawn.push(<TitlePanels key="surface-title-panels" id={title.id} kind={title.kind} />);
+    const lazy = node.items ? undefined : LAZY_REPEATS[node.over];
+    return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{drawn}</LazyRepeat> : <>{drawn}</>;
   }
   // A menu or drawer that opens with a motion also leaves with one (not on TV, whose focus motion
   // is the only one).
@@ -451,6 +529,8 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     return <MenuPresence shown={holds(node.when, ctx, env)} still={env.still}><Box node={node} ctx={ctx} route={route} after={after} hero={hero} /></MenuPresence>;
   }
   if (!holds(node.when, ctx, env)) return null;
+  // Screens: a node whose bound value changes plays its onChange motion (a score pops).
+  if (node.onChange && !changed) return <Changed node={node} ctx={ctx} route={route} after={after} hero={hero} />;
   switch (node.kind) {
     case 'box': return <Box node={node} ctx={ctx} route={route} after={after} hero={hero} />;
     case 'text': return <TextNode node={node} ctx={ctx} />;
@@ -458,6 +538,10 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     case 'icon': return <Icon node={node} ctx={ctx} />;
     case 'slot': return <Slot node={node} ctx={ctx} />;
     case 'widget': return <Widget node={node} ctx={ctx} />;
+    // Renderer 19 blocks (docs/plugin-screens.md), drawn by ./blocks through the screen's runtime.
+    case 'sections': case 'shelf': case 'grid': case 'marquee': case 'tabs': case 'table':
+    case 'lineGraph': case 'player': case 'paramInput': case 'titleCard':
+      return <BlockView node={node} ctx={ctx} />;
   }
 }
 
@@ -471,7 +555,13 @@ function usePager(rowId: string | undefined): void {
 const SkinNode = memo(SkinNodeView, (a, b) => a.node === b.node && a.route === b.route
   && a.after === b.after && a.hero === b.hero
   && (a.ctx === b.ctx || Object.keys(a.ctx).length === Object.keys(b.ctx).length
-    && (Object.keys(a.ctx) as (keyof Ctx)[]).every(key => a.ctx[key] === b.ctx[key])));
+    && (Object.keys(a.ctx) as (keyof Ctx)[]).every(key => a.ctx[key] === b.ctx[key] || key === 'screen' && sameScreenScope(a.ctx.screen, b.ctx.screen))));
+
+/** A screen scope that differs only in its reader: every screen node reads through its own reader
+ * (useScopedReads), so a parent's new reader (a record it read changed) does not redraw its children. */
+function sameScreenScope(a: Ctx['screen'], b: Ctx['screen']): boolean {
+  return !!a && !!b && a.page === b.page && a.state === b.state && a.items === b.items && a.source === b.source && !!a.source;
+}
 
 // ---- Style: layers, overlays, translation ----
 
@@ -683,7 +773,11 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const band = useContext(Band);
   // A section the remote reaches though it presses nothing: below a scroll's last control, or one
   // the document marks (a menu's About line).
-  const stop = useContext(ReadingStop) || (Platform.isTV && node.readingStop === true);
+  const unfocusable = useContext(Unfocusable);
+  const readingStop = useContext(ReadingStop);
+  // A box marked a reading stop, or one only while its conditions hold (vela:panel with a bound `focusable`).
+  const marked = node.kind === 'box' && (node.readingStop === true || (!!node.readingStopWhen?.length && holds(node.readingStopWhen, ctx, env)));
+  const stop = !unfocusable && (readingStop || (Platform.isTV && marked));
   const routeFocus = useRouteFocusContext();
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
@@ -747,7 +841,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // finite motion runs whatever the screen (keyframes.ts runs), so a section coming or going
   // redraws those few nodes, not every card that arrived with a motion.
   const opening = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, readsActivity(node) ? use(ScreenActive) : true);
-  const motion = leaving ? MENU_LEAVE : opening;
+  const change = useChangeMotion(node, env.still);
+  const motion = leaving ? MENU_LEAVE : change ? { ...opening, ...change } : opening;
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
@@ -805,15 +900,15 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const cards = env.library?.model?.items ?? [];
       const item = (i: number) => {
         const context = { ...ctx, card: cards[i]!, index: i };
-        return <SkinNode key={itemKey(context, repeat.over)} node={repeat.item} ctx={context} />;
+        return <SkinNode key={vocabularyKey(context, repeat.over)} node={repeat.item} ctx={context} />;
       };
       content = <WindowedGrid grid={fx.grid} rowGap={style.rowGap ?? 0}
         length={Math.min(cards.length, repeat.implicitLimit ? Infinity : repeat.limit)} getItem={item} />;
     } else {
-      const items = node.children.flatMap((child, i) => child.kind === 'repeat'
-        ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c, child.over)}`} node={child.item} ctx={c} />)
+      const cells = node.children.flatMap((child, i) => child.kind === 'repeat'
+        ? items(child, ctx, env).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(child, c, env)}`} node={child.item} ctx={c} />)
         : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
-      content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
+      content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={cells} />;
     }
   }
   if (measuring) {
@@ -825,8 +920,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       </FitCell>
     );
     const cells = measure ? node.children.flatMap((child, i) => child.kind === 'repeat'
-      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env) && holds(child.item.when, c, env))
-        .map(c => cell(child.item, c, `${i}:${itemKey(c, child.over)}`))
+      ? items(child, ctx, env).filter(c => holds(child.when, c, env) && holds(child.item.when, c, env))
+        .map(c => cell(child.item, c, `${i}:${itemKey(child, c, env)}`))
       : holds(child.when, ctx, env) ? [cell(child, ctx, String(i))] : []) : children;
     return (
       <Inherited.Provider value={text}>
@@ -958,6 +1053,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const kind = (node.id && fill(node.id, ctx, env).startsWith('episode-')) ? 'episode' : press?.action === 'select' && arg.includes('|season|') ? 'season' : press?.action === 'playExtra' ? 'extra' : undefined;
       const unepisode = kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
       if (press) routeFocus?.offer(target, press.action);
+      // A reading stop is the route's first focus when nothing else offers itself first (a final game's panels).
+      else if (stop && ctx.screen) routeFocus?.offer(target, 'stop');
       const release = () => {
         if (releaseButton.current !== release) return;
         releaseButton.current = undefined;
@@ -997,7 +1094,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       // Pausing or playing the slideshow clears the hold its keyboard focus placed, so play takes
       // effect while focus stays on the control.
       if (heroControl && press.action === 'toggle') host.setFlag('hero-interacting', false);
-      host.dispatch(press.action, arg);
+      if (ctx.screen && host.screenPress) host.screenPress(screenPress(press, arg, node, ctx, env));
+      else host.dispatch(press.action, arg);
       // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
       if (focus) requestAnimationFrame(() => focusElement(focus));
     });
@@ -1008,7 +1106,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
         {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
-        focusable={selectable(node)}
+        focusable={selectable(node) && !unfocusable}
         {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}), ...(heroSegment ? { velaHeroSegment: String(ctx.index) } : {}) }, onKeyDown: (event) => {
           const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
           const heroTo = heroSegment ? heroSegmentDestination(key, ctx.index, env.home?.hero.length ?? 0) : null;
@@ -1048,9 +1146,17 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={expanded === undefined ? a11y.accessibilityState : { ...a11y.accessibilityState, expanded }}
         testID={a11y.testID} />
     ) : null;
+    // On a TV a reading stop is a real focusable responder (the tvOS focus engine passes over a
+    // plain focusable view): a button that does nothing, over the section, wearing the focus look.
+    const stopButton = !press && stop && !web ? (
+      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} focusable onPress={NOTHING}
+        onFocus={() => { set('focus', true); routeFocus?.focused(); if (reveal && buttonRef.current) reveal(buttonRef.current); }}
+        onBlur={() => set('focus', false)}
+        accessible accessibilityRole="summary" accessibilityLabel={a11y.accessibilityLabel ?? sectionText(node, ctx, env)} testID={a11y.testID} />
+    ) : null;
     const guide = node.press ? undefined : tvGuide(node, env, band);
     // A reading stop takes focus without doing anything, so the remote can scroll to it.
-    const stopProps = stop ? {
+    const stopProps = stop && web ? {
       focusable: true,
       onFocus: () => set('focus', true),
       onBlur: () => set('focus', false),
@@ -1071,6 +1177,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         {layers}
         {content}
         {button}
+        {stopButton}
       </Frame>
     );
   }
@@ -1162,7 +1269,7 @@ function focusableWithin(node: RNode): boolean {
   if (known !== undefined) return known;
   let found: boolean;
   switch (node.kind) {
-    case 'box': found = (!!node.press && selectable(node)) || node.children.some(focusableWithin); break;
+    case 'box': found = (!!node.press && selectable(node)) || (Platform.isTV && (node.readingStop === true || !!node.readingStopWhen?.length)) || node.children.some(focusableWithin); break;
     case 'repeat': found = focusableWithin(node.item); break;
     case 'slot': found = node.slot === 'searchField' && !SYSTEM_SEARCH; break;
     case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget); break;
@@ -1194,7 +1301,7 @@ function sectionText(node: RNode, ctx: Ctx, env: Env): string {
   const visit = (n: RNode, c: Ctx) => {
     if (parts.join(' ').length > SECTION_TEXT_MAX) return;
     if (n.kind === 'repeat') {
-      for (const item of collection(n.over, c, env, n.limit)) if (holds(n.when, item, env)) visit(n.item, item);
+      for (const item of items(n, c, env)) if (holds(n.when, item, env)) visit(n.item, item);
       return;
     }
     if (!holds(n.when, c, env) || n.hidden) return;
@@ -1502,8 +1609,9 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const instant = useContext(InstantContent);
   const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, readsActivity(node) ? use(ScreenActive) : true);
+  const change = useChangeMotion(node, env.still);
   const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
-  return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion,
+  return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion, ...change,
     ...(!web && pointer.content === 'none' ? { pointerEvents: 'none' } : {}) } as Record<string, unknown>, fx };
 }
 
@@ -1584,12 +1692,19 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
   const { style, fx } = useLeafStyle(node, ctx);
   const Frame = frameFor(node);
   const labelContent = useContext(PressLabelContent);
+  const [loadState, setLoadState] = useState<{ src: string; ok: boolean } | null>(null);
   if (fx.hidden) return null;
-  const source = host.image(fill(node.src, ctx, host.env));
+  const src = fill(node.src, ctx, host.env);
+  const source = host.image(ctx.screen ? screenImageSrc(src) : src);
+  // Screens: the fallback draws in the image's place when the source is empty, refused or fails;
+  // one positioned absolutely (a crest's initials over its disc) also shows until the image loads.
+  const state = loadState?.src === src ? loadState.ok : undefined;
+  if (node.fallback && (!source || state === false)) return <SkinNode node={node.fallback} ctx={ctx} />;
+  const fallback = node.fallback && state === undefined && node.fallback.base.style.position === 'absolute' ? <SkinNode node={node.fallback} ctx={ctx} /> : null;
   const alt = node.alt ? fill(node.alt, ctx, host.env) : '';
   const hidden = labelContent || !alt;
   // The box carries the node's style and motion; the image fills it.
-  return (
+  const image = (
     <Frame style={style as ViewStyle} pointerEvents="none" accessible={!hidden} accessibilityLabel={hidden ? undefined : alt} accessibilityRole={!hidden ? 'image' : undefined}
       accessibilityElementsHidden={hidden || undefined} importantForAccessibility={hidden ? 'no-hide-descendants' : undefined} {...(web && hidden ? { 'aria-hidden': true } : {})}>
       {source ? (
@@ -1601,10 +1716,12 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
           transition={node.fade ? 420 : 0}
           accessible={!hidden}
           accessibilityLabel={hidden ? '' : alt}
+          {...(node.fallback ? { onLoad: () => setLoadState({ src, ok: true }), onError: () => setLoadState({ src, ok: false }) } : {})}
         />
       ) : null}
     </Frame>
   );
+  return fallback ? <>{image}{fallback}</> : image;
 }
 
 function Icon({ node, ctx }: { node: Extract<RNode, { kind: 'icon' }>; ctx: Ctx }) {
@@ -1696,3 +1813,9 @@ export function page(rowId: string, direction: 1 | -1, inset = 0, peek = 0): voi
 const styles = StyleSheet.create({
   searchGuide: { alignSelf: 'stretch', alignItems: 'center' },
 });
+
+/** Any resolved node drawn in a context (a screen's blocks draw their items through this). */
+export function SkinNodeFor({ node, ctx }: { node: RNode; ctx: Ctx }) {
+  return <SkinNode node={node} ctx={ctx} />;
+}
+

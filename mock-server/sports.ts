@@ -1,12 +1,17 @@
-// Live events, the Sports screen and multiview, shaped exactly like Ether's 0.3.19 contract
-// (packages/protocol/live-events.ts). Scores tick while the mock runs so live UI visibly moves:
-// every VELA_MOCK_LIVE_TICK_MS (default 3000) each live event advances its clock, sometimes
-// scores, and the change is pushed on /live/stream. A finished replay restarts its script.
+// The Sports plugin's live feed (LiveEvent shapes, packages/protocol/live-events.ts) and multiview.
+// screens.ts serves it as Ether's plugin screens and surfaces (view-model records, page topics).
+// Scores tick while the mock runs so live UI visibly moves: every VELA_MOCK_LIVE_TICK_MS (default
+// 3000) each live event advances its clock, sometimes scores, and the change is pushed on the
+// page topics of /live/stream. A finished replay restarts its script.
 //
-// Knobs: VELA_MOCK_NO_SPORTS=1 hides it all (no features, navigation or endpoints);
+// Knobs: VELA_MOCK_NO_SPORTS=1 hides it all (no screens, surfaces or multiview);
+// VELA_MOCK_SPORTS_FREEZE=1 stops the clock for screenshot parity: nothing ticks, and "now" is
+// VELA_MOCK_SPORTS_NOW (an ISO instant) or 15:00 local on the day the mock started, so scores,
+// clocks, plays, probability and start times are identical in every capture;
 // VELA_MOCK_SPOILER_FREE=1 makes the viewer spoiler-free for every started event;
 // VELA_MOCK_PROVIDER_CAP=n refuses a multiview tile past n channels of one provider.
-// POST /__admin/sports {providerCap, spoilerFree, alert} changes them at runtime.
+// POST /__admin/sports {providerCap, spoilerFree, screenDelayMs, screenFail, favourites, alert}
+// changes them at runtime.
 import type * as V from '../packages/protocol/types';
 
 const PLUGIN = 'sports', FEED = 'sports';
@@ -18,7 +23,29 @@ const tickMs = Math.max(20, Number(process.env.VELA_MOCK_LIVE_TICK_MS) || 3000);
 export const sportsKnobs = {
   providerCap: Math.max(0, Math.floor(Number(process.env.VELA_MOCK_PROVIDER_CAP) || 0)),
   spoilerFree: process.env.VELA_MOCK_SPOILER_FREE === '1',
+  /** Plugin-screen data reads answer this late (the loading views), or fail (the failure views). */
+  screenDelayMs: 0,
+  screenFail: false,
 };
+
+/** The frozen instant, when VELA_MOCK_SPORTS_FREEZE=1. */
+export function frozenNow(env: Record<string, string | undefined>, started = Date.now()): number | undefined {
+  if (env.VELA_MOCK_SPORTS_FREEZE !== '1') return undefined;
+  const given = Date.parse(env.VELA_MOCK_SPORTS_NOW ?? '');
+  if (Number.isFinite(given)) return given;
+  const day = new Date(started);
+  day.setHours(15, 0, 0, 0);
+  return day.getTime();
+}
+const frozen = frozenNow(process.env);
+export const sportsFrozen = frozen !== undefined;
+/** The Sports clock: the frozen instant, or the real time. Everything in Sports reads time here. */
+export const sportsNow = () => frozen ?? Date.now();
+/** Await before answering a plugin-screen data read: honours screenDelayMs and screenFail. */
+export async function sportsGate(fail: Fail): Promise<void> {
+  if (sportsKnobs.screenDelayMs > 0) await Bun.sleep(sportsKnobs.screenDelayMs);
+  if (sportsKnobs.screenFail) fail('transient', 'sports_unavailable', 'Sports is unavailable (mock fault)', {}, 503);
+}
 
 // Deterministic randomness, so a run is repeatable.
 let seed = 0x5eed;
@@ -65,6 +92,8 @@ const LEAGUES: Record<string, V.LiveLeague & { category: string }> = {
   f1: { id: 'f1', name: 'Formula 1', abbr: 'F1', category: 'f1' },
 };
 const DEFAULT_FAVOURITES = ['nfl-phi', 'nhl-tor', 'nba-tor', 'mlb-tor', 'epl-mci'];
+/** Every viewer's starting favourites (team ids); /__admin/sports {favourites} replaces them. */
+let startingFavourites = DEFAULT_FAVOURITES;
 
 /** One sport's rules for the simulation and the score page. */
 interface Rules { periods: number; periodSeconds: number; countUp?: boolean; tick: number; scoreChance: number; points: number[]; periodName: (n: number) => string; columns: (n: number) => string }
@@ -81,18 +110,19 @@ interface Sim {
   home: string; away: string; scores: [number, number]; lines: [number[], number[]];
   situation?: Record<string, string>; probability: number; series: V.LiveProbabilityPoint[];
   plays: V.LivePlay[]; broadcasts: V.LiveBroadcast[]; venue?: V.LiveEvent['venue'];
+  /** Its plays carry `at` and the score after them (plugin-supplied; a timeshifted viewer sees the score as of the picture). */ timed?: boolean;
   /** Channel indexes (into the mock lineup) carrying it. */ channels: number[]; addon?: string;
   ranking?: V.LiveRankingRow[]; laps?: [number, number];
   updatedAt: string; initial?: string; postedAt?: number;
 }
 const sims = new Map<string, Sim>();
-const H = 3600_000, now0 = Date.now();
+const H = 3600_000, now0 = sportsNow();
 const dayStart = (offset: number) => { const d = new Date(now0); d.setHours(0, 0, 0, 0); return d.getTime() + offset * 24 * H; };
 
 function makeSim(id: string, league: string, away: string, home: string, start: number, state: V.LiveEventState, more: Partial<Sim> = {}): Sim {
   const lines: [number[], number[]] = [[], []];
   const sim: Sim = { id: ns(id), league, start, state, period: 0, clock: 0, home: `${league}-${home.toLowerCase()}`, away: `${league}-${away.toLowerCase()}`,
-    scores: [0, 0], lines, probability: 0.5, series: [], plays: [], broadcasts: [], channels: [], updatedAt: new Date().toISOString(), ...more };
+    scores: [0, 0], lines, probability: 0.5, series: [], plays: [], broadcasts: [], channels: [], updatedAt: new Date(sportsNow()).toISOString(), ...more };
   if (more.lines) sim.scores = [sum(more.lines[0]), sum(more.lines[1])];
   sims.set(sim.id, sim);
   return sim;
@@ -112,7 +142,11 @@ function seedFixtures(): void {
       { clock: '6:40', period: 4, text: 'Jones pass deep right to Nabers for 41 yards, TOUCHDOWN · NYG 24–24', emphasis: 'score', competitorId: 'nfl-nyg' },
       { clock: '8:15', period: 4, text: 'Hurts sacked at PHI 30 for -8 yards (Burns)', emphasis: 'key', competitorId: 'nfl-nyg' },
       { clock: '11:02', period: 4, text: 'Hurts 2 yd run, TOUCHDOWN · PHI 24–17', emphasis: 'score', competitorId: 'nfl-phi' },
-    ],
+    ].map((play, n): V.LivePlay => ({ ...play as V.LivePlay,
+      // Timed, with the score after each play; nhl-tor-mtl stays untimed (both asOf paths).
+      at: new Date(now0 - [2, 5, 7, 10, 13, 16, 20][n]! * 60_000).toISOString(),
+      score: n <= 2 ? { 'nfl-nyg': '24', 'nfl-phi': '27' } : n <= 4 ? { 'nfl-nyg': '24', 'nfl-phi': '24' } : { 'nfl-nyg': '17', 'nfl-phi': '24' } })),
+    timed: true,
   });
   makeSim('nhl-tor-mtl', 'nhl', 'MTL', 'TOR', now0 - 1.5 * H, 'in', { period: 2, clock: 520, lines: [[1, 0], [1, 1]], probability: 0.61,
     broadcasts: [{ name: 'Sportsnet', kind: 'tv', region: 'CA' }], channels: [28], situation: { Shots: 'MTL 17 · TOR 24', 'Power play': 'TOR 1:12' },
@@ -156,11 +190,10 @@ function seedFixtures(): void {
 // Presentation
 
 const teamById = (id: string) => TEAMS.find(t => t.id === id);
-let logoOrigin = '';
 const competitor = (sim: Sim, side: 0 | 1): V.LiveCompetitor => {
   const t = teamById(side ? sim.home : sim.away)!;
   const post = sim.state === 'post';
-  return { id: t.id, name: t.name, short: t.short, abbr: t.abbr, logo: `${logoOrigin}/vela/v0/sports-mock/logos/${t.id}.svg`, color: `#${t.color}`, altColor: `#${t.altColor}`,
+  return { id: t.id, name: t.name, short: t.short, abbr: t.abbr, logo: `/vela/v0/sports-mock/logos/${t.id}.svg`, color: `#${t.color}`, altColor: `#${t.altColor}`,
     ...(sim.state === 'pre' ? {} : { score: String(sim.scores[side]) }), record: t.record, home: side === 1,
     ...(post ? { winner: sim.scores[side] > sim.scores[side ? 0 : 1] } : {}), entityId: t.id };
 };
@@ -262,7 +295,7 @@ function tablesFor(sim: Sim): V.LiveTable[] {
 
 const favourites = new Map<string, Set<string>>();
 const revealed = new Map<string, Set<string>>();
-const favouritesOf = (viewerId: string) => { let set = favourites.get(viewerId); if (!set) favourites.set(viewerId, set = new Set(DEFAULT_FAVOURITES.map(entityKey))); return set; };
+const favouritesOf = (viewerId: string) => { let set = favourites.get(viewerId); if (!set) favourites.set(viewerId, set = new Set(startingFavourites.map(entityKey))); return set; };
 const DEFAULT_SPOILERS = new Set([ns('epl-che-mci')]);
 /** A viewer's own spoiler-free choice (PUT /live/preferences); the admin knob otherwise. */
 const spoilerPreference = new Map<string, boolean>();
@@ -274,45 +307,6 @@ function spoilered(sim: Sim, viewerId: string): boolean {
 }
 const isFavourite = (sim: Sim, viewerId: string) => [sim.home, sim.away].some(id => favouritesOf(viewerId).has(entityKey(id)));
 
-// Screens
-
-const rank = (sim: Sim) => (sim.state === 'in' ? 0 : sim.state === 'pre' ? 1 : 2);
-const byInterest = (viewerId: string) => (a: Sim, b: Sim) => (rank(a) - rank(b)) || (Number(isFavourite(b, viewerId)) - Number(isFavourite(a, viewerId)))
-  || (a.state === 'post' ? b.start - a.start : a.start - b.start);
-const isoDay = (at: number) => { const d = new Date(at); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const dayLabel = (offset: number, at: number) => offset === 0 ? 'Today' : offset === -1 ? 'Yesterday' : offset === 1 ? 'Tomorrow' : new Date(at).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-
-export function screen(id: string, viewerId: string, league: string | null, date: string | null): V.Screen | undefined {
-  if (id !== 'sports') return undefined;
-  const all = [...sims.values()].filter(sim => !league || sim.league === league);
-  const sorted = all.sort(byInterest(viewerId));
-  const present = (list: Sim[]) => list.map(sim => presentEvent(sim, viewerId));
-  const live = sorted.filter(sim => sim.state === 'in');
-  const hero = live.find(sim => isFavourite(sim, viewerId) && LEAGUES[sim.league]!.category !== 'f1') ?? live[0] ?? sorted[0];
-  const also = sorted.filter(sim => sim !== hero && sim.state !== 'post').slice(0, 3);
-  const today = isoDay(now0);
-  const shown = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today;
-  const offsets = [-3, -2, -1, 0, 1, 2, 3, 4];
-  const days = offsets.map(offset => { const at = dayStart(offset); return { date: isoDay(at), label: dayLabel(offset, at), count: all.filter(sim => isoDay(sim.start) === isoDay(at)).length }; });
-  const index = days.findIndex(day => day.date === shown);
-  const favouriteSims = sorted.filter(sim => isFavourite(sim, viewerId) && Math.abs(sim.start - now0) < 7 * 24 * H);
-  const entities = TEAMS.filter(t => !league || t.league === league).map(t => entity(t, viewerId))
-    .sort((a, b) => Number(b.favorite) - Number(a.favorite));
-  const tableLeague = league && STANDINGS[league] ? league : 'nfl';
-  const sections: V.ScreenSection[] = [
-    { id: 'hero', type: 'hero', event: hero ? presentEvent(hero, viewerId) : null, also: present(also) },
-    { id: 'leagues', type: 'leagues', title: 'Leagues', leagues: Object.values(LEAGUES).map(({ category: _c, ...l }) => l), ...(league ? { selected: league } : {}) },
-    { id: 'favorites', type: 'events', title: 'Your teams', query: { favorites: true, window: 'week' }, events: present(favouriteSims) },
-    { id: 'live', type: 'events', title: 'Live now', query: { state: ['in'] }, events: present(live) },
-    { id: 'schedule', type: 'schedule', title: 'Schedule', date: shown, ...(index > 0 ? { previous: days[index - 1]!.date } : {}), ...(index >= 0 && index < days.length - 1 ? { next: days[index + 1]!.date } : {}),
-      days, events: present(all.filter(sim => isoDay(sim.start) === shown).sort((a, b) => a.start - b.start)) },
-    { id: 'standings', type: 'table', title: `${LEAGUES[tableLeague]!.name} standings`, feed: FEED, league: tableLeague, tables: STANDINGS[tableLeague]! },
-    { id: 'teams', type: 'entities', title: 'Pick your teams', feed: FEED, entityKind: 'team', entities },
-  ];
-  return { id: 'sports', title: 'Sports', icon: 'sports', ...(league ? { league } : {}), date: shown, sections };
-}
-const entity = (t: Team, viewerId: string): V.LiveEntity => ({ id: t.id, kind: 'team', name: t.name, abbr: t.abbr, logo: `${logoOrigin}/vela/v0/sports-mock/logos/${t.id}.svg`,
-  league: t.league, color: `#${t.color}`, key: entityKey(t.id), favorite: favouritesOf(viewerId).has(entityKey(t.id)) });
 const STANDINGS: Record<string, V.LiveTable[]> = {
   nfl: [
     { title: 'NFC East', columns: ['Team', 'W', 'L', 'PCT', 'PF', 'PA', 'STRK'], rows: [['Eagles', '9', '2', '.818', '298', '201', 'W4'], ['Cowboys', '7', '4', '.636', '271', '240', 'L1'], ['Commanders', '5', '6', '.455', '233', '252', 'W1'], ['Giants', '4', '7', '.364', '210', '262', 'L2']] },
@@ -340,10 +334,10 @@ const FILLER: Record<string, string[]> = {
 };
 function step(sim: Sim): boolean {
   const league = LEAGUES[sim.league]!;
-  if (sim.state === 'post' && sim.postedAt && Date.now() - sim.postedAt > 20 * tickMs && sim.initial) {
+  if (sim.state === 'post' && sim.postedAt && sportsNow() - sim.postedAt > 20 * tickMs && sim.initial) {
     // A finished replay starts its script again, so live UI always has something moving.
     const fresh = JSON.parse(sim.initial) as Sim;
-    Object.assign(sim, fresh, { initial: sim.initial, postedAt: undefined, updatedAt: new Date().toISOString() });
+    Object.assign(sim, fresh, { initial: sim.initial, postedAt: undefined, updatedAt: new Date(sportsNow()).toISOString() });
     return true;
   }
   if (sim.state !== 'in') return false;
@@ -354,7 +348,7 @@ function step(sim: Sim): boolean {
       const swap = 1 + Math.floor(random() * (ranking.length - 1));
       if (random() < 0.4) [ranking[swap - 1], ranking[swap]] = [{ ...ranking[swap]!, pos: swap }, { ...ranking[swap - 1]!, pos: swap + 1 }];
       ranking.forEach((row, n) => { row.detail = n ? `+${(n * 2.41 + random()).toFixed(3)}` : 'Leader'; });
-      if (sim.laps[0] >= sim.laps[1]) { sim.state = 'post'; sim.postedAt = Date.now(); }
+      if (sim.laps[0] >= sim.laps[1]) { sim.state = 'post'; sim.postedAt = sportsNow(); }
       return true;
     }
     return false;
@@ -377,12 +371,13 @@ function step(sim: Sim): boolean {
     sim.plays.unshift({ clock, period: sim.period, text: `${teamById(side ? sim.home : sim.away)!.short} ${lines[Math.floor(random() * lines.length)]}`, emphasis: 'normal', competitorId: side ? sim.home : sim.away });
     changed = true;
   }
+  if (sim.timed && sim.plays[0] && !sim.plays[0].at) sim.plays[0] = { ...sim.plays[0], at: new Date(sportsNow()).toISOString(), score: { [sim.away]: String(sim.scores[0]), [sim.home]: String(sim.scores[1]) } };
   sim.plays.length = Math.min(sim.plays.length, 60);
   // The period ends: the next starts, or the game is final.
   if (rules.countUp && sim.period === 1 && sim.clock >= 45 * 60) { sim.period = 2; changed = true; }
   const ended = rules.countUp ? sim.clock >= 93 * 60 : sim.clock <= 0;
   if (ended) {
-    if (rules.countUp || sim.period >= rules.periods && sim.scores[0] !== sim.scores[1]) { sim.state = 'post'; sim.postedAt = Date.now(); }
+    if (rules.countUp || sim.period >= rules.periods && sim.scores[0] !== sim.scores[1]) { sim.state = 'post'; sim.postedAt = sportsNow(); }
     else { sim.period++; sim.clock = rules.countUp ? sim.clock : rules.periodSeconds; for (const line of sim.lines) line[sim.period - 1] ??= 0; }
     changed = true;
   }
@@ -435,11 +430,7 @@ const progress = (sim: Sim, rules: Rules) => {
   return Math.max(0, Math.min(1, done / total));
 };
 
-// The live stream
-
-interface Listener { viewerId: string; events: Set<string>; screens: Set<string>; alerts: boolean; send(name: string, data: unknown): void; close(): void }
-const listeners = new Set<Listener>();
-const wants = (listener: Listener, sim: Sim) => listener.events.has(sim.id) || listener.screens.size > 0;
+// The clock
 
 function tick(): void {
   const changed: Sim[] = [];
@@ -447,7 +438,7 @@ function tick(): void {
     const wasClose = sim.state === 'in' && LEAGUES[sim.league]!.category !== 'f1' && isClose(sim, RULES[LEAGUES[sim.league]!.category]!);
     const wasState = sim.state;
     if (!step(sim)) continue;
-    sim.updatedAt = new Date().toISOString();
+    sim.updatedAt = new Date(sportsNow()).toISOString();
     changed.push(sim);
     const category = LEAGUES[sim.league]!.category;
     const close = sim.state === 'in' && category !== 'f1' && isClose(sim, RULES[category]!);
@@ -456,117 +447,23 @@ function tick(): void {
     if (sim.state === 'in' && wasState !== 'in') alert('started', sim);
   }
   if (!changed.length) return;
-  for (const listener of listeners) {
-    const events = changed.filter(sim => wants(listener, sim)).map(sim => presentEvent(sim, listener.viewerId));
-    if (events.length) listener.send('update', { events } satisfies V.LiveStreamUpdate);
-  }
+  for (const hook of changeHooks) hook(changed);
 }
-let alerts = 0;
+/** An alert for an event: plugin-screen streams (screens.ts) decide who hears it. */
 function alert(kind: V.LiveAlertKind, sim: Sim, force = false): void {
-  for (const listener of listeners) {
-    if (!listener.alerts) continue;
-    const favourite = [sim.home, sim.away].find(id => favouritesOf(listener.viewerId).has(entityKey(id)));
-    if (!favourite && !force) continue;
-    if (spoilered(sim, listener.viewerId) && kind !== 'started') continue;
-    const away = teamById(sim.away), home = teamById(sim.home);
-    const score = `${away?.short ?? ''} ${sim.scores[0]}–${sim.scores[1]} ${home?.short ?? ''}`;
-    const detail = statusOf(sim).detail;
-    const title = { started: 'Starting now', close: 'Close game', final: 'Final' }[kind];
-    const body = kind === 'started' ? `${away?.short} at ${home?.short} · ${LEAGUES[sim.league]!.name}` : `${score}, ${detail}`;
-    listener.send('alert', { id: `alert-${++alerts}`, kind, eventId: sim.id, entityKey: entityKey(favourite ?? sim.home), title, body, at: new Date().toISOString() } satisfies V.LiveAlert);
-  }
-}
-
-export function liveStream(req: Request, url: URL, viewerId: string, authorized: () => boolean): Response {
-  const list = (name: string) => new Set((url.searchParams.get(name) ?? '').split(',').filter(Boolean));
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
-  const encoder = new TextEncoder();
-  const listener: Listener = {
-    viewerId, events: list('events'), screens: list('screens'), alerts: url.searchParams.get('alerts') === '1',
-    send(name, data) { try { controller?.enqueue(encoder.encode(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`)); } catch { listener.close(); } },
-    close() { if (heartbeat) clearInterval(heartbeat); listeners.delete(listener); try { controller?.close(); } catch {} },
-  };
-  const stream = new ReadableStream<Uint8Array>({ start(c) {
-    controller = c;
-    listeners.add(listener);
-    // The current state of everything asked for, so nothing changed between the snapshot read and the connection is lost.
-    const current = [...sims.values()].filter(sim => wants(listener, sim)).map(sim => presentEvent(sim, viewerId));
-    if (current.length) listener.send('update', { events: current });
-    heartbeat = setInterval(() => { if (!authorized()) listener.close(); else listener.send('heartbeat', {}); }, 25_000);
-    req.signal.addEventListener('abort', () => listener.close(), { once: true });
-  }, cancel: () => listener.close() });
-  return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' } });
+  for (const hook of alertHooks) hook(kind, sim, force);
 }
 
 // Endpoints
 
 type Fail = (cls: V.ProtocolError['class'], code: string, message: string, extra?: Partial<V.ProtocolError>, status?: number) => never;
-const json = (data: unknown) => Response.json(data, { headers: { 'Cache-Control': 'no-store' } });
 let lineup: V.Channel[] = [];
 
 export function initSports(channels: V.Channel[]): void {
   lineup = channels;
   if (!sportsEnabled || sims.size) return;
   seedFixtures();
-  setInterval(tick, tickMs);
-}
-
-/** The Sports routes under /vela/v0; undefined for any other path. */
-export function sportsApi(req: Request, url: URL, method: string, path: string, viewerId: string, authorized: () => boolean, fail: Fail, body?: unknown): Response | undefined {
-  if (!sportsEnabled) return undefined;
-  logoOrigin ||= url.origin;
-  const screenMatch = /^\/screens\/([^/]+)$/.exec(path);
-  if (method === 'GET' && screenMatch) {
-    const value = screen(decodeURIComponent(screenMatch[1]!), viewerId, url.searchParams.get('league'), url.searchParams.get('date'));
-    if (!value) fail('not-found', 'screen_not_found', 'Screen not found');
-    return json(value);
-  }
-  if (method === 'GET' && path === '/live/events') {
-    const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean);
-    const events = [...sims.values()].filter(sim => !ids.length || ids.includes(sim.id)).map(sim => presentEvent(sim, viewerId));
-    return json({ events } satisfies V.LiveEventsResponse);
-  }
-  const eventMatch = /^\/live\/events\/([^/]+)(\/reveal)?$/.exec(path);
-  if (eventMatch) {
-    const sim = sims.get(decodeURIComponent(eventMatch[1]!));
-    if (!sim) fail('not-found', 'event_not_found', 'Live event not found');
-    if (method === 'GET' && !eventMatch[2]) return json(presentDetail(sim, viewerId));
-    if (method === 'POST' && eventMatch[2]) {
-      let set = revealed.get(viewerId);
-      if (!set) revealed.set(viewerId, set = new Set());
-      set.add(sim.id);
-      return json(presentDetail(sim, viewerId));
-    }
-  }
-  if (path === '/live/preferences') {
-    if (method === 'GET') return json({ spoilerFree: spoilerFreeFor(viewerId) } satisfies V.LivePreferences);
-    if (method === 'PUT') {
-      const value = (body as { spoilerFree?: unknown } | undefined)?.spoilerFree;
-      if (typeof value !== 'boolean') fail('request', 'invalid_preferences', 'spoilerFree must be true or false');
-      spoilerPreference.set(viewerId, value as boolean);
-      return json({ spoilerFree: value } satisfies V.LivePreferences);
-    }
-  }
-  if (method === 'GET' && path === '/live/stream') return liveStream(req, url, viewerId, authorized);
-  if (method === 'GET' && path === '/live/ticker') {
-    const events = [...sims.values()].filter(sim => sim.state === 'in' || sim.state === 'post' && now0 - sim.start < 30 * H || sim.state === 'pre' && sim.start - Date.now() < 6 * H)
-      .sort(byInterest(viewerId)).map(sim => presentEvent(sim, viewerId));
-    return json({ events } satisfies V.LiveEventsResponse);
-  }
-  if (method === 'GET' && path === '/live/entities') {
-    const league = url.searchParams.get('league'), q = (url.searchParams.get('q') ?? '').toLowerCase();
-    const entities = TEAMS.filter(t => (!league || t.league === league) && (!q || `${t.name} ${t.abbr}`.toLowerCase().includes(q))).map(t => entity(t, viewerId));
-    return json({ entities } satisfies V.LiveEntitiesResponse);
-  }
-  const favouriteMatch = /^\/favorites\/entities\/([^/]+)$/.exec(path);
-  if (favouriteMatch && (method === 'PUT' || method === 'DELETE')) {
-    const key = decodeURIComponent(favouriteMatch[1]!);
-    if (!TEAMS.some(t => entityKey(t.id) === key)) fail('not-found', 'entity_not_found', 'Entity not found');
-    if (method === 'PUT') favouritesOf(viewerId).add(key); else favouritesOf(viewerId).delete(key);
-    return json({ accepted: true });
-  }
-  return undefined;
+  if (!sportsFrozen) setInterval(tick, tickMs);
 }
 
 /** The live event on air on a channel (A6), for the playback snapshot and session stream. */
@@ -581,12 +478,19 @@ export function liveEventOnChannel(channelId: string | undefined): V.LiveEventRe
 }
 
 /** Admin: change the knobs, or push an alert for an event to every alert listener. */
-export function sportsAdmin(body: { providerCap?: number; spoilerFree?: boolean; alert?: { kind: V.LiveAlertKind; eventId: string } }): typeof sportsKnobs {
+export function sportsAdmin(body: { providerCap?: number; spoilerFree?: boolean; screenDelayMs?: number; screenFail?: boolean; favourites?: string[] | null; alert?: { kind: V.LiveAlertKind; eventId: string } }): typeof sportsKnobs & { now: string; frozen: boolean } {
   if (Number.isFinite(body.providerCap) && body.providerCap! >= 0) sportsKnobs.providerCap = Math.floor(body.providerCap!);
+  if (Number.isFinite(body.screenDelayMs) && body.screenDelayMs! >= 0) sportsKnobs.screenDelayMs = Math.min(600_000, Math.floor(body.screenDelayMs!));
+  if (typeof body.screenFail === 'boolean') sportsKnobs.screenFail = body.screenFail;
+  // Every viewer starts again from these favourites (null: the defaults); reveals are forgotten too.
+  if (body.favourites === null || Array.isArray(body.favourites)) {
+    startingFavourites = body.favourites?.filter(id => TEAMS.some(t => t.id === id)) ?? DEFAULT_FAVOURITES;
+    favourites.clear(); revealed.clear();
+  }
   if (typeof body.spoilerFree === 'boolean') { sportsKnobs.spoilerFree = body.spoilerFree; spoilerPreference.clear(); }
   const sim = body.alert && sims.get(body.alert.eventId);
   if (sim && body.alert) alert(body.alert.kind, sim, true);
-  return sportsKnobs;
+  return { ...sportsKnobs, now: new Date(sportsNow()).toISOString(), frozen: sportsFrozen };
 }
 
 /** A team crest for the mock's logos: the abbreviation on transparent, drawn over the team colour. */
@@ -660,3 +564,39 @@ export function replanTile(plan: V.PlaybackPlan, maxHeight: number): V.PlaybackP
   if (JSON.stringify(plan.paths.map(path => path.qualities.map(quality => quality.id))) !== before) plan.revision += 1;
   return plan;
 }
+
+// Plugin screens access (W2): read-only views of the simulation for mock-server/screens.ts, which
+// derives Ether's view-model records from them, and hooks for its stream.
+const changeHooks = new Set<(changed: Sim[]) => void>();
+const alertHooks = new Set<(kind: V.LiveAlertKind, sim: Sim, force: boolean) => void>();
+export type SportsSim = Sim;
+export type SportsTeam = Team;
+export const sportsModel = {
+  plugin: PLUGIN,
+  feed: FEED,
+  sims: (): Sim[] => [...sims.values()],
+  sim: (id: string): Sim | undefined => sims.get(id),
+  leagues: (): (V.LiveLeague & { category: string })[] => Object.values(LEAGUES),
+  league: (id: string) => LEAGUES[id],
+  teams: (): Team[] => TEAMS,
+  standings: (league: string): V.LiveTable[] | undefined => STANDINGS[league],
+  /** The event as this viewer reads it (spoiler mask applied), and its detail. */
+  event: (sim: Sim, viewerId: string): V.LiveEvent => presentEvent(sim, viewerId),
+  detail: (sim: Sim, viewerId: string): V.LiveEventDetail => presentDetail(sim, viewerId),
+  logo: (teamId: string) => `/vela/v0/sports-mock/logos/${teamId}.svg`,
+  favourites: (viewerId: string): Set<string> => favouritesOf(viewerId),
+  isFavourite: (sim: Sim, viewerId: string) => isFavourite(sim, viewerId),
+  spoilerFree: (viewerId: string) => spoilerPreference.get(viewerId) ?? sportsKnobs.spoilerFree,
+  setSpoilerFree: (viewerId: string, on: boolean) => { spoilerPreference.set(viewerId, on); },
+  reveal: (viewerId: string, id: string) => { let set = revealed.get(viewerId); if (!set) revealed.set(viewerId, set = new Set()); set.add(id); },
+  spoilered: (sim: Sim, viewerId: string) => spoilered(sim, viewerId),
+  /** An alert's words (title and body of the AlertFrame). */
+  alertText(kind: V.LiveAlertKind, sim: Sim): { title: string; body: string } {
+    const away = teamById(sim.away), home = teamById(sim.home);
+    const score = `${away?.short ?? ''} ${sim.scores[0]}–${sim.scores[1]} ${home?.short ?? ''}`;
+    const title = { started: 'Starting now', close: 'Close game', final: 'Final' }[kind];
+    return { title, body: kind === 'started' ? `${away?.short} at ${home?.short} · ${LEAGUES[sim.league]!.name}` : `${score}, ${statusOf(sim).detail}` };
+  },
+  onChange(hook: (changed: Sim[]) => void): () => void { changeHooks.add(hook); return () => changeHooks.delete(hook); },
+  onAlert(hook: (kind: V.LiveAlertKind, sim: Sim, force: boolean) => void): () => void { alertHooks.add(hook); return () => alertHooks.delete(hook); },
+};

@@ -2,6 +2,15 @@
 // text colour. Vela's own geometry; a document may instead give its own `paths`. The roles from
 // `filter` down are the compiled skins' shapes (Exact's symbol table at exact-client-final).
 export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
+  // Plugin screens (the kit and plugin documents; Sports' glyphs).
+  grid: { paths: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'], stroke: true },
+  /** Add to multiview on a plugin screen: four rounded 8x8 tiles (Sports' GridMark). */
+  tiles: { paths: ['M4.5 3h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 3 9.5v-5A1.5 1.5 0 0 1 4.5 3z', 'M14.5 3h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 13 9.5v-5A1.5 1.5 0 0 1 14.5 3z', 'M4.5 13h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 3 19.5v-5A1.5 1.5 0 0 1 4.5 13z', 'M14.5 13h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 13 19.5v-5A1.5 1.5 0 0 1 14.5 13z'], stroke: true },
+  'eye-off': { paths: ['M3 3l18 18', 'M10.6 5.1A10.4 10.4 0 0 1 12 5c6 0 9.5 7 9.5 7a17.6 17.6 0 0 1-3 3.9', 'M6.6 6.6C3.9 8.4 2.5 12 2.5 12S6 19 12 19a9.7 9.7 0 0 0 4.4-1', 'M9.9 9.9a3 3 0 0 0 4.2 4.2'], stroke: true },
+  bell: { paths: ['M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z', 'M10 21h4'], stroke: true },
+  star: { paths: ['M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z'], stroke: true },
+  tv: { paths: ['M3.5 6.5h17v11h-17z', 'M8.5 21h7', 'M9 2.5l3 4 3-4'], stroke: true },
+  trophy: { paths: ['M8 4h8v5a4 4 0 0 1-8 0z', 'M8 6H5a3 3 0 0 0 3 4', 'M16 6h3a3 3 0 0 1-3 4', 'M12 13v4', 'M8.5 20h7'], stroke: true },
   'play-fill': { paths: ['M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z'] },
   play: { paths: ['M7.5 5.2v13.6L19 12z'], stroke: true },
   pause: { paths: ['M8 5v14M16 5v14'], stroke: true },

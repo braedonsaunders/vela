@@ -7,7 +7,7 @@ import { mediaClass } from '../media';
 import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
-import { card, entry, feedRow, homeModel } from '../discovery/models';
+import { card, entry, feedRow, homeModel, isSurfaceRow } from '../discovery/models';
 import { homeCard, homeWatched, laterProgressRows, progressRow, reconcileHomeProgress, reconcileShelves, recorded, type Watched } from '../discovery/progress';
 import type { Card, Destination, HomeModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
@@ -342,10 +342,12 @@ export class Home {
       const rows = data.items
         .filter(row => !known.has(row.id) && !!known.add(row.id))
         .map(row => {
+          if (isSurfaceRow(row)) return feedRow(row, images, this.artWidth());
           const items = row.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id));
           return feedRow({ ...row, items }, images, this.artWidth());
         })
-        .filter(row => row.items.length > 0);
+        // A plugin's surface row has no items of its own; it keeps its place.
+        .filter(row => row.surface || row.items.length > 0);
       this.box.update('home', home => {
         if (!home.value || home.value.nextCursor !== cursor) return home;
         const value = { ...home.value, rows: [...home.value.rows, ...rows], nextCursor: data.nextCursor ?? '' };

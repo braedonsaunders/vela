@@ -25,7 +25,7 @@ export const libraries: Library[] = [
     browse: { sorts: [{ id: 'index', directions: ['asc'] }, { id: 'title', directions: ['asc', 'desc'] }, { id: 'lastViewed', directions: ['desc', 'asc'] }], defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'topic', label: 'Topic', type: 'strings', multi: true }, { id: 'creator', label: 'Creator', type: 'people', multi: true }, { id: 'length', label: 'Length', type: 'duration', multi: true }] } } } as Library;
   return { ...l, kind, presentation: { card: 'poster' }, tabs: kind === 'live' ? [{ id: 'library', label: 'Channels', kind: 'library' }] : [
-    { id: 'recommended', label: 'Recommended', kind: 'recommended' }, { id: 'library', label: 'Library', kind: 'library' }, { id: 'collections', label: 'Collections', kind: 'collections', ...(l.id === 'movies' ? { facet: 'studios', sort: 'released', direction: 'desc' } : {}) }], browse: { sorts: kind === 'live' ? [{ id: 'server', directions: ['asc'] }] : [
+    { id: 'recommended', label: 'Recommendations', kind: 'recommended' }, { id: 'library', label: 'Library', kind: 'library' }, { id: 'collections', label: 'Collections', kind: 'collections', ...(l.id === 'movies' ? { facet: 'studios', sort: 'released', direction: 'desc' } : {}) }], browse: { sorts: kind === 'live' ? [{ id: 'server', directions: ['asc'] }] : [
     { id: 'server', directions: ['asc'] }, { id: 'title', directions: ['asc', 'desc'] }, { id: 'year', directions: ['asc', 'desc'] }, { id: 'released', directions: ['asc', 'desc'] }],
     defaultSort: 'server', defaultDirection: 'asc', filters: kind === 'live' ? {} : {
       kind: kind === 'shows' ? ['show'] : kind === 'mixed' ? ['movie', 'show'] : ['movie'],

@@ -184,6 +184,7 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
         break;
       }
       case 'outline-style': if (v === 'none') s.outlineWidth = 0; break;
+      case 'outline-offset': s.outlineOffset = len(v); break;
       case 'box-shadow': s.boxShadow = v === 'none' ? undefined : pxText(withTokens(v), m); break;
       case 'filter': {
         if (v === 'none') break;

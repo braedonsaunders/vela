@@ -1,0 +1,252 @@
+{
+ "rev": 1764003123999,
+ "live": {
+  "topic": "lt1.sample-game"
+ },
+ "sources": {
+  "viewer": {
+   "spoilerFree": false,
+   "canSetSpoilerFree": true,
+   "locale": "en",
+   "favouriteCount": 5
+  },
+  "game": {
+   "event": {
+    "$record": "event:org.ether.sports:sports:nfl-nyg-phi"
+   },
+   "detail": {
+    "$record": "detail:org.ether.sports:sports:nfl-nyg-phi"
+   }
+  }
+ },
+ "errors": {},
+ "records": {
+  "event:org.ether.sports:sports:nfl-nyg-phi": {
+   "rev": 1764003120000,
+   "value": {
+    "id": "org.ether.sports:sports:nfl-nyg-phi",
+    "feed": "sports",
+    "spoiler": false,
+    "close": true,
+    "favourite": true,
+    "situation": [
+     {
+      "label": "Down",
+      "value": "3rd & 6"
+     },
+     {
+      "label": "Ball",
+      "value": "NYG 38"
+     }
+    ],
+    "watch": {
+     "targets": [
+      {
+       "kind": "channel",
+       "channelId": "ch-107",
+       "name": "Matchday",
+       "number": "107",
+       "live": true,
+       "confidence": 0.95
+      },
+      {
+       "kind": "channel",
+       "channelId": "ch-120",
+       "name": "Metro Sports 1",
+       "number": "120",
+       "live": true,
+       "confidence": 0.7
+      }
+     ],
+     "airing": [
+      {
+       "name": "FOX"
+      }
+     ],
+     "primary": {
+      "kind": "channel",
+      "channelId": "ch-107",
+      "name": "Matchday",
+      "number": "107",
+      "live": true,
+      "confidence": 0.95
+     }
+    },
+    "phase": "live",
+    "state": "in",
+    "detail": "Q4 · 2:14",
+    "clock": "2:14",
+    "period": 4,
+    "scored": true,
+    "title": "Giants at Eagles",
+    "start": "2026-11-24T17:00:00.000Z",
+    "league": {
+     "id": "nfl",
+     "name": "NFL",
+     "abbr": "NFL",
+     "label": "NFL"
+    },
+    "venue": "Lincoln Financial Field, Philadelphia",
+    "sides": [
+     {
+      "id": "nfl-nyg",
+      "name": "New York Giants",
+      "short": "Giants",
+      "abbr": "NYG",
+      "logo": "/vela/v0/images/p/sports/nfl-nyg.svg",
+      "color": "#0b2265",
+      "altColor": "#a71930",
+      "record": "4-7",
+      "entityId": "nfl-nyg",
+      "favourite": false,
+      "winner": false,
+      "loser": false,
+      "score": "24",
+      "share": 17,
+      "leads": false
+     },
+     {
+      "id": "nfl-phi",
+      "name": "Philadelphia Eagles",
+      "short": "Eagles",
+      "abbr": "PHI",
+      "logo": "/vela/v0/images/p/sports/nfl-phi.svg",
+      "color": "#004c54",
+      "altColor": "#a5acaf",
+      "record": "9-2",
+      "entityId": "nfl-phi",
+      "favourite": true,
+      "winner": false,
+      "loser": false,
+      "score": "27",
+      "share": 83,
+      "leads": true,
+      "possession": true
+     }
+    ],
+    "probability": {
+     "home": 0.83,
+     "away": 0.17,
+     "subjectSide": 1,
+     "leader": {
+      "abbr": "PHI",
+      "share": 83
+     }
+    },
+    "possessionLabel": "Possession"
+   }
+  },
+  "detail:org.ether.sports:sports:nfl-nyg-phi": {
+   "rev": 1764003120100,
+   "value": {
+    "id": "org.ether.sports:sports:nfl-nyg-phi",
+    "plays": [
+     {
+      "clock": "11:02",
+      "period": 4,
+      "text": "Hurts 2 yd run, TOUCHDOWN · PHI 24–17",
+      "emphasis": "score",
+      "competitorId": "nfl-phi"
+     },
+     {
+      "clock": "8:15",
+      "period": 4,
+      "text": "Hurts sacked at PHI 30 for -8 yards (Burns)",
+      "emphasis": "key",
+      "competitorId": "nfl-nyg"
+     },
+     {
+      "clock": "2:14",
+      "period": 4,
+      "text": "Barkley rush right for 7 yards",
+      "emphasis": "normal",
+      "competitorId": "nfl-phi"
+     }
+    ],
+    "playsNewest": [
+     {
+      "clock": "2:14",
+      "period": 4,
+      "text": "Barkley rush right for 7 yards",
+      "emphasis": "normal",
+      "competitorId": "nfl-phi"
+     },
+     {
+      "clock": "8:15",
+      "period": 4,
+      "text": "Hurts sacked at PHI 30 for -8 yards (Burns)",
+      "emphasis": "key",
+      "competitorId": "nfl-nyg"
+     },
+     {
+      "clock": "11:02",
+      "period": 4,
+      "text": "Hurts 2 yd run, TOUCHDOWN · PHI 24–17",
+      "emphasis": "score",
+      "competitorId": "nfl-phi"
+     }
+    ],
+    "tables": [
+     {
+      "title": "Scoring",
+      "columns": [
+       "Team",
+       "Q1",
+       "Q2",
+       "Q3",
+       "Q4",
+       "T"
+      ],
+      "rows": [
+       {
+        "cells": [
+         "NYG",
+         "7",
+         "3",
+         "7",
+         "7",
+         "24"
+        ]
+       },
+       {
+        "cells": [
+         "PHI",
+         "0",
+         "14",
+         "3",
+         "10",
+         "27"
+        ],
+        "highlight": true,
+        "entityId": "nfl-phi"
+       }
+      ]
+     }
+    ],
+    "probabilitySeries": [
+     {
+      "t": 0,
+      "value": 0.5
+     },
+     {
+      "t": 0.5,
+      "value": 0.45
+     },
+     {
+      "t": 0.95,
+      "value": 0.83
+     }
+    ],
+    "links": [
+     {
+      "label": "Game centre",
+      "url": {
+       "href": "https://example.invalid/sports/nfl-nyg-phi",
+       "host": "example.invalid"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

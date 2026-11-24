@@ -17,6 +17,7 @@ import type { LiveView } from './widgets/guide/controller';
 import { LIVE_VOCABULARY, liveCollection } from './widgets/guide/vocabulary';
 import type { CollectionPage, LibraryOption, LibraryPage } from './widgets/library/model';
 import { LIBRARY_VOCABULARY, libraryCollection } from './widgets/library/vocabulary';
+import type { ScreenScope } from './screen/scope';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export type Card = ReturnType<typeof entry>;
@@ -42,11 +43,12 @@ export interface Env {
   canLive: boolean;
   canPlaylists: boolean;
   canSwitchProfile: boolean;
-  /** Live events: the viewer can hide scores (a plugin screen exists and the preference is known). */
-  canHideScores?: boolean;
-  /** Scores are hidden (spoiler-free). */
-  hideScores?: boolean;
   width: number;
+  /** Screen documents (env.canMultiview, env.canPlay): multiview is available here; playback is (default true). */
+  canMultiview?: boolean;
+  canPlay?: boolean;
+  /** Screen documents (env.isTV): a TV device, where env.tv is the TV class (a TV, or a window 1600px or wider). */
+  isTV?: boolean;
   home?: HomeModel;
   heroIndex: number;
   libraries: Destination[];
@@ -112,6 +114,8 @@ export interface Ctx {
   opt?: LibraryOption;
   /** The identity of a row or card in a shelf (identityKeys): kept when the shelf reorders. */
   key?: string;
+  /** A screen or surface document's data, records, local state and item aliases (screen/scope.ts). */
+  screen?: ScreenScope;
   index: number;
 }
 
@@ -265,6 +269,15 @@ export const VOCABULARY: Record<string, Accessor> = {
   'row.landscape': c => (c.row ? yes(c.row.items.length > 0 && c.row.items.every(i => i.kind === 'episode' || (i.progressSeconds > 0 && !i.played))) : ''),
   'row.resume': c => (c.row ? yes(c.row.items.length > 0 && c.row.items.every(i => i.progressSeconds > 0 && !i.played)) : ''),
   'row.previewOnFocus': c => (c.row ? yes(c.row.previewOnFocus) : ''),
+  // Recommendations presentation (Ether): how the row draws (standard|hero|wide|tiles|tracks; unknown
+  // values read standard), its card (poster|landscape|square|round, or ''), the items' media role,
+  // whether its titles are the viewer's own, its library and experience (watch|listen|read|gallery|live).
+  'row.layout': c => c.row?.layout ?? '',
+  'row.card': c => c.row?.card ?? '',
+  'row.role': c => c.row?.role ?? '',
+  'row.personal': c => (c.row ? yes(c.row.personal) : ''),
+  'row.library': c => c.row?.library ?? '',
+  'row.experience': c => c.row?.experience ?? '',
   'row.loadingMore': (c, e) => (c.row ? yes(e.rowLoading.includes(c.row.id)) : ''),
   'pager.overflows': pagerBinding((c: Ctx) => (c.row ? yes(!(pagerState(c.row.id)?.atStart ?? true) || !(pagerState(c.row.id)?.atEnd ?? true)) : '')),
   'pager.atStart': pagerBinding((c: Ctx) => (c.row ? yes(pagerState(c.row.id)?.atStart ?? true) : '')),
@@ -333,8 +346,6 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.canLive': (_, e) => yes(e.canLive),
   'env.canPlaylists': (_, e) => yes(e.canPlaylists),
   'env.canSwitchProfile': (_, e) => yes(e.canSwitchProfile),
-  'env.canHideScores': (_, e) => yes(e.canHideScores === true),
-  'env.hideScores': (_, e) => yes(e.hideScores === true),
   'env.heroCount': (_, e) => (e.home ? String(e.home.hero.length) : ''),
   'env.heroIndex': (_, e) => String(e.heroIndex),
   'env.rowCount': (_, e) => (e.home ? String(e.home.rows.length) : ''),
