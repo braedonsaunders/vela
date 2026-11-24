@@ -103,7 +103,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
 export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
-  const previewExpired = useVelaState(state => (state.screens as { preview?: { expired?: boolean } | null }).preview?.expired === true);
+  const previewExpired = useVelaState(state => state.screens.preview?.expired === true);
   const { resolved, problem } = useResolved(document.value, host);
   // Only the params the page declares are read (an address may carry other keys); before the
   // document is known every given param goes, so the first read does not wait for it.

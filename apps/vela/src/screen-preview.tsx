@@ -15,13 +15,6 @@ import { PX } from '@vela/skin/src/css';
 const KEY = 'vela.screenPreview';
 const PARAM = 'screenPreview';
 
-/** What core offers for previews (W2's Screens), read where it exists. */
-interface PreviewApi {
-  setPreview?(token: string | null | undefined): Promise<void>;
-  reload?(screen?: string, page?: string): Promise<void>;
-  origin?(): string | undefined;
-}
-
 /** The token from the address, kept for the tab; and where the preview opened (to return after sign-in). */
 function capture(): { token?: string; path?: string } {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return {};
@@ -60,17 +53,16 @@ export function startPreview(store: Store): void {
   const token = previewToken();
   if (!token) return;
   setForcedMute(true);
-  void (store.screens as PreviewApi).setPreview?.(token);
+  void store.screens.setPreview(token);
 }
 
 /** While previewing: the console's reload messages re-read the drafts they name. */
 export function usePreviewReload(store: Store): void {
   useEffect(() => {
     if (!previewToken() || Platform.OS !== 'web' || typeof window === 'undefined' || window.parent === window) return;
-    const screens = store.screens as PreviewApi;
     const onMessage = (event: MessageEvent) => {
-      const reload = acceptReload(event, window.parent, screens.origin?.());
-      if (reload) void screens.reload?.(reload.screen, reload.page);
+      const reload = acceptReload(event, window.parent, store.screens.origin());
+      if (reload) void store.screens.reload(reload.screen, reload.page);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -79,7 +71,7 @@ export function usePreviewReload(store: Store): void {
 
 /** The small badge a previewing tab shows over the shell. */
 export function PreviewBadge() {
-  const preview = useVelaState(state => (state.screens as { preview?: { token: string } | null }).preview);
+  const preview = useVelaState(state => state.screens.preview);
   if (!previewToken() && !preview?.token) return null;
   return (
     <View pointerEvents="none" testID="screen-preview-badge" style={{ position: 'absolute', left: 12 * PX, bottom: 12 * PX, zIndex: 1000,
