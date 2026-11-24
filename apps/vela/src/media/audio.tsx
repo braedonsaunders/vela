@@ -11,10 +11,10 @@ import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '@vela/skin/src/widge
 import { MOTION, Presence } from '@vela/skin/src/presence';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
-import { soundSettings } from '@vela/core';
+import { soundSettings, type Vela as Store } from '@vela/core';
 import { useVela } from '../vela';
 import { preferences } from '../data/preferences';
-import { audioDiagnostics, createAudioEngine, syncMediaSession, type MediaSessionControls } from './audio-engine';
+import { audioDiagnostics, createAudioEngine, syncMediaSession, type AppAudioEngine, type MediaSessionControls } from './audio-engine';
 import { useMediaPageActions } from './actions';
 import { musicTV, onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
 import { useMediaPlayerActions } from './player-actions';
@@ -53,6 +53,22 @@ const SOUND_PREFERENCE = 'sound';
 const NOW_PLAYING_ENTER = 420;
 const NOW_PLAYING_EXIT = 280;
 
+/**
+ * The audio engine and its native player belong to the process, like the store (vela.tsx), not to a
+ * mount of the app's tree: Android's Back out of the app unmounts the tree while music plays on, with
+ * its notification, and opening the app mounts it again over the same queue. So one engine is attached
+ * per store and kept, never detached (which would stop the music) or made again (whose subscription
+ * would pass each system command on a second time).
+ */
+let attached: { store: Store; engine: AppAudioEngine | null; detach: () => void } | undefined;
+
+function attachAudioEngine(store: Store): void {
+  if (attached?.store === store) return;
+  if (attached) { attached.detach(); attached.engine?.dispose(); }
+  const engine = createAudioEngine(() => store.playback.mediaAccess());
+  attached = { store, engine, detach: store.audio.attach(engine) };
+}
+
 export function AudioDock() {
   const vela = useVela();
   const store = vela.store;
@@ -63,13 +79,7 @@ export function AudioDock() {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<NowPlayingPanel | undefined>(undefined);
   useEffect(() => onOpenNowPlaying(next => { setPanel(next); setOpen(true); }), []);
-  // The engine belongs to this mount: unmounted (the tree can mount again in the same runtime), it stops
-  // listening, so a system media command (notification, lock screen, headset) reaches the queue once.
-  useEffect(() => {
-    const engine = createAudioEngine(() => store.playback.mediaAccess());
-    const detach = store.audio.attach(engine);
-    return () => { detach(); engine?.dispose(); };
-  }, [store]);
+  useEffect(() => attachAudioEngine(store), [store]);
   // Development checks read what the audio did (docs/sound.md): the store's audio and the engine's last crossfade.
   useEffect(() => {
     if (!__DEV__) return;
