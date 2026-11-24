@@ -371,11 +371,12 @@ export class Audio {
    * Keep the prepared item in step: forget one that no longer plays next (the queue changed, or the
    * viewer sought far back), and ask for the one that does once the playing item nears its end.
    *
-   * A server may keep one session per device and end the playing one when the next is asked for
-   * (Ether does). So the next plan waits until the engine holds the rest of the playing item (its
-   * buffered range reaches the end; the last few seconds go ahead regardless), the playing item's
-   * position is reported first, and spoken word, whose resume point that position becomes, waits until
-   * its last seconds.
+   * A server with queued sessions (features.queuedPlayback) opens the next plan beside the playing one,
+   * which it keeps until the next is first observed playing. A server without them may keep one session
+   * per device and end the playing one when the next is asked for (Ether did): there the next plan waits
+   * until the engine holds the rest of the playing item (its buffered range reaches the end; the last
+   * few seconds go ahead regardless), and spoken word, whose resume point the last report becomes,
+   * waits until its last seconds. Either way the playing item reports where it is first.
    */
   private lookAhead(position = this.engine?.position() ?? this.state.positionSeconds): void {
     if (!this.engine || !this.sessionId) return;
@@ -383,11 +384,11 @@ export class Audio {
     const duration = this.state.durationSeconds;
     const remaining = duration > 0 ? duration - position : Infinity;
     const cls = current(this.state.queue)?.media?.class;
-    const lead = preloadLead(duration, cls === 'audiobook' || cls === 'podcast');
+    const lead = preloadLead(duration, !this.playback.queuedPlayback && (cls === 'audiobook' || cls === 'podcast'));
     if (this.prepared && (this.prepared.id !== upcoming?.id || remaining > lead + PRELOAD_RELEASE_MARGIN)) this.forget();
     if (!upcoming || this.prepared || remaining > lead || this.declined === `${this.sessionId}:${upcoming.id}`) return;
     if (this.state.phase !== 'playing' && this.state.phase !== 'buffering') return;
-    if (remaining > PRELOAD_LAST_CALL && !this.bufferedToEnd(duration)) return;
+    if (!this.playback.queuedPlayback && remaining > PRELOAD_LAST_CALL && !this.bufferedToEnd(duration)) return;
     void this.prepare(upcoming.id);
   }
 

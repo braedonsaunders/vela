@@ -127,11 +127,16 @@ interface PlaybackPlan { /* existing … */ media?: 'video' | 'audio' }   // omi
   position across them. One joined server timeline is a later improvement.
   Chapters inside one file still come through `chapters`.
 - Gapless: client-side (Vela prefetches the next queued track's plan). No field.
-  The next plan is asked for while the current track still plays, so a server must
-  not end a device's playing audio session when the same device opens the next
-  one. Ether does today (the first session's media answers 404 as soon as the
-  second exists); Vela works around it (see Gapless playback in section 3) at the
-  cost of the playing track's session ending up to ~20 s early.
+  The next plan is asked for while the current track still plays. A server that
+  states `features.queuedPlayback` takes `PlaybackRequest.queued: true` for it: that
+  session coexists with the playing one (its media may be read) and takes the device
+  over on its first `playing`, `paused` or `buffering` observation, which Vela sends
+  as soon as it plays; an ordinary request still supersedes everything, and a newer
+  queued one replaces an older unplayed one. A server without it may end the
+  device's playing session when the next one opens (Ether did before it: the first
+  session's media answered 404 as soon as the second existed); Vela then works
+  around it (see Gapless playback in section 3) at the cost of the playing track's
+  session ending a little early.
 - Progress: observations update `WatchState.positionSeconds` exactly as today.
   Resume policy by class (data, not code): `music` never enters Continue and
   never stores a resume point for tracks; `audiobook` and `podcast` do.
@@ -244,10 +249,11 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   state) and hands its URL to the engine (`AudioEngine.preload`); the engine plays it
   straight on and says `advanced`, the finished item reports `ended` once and its
   session stops, and the prepared plan becomes the playing session (`Playback.adopt`).
-  The lead is 20 s (half a short track, at least 4 s; 6 s for spoken word), and the
-  plan is only asked for once the engine's buffered range reaches the playing item's
-  end (or in its last 5 s), with its position reported first, because Ether ends a
-  device's playing session when the next one opens. Play next, remove, move,
+  The lead is 20 s (half a short track, at least 4 s), asked for as a queued session
+  where the server offers them. Where it does not, the plan is only asked for once the
+  engine's buffered range reaches the playing item's end (or in its last 5 s), and
+  spoken word waits until its last 6 s, because such a server may end the playing
+  session when the next one opens. The playing item reports its position first. Play next, remove, move,
   shuffle, repeat and sleep-at-end re-plan the prepared item (the old one is
   released), seeking far back gives it back, seeking near the end prepares at once,
   repeat-one prepares the same title again, and Next while it is ready plays it on its

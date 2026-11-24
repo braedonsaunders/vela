@@ -36,10 +36,11 @@ async function advance(ms: number): Promise<void> {
 
 const DURATION = 200;
 
-function harness(options: { gapless?: boolean; duration?: number; buffered?: () => number } = {}) {
+function harness(options: { gapless?: boolean; duration?: number; buffered?: () => number; queued?: boolean } = {}) {
   const gapless = options.gapless ?? true;
   const duration = options.duration ?? DURATION;
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
+  const requests: { titleId: string; queued?: boolean }[] = [];
   const preloads: (AudioPreload | null)[] = [];
   const reports: { sessionId: string; state: string; position: number }[] = [];
   const titles = new Map<string, string>();
@@ -49,8 +50,9 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
     selectedPathId: 'direct', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null,
   } as unknown as PlaybackPlan);
   const adapter = {
-    startPlayback: async (request: { titleId: string }) => {
+    startPlayback: async (request: { titleId: string; queued?: boolean }) => {
       starts.push(request.titleId);
+      requests.push(request);
       const id = `s${starts.length}`;
       titles.set(id, request.titleId);
       return plan(id, request.titleId);
@@ -63,7 +65,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
     },
     detail: async (id: string) => ({ title: { id, watch: { positionSeconds: 0 } } }),
   };
-  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
+  const session = { epoch: 0, features: options.queued ? { queuedPlayback: { available: true } } : {}, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
   const box = new StateBox({ playback: initialPlayback, audio: initialAudio, auth: { phase: 'signed-in' } } as unknown as VelaState);
   const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
   const audio = new Audio(box, session as unknown as Session, playback, () => 0);
@@ -103,7 +105,7 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
   };
   const seek = (seconds: number) => { position = seconds; };
   const fail = () => { playing = false; emit('error'); };
-  return { audio, box, starts, stops, loads, preloads, reports, play, seek, fail, held: () => queued, isPlaying: () => playing };
+  return { audio, box, starts, stops, loads, preloads, reports, requests, play, seek, fail, held: () => queued, isPlaying: () => playing };
 }
 
 const track = (id: string, cls = 'music') => ({ id, kind: 'episode', name: id, durationSeconds: DURATION, media: { class: cls } } as unknown as Card);
@@ -377,4 +379,22 @@ test('short tracks prepare at half their length', async () => {
   expect(h.starts).toEqual(['t1', 't2']);
   await h.play(30);
   expect(h.loads).toEqual(['/media/s1', 'advanced:/media/s2', 'advanced:/media/s3']);
+});
+
+test('a server with queued sessions gets the next plan as queued, twenty seconds out, buffered or not', async () => {
+  const h = harness({ queued: true, buffered: () => 30 });
+  h.audio.play({ items: [track('p1', 'audiobook'), track('p2', 'audiobook')], index: 0 });
+  await settle();
+  await h.play(185);
+  expect(h.starts).toEqual(['p1', 'p2']);
+  expect(h.requests.map(r => !!r.queued)).toEqual([false, true]);
+  await h.play(20);
+  // Its first report once it plays is what takes the device over.
+  expect(h.reports.find(r => r.sessionId === 's2')?.state).toBe('playing');
+  // A server without them never sees the field.
+  const plain = harness();
+  plain.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await plain.play(185);
+  expect(plain.requests.every(r => r.queued === undefined)).toBe(true);
 });

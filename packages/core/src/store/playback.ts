@@ -622,6 +622,8 @@ export class Playback {
       titleId: target.id,
       ...(target.positionSeconds !== undefined ? { positionSeconds: target.positionSeconds } : {}),
       ...(target.context && this.session.features?.playContexts?.available ? { context: target.context } : {}),
+      // A server with queued sessions keeps the playing one until this one is first observed playing.
+      ...(this.queuedPlayback ? { queued: true } : {}),
       client: this.session.client,
       idempotencyKey: `prepare-title-${target.id}-${randomId()}`,
     });
@@ -630,6 +632,10 @@ export class Playback {
     if (epoch !== this.session.epoch) { this.release(plan); return null; }
     return plan;
   }
+
+  /** The server opens a prepared plan beside the playing session (features.queuedPlayback): asking for
+   * it early ends nothing. Without it a server may end the device's playing session (Ether did). */
+  get queuedPlayback(): boolean { return !!this.session.features?.queuedPlayback?.available; }
 
   /** Give back a prepared plan that will not play: the server releases its session. */
   release(plan: V.PlaybackPlan): void {
