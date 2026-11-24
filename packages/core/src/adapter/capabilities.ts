@@ -85,8 +85,9 @@ export function hasLibraryLive(adapter: ServerAdapter): adapter is ServerAdapter
 
 /** A title's children (an artist's albums, an album's tracks, a series' books), page by page. */
 export interface TitleChildren {
-  /** `role`: one child level's children, sent only with features.pluginLevels.childRoles. */
-  children(id: string, cursor?: string, limit?: number, role?: string): Promise<V.ChildrenPage>;
+  /** `role`: one child level's children, sent only with features.pluginLevels.childRoles.
+   * `signal` abandons the read (an adapter may ignore it). */
+  children(id: string, cursor?: string, limit?: number, role?: string, signal?: AbortSignal): Promise<V.ChildrenPage>;
 }
 export function hasTitleChildren(adapter: ServerAdapter): adapter is ServerAdapter & TitleChildren {
   return 'children' in adapter && typeof adapter.children === 'function';

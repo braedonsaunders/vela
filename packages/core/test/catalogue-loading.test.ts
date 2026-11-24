@@ -65,6 +65,31 @@ test('opening eleven library pages reads each cursor exactly once', async () => 
     .toEqual(items.slice(0, 11).map(item => item.kind === 'title' ? item.title.id : item.id));
 });
 
+test("a view asking its own page size reads that many a page, appends each next page and keeps its own key", async () => {
+  const f = setup();
+  const items = answer().items;
+  const asked: LibraryBrowseQuery[] = [];
+  f.read(async query => {
+    asked.push(query);
+    const offset = Number(query.cursor ?? 0);
+    // No total: the end is only the exhausted continuation.
+    return { ...answer(), items: items.slice(offset, Math.min(5, offset + 2)), continuation: offset + 2 < 5 ? 'more' : 'exhausted', nextCursor: offset + 2 < 5 ? String(offset + 2) : undefined };
+  });
+  const view = { tab: 'albums', query: 'dave', limit: 50 };
+  const key = libraryKey('music', view);
+  expect(key).not.toBe(libraryKey('music', { tab: 'albums', query: 'dave' }));
+  // Without a limit the key is what it always was.
+  expect(libraryKey('music', { tab: 'albums' })).toBe(JSON.stringify(['music', 'albums', null, null, null, null, null, null, null, null, null, []]));
+  await f.catalogue.library('music', view);
+  expect(f.box.get().library[key]?.value).toMatchObject({ more: true, pages: 1 });
+  await f.catalogue.library('music', view, 2);
+  await f.catalogue.library('music', view, 3);
+  expect(asked.map(query => [query.tab, query.query, query.limit, query.cursor])).toEqual([['albums', 'dave', 50, undefined], ['albums', 'dave', 50, '2'], ['albums', 'dave', 50, '4']]);
+  expect(f.box.get().library[key]?.value?.items).toHaveLength(5);
+  expect(f.box.get().library[key]?.value?.more).toBe(false);
+  expect(f.box.get().library[key]?.value?.total).toBeUndefined();
+});
+
 test('an expired cursor replaces the old snapshot and restarts only once', async () => {
   const f = setup();
   const items = answer().items;

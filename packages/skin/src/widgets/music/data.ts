@@ -1,6 +1,6 @@
 // The music app's reads, over the store's existing loaders (titles, children, detail rows,
-// library rows, playlists, listening recap, playlist import, duplicates). Each is bounded by the
-// server's page size.
+// library rows, playlists, listening recap, playlist import, duplicates). A title's children and
+// the albums a search matches read page after page; the rest are bounded by the server's page size.
 import { useEffect, useMemo, useState } from 'react';
 import { childrenKey, libraryHomeTab, libraryKey, type Card, type ChildrenModel, type CollectionModel, type DetailModel, type Loadable, type PlaylistModel, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -16,10 +16,12 @@ export function useTitle(id: string | undefined): Loadable<DetailModel> | undefi
   return detail;
 }
 
-export function useChildren(id: string | undefined): Loadable<ChildrenModel> | undefined {
+/** A title's children, appended page by page as they land. `all`: every one there is (an
+ * artist's discography), not just the store's usual first thousand. */
+export function useChildren(id: string | undefined, all = false): Loadable<ChildrenModel> | undefined {
   const store = useVela();
   const children = useVelaState(state => (id ? state.children[childrenKey(id)] : undefined));
-  useEffect(() => { if (id) void store.media.children(id); }, [store, id]);
+  useEffect(() => { if (id) void store.media.children(id, false, undefined, all ? Infinity : undefined); }, [store, id, all]);
   return children;
 }
 
@@ -120,4 +122,32 @@ export function useLibraryItems(libraryId: string): { items: Card[]; loading: bo
   const library = useVelaState(state => state.library[libraryKey(libraryId, {})]);
   useEffect(() => { void store.catalogue.library(libraryId, {}).catch(() => undefined); }, [store, libraryId]);
   return { items: library?.value?.items ?? [], loading: !library?.value };
+}
+
+/** Albums per page in the albums a search matches. */
+export const ALBUMS_PAGE = 50;
+
+export type AlbumPages = { items: Card[]; loading: boolean; failed: boolean; more: boolean; loadMore(): void };
+
+/** Every album in the library matching `query`, from its album view (`tab`), 50 a page: the
+ * first page on open, the next when the page asks (scrolled to its end). The server gives no
+ * total, so none is shown; the end is its exhausted continuation. */
+export function useLibraryAlbums(libraryId: string, tab: string | undefined, query: string): AlbumPages {
+  const store = useVela();
+  const browse = useMemo(() => ({ tab, query, limit: ALBUMS_PAGE }), [tab, query]);
+  const key = libraryKey(libraryId, browse);
+  const view = useVelaState(state => (tab ? state.library[key] : undefined));
+  useEffect(() => { if (tab && query) void store.catalogue.library(libraryId, browse).catch(() => undefined); }, [store, libraryId, tab, query, browse]);
+  const value = view?.value;
+  const loading = view?.load === 'loading';
+  return {
+    items: value?.items ?? [],
+    loading: !!tab && (loading || !view),
+    failed: view?.load === 'failed',
+    more: !!value?.more,
+    loadMore: () => {
+      if (!tab || loading) return;
+      void store.catalogue.library(libraryId, browse, value?.more ? value.pages + 1 : value?.pages ?? 1).catch(() => undefined);
+    },
+  };
 }

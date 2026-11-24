@@ -26,6 +26,8 @@ import { FocusGroup, IconButton, Surface, transition } from './parts';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
 import { QueuePanel } from './queue';
 import { ListeningSearch } from './search';
+import { MusicAlbums } from './albums';
+import { PageScrollContext, usePageScroll } from './paging';
 
 function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
   if (page.kind === 'liked' && music) return <MusicLiked />;
@@ -35,6 +37,7 @@ function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
   if (page.kind === 'playlist') return <MusicPlaylist id={page.id} />;
   if (page.kind === 'title') return <ListeningTitle id={page.id} />;
   if (page.kind === 'search') return <ListeningSearch />;
+  if (page.kind === 'albums' && music) return <MusicAlbums query={page.query} />;
   return <ListeningHome />;
 }
 import { SoundBlock } from '../../blocks/sound';
@@ -55,6 +58,7 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   const narrow = m.width < 1180;
   const rail = collapsed || narrow;
   const page = app.place;
+  const scroll = usePageScroll(pageKey(page));
   const top = `calc(${m.small ? inset.small : inset.wide} + 6px)`;
   if (musicTV()) return <TVShell top={top} />;
   if (compactMusic(m)) return <CompactShell top={top} />;
@@ -74,8 +78,8 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
       <View style={{ flex: 1, flexDirection: 'row', minHeight: 0 }}>
         {side(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, rail ? 84 : 316, 'right')}
         {flush(
-          <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main">
-            {renderMusicPage(page, music)}
+          <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main" {...scroll.handlers}>
+            <PageScrollContext.Provider value={scroll}>{renderMusicPage(page, music)}</PageScrollContext.Provider>
           </ScrollView>)}
         {sideSound ? side(<SoundBlock onClose={() => setSoundOpen(false)} />, 360, 'left')
           : sideQueue ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
@@ -94,6 +98,7 @@ function CompactShell({ top }: { top: string }) {
   const store = useVela();
   const m = useMediaLook();
   const page = app.place;
+  const scroll = usePageScroll(pageKey(page));
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
   useVelaState(state => state.home.load);
@@ -109,9 +114,9 @@ function CompactShell({ top }: { top: string }) {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }} accessibilityRole="tablist">
         {tabs.map(tab => <Chip key={tab.label} label={tab.label} on={samePlace(page, tab.place)} onPress={() => app.go(tab.place)} />)}
       </ScrollView>
-      <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main">
-        {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : renderMusicPage(page, music)}
+      <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main" {...scroll.handlers}>
+        <PageScrollContext.Provider value={scroll}>{page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
+          : renderMusicPage(page, music)}</PageScrollContext.Provider>
       </ScrollView>
     </View>
   );
@@ -126,6 +131,7 @@ function TVShell({ top }: { top: string }) {
   const m = useMediaLook();
   const host = useHost();
   const page = app.place;
+  const scroll = usePageScroll(pageKey(page));
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
   useVelaState(state => state.home.load);
@@ -143,9 +149,9 @@ function TVShell({ top }: { top: string }) {
         {music ? <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail /> : null}
       </FocusGroup>
       {/* The page ends above the floating mini player, so a focused row is never under it. */}
-      <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main">
-        {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : renderMusicPage(page, music)}
+      <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main" {...scroll.handlers}>
+        <PageScrollContext.Provider value={scroll}>{page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
+          : renderMusicPage(page, music)}</PageScrollContext.Provider>
       </ScrollView>
     </View>
   );
@@ -157,7 +163,7 @@ function flush(children: ReactNode): ReactNode {
 }
 
 function pageKey(place: MusicPlace): string {
-  return place.kind === 'title' || place.kind === 'playlist' ? `${place.kind}:${place.id}` : place.kind;
+  return place.kind === 'title' || place.kind === 'playlist' ? `${place.kind}:${place.id}` : place.kind === 'albums' ? `albums:${place.query}` : place.kind;
 }
 
 type Filter = 'all' | 'playlists' | 'albums' | 'artists';
