@@ -136,6 +136,8 @@ export class Playback {
   private followNow: ((sessionId: string) => void) | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private media: { identity: string; handle: string } | undefined;
+  /** Told when a new grant replaces an earlier one for the same session (`followMediaAccess`). */
+  private readonly mediaListeners = new Set<() => void>();
   /** The version read in flight, so a second ask for the same session shares it. */
   private versionsRead: { run: object; sessionId: string; done: Promise<void> } | undefined;
   private versionsTimer: ReturnType<typeof setTimeout> | undefined;
@@ -900,6 +902,26 @@ export class Playback {
   }
 
   /**
+   * Keeps `install` holding the signed-in session's current grant: the one asked for now and, when a
+   * rotated credential replaces it, the new one (only the newest answer is installed). Returns the
+   * function that stops following; the caller clears what it installed.
+   */
+  followMediaAccess(install: (grant: MediaAccessGrant | null) => void): () => void {
+    let asked = 0;
+    let following = true;
+    const ask = () => {
+      const mine = ++asked;
+      this.mediaAccess().then(grant => { if (following && mine === asked) install(grant); }, () => undefined);
+    };
+    this.mediaListeners.add(ask);
+    ask();
+    return () => {
+      following = false;
+      this.mediaListeners.delete(ask);
+    };
+  }
+
+  /**
    * The selected server's media authorization for the trusted player host, or null for a server
    * whose plans carry their own authority (Ether's broker). Never part of state, a plan or a log.
    */
@@ -909,7 +931,13 @@ export class Playback {
     const media = connection.media;
     if (!media || !tokens) return null;
     const identity = JSON.stringify([connection.record.id, tokens.viewer.id, tokens.accessToken]);
-    if (this.media?.identity !== identity) this.media = { identity, handle: randomId() };
+    if (this.media?.identity !== identity) {
+      const replaced = this.media !== undefined;
+      this.media = { identity, handle: randomId() };
+      // A rotated credential (an Ether token refresh) retires the grant the player host holds the
+      // next time anyone asks for one (the audio queue asks for every item), so its owner is told.
+      if (replaced) for (const listener of [...this.mediaListeners]) listener();
+    }
     const handle = this.media.handle;
     const current = () => this.media?.handle === handle && this.session.selected() === connection;
     return {
