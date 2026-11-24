@@ -125,6 +125,23 @@ describe('pipes', () => {
     expect(dayText('2026-11-23')).toBe('Yesterday');
     expect(dayText('2026-11-26')).toBe('Thu 26');
     expect(dayText('2026-11-22')).toBe('Sun 22');
+  }));
+  test('day and start work without Intl.RelativeTimeFormat and formatToParts (Hermes)', () => withLocale(LOCALE, () => {
+    const relative = (Intl as { RelativeTimeFormat?: unknown }).RelativeTimeFormat;
+    const parts = Intl.DateTimeFormat.prototype.formatToParts;
+    (Intl as { RelativeTimeFormat?: unknown }).RelativeTimeFormat = undefined;
+    (Intl.DateTimeFormat.prototype as { formatToParts?: unknown }).formatToParts = undefined;
+    try {
+      expect(dayText('2026-11-24')).toBe('Today');
+      expect(dayText('2026-11-25')).toBe('Tomorrow');
+      expect(dayText('2026-11-23')).toBe('Yesterday');
+      expect(dayText('2026-11-26')).toBe('Thu 26');
+      expect(startText('2026-11-25T17:00:00Z')).toBe('Tomorrow 12:00 PM');
+      expect(startText('2026-11-25T00:30:00Z')).toBe('7:30 PM');
+    } finally {
+      (Intl as { RelativeTimeFormat?: unknown }).RelativeTimeFormat = relative;
+      Intl.DateTimeFormat.prototype.formatToParts = parts;
+    }
     expect(dayText('')).toBe('');
     expect(draw('{src.t|time}', {}, ctx(page({ sources: { t: '2026-11-25T00:30:00Z' } })))).toBe('7:30 PM');
     expect(draw('{src.t|date}', {}, ctx(page({ sources: { t: '2026-11-30' } })))).toBe('Nov 30');
