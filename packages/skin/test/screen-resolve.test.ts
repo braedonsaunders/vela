@@ -291,6 +291,20 @@ describe('fixtures', () => {
   });
 });
 
+describe('border widths are points', () => {
+  test('a document border is one point wherever px scale (TV); the kit tab keeps a scaled hairline', () => {
+    const tv = resolveScreenDocument(doc({ type: 'box', style: { border: '1px solid $ui.ink', 'border-top-width': '1px', padding: '8px' } }), { width: 1920, tv: true, scale: 1.25 }, 'en', {});
+    expect(fill(tv.tree.base.style.border, root({}), env)).toBe('0.8px solid #f5f1e9');
+    expect(fill(tv.tree.base.style['border-top-width'], root({}), env)).toBe('0.8px');
+    expect(fill(tv.tree.base.style.padding, root({}), env)).toBe('8px');
+    const tab = box(resolveScreenDocument(doc({ type: 'use', template: 'vela:tab', with: { label: 'NFL' } }), { width: 1920, tv: true, scale: 1.25 }, 'en', {}).tree);
+    expect(fill(tab.base.style.border, root({}), env)).toBe('1px solid #ffffff1a');
+    const crest = box(resolveScreenDocument(doc({ type: 'use', template: 'vela:crest', with: { abbr: 'X', color: '{src.c}', size: '52px' } }), { width: 1920, tv: true, scale: 1.25 }, 'en', {}).tree);
+    // max(1.5pt, 52px x 1.25 x 0.05 = 3.25pt), written as 2.6px for the renderer's x1.25.
+    expect(fill(crest.base.style.border, root({ c: '#00205b' }), env)).toBe('2.6px solid #00205b');
+  });
+});
+
 describe('half points', () => {
   test('a unitless line height beside a px font size draws as px(size x line), on half points everywhere', async () => {
     const { lineHeightPoints } = await import('../src/resolve/screen-style');
