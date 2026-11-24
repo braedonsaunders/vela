@@ -40,7 +40,13 @@ export {
   type TabBindingState,
 } from './layout-math';
 export { alpha, barOffset, createScalePx, isLight, mix, useBlockLook, type BlockLook } from './look';
-export { ScopedRecordNode, sameItems, samePageWithoutRev, sameScopedRecordProps } from './record-scope';
+export {
+  ScopedRecordNode,
+  nonSubscribingItemKey,
+  sameItems,
+  samePageWithoutRev,
+  sameScopedRecordProps,
+} from './record-scope';
 export {
   fitTable,
   fitTextMetrics,

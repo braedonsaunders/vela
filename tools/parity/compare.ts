@@ -12,7 +12,7 @@ import { decodePng, encodePng } from './png';
 import { diffImages, movingMask, RULE, verdict, type Rect } from './diff';
 import { DEVICE_MASKS } from './views';
 
-interface Capture { viewport: string; view: string; file: string; frame: string; description: string; review?: string; ok: boolean; error?: string }
+interface Capture { viewport: string; view: string; file: string; frame: string; description: string; review?: string; ok: boolean; error?: string; reviewedRegions?: (Rect & { note: string })[] }
 interface Manifest { variant: string; platform: string; now: string; captures: Capture[] }
 
 const { values } = parseArgs({ options: { legacy: { type: 'string' }, document: { type: 'string' }, out: { type: 'string' }, threshold: { type: 'string' } } });
@@ -25,7 +25,7 @@ if (legacy.now !== document.now) console.warn(`warning: the sets were captured a
 const threshold = Number(values.threshold ?? 10);
 const png = (dir: string, file: string) => decodePng(new Uint8Array(readFileSync(join(dir, file))));
 
-interface Row { viewport: string; view: string; description: string; status: 'pass' | 'fail' | 'review' | 'missing'; percent?: number; maxDisplacement?: number; changed?: number; masked?: number; reasons: string[]; legacy?: string; document?: string; diff?: string; review?: string }
+interface Row { viewport: string; view: string; description: string; status: 'pass' | 'fail' | 'review' | 'missing'; percent?: number; maxDisplacement?: number; changed?: number; masked?: number; reasons: string[]; reviewedNotes?: string[]; moved?: { x: number; y: number; width: number; height: number; shift: { dx: number; dy: number } | null }[]; legacy?: string; document?: string; diff?: string; review?: string }
 const rows: Row[] = [];
 for (const before of legacy.captures) {
   const after = document.captures.find(c => c.viewport === before.viewport && c.view === before.view);
@@ -33,7 +33,8 @@ for (const before of legacy.captures) {
   rows.push(row);
   if (!before.ok || !after?.ok) { row.reasons.push(!before.ok ? `legacy capture failed: ${before.error?.split('\n')[0]}` : after ? `document capture failed: ${after.error?.split('\n')[0]}` : 'no document capture'); continue; }
   const a = png(legacyDir, before.file), b = png(documentDir, after.file);
-  const mask: Rect[] = [...(DEVICE_MASKS[before.viewport] ?? [])];
+  const mask: Rect[] = [...(DEVICE_MASKS[before.viewport] ?? []), ...(after.reviewedRegions ?? []).map(({ note: _n, ...rect }) => rect)];
+  const reviewedNotes = [...new Set((after.reviewedRegions ?? []).map(r => r.note))];
   for (const [dir, capture, image] of [[legacyDir, before, a], [documentDir, after, b]] as const) {
     if (existsSync(join(dir, capture.frame))) mask.push(...movingMask(image, png(dir, capture.frame)));
   }
@@ -43,7 +44,9 @@ for (const before of legacy.captures) {
   const judged = verdict(result);
   Object.assign(row, {
     status: before.review ? 'review' : judged.pass ? 'pass' : 'fail', percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
-    masked: mask.length, reasons: judged.reasons,
+    masked: mask.length, reasons: judged.reasons, ...(reviewedNotes.length ? { reviewedNotes } : {}),
+    // The regions that moved too far, for finding them on the diff picture.
+    moved: result.regions.filter(r => (r.displacement ?? 0) > RULE.maxDisplacement).slice(0, 12).map(({ x, y, width, height, shift }) => ({ x, y, width, height, shift })),
     legacy: relative(out, join(legacyDir, before.file)), document: relative(out, join(documentDir, after.file)), diff: diffFile,
   });
 }
@@ -56,7 +59,7 @@ const lines = [
   `Pass ${count('pass')} · fail ${count('fail')} · review ${count('review')} · missing ${count('missing')}`, '',
   '| Viewport | View | Result | % differing | Max move (px) | Content changes | Masked regions | Notes | Images |',
   '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-  ...rows.map(r => `| ${r.viewport} | ${r.view} | ${r.status} | ${r.percent ?? ''} | ${r.maxDisplacement ?? ''} | ${r.changed ?? ''} | ${r.masked ?? ''} | ${[...r.reasons, r.review ?? ''].filter(Boolean).join('; ')} | ${r.diff ? `[legacy](${r.legacy}) · [document](${r.document}) · [diff](${r.diff})` : ''} |`),
+  ...rows.map(r => `| ${r.viewport} | ${r.view} | ${r.status} | ${r.percent ?? ''} | ${r.maxDisplacement ?? ''} | ${r.changed ?? ''} | ${r.masked ?? ''} | ${[...r.reasons, r.review ?? '', ...(r.reviewedNotes ?? []).map(n => `reviewed, left out: ${n}`)].filter(Boolean).join('; ')} | ${r.diff ? `[legacy](${r.legacy}) · [document](${r.document}) · [diff](${r.diff})` : ''} |`),
   '',
 ];
 writeFileSync(join(out, 'report.md'), lines.join('\n'));

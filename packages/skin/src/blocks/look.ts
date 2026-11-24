@@ -1,7 +1,7 @@
 // Shared visual tokens, scaling, and colour helpers for renderer-19 layout blocks.
 // Reads the active skin document's `ui` tokens (`resolveUi(host.doc.document.ui)`) and floating shell
-// bar offset (`barOffset`) so blocks match the active skin while preserving exact pixel parity with
-// the legacy Sports layout.
+// bar offset (`barOffset`) so blocks match the active skin, measured as the built-in Sports screen
+// was (pixel parity).
 import { useMemo } from 'react';
 import { Platform, useWindowDimensions, type TextStyle } from 'react-native';
 import { PX } from '../css';

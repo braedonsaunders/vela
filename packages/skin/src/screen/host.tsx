@@ -257,7 +257,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     // Before the document or the first read: the document's own skeleton once it is resolved.
     return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state, pool)} runtime={runtime} route={route} status={statusTop} /> : <View style={{ flex: 1 }} />;
   }
-  // The skeleton starts below the shell's bar; the failure centres in the whole section, as the hard-coded screens drew them.
+  // The skeleton starts below the shell's bar; the failure centres in the whole section, as the built-in Sports screen drew them.
   const status = page.load !== 'ready';
   const statusInset = page.load === 'loading' ? statusTop : 0;
   const node = page.load === 'failed' ? resolved.failure : page.load === 'loading' ? resolved.loading : resolved.tree;
@@ -279,7 +279,7 @@ const LOADING: ScreenPageState = { href: '', key: '', params: {}, sources: {}, p
 
 /** The page's tree (its sections scroll and keep clear of the shell themselves); or, with `status`
  * (the points to keep clear at the top), its loading or failure node filling the page below the
- * shell's bar, as the hard-coded screens drew their skeleton and failure. */
+ * shell's bar, as the built-in Sports screen drew its skeleton and failure. */
 function Draw({ host, node, ctx, runtime, route, status }: { host: SkinHost; node: RNode; ctx: ReturnType<typeof screenRoot>; runtime: ScreenBlockRuntime; route: boolean; status?: number }) {
   return (
     <ScreenBlockRuntimeProvider value={runtime}>

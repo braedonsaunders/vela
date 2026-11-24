@@ -26,7 +26,7 @@ import {
   resolveActiveTabValue,
   resolveShelfItemWidth,
 } from '../src/blocks/layout-math';
-import { samePageWithoutRev, sameScopedRecordProps } from '../src/blocks/record-scope';
+import { nonSubscribingItemKey, samePageWithoutRev, sameScopedRecordProps } from '../src/blocks/record-scope';
 import {
   fitTable,
   fitTextMetrics,
@@ -36,6 +36,7 @@ import {
   textWidth,
   type RawTableData,
 } from '../src/blocks/table-fit';
+import { createScreenBlockRuntime } from '../src/blocks/types';
 import { fill } from '../src/resolve';
 import { resolveScreenDocument } from '../src/resolve/screen';
 import { screenItems, screenRoot } from '../src/screen/items';
@@ -472,6 +473,61 @@ describe('action-validation (navigate, setParam, play, multiview, plugin, openLi
 });
 
 describe('record-scope isolation (per-card re-render count on live record push vs legacy Sports)', () => {
+  test('nonSubscribingItemKey and runtime.evalItemKey extract $record key without subscribing parent RecordReader', () => {
+    const parentSeen = new Set<string>();
+    const store = new RecordStore();
+    store.merge({
+      'event:game-1': { rev: 1, value: { id: 'game-1' } },
+    });
+    const resolved = resolveScreenDocument(
+      {
+        schema: 1,
+        kind: 'screen',
+        renderer: 19,
+        screen: 'sports',
+        page: 'index',
+        version: '1',
+        title: 'Sports',
+        presentation: 'section',
+        sources: {},
+        tree: {
+          type: 'shelf',
+          over: 'src.live.events',
+          as: 'e',
+          key: '{e.id}',
+          item: { type: 'text', text: '{e.id}' },
+        },
+      },
+      { width: 1920, tv: true },
+      'en',
+      {},
+    );
+    const shelfNode = resolved.tree as Extract<typeof resolved.tree, { kind: 'shelf' }>;
+    const env = { small: false, tv: true, still: false, width: 1920 } as Env;
+    const page: ScreenPageState = {
+      href: '/vela/v0/screens/sports/index',
+      key: 'screen:sports/index',
+      params: {},
+      sources: { live: { events: [{ $record: 'event:game-1' }] } },
+      pending: {},
+      errors: {},
+      load: 'ready',
+      rev: 1,
+    };
+    const rootCtx = screenRoot(page, key => {
+      parentSeen.add(key);
+      return store.get(key);
+    });
+    const runtime = createScreenBlockRuntime(() => null);
+    const items = runtime.evalItems(shelfNode, rootCtx, env);
+    expect(items).toHaveLength(1);
+    const key = runtime.evalItemKey(shelfNode, items[0]!, env);
+    expect(key).toBe('event:game-1');
+    expect(nonSubscribingItemKey('e', items[0]!, () => 'fallback')).toBe('event:game-1');
+    // Parent reader was NEVER called during evalItems or evalItemKey even though shelf wrote `key: "{e.id}"`!
+    expect(parentSeen.size).toBe(0);
+  });
+
   test('pushing 1 event record out of 16 shelf/grid cards notifies and re-renders only 1 card (1 vs 16 in legacy Sports)', () => {
     const store = new RecordStore();
     const cardCount = 16;
@@ -590,6 +646,12 @@ describe('record-scope isolation (per-card re-render count on live record push v
 
     // Every ScopedRecordNode sees `sameScopedRecordProps === true` from its parent shelf/grid pass:
     for (let i = 0; i < cardCount; i++) {
+      expect(
+        sameScopedRecordProps(
+          { node: shelfNode.item, ctx: itemsRev1[i]!, renderNode },
+          { node: shelfNode.item, ctx: itemsRev2[i]!, renderNode },
+        ),
+      );
       expect(
         sameScopedRecordProps(
           { node: shelfNode.item, ctx: itemsRev1[i]!, renderNode },

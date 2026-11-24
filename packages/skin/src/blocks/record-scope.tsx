@@ -4,12 +4,32 @@
 // rather than re-rendering the entire page.
 import { memo, useMemo, type ReactElement } from 'react';
 import { useRecordReader } from '@vela/core/react';
+import { refKey } from '../screen/scope';
 import type { Ctx } from '../vocabulary';
 
 export interface ScopedRecordNodeProps {
   node: unknown;
   ctx: Ctx;
   renderNode: (node: unknown, ctx: Ctx) => ReactElement | null;
+}
+
+/**
+ * Extracts a stable React key for a repeated item without invoking `ctx.screen.record` when the
+ * bound item is a `{ $record: key }` reference. Using `refKey(bound.value)` prevents `evalItemKey`
+ * in `ShelfBlock`, `GridBlock`, or `MarqueeBlock` from subscribing the parent block's
+ * `useRecordReader()` to every record in the collection.
+ */
+export function nonSubscribingItemKey(
+  as: string | undefined,
+  itemCtx: Ctx,
+  fallbackEvalKey: () => string,
+): string {
+  if (as && itemCtx.screen) {
+    const bound = itemCtx.screen.items[as];
+    const rKey = refKey(bound?.value);
+    if (rKey) return rKey;
+  }
+  return fallbackEvalKey() || String(itemCtx.index);
 }
 
 export function sameScopedRecordProps(a: ScopedRecordNodeProps, b: ScopedRecordNodeProps): boolean {
