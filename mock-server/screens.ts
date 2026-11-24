@@ -298,6 +298,8 @@ export function eventView(event: V.LiveEvent, favourites: ReadonlySet<string>): 
     favourite: !!sides?.some(s => s.favourite),
     ...(sides ? { sides } : {}),
     situation,
+    // The situation label that named the side with possession ("Possession", "Serving", "Batting").
+    ...(ball.key ? { possessionLabel: ball.key.trim() } : {}),
     watch: watchOf(event),
     ...(p && sides && home !== undefined ? { probability: { home, away: Math.round((1 - home) * 1000) / 1000, subjectSide: subject,
       leader: { abbr: home >= 0.5 ? sides[1]!.abbr : sides[0]!.abbr, share: Math.round(Math.max(home, 1 - home) * 100) } } } : {}),

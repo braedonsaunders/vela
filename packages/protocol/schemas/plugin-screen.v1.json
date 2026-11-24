@@ -5192,6 +5192,10 @@
         "over": {
           "type": "string"
         },
+        "pin": {
+          "description": "With `bind.param`: on first draw an empty param takes the resolved `default` (history replace, no re-read), so a later\nchange of the default does not move the selection.",
+          "type": "boolean"
+        },
         "returnFocus": {
           "type": "string"
         },
