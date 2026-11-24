@@ -111,7 +111,9 @@ const SIGNED_OUT_ROUTES = ['/sign-in', '/connect'];
  * again mounts the tree anew: it finds the same store (the session, the sign-in, the queue that is
  * still playing) rather than starting a second one beside the first, which nothing would stop.
  */
-let runtime: { boot: ReturnType<typeof platform>; store: Store; started?: Promise<void> } | undefined;
+let runtime: { boot: ReturnType<typeof platform>; store: Store } | undefined;
+/** Stores whose session has been settled (`start`): once each, however often the tree mounts. */
+const started = new WeakSet<Store>();
 
 function runtimeStore(): NonNullable<typeof runtime> {
   if (!runtime) {
@@ -125,9 +127,7 @@ export function VelaProvider({ children }: { children: ReactNode }) {
   const [{ boot, store }] = useState(runtimeStore);
   const [consoleUrl, setConsoleUrl] = useState(boot.page?.consoleUrl);
   useEffect(() => {
-    // Once per runtime: a remount finds the session already settled.
-    const current = runtimeStore();
-    if (current.store === store) current.started ??= start(store);
+    if (!started.has(store)) { started.add(store); void start(store); }
     return listenWebHandoff(link => {
       setConsoleUrl(link.consoleUrl);
       if (link.code !== undefined) void store.auth.signInWithWebCode(link.code).then(signedIn => {
