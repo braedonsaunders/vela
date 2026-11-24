@@ -115,6 +115,10 @@ export interface VelaPlayerModule {
   setMediaAccess(access: MediaAccess | null): void;
   /** Probed once per page or process; the controller adds the device and protocol versions. */
   capabilities(): Promise<PlayerCapabilities>;
+  /** What the app's audio engine plays (music, audiobooks, podcasts), for their playback requests: the
+   * page's own engine in browsers and the desktop shells, the native audio player on devices. Never the
+   * video player's list. */
+  audioCapabilities(): Promise<PlayerCapabilities>;
 }
 
 /** The web implementation's seam: the browser host the playback lead extracts from

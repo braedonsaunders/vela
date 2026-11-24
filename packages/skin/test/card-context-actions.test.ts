@@ -94,3 +94,34 @@ test('a channel offers Add to multiview only where the server has multiview', ()
   expect(actions.map(action => action.id)).toEqual(['watch-live', 'multiview']);
   expect(actions[1]!.command).toEqual({ kind: 'dispatch', action: 'multiview', arg: 'channel-7' });
 });
+
+const song = (role: 'track' | 'album' | 'artist' = 'track'): Card => card({
+  id: `${role}-1`, kind: role === 'track' ? 'episode' : 'show', name: 'needy', contextParts: [],
+  media: { class: 'music', role, parents: [], byline: '', bylineTarget: '' } as unknown as Card['media'],
+});
+const watch = (favorite: boolean): TitleActions => ({
+  watched: true, favorite: true, watchlist: true, removeFromContinue: false, versions: [],
+  watch: { positionSeconds: 0, played: false, favorite, watchlisted: false },
+});
+const favourite = (actions: ReturnType<typeof cardContextActions>) => actions.find(action => action.id === 'favorite');
+const press = { action: 'select' as const, arg: 'track-1|track|' };
+
+test('a song the liked lists hold offers Remove from Liked Songs before its title actions arrive', () => {
+  const entry = favourite(cardContextActions(song(), press, undefined, { liked: true }));
+  expect(entry?.label).toBe('Remove from Liked Songs');
+  expect(entry?.command).toEqual({ kind: 'watch', change: { favorite: false } });
+});
+
+test('liked songs, saved albums and followed artists read as liked from either source', () => {
+  // Liked on the server though past the liked list's first page.
+  expect(favourite(cardContextActions(song(), press, watch(true), { liked: false }))?.label).toBe('Remove from Liked Songs');
+  // In the liked list while the title's own answer is stale or failed.
+  expect(favourite(cardContextActions(song('album'), press, watch(false), { liked: true }))?.label).toBe('Remove from Your Library');
+  expect(favourite(cardContextActions(song('artist'), press, null, { liked: true }))?.label).toBe('Unfollow');
+  expect(favourite(cardContextActions(song(), press, watch(false), { liked: false }))?.command).toEqual({ kind: 'watch', change: { favorite: true } });
+});
+
+test('outside the music app a song still waits on its title actions for the like entry', () => {
+  expect(favourite(cardContextActions(song(), press, undefined))).toBeUndefined();
+  expect(favourite(cardContextActions(song(), press, watch(true)))?.label).toBe('Remove from Liked Songs');
+});

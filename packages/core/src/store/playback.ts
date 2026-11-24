@@ -25,7 +25,8 @@ import type { StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
-  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext;
+  /** `audio`: the app's audio engine plays it (music, audiobooks, podcasts), so the request declares what that engine plays. */
+  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
     /** The title's media class when the caller knows it (the audio queue does): a class that never
      * enters Continue (music) is not followed by a read of Home's progress shelves. Not sent. */
     media?: V.MediaClass }
@@ -251,7 +252,7 @@ export class Playback {
           ...(target.kind === 'title' && target.versionId ? { versionId: target.versionId } : {}),
           ...(target.kind === 'title' && target.context && this.session.features?.playContexts?.available ? { context: target.context } : {}),
           ...(target.kind === 'title' && target.audioTrackId && !this.recovering ? { audioTrackId: target.audioTrackId } : {}),
-          client: this.session.client,
+          client: target.kind === 'title' && target.audio ? this.session.audioClient : this.session.client,
           idempotencyKey: intent.key,
         });
     } catch (error) {
@@ -716,7 +717,7 @@ export class Playback {
       ...(target.context && this.session.features?.playContexts?.available ? { context: target.context } : {}),
       // A server with queued sessions keeps the playing one until this one is first observed playing.
       ...(this.queuedPlayback ? { queued: true } : {}),
-      client: this.session.client,
+      client: target.audio ? this.session.audioClient : this.session.client,
       idempotencyKey: `prepare-title-${target.id}-${randomId()}`,
     });
     if (!('sessionId' in reply)) return null;
@@ -728,6 +729,12 @@ export class Playback {
   /** The server opens a prepared plan beside the playing session (features.queuedPlayback): asking for
    * it early ends nothing. Without it a server may end the device's playing session (Ether did). */
   get queuedPlayback(): boolean { return !!this.session.features?.queuedPlayback?.available; }
+  /** Seconds a superseded queued session keeps serving after its successor takes over (0: none), so
+   * two may overlap in a crossfade (features.queuedPlayback.handoverSeconds). */
+  get handoverSeconds(): number {
+    const seconds = this.session.features?.queuedPlayback?.handoverSeconds;
+    return this.queuedPlayback && typeof seconds === 'number' && seconds > 0 ? seconds : 0;
+  }
 
   /** Give back a prepared plan that will not play: the server releases its session. */
   release(plan: V.PlaybackPlan): void {
@@ -741,9 +748,10 @@ export class Playback {
   /**
    * Make a prepared plan the playing one (the engine moved on to it, or the viewer skipped to it).
    * The session that was playing stops exactly as `stop` stops it, after its last report, and the
-   * prepared one is followed from here on.
+   * prepared one is followed from here on. `finishAfterMs`: a crossfade, where the old session still
+   * plays out for that long (within the server's handover) before it stops.
    */
-  adopt(target: PlaybackTarget, plan: V.PlaybackPlan): void {
+  adopt(target: PlaybackTarget, plan: V.PlaybackPlan, options: { finishAfterMs?: number } = {}): void {
     const previous = this.box.get().playback;
     const old = previous.plan ?? this.abandoned;
     const last = old && this.lastPosition?.sessionId === old.sessionId ? this.lastPosition : undefined;
@@ -757,7 +765,11 @@ export class Playback {
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     void this.session.ready().then(connection => { if (this.run === run) this.followSession(run, connection, plan.sessionId); }, () => undefined);
-    if (old && old.state !== 'ended' && old.sessionId !== plan.sessionId) void this.finish(old, previous.target, previous.phase, last, reported);
+    if (old && old.state !== 'ended' && old.sessionId !== plan.sessionId) {
+      const finish = () => void this.finish(old, previous.target, previous.phase, last, reported);
+      if (options.finishAfterMs && options.finishAfterMs > 0) setTimeout(finish, options.finishAfterMs);
+      else finish();
+    }
   }
 
   /** Stop playing: the server releases the session at the plan's generations. */

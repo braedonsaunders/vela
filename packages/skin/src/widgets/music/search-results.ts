@@ -3,8 +3,9 @@
 // episodes. The server's list may be unscoped (a server that cannot keep search to one library):
 // it is then kept to the library's own class here. Recent searches are this library's, local.
 // Pure: the page (search.tsx) draws what this returns.
-import { normalizeQuery, type Card } from '@vela/core';
+import { normalizeQuery, type Card, type LibraryModel } from '@vela/core';
 import type { Listening } from './listening';
+import type { MusicPlace } from './place';
 
 /** A person a book credits whose name the query matches, with how many of the books found credit them. */
 export interface ResultPerson { name: string; personId: string; role: 'author' | 'narrator'; count: number }
@@ -146,6 +147,34 @@ export function listeningResults(serverItems: Card[], query: string, listening: 
   }
   groups = groups.filter(g => g.items.length || g.people.length);
   return { top: topResult(items, query, listening), groups, empty: groups.length === 0 };
+}
+
+/** Who an album is by: its artist parent, else the title its byline links to. */
+export function albumArtist(card: Pick<Card, 'media'>): string | undefined {
+  const media = card.media;
+  return media?.parents.find(parent => parent.role === 'artist')?.id ?? (media?.bylineTarget.startsWith('title:') ? media.bylineTarget.slice(6) : undefined);
+}
+
+/** The library's own view of every album, searchable (Ether's music "Albums" tab: level album), if it declares one. */
+export function albumsTab(tabs: LibraryModel['tabs']): string | undefined {
+  return tabs?.find(tab => tab.kind === 'view' && tab.level === 'album' && tab.search === true)?.id;
+}
+
+/**
+ * Where the Albums group's "See all" goes. Albums all by one artist: that artist's page, which
+ * reads the whole discography. Albums by several: every album in the library matching the query,
+ * when the library has a searchable album view (so "See all" never lists fewer than the shelf);
+ * without one, the top result's page when it is an artist. Otherwise no "See all".
+ */
+export function seeAllAlbums(results: ListeningResults, query: string, albumView: boolean): MusicPlace | undefined {
+  const albums = results.groups.find(group => group.id === 'albums')?.items ?? [];
+  if (!albums.length) return undefined;
+  const artists = new Set(albums.map(albumArtist));
+  const [only] = artists;
+  if (artists.size === 1 && only) return { kind: 'title', id: only };
+  const text = query.trim();
+  if (albumView && text) return { kind: 'albums', query: text };
+  return results.top?.media?.role === 'artist' ? { kind: 'title', id: results.top.id } : undefined;
 }
 
 /** How many recent searches a library keeps. */

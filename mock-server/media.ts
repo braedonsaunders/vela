@@ -44,8 +44,13 @@ export interface Faults {
   refreshFailStatus: number;
   /** Delay before any refresh answer, to stand in for a server that does not answer. */
   refreshStallMs: number;
+  /**
+   * The next refresh key stores its replay entry, stalls this long, then answers 409
+   * `mutation_outcome_unknown`; that key answers the same 409 at once from then on (main.ts).
+   */
+  refreshAbandonMs: number;
 }
-export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0 };
+export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0 };
 let segmentCount = 0;
 let rangeFailureUntil = 0;
 let rangeFailureSetting = 0;

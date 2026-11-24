@@ -23,6 +23,7 @@ const PATHS: Record<string, { d: string[]; stroke?: boolean }> = {
   down: { stroke: true, d: ['M5 9l7 7 7-7'] },
   text: { stroke: true, d: ['M4 19l5-14 5 14', 'M5.8 14h6.4', 'M15 19l3-8 3 8', 'M16 16.5h4'] },
   contents: { stroke: true, d: ['M5 6h14', 'M5 10h14', 'M5 14h9', 'M5 18h9'] },
+  sound: { stroke: true, d: ['M6 4v8', 'M6 16v4', 'M8 14a2 2 0 1 1-4 0 2 2 0 0 1 4 0z', 'M12 4v2', 'M12 10v10', 'M14 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0z', 'M18 4v10', 'M18 18v2', 'M20 16a2 2 0 1 1-4 0 2 2 0 0 1 4 0z'] },
   volume: { stroke: true, d: ['M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z', 'M15.5 9a4 4 0 0 1 0 6', 'M18 6.5a7.5 7.5 0 0 1 0 11'] },
 };
 

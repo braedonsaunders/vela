@@ -41,6 +41,7 @@ export class Session {
   private activeId: string | undefined;
   private deviceValue: V.Device | undefined;
   private clientValue: V.ClientCapabilities | undefined;
+  private audioValue: MediaCapabilities | undefined;
   /** Settles once the player has said what it plays; negotiation and playback wait for it. */
   private readonly media: Promise<void>;
   private signingIn: Promise<void> | undefined;
@@ -63,7 +64,12 @@ export class Session {
     } catch {
       // An unreadable registry fails where it is first used, as before.
     }
-    this.media = Promise.resolve(platform.media).then(media => this.setMedia(media));
+    // An audio engine that cannot say what it plays leaves audio sessions on the player's declaration.
+    const audio = Promise.resolve(platform.audio).catch(() => undefined);
+    this.media = Promise.all([platform.media, audio]).then(([media, engine]) => {
+      this.audioValue = engine;
+      this.setMedia(media);
+    });
   }
 
   /** This install's stable device: its ID is kept with the secrets. */
@@ -84,6 +90,13 @@ export class Session {
   get client(): V.ClientCapabilities {
     if (!this.clientValue) throw new Error('Media capabilities are unavailable');
     return this.clientValue;
+  }
+
+  /** What an audio session declares (music, audiobooks, podcasts): what the app's audio engine plays,
+   * on this device. The player's declaration where the platform names no separate audio engine. */
+  get audioClient(): V.ClientCapabilities {
+    const client = this.client;
+    return this.audioValue ? { device: client.device, protocolVersions: client.protocolVersions, ...this.audioValue } : client;
   }
 
   /** The client declaration, once the player has said what it plays. */

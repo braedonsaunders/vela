@@ -7,6 +7,14 @@
 // Gapless: an AVQueuePlayer holds the next queue item behind the current one (`preload`) and moves on to
 // it with no gap, trimming the encoder delay and padding the file declares (iTunes gapless metadata, MP4
 // edit lists, the LAME header); JavaScript hears `advanced` and Now Playing follows.
+// Sound (docs/sound.md): a player's items share one processing tap (SoundTap.swift) with their levelling
+// gains and the shared EQ; a gapless join changes gain on the next item's first sample, and the queue
+// stays gapless (a tap per item would make AVQueuePlayer stop and restart between items). AutoMix: a
+// crossfade's incoming item waits, prerolled, in a second queue player; a boundary observer on the
+// outgoing item starts it at the exact host time the outgoing item reaches `at` (setRate(_:time:
+// atHostTime:)), both taps run their equal-power fades on their own item clocks, and the players swap
+// roles: the incoming one becomes the player JavaScript, Now Playing and the remote commands follow,
+// and the outgoing one plays out its fade and is released.
 import AVFoundation
 import Foundation
 import MediaPlayer
@@ -27,12 +35,25 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         var spoken: Bool
     }
 
-    private let player = AVQueuePlayer()
+    /// The playing player: the one JavaScript, Now Playing and the remote commands follow.
+    private var player = AudioPlayback.makePlayer()
+    /// AutoMix's second player: a crossfade's incoming item waits in it until it starts and takes over.
+    private var spare = AudioPlayback.makePlayer()
     private var item: AVPlayerItem?
-    /// The next item, waiting behind `item` in the queue player, and JavaScript's id for it.
-    private var queued: (item: AVPlayerItem, id: Int)?
-    private var playerObserver: NSKeyValueObservation?
-    private var currentItemObserver: NSKeyValueObservation?
+    /// The next item, waiting behind `item` in the queue player (once its tap is on), JavaScript's id
+    /// for it, and its levelling gain.
+    private var queued: (item: AVPlayerItem, id: Int, gain: Double)?
+    private var playerObservers: [NSKeyValueObservation] = []
+    private var timeObserver: Any?
+    /// The playing player's tap (levelling, fades and the EQ), and the spare's for a crossfade.
+    private var lane = SoundLane()
+    private var spareLane: SoundLane?
+    /// A crossfade waiting for its moment, and the outgoing item playing out its fade.
+    private var crossfade: PendingCrossfade?
+    private var fading: Fading?
+    #if DEBUG
+    private var captureTimer: Timer?
+    #endif
     /// After an advance Now Playing waits for JavaScript's title for the new item (a second at most),
     /// rather than showing the finished item's title over the new item's position.
     private var nowPlayingHeld = false
@@ -64,26 +85,59 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
 
     private override init() {
         super.init()
-        player.actionAtItemEnd = .pause
-        player.automaticallyWaitsToMinimizeStalling = true
-        player.isMuted = PlaybackSilence.on
-        playerObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.publish() } }
-        }
-        currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.currentItemChanged() } }
-        }
-        player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.publish(tick: true) }
-        }
+        bind(player)
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(interrupted(_:)), name: AVAudioSession.interruptionNotification, object: nil)
         center.addObserver(self, selector: #selector(routeChanged(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
     }
 
+    private static func makePlayer() -> AVQueuePlayer {
+        let player = AVQueuePlayer()
+        player.actionAtItemEnd = .pause
+        player.automaticallyWaitsToMinimizeStalling = true
+        player.isMuted = PlaybackSilence.on
+        #if DEBUG
+        if SoundCapture.silent { quiet(player) }
+        #endif
+        return player
+    }
+
+    /// Follows the playing player's state, item and clock.
+    private func bind(_ player: AVQueuePlayer) {
+        playerObservers = [
+            player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        // A crossfade due while the player waited (a resume, a stall) is fixed once it plays.
+                        self?.checkCrossfadeBoundary()
+                        self?.publish()
+                    }
+                }
+            },
+            player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.currentItemChanged() } }
+            },
+        ]
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.checkCrossfadeBoundary()
+                self?.publish(tick: true)
+            }
+        }
+    }
+
+    private func unbind(_ player: AVQueuePlayer) {
+        playerObservers.forEach { $0.invalidate() }
+        playerObservers = []
+        if let timeObserver { player.removeTimeObserver(timeObserver) }
+        timeObserver = nil
+    }
+
     // MARK: Commands (from JavaScript)
 
     func load(id: Int, url: URL, access: VelaMediaAuth?, start: Double, rate: Double) {
+        cancelCrossfade()
+        stopFading()
         detachItem()
         loadID = id
         ready = false
@@ -102,6 +156,13 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         player.defaultRate = self.rate
         player.actionAtItemEnd = .pause
         player.removeAllItems()
+        lane = SoundLane()
+        lane.context.start(id: id, gain: 1)
+        lane.attach(item) { [weak self] tapped in
+            guard let self, self.item === item else { return }
+            self.tapAttached(id, tapped)
+            self.startIfWanted()
+        }
         player.insert(item, after: nil)
         SystemMediaControls.shared.claim(self)
         publish()
@@ -139,22 +200,64 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
 
     /// Queues the next item behind the current one (nil drops it), so the player goes straight on to it.
     /// An item that starts part-way (an audiobook part's resume point) is not queued: the current one ends
-    /// and JavaScript loads it.
-    func preload(id: Int?, url: URL?, access: VelaMediaAuth?, start: Double) {
-        if let waiting = queued?.item { player.remove(waiting) }
+    /// and JavaScript loads it. `gain` is the next item's levelling; with `crossfade` (AutoMix) the next
+    /// item starts `seconds` before the current one's audible end, at `at` on the current item's clock.
+    func preload(id: Int?, url: URL?, access: VelaMediaAuth?, start: Double, gain: Double = 1, crossfade fade: (seconds: Double, at: Double)? = nil) {
+        // The same handover again (the sound settings changed): only the id and gain follow.
+        if let id, let url, let pending = crossfade, let fade, pending.url == url, pending.start == max(0, start),
+           pending.seconds == fade.seconds, pending.at == fade.at {
+            pending.id = id
+            spareLane?.context.setGain(gain)
+            return
+        }
+        if let id, let url, fade == nil, start <= 0, let waiting = queued, (waiting.item.asset as? AVURLAsset)?.url == url {
+            queued = (waiting.item, id, gain)
+            if player.items().contains(waiting.item) { lane.context.queue(.init(id: id, gain: gain)) }
+            return
+        }
+        if let waiting = queued?.item {
+            player.remove(waiting)
+            lane.forget(waiting)
+        }
         queued = nil
+        lane.context.queue(nil)
+        cancelCrossfade()
         player.actionAtItemEnd = .pause
-        guard let id, let url, start <= 0, let current = item, player.currentItem === current, !ended else { return }
+        guard let id, let url, let current = item, player.currentItem === current, !ended else { return }
+        if let fade, fade.seconds > 0, fade.at.isFinite, fade.at >= 0 {
+            prepareCrossfade(id: id, url: url, access: access, start: max(0, start), gain: gain, seconds: fade.seconds, at: fade.at)
+            return
+        }
+        guard start <= 0 else { return }
         let next = Self.item(url: url, access: access)
-        guard player.canInsert(next, after: current) else { return }
-        player.insert(next, after: current)
-        queued = (next, id)
-        player.actionAtItemEnd = .advance
+        queued = (next, id, gain)
+        // Queued once the tap is on it: the queue player then goes on to it in the same audio pipeline.
+        let lane = self.lane
+        lane.attach(next) { [weak self] tapped in
+            guard let self, self.lane === lane, let waiting = self.queued, waiting.item === next, let current = self.item,
+                  self.player.currentItem === current, !self.ended else { return }
+            self.tapAttached(waiting.id, tapped)
+            guard lane.ready(next), self.player.canInsert(next, after: current) else {
+                self.queued = nil
+                return
+            }
+            lane.context.queue(.init(id: waiting.id, gain: waiting.gain))
+            self.player.insert(next, after: current)
+            self.player.actionAtItemEnd = .advance
+        }
+    }
+
+    /// Levelling and the EQ: `gain` for the playing item, the EQ for every item until it changes.
+    func setSound(gain: Double, eq: SoundEQ?) {
+        if item != nil { lane.context.setGain(gain) }
+        SoundSharedEQ.shared.set(eq)
     }
 
     /// The queue player moved on to the queued item: it is now the one JavaScript hears about.
     private func currentItemChanged() {
         guard let next = queued, player.currentItem === next.item else { return }
+        if let finished = item { lane.forget(finished) }
+        lane.context.advanced()
         detachItem()
         queued = nil
         player.actionAtItemEnd = .pause
@@ -179,20 +282,32 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         ended = false
         PlaybackAudioSession.activateForAudio(spoken: info?.spoken == true)
         // An item that starts later in the file waits until it is ready and there; anything else starts buffering now.
-        if ready || pendingStart == nil {
-            player.playImmediately(atRate: rate)
-        }
+        startIfWanted(always: true)
+        if let fading { fading.player.playImmediately(atRate: rate) }
+        checkCrossfadeBoundary()
         publish()
+    }
+
+    /// Starts the player if JavaScript wants it playing, the item can start, and its tap is in place:
+    /// an item never plays its first moments at the wrong gain or without the EQ.
+    private func startIfWanted(always: Bool = false) {
+        guard wantsPlay, let item, ready || pendingStart == nil, lane.ready(item) else { return }
+        if always || player.rate == 0 { player.playImmediately(atRate: rate) }
     }
 
     func pause() {
         wantsPlay = false
         player.pause()
+        fading?.player.pause()
+        unscheduleCrossfade()
         publish()
     }
 
     func seek(_ seconds: Double) {
         guard item != nil else { return }
+        stopFading()
+        unscheduleCrossfade()
+        lane.context.seeked()
         ended = false
         guard ready else {
             pendingStart = max(0, seconds)
@@ -206,6 +321,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
                 MainActor.assumeIsolated {
                     guard let self, self.seekTarget == target else { return }
                     self.seekTarget = nil
+                    self.checkCrossfadeBoundary()
                     self.publish(tick: true)
                 }
             }
@@ -216,16 +332,20 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         rate = Float(value > 0 ? value : 1)
         player.defaultRate = rate
         if player.rate != 0 { player.rate = rate }
+        if let fading, fading.player.rate != 0 { fading.player.rate = rate }
         publish(tick: true)
     }
 
     func unload() {
         wantsPlay = false
         player.pause()
+        cancelCrossfade()
+        stopFading()
         detachItem()
         queued = nil
         player.actionAtItemEnd = .pause
         player.removeAllItems()
+        lane = SoundLane()
         endBridging()
         SystemMediaControls.shared.release(self)
     }
@@ -270,13 +390,13 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
                         MainActor.assumeIsolated {
                             guard let self, self.item === changed else { return }
                             if self.seekTarget == start { self.seekTarget = nil }
-                            if self.wantsPlay { self.player.playImmediately(atRate: self.rate) }
+                            self.startIfWanted(always: true)
                             self.publish(tick: true)
                         }
                     }
                 }
-            } else if wantsPlay, player.rate == 0 {
-                player.playImmediately(atRate: rate)
+            } else {
+                startIfWanted()
             }
             publish()
         case .failed:
@@ -289,6 +409,9 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     private func finished() {
         // The queue player goes on to the queued item; that is an advance, not an end.
         if let next = queued, player.items().contains(next.item) { return }
+        queued = nil
+        // A crossfade that could not start in time: the incoming item starts now, without a fade.
+        if crossfade != nil, startCrossfadeAtEnd() { return }
         ended = true
         wantsPlay = false
         // JavaScript loads the next item's plan; keep the app running in the background until it plays.
@@ -428,6 +551,320 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         itemNotifications = []
         item = nil
     }
+
+    // MARK: Sound and AutoMix
+
+    /// How long before `at` the incoming item's host start time is fixed. The outgoing tap renders a
+    /// little ahead of what is heard, so its fade must be set well before it is due.
+    private static let crossfadeLead = 1.0
+
+    /// Main thread only.
+    private final class PendingCrossfade: @unchecked Sendable {
+        let item: AVPlayerItem
+        let url: URL
+        var id: Int
+        let seconds: Double
+        let at: Double
+        let start: Double
+        /// The outgoing player's boundary observer at `at` minus the lead.
+        var boundary: (player: AVQueuePlayer, token: Any)?
+        var status: NSKeyValueObservation?
+        var positioned: Bool
+        var positioning = false
+        var prerolled = false
+        var prerolling = false
+        /// The outgoing item reached the lead: start as soon as everything is ready.
+        var due = false
+        /// Once fixed: the host time it starts, and where the outgoing fade ends on the outgoing item's clock.
+        var startHost: CMTime?
+        var fadeEnd: Double?
+        var started: DispatchWorkItem?
+
+        init(item: AVPlayerItem, url: URL, id: Int, seconds: Double, at: Double, start: Double) {
+            self.item = item
+            self.url = url
+            self.id = id
+            self.seconds = seconds
+            self.at = at
+            self.start = start
+            positioned = start <= 0
+        }
+    }
+
+    private struct Fading {
+        let player: AVQueuePlayer
+        let item: AVPlayerItem
+        let id: Int
+        let lane: SoundLane
+        var boundary: Any?
+        var ended: NSObjectProtocol?
+    }
+
+    private func tapAttached(_ id: Int, _ tapped: Bool) {
+        #if DEBUG
+        SoundCapture.shared.event("tap", ["id": id, "tapped": tapped])
+        #endif
+        if !tapped { print("[vela-sound] item \(id) plays without its tap (no audio track or no tap)") }
+    }
+
+    private func prepareCrossfade(id: Int, url: URL, access: VelaMediaAuth?, start: Double, gain: Double, seconds: Double, at: Double) {
+        let next = Self.item(url: url, access: access)
+        let pending = PendingCrossfade(item: next, url: url, id: id, seconds: seconds, at: at, start: start)
+        crossfade = pending
+        let lane = SoundLane()
+        spareLane = lane
+        lane.context.start(id: id, gain: gain)
+        // The incoming fade runs on the incoming item's own clock from where it starts, so it is set
+        // before anything is prerolled: the item's first sample is already silent.
+        lane.context.setFade(.into(start: start, seconds: seconds))
+        lane.attach(next) { [weak self] tapped in
+            guard let self, self.crossfade === pending else { return }
+            self.tapAttached(id, tapped)
+            self.readyCrossfade()
+        }
+        spare.pause()
+        spare.removeAllItems()
+        // A start at a host time needs a player that does not wait to minimize stalling.
+        spare.automaticallyWaitsToMinimizeStalling = false
+        spare.defaultRate = rate
+        spare.insert(next, after: nil)
+        pending.status = next.observe(\.status, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.readyCrossfade() } }
+        }
+        let lead = CMTime(seconds: max(0, at - Self.crossfadeLead), preferredTimescale: 1000)
+        let token = player.addBoundaryTimeObserver(forTimes: [NSValue(time: lead)], queue: .main) { [weak self] in
+            MainActor.assumeIsolated { self?.checkCrossfadeBoundary() }
+        }
+        pending.boundary = (player, token)
+        readyCrossfade()
+        checkCrossfadeBoundary()
+    }
+
+    /// Readies the incoming item: at its start, tapped and prerolled, so it starts on the host time given.
+    private func readyCrossfade() {
+        guard let pending = crossfade, pending.startHost == nil, pending.item.status == .readyToPlay else { return }
+        if !pending.positioned {
+            guard !pending.positioning else { return }
+            pending.positioning = true
+            pending.item.seek(to: CMTime(seconds: pending.start, preferredTimescale: 48000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self, self.crossfade === pending else { return }
+                        pending.positioning = false
+                        pending.positioned = true
+                        self.readyCrossfade()
+                    }
+                }
+            }
+            return
+        }
+        if !pending.prerolled {
+            guard !pending.prerolling, spareLane?.ready(pending.item) == true else { return }
+            guard spare.status == .readyToPlay else {
+                pending.prerolled = true
+                scheduleCrossfade()
+                return
+            }
+            pending.prerolling = true
+            spare.preroll(atRate: rate) { [weak self] _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self, self.crossfade === pending else { return }
+                        pending.prerolling = false
+                        pending.prerolled = true
+                        self.scheduleCrossfade()
+                    }
+                }
+            }
+            return
+        }
+        scheduleCrossfade()
+    }
+
+    /// The outgoing item is within the lead of `at`, or past it: time to fix the start.
+    private func checkCrossfadeBoundary() {
+        guard let pending = crossfade, pending.startHost == nil, let current = item, seekTarget == nil else { return }
+        let now = current.currentTime().seconds
+        if now.isFinite, now >= pending.at - Self.crossfadeLead - 0.01 { pending.due = true }
+        scheduleCrossfade()
+    }
+
+    /// Fixes the crossfade on the host clock: the incoming player starts at the host time the outgoing
+    /// item reaches `at`, and the outgoing tap's fade starts at `at` on its own item clock.
+    private func scheduleCrossfade() {
+        guard let pending = crossfade, pending.due, pending.startHost == nil, wantsPlay, let current = item,
+              player.timeControlStatus == .playing, let timebase = current.timebase, CMTimebaseGetRate(timebase) > 0,
+              pending.item.status == .readyToPlay, pending.positioned, pending.prerolled, spareLane?.ready(pending.item) == true else { return }
+        let nowA = CMTimebaseGetTime(timebase).seconds
+        // Normally fixed a second ahead; a late one (a late preload, a seek, a slow item) starts shortly,
+        // though never sooner than the taps render ahead of what is heard (~0.4 s).
+        let startA = max(pending.at, nowA + 0.6)
+        let duration = current.duration.seconds
+        // Too late for a fade: the incoming item starts when the outgoing one ends (finished()).
+        if duration.isFinite, duration > 0, startA > duration - 0.5 { return }
+        let hostClock = CMClockGetHostTimeClock()
+        let startHost = CMSyncConvertTime(CMTime(seconds: startA, preferredTimescale: 1_000_000_000), from: timebase, to: hostClock)
+        lane.context.setFade(.out(start: startA, seconds: pending.seconds))
+        spare.setRate(rate, time: .invalid, atHostTime: startHost)
+        pending.startHost = startHost
+        pending.fadeEnd = startA + pending.seconds
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.crossfadeStarted() } }
+        pending.started = work
+        let wait = (startHost - CMClockGetTime(hostClock)).seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, wait), execute: work)
+        #if DEBUG
+        SoundCapture.shared.event("crossfade-scheduled", ["outgoing": loadID, "incoming": pending.id, "startHost": startHost.seconds,
+                                                          "startA": startA, "nowA": nowA, "at": pending.at, "seconds": pending.seconds,
+                                                          "incomingTime": pending.item.currentTime().seconds])
+        #endif
+    }
+
+    /// Pause or a seek before the crossfade started: it is fixed again when playback reaches it.
+    private func unscheduleCrossfade() {
+        guard let pending = crossfade, pending.startHost != nil else { return }
+        pending.started?.cancel()
+        pending.started = nil
+        pending.startHost = nil
+        pending.fadeEnd = nil
+        pending.due = false
+        pending.prerolled = false
+        pending.positioned = false
+        spare.pause()
+        lane.context.setFade(.none)
+        readyCrossfade()
+    }
+
+    /// The incoming item is playing: it becomes the item JavaScript, Now Playing and the remote commands
+    /// follow, and the outgoing one plays out its fade.
+    private func crossfadeStarted() {
+        guard let pending = crossfade, let outgoingItem = item, let incomingLane = spareLane else { return }
+        let outgoing = player
+        let outgoingLane = lane
+        let outgoingID = loadID
+        let incoming = spare
+        if let boundary = pending.boundary { boundary.player.removeTimeObserver(boundary.token) }
+        pending.status?.invalidate()
+        crossfade = nil
+        unbind(outgoing)
+        detachItem()
+        player = incoming
+        lane = incomingLane
+        spareLane = nil
+        spare = Self.makePlayer()
+        incoming.automaticallyWaitsToMinimizeStalling = true
+        incoming.actionAtItemEnd = .pause
+        bind(incoming)
+        item = pending.item
+        loadID = pending.id
+        ready = pending.item.status == .readyToPlay
+        failure = nil
+        ended = false
+        pendingStart = nil
+        lastSent = nil
+        clockSample = nil
+        clockRunning = false
+        observe(pending.item)
+        var fading = Fading(player: outgoing, item: outgoingItem, id: outgoingID, lane: outgoingLane)
+        if let fadeEnd = pending.fadeEnd {
+            fading.boundary = outgoing.addBoundaryTimeObserver(forTimes: [NSValue(time: CMTime(seconds: fadeEnd + 0.05, preferredTimescale: 1000))],
+                                                               queue: .main) { [weak self] in
+                MainActor.assumeIsolated { self?.stopFading() }
+            }
+        }
+        fading.ended = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: outgoingItem, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopFading() }
+        }
+        self.fading = fading
+        #if DEBUG
+        SoundCapture.shared.event("crossfade-started", ["outgoing": outgoingID, "incoming": pending.id])
+        #endif
+        holdNowPlaying()
+        emit?(["id": pending.id, "type": "advanced", "position": position, "duration": duration])
+        publish(tick: true)
+    }
+
+    /// The outgoing item ended before its crossfade could start: the incoming item starts now, unfaded.
+    private func startCrossfadeAtEnd() -> Bool {
+        guard let pending = crossfade, pending.startHost == nil, pending.item.status != .failed, spareLane?.ready(pending.item) == true else { return false }
+        spareLane?.context.setFade(.none)
+        pending.fadeEnd = nil
+        let incoming = spare
+        incoming.automaticallyWaitsToMinimizeStalling = true
+        let rate = self.rate
+        // Back to its start (anything prerolled was rendered silent for the fade).
+        pending.item.seek(to: CMTime(seconds: pending.start, preferredTimescale: 48000), toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+            DispatchQueue.main.async { incoming.playImmediately(atRate: rate) }
+        }
+        crossfadeStarted()
+        stopFading()
+        return true
+    }
+
+    /// Drops a crossfade that has not started.
+    private func cancelCrossfade() {
+        guard let pending = crossfade else { return }
+        crossfade = nil
+        if let boundary = pending.boundary { boundary.player.removeTimeObserver(boundary.token) }
+        pending.status?.invalidate()
+        pending.started?.cancel()
+        spare.pause()
+        spare.removeAllItems()
+        spareLane = nil
+        lane.context.setFade(.none)
+    }
+
+    /// Releases the outgoing item of a crossfade (its fade is over, or playback moved on).
+    private func stopFading() {
+        guard let fading else { return }
+        self.fading = nil
+        if let boundary = fading.boundary { fading.player.removeTimeObserver(boundary) }
+        if let ended = fading.ended { NotificationCenter.default.removeObserver(ended) }
+        fading.player.pause()
+        fading.player.removeAllItems()
+        #if DEBUG
+        SoundCapture.shared.event("fading-released", ["id": fading.id])
+        #endif
+    }
+
+    // MARK: Measurement capture (debug builds)
+
+    /// Starts capturing every tap's output to `path` (.f32 and .json), silencing the output for the rest
+    /// of the process; nil stops and writes the capture.
+    func capture(path: String?) {
+        #if DEBUG
+        if let path {
+            SoundCapture.shared.begin(path: path)
+            [player, spare, fading?.player].compactMap { $0 }.forEach(Self.quiet)
+            captureTimer?.invalidate()
+            captureTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sampleClocks() }
+            }
+        } else {
+            captureTimer?.invalidate()
+            captureTimer = nil
+            SoundCapture.shared.finish()
+        }
+        #endif
+    }
+
+    #if DEBUG
+    /// While capturing, a player's own volume (the taps already output silence). Not mute: a muted
+    /// player feeds its taps silence after a few seconds.
+    static var captureVolume: Float = 0
+
+    private static func quiet(_ player: AVQueuePlayer) {
+        player.isMuted = false
+        player.volume = captureVolume
+    }
+
+    private func sampleClocks() {
+        var entries: [(id: Int, role: String, item: AVPlayerItem)] = []
+        if let item { entries.append((loadID, "playing", item)) }
+        if let fading { entries.append((fading.id, "fading", fading.item)) }
+        if let crossfade { entries.append((crossfade.id, "incoming", crossfade.item)) }
+        SoundCapture.shared.clock(entries)
+    }
+    #endif
 
     // MARK: Background between items
 

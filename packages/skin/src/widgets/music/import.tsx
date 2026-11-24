@@ -5,6 +5,7 @@ import { Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import { useMediaLook } from '../media/parts';
 import { ImportCover, PlaylistImportBlock, usePlaylistImport } from '../../blocks/import';
+import { importSubtitle } from '../../blocks/import-copy';
 import { useMusic } from './context';
 import { coverSize, Header, Mosaic, pad } from './pages';
 import { Wash } from './parts';
@@ -14,7 +15,7 @@ export { ImportCover };
 export function MusicImport() {
   const app = useMusic();
   const m = useMediaLook();
-  const { job } = usePlaylistImport();
+  const { job, sources } = usePlaylistImport({ poll: false });
   const [playlistName, setPlaylistName] = useState('');
   const matchedCards = job?.matched.map(entry => entry.card) ?? [];
 
@@ -27,7 +28,7 @@ export function MusicImport() {
           title={job ? (playlistName || job.name) : msg('music.import.title')}
           cover={job && matchedCards.length ? <Mosaic tracks={matchedCards} size={coverSize(m)} poster={job.poster} /> : <ImportCover size={coverSize(m)} />}>
           <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary', 'max-width': '680px' })}>
-            {job?.description || msg('music.import.subtitle')}
+            {job?.description || importSubtitle(sources)}
           </Text>
         </Header>
 

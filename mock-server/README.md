@@ -88,7 +88,7 @@ qualities=[]; TS is not offered to the fMP4 MSE pipeline or added to normal plan
 GET/POST `/__admin/faults` reads/patches:
 
 ```json
-{"rangeFailSeconds":0,"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false,"refreshFailSeconds":0,"refreshFailStatus":500,"refreshStallMs":0}
+{"rangeFailSeconds":0,"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false,"refreshFailSeconds":0,"refreshFailStatus":500,"refreshStallMs":0,"refreshAbandonMs":0}
 ```
 
 Session faults: `refreshFailSeconds` makes `POST /vela/v0/auth/refresh` fail for that
@@ -96,6 +96,11 @@ many seconds from the request that sets it, so a restoring app meets a transient
 server failure and then recovers. `refreshFailStatus` 500 answers like a server
 whose database is locked (`retry.allowed: false`); 503 offers a retry after two
 seconds. `refreshStallMs` holds every refresh answer that long (capped ten minutes).
+`refreshAbandonMs` reproduces a refresh Ether abandoned: the next refresh key the
+mock sees is stored, held that long, then answered 409 `mutation_outcome_unknown`
+(`retry.allowed: false`) without rotating the token; that key answers the same 409
+at once from then on, while a new key for the same token rotates normally. Setting
+it again re-arms one abandonment and forgets the earlier keys; zero clears them.
 
 Zero disables each numeric fault. Bandwidth applies per response (bits/s).
 failEvery/truncateEvery affect every Nth requested CMAF media segment globally;
@@ -313,3 +318,9 @@ E1/E2); `VELA_MOCK_SCREEN_FIXTURES=<dir>` reads the documents from another direc
 `POST /__admin/screens {hide: [id], show: [id]}` hides a screen or surface from viewers (404, and
 the streams following it end); `POST /__admin/sports {screenDelayMs, screenFail, favourites,
 spoilerFree, alert}` as in `sports.ts`.
+
+A track plays as its original file when the client declares its codec. Otherwise the mock
+serves a live AAC transcode (`stream.m4a`) the way Ether serves one it has not finished: 200
+whatever the Range, chunked, no Content-Length, `Accept-Ranges: none`, produced by ffmpeg at
+`VELA_MOCK_TRANSCODE_SPEED` times real time (default 4). `VELA_MOCK_AUDIO_TRANSCODE=1` transcodes
+every track, to exercise that path in a browser that plays every original.

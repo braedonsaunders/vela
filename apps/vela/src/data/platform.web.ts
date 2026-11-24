@@ -81,6 +81,7 @@ export function platform(): VelaPlatform {
       : { name: 'Vela browser', platform: 'web' },
     appVersion: config.appVersion,
     media: VelaPlayer.capabilities(),
+    audio: VelaPlayer.audioCapabilities(),
     page: { origin: location.origin, webCode: link.code, consoleUrl: link.consoleUrl },
     beginExternalAuth: () => {
       // WebView desktop shells hand a requested window to the system browser. Ordinary browsers

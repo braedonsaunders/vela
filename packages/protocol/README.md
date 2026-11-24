@@ -802,6 +802,41 @@ returns as `WatchState.reading`. Clients gate on `features.mediaClasses`,
 - **Playlist import (`features.playlistImport: {available, links, files, maxTracks}`)**: `POST /playlists/import` with `{idempotencyKey, library, url}` or `{idempotencyKey, library, file: {name, format, text}}` returns 202 `{id}`; an unsupported URL returns 400 `unsupported_link`. `GET /playlists/import/:id` returns `PlaylistImport` (`state: 'reading' | 'matching' | 'done' | 'failed'`, `total`, `done`, `matched` with `by: 'isrc' | 'title'`, and `unmatched` with `reason: 'not_found' | 'ambiguous'`, where `ambiguous` items carry `candidates?: Title[]` up to 8 releases). `POST /playlists/import/:id/save` with `{idempotencyKey, name?, exclude?, choose?}` (mapping source index strings to a chosen candidate `titleId`, or 400 `invalid_choice`) creates and returns the ordinary `PlaylistCard` in source order.
 - **Duplicate recordings (`features.duplicates: {available}`)**: `TitleMedia.recordingId` carries the recording identity (such as ISRC) shared across releases of the same recording. `GET /libraries/:id/duplicates?cursor=&limit=` pages `DuplicateGroup` items (`{recordingId, count, titles, preferredTitleId?}`), most copies first. `GET /titles/:id/recording` returns `{recordingId, preferredTitleId?, titles}` for every release of that recording in the library. `POST /libraries/:id/duplicates/:recordingId` with `{idempotencyKey, preferredTitleId, hideOtherIds?}` records the viewer's preferred release and optionally hides the other release IDs from the viewer's library lists, search and Liked Songs, returning the updated `DuplicateGroup`.
 
+### Loudness and AutoMix markers
+
+`features.loudness` (`{ available, album?, fades? }`) lets a client level volume and
+time crossfades. Tracks carry `TitleMedia.loudness` on every card (detail, children,
+rows, queue, favourites, playlist entries, continuation), and an audio
+`PlaybackPlan.loudness` repeats it for the exact source the plan plays:
+
+```jsonc
+{ "trackGainDb": -7.9, "trackPeak": 0.98, "albumGainDb": -8.4, "albumPeak": 1.0, "lufs": -10.1,
+  "reference": -18, "source": "measured",
+  "trim": { "startMs": 120, "endMs": 213400, "fadeInEndMs": 900, "fadeOutStartMs": 204100 } }
+```
+
+Gains are ReplayGain 2.0 style: the dB that brings the track (or album) to `reference`
+LUFS. Peaks are linear true peak (1.0 = 0 dBTP). Ether measures a track once, after
+its first complete play, from its cached copy (one EBU R128 pass, no library walk);
+until then a provider hint may give `trackGainDb` alone with `source: "provider"`.
+`albumGainDb`/`albumPeak` appear only when `album` is advertised and every track of the
+album is measured. `trim.startMs`/`endMs` bound the audible part (silence is below
+-60 dBFS); with `fades`, `fadeInEndMs` is the first point the 100 ms momentary loudness
+comes within 10 LU of integrated and `fadeOutStartMs` the last point before it falls
+more than 10 LU below integrated for good. A sub-flag absent or false means those
+fields are never sent. The plan's value is authoritative (the card's may describe
+another release of the track); a missing value means unmeasured, and the client plays
+the file at its own level. `TitleMedia.bpm` is sent when the provider knows it.
+Older clients ignore all of it.
+
+Queued handover for crossfades (Ether, after 0.3.21): a server that advertises
+`features.queuedPlayback.handoverSeconds` keeps a superseded queued-playback session alive
+for that many seconds after its successor takes the device over. Its reads serve, its
+progress and stop are accepted, and it retires at the client's stop or when the time
+runs out. The takeover itself records the outgoing item as played through. Clients
+overlap two sessions (an AutoMix crossfade) only when the field is present, or when
+the outgoing tail is already buffered.
+
 ### Library experience
 
 `Library.experience` names how a client presents the whole library. Vela's experiences:

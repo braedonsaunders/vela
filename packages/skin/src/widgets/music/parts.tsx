@@ -58,10 +58,12 @@ export function useHover(): [boolean, object] {
  * the press target lies under the content, so no button sits inside another. Text in `children`
  * passes presses through to it; buttons on top take their own.
  */
-export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, contentStyle, children, selected, focusId }: {
+export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, contentStyle, children, selected, focusId, preferred = false }: {
   onPress?(): void; onMenu?: MenuOpen; onDoubleClick?(): void; label: string; testID?: string; selected?: boolean;
   /** Stable id for focus memory on a TV (a card or track id). */
   focusId?: string;
+  /** On a TV, where focus lands as its group appears, unless the viewer is coming back to a spot in the group. */
+  preferred?: boolean;
   style(lit: boolean, focus: boolean): StyleProp<ViewStyle>; contentStyle?: StyleProp<ViewStyle>; children(lit: boolean): ReactNode;
 }) {
   const app = useMusic();
@@ -103,7 +105,7 @@ export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, 
       <Pressable ref={ref} {...handlers} {...menu} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }}
         onFocus={(e: unknown) => { focused.current = true; if (memoryId) remembered.set(page, memoryId); h.onFocus?.(e); }}
         onBlur={(e: unknown) => { focused.current = false; h.onBlur?.(e); }}
-        {...(Platform.isTV && memoryId && remembered.get(page) === memoryId ? { hasTVPreferredFocus: true } : {})}
+        {...(Platform.isTV && ((memoryId && remembered.get(page) === memoryId) || (preferred && !remembered.get(page)?.startsWith(`${scope}/`))) ? { hasTVPreferredFocus: true } : {})}
         {...(web && onDoubleClick ? { onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') onDoubleClick(); } } as object : {})}
         style={[NO_RING, StyleSheet.absoluteFill]} />
       <View pointerEvents="box-none" style={contentStyle}>{children(lit)}</View>
@@ -168,7 +170,7 @@ export function Heart({ card, size = 32, iconSize = 18, quiet = false }: { card:
 }
 
 /** A square (or round, for an artist) tile with its name; a play button rises on hover. */
-export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card; size: number; subtitle?: string; testID?: string }) {
+export function MusicTile({ card, size: wanted, subtitle, testID, preferred }: { card: Card; size: number; subtitle?: string; testID?: string; preferred?: boolean }) {
   const app = useMusic();
   const m = useMediaLook();
   const size = m.small ? Math.min(wanted, 132) : wanted;
@@ -180,7 +182,7 @@ export function MusicTile({ card, size: wanted, subtitle, testID }: { card: Card
     : role === 'show' ? card.media?.byline ?? '' : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · '));
   const listened = listenedFraction(card);
   return (
-    <Surface onPress={() => app.go(placeOf(card))} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={card.id} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}
+    <Surface onPress={() => app.go(placeOf(card))} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={card.id} preferred={preferred} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}
       style={(lit, focus) => [{ width: size + (m.small ? 16 : 24), borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.control : 'transparent' },
         musicTV() ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.04 : 1 }] } : {}, transition('background-color, transform', 160)]}
       contentStyle={{ padding: m.small ? 8 : 12, gap: 10 }}>
@@ -218,7 +220,7 @@ const SHELF_TV_BLEED: ViewStyle = { margin: -12 };
  * not the row); touch swipes and TV focus move it as before. */
 const POINTER = Platform.OS === 'web' && typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
 
-export function Shelf({ title, detail, children, onMore }: { title: string; detail?: string; children: ReactNode; onMore?(): void }) {
+export function Shelf({ title, detail, children, onMore, moreLabel, moreTestID }: { title: string; detail?: string; children: ReactNode; onMore?(): void; moreLabel?: string; moreTestID?: string }) {
   const m = useMediaLook();
   const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
   const [span, setSpan] = useState({ x: 0, width: 0, content: 0 });
@@ -233,7 +235,7 @@ export function Shelf({ title, detail, children, onMore }: { title: string; deta
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 4, gap: 12 }}>
         <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { flexShrink: 1 }]}>{title}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
+          {onMore ? <ShelfMore label={moreLabel ?? msg('music.showAll')} onPress={onMore} testID={moreTestID} /> : null}
           {arrows ? <ShelfArrow flip={false} label={msg('ui.scrollBack')} disabled={span.x <= 2} onPress={() => page(-1)} /> : null}
           {arrows ? <ShelfArrow flip label={msg('ui.scrollOn')} disabled={span.x >= span.content - span.width - 2} onPress={() => page(1)} /> : null}
         </View>
@@ -245,6 +247,21 @@ export function Shelf({ title, detail, children, onMore }: { title: string; deta
         onLayout={event => { const width = event.nativeEvent.layout.width; setSpan(old => old.width === width ? old : { ...old, width }); }}
         onContentSizeChange={content => setSpan(old => old.content === content ? old : { ...old, content })}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
     </View>
+  );
+}
+
+/** A shelf's "Show all" / "See all": quiet text, filled with the ink while a TV's focus is on it. */
+function ShelfMore({ label, onPress, testID }: { label: string; onPress(): void; testID?: string }) {
+  const m = useMediaLook();
+  const tv = musicTV();
+  const { state, handlers } = useInteraction();
+  const lit = state.hover || state.focus;
+  return (
+    // A button, not a link: React Native Web leaves a link's Enter to the browser, and this is no anchor.
+    <Pressable {...handlers} onPress={onPress} accessibilityRole="button" testID={testID}
+      style={[NO_RING, { paddingHorizontal: tv ? 14 : 6, paddingVertical: tv ? 6 : 4, borderRadius: 999, backgroundColor: tv && state.focus ? m.ui.ink : 'transparent' }]}>
+      <Text style={m.text({ 'font-size': tv ? '18px' : '13px', 'font-weight': '650', color: tv && state.focus ? m.ui.inkInverse : lit ? '$ui.ink' : '$ui.inkQuiet' })}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -260,6 +277,8 @@ function ShelfArrow({ flip, label, disabled, onPress }: { flip: boolean; label: 
 }
 
 /** A wash of the artwork's colour behind a page's header: the Vela touch. */
+const FADE_OUT = { maskImage: 'linear-gradient(180deg, #000 45%, transparent 100%)', WebkitMaskImage: 'linear-gradient(180deg, #000 45%, transparent 100%)' } as unknown as ViewStyle;
+
 export function Wash({ accent, height = 420, image }: { accent: string; height?: number; image?: string }) {
   const m = useMediaLook();
   const host = useHost();
@@ -268,7 +287,11 @@ export function Wash({ accent, height = 420, image }: { accent: string; height?:
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height, overflow: 'hidden' }}>
       {/* Native image blur (expo-image on Android and iOS) stops far short of 80: the artwork's own
           lettering showed through behind a page's title. There the wash is the colour alone. */}
-      {image && Platform.OS === 'web' ? <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} /> : null}
+      {/* The blurred cover fades out with the colour, so the wash never ends on a hard line above the
+          page's first row (the track list's column headings sat right on that line). */}
+      {image && Platform.OS === 'web' ? <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, FADE_OUT]}>
+        <Image source={host.image(image)} contentFit="cover" blurRadius={80} style={{ position: 'absolute', top: -80, left: -80, right: -80, bottom: -80, opacity: 0.38 } as never} />
+      </View> : null}
       <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.55)} 0%, ${alpha(tint, 0.18)} 55%, ${alpha(m.ui.page, 0)} 100%)` })]} />
     </View>
   );

@@ -14,7 +14,7 @@ import { alpha, Cover, useMediaLook, type MediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
 type FacetValue = { id: string; label: string; count: number };
-import { Byline, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
+import { Byline, FocusGroup, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
 import { listeningWords } from './listening';
 import { TrackList } from './tracks';
 import { compactMusic, musicTV } from './layout';
@@ -63,7 +63,7 @@ export function Header({ cover, eyebrow, title, children }: { cover: ReactNode; 
 }
 
 export function ActionBar({ children }: { children: ReactNode }) {
-  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 18 }}>{children}</View>;
+  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingTop: 18, paddingBottom: 28 }}>{children}</View>;
 }
 
 export function MoreButton({ card }: { card: Card }) {
@@ -276,7 +276,8 @@ function ArtistView({ card }: { card: Card }) {
   const app = useMusic();
   const m = useMediaLook();
   const host = useHost();
-  const children = useChildren(card.id);
+  // The whole discography, page after page: the first page draws at once and the rest join it.
+  const children = useChildren(card.id, true);
   const rows = useDetailRows(card.id);
   const top = rows.find(r => r.id.endsWith(':top'))?.items ?? [];
   const related = rows.find(r => r.id.endsWith(':related'));
@@ -288,6 +289,12 @@ function ArtistView({ card }: { card: Card }) {
   const short = albums.filter(a => (a.media?.childCount ?? 0) <= 6);
   const [section, setSection] = useState<'albums' | 'singles'>('albums');
   const shown = section === 'albums' && full.length ? full : short.length ? short : full;
+  // "Show all" lays the section out as a grid (on a TV, the D-pad moves through it).
+  const [grid, setGrid] = useState(false);
+  const reading = !!children?.value?.more && children.load === 'loading';
+  // While pages are still landing, the count is the artist's own (the server's), not what has arrived.
+  const releases = reading ? Math.max(albums.length, card.media?.childCounts?.album ?? card.media?.childCount ?? 0) : albums.length;
+  const releaseLine = (a: Card) => [a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ');
   const liked = useLiked().tracks.filter(t => t.media?.byline === card.name);
   const playing = usePlayingFrom(card.id);
   const source = { id: card.id, name: card.name, kind: 'title' as const };
@@ -301,7 +308,7 @@ function ArtistView({ card }: { card: Card }) {
         <View style={{ paddingHorizontal: pad(m), paddingBottom: 22 }}>
           <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{msg('media.ui.artist')}</Text>
           <Text accessibilityRole="header" numberOfLines={1} style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? (card.name.length > 14 ? '40px' : '54px') : card.name.length > 18 ? '64px' : '96px', 'line-height': '1', 'letter-spacing': '-0.03em', color: '$ui.ink' })}>{card.name}</Text>
-          <Text style={[m.text({ 'font-size': '15px', color: '$ui.inkSecondary' }), { marginTop: 10 }]}>{[albums.length ? msg('music.releasesCount', { count: number(albums.length) }) : '', card.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</Text>
+          <Text style={[m.text({ 'font-size': '15px', color: '$ui.inkSecondary' }), { marginTop: 10 }]}>{[releases ? msg('music.releasesCount', { count: number(releases) }) : '', card.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</Text>
         </View>
       </View>
       <View style={{ paddingHorizontal: pad(m) }}>
@@ -340,11 +347,23 @@ function ArtistView({ card }: { card: Card }) {
             <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginRight: 12 }]}>{msg('music.discography')}</Text>
             {full.length ? <Chip label={msg('music.albums')} on={section === 'albums'} onPress={() => setSection('albums')} /> : null}
             {short.length ? <Chip label={msg('music.singlesEps')} on={section === 'singles' || !full.length} onPress={() => setSection('singles')} /> : null}
+            {grid ? <Chip label={msg('music.showLess')} on={false} onPress={() => setGrid(false)} /> : null}
           </View>
         </View>
       </View>
-      <View style={{ paddingHorizontal: 16 }}>
-        <Shelf title="">{shown.map(a => <MusicTile key={a.id} card={a} size={168} subtitle={[a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ')} />)}</Shelf>
+      <View style={{ paddingHorizontal: 16 }} testID="music-discography">
+        {grid ? (
+          <FocusScope.Provider value={`discography:${section}`}>
+            <FocusGroup style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 28 }}>
+              {shown.map((a, index) => <MusicTile key={a.id} card={a} size={168} subtitle={releaseLine(a)} preferred={index === 0} testID={`music-discography-${a.id}`} />)}
+            </FocusGroup>
+          </FocusScope.Provider>
+        ) : (
+          <Shelf title="" onMore={shown.length > 6 ? () => setGrid(true) : undefined} moreTestID="music-discography-all">
+            {shown.map(a => <MusicTile key={a.id} card={a} size={168} subtitle={releaseLine(a)} />)}
+          </Shelf>
+        )}
+        {reading ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginTop: -16, marginBottom: 24 }]} testID="music-discography-loading">{msg('music.loadingMore')}</Text> : null}
       </View>
       {similar.length ? (
         <View style={{ paddingHorizontal: m.small ? 4 : 16 }}>

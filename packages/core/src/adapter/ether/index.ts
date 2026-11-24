@@ -439,8 +439,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   /** `role` reads one child level (features.pluginLevels.childRoles); the caller sends it only then. */
-  children(id: string, cursor?: string, limit?: number, role?: string) {
-    return this.http.request<V.ChildrenPage>('GET', `/titles/${segment(id)}/children${query({ role: role || undefined, cursor, limit: limit === undefined ? undefined : String(limit) })}`, undefined, CACHED);
+  children(id: string, cursor?: string, limit?: number, role?: string, signal?: AbortSignal) {
+    return this.http.request<V.ChildrenPage>('GET', `/titles/${segment(id)}/children${query({ role: role || undefined, cursor, limit: limit === undefined ? undefined : String(limit) })}`, undefined, { ...CACHED, signal });
   }
 
   openReading(id: string, request: V.ReadingRequest) {

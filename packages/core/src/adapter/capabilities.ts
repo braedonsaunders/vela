@@ -87,8 +87,9 @@ export function hasLibraryLive(adapter: ServerAdapter): adapter is ServerAdapter
 
 /** A title's children (an artist's albums, an album's tracks, a series' books), page by page. */
 export interface TitleChildren {
-  /** `role`: one child level's children, sent only with features.pluginLevels.childRoles. */
-  children(id: string, cursor?: string, limit?: number, role?: string): Promise<V.ChildrenPage>;
+  /** `role`: one child level's children, sent only with features.pluginLevels.childRoles.
+   * `signal` abandons the read (an adapter may ignore it). */
+  children(id: string, cursor?: string, limit?: number, role?: string, signal?: AbortSignal): Promise<V.ChildrenPage>;
 }
 export function hasTitleChildren(adapter: ServerAdapter): adapter is ServerAdapter & TitleChildren {
   return 'children' in adapter && typeof adapter.children === 'function';
@@ -149,6 +150,38 @@ export interface PlaylistImports {
 export function hasPlaylistImports(adapter: ServerAdapter): adapter is ServerAdapter & PlaylistImports {
   const a = adapter as unknown as Record<string, unknown>;
   return typeof a.startPlaylistImport === 'function' && typeof a.playlistImport === 'function' && typeof a.savePlaylistImport === 'function';
+}
+
+/** What a server's playlist import reads: link sources ("deezer"), file formats, and the most tracks
+ * it keeps from one playlist (0 when it states no limit). */
+export interface PlaylistImportSources { links: string[]; files: V.PlaylistImportFormat[]; maxTracks: number }
+const IMPORT_FORMATS: readonly V.PlaylistImportFormat[] = ['m3u', 'csv'];
+
+/** The sources an advertised features.playlistImport offers, or null when the server offers none.
+ * Only what the server lists counts: a missing list offers nothing, unknown formats are dropped. */
+export function playlistImportSources(feature: V.ServerCapabilities['features']['playlistImport']): PlaylistImportSources | null {
+  if (feature?.available !== true) return null;
+  const links = Array.isArray(feature.links)
+    ? [...new Set(feature.links.filter((link): link is string => typeof link === 'string').map(link => link.trim().toLowerCase()).filter(Boolean))]
+    : [];
+  const files = Array.isArray(feature.files) ? IMPORT_FORMATS.filter(format => feature.files.includes(format)) : [];
+  const maxTracks = typeof feature.maxTracks === 'number' && Number.isFinite(feature.maxTracks) && feature.maxTracks > 0 ? Math.floor(feature.maxTracks) : 0;
+  return { links, files, maxTracks };
+}
+
+/** Whether a pasted link could come from one of `links`, by the rule Ether applies before reading it:
+ * an http(s) URL whose host names the source ("www.deezer.com" for "deezer"). A link that passes can
+ * still be refused by the server, which stays the authority; one that fails cannot be imported. */
+export function importLinkFromSources(raw: string, links: readonly string[]): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || !url.hostname) return false;
+  const host = url.hostname.toLowerCase();
+  return links.some(link => link !== '' && host.includes(link));
 }
 
 /** Duplicate recording groups and per-viewer preferred release selection (features.duplicates). */

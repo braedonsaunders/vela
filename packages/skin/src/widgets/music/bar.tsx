@@ -13,7 +13,7 @@ import { Cover, useMediaLook } from '../media/parts';
 import { MediaGlyph } from '../media/icons';
 import { placeOf, useMusic } from './context';
 import { isSpoken, listeningWords } from './listening';
-import { Heart, IconButton, transition } from './parts';
+import { Heart, IconButton, menuHandlers, transition } from './parts';
 import { openNowPlaying } from './hub';
 import { Chip } from './pages';
 
@@ -23,7 +23,7 @@ const web = Platform.OS === 'web';
 /** Spoken word's speed and sleep choices, opened from the bar over the page above it. */
 export type BarPanel = '' | 'speed' | 'sleep';
 
-export function NowPlayingBar({ queueOpen, onQueue, panel, onPanel }: { queueOpen: boolean; onQueue(): void; panel: BarPanel; onPanel(panel: BarPanel): void }) {
+export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, panel, onPanel }: { queueOpen: boolean; onQueue(): void; soundOpen?: boolean; onSound?(): void; panel: BarPanel; onPanel(panel: BarPanel): void }) {
   const app = useMusic();
   const m = useMediaLook();
   const store = useVela();
@@ -38,21 +38,24 @@ export function NowPlayingBar({ queueOpen, onQueue, panel, onPanel }: { queueOpe
   const chapter = spoken ? [...audio.chapters].reverse().find(c => c.startSeconds <= audio.positionSeconds) : undefined;
   const container = item?.media?.parent;
   const sleeping = audio.sleep.mode !== 'off';
+  // What is playing has its card's menu too (Remove from Liked Songs, Go to album): a right-click
+  // or a long press on its cover or its title.
+  const menu = item ? menuHandlers(point => app.menu({ card: item, anchor: { kind: 'point', point }, mode: 'pointer' })) : {};
   return (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 }} testID="now-playing-bar" accessibilityRole="toolbar" accessibilityLabel={msg('media.player.nowPlaying')}>
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         {item ? (
           <>
-            <Pressable onPress={() => openNowPlaying()} accessibilityRole="button" accessibilityLabel={msg('media.player.open')} style={NO_RING}>
+            <Pressable {...menu} onPress={() => openNowPlaying()} accessibilityRole="button" accessibilityLabel={msg('media.player.open')} style={NO_RING} testID="bar-cover">
               <Cover uri={item.poster} shape="square" size={58} title={item.name} accent={item.accent} lift={0.5} />
             </Pressable>
             <View style={{ minWidth: 0, flexShrink: 1 }}>
               {spoken ? <>
                 {/* A book or episode opens its page; the line under it is the chapter, else the book or show it is from. */}
-                <Link label={item.name} strong onPress={() => app.go(placeOf(item))} testID="bar-title" />
+                <Link label={item.name} strong onPress={() => app.go(placeOf(item))} menu={menu} testID="bar-title" />
                 <Link label={chapter?.name || container?.name || item.media?.byline || ''} onPress={() => app.go(placeOf(item))} testID="bar-subtitle" />
               </> : <>
-                <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} testID="bar-title" />
+                <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} menu={menu} testID="bar-title" />
                 <Link label={item.media?.byline ?? ''} onPress={() => artist && app.go({ kind: 'title', id: artist.id })} testID="bar-subtitle" />
               </>}
             </View>
@@ -90,6 +93,7 @@ export function NowPlayingBar({ queueOpen, onQueue, panel, onPanel }: { queueOpe
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
         {spoken ? (audio.chapters.length ? <IconButton symbol="chapters" label={msg('media.player.chapters')} onPress={() => openNowPlaying()} size={34} iconSize={18} testID="bar-chapters" /> : null)
           : store.music.lyricsAvailable ? <IconButton symbol="lyrics" label={msg('music.lyrics')} onPress={() => openNowPlaying('lyrics')} size={34} iconSize={18} testID="bar-lyrics" /> : null}
+        {onSound ? <IconButton symbol="sound" label={msg('music.sound')} onPress={onSound} active={soundOpen} size={34} iconSize={18} testID="bar-sound" /> : null}
         <IconButton symbol="queue" label={msg('music.queue')} onPress={onQueue} active={queueOpen} size={34} iconSize={18} testID="bar-queue" />
         <IconButton symbol={audio.muted || audio.volume === 0 ? 'speaker-mute' : 'speaker'} label={msg('music.mute')} onPress={() => store.audio.toggleMute()} size={34} iconSize={18} testID="bar-mute" />
         <View style={{ width: 110 }}><Slider value={audio.muted ? 0 : audio.volume} onChange={v => store.audio.setVolume(v)} label={msg('music.volume')} testID="bar-volume" /></View>
@@ -155,11 +159,11 @@ function Transport({ icon, label, onPress }: { icon: string; label: string; onPr
   );
 }
 
-function Link({ label, strong = false, onPress, testID }: { label: string; strong?: boolean; onPress(): void; testID?: string }) {
+function Link({ label, strong = false, onPress, menu, testID }: { label: string; strong?: boolean; onPress(): void; menu?: object; testID?: string }) {
   const m = useMediaLook();
   const [hover, setHover] = useState(false);
   return (
-    <Pressable onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link" style={NO_RING} testID={testID}>
+    <Pressable {...menu} onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link" style={NO_RING} testID={testID}>
       <Text numberOfLines={1} style={m.text({ 'font-size': strong ? '15px' : '13px', 'font-weight': strong ? '650' : '450', color: strong ? '$ui.ink' : '$ui.inkQuiet', 'text-decoration-line': hover ? 'underline' : 'none' })}>{label}</Text>
     </Pressable>
   );
@@ -171,6 +175,7 @@ export function Slider({ value, onChange, label, testID }: { value: number; onCh
   const ref = useRef<ComponentRef<typeof View>>(null);
   const bounds = useRef({ x: 0, width: 1 });
   const [drag, setDrag] = useState<number | null>(null);
+  const pressed = useRef(false);
   const [hover, setHover] = useState(false);
   const shown = Math.min(1, Math.max(0, drag ?? value));
   const at = (pageX: number) => Math.min(1, Math.max(0, (pageX - bounds.current.x) / Math.max(1, bounds.current.width)));
@@ -180,10 +185,13 @@ export function Slider({ value, onChange, label, testID }: { value: number; onCh
   return (
     <View ref={ref} testID={testID} accessible focusable accessibilityRole="adjustable" accessibilityLabel={label} accessibilityValue={{ min: 0, max: 100, now: Math.round(shown * 100) }}
       onStartShouldSetResponder={() => true} onMoveShouldSetResponder={() => true}
-      onResponderGrant={e => { const x = e.nativeEvent.pageX; measure(() => setDrag(at(x))); }}
-      onResponderMove={e => setDrag(at(e.nativeEvent.pageX))}
-      onResponderRelease={e => { const to = at(e.nativeEvent.pageX); setDrag(null); onChange(to); }}
-      onResponderTerminate={() => setDrag(null)}
+      // The measure answers later: a quick click has already been released by then. It must not leave
+      // a drag behind (the thumb stuck where it was clicked, whatever plays), and it seeks by the
+      // measured bounds, not ones from before the first measure.
+      onResponderGrant={e => { const x = e.nativeEvent.pageX; pressed.current = true; measure(() => { if (pressed.current) setDrag(at(x)); }); }}
+      onResponderMove={e => { if (pressed.current) setDrag(at(e.nativeEvent.pageX)); }}
+      onResponderRelease={e => { const x = e.nativeEvent.pageX; pressed.current = false; setDrag(null); measure(() => onChange(at(x))); }}
+      onResponderTerminate={() => { pressed.current = false; setDrag(null); }}
       {...(web ? { onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false), onKeyDown: (e: { key: string; preventDefault(): void }) => {
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); onChange(Math.min(1, Math.max(0, value + (e.key === 'ArrowLeft' ? -0.05 : 0.05)))); }
       } } as object : {})}

@@ -26,6 +26,8 @@ import { FocusGroup, IconButton, Surface, transition } from './parts';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
 import { QueuePanel } from './queue';
 import { ListeningSearch } from './search';
+import { MusicAlbums } from './albums';
+import { PageScrollContext, usePageScroll } from './paging';
 
 function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
   if (page.kind === 'liked' && music) return <MusicLiked />;
@@ -35,8 +37,10 @@ function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
   if (page.kind === 'playlist') return <MusicPlaylist id={page.id} />;
   if (page.kind === 'title') return <ListeningTitle id={page.id} />;
   if (page.kind === 'search') return <ListeningSearch />;
+  if (page.kind === 'albums' && music) return <MusicAlbums query={page.query} />;
   return <ListeningHome />;
 }
+import { SoundBlock } from '../../blocks/sound';
 
 export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
   const app = useMusic();
@@ -46,10 +50,15 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   const inset = host.doc.document.traits?.headerInset ?? headerInsetOf(host.doc.document.slots?.shell);
   const [collapsed, setCollapsed] = useState(false);
   const [panel, setPanel] = useState<BarPanel>('');
+  // The side beside the page holds the queue or Sound, one at a time.
+  const [soundOpen, setSoundOpen] = useState(false);
+  const sideSound = soundOpen;
+  const sideQueue = queueOpen && !soundOpen;
   const music = app.listening === 'music';
   const narrow = m.width < 1180;
   const rail = collapsed || narrow;
   const page = app.place;
+  const scroll = usePageScroll(pageKey(page));
   const top = `calc(${m.small ? inset.small : inset.wide} + 6px)`;
   if (musicTV()) return <TVShell top={top} />;
   if (compactMusic(m)) return <CompactShell top={top} />;
@@ -69,13 +78,14 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
       <View style={{ flex: 1, flexDirection: 'row', minHeight: 0 }}>
         {side(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, rail ? 84 : 316, 'right')}
         {flush(
-          <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main">
-            {renderMusicPage(page, music)}
+          <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main" {...scroll.handlers}>
+            <PageScrollContext.Provider value={scroll}>{renderMusicPage(page, music)}</PageScrollContext.Provider>
           </ScrollView>)}
-        {queueOpen ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
+        {sideSound ? side(<SoundBlock onClose={() => setSoundOpen(false)} />, 360, 'left')
+          : sideQueue ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
       </View>
       <View style={[{ height: 1 }, hairline]} />
-      <View style={{ height: NOW_PLAYING_BAR_HEIGHT, backgroundColor: m.ui.raised }}><NowPlayingBar queueOpen={queueOpen} onQueue={() => onQueue(!queueOpen)} panel={panel} onPanel={setPanel} /></View>
+      <View style={{ height: NOW_PLAYING_BAR_HEIGHT, backgroundColor: m.ui.raised }}><NowPlayingBar queueOpen={sideQueue} onQueue={() => { setSoundOpen(false); onQueue(!sideQueue); }} soundOpen={sideSound} onSound={() => setSoundOpen(!sideSound)} panel={panel} onPanel={setPanel} /></View>
       <BarPanelView panel={panel} onClose={() => setPanel('')} />
     </View>
   );
@@ -88,6 +98,7 @@ function CompactShell({ top }: { top: string }) {
   const store = useVela();
   const m = useMediaLook();
   const page = app.place;
+  const scroll = usePageScroll(pageKey(page));
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
   useVelaState(state => state.home.load);
@@ -103,9 +114,9 @@ function CompactShell({ top }: { top: string }) {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }} accessibilityRole="tablist">
         {tabs.map(tab => <Chip key={tab.label} label={tab.label} on={samePlace(page, tab.place)} onPress={() => app.go(tab.place)} />)}
       </ScrollView>
-      <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main">
-        {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : renderMusicPage(page, music)}
+      <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main" {...scroll.handlers}>
+        <PageScrollContext.Provider value={scroll}>{page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
+          : renderMusicPage(page, music)}</PageScrollContext.Provider>
       </ScrollView>
     </View>
   );
@@ -120,6 +131,7 @@ function TVShell({ top }: { top: string }) {
   const m = useMediaLook();
   const host = useHost();
   const page = app.place;
+  const scroll = usePageScroll(pageKey(page));
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
   useVelaState(state => state.home.load);
@@ -137,9 +149,9 @@ function TVShell({ top }: { top: string }) {
         {music ? <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail /> : null}
       </FocusGroup>
       {/* The page ends above the floating mini player, so a focused row is never under it. */}
-      <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main">
-        {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : renderMusicPage(page, music)}
+      <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main" {...scroll.handlers}>
+        <PageScrollContext.Provider value={scroll}>{page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
+          : renderMusicPage(page, music)}</PageScrollContext.Provider>
       </ScrollView>
     </View>
   );
@@ -151,10 +163,26 @@ function flush(children: ReactNode): ReactNode {
 }
 
 function pageKey(place: MusicPlace): string {
-  return place.kind === 'title' || place.kind === 'playlist' ? `${place.kind}:${place.id}` : place.kind;
+  return place.kind === 'title' || place.kind === 'playlist' ? `${place.kind}:${place.id}` : place.kind === 'albums' ? `albums:${place.query}` : place.kind;
 }
 
 type Filter = 'all' | 'playlists' | 'albums' | 'artists';
+
+/** "Your Library" is a heading, not a button: collapsing the sidebar is its own control beside it
+ * (and, collapsed to a rail, the library icon opens it again). Embedded (phone, TV) it never collapses. */
+function LibraryHeading({ rail, embedded, onToggle }: { rail: boolean; embedded: boolean; onToggle(): void }) {
+  const m = useMediaLook();
+  if (rail) return <IconButton symbol="library" label={msg('music.expandLibrary')} onPress={onToggle} size={40} iconSize={24} testID="music-library-expand" />;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      {embedded ? null : <IconButton symbol="sidebar" label={msg('music.collapseLibrary')} onPress={onToggle} size={34} iconSize={20} testID="music-library-collapse" />}
+      <View accessibilityRole="header" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: embedded ? 0 : 2 }}>
+        {embedded ? <Glyph symbol="library" size={24} color={m.ui.inkSecondary} /> : null}
+        <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text>
+      </View>
+    </View>
+  );
+}
 
 function Sidebar(props: { rail: boolean; onToggle(): void; embedded?: boolean }) {
   const app = useMusic();
@@ -193,10 +221,7 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
         <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
       </>}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: rail ? 'center' : 'space-between', paddingHorizontal: rail ? 0 : 16, paddingTop: 14, paddingBottom: 8 }}>
-        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={msg('music.yourLibrary')} style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
-          <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
-          {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text> : null}
-        </Pressable>
+        <LibraryHeading rail={rail} embedded={embedded} onToggle={onToggle} />
         {!rail ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <IconButton symbol="playlist-add" label={msg('music.newPlaylist')} size={34} iconSize={19} onPress={() => app.drawer({ mode: 'create' })} testID="music-new-playlist" />
@@ -350,10 +375,7 @@ function SpokenSidebar({ rail, onToggle, embedded = false }: { rail: boolean; on
         <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
       </>}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', paddingHorizontal: rail ? 0 : 16, paddingTop: 14, paddingBottom: 8 }}>
-        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={msg('music.yourLibrary')} style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
-          <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
-          {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text> : null}
-        </Pressable>
+        <LibraryHeading rail={rail} embedded={embedded} onToggle={onToggle} />
       </View>
       {!rail ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }} accessibilityRole="radiogroup">

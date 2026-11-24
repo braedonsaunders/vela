@@ -67,6 +67,8 @@ if (mediaEnabled) Object.assign(capabilities.features, {
 // podcasts listen, books read, photos are a gallery, Live TV is live, the rest watch.
 // VELA_MOCK_NO_EXPERIENCES=1 is a server without it (Vela chooses by media class).
 const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
+// Loudness levelling and AutoMix markers on music tracks; VELA_MOCK_NO_LOUDNESS=1 is an Ether without them.
+if (mediaEnabled && process.env.VELA_MOCK_NO_LOUDNESS !== '1') capabilities.features.loudness = { available: true, album: true, fades: true };
 if (experiencesEnabled) capabilities.features.libraryExperiences = { available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] };
 // Plugin levels (concerts under music artists, rows per recommended tab). VELA_MOCK_NO_LEVELS=1 is
 // a server from before them: no capability, no Concerts tab, no childCounts and no video children.
@@ -125,6 +127,22 @@ function refreshFailure(): never {
     ? { class: 'transient', code: 'unavailable', message: 'Sign-in is briefly unavailable', retry: { allowed: true, afterSeconds: 2 } }
     : { class: 'transient', code: 'internal', message: 'database is locked', retry: { allowed: false } };
   throw Response.json({ error } satisfies V.ErrorResponse, { status: busy ? 503 : 500, headers: { 'Cache-Control': 'no-store', ...(busy ? { 'Retry-After': '2' } : {}) } });
+}
+/**
+ * Refresh keys the mock abandoned the way the lab's Ether did: the replay key was stored, the
+ * rotation never committed, and the key now answers 409 mutation_outcome_unknown. Setting
+ * refreshAbandonMs arms one abandonment (the next refresh key seen) and forgets earlier ones.
+ */
+const abandonedRefreshKeys = new Set<string>();
+let refreshAbandonArmed = false;
+async function abandonedRefresh(key: string): Promise<void> {
+  const unknown = () => fail('conflict', 'mutation_outcome_unknown', 'The outcome of an earlier request with this idempotency key is unknown');
+  if (abandonedRefreshKeys.has(key)) unknown();
+  if (!refreshAbandonArmed || faults.refreshAbandonMs <= 0) return;
+  refreshAbandonArmed = false;
+  abandonedRefreshKeys.add(key);
+  await Bun.sleep(Math.min(faults.refreshAbandonMs, 600_000));
+  unknown();
 }
 function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}, statusOverride?: number): never {
   const status = statusOverride ?? { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, playback: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
@@ -1145,7 +1163,7 @@ async function dispatch(req: Request): Promise<Response> {
       return json(revised.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, sourceGeneration: s.plan.sourceGeneration })));
     }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
-    if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; return json(faults); }
+    if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/screens') return json(screensAdmin(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/appearance') return json(setAppearance(await req.json()));
@@ -1208,6 +1226,7 @@ async function dispatch(req: Request): Promise<Response> {
   if (url.pathname !== '/vela/v0/negotiate' && !/^\/vela\/v0\/auth\/(plex(?:\/profile)?|sign-in|refresh|device(?:\/poll)?|quick-connect(?:\/poll)?|web-code\/redeem)$/.test(url.pathname)) authenticate(req);
   const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? body.client?.device?.id ?? 'anonymous';
   const key = `${identity}:${url.pathname}:${body.idempotencyKey}`, old = idempotency.get(key);
+  if (url.pathname === '/vela/v0/auth/refresh') await abandonedRefresh(key);
   if (old && old.expires > Date.now()) { if (old.body !== raw) fail('conflict', 'idempotency_conflict', 'Key reused with different body'); return (await old.response).clone(); }
   const response = api(req, url, body).catch(e => { if (e instanceof Response) return e; throw e; });
   const entry = { body: raw, response, expires: Date.now() + 86400000 };

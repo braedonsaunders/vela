@@ -71,6 +71,15 @@ export interface CardMenuContext {
   multiview?: boolean;
   /** The card is an entry of this playlist (Remove from this playlist). */
   playlistEntry?: { playlistId: string; entryId: string };
+  /** Music: whether the listener's liked lists (Liked Songs, Your Library) hold this title, as
+   * the music app knows it. The like entry is offered from this at once, without waiting on the
+   * title's actions, and a title either source calls liked reads as liked. */
+  liked?: boolean;
+}
+
+/** Whether a music title is liked: the music app's liked lists or the server's watch state. */
+export function musicLiked(liked: boolean | undefined, management: TitleActions | null | undefined): boolean {
+  return liked === true || management?.watch.favorite === true;
 }
 
 const MUSIC_QUEUEABLE = new Set(['track', 'album']);
@@ -89,8 +98,8 @@ function musicActions(card: Card, primary: CardPress, management: TitleActions |
   } else {
     actions.push(dispatch('open', msg('cardMenu.open'), primary.action, primary.arg, 'info', 'details'));
   }
-  if (management?.favorite) {
-    const on = management.watch.favorite;
+  if (management?.favorite || context.liked !== undefined) {
+    const on = musicLiked(context.liked, management);
     const label = role === 'artist' ? (on ? 'cardMenu.unfollow' : 'cardMenu.follow')
       : role === 'track' ? (on ? 'cardMenu.unlikeSong' : 'cardMenu.likeSong')
       : (on ? 'cardMenu.removeFromLibrary' : 'cardMenu.saveToLibrary');

@@ -13,6 +13,8 @@ export interface Loadable<T> {
   value?: T;
   error: string;
   failure?: FailureKind;
+  /** The server's refusal code ("unsupported_link") when it gave one. */
+  code?: string;
 }
 
 export const idle = <T>(): Loadable<T> => ({ load: 'idle', error: '' });
@@ -29,6 +31,7 @@ export const failed = <T>(error: unknown, previous?: Loadable<T>): Loadable<T> =
     : error instanceof VelaError && (error.status >= 500 || error.detail.class === 'transient' || error.detail.retry.allowed)
       ? 'temporary'
       : 'other',
+  ...(error instanceof VelaError && error.detail.code ? { code: error.detail.code } : {}),
 });
 
 /** Ether refused a Studio preview token (401/403 with problem code preview_expired). */

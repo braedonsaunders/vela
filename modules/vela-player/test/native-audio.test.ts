@@ -128,6 +128,29 @@ test("the system's media commands go to the remote handler, whatever load they n
   expect(remote).toEqual([['next', undefined], ['skip', -15]]);
 });
 
+test('a disposed engine stops listening: one Next from the system is one Next, however many engines were made', async () => {
+  // The one native player, heard by every engine that subscribes (the app's tree can mount again).
+  const subscribers = new Set<(event: NativeAudioEvent) => void>();
+  const { bridge } = fakeBridge();
+  bridge.subscribe = listener => { subscribers.add(listener); return () => { subscribers.delete(listener); }; };
+  const send = (event: NativeAudioEvent) => { for (const listener of [...subscribers]) listener(event); };
+  const remote: string[] = [];
+  const old = createNativeAudioEngine(bridge, { onRemote: command => remote.push(`old:${command}`) });
+  const oldEvents: AudioEngineEvent[] = [];
+  old.subscribe(event => oldEvents.push(event));
+  old.load('https://ether.example/track.flac', 0, 1);
+  await flush();
+  old.dispose();
+  expect(subscribers.size).toBe(0);
+  const current = createNativeAudioEngine(bridge, { onRemote: command => remote.push(`new:${command}`) });
+  current.load('https://ether.example/track.flac', 0, 1);
+  await flush();
+  send({ id: 1, type: 'remote', command: 'next' });
+  send(status(1, 'playing', 1, 200));
+  expect(remote).toEqual(['new:next']);
+  expect(oldEvents).toEqual([]);
+});
+
 test('a seek and a speed change move the clock at once', async () => {
   const { bridge, calls, send } = fakeBridge();
   let now = 0;
@@ -294,4 +317,28 @@ test('a native player without preload takes none', async () => {
   engine.preload({ url: 'https://ether.example/2.flac', startSeconds: 0 });
   await flush();
   expect(calls.map(call => call[0])).toEqual(['load']);
+});
+
+test('sound and an AutoMix preload reach the native player in order, gain and crossfade included', async () => {
+  const fake = fakeBridge();
+  const bridge: NativeAudioBridge = { ...fake.bridge, preload: request => fake.calls.push(['preload', request]), sound: sound => fake.calls.push(['sound', sound]) };
+  const engine = createNativeAudioEngine(bridge);
+  engine.load('https://ether.example/1.flac', 0, 1);
+  const eq = { preGainDb: -6, filters: [{ type: 'lowshelf' as const, frequency: 31, q: Math.SQRT2, gainDb: 6 }] };
+  engine.setSound({ gain: 0.5, eq });
+  engine.preload({ url: 'https://ether.example/2.flac', startSeconds: 0.3, gain: 0.7, crossfade: { seconds: 7, at: 192 } });
+  await flush();
+  expect(fake.calls.slice(1)).toEqual([
+    ['sound', { gain: 0.5, eq }],
+    ['preload', { id: 2, url: 'https://ether.example/2.flac', access: null, start: 0.3, gain: 0.7, crossfade: { seconds: 7, at: 192 } }],
+  ]);
+});
+
+test('a native player without sound ignores it', async () => {
+  const { bridge, calls } = fakeBridge();
+  const engine = createNativeAudioEngine(bridge);
+  engine.load('https://ether.example/1.flac', 0, 1);
+  engine.setSound({ gain: 2, eq: null });
+  await flush();
+  expect(calls.map(c => c[0])).toEqual(['load']);
 });

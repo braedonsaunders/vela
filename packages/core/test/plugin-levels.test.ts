@@ -150,7 +150,7 @@ function mediaWith(features: Partial<ServerCapabilities['features']> | undefined
 test("one child level is read with ?role= and held under its own key", async () => {
   const f = mediaWith(LEVELS);
   await f.media.children('artist-1', false, 'concert');
-  expect(f.calls).toEqual([['artist-1', undefined, 100, 'concert']]);
+  expect(f.calls).toEqual([['artist-1', undefined, 50, 'concert', expect.any(AbortSignal)]]);
   expect(f.box.get().children[childrenKey('artist-1', 'concert')]?.value?.items.map(item => item.id)).toEqual(['concert-1']);
   expect(f.box.get().children['artist-1']).toBeUndefined();
 });
@@ -160,7 +160,7 @@ test('a server without child roles is never sent a role', async () => {
   await f.media.children('artist-1', false, 'concert');
   expect(f.calls).toEqual([]);
   await f.media.children('artist-1');
-  expect(f.calls).toEqual([['artist-1', undefined, 100, undefined]]);
+  expect(f.calls).toEqual([['artist-1', undefined, 50, undefined, expect.any(AbortSignal)]]);
 });
 
 test('pages follow the levels bootstrap states, and wait for them only where reading early would be wrong', () => {

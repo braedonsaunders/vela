@@ -26,14 +26,28 @@ export interface NativeNowPlaying {
   spoken: boolean;
 }
 
-/** The item the native player readies to play straight after its current one (gapless). */
-export interface NativeAudioPreload { id: number; url: string; access: NativeAudioAccess | null; start: number }
+/** The item the native player readies to play straight after its current one. `gain`: its levelling
+ * (linear, default 1). `crossfade` (AutoMix): start it `seconds` before the current item's audible end,
+ * at `at` seconds into the current item, with equal-power fades (cos/sin) on both; the outgoing item
+ * plays out its fade and is then dropped, and `advanced` (the preload's id) is sent when it starts.
+ * Without it the join is gapless, as before. */
+export interface NativeAudioPreload { id: number; url: string; access: NativeAudioAccess | null; start: number; gain?: number; crossfade?: { seconds: number; at: number } }
+
+/** One EQ filter, Robert Bristow-Johnson's cookbook exactly as Web Audio's BiquadFilterNode defines it
+ * (peaking with Q; shelves with slope 1; packages/core/src/audio/eq.ts). */
+export interface NativeEqFilter { type: 'lowshelf' | 'peaking' | 'highshelf'; frequency: number; q: number; gainDb: number }
+/** Levelling and the EQ: the playing item's gain (linear; may exceed 1, the store has already limited
+ * it against the track's peak) and the EQ for every item (a pre-gain in dB, then the filters in order;
+ * null: none). Native players apply them to decoded PCM, sample-accurately per item. */
+export interface NativeSound { gain: number; eq: { preGainDb: number; filters: NativeEqFilter[] } | null }
 
 export interface NativeAudioBridge {
   load(request: { id: number; url: string; access: NativeAudioAccess | null; start: number; rate: number }): void;
   /** Gapless playback: queue the next item after the current one, or drop it (null). A native player
    * without it ends each item. */
   preload?(request: NativeAudioPreload | null): void;
+  /** Levelling and the EQ; a native player without it plays at unity with no EQ. */
+  sound?(sound: NativeSound): void;
   play(): void;
   pause(): void;
   seek(seconds: number): void;
@@ -58,8 +72,13 @@ export interface NativeAudioEngine {
   buffered(): { startSeconds: number; endSeconds: number }[];
   error(): string;
   subscribe(listener: (event: AudioEngineEvent) => void): () => void;
-  /** Gapless playback (the store's AudioEngine.preload). */
-  preload(next: { url: string; startSeconds: number } | null): void;
+  /** Gapless playback and AutoMix (the store's AudioEngine.preload). */
+  preload(next: { url: string; startSeconds: number; gain?: number; crossfade?: { seconds: number; at: number } } | null): void;
+  /** Levelling and the EQ (the store's AudioEngine.setSound). */
+  setSound(sound: NativeSound): void;
+  /** Stops listening to the native player for good: an engine the app has replaced must neither pass on
+   * the system's media commands nor report the native player's events (both would come twice). */
+  dispose(): void;
 }
 
 interface Status {
@@ -137,7 +156,9 @@ export function createNativeAudioEngine(
       emit('error');
     });
   };
-  bridge.subscribe(event => {
+  let disposed = false;
+  const unsubscribe = bridge.subscribe(event => {
+    if (disposed) return;
     if (event.type === 'remote') { options.onRemote?.(event.command, event.seconds); return; }
     // The preloaded item took over: from here on its events are the store's. A status that names it
     // before the advance itself arrives is the advance.
@@ -203,8 +224,14 @@ export function createNativeAudioEngine(
         if (!next) { preload(null); return; }
         const access = options.authorize ? await options.authorize(next.url) : null;
         if (queued !== item) return;
-        preload({ id: item, url: next.url, access, start: Math.max(0, next.startSeconds) });
+        preload({ id: item, url: next.url, access, start: Math.max(0, next.startSeconds),
+          ...(next.gain !== undefined && next.gain !== 1 ? { gain: next.gain } : {}), ...(next.crossfade ? { crossfade: next.crossfade } : {}) });
       });
+    },
+    setSound(sound) {
+      // Sent in order with the rest; the native player keeps it for the items that follow.
+      const apply = bridge.sound?.bind(bridge);
+      if (apply) send(() => apply({ gain: sound.gain, eq: sound.eq }));
     },
     unload() {
       if (!loaded) return;
@@ -223,6 +250,11 @@ export function createNativeAudioEngine(
     buffered: () => status.buffered,
     error: () => status.error,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    dispose() {
+      disposed = true;
+      listeners.clear();
+      unsubscribe();
+    },
   };
 }
 
@@ -241,6 +273,14 @@ export const AUDIO_PLAYBACK: Record<'ios' | 'android', { audioCodecs: string[]; 
   // audio extension (ALAC, and Opus/Vorbis/FLAC where MediaCodec lacks them).
   android: { audioCodecs: ['aac', 'mp3', 'alac', 'flac', 'opus', 'vorbis', 'pcm'], containers: ['mp3', 'aac', 'm4a', 'm4b', 'flac', 'ogg', 'webm', 'wav'] },
 };
+
+/** What an audio session declares on a device: exactly what the native audio player opens (AVPlayer or
+ * Media3), not the video player's decoders it does not share. Elsewhere the device's own list. */
+export function nativeAudioCapabilities(capabilities: PlayerCapabilities, os: string): PlayerCapabilities {
+  const audio = os === 'ios' || os === 'android' ? AUDIO_PLAYBACK[os] : undefined;
+  if (!audio) return capabilities;
+  return { containers: [...audio.containers], videoCodecs: [], audioCodecs: [...audio.audioCodecs], subtitleFormats: [], hls: capabilities.hls, mse: false };
+}
 
 /** The device's capabilities with the native audio player's direct-play formats added. */
 export function withAudioPlayback(capabilities: PlayerCapabilities, os: string): PlayerCapabilities {

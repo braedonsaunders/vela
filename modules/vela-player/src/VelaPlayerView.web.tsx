@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import type { Failure, MediaAccess, VelaPlayerModule, VelaPlayerProps, VelaPlayerViewProps } from '@vela/player-api';
 import { playerAssetBase } from '../web/asset-base';
+import { audioCapabilities } from '../web/audio-capabilities';
 import { playerCapabilities } from '../web/capabilities';
 import { currentMediaAccess, onMediaAccessChange, setMediaAccess } from '../web/media-access';
 import { createWebPreview } from '../web/preview';
@@ -17,6 +18,9 @@ import { createWindowsPlayerHost } from './windows/host';
 export const VelaPlayer: VelaPlayerModule = {
   setMediaAccess(access) { setWindowsMediaAccess(access); setMediaAccess(access); },
   capabilities: () => isWindowsHost() ? windowsCapabilities().catch(() => playerCapabilities()) : playerCapabilities(),
+  // Music plays in the page's own audio engine on every desktop host too, never in the native video
+  // host (libmpv, Aether), so its list is not the native one.
+  audioCapabilities,
 };
 
 /** What a view mounts into its DOM node: the playback host or a preview. */

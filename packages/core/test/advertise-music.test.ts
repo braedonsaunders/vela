@@ -20,3 +20,10 @@ test('queued playback (gapless next-track sessions) reaches the app when the ser
   expect(advertise({} as unknown as ServerAdapter, stated).features.queuedPlayback).toEqual(on);
   expect(advertise({} as unknown as ServerAdapter, description).features.queuedPlayback).toBeUndefined();
 });
+
+test('loudness (levelling and AutoMix markers) reaches the app as the server states it, sub-flags kept', () => {
+  const loudness = { available: true, album: true, fades: false };
+  const stated = { features: { loudness } } as unknown as ServerDescription;
+  expect(advertise({} as unknown as ServerAdapter, stated).features.loudness).toEqual(loudness);
+  expect(advertise({} as unknown as ServerAdapter, description).features.loudness).toBeUndefined();
+});

@@ -22,6 +22,10 @@ export interface VelaPlatform {
   appVersion: string;
   /** What the player plays (`VelaPlayer.capabilities()`); sign-in does not wait for it. */
   media: MediaCapabilities | Promise<MediaCapabilities>;
+  /** What the app's audio engine plays (`VelaPlayer.audioCapabilities()`): music, audiobooks and
+   * podcasts are declared with this, never with the video player's list (a desktop's native video host
+   * decodes far less audio than the page's own engine that plays them). Absent, or failing: `media`. */
+  audio?: MediaCapabilities | Promise<MediaCapabilities>;
   /** The web page the app is served from. Absent natively, where there is no page to hand a session to. */
   page?: {
     origin: string;
