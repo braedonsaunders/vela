@@ -1079,6 +1079,8 @@
   "music.playlist": "Playlist",
   "music.editDetails": "Edit details",
   "music.yourLibrary": "Your Library",
+  "music.collapseLibrary": "Collapse Your Library",
+  "music.expandLibrary": "Open Your Library",
   "music.home": "Home",
   "music.search": "Search",
   "music.newPlaylist": "Create playlist",

@@ -162,6 +162,22 @@ function pageKey(place: MusicPlace): string {
 
 type Filter = 'all' | 'playlists' | 'albums' | 'artists';
 
+/** "Your Library" is a heading, not a button: collapsing the sidebar is its own control beside it
+ * (and, collapsed to a rail, the library icon opens it again). Embedded (phone, TV) it never collapses. */
+function LibraryHeading({ rail, embedded, onToggle }: { rail: boolean; embedded: boolean; onToggle(): void }) {
+  const m = useMediaLook();
+  if (rail) return <IconButton symbol="library" label={msg('music.expandLibrary')} onPress={onToggle} size={40} iconSize={24} testID="music-library-expand" />;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      {embedded ? null : <IconButton symbol="sidebar" label={msg('music.collapseLibrary')} onPress={onToggle} size={34} iconSize={20} testID="music-library-collapse" />}
+      <View accessibilityRole="header" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: embedded ? 0 : 2 }}>
+        {embedded ? <Glyph symbol="library" size={24} color={m.ui.inkSecondary} /> : null}
+        <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text>
+      </View>
+    </View>
+  );
+}
+
 function Sidebar(props: { rail: boolean; onToggle(): void; embedded?: boolean }) {
   const app = useMusic();
   return app.listening === 'music' ? <MusicSidebar {...props} /> : <SpokenSidebar {...props} />;
@@ -199,10 +215,7 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
         <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
       </>}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: rail ? 'center' : 'space-between', paddingHorizontal: rail ? 0 : 16, paddingTop: 14, paddingBottom: 8 }}>
-        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={msg('music.yourLibrary')} style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
-          <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
-          {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text> : null}
-        </Pressable>
+        <LibraryHeading rail={rail} embedded={embedded} onToggle={onToggle} />
         {!rail ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <IconButton symbol="playlist-add" label={msg('music.newPlaylist')} size={34} iconSize={19} onPress={() => app.drawer({ mode: 'create' })} testID="music-new-playlist" />
@@ -356,10 +369,7 @@ function SpokenSidebar({ rail, onToggle, embedded = false }: { rail: boolean; on
         <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
       </>}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', paddingHorizontal: rail ? 0 : 16, paddingTop: 14, paddingBottom: 8 }}>
-        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={msg('music.yourLibrary')} style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
-          <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
-          {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text> : null}
-        </Pressable>
+        <LibraryHeading rail={rail} embedded={embedded} onToggle={onToggle} />
       </View>
       {!rail ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }} accessibilityRole="radiogroup">
