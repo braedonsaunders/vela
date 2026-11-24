@@ -251,7 +251,9 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   // it (a final game has no Watch button) route focus gives the first control or reading stop.
   const initial = resolved?.focusInitial && ctx && page?.load === 'ready' ? fill(resolved.focusInitial, ctx, screenHost.env) : '';
   useEffect(() => {
-    if (!initial || !active) return;
+    // On a TV only, as route focus: the web and touch screens never draw focus before the viewer
+    // uses the keyboard (other pages leave the web's first focus to the browser).
+    if (!initial || !active || !Platform.isTV) return;
     let tries = 0;
     const timer = setInterval(() => { if (focusElement(initial) || ++tries > 20) clearInterval(timer); }, 100);
     return () => clearInterval(timer);
