@@ -24,6 +24,9 @@ export interface ScreenViewport {
   /** Points per CSS px on this device (css.ts: 1.25 on Apple TV, tvPixelScale on Android TV). Lengths
    * then land on half points, as the hard-coded screens' look.px did. Default 1 (no rounding). */
   scale?: number;
+  /** The points lengths round to: half points (0.5) by default; whole points (1) where a host draws as
+   * a look that rounds each size (the player's look.size: overlays and toasts over the picture). */
+  step?: number;
 }
 
 export interface ResolvedScreen {
@@ -193,7 +196,7 @@ export function resolveScreenDocument(doc: ScreenDocument, viewport: ScreenViewp
   };
   const r: Context = {
     doc: pseudo, ui: tokens, strings, width: viewport.width, tv: viewport.tv === true, count: 0, unsupported: new Set(),
-    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens), palette, warnings, scale: viewport.scale ?? 1 },
+    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens), palette, warnings, scale: viewport.scale ?? 1, step: viewport.step ?? 0.5 },
   };
   const tree = convertNode(held(doc.tree), r);
   // Without its own, a page draws a generic skeleton while loading and the kit's failure.

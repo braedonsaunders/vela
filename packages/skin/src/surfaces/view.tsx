@@ -77,7 +77,7 @@ export function SurfaceView({ surface, context, host, active = true, overPicture
   // still has a pointer, so a toast keeps its Dismiss there).
   const drawn = useMemo(() => {
     if (!overPicture) return doc === host.doc ? host : { ...host, doc };
-    const viewport = Platform.isTV ? { ...host.viewport, pxScale: playerScale(host.viewport.height) } : host.viewport;
+    const viewport = Platform.isTV ? { ...host.viewport, pxScale: playerScale(host.viewport.height), pxStep: 1 } : host.viewport;
     return { ...host, doc, viewport, env: { ...host.env, tv: Platform.isTV } };
   }, [host, doc, overPicture]);
   const channel = context.server.channel ?? context.local?.channel;

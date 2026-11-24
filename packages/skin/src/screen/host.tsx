@@ -91,7 +91,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
     const id = `${doc.screen}/${doc.page}`;
     try {
       const scale = host.viewport.pxScale ?? (Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX);
-      const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale }, 'en', resolveUi(ui));
+      const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale, ...(host.viewport.pxStep ? { step: host.viewport.pxStep } : {}) }, 'en', resolveUi(ui));
       if (resolved.warnings.length) console.warn(`${id}: ${resolved.warnings.join('; ')}`);
       lastGood.current = { id, resolved };
       return { resolved, problem: '' };
@@ -103,7 +103,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
       }
       return { problem };
     }
-  }, [doc, width, height, ui, host.viewport.pxScale]);
+  }, [doc, width, height, ui, host.viewport.pxScale, host.viewport.pxStep]);
 }
 
 export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false }: ScreenViewProps) {
@@ -249,9 +249,11 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     // Before the document or the first read: the document's own skeleton once it is resolved.
     return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} status={statusTop} /> : <View style={{ flex: 1 }} />;
   }
+  // The skeleton starts below the shell's bar; the failure centres in the whole section, as the hard-coded screens drew them.
   const status = page.load !== 'ready';
+  const statusInset = page.load === 'loading' ? statusTop : 0;
   const node = page.load === 'failed' ? resolved.failure : page.load === 'loading' ? resolved.loading : resolved.tree;
-  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} {...(status ? { status: statusTop } : {})} />;
+  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} {...(status ? { status: statusInset } : {})} />;
   if (!toast) return drawn;
   const ui = resolveUi(host.doc.document.ui);
   return (

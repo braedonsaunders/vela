@@ -191,8 +191,9 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
     },
     'vela:placeholder': {
       type: 'box', motion: 'kit:breathe', a11y: { hidden: true },
-      style: { width: '{arg.width}', height: '{arg.height}', 'border-radius': radiusCard, 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' },
-      states: [{ when: on('radius'), style: { width: '{arg.width}', height: '{arg.height}', 'border-radius': '{arg.radius}', 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' } }],
+      // A plain block of its size: it never shrinks in a row (a skeleton row clips its last one).
+      style: { width: '{arg.width}', height: '{arg.height}', 'flex-shrink': '0', 'border-radius': radiusCard, 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' },
+      states: [{ when: on('radius'), style: { width: '{arg.width}', height: '{arg.height}', 'flex-shrink': '0', 'border-radius': '{arg.radius}', 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' } }],
     },
     'vela:failure': {
       type: 'box', style: { flex: '1', 'align-items': 'center', 'justify-content': 'center', gap: '16px', padding: 'max(28px, 4vw)' },
