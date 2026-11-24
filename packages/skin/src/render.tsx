@@ -54,6 +54,7 @@ import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument }
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
 import { collection, itemKey, type Card, type Ctx, type Env } from './vocabulary';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
+import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { moveWebRowFocus } from './web-row-navigation';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
@@ -592,12 +593,6 @@ function a11yProps(node: RNode, c: Ctx, e: Env) {
 /** The rows that size and place a box, which a mask wrapper takes over from it. */
 const GEOMETRY = new Set(['position', 'top', 'right', 'bottom', 'left', 'zIndex', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight',
   'aspectRatio', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft']);
-/** The rows that lay out a scroll box's content. */
-const CONTENT = new Set(['flexDirection', 'flexWrap', 'alignItems', 'justifyContent', 'alignContent', 'rowGap', 'columnGap', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']);
-// A route is the page the window scrolls, so its minimum height is its content's, as in CSS:
-// a `min-height: 100dvh` stage fills the window and centres within it.
-const ROUTE_CONTENT = new Set([...CONTENT, 'minHeight']);
-
 function partition(style: Record<string, unknown>, keys: Set<string>): [Record<string, unknown>, Record<string, unknown>] {
   const inside: Record<string, unknown> = {}, outside: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(style)) (keys.has(k) ? inside : outside)[k] = v;
@@ -884,7 +879,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   let element: ReactNode;
   if (route || fx.scrollX || fx.scrollY) {
     const horizontal = !route && !!fx.scrollX && !fx.scrollY;
-    const [contentStyle, outerStyle] = partition(boxStyleFinal, route ? ROUTE_CONTENT : CONTENT);
+    const [contentStyle, outerStyle] = scrollStyles(boxStyleFinal, !!route, web);
     const sticky = web || horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
     const onPagerScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
