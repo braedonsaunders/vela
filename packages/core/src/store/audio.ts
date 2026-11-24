@@ -79,11 +79,14 @@ const OBSERVE_EVERY_MS = 10_000;
 
 /**
  * How long before an item ends the next one's plan is asked for and handed to the engine: twenty
- * seconds, half of a short item (but at least four seconds).
+ * seconds, half of a short item (but at least four seconds); six for spoken word, whose resume point
+ * the server keeps (see `lookAhead`).
  */
-export function preloadLead(durationSeconds: number): number {
-  return Math.min(20, Math.max(4, durationSeconds / 2));
+export function preloadLead(durationSeconds: number, spoken = false): number {
+  return Math.min(spoken ? 6 : 20, Math.max(4, durationSeconds / 2));
 }
+/** With this little left the next plan is asked for even if the engine has not buffered to the end. */
+const PRELOAD_LAST_CALL = 5;
 /** A prepared item is given back when the viewer seeks this much further from the end than the lead. */
 const PRELOAD_RELEASE_MARGIN = 30;
 
@@ -115,6 +118,8 @@ export class Audio {
   private prepared: Prepared | undefined;
   /** The session and next title whose preparation failed: not asked again until either changes. */
   private declined = '';
+  /** The queue item already played on afresh after it failed while the next was prepared (once each). */
+  private retried = '';
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -365,23 +370,41 @@ export class Audio {
   /**
    * Keep the prepared item in step: forget one that no longer plays next (the queue changed, or the
    * viewer sought far back), and ask for the one that does once the playing item nears its end.
+   *
+   * A server may keep one session per device and end the playing one when the next is asked for
+   * (Ether does). So the next plan waits until the engine holds the rest of the playing item (its
+   * buffered range reaches the end; the last few seconds go ahead regardless), the playing item's
+   * position is reported first, and spoken word, whose resume point that position becomes, waits until
+   * its last seconds.
    */
   private lookAhead(position = this.engine?.position() ?? this.state.positionSeconds): void {
     if (!this.engine || !this.sessionId) return;
     const upcoming = this.upcoming();
     const duration = this.state.durationSeconds;
     const remaining = duration > 0 ? duration - position : Infinity;
-    const lead = preloadLead(duration);
+    const cls = current(this.state.queue)?.media?.class;
+    const lead = preloadLead(duration, cls === 'audiobook' || cls === 'podcast');
     if (this.prepared && (this.prepared.id !== upcoming?.id || remaining > lead + PRELOAD_RELEASE_MARGIN)) this.forget();
     if (!upcoming || this.prepared || remaining > lead || this.declined === `${this.sessionId}:${upcoming.id}`) return;
     if (this.state.phase !== 'playing' && this.state.phase !== 'buffering') return;
+    if (remaining > PRELOAD_LAST_CALL && !this.bufferedToEnd(duration)) return;
     void this.prepare(upcoming.id);
+  }
+
+  /** The playing queue item: its place in the play order and its title. */
+  private itemKey(): string { return `${this.state.queue?.at ?? -1}:${current(this.state.queue)?.id ?? ''}`; }
+
+  /** The engine holds the playing item to its end. */
+  private bufferedToEnd(duration: number): boolean {
+    return (this.engine?.buffered() ?? []).some(range => range.endSeconds >= duration - 0.5);
   }
 
   private async prepare(id: string): Promise<void> {
     const prepared: Prepared = { id, start: 0, handed: false };
     this.prepared = prepared;
     const sessionId = this.sessionId;
+    // Where the playing item is, before a server that ends it on the next request stops listening.
+    this.observe('playing');
     let plan: V.PlaybackPlan | null = null;
     try { plan = await this.playback.prepare(this.target(id)); } catch { /* Loaded at the end instead. */ }
     if (this.prepared !== prepared) { if (plan) this.playback.release(plan); return; }
@@ -422,6 +445,7 @@ export class Audio {
       return;
     }
     this.prepared = undefined;
+    this.retried = '';
     // The finished item's last report, at its end; its session then stops as the next one starts.
     this.observe('ended', this.state.durationSeconds);
     const plan = prepared.plan;
@@ -489,7 +513,17 @@ export class Audio {
       case 'paused': if (this.state.phase !== 'ended') { this.patch({ phase: 'paused', positionSeconds: position }); this.observe('paused'); this.held('paused'); } break;
       case 'waiting': this.patch({ phase: 'buffering' }); break;
       case 'duration': if (engine.duration() > 0) this.patch({ durationSeconds: engine.duration() }); break;
-      case 'error': this.patch({ phase: 'failed', error: engine.error() || 'Playback failed' }); break;
+      case 'error':
+        // With the next item prepared, the playing item's session may have ended under it (a server with
+        // one session per device): play on from where it was, on a new session, once.
+        if (this.prepared?.plan && this.retried !== this.itemKey()) {
+          this.retried = this.itemKey();
+          this.forget();
+          void this.load(position);
+          break;
+        }
+        this.patch({ phase: 'failed', error: engine.error() || 'Playback failed' });
+        break;
       case 'ended': this.ended(); break;
       case 'advanced': this.advanced(); break;
       case 'time': this.progress(position); break;

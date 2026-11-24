@@ -36,7 +36,7 @@ async function advance(ms: number): Promise<void> {
 
 const DURATION = 200;
 
-function harness(options: { gapless?: boolean; duration?: number } = {}) {
+function harness(options: { gapless?: boolean; duration?: number; buffered?: () => number } = {}) {
   const gapless = options.gapless ?? true;
   const duration = options.duration ?? DURATION;
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
@@ -80,7 +80,8 @@ function harness(options: { gapless?: boolean; duration?: number } = {}) {
     unload() { playing = false; queued = null; },
     position: () => position,
     duration: () => duration,
-    buffered: () => [],
+    // Fully buffered unless the test says how far.
+    buffered: () => [{ startSeconds: 0, endSeconds: options.buffered ? options.buffered() : duration }],
     error: () => '',
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     ...(gapless ? { preload(next: AudioPreload | null) { preloads.push(next); queued = next; } } : {}),
@@ -101,17 +102,84 @@ function harness(options: { gapless?: boolean; duration?: number } = {}) {
     }
   };
   const seek = (seconds: number) => { position = seconds; };
-  return { audio, box, starts, stops, loads, preloads, reports, play, seek, held: () => queued, isPlaying: () => playing };
+  const fail = () => { playing = false; emit('error'); };
+  return { audio, box, starts, stops, loads, preloads, reports, play, seek, fail, held: () => queued, isPlaying: () => playing };
 }
 
-const track = (id: string) => ({ id, kind: 'episode', name: id, durationSeconds: DURATION } as unknown as Card);
-const tracks = (...ids: string[]) => ids.map(track);
+const track = (id: string, cls = 'music') => ({ id, kind: 'episode', name: id, durationSeconds: DURATION, media: { class: cls } } as unknown as Card);
+const tracks = (...ids: string[]) => ids.map(id => track(id));
 const at = (h: ReturnType<typeof harness>) => h.box.get().audio;
 
-test('the lead is twenty seconds, half a short item, never under four', () => {
+test('the lead is twenty seconds, half a short item, never under four; six for spoken word', () => {
   expect(preloadLead(240)).toBe(20);
   expect(preloadLead(30)).toBe(15);
   expect(preloadLead(5)).toBe(4);
+  expect(preloadLead(1800, true)).toBe(6);
+});
+
+// A server may keep one session per device and end the playing one when the next is asked for
+// (Ether does): the next plan waits until the engine holds the rest of the playing item.
+test('the next plan waits until the playing item is buffered to its end, or its last five seconds', async () => {
+  let buffered = 150;
+  const h = harness({ buffered: () => buffered });
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await h.play(185);
+  expect(h.starts).toEqual(['t1']);
+  buffered = 199.8;
+  await h.play(1);
+  expect(h.starts).toEqual(['t1', 't2']);
+
+  let none = 0;
+  const slow = harness({ buffered: () => none });
+  slow.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await slow.play(194);
+  expect(slow.starts).toEqual(['t1']);
+  await slow.play(2);
+  expect(slow.starts).toEqual(['t1', 't2']);
+});
+
+test('the playing item reports where it is just before the next plan is asked for', async () => {
+  const h = harness();
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await h.play(185);
+  const before = h.reports.filter(r => r.sessionId === 's1');
+  expect(before.at(-1)).toEqual({ sessionId: 's1', state: 'playing', position: 180 });
+});
+
+test('spoken word asks for the next part only in its last seconds', async () => {
+  const h = harness();
+  h.audio.play({ items: [track('p1', 'audiobook'), track('p2', 'audiobook')], index: 0 });
+  await settle();
+  await h.play(190);
+  expect(h.starts).toEqual(['p1']);
+  await h.play(5);
+  expect(h.starts).toEqual(['p1', 'p2']);
+  await h.play(10);
+  expect(h.loads).toEqual(['/media/s1', 'advanced:/media/s2']);
+});
+
+test('an item that fails while the next is prepared plays on from where it was on a new session, once', async () => {
+  const h = harness();
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await h.play(185);
+  expect(h.starts).toEqual(['t1', 't2']);
+  h.fail();
+  await settle();
+  // The prepared session goes back; t1 starts again at 180 s on a new session.
+  expect(h.starts).toEqual(['t1', 't2', 't1']);
+  expect(h.stops).toContain('s2');
+  expect(h.loads.at(-1)).toBe('/media/s3');
+  expect(at(h).phase).not.toBe('failed');
+  await h.play(1);
+  // Prepared again (buffered to the end), and a second failure on that session is shown.
+  expect(h.starts).toEqual(['t1', 't2', 't1', 't2']);
+  h.fail();
+  await settle();
+  expect(at(h).phase).toBe('failed');
 });
 
 test('the next item is planned twenty seconds before the end and played straight on', async () => {

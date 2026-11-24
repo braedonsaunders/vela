@@ -14,6 +14,8 @@ import { CompatAudioDecoder } from './compat-decoder';
 const AHEAD = 6;
 /** Seconds of the next track decoded before it is needed. */
 const NEXT_PREFETCH = 2;
+/** In its last this-many seconds the playing track is decoded to its end. */
+const END_WINDOW = 30;
 /** How far ahead of the clock a fresh start (load, seek, resume after a stall) is placed. */
 const START_MARGIN = 0.06;
 
@@ -199,8 +201,11 @@ export function createGaplessPlayer(): GaplessPlayer {
     const ctx = context;
     const current = items[0];
     if (!ctx || !current) return;
-    // Keep decoding ahead: the current track to AHEAD, the next a little before it is needed.
-    void decode(current, AHEAD);
+    // Keep decoding ahead: the current track to AHEAD, and to its end in its last half minute (the app
+    // asks for the next track's plan once this one is all here: a server may end a device's playing
+    // session as it opens the next); the next track a little before it is needed.
+    const left = (current.stream?.duration ?? 0) - clockPosition(current);
+    void decode(current, current.stream?.duration && left <= END_WINDOW ? Infinity : AHEAD);
     const next = items[1];
     if (next) void decode(next, next.startTime === undefined ? NEXT_PREFETCH : AHEAD);
     schedule();
