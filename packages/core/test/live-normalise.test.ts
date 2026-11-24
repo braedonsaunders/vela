@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { normaliseDetail, normaliseEvent, normaliseScreen, readLiveMessage } from '../src/live/events';
+import { normaliseDetail, normaliseEvent, normaliseScreen, readLiveMessage, serverURL } from '../src/live/events';
 
 const golf = { id: 'p:sports:401', feed: 'sports', category: 'golf', league: { id: 'pga', name: 'PGA' }, start: '2026-11-22T14:00:00Z',
   status: { state: 'in', detail: 'Round 3' }, ranking: [{ pos: 1, name: 'Scheffler' }], updatedAt: '2026-11-22T16:00:00Z' };
@@ -39,4 +39,18 @@ test('pushed updates keep competitor-less events instead of dropping them', () =
 test('a detail always carries its tables, plays, series and links', () => {
   const detail = normaliseDetail(golf)!;
   expect([detail.tables, detail.plays, detail.probabilitySeries, detail.links]).toEqual([[], [], [], []]);
+});
+
+test('logos sent as paths on the server become absolute URLs on it; absolute logos are kept', () => {
+  const origin = 'http://192.168.68.65:32550';
+  const event = normaliseEvent({
+    id: 'e1', status: { state: 'pre' }, league: { id: 'nba', name: 'NBA', logo: '/vela/v0/images/league-grant' },
+    competitors: [{ id: 'a', name: 'A', logo: '/vela/v0/images/a-grant' }, { id: 'b', name: 'B', logo: 'https://cdn.example/b.png' }],
+    watch: [{ kind: 'channel', name: 'ESPN', logo: '/vela/v0/images/espn', live: true, confidence: 1 }],
+  }, origin)!;
+  expect(event.league.logo).toBe(`${origin}/vela/v0/images/league-grant`);
+  expect(event.competitors.map(c => c.logo)).toEqual([`${origin}/vela/v0/images/a-grant`, 'https://cdn.example/b.png']);
+  expect(event.watch?.[0]?.logo).toBe(`${origin}/vela/v0/images/espn`);
+  expect(serverURL('//evil.example/x.png', origin)).toBe('//evil.example/x.png');
+  expect(normaliseEvent({ id: 'e2', status: { state: 'pre' }, competitors: [{ id: 'a', name: 'A', logo: '/x.png' }] })!.competitors[0]!.logo).toBe('/x.png');
 });
