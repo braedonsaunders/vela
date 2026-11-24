@@ -145,7 +145,7 @@
             { "type": "use", "template": "metaLine", "with": { "text": "{src.game.event.league.name}{src.game.event.detail| · }{src.game.event.venue| · }" },
               "when": [{ "test": "src.game.event.phase", "is": "ne", "value": "live" }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }] },
             { "type": "text", "text": "{s:closeGame}", "when": [{ "test": "src.game.event.close" }], "style": { "font-size": "12.5px", "line-height": "1.25", "font-weight": "800", "color": "$ui.highlight" } },
-            { "type": "box", "role": "button", "label": "{s:close}", "testId": "sports-game-close", "when": [{ "test": "env.tv", "not": true }], "press": { "action": "back" },
+            { "type": "box", "role": "button", "label": "{s:close}", "testId": "sports-game-close", "when": [{ "test": "env.isTV", "not": true }], "press": { "action": "back" },
               "style": { "width": "38px", "height": "38px", "border-radius": "19px", "align-items": "center", "justify-content": "center", "background-color": "#ffffff24" },
               "hover": { "background-color": "#ffffff47", "scale": "1.08" }, "focus": { "background-color": "#ffffff47", "scale": "1.08" },
               "children": [{ "type": "icon", "symbol": "close", "style": { "width": "18px", "height": "18px", "color": "#ffffff" } }] } ] },
@@ -232,7 +232,7 @@
           { "type": "box", "when": [{ "test": "src.game.detail.playsNewest.0", "not": true }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }, { "test": "src.game.event.spoiler" }], "style": { "flex": "1", "align-self": "stretch" }, "small": { "flex": "none" }, "children": [{ "type": "use", "template": "plays" }] }
         ] },
 
-        { "type": "box", "id": "links", "when": [{ "test": "src.game.detail.links.0" }, { "test": "env.tv", "not": true }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px" }, "children": [
+        { "type": "box", "id": "links", "when": [{ "test": "src.game.detail.links.0" }, { "test": "env.isTV", "not": true }], "style": { "flex-direction": "row", "flex-wrap": "wrap", "gap": "10px" }, "children": [
           { "type": "repeat", "over": "src.game.detail.links", "as": "link", "item": { "type": "use", "template": "vela:pill", "with": { "label": "{link.label}", "glyph": "external", "small": "true" },
             "press": { "action": "openLink", "args": { "href": "{link.url.href}" } } } } ] }
       ] }

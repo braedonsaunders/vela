@@ -109,7 +109,8 @@ export type RNode = Common & (
   | { kind: 'marquee'; items: Items; item: RNode; gap?: string; speed?: number }
   | { kind: 'tabs'; items: Items; value: Template; label: Template; count?: Template; bind: { param?: string; state?: string; clear?: string[] };
     default?: Template; all?: Template; /** The chip each option is drawn with (a box, its args bound to `{$tab.*}`). */ chip: RNode; small: boolean;
-    /** Drawn after the options in the same scroll and focus row. */ after?: RNode[] }
+    /** Drawn after the options in the same scroll and focus row. */ after?: RNode[];
+    /** An empty bound param takes the shown default on first draw. */ pin?: boolean }
   | { kind: 'table'; data: Value; compact: boolean; focusRows?: number; /** false: rows' highlight is ignored. */ highlight?: false }
   | { kind: 'lineGraph'; series: Value; sides?: Value; subject?: Template; live?: Template; height?: string }
   | { kind: 'player'; channel: Template }
@@ -576,7 +577,7 @@ function tabsNode(node: TabsNode, common: Common, depth: number, r: Context): RN
   return withAlias(r, items.as, () => ({
     ...common, kind: 'tabs' as const, items, value: compile(node.value, r)!, label: compile(node.label, r)!, count: compile(node.count, r),
     bind: { ...(node.bind.param ? { param: node.bind.param } : { state: node.bind.state }), ...(node.bind.clear ? { clear: [...node.bind.clear] } : {}) },
-    default: compile(node.default, r), all: compile(node.all, r), chip, small: node.size === 'small', ...(after ? { after } : {}),
+    default: compile(node.default, r), all: compile(node.all, r), chip, small: node.size === 'small', ...(after ? { after } : {}), ...(node.pin ? { pin: true } : {}),
   }));
 }
 

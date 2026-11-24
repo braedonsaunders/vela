@@ -172,6 +172,15 @@ export function resolveActiveTabValue(state: TabBindingState): string {
   return optionValues[0] ?? '';
 }
 
+/** A pinned tabs row (`pin`): the value to write into its empty bound param on first draw (the
+ * resolved default), so a later change of the default does not move the selection; undefined when
+ * nothing should be written. */
+export function pinnedParamValue(state: { pin?: boolean; param?: string; paramValue: string; defaultValue: string; optionValues: readonly string[] }): string | undefined {
+  if (!state.pin || !state.param || state.paramValue) return undefined;
+  if (!state.defaultValue || !state.optionValues.includes(state.defaultValue)) return undefined;
+  return state.defaultValue;
+}
+
 /** Chunks a flat array of items into rows of `columns` items each for row-virtualised `grid` rendering. */
 export function chunkGridRows<T>(items: readonly T[], columns: number): T[][] {
   const cols = Math.max(1, Math.floor(columns) || 1);

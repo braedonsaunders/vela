@@ -4,14 +4,14 @@
 // trailing `after` nodes inside the same horizontal ScrollView (such as the Hide-scores switch).
 // Renders each option using W1's resolved kit template `node.chip` (`vela:tab` by default, or
 // `vela:chip`) with `$tab` bound via `bindTabCtx` and `role: 'tab'` / `press` cloned onto the root box.
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Platform, ScrollView, View, type ViewStyle } from 'react-native';
 import { measure, useHost } from '../host';
 import { fill, type RNode, type RPress, type Template } from '../resolve';
 import { boxStyle } from '../translate';
 import type { Ctx, Env } from '../vocabulary';
 import { FocusBand } from './focus';
-import { parsePoints, resolveActiveTabValue } from './layout-math';
+import { parsePoints, pinnedParamValue, resolveActiveTabValue } from './layout-math';
 import { useBlockLook } from './look';
 import { useScreenBlockRuntime, type TabsBlockNode } from './types';
 
@@ -100,9 +100,25 @@ export function TabsBlock({ node, ctx }: { node: TabsBlockNode; ctx: Ctx }) {
     return list;
   }, [hasAllOption, allLabel, rawItems, node.value, node.label, node.count, host.env]);
 
+  const screenScope = ctx.screen;
+  // `pin`: once shown, an empty bound param takes the shown default (history replaces), so the row
+  // does not move when the default later changes (the team picker's opening league after an unfollow).
+  const pinned = useRef(false);
+  const pinParam = node.bind.param;
+  const pinParamValue = pinParam ? (screenScope?.page?.params?.[pinParam] ?? '') : '';
+  const pinDefault = node.default ? fill(node.default as Template, ctx, host.env).trim() : '';
+  const pinValue = pinnedParamValue({ pin: node.pin, param: pinParam, paramValue: pinParamValue, defaultValue: pinDefault,
+    optionValues: options.filter(o => o.key !== '__all__').map(o => o.value) });
+  useEffect(() => {
+    if (pinned.current || pinValue === undefined || !pinParam) return;
+    pinned.current = true;
+    const screenPress = (host as { screenPress?: (p: { action: string; arg: string; args: Record<string, string>; control: string }) => void }).screenPress;
+    if (screenPress) screenPress({ action: 'setParam', arg: pinParam, args: { name: pinParam, param: pinParam, value: pinValue }, control: `pin-${pinParam}` });
+    else host.dispatch('setParam', `${pinParam}=${pinValue}`);
+  }, [pinValue, pinParam, host]);
+
   if (!runtime || !options.length) return null;
 
-  const screenScope = ctx.screen;
   const paramName = node.bind.param;
   const stateName = node.bind.state;
   const currentParamValue = paramName

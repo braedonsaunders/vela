@@ -157,3 +157,31 @@ describe('the Sports game document', () => {
     expect(t).not.toContain('New York Giants');
   });
 });
+
+describe('tabs pin', () => {
+  test('an empty bound param takes the shown default once; nothing else is written', async () => {
+    const { pinnedParamValue } = await import('../src/blocks/layout-math');
+    const base = { pin: true, param: 'teamsLeague', paramValue: '', defaultValue: 'nfl', optionValues: ['nfl', 'nba'] };
+    expect(pinnedParamValue(base)).toBe('nfl');
+    expect(pinnedParamValue({ ...base, pin: false })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, paramValue: 'nba' })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, defaultValue: '' })).toBeUndefined();
+    // A default that is not one of the shown options is not pinned (nothing is shown for it).
+    expect(pinnedParamValue({ ...base, defaultValue: 'mlb' })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, param: undefined })).toBeUndefined();
+  });
+
+  test('the team picker pins its league; the schedule days do not', async () => {
+    const doc = await json<ScreenDocument>('index.json');
+    const tabs: (RNode & { pin?: boolean; bind: { param?: string } })[] = [];
+    const visit = (n: RNode) => {
+      const node = n as RNode & { children?: RNode[]; item?: RNode };
+      if (n.kind === 'tabs') tabs.push(n as never);
+      node.children?.forEach(visit);
+      if (node.item) visit(node.item);
+    };
+    visit(resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {}).tree);
+    const byParam = Object.fromEntries(tabs.map(t => [t.bind.param, t.pin === true]));
+    expect(byParam).toEqual({ league: false, date: false, teamsLeague: true });
+  });
+});

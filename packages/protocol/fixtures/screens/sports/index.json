@@ -116,7 +116,7 @@
     "miniCard": {
       "type": "box", "role": "button", "label": "{e.title}", "testId": "sports-mini-{e.id}",
       "press": { "action": "navigate", "args": { "page": "game", "event": "{e.$key}" } },
-      "style": { "flex": "1", "justify-content": "center", "padding": "10px 13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $hairline" },
+      "style": { "padding": "10px 13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $hairline" },
       "hover": { "background-color": "$cardHover", "scale": "1.03" },
       "focus": { "background-color": "$cardHover", "scale": "1.03" },
       "children": [
@@ -371,7 +371,7 @@
 
       { "type": "box", "id": "teams", "needs": ["teams"], "when": [{ "test": "src.teams.entities.0" }], "children": [
         { "type": "use", "template": "heading", "with": { "text": "{s:pickTeams}" } },
-        { "type": "tabs", "over": "src.teams.leagues", "as": "l", "value": "{l.id}", "label": "{l.label}", "bind": { "param": "teamsLeague" }, "default": "{src.teams.opening}",
+        { "type": "tabs", "over": "src.teams.leagues", "as": "l", "value": "{l.id}", "label": "{l.label}", "bind": { "param": "teamsLeague" }, "default": "{src.teams.opening}", "pin": true,
           "chip": "vela:chip", "size": "small", "when": [{ "test": "src.teams.leagues.1" }], "testId": "sports-teams-league-{l.id}",
           "style": { "padding": "0 $gutter 6px", "gap": "8px" }, "small": { "padding": "0 18px 6px" } },
         { "type": "shelf", "over": "src.teams.entities", "as": "t", "key": "{t.key}", "stableOrder": true, "gap": "10px",
