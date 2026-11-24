@@ -95,7 +95,7 @@
         { "type": "text", "text": "{s:spoilersHidden}", "when": [{ "test": "src.game.detail.playsNewest.0", "not": true }, { "test": "src.game.event.spoiler" }], "style": { "font-size": "14px", "line-height": "1.25", "color": "$ui.inkQuiet" } },
         { "type": "repeat", "over": "src.game.detail.playsNewest", "as": "p", "key": "{p.period}-{p.clock}-{p.text}", "limit": 30, "motion": "rise", "stagger": { "step": 70, "cap": 3 }, "item": {
           "type": "box", "readingStop": true,
-          "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px", "border-top": "1px solid $hairline" },
+          "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px", "border-top-width": "1px", "border-top-color": "$hairline" },
           "states": [{ "when": [{ "test": "$index", "is": "eq", "value": "0" }], "style": { "flex-direction": "row", "gap": "12px", "padding": "9px 8px", "border-radius": "8px" } }],
           "focus": { "background-color": "color-mix(in srgb, $ui.ink 7%, transparent)", "scale": "1.015" },
           "children": [
