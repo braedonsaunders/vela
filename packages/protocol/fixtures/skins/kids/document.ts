@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Condition, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.20';
+const version = '1.2.21';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -158,12 +158,6 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
       ] },
       { ...menuRow({ action: 'switchProfile' }, '{s:switchProfile}', 'person', 'switch-profile'), when: [{ test: 'env.canSwitchProfile' }] },
       { ...menuRow({ action: 'playlists' }, 'Playlists', 'layers', 'kids-playlists'), when: [{ test: 'env.canPlaylists' }] },
-      (() => {
-        const row = menuRow({ action: 'hideScores' }, '{t:ui.hideScores}', 'lock', 'kids-hide-scores') as BoxNode;
-        return { ...row, when: [{ test: 'env.canHideScores' }], children: [...(row.children ?? []),
-          { type: 'icon', symbol: 'check-circle', when: [{ test: 'env.hideScores' }], style: { width: '22px', height: '22px' } },
-          { type: 'icon', symbol: 'circle', when: [{ test: 'env.hideScores', not: true }], style: { width: '22px', height: '22px' } }] } as Node;
-      })(),
       menuRow({ action: 'openPicker' }, '{s:changeLook}', 'sparkles', 'skin-picker'),
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
