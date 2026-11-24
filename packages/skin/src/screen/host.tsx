@@ -7,7 +7,7 @@
 // Section routes, pages and W5's surface hosts all draw through ScreenView.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, Text, View } from 'react-native';
-import { useRecordReader, useScreenDocument, useScreenPage, useVela } from '@vela/core/react';
+import { useRecordReader, useScreenDocument, useScreenPage, useVela, useVelaState } from '@vela/core/react';
 import { msg, screenDocumentHref, type ScreenTarget } from '@vela/core';
 import type { ScreenDocument, SurfaceContext } from '../../../protocol/screen';
 import type { ScreenPageState } from '../../../core/src/screens/types';
@@ -77,15 +77,25 @@ function without(args: Record<string, string>, ...names: string[]): Record<strin
 function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolved?: ResolvedScreen; problem: string } {
   const { width, height } = host.viewport;
   const ui = host.doc.document.ui;
+  // The last document of this page that resolved: a newer one that cannot be drawn (a Studio draft
+  // with an error) leaves it on screen instead of the failure.
+  const lastGood = useRef<{ id: string; resolved: ResolvedScreen } | null>(null);
   return useMemo(() => {
     if (!doc) return { problem: '' };
+    const id = `${doc.screen}/${doc.page}`;
     try {
       const scale = Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX;
       const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale }, 'en', resolveUi(ui));
-      if (resolved.warnings.length) console.warn(`${doc.screen}/${doc.page}: ${resolved.warnings.join('; ')}`);
+      if (resolved.warnings.length) console.warn(`${id}: ${resolved.warnings.join('; ')}`);
+      lastGood.current = { id, resolved };
       return { resolved, problem: '' };
     } catch (error) {
-      return { problem: error instanceof Error ? error.message : String(error) };
+      const problem = error instanceof Error ? error.message : String(error);
+      if (lastGood.current?.id === id) {
+        console.warn(`${id}: the new document cannot be drawn, the last one stays: ${problem}`);
+        return { resolved: lastGood.current.resolved, problem: '' };
+      }
+      return { problem };
     }
   }, [doc, width, height, ui]);
 }
@@ -93,6 +103,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
 export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
+  const previewExpired = useVelaState(state => (state.screens as { preview?: { expired?: boolean } | null }).preview?.expired === true);
   const { resolved, problem } = useResolved(document.value, host);
   // Only the params the page declares are read (an address may carry other keys); before the
   // document is known every given param goes, so the first read does not wait for it.
@@ -215,7 +226,10 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     },
   ), [pageKey, vela, title, doc?.presentation]);
 
-  const reason = problem || (document.load === 'failed' ? document.error : '');
+  // A Studio preview whose token is no longer live: one message for the whole tab (core's flag).
+  if (previewExpired) return <Refused host={host} reason="" expired />;
+  // A document that failed to read again keeps drawing the one it had (core keeps it ready).
+  const reason = problem || (document.load === 'failed' && !resolved ? document.error : '');
   if (reason) return <>{refused ? refused(reason) : <Refused host={host} reason={reason} />}</>;
   if (!resolved || !ctx || !page) {
     // Before the document or the first read: the document's own skeleton once it is resolved.
@@ -247,9 +261,14 @@ function Draw({ host, node, ctx, runtime, route }: { host: SkinHost; node: RNode
 }
 
 /** A document this client cannot draw: a newer renderer, a block it lacks, a broken document. */
-function Refused({ host, reason }: { host: SkinHost; reason: string }) {
+function Refused({ host, reason, expired = false }: { host: SkinHost; reason: string; expired?: boolean }) {
   const ui = resolveUi(host.doc.document.ui);
   const update = /renderer|update|needs /i.test(reason);
+  if (expired) return (
+    <View testID="screen-preview-expired" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 * PX }}>
+      <Text style={{ color: ui.ink, fontSize: 18 * PX, fontWeight: '700', textAlign: 'center' }}>{msg('screen.previewExpired')}</Text>
+    </View>
+  );
   return (
     <View testID="screen-refused" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 * PX, gap: 10 * PX }}>
       <Text style={{ color: ui.ink, fontSize: 18 * PX, fontWeight: '700', textAlign: 'center' }}>

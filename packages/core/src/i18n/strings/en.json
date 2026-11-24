@@ -945,6 +945,8 @@
   "sports.favouriteFailed": "That team could not be saved. Try again.",
   "sports.loading": "Loading sports",
   "screen.updateRequired": "Update Vela to see this page",
+  "screen.previewExpired": "Preview expired, reload from Studio",
+  "screen.previewBadge": "Preview",
   "screen.unavailable": "This page isn’t available right now",
   "sports.unavailable": "Sports is unavailable right now",
   "sports.retry": "Try again",

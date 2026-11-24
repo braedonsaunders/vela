@@ -2,7 +2,7 @@
 // stop it when the route leaves, number the chrome's commands for the view, take the view's
 // snapshots and failures, and hand the engine's session commands and observations to core, which
 // talks to the server and follows the session. Core owns the server; this owns the order of things.
-import { quietPlayback } from '../../quiet-playback';
+import { forcedMute, quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { commandOrigin, msg, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
@@ -133,6 +133,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const stop = useCallback(() => { if (!external) void vela.playback.stop(); }, [vela, external]);
 
   const send = useCallback((input: CommandInput) => {
+    // A Studio preview keeps the sound off (quiet-playback.ts forcedMute).
+    if (input.type === 'mute' && !input.muted && forcedMute()) return;
     nextId.current += 1;
     setRefused('');
     if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }

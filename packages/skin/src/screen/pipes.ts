@@ -75,10 +75,12 @@ export function dayText(value: unknown): string {
   if (Math.abs(days) <= 1) return relativeDay(days);
   const only = dateOnly(value);
   const { formatLocale, timeZone } = localeContext();
-  // A date-only value names a calendar day, drawn as that day wherever the viewer is.
-  return only !== undefined
-    ? new Date(only * 86_400_000).toLocaleDateString(formatLocale, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
-    : new Date(instant(value)).toLocaleDateString(formatLocale, { weekday: 'short', day: 'numeric', timeZone });
+  // A date-only value names a calendar day, drawn as that day wherever the viewer is. The weekday
+  // leads ("Thu 26"), as the chips always read, whatever order the locale's own format would give.
+  const at = only !== undefined ? only * 86_400_000 : instant(value);
+  const parts = new Intl.DateTimeFormat(formatLocale, { weekday: 'short', day: 'numeric', timeZone: only !== undefined ? 'UTC' : timeZone }).formatToParts(at);
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? '';
+  return `${part('weekday')} ${part('day')}`.trim();
 }
 
 function dateText(value: unknown): string {
