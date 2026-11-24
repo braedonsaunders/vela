@@ -4,7 +4,7 @@
 // and TV draw the same page; on a TV the field opens Vela's keyboard (Android TV) or the system's.
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Pressable as PlainPressable, Text, View, type TextStyle } from 'react-native';
-import { msg, number, searchList, type Card } from '@vela/core';
+import { msg, number, plural, searchList, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
@@ -67,10 +67,10 @@ function SearchBox({ value, onChange, placeholder, onSubmit }: { value: string; 
   // The page opens with the field focused: typing starts at once (a TV focuses the field's entry,
   // and selecting it opens the keyboard).
   useEffect(() => {
-    if (tv) return;
+    if (Platform.isTV) return;
     const timer = setTimeout(() => input.current?.focus(), 0);
     return () => clearTimeout(timer);
-  }, [tv]);
+  }, []);
   const escape = web ? { onKeyPress: (event: { nativeEvent: { key: string }; preventDefault?(): void }) => {
     if (event.nativeEvent.key !== 'Escape' || value === '') return;
     event.preventDefault?.();
@@ -137,9 +137,7 @@ function Recent({ onPick, intro }: { onPick(text: string): void; intro: string }
     <View testID="music-search-recent" style={{ maxWidth: 720 }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
         <Heading>{msg('listening.recentSearches')}</Heading>
-        <Pressable onPress={() => app.dropSearch()} accessibilityRole="button" style={NO_RING} testID="music-search-recent-clear">
-          <Text style={m.text({ 'font-size': tv ? '18px' : '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('listening.clearRecent')}</Text>
-        </Pressable>
+        <TextButton label={msg('listening.clearRecent')} onPress={() => app.dropSearch()} testID="music-search-recent-clear" />
       </View>
       <FocusScope.Provider value="recent-searches"><FocusGroup>
         {app.searches.map(item => <RecentRow key={item} text={item} onPick={() => onPick(item)} onForget={() => app.dropSearch(item)} />)}
@@ -233,8 +231,8 @@ function ResultGroups({ results, query }: { results: ListeningResults; query: st
   const [allSongs, setAllSongs] = useState(false);
   useEffect(() => { setPerson(null); setAllSongs(false); }, [query]);
   const lead = results.groups.find(g => g.layout === 'rows');
-  // Wide: the top result beside the first songs (or episodes), as one band.
-  const side = m.width >= 1100 && !tv;
+  // Wide (and a TV): the top result beside the first songs (or episodes), as one band.
+  const side = m.width >= (tv ? 960 : 1100);
   const rest = results.groups.filter(g => g !== lead);
   if (person) {
     const books = booksBy(results.groups.find(g => g.id === 'books')?.items ?? [], person);
@@ -253,7 +251,7 @@ function ResultGroups({ results, query }: { results: ListeningResults; query: st
     <View style={{ gap: 8 }}>
       {results.top ? (
         <View style={side ? { flexDirection: 'row', gap: 28, alignItems: 'flex-start', marginBottom: 20 } : { gap: 20, marginBottom: 12 }}>
-          <View style={side ? { width: 420 } : undefined}>
+          <View style={side ? { width: tv ? 440 : 420 } : { maxWidth: 560 }}>
             <Heading>{msg('listening.topResult')}</Heading>
             <TopResult card={results.top} />
           </View>
@@ -283,9 +281,7 @@ function GroupRows({ group, all, onAll }: { group: ResultGroup; all: boolean; on
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <Heading>{msg(group.title)}</Heading>
         {group.items.length > SONGS_SHOWN ? (
-          <Pressable onPress={onAll} accessibilityRole="button" style={NO_RING} testID={`music-search-${group.id}-all`}>
-            <Text style={m.text({ 'font-size': musicTV() ? '18px' : '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{all ? msg('music.showLess') : msg('music.showAll')}</Text>
-          </Pressable>
+          <TextButton label={all ? msg('music.showLess') : msg('music.showAll')} onPress={onAll} testID={`music-search-${group.id}-all`} />
         ) : null}
       </View>
       {group.id === 'episodes'
@@ -307,6 +303,8 @@ function TopResult({ card }: { card: Card }) {
   const what = card.kind === 'playlist' ? msg('music.playlist') : msg(roleLabel(card));
   const line = [what, round ? '' : card.media?.byline].filter(Boolean).join(' · ');
   const open = () => (leaf ? app.playCard(card) : app.go(placeOf(card)));
+  // Touch keeps the play button in reach; a pointer raises it on hover, as a tile's does.
+  const touch = !tv && (!web || m.width < 980);
   return (
     <Surface onPress={open} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={`top:${card.id}`} testID={`music-search-top-${card.id}`} label={[card.name, line].filter(Boolean).join(', ')}
       style={(lit, focus) => [{ borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.controlHover : m.ui.control, marginTop: 10 },
@@ -319,7 +317,7 @@ function TopResult({ card }: { card: Card }) {
           <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '18px' : '14px', color: '$ui.inkSecondary' })}>{line}</Text>
         </View>
         {tv ? null : (
-          <View pointerEvents={lit || !web ? 'auto' : 'none'} style={[{ position: 'absolute', right: 20, bottom: 20, opacity: lit || !web ? 1 : 0, transform: [{ translateY: lit || !web ? 0 : 8 }] }, transition('opacity, transform', 220)]}>
+          <View pointerEvents={lit || touch ? 'auto' : 'none'} style={[{ position: 'absolute', right: 20, bottom: 20, opacity: lit || touch ? 1 : 0, transform: [{ translateY: lit || touch ? 0 : 8 }] }, transition('opacity, transform', 220)]}>
             <PlayFab playing={false} size={52} onPress={() => app.playCard(card)} label={`${msg('media.ui.play')} ${card.name}`} testID="music-search-top-play" />
           </View>
         )}
@@ -338,7 +336,7 @@ function PeopleShelf({ group, onPick }: { group: ResultGroup; onPick(person: Res
       <Shelf title={msg(group.title)}>
         {group.people.map(person => (
           <Surface key={person.name} onPress={() => onPick(person)} focusId={`${person.role}:${person.name}`} testID={`music-search-person-${person.name}`}
-            label={[person.name, msg(person.role === 'author' ? 'listening.author' : 'listening.narrator'), msg('listening.audiobooksCount', { count: number(person.count) })].join(', ')}
+            label={[person.name, msg(person.role === 'author' ? 'listening.author' : 'listening.narrator'), msg(`media.count.audiobooks.${plural(person.count)}`, { count: number(person.count) })].join(', ')}
             style={(lit, focus) => [{ width: size + 24, borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.control : 'transparent' },
               tv ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.04 : 1 }] } : {}, transition('background-color, transform', 160)]}
             contentStyle={{ padding: 12, gap: 10, alignItems: 'center' }}>
@@ -348,7 +346,7 @@ function PeopleShelf({ group, onPick }: { group: ResultGroup; onPick(person: Res
               </View>
               <View pointerEvents="none" style={{ alignItems: 'center', gap: 2 }}>
                 <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '18px' : '15px', 'font-weight': '650', color: '$ui.ink' })}>{person.name}</Text>
-                <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '15px' : '13px', color: '$ui.inkQuiet' })}>{msg('listening.audiobooksCount', { count: number(person.count) })}</Text>
+                <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '15px' : '13px', color: '$ui.inkQuiet' })}>{msg(`media.count.audiobooks.${plural(person.count)}`, { count: number(person.count) })}</Text>
               </View>
             </>}
           </Surface>
@@ -375,6 +373,20 @@ function TileGrid({ items }: { items: Card[] }) {
 function Heading({ children }: { children: ReactNode }) {
   const m = useMediaLook();
   return <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': musicTV() ? '30px' : m.small ? '22px' : '26px', color: '$ui.ink', 'letter-spacing': '-0.01em' })}>{children}</Text>;
+}
+
+/** A quiet text action ("Show all", "Clear all"); on a TV its focus fills it with the ink. */
+function TextButton({ label, onPress, testID }: { label: string; onPress(): void; testID?: string }) {
+  const m = useMediaLook();
+  const tv = musicTV();
+  const { state, handlers } = useInteraction();
+  const lit = state.hover || state.focus;
+  return (
+    <Pressable {...handlers} onPress={onPress} accessibilityRole="button" testID={testID}
+      style={[NO_RING, { paddingHorizontal: tv ? 14 : 6, paddingVertical: tv ? 6 : 4, borderRadius: 999, backgroundColor: tv && state.focus ? m.ui.ink : 'transparent' }]}>
+      <Text style={m.text({ 'font-size': tv ? '18px' : '13px', 'font-weight': '650', color: tv && state.focus ? m.ui.inkInverse : lit ? '$ui.ink' : '$ui.inkQuiet' })}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function Chipish({ label, onPress }: { label: string; onPress(): void }) {

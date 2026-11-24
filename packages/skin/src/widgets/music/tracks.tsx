@@ -37,7 +37,7 @@ export function TrackList({ tracks, options = {} }: { tracks: Card[]; options?: 
       {m.small ? null : <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, height: 36, marginBottom: 8 }, m.box({ 'border-bottom': '1px solid $ui.glassEdge' })]}>
         <Text style={[head(m), { width: 28, textAlign: 'center' }]}>#</Text>
         <Text style={[head(m), { flex: 1 }]}>{msg('music.title')}</Text>
-        {options.album && wide ? <Text style={[head(m), { flex: 0.8 }]}>{msg('media.ui.album')}</Text> : null}
+        {options.album && wide && !musicTV() ? <Text style={[head(m), { flex: 0.8 }]}>{msg('media.ui.album')}</Text> : null}
         <View style={{ width: 32 }} />
         <View style={{ width: 52, alignItems: 'flex-end' }}><Glyph symbol="clock" size={16} color={m.ui.inkQuiet} /></View>
         <View style={{ width: 32 }} />
