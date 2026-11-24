@@ -43,7 +43,9 @@ CMAF ladder with rebased decode timestamps. Its 48-second HLS window advances
 every four seconds, with media sequences and programme date times and no ENDLIST.
 This is a real live delivery fixture, not a connection to a television provider.
 
-Generate media once: `bun mock-server/scripts/make-media.ts` (requires ffmpeg).
+Generate media once: `bun mock-server/scripts/make-media.ts` (requires ffmpeg). With
+`VELA_MOCK_SILENT_MEDIA=1` both audio tracks are silence, for a simulator that plays through the
+Mac's speakers.
 Output: `~/.scratch/tmp/vela/media/`, synthetic three-minute H.264/AAC direct MP4,
 three aligned four-second fMP4 HLS qualities, two tone audio tracks and WebVTT.
 The existing remux/transcode Quality URLs remain complete muxed A/V playlists.
