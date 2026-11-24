@@ -1,7 +1,7 @@
 // The music app's pieces in the document's `ui` look: tiles with a play button that rises on
 // hover, shelves, the heart, the big play button, a byline whose names open their pages.
 import { Image } from 'expo-image';
-import { useRef, useState, type ReactNode, type ComponentRef } from 'react';
+import { createContext, useContext, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import type { CardMenuAnchor, CardMenuOpenMode } from '../card-context-menu';
 import type { Focusable } from '../../escape';
@@ -43,6 +43,10 @@ export function menuHandlers(open: (point: { x: number; y: number }) => void) {
 /** Where focus was last on each music page, so coming back to a page lands where you left it. */
 const remembered = new Map<string, string>();
 
+/** The group a card sits in (a shelf, the quick tiles, a tracklist): the same album can sit in
+ * several on one page, and focus must come back to the one you left. */
+export const FocusScope = createContext('');
+
 export function useHover(): [boolean, object] {
   const [hover, setHover] = useState(false);
   return [hover, web ? { onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) } : {}];
@@ -60,6 +64,8 @@ export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, 
   style(lit: boolean, focus: boolean): StyleProp<ViewStyle>; contentStyle?: StyleProp<ViewStyle>; children(lit: boolean): ReactNode;
 }) {
   const app = useMusic();
+  const scope = useContext(FocusScope);
+  const memoryId = focusId ? `${scope}/${focusId}` : '';
   const [hover, hoverProps] = useHover();
   const { state, handlers } = useInteraction();
   const lit = hover || state.focus;
@@ -81,9 +87,9 @@ export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, 
   return (
     <View {...hoverProps} style={style(lit, state.focus)}>
       <Pressable ref={ref} {...handlers} {...menu} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }}
-        onFocus={(e: unknown) => { focused.current = true; if (focusId) remembered.set(page, focusId); h.onFocus?.(e); }}
+        onFocus={(e: unknown) => { focused.current = true; if (memoryId) remembered.set(page, memoryId); h.onFocus?.(e); }}
         onBlur={(e: unknown) => { focused.current = false; h.onBlur?.(e); }}
-        {...(Platform.isTV && focusId && remembered.get(page) === focusId ? { hasTVPreferredFocus: true } : {})}
+        {...(Platform.isTV && memoryId && remembered.get(page) === memoryId ? { hasTVPreferredFocus: true } : {})}
         {...(web && onDoubleClick ? { onDoubleClick, onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') onDoubleClick(); } } as object : {})}
         style={[NO_RING, StyleSheet.absoluteFill]} />
       <View pointerEvents="box-none" style={contentStyle}>{children(lit)}</View>
@@ -98,14 +104,22 @@ export function FocusGroup({ children, style }: { children: ReactNode; style?: S
   return <TVFocusGuideView autoFocus style={style}>{children}</TVFocusGuideView>;
 }
 
-export function PlayFab({ playing, onPress, size = 56, label, testID }: { playing: boolean; onPress(): void; size?: number; label?: string; testID?: string }) {
+/** On a TV a page opens with focus on its Play button, unless you are coming back to a spot. */
+function useOpensHere(wanted: boolean): boolean {
+  const app = useMusic();
+  return wanted && Platform.isTV && !remembered.has(placeParam(app.place));
+}
+
+export function PlayFab({ playing, onPress, size = 56, label, testID, opensPage = false }: { playing: boolean; onPress(): void; size?: number; label?: string; testID?: string; opensPage?: boolean }) {
   const m = useMediaLook();
+  const preferred = useOpensHere(opensPage);
   const { state, handlers } = useInteraction();
   const lit = state.hover || state.focus;
   return (
     <Pressable {...handlers} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label ?? (playing ? msg('media.player.pause') : msg('media.player.play'))}
+      {...(preferred ? { hasTVPreferredFocus: true } : {})}
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: m.ui.accent,
-        transform: [{ scale: state.pressed ? 0.95 : lit ? 1.05 : 1 }] }, m.box({ 'box-shadow': `0px 10px 28px -8px ${alpha(m.ui.accent, 0.7)}` }), transition('transform')]}>
+        transform: [{ scale: state.pressed ? 0.95 : lit ? 1.08 : 1 }] }, state.focus && musicTV() ? { borderWidth: 3, borderColor: m.ui.ink } : {}, m.box({ 'box-shadow': `0px 10px 28px -8px ${alpha(m.ui.accent, 0.7)}` }), transition('transform')]}>
       <MediaGlyph name={playing ? 'pause' : 'play'} size={Math.round(size * 0.42)} color={m.ui.onAccent} />
     </Pressable>
   );
@@ -121,7 +135,7 @@ export function IconButton({ symbol, label, onPress, size = 40, iconSize = 20, a
   return (
     <Pressable {...handlers} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: active }}
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: lit ? m.ui.control : 'transparent',
-        transform: [{ scale: state.pressed ? 0.92 : 1 }] }, transition('transform, background-color', 140)]}>
+        transform: [{ scale: state.pressed ? 0.92 : state.focus && musicTV() ? 1.1 : 1 }] }, state.focus && musicTV() ? { borderWidth: 2, borderColor: m.ui.ink } : {}, transition('transform, background-color', 140)]}>
       <Icon name={symbol} size={iconSize} color={ink} />
       {active ? <View style={{ position: 'absolute', bottom: 3, width: 4, height: 4, borderRadius: 2, backgroundColor: m.ui.accent }} /> : null}
     </Pressable>
@@ -181,7 +195,7 @@ export function Shelf({ title, detail, children, onMore }: { title: string; deta
         {onMore ? <Pressable onPress={onMore} accessibilityRole="link" style={NO_RING}><Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: '$ui.inkQuiet' })}>{msg('music.showAll')}</Text></Pressable> : null}
       </View>
       {detail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginBottom: 4 }]}>{detail}</Text> : null}
-      <FocusGroup><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 0 }}>{children}</ScrollView></FocusGroup>
+      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 0 }}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
     </View>
   );
 }

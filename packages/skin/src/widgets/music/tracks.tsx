@@ -11,7 +11,7 @@ import { NO_RING, Glyph } from '../common/controls';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { MediaGlyph } from '../media/icons';
 import { useMusic } from './context';
-import { FocusGroup, Heart, IconButton, Surface, transition, type MenuOpen } from './parts';
+import { FocusGroup, FocusScope, Heart, IconButton, Surface, transition, type MenuOpen } from './parts';
 import { musicTV } from './layout';
 
 const web = Platform.OS === 'web';
@@ -42,7 +42,7 @@ export function TrackList({ tracks, options = {} }: { tracks: Card[]; options?: 
         <View style={{ width: 52, alignItems: 'flex-end' }}><Glyph symbol="clock" size={16} color={m.ui.inkQuiet} /></View>
         <View style={{ width: 32 }} />
       </View>}
-      <FocusGroup>{tracks.map((track, i) => <TrackRow key={`${track.id}-${i}`} track={track} index={i} tracks={tracks} options={options} wide={wide} />)}</FocusGroup>
+      <FocusScope.Provider value={`tracks:${options.source?.id ?? ''}`}><FocusGroup>{tracks.map((track, i) => <TrackRow key={`${track.id}-${i}`} track={track} index={i} tracks={tracks} options={options} wide={wide} />)}</FocusGroup></FocusScope.Provider>
     </View>
   );
 }

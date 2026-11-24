@@ -126,7 +126,9 @@ export function RoundButton({ icon, label, onPress, size = 44, active = false, t
       accessibilityState={{ selected: active }}
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center',
         backgroundColor: lit ? ui.controlHover : ui.control, transform: [{ scale: state.pressed ? 0.94 : 1 }] },
-        state.focus ? box({ 'box-shadow': `0px 0px 0px 3px ${ui.focusHalo}, 0px 0px 0px 1.5px ${ui.ink}` }) : {}]}>
+        state.focus ? box({ 'box-shadow': `0px 0px 0px 3px ${ui.focusHalo}, 0px 0px 0px 1.5px ${ui.ink}` }) : {},
+        // Android draws no box shadows: a TV shows focus as a ring and a lift.
+        Platform.isTV ? { borderWidth: 3, borderColor: state.focus ? ui.ink : 'transparent', transform: [{ scale: state.focus ? 1.1 : 1 }] } : {}]}>
       <MediaGlyph name={icon} size={iconSize ?? Math.round(size * 0.45)} color={active ? ui.accent : ui.ink} />
     </Pressable>
   );
@@ -166,7 +168,8 @@ export function ListRow({ number, title, subtitle, trailing, current = false, pl
       accessibilityLabel={[title, subtitle, trailing].filter(Boolean).join(', ')} accessibilityState={{ selected: current }}
       style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: small ? 12 : 18, paddingVertical: small ? 10 : 11, paddingHorizontal: small ? 10 : 14,
         borderRadius: Math.min(12, Number(ui.radiusCard) || 10), backgroundColor: lit ? ui.control : current ? alpha(ui.accent, 0.12) : 'transparent' },
-        state.focus ? box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${ui.ink}` }) : {}]}>
+        state.focus ? box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${ui.ink}` }) : {},
+        Platform.isTV ? { borderWidth: 2, borderColor: state.focus ? ui.ink : 'transparent' } : {}]}>
       <View style={{ width: 28, alignItems: 'center' }}>
         {current || lit
           ? <MediaGlyph name={current && playing && !lit ? 'volume' : current && playing ? 'pause' : 'play'} size={16} color={current ? ui.accent : ui.ink} />

@@ -13,7 +13,7 @@ import { alpha, Cover, useMediaLook, type MediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
 type FacetValue = { id: string; label: string; count: number };
-import { Byline, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
+import { Byline, FocusScope, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
 import { TrackList } from './tracks';
 import { compactMusic, musicTV } from './layout';
 export { compactMusic };
@@ -102,11 +102,11 @@ export function MusicHome() {
       <Wash accent={accent} height={360} />
       <View style={{ paddingHorizontal: m.small ? 16 : 20, paddingTop: m.small ? 16 : 28 }}>
         <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '30px' : '38px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { marginBottom: m.small ? 14 : 20 }]}>{greeting()}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 8 : 10, marginBottom: m.small ? 24 : 36 }} testID="music-quick">
+        <FocusScope.Provider value="quick"><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 8 : 10, marginBottom: m.small ? 24 : 36 }} testID="music-quick">
           {quick.map(item => item === 'liked'
-            ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'liked' })} />
-            : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={m.small ? 52 : 64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
-        </View>
+            ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={musicTV() ? 72 : m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'liked' })} />
+            : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={musicTV() ? 72 : m.small ? 52 : 64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
+        </View></FocusScope.Provider>
       </View>
       <View style={{ paddingHorizontal: m.small ? 4 : 8 }}>
         {recentCards.length ? <Shelf title={msg('music.recentlyPlayed')}>{recentCards.map(card => <MusicTile key={card.id} card={card} size={176} subtitle={card.kind === 'playlist' ? msg('music.playlist') : undefined} />)}</Shelf> : null}
@@ -137,17 +137,20 @@ export function playlistCard(p: { id: string; name: string; poster: string; item
 function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; title: string; subtitle?: string; cover: ReactNode; onPress(): void }) {
   const app = useMusic();
   const m = useMediaLook();
-  const columns = m.width >= 1000 ? 4 : 2;
-  const width = `calc(${100 / columns}% - ${(10 * (columns - 1)) / columns}px)`;
+  const columns = m.width >= 1000 || musicTV() ? 4 : 2;
+  // A percentage every platform lays out (native has no calc()): the gaps take the rest.
+  const width = `${100 / columns - (columns === 4 ? 1.2 : 1.6)}%`;
+  const tv = musicTV();
   return (
     <Surface onPress={onPress} onMenu={card ? (anchor, mode, opener) => app.menu({ card, anchor, mode, opener }) : undefined} focusId={card?.id ?? 'liked'} label={title}
-      style={lit => [{ width: width as never, height: m.small ? 52 : 64, borderRadius: 8, overflow: 'hidden', backgroundColor: lit ? m.ui.controlHover : alpha(m.ui.ink, 0.07) }, transition('background-color', 140)]}
+      style={(lit, focus) => [{ width: width as never, height: tv ? 76 : m.small ? 52 : 64, borderRadius: tv ? 12 : 8, overflow: 'hidden', backgroundColor: lit ? m.ui.controlHover : alpha(m.ui.ink, 0.07) },
+        tv ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.03 : 1 }] } : {}, transition('background-color, transform', 140)]}
       contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: m.small ? 10 : 14, paddingRight: m.small ? 8 : 0 }}>
       {lit => (
         <>
           <View pointerEvents="none">{cover}</View>
           <View pointerEvents="none" style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={2} style={m.text({ 'font-size': m.small ? '13px' : '15px', 'font-weight': '700', color: '$ui.ink' })}>{title}</Text>
+            <Text numberOfLines={2} style={m.text({ 'font-size': musicTV() ? '19px' : m.small ? '13px' : '15px', 'font-weight': '700', color: '$ui.ink' })}>{title}</Text>
             {subtitle ? <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet' })}>{subtitle}</Text> : null}
           </View>
           {m.small || musicTV() ? null : <View pointerEvents={lit ? 'auto' : 'none'} style={[{ marginRight: 10, opacity: lit ? 1 : 0 }, transition('opacity', 160)]}>
@@ -217,7 +220,7 @@ function AlbumView({ card }: { card: Card }) {
           <Byline card={card} facts={[card.yearLabel, tracks.length ? totalLabel(tracks) : '']} />
         </Header>
         <ActionBar>
-          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" />
+          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" opensPage />
           <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />
           <Heart card={card} size={44} iconSize={26} />
           <MoreButton card={card} />
@@ -274,7 +277,7 @@ function ArtistView({ card }: { card: Card }) {
       </View>
       <View style={{ paddingHorizontal: pad(m) }}>
         <ActionBar>
-          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(top, 0, source))} testID="music-play" />
+          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(top, 0, source))} testID="music-play" opensPage />
           <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(top, 0, source, true)} />
           <FollowButton on={following} onPress={() => app.like(card, !following)} />
           <MoreButton card={card} />
@@ -402,7 +405,7 @@ export function MusicPlaylist({ id }: { id: string }) {
           </View>
         </Header>
         <ActionBar>
-          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" />
+          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" opensPage />
           <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />
           <IconButton symbol="more" label={msg('music.editDetails')} size={44} iconSize={24} onPress={() => undefined} />
         </ActionBar>
@@ -431,7 +434,7 @@ export function MusicLiked() {
           <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}><Text style={m.text({ 'font-weight': '700', color: '$ui.ink' })}>{viewer}</Text> · {liked.moreTracks ? msg(`media.count.tracks.other`, { count: number(liked.trackTotal) }) : totalLabel(tracks)}</Text>
         </Header>
         <ActionBar>
-          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" />
+          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" opensPage />
           <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />
         </ActionBar>
         <TrackList tracks={tracks} options={{ covers: true, album: true, position: true, source }} />

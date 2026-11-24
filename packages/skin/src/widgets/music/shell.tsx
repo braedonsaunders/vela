@@ -99,7 +99,8 @@ function TVShell({ top }: { top: string }) {
         <NavItem symbol="library" label={msg('music.yourLibrary')} place={{ kind: 'library' }} rail />
         <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail />
       </FocusGroup>
-      <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 64 : 48, paddingRight: 32 }} testID="music-main">
+      {/* The page ends above the floating mini player, so a focused row is never under it. */}
+      <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? MINI_PLAYER_HEIGHT + 28 : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main">
         {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
           : page.kind === 'liked' ? <MusicLiked />
           : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />

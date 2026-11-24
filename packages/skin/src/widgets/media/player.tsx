@@ -131,6 +131,7 @@ function PlayButton({ playing, size, onPress, testID, nativeID, preferred }: { p
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center',
         backgroundColor: lit ? m.ui.inkHover : m.ui.accent, transform: [{ scale: state.pressed ? 0.94 : lit ? 1.04 : 1 }] },
         state.focus ? m.box({ 'box-shadow': `0px 0px 0px 4px ${m.ui.focusHalo}` }) : {},
+        Platform.isTV ? { borderWidth: 4, borderColor: state.focus ? m.ui.ink : 'transparent' } : {},
         web ? ({ transitionProperty: 'transform, background-color', transitionDuration: '160ms' } as ViewStyle) : {}]}>
       <MediaGlyph name={playing ? 'pause' : 'play'} size={Math.round(size * 0.42)} color={lit ? m.ui.inkInverse : m.ui.onAccent} />
     </Pressable>
@@ -165,7 +166,8 @@ function Scrubber({ position, duration, onSeek, chapters }: { position: number; 
         onResponderTerminate={() => setDrag(null)}
         {...(keys as object)}
         style={[NO_RING, { height: 22, justifyContent: 'center', borderRadius: 6 }, web ? ({ cursor: 'pointer' } as ViewStyle) : {},
-          focus ? m.box({ 'box-shadow': `0px 0px 0px 2px ${m.ui.focusHalo}` }) : {}]}>
+          focus ? m.box({ 'box-shadow': `0px 0px 0px 2px ${m.ui.focusHalo}` }) : {},
+          Platform.isTV ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent' } : {}]}>
         <View style={{ height: drag !== null || focus ? 6 : 4, borderRadius: 3, backgroundColor: m.ui.track, overflow: 'hidden' }}>
           <View style={{ width: `${fraction * 100}%`, height: '100%', backgroundColor: m.ui.ink }} />
         </View>
@@ -192,7 +194,8 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
       {...(Platform.OS === 'web' ? { 'aria-checked': selected } : {})}
       style={[NO_RING, { paddingHorizontal: 14, height: 34, borderRadius: 17, justifyContent: 'center',
         backgroundColor: selected ? m.ui.ink : lit ? m.ui.controlHover : m.ui.control },
-        state.focus ? m.box({ 'box-shadow': `0px 0px 0px 3px ${m.ui.focusHalo}` }) : {}]}>
+        state.focus ? m.box({ 'box-shadow': `0px 0px 0px 3px ${m.ui.focusHalo}` }) : {},
+        Platform.isTV ? { borderWidth: 3, borderColor: state.focus ? m.ui.accent : 'transparent' } : {}]}>
       <Text style={m.text({ 'font-size': '13px', 'font-weight': '600', color: selected ? m.ui.inkInverse : m.ui.ink })}>{label}</Text>
     </Pressable>
   );
