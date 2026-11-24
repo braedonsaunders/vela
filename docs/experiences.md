@@ -235,10 +235,36 @@ Watch, or rides along with step 1's surfaces if the owner wants it earlier.
   experience in the manifest (the clean cut is in progress).
 - Slot surfaces: `contributes.surfaces` with presentation `slot` and a slot id from the
   published list, served and capped like the other surfaces.
-- The music API in thr_9ahkvmww6a's plan (likes listing, play contexts, playlist covers, lyrics,
-  continuation). These back the `vela.*` sources for `listen`. The Jellyfin and Plex adapters
-  answer the same sources where their servers can.
+- The music API in thr_9ahkvmww6a's plan and the Mornye contract below back the `vela.*` sources
+  for `listen`. The Jellyfin and Plex adapters answer the same sources where their servers can.
 - Hosting and vendoring the one schema, with Studio preview through Vela's preview mode.
+
+### Agreed with Ether's music lead (2026-11-24)
+
+- **Experience ids:**
+  - Already on Ether: `library.experience` on every library, the manifest
+    `mediaKinds[].library.experience` with any id matching the slug pattern, defaults by media
+    class, and `features.libraryExperiences.experiences`.
+  - Ether accepts any id, so plugin-defined experiences later need no Ether change.
+- **`live`:**
+  - Live TV is its own section, not a library. Vela maps its Live TV section onto the `live`
+    experience itself, so Ether changes nothing.
+  - Only a kind that declares `live`, such as Sports, sends it on a library.
+- **The music contract** (the agreed refinements in the Mornye plan) appears to documents as:
+
+  | Kind | Names |
+  | --- | --- |
+  | Record fields | `media.loudness` (with `trim` and fades), `media.quality`, `media.recordingId`, `media.bpm` on `item:` records; `audioQuality` and `loudness` of the playing file on `nowPlaying:` |
+  | Sources | `vela.lyrics` (`id`, `translate`; lines with word timing, translation and romanisation), `vela.recap` (`period`, `at`, `library`), `vela.duplicates` (`libraryId`), `vela.recording` (`id`) |
+  | Local actions | Answered by core, with the same answer shape as plugin actions: `vela.playlistImport` (start, which polls its progress into a local `import:` record; then `vela.playlistImportSave`), `vela.duplicatePreference`, `vela.like`, `vela.playNext`, `vela.addToQueue`, `vela.startRadio`, and so on. A flow such as the import is a page document (`listen/import`) over the `import:` record, not a new mechanism. |
+
+- **Artist extras** (bio, upcoming concerts) come as an `ether.music` surface in
+  `listen.artist.panel` once slot surfaces exist. No music-specific fields go into core.
+- **Sequencing:** the music section-B work happening now in `widgets/music` puts its engines in
+  core stores and in the rich blocks. These engines are AutoMix and crossfade, EQ, levelling,
+  word-timed lyrics, recap charts and the import flow. That way they carry over to documents
+  unchanged, and only the drawing is replaced at Listen parity.
+- **Jellyfin and Plex:** `unsupported` per part. Nothing changes on Ether.
 
 ### Agreed with Ether's plugin-screens lead (2026-11-24)
 
