@@ -9,7 +9,7 @@ const animatedLayer = (layer: Layer) => [layer.style, layer.hover, layer.focus, 
 export function needsAnimatedFrame(node: RNode): boolean {
   const previous = choices.get(node);
   if (previous !== undefined) return previous;
-  const animated = !!node.motion || animatedLayer(node.base) || node.states.some(state => animatedLayer(state.layer))
+  const animated = !!node.motion || !!node.onChange || animatedLayer(node.base) || node.states.some(state => animatedLayer(state.layer))
     || transitions(node.active) || transitions(node.disabledStyle);
   choices.set(node, animated);
   return animated;

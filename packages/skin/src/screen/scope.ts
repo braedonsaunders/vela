@@ -75,3 +75,9 @@ export function text(value: unknown, read?: RecordReader): string {
   if (typeof value === 'object') return Object.keys(value).length ? 'true' : '';
   return '';
 }
+
+/** A screen document's image: only Vela's own same-origin URLs (Ether's proxied `$image`s and a
+ * plugin's assets); anything else is refused, and the image's fallback draws instead. */
+export function screenImageSrc(src: string): string {
+  return /^\/vela\/v0\/[^\s\\]*$/.test(src) && !src.includes('..') ? src : '';
+}

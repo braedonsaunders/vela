@@ -52,7 +52,9 @@ import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
-import { collection, itemKey, type Card, type Ctx, type Env } from './vocabulary';
+import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocabulary';
+import { itemKey, items } from './screen/items';
+import { screenImageSrc } from './screen/scope';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
@@ -375,8 +377,8 @@ function MenuPresence({ shown, still, children }: { shown: boolean; still: boole
  * re-enters. */
 function HeroStage({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx: Ctx }) {
   const { env } = useHost();
-  const current = collection(node.over, ctx, env, node.limit).find(c => holds(node.when, c, env));
-  const key = current ? itemKey(current, node.over) : '';
+  const current = items(node, ctx, env).find(c => holds(node.when, c, env));
+  const key = current ? itemKey(node, current, env) : '';
   const layers = useRef<{ key: string; ctx: Ctx }[]>([]);
   const [, refresh] = useState(0);
   if (!current) layers.current = [];
@@ -395,17 +397,42 @@ function HeroStage({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ct
  * one after it arrives with the shared motion, so the copy never snaps from one title to the next. */
 function HeroCopy({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx: Ctx }) {
   const { env } = useHost();
-  const items = collection(node.over, ctx, env, node.limit).filter(c => holds(node.when, c, env));
+  const drawn = items(node, ctx, env).filter(c => holds(node.when, c, env));
   const first = useRef<string | null>(null);
-  if (first.current === null && items[0]) first.current = itemKey(items[0], node.over);
-  return <>{items.map(c => {
-    const key = itemKey(c, node.over);
+  if (first.current === null && drawn[0]) first.current = itemKey(node, drawn[0], env);
+  return <>{drawn.map(c => {
+    const key = itemKey(node, c, env);
     const item = <SkinNode key={key} node={node.item} ctx={c} hero />;
     return key === first.current ? item : <Arrive key={key} still={env.still}>{item}</Arrive>;
   })}</>;
 }
 
-function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
+/** How many times a node's onChange value has changed while drawn (screens). */
+const ChangeCount = createContext(0);
+
+/** Redraws its node afresh each time its onChange value changes, so the node's change motion plays
+ * from the start; the first draw plays nothing. */
+function Changed({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
+  const { env } = useHost();
+  const value = fill(node.onChange!.value, ctx, env);
+  const last = useRef(value);
+  const count = useRef(0);
+  if (last.current !== value) {
+    last.current = value;
+    count.current++;
+  }
+  return <ChangeCount.Provider value={count.current}>
+    <SkinNodeView key={count.current} node={node} ctx={ctx} route={route} after={after} hero={hero} changed />
+  </ChangeCount.Provider>;
+}
+
+/** A node's onChange motion while it plays (after a change), else nothing. */
+function useChangeMotion(node: RNode, still: boolean): Record<string, unknown> | undefined {
+  const changes = useContext(ChangeCount);
+  return node.onChange && changes > 0 ? animation(node.onChange.motion, {}, still, 0) : undefined;
+}
+
+function SkinNodeView({ node, ctx, route, after, hero, changed }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; changed?: boolean }) {
   // A row's arrows read its pager: they, and nothing else, redraw when the row reports its ends.
   usePager(readsPager(node) ? ctx.row?.id : undefined);
   const { env } = useHost();
@@ -436,14 +463,14 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     // focus to the pager, where Select picked the first title).
     let shown = 0;
     const steadyHero = node.over === 'home.hero' && Platform.isTV;
-    const items = collection(node.over, ctx, env, node.limit).flatMap(c => {
+    const drawn = items(node, ctx, env).flatMap(c => {
       const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
       if (!holds(node.when, c, env)) return [];
-      const key = steadyHero ? `hero-shown-${shown++}` : itemKey(c, node.over);
+      const key = steadyHero ? `hero-shown-${shown++}` : itemKey(node, c, env);
       return [<SkinNode key={key} node={node.item} ctx={context} hero={node.over === 'home.hero'} />];
     });
-    const lazy = LAZY_REPEATS[node.over];
-    return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{items}</LazyRepeat> : <>{items}</>;
+    const lazy = node.items ? undefined : LAZY_REPEATS[node.over];
+    return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{drawn}</LazyRepeat> : <>{drawn}</>;
   }
   // A menu or drawer that opens with a motion also leaves with one (not on TV, whose focus motion
   // is the only one).
@@ -451,6 +478,8 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     return <MenuPresence shown={holds(node.when, ctx, env)} still={env.still}><Box node={node} ctx={ctx} route={route} after={after} hero={hero} /></MenuPresence>;
   }
   if (!holds(node.when, ctx, env)) return null;
+  // Screens: a node whose bound value changes plays its onChange motion (a score pops).
+  if (node.onChange && !changed) return <Changed node={node} ctx={ctx} route={route} after={after} hero={hero} />;
   switch (node.kind) {
     case 'box': return <Box node={node} ctx={ctx} route={route} after={after} hero={hero} />;
     case 'text': return <TextNode node={node} ctx={ctx} />;
@@ -747,7 +776,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // finite motion runs whatever the screen (keyframes.ts runs), so a section coming or going
   // redraws those few nodes, not every card that arrived with a motion.
   const opening = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, readsActivity(node) ? use(ScreenActive) : true);
-  const motion = leaving ? MENU_LEAVE : opening;
+  const change = useChangeMotion(node, env.still);
+  const motion = leaving ? MENU_LEAVE : change ? { ...opening, ...change } : opening;
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
@@ -805,15 +835,15 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const cards = env.library?.model?.items ?? [];
       const item = (i: number) => {
         const context = { ...ctx, card: cards[i]!, index: i };
-        return <SkinNode key={itemKey(context, repeat.over)} node={repeat.item} ctx={context} />;
+        return <SkinNode key={vocabularyKey(context, repeat.over)} node={repeat.item} ctx={context} />;
       };
       content = <WindowedGrid grid={fx.grid} rowGap={style.rowGap ?? 0}
         length={Math.min(cards.length, repeat.implicitLimit ? Infinity : repeat.limit)} getItem={item} />;
     } else {
-      const items = node.children.flatMap((child, i) => child.kind === 'repeat'
-        ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c, child.over)}`} node={child.item} ctx={c} />)
+      const cells = node.children.flatMap((child, i) => child.kind === 'repeat'
+        ? items(child, ctx, env).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(child, c, env)}`} node={child.item} ctx={c} />)
         : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
-      content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
+      content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={cells} />;
     }
   }
   if (measuring) {
@@ -825,8 +855,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       </FitCell>
     );
     const cells = measure ? node.children.flatMap((child, i) => child.kind === 'repeat'
-      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env) && holds(child.item.when, c, env))
-        .map(c => cell(child.item, c, `${i}:${itemKey(c, child.over)}`))
+      ? items(child, ctx, env).filter(c => holds(child.when, c, env) && holds(child.item.when, c, env))
+        .map(c => cell(child.item, c, `${i}:${itemKey(child, c, env)}`))
       : holds(child.when, ctx, env) ? [cell(child, ctx, String(i))] : []) : children;
     return (
       <Inherited.Provider value={text}>
@@ -1192,7 +1222,7 @@ function sectionText(node: RNode, ctx: Ctx, env: Env): string {
   const visit = (n: RNode, c: Ctx) => {
     if (parts.join(' ').length > SECTION_TEXT_MAX) return;
     if (n.kind === 'repeat') {
-      for (const item of collection(n.over, c, env, n.limit)) if (holds(n.when, item, env)) visit(n.item, item);
+      for (const item of items(n, c, env)) if (holds(n.when, item, env)) visit(n.item, item);
       return;
     }
     if (!holds(n.when, c, env) || n.hidden) return;
@@ -1500,8 +1530,9 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const instant = useContext(InstantContent);
   const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, readsActivity(node) ? use(ScreenActive) : true);
+  const change = useChangeMotion(node, env.still);
   const pointer = pointerPolicy(style.pointerEvents, useContext(PointerInheritance));
-  return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion,
+  return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion, ...change,
     ...(!web && pointer.content === 'none' ? { pointerEvents: 'none' } : {}) } as Record<string, unknown>, fx };
 }
 
@@ -1582,12 +1613,19 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
   const { style, fx } = useLeafStyle(node, ctx);
   const Frame = frameFor(node);
   const labelContent = useContext(PressLabelContent);
+  const [loadState, setLoadState] = useState<{ src: string; ok: boolean } | null>(null);
   if (fx.hidden) return null;
-  const source = host.image(fill(node.src, ctx, host.env));
+  const src = fill(node.src, ctx, host.env);
+  const source = host.image(ctx.screen ? screenImageSrc(src) : src);
+  // Screens: the fallback draws in the image's place when the source is empty, refused or fails;
+  // one positioned absolutely (a crest's initials over its disc) also shows until the image loads.
+  const state = loadState?.src === src ? loadState.ok : undefined;
+  if (node.fallback && (!source || state === false)) return <SkinNode node={node.fallback} ctx={ctx} />;
+  const fallback = node.fallback && state === undefined && node.fallback.base.style.position === 'absolute' ? <SkinNode node={node.fallback} ctx={ctx} /> : null;
   const alt = node.alt ? fill(node.alt, ctx, host.env) : '';
   const hidden = labelContent || !alt;
   // The box carries the node's style and motion; the image fills it.
-  return (
+  const image = (
     <Frame style={style as ViewStyle} pointerEvents="none" accessible={!hidden} accessibilityLabel={hidden ? undefined : alt} accessibilityRole={!hidden ? 'image' : undefined}
       accessibilityElementsHidden={hidden || undefined} importantForAccessibility={hidden ? 'no-hide-descendants' : undefined} {...(web && hidden ? { 'aria-hidden': true } : {})}>
       {source ? (
@@ -1599,10 +1637,12 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
           transition={node.fade ? 420 : 0}
           accessible={!hidden}
           accessibilityLabel={hidden ? '' : alt}
+          {...(node.fallback ? { onLoad: () => setLoadState({ src, ok: true }), onError: () => setLoadState({ src, ok: false }) } : {})}
         />
       ) : null}
     </Frame>
   );
+  return fallback ? <>{image}{fallback}</> : image;
 }
 
 function Icon({ node, ctx }: { node: Extract<RNode, { kind: 'icon' }>; ctx: Ctx }) {
