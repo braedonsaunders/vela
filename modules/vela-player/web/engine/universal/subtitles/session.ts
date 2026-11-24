@@ -9,6 +9,7 @@ import { PGSDecoder, type PGSDisplay } from './pgs';
 import { decodeVobSub, joinVobSubPackets, parseVobSubIdx, type VobSubCue } from './vobsub';
 import { createAssOutput, type AssOutput } from './ass';
 import { streamingPGS } from './streaming-pgs';
+import { externalTrack, withDescribed } from './described';
 import {
   readSubtitlePreferences,
   validateSubtitlePreferences,
@@ -67,43 +68,6 @@ function wait<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
       },
     );
   });
-}
-function externalTrack(description: SubtitleDescription): SubtitleTrack | null {
-  const codec = externalCodec(description);
-  if (!codec || !description.delivery || description.delivery.kind === 'embedded') return null;
-  return {
-    id: description.id,
-    serverId: description.id,
-    streamIndex: description.streamIndex ?? null,
-    containerTrackId: null,
-    codec,
-    label: (description.label ?? `${description.language ?? 'und'} ${codec.toUpperCase()}`).slice(0, 512),
-    language: (description.language ?? 'und').slice(0, 64),
-    default: false,
-    forced: false,
-    delivery: description.delivery,
-  };
-}
-function externalCodec(description: SubtitleDescription): SubtitleTrack['codec'] | null {
-  const format =
-    description.delivery?.kind === 'external'
-      ? description.delivery.format
-      : description.codec?.toLowerCase();
-  return format === 'webvtt-window' || format === 'vtt'
-    ? 'webvtt'
-    : format === 'sup' || format === 'hdmv_pgs_subtitle'
-      ? 'pgs'
-      : format === 'dvd_subtitle' || format === 'dvdsub'
-        ? 'vobsub'
-      : format === 'subrip'
-        ? 'srt'
-        : format === 'mov_text'
-          ? 'tx3g'
-          : ['srt', 'webvtt', 'ass', 'ssa', 'pgs', 'vobsub', 'tx3g'].includes(format ?? '')
-            ? (format as SubtitleTrack['codec'])
-            : description.delivery?.kind === 'burn-in'
-              ? 'unknown'
-              : null;
 }
 function supPackets(bytes: Uint8Array): SubtitlePacket[] {
   const result: SubtitlePacket[] = [];
@@ -209,9 +173,8 @@ export class SubtitleSession {
     if (!fresh.length) return false;
     // A discovery still opening the source reads these when it lists its tracks.
     this.added.push(...fresh);
-    if (this.opened) {
-      const tracks = [...this.tracks];
-      for (const description of fresh) if (!tracks.some((track) => track.serverId === description.id)) tracks.push(externalTrack(description)!);
+    const tracks = this.opened ? withDescribed(this.tracks, fresh) : null;
+    if (tracks) {
       this.tracks = tracks;
       this.options.onTracks?.(tracks);
     }
