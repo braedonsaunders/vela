@@ -313,22 +313,9 @@ function convert(node: Node, depth: number, r: Context): RNode {
       when: [...(template.when ?? []), ...(node.when ?? [])],
       motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r);
   }
-  node = withRowLinks(node);
-  // Loading is app-owned across skins. Keep the document's condition and placement,
-  // but use the same passive branded indicator for status surfaces.
-  const waiting = node.when?.find(test => !test.not && (
-    (test.test === 'env.load' || test.test === 'env.search') && test.is === 'eq' && test.value === 'loading'
-    || ['env.libraryMoreLoading', 'env.collectionMoreLoading', 'env.homeMoreLoading'].includes(test.test)
-  ));
-  if (node.role === 'status' && waiting) {
-    node = { type: 'widget', widget: 'contentLoader', when: node.when,
-      params: { inline: waiting.test.endsWith('MoreLoading') ? 'true' : 'false' } };
-  }
-  // Legacy/custom skins may count items without guarding the active query's load.
-  if (node.when?.some(test => test.test === 'library.itemCount' && test.is === 'eq' && test.value === '0' && !test.not)) {
-    node = { ...node, when: [...node.when, { test: 'library.viewLoad', is: 'eq', value: 'ready' }] };
-  }
-  node = withLibraryPresentation(node, r.width);
+  // The app's own rewrites of skin routes (row links, loaders, library guards) read the vocabulary:
+  // a screen document has none of it.
+  if (!r.screen) node = skinRewrites(node, r);
   const n = node as Node & { below?: Record<string, Style>; above?: Record<string, Style> };
   const style = variant(n, r, node.style);
   const layer = (s: Style, extra: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; label?: string }): Layer => ({
@@ -415,6 +402,27 @@ function convert(node: Node, depth: number, r: Context): RNode {
       r.unsupported.add(`block ${(node as { type: string }).type}`);
       return { ...common, kind: 'box', children: [], controlStates: false };
   }
+}
+
+/** Rewrites the app applies to skin documents' routes (never to screen documents). */
+function skinRewrites(node: Exclude<Node, UseNode>, r: Context): Exclude<Node, UseNode> {
+  node = withRowLinks(node);
+  // Loading is app-owned across skins. Keep the document's condition and placement,
+  // but use the same passive branded indicator for status surfaces.
+  const waiting = node.when?.find(test => !test.not && (
+    (test.test === 'env.load' || test.test === 'env.search') && test.is === 'eq' && test.value === 'loading'
+    || ['env.libraryMoreLoading', 'env.collectionMoreLoading', 'env.homeMoreLoading'].includes(test.test)
+  ));
+  if (node.role === 'status' && waiting) {
+    node = { type: 'widget', widget: 'contentLoader', when: node.when,
+      params: { inline: waiting.test.endsWith('MoreLoading') ? 'true' : 'false' } };
+  }
+  // Legacy/custom skins may count items without guarding the active query's load.
+  if (node.when?.some(test => test.test === 'library.itemCount' && test.is === 'eq' && test.value === '0' && !test.not)) {
+    node = { ...node, when: [...node.when, { test: 'library.viewLoad', is: 'eq', value: 'ready' }] };
+  }
+  node = withLibraryPresentation(node, r.width);
+  return node;
 }
 
 // Screens (docs/plugin-screens.md). Resolved with the same convert(), holes reading ScreenScope.

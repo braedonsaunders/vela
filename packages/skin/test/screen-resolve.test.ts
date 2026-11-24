@@ -194,6 +194,11 @@ describe('collections', () => {
     const all = repeat({ asOf: { at: 'at', time: '{context.pictureTime}' } });
     expect(drawn(all, root({ list: { events: [{ title: 'x' }, { title: 'y' }] } }, { context: { pictureTime: '2026-11-24T19:00:00Z' } }))).toEqual(['x#0', 'y#1']);
   });
+  test("the app's skin rewrites never touch a screen: an alias named row keeps its text", () => {
+    const r = resolve(doc({ type: 'repeat', over: 'src.rows', as: 'row', item: { type: 'text', text: '{row.name}' } })).tree as Extract<RNode, { kind: 'repeat' }>;
+    expect(r.item.kind).toBe('text');
+    expect(items(r, root({ rows: [{ name: 'Verstappen' }] }), env).map(i => textOf(r.item, i))).toEqual(['Verstappen']);
+  });
   test('a condition may be written as a hole', () => {
     const r = resolve(doc({ type: 'text', text: 'x', when: [{ test: '{src.on}' }] }));
     expect(holds(r.tree.when, root({ on: true }), env)).toBe(true);
@@ -275,5 +280,16 @@ describe('half points on TV', () => {
     expect(halfPoints('#13pxx a-13px', 1.25)).toBe('#13pxx a-13px');
     const r = resolveScreenDocument(doc({ type: 'box', style: { padding: '13px', width: '{src.w}' } }), { width: 1920, tv: true, scale: 1.25 }, 'en', {});
     expect(fill(r.tree.base.style.padding, root({}), env)).toBe('13.2px');
+  });
+});
+
+describe('budgets', () => {
+  test("a block's items cost as a repeat's; a repeat of at most one item costs as the page", async () => {
+    const { treesReport } = await import('../../../tools/skin-budget');
+    const card: Node = { type: 'box', children: Array.from({ length: 30 }, () => ({ type: 'text', text: 'x' }) as Node) };
+    const shelf = resolve(doc({ type: 'shelf', over: 'src.x', as: 'e', item: card }));
+    expect(treesReport([['tree', shelf.tree]]).pages[0]!.perItem).toBe(31);
+    const hero = resolve(doc({ type: 'repeat', over: 'src.x', as: 'e', limit: 1, item: card }));
+    expect(treesReport([['tree', hero.tree]]).pages[0]).toMatchObject({ perItem: 0, nodes: 32 });
   });
 });
