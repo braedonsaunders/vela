@@ -361,10 +361,11 @@ export class Home {
       let cursor: string | undefined;
       for (let n = 0; n < LIBRARY_PAGES; n++) {
         const page = await connection.adapter.libraries({ cursor, limit: 100 });
-        for (const { id, name, kind, artwork, dateDisplay = 'year', media, presentation } of page.items) {
+        for (const { id, name, kind, artwork, dateDisplay = 'year', media, presentation, tabs, experience } of page.items) {
           const image = artwork.find(a => a.kind === 'backdrop');
-          items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), ...(presentation ? { presentation } : {}),
-            experience: libraryExperience({ media, presentation }, this.session.features?.libraryExperiences), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
+          items.push({ id, name, kind, dateDisplay, ...(media ? { media: mediaClass(media) } : {}), ...(presentation ? { presentation } : {}), ...(tabs ? { tabs } : {}),
+            ...(experience ? { declaredExperience: experience } : {}),
+            experience: libraryExperience({ media, kind, experience }, this.session.features?.libraryExperiences), backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
         }
         if (page.continuation === 'exhausted') {
           this.session.check(epoch, 'libraries');
@@ -398,9 +399,10 @@ export class Home {
   private settleExperiences(): void {
     const libraries = this.box.get().libraries;
     const feature = this.session.features?.libraryExperiences;
-    if (!libraries.value?.some(item => item.experience !== libraryExperience(item, feature))) return;
+    const chosen = (item: Destination) => libraryExperience({ media: item.media, kind: item.kind, experience: item.declaredExperience }, feature);
+    if (!libraries.value?.some(item => item.experience !== chosen(item))) return;
     this.box.update('libraries', current => current.value
-      ? { ...current, value: current.value.map(item => ({ ...item, experience: libraryExperience(item, feature) })) }
+      ? { ...current, value: current.value.map(item => ({ ...item, experience: chosen(item) })) }
       : current);
   }
 

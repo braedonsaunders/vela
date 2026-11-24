@@ -55,14 +55,15 @@ if (sportsEnabled) Object.assign(capabilities.features, { liveEvents: { availabl
 Object.assign(capabilities.features, catchUpFeature());
 const navigation: V.NavigationEntry[] = sportsEnabled ? [{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports' }] : [];
 if (mediaEnabled) Object.assign(capabilities.features, {
-  mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast'] },
+  mediaClasses: { available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast', 'photo'] },
   reading: { available: true, formats: ['epub', 'pdf', 'cbz'] },
   audioPlayback: yes,
 } satisfies Partial<V.ServerCapabilities['features']>);
-// Every media library says how it opens (protocol README, Library experience): the audiobook and
-// podcast libraries ask for the audio app. VELA_MOCK_NO_EXPERIENCES=1 is a server from before it.
+// Every library names how it opens (protocol README, Library experience): music, audiobooks and
+// podcasts listen, books read, photos are a gallery, Live TV is live, the rest watch.
+// VELA_MOCK_NO_EXPERIENCES=1 is a server without it (Vela chooses by media class).
 const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
-if (experiencesEnabled) capabilities.features.libraryExperiences = { available: true, experiences: ['audio', 'standard'] };
+if (experiencesEnabled) capabilities.features.libraryExperiences = { available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] };
 // Plugin levels (concerts under music artists, rows per recommended tab). VELA_MOCK_NO_LEVELS=1 is
 // a server from before them: no capability, no Concerts tab, no childCounts and no video children.
 const levelsEnabled = mediaEnabled && process.env.VELA_MOCK_NO_LEVELS !== '1';
@@ -77,8 +78,8 @@ const videoLibraries: V.Library[] = labPreset ? [
   { ...fixtureLibraries[1]!, id: '2', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
   { ...fixtureLibraries[1]!, id: '4', name: 'Anime Shows', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
 ] : fixtureLibraries;
-const libraries: V.Library[] = [...videoLibraries.map(library => experiencesEnabled ? { ...library, presentation: { card: library.presentation?.card ?? 'poster', experience: 'standard' as const } } : library),
-  ...(mediaEnabled ? mediaLibraries.map(library => experiencesEnabled ? library : { ...library, presentation: { card: library.presentation!.card } }).map(library => levelsEnabled ? library
+const libraries: V.Library[] = [...videoLibraries.map(library => experiencesEnabled ? { ...library, experience: library.kind === 'live' ? 'live' : 'watch' } : library),
+  ...(mediaEnabled ? mediaLibraries.map(({ experience, ...library }) => experiencesEnabled ? { ...library, experience } : library).map(library => levelsEnabled ? library
     : { ...library, tabs: library.tabs?.filter(tab => !(tab.kind === 'recommended' && tab.card)) }) : [])];
 const isMedia = (libraryId: string) => mediaEnabled && isMediaLibrary(libraryId);
 /** A library's entries; media libraries list the root level, or `level` when a tab names one. */
@@ -224,6 +225,7 @@ function mediaLibraryRows(g: Grant, libraryId: string, tab?: string): V.Row[] {
   if (libraryId === 'books') return [...titleRow('books-continue', 'Continue reading', 'continue', 'poster', continueReading(g)),
     ...titleRow('books-series', 'Series to start', 'recommendation', 'poster', mediaGroups.series),
     ...titleRow('books-standalone', 'Standalone reads', 'collection', 'poster', mediaGroups.books.filter(book => !book.media?.parents?.length).map(book => present(g, book)))];
+  if (libraryId === 'photos') return titleRow('photos-recent', 'Recent photos', 'recentlyAdded', 'square', mediaGroups.photos);
   if (libraryId === 'podcasts') return [...titleRow('podcasts-continue', 'Continue listening', 'continue', 'square', continueListening('podcast')),
     ...titleRow('podcasts-new', 'New episodes', 'recentlyReleased', 'square', newEpisodes()),
     ...titleRow('podcasts-shows', 'Your shows', 'collection', 'square', mediaGroups.shows)];

@@ -1,4 +1,4 @@
-// A library whose experience is 'audio' opens as the audio app: the shell from the skin package,
+// A library whose experience is 'listen' opens as the audio app: the shell from the skin package,
 // given the app's router, player and the card menu, worded for what the library holds (music,
 // audiobooks, podcasts). The page in view lives in the address (`?m=`).
 import { router } from 'expo-router';
@@ -15,12 +15,6 @@ import { listenFrom, listeningOf } from '@vela/skin/src/widgets/music/listening'
 import { useVela } from '../vela';
 import { useMusicKeys } from './keys';
 import { MusicKeysSheet } from './keys-sheet';
-
-/** Whether this library draws as the audio app, in the shell's wide, compact (below 980px) or TV
- * form: the library's experience (core's libraryExperience: the server's word, else music). */
-export function useAudioApp(libraryId: string): boolean {
-  return useVelaState(state => state.libraries.value?.find(library => library.id === libraryId)?.experience === 'audio');
-}
 
 /** Titles the audio app opens in place: its roles (and the card kinds media titles carry). */
 const OPENS_IN_PLACE = ['artist', 'album', 'track', 'season', 'show', 'audiobook', 'part', 'series', 'episode', 'podcast', 'podcastEpisode'];

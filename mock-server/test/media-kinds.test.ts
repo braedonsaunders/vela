@@ -37,15 +37,17 @@ const titlesOf = (page: V.Page<V.RowEntry>) => page.items.flatMap(item => item.k
 describe('media kinds', () => {
   test('capabilities and libraries carry media classes', async () => {
     const capabilities = await get<V.ServerCapabilities>('/capabilities');
-    expect(capabilities.features.mediaClasses).toEqual({ available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast'] });
-    expect(capabilities.features.libraryExperiences).toEqual({ available: true, experiences: ['audio', 'standard'] });
+    expect(capabilities.features.mediaClasses).toEqual({ available: true, classes: ['video', 'music', 'book', 'audiobook', 'podcast', 'photo'] });
+    expect(capabilities.features.libraryExperiences).toEqual({ available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] });
     expect(capabilities.features.reading?.formats).toEqual(['epub', 'pdf', 'cbz']);
     expect(capabilities.features.audioPlayback?.available).toBe(true);
     const libraries = (await get<V.Page<V.Library>>('/libraries?limit=100')).items;
-    expect(Object.fromEntries(libraries.filter(library => library.media).map(library => [library.id, [library.media, library.presentation?.card, library.presentation?.experience]]))).toEqual({
-      music: ['music', 'square', 'audio'], books: ['book', 'poster', 'standard'], audiobooks: ['audiobook', 'square', 'audio'], podcasts: ['podcast', 'square', 'audio'] });
-    // The field is on every library once the server has the feature.
-    expect(libraries.every(library => library.presentation?.experience === 'audio' || library.presentation?.experience === 'standard')).toBe(true);
+    expect(Object.fromEntries(libraries.filter(library => library.media).map(library => [library.id, [library.media, library.presentation?.card, library.experience]]))).toEqual({
+      music: ['music', 'square', 'listen'], books: ['book', 'poster', 'read'], audiobooks: ['audiobook', 'square', 'listen'], podcasts: ['podcast', 'square', 'listen'], photos: ['photo', 'square', 'gallery'] });
+    // Every library names its experience once the server has the feature; Live TV is live.
+    expect(libraries.every(library => typeof library.experience === 'string')).toBe(true);
+    expect(libraries.find(library => library.kind === 'live')?.experience).toBe('live');
+    expect(libraries.find(library => library.id === 'movies')?.experience).toBe('watch');
     expect(libraries.find(library => library.id === 'music')!.tabs!.filter(tab => tab.level).map(tab => [tab.id, tab.level])).toEqual([['albums', 'album'], ['tracks', 'track']]);
   });
 

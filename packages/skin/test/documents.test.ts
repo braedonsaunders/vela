@@ -192,6 +192,8 @@ test('app-drawn section pages read where the shell navigation ends from the docu
   expect(inset('broadcast')).toEqual({ wide: '0px', small: '0px' });
   expect(inset('latenight')).toEqual({ wide: 'calc(56px + env(safe-area-inset-top))', small: 'calc(56px + env(safe-area-inset-top))' });
   expect(inset('kids')).toEqual({ wide: '100px', small: '68px' });
+  // Lounge's floating bar has no height of its own: its bar row's.
+  expect(inset('lounge')).toEqual({ wide: 'calc(clamp(84px, 7vw, 132px) + max(0px, env(safe-area-inset-top)))', small: '64px' });
 });
 
 test('live library tabs use the catalogue grid without an empty alternative-view spacer', async () => {
