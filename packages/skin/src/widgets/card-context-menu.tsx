@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { cardContextActions, supportsTitleActions, type CardContextAction, type CardPress } from '../card-context-actions';
 import { placeAtPoint, placeAtRect, type Point, type Rect, type Size } from '../card-context-placement';
+import { isMenuPress, macPlatform, passRightClickThrough } from '../context-menu-reopen';
 import { DismissScope, type Focusable } from '../escape';
 import Reanimated from 'react-native-reanimated';
 import { MOTION, presenceStyle } from '../presence';
@@ -39,6 +40,9 @@ interface Props {
   continueWatching?: boolean;
   /** The card is listed as this playlist entry (music: Remove from this playlist). */
   playlistEntry?: { playlistId: string; entryId: string };
+  /** Music: the liked state the music app holds for this title, and how it likes or unlikes one
+   * (its hearts and liked lists change with it). Without it the menu asks the title's actions. */
+  favorite?: { on: boolean; set(on: boolean): Promise<void> };
   close(): void;
 }
 
@@ -86,7 +90,7 @@ async function copyLink(href: string): Promise<void> {
   if (!copied) throw new Error(msg('cardMenu.copyLinkFailed'));
 }
 
-export function CardContextMenu({ card, primary, href, anchor, mode, opener, continueWatching, playlistEntry, close }: Props) {
+export function CardContextMenu({ card, primary, href, anchor, mode, opener, continueWatching, playlistEntry, favorite, close }: Props) {
   const host = useHost();
   const vela = useVela();
   const look = useLook();
@@ -96,6 +100,8 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   const [busy, setBusy] = useState(false);
   const first = useRef<ComponentRef<typeof FocusPressable> | null>(null);
   const guide = useRef<Focusable | null>(null);
+  const layerRef = useRef<unknown>(null);
+  const panelRef = useRef<unknown>(null);
 
   useEffect(() => {
     let live = true;
@@ -121,7 +127,8 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
 
   const link = web && href ? new URL(href, window.location.href).href : undefined;
   const multiview = useMultiview() !== null;
-  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link, multiview, playlistEntry }), [card, primary, management, continueWatching, host.env.canPlaylists, link, multiview, playlistEntry]);
+  const liked = favorite?.on;
+  const actions = useMemo(() => cardContextActions(card, primary, management, { continueWatching, playlists: host.env.canPlaylists, href: link, multiview, playlistEntry, liked }), [card, primary, management, continueWatching, host.env.canPlaylists, link, multiview, playlistEntry, liked]);
   const focusFirst = mode === 'keyboard' || mode === 'tv';
   useEffect(() => {
     if (!focusFirst || menuSize.height <= 1) return;
@@ -148,6 +155,36 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
     if (returnFocus) { leave(); restore(opener); }
     else close();
   }, [close, leave, opener]);
+
+  // A right-click outside the open menu goes to the page under it (context-menu-reopen.ts): this
+  // menu closes at once (no leaving motion, which would close the next menu opened in its place)
+  // and the card there opens its own menu at the pointer. Over this menu the browser's never opens.
+  useEffect(() => {
+    if (!web) return;
+    const mac = macPlatform();
+    const layer = () => layerRef.current as unknown as HTMLElement | null;
+    const panel = () => panelRef.current as unknown as HTMLElement | null;
+    const onPress = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!isMenuPress(event, mac) || !target || !layer()?.contains(target) || panel()?.contains(target)) return;
+      passRightClickThrough(layer());
+      close();
+      restore(opener);
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !layer()?.contains(target)) return;
+      event.preventDefault();
+      // No press came first (a long touch, a pen): the right-click on the backdrop still closes.
+      if (!panel()?.contains(target)) { close(); restore(opener); }
+    };
+    document.addEventListener('mousedown', onPress, true);
+    document.addEventListener('contextmenu', onContextMenu, true);
+    return () => {
+      document.removeEventListener('mousedown', onPress, true);
+      document.removeEventListener('contextmenu', onContextMenu, true);
+    };
+  }, [close, opener]);
 
   const run = useCallback(async (item: CardContextAction) => {
     if (busy) return;
@@ -191,7 +228,14 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
     setBusy(true);
     setError('');
     try {
-      await vela.catalogue.setTitleWatch(card.id, item.command.change);
+      const change = item.command.change;
+      if (favorite && change.favorite !== undefined && Object.keys(change).length === 1) {
+        // The music app likes it: its hearts, Liked Songs and Your Library change with it.
+        await favorite.set(change.favorite);
+        dismiss();
+        return;
+      }
+      await vela.catalogue.setTitleWatch(card.id, change);
       // A like from here shows in Liked Songs and Your Library as one from the heart does: their
       // lists are read again (they were read once and kept, so the new like never appeared).
       if ('favorite' in item.command.change) {
@@ -203,7 +247,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
       setError(cause instanceof Error ? cause.message : msg('cardMenu.actionFailed'));
       setBusy(false);
     }
-  }, [busy, card.id, card.media?.role, dismiss, host, vela]);
+  }, [busy, card.id, card.media?.role, dismiss, favorite, host, vela]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -231,7 +275,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   return (
     <DismissScope open dismiss={leave} returnTarget={opener} guide={guide}>
       <Modal visible transparent onRequestClose={() => dismiss()} supportedOrientations={['portrait', 'landscape']}>
-        <View style={StyleSheet.absoluteFill} accessibilityViewIsModal importantForAccessibility="yes" pointerEvents={leaving ? 'none' : 'auto'}>
+        <View ref={layerRef as never} style={StyleSheet.absoluteFill} accessibilityViewIsModal importantForAccessibility="yes" pointerEvents={leaving ? 'none' : 'auto'}>
           <FocusPressable
             style={StyleSheet.absoluteFill}
             onPress={() => dismiss()}
@@ -241,6 +285,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
             testID="card-context-dismiss"
           />
           <Reanimated.View
+            ref={panelRef as never}
             onLayout={onLayout}
             testID="card-context-menu"
             accessibilityRole="menu"

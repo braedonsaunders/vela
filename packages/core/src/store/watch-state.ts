@@ -2,6 +2,7 @@ import type { Card, DetailModel, HomeModel, LibraryModel, CollectionModel, Row }
 import type { WatchRequest, WatchState } from '../wire';
 import type { VelaState } from './index';
 import type { Loadable } from './state';
+import type { LikedList, MusicState } from './music';
 
 type Change = Omit<WatchRequest, 'idempotencyKey'> & { positionSeconds?: number; progressLabel?: string };
 
@@ -53,6 +54,22 @@ function detail(value: DetailModel, id: string, change: Change): DetailModel {
   };
 }
 
+/** The viewer's liked lists (Liked Songs, Your Library's albums and artists) after a like changes:
+ * an unliked title leaves them at once; a new like arrives with the list's next read. */
+export function likedAfter(liked: MusicState['liked'], id: string, change: Change): MusicState['liked'] {
+  if (change.favorite !== false) return liked;
+  let changed = false;
+  const next: MusicState['liked'] = {};
+  for (const [role, known] of Object.entries(liked)) {
+    const list: LikedList | undefined = known?.value;
+    if (!known || !list?.items.some(item => item.id === id)) { next[role] = known; continue; }
+    changed = true;
+    const items = list.items.filter(item => item.id !== id);
+    next[role] = { ...known, value: { ...list, items, total: Math.max(items.length, list.total - (list.items.length - items.length)) } };
+  }
+  return changed ? next : liked;
+}
+
 /** Optimistically apply one viewer mutation everywhere the title is currently drawn. */
 export function optimisticWatchState(state: VelaState, id: string, change: Change): VelaState {
   const mapRecord = <T>(record: Record<string, Loadable<T>>, map: (value: T) => T) =>
@@ -70,6 +87,7 @@ export function optimisticWatchState(state: VelaState, id: string, change: Chang
       return { ...value, items } as LibraryModel;
     }),
     collections: mapRecord(state.collections, value => ({ ...value, items: cards(value.items, id, change) } as CollectionModel)),
+    ...(state.music ? { music: { ...state.music, liked: likedAfter(state.music.liked, id, change) } } : {}),
     search: {
       ...state.search,
       fast: { ...state.search.fast, items: cards(state.search.fast.items, id, change) },
