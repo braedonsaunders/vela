@@ -14,6 +14,7 @@ import {
   FIRST_SECTIONS,
   applyStableOrder,
   chunkGridRows,
+  hasFocusableChild,
   initialStreamedCount,
   nextStreamedCount,
   parseItemWidth,
@@ -291,6 +292,32 @@ describe('layout-math (itemWidth, streaming sections, stableOrder, tabs binding,
 
   test('chunkGridRows splits items into rows of N columns', () => {
     expect(chunkGridRows(['a', 'b', 'c', 'd', 'e'], 2)).toEqual([['a', 'b'], ['c', 'd'], ['e']]);
+  });
+
+  test('hasFocusableChild detects pressable boxes, readingStop, tabs, focusRows tables, and skips static sections', () => {
+    expect(hasFocusableChild({ kind: 'text' })).toBe(false);
+    expect(hasFocusableChild({ kind: 'lineGraph' })).toBe(false);
+    expect(hasFocusableChild({ kind: 'table', focusRows: undefined })).toBe(false);
+    expect(hasFocusableChild({ kind: 'table', focusRows: 10 })).toBe(true);
+    expect(hasFocusableChild({ kind: 'tabs' })).toBe(true);
+    expect(
+      hasFocusableChild({
+        kind: 'box',
+        children: [{ kind: 'text' }, { kind: 'lineGraph' }],
+      }),
+    ).toBe(false);
+    expect(
+      hasFocusableChild({
+        kind: 'box',
+        children: [{ kind: 'shelf', item: { kind: 'box', press: { action: 'navigate' } } }],
+      }),
+    ).toBe(true);
+    expect(
+      hasFocusableChild({
+        kind: 'box',
+        children: [{ kind: 'repeat', item: { kind: 'box', readingStop: true } }],
+      }),
+    ).toBe(true);
   });
 });
 
