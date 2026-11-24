@@ -62,6 +62,9 @@ export function createGaplessPlayer(): GaplessPlayer {
   let failure = '';
   let timer: ReturnType<typeof setInterval> | undefined;
   let lastTime = 0;
+  /** The next track as an unload left it, opened and partly decoded: a load of it (Next while it was
+   * ready) starts from it at once. Any other load retires it. */
+  let spare: Item | undefined;
 
   const rateOf = (item: Item) => item.stream?.sampleRate ?? context?.sampleRate ?? 44100;
   const scheduledEnd = (item: Item) => (item.startTime ?? 0) + item.frames / rateOf(item);
@@ -264,7 +267,11 @@ export function createGaplessPlayer(): GaplessPlayer {
     load(url, startSeconds) {
       for (const item of items) retire(item);
       ended = false; waiting = false; failure = '';
-      const item = create(url, Math.max(0, startSeconds));
+      const from = Math.max(0, startSeconds);
+      const reused = spare && spare.url === url && spare.from === from && !spare.failed ? spare : undefined;
+      if (spare && !reused) retire(spare);
+      spare = undefined;
+      const item = reused ?? create(url, from);
       items = [item];
       item.open.then(stream => {
         if (items[0] !== item) return;
@@ -312,7 +319,16 @@ export function createGaplessPlayer(): GaplessPlayer {
     },
     setVolume(value) { volume = value; if (gain) gain.gain.value = value; },
     unload() {
-      for (const item of items) retire(item);
+      const next = items[1];
+      // An unload with nothing loaded (a second one in a row) keeps what the first kept.
+      if (items.length && spare) { retire(spare); spare = undefined; }
+      if (next) {
+        // Kept, unscheduled, for a load of the same track.
+        if (next.startTime !== undefined || next.frames) rewind(next, next.from);
+        stopNodes(next);
+        spare = next;
+      }
+      for (const item of items) if (item !== next) retire(item);
       items = [];
       wanted = false; waiting = false; ended = false;
       stop();
