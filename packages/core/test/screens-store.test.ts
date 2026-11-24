@@ -7,7 +7,8 @@ import type { PluginScreens, ScreenDataRead } from '../src/adapter/capabilities'
 import type { ScreenTarget } from '../src/screens/keys';
 import type { ScreenStreamQuery } from '../src/screens/stream';
 import type { EventHandler } from '../src/protocol/sse';
-import { initialScreens, Screens } from '../src/store/screens';
+import { documentMatches, initialScreens, Screens } from '../src/store/screens';
+import { VelaError } from '../src/adapter/errors';
 import type { Session } from '../src/store/session';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
@@ -34,7 +35,13 @@ class FakeApi implements PluginScreens {
   document: V.ScreenDocument = DOC;
   /** Answer data reads at once with this, unless null (then they wait for resolve). */
   auto: ((read: ScreenDataRead) => Partial<V.ScreenData>) | null = null;
-  async screenDocument() { return this.document; }
+  documentReads: { href: string; fresh: boolean }[] = [];
+  documentFailure: unknown = null;
+  async screenDocument(href: string, _signal?: AbortSignal, fresh = false) {
+    this.documentReads.push({ href, fresh });
+    if (this.documentFailure) throw this.documentFailure;
+    return this.document;
+  }
   screenData(target: ScreenTarget, read: ScreenDataRead): Promise<V.ScreenData> {
     return new Promise((resolve, reject) => {
       const call: Call = { target, read, resolve: data => resolve({ rev: 0, sources: {}, records: {}, ...data } as V.ScreenData), reject };
@@ -450,4 +457,82 @@ test('a timed-out source is read again after 1.5, 3 and 6 s (here scaled), pendi
   await h.screens.retry(key, ['hero']);
   expect(h.page(key).errors.hero).toBe('timeout');
   expect(h.page(key).pending.hero).toBeUndefined();
+});
+
+const expired = () => new VelaError({ class: 'policy', code: 'preview_expired', message: 'Preview expired, reload from Studio', retry: { allowed: false } }, 403);
+
+test('preview: the token is the session\'s, documents and open pages are read again, and leaving clears it', async () => {
+  const h = harness();
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' } });
+  const { key } = open(h);
+  await h.screens.loadDocument(HREF);
+  await flush(); await flush();
+  const reads = h.api.calls.length;
+  await h.screens.setPreview('tok-1');
+  expect(h.screens.preview()).toBe('tok-1');
+  expect(h.box.get().screens.preview).toEqual({ token: 'tok-1', expired: false });
+  expect(h.api.documentReads.at(-1)).toEqual({ href: HREF, fresh: true });
+  await flush();
+  expect(h.api.calls.length).toBeGreaterThan(reads);
+  expect(h.page(key).load).toBe('ready');
+  await h.screens.setPreview('');
+  expect(h.screens.preview()).toBeUndefined();
+  expect(h.box.get().screens.preview).toBeNull();
+});
+
+test('reload re-reads the matching documents past the cache; a failing or refused draft keeps the last good one', async () => {
+  const h = harness();
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' } });
+  open(h);
+  const other = '/vela/v0/surfaces/sports.scorebug/document?v=1';
+  await h.screens.loadDocument(HREF);
+  await h.screens.loadDocument(other);
+  h.api.documentReads = [];
+  h.api.document = { ...DOC, title: 'Draft' };
+  await h.screens.reload('sports', 'index');
+  expect(h.api.documentReads).toEqual([{ href: HREF, fresh: true }]);
+  expect(h.box.get().screens.documents[HREF]!.value!.title).toBe('Draft');
+  // A draft that does not compile: the last good document keeps drawing, the failure beside it.
+  h.api.documentFailure = new VelaError({ class: 'request', code: 'invalid_document', message: 'Compile error at /tree', retry: { allowed: false } }, 422);
+  await h.screens.reload();
+  const kept = h.box.get().screens.documents[HREF]!;
+  expect(kept).toMatchObject({ load: 'ready', error: 'Compile error at /tree' });
+  expect(kept.value!.title).toBe('Draft');
+  h.api.documentFailure = null;
+  h.api.document = { ...DOC, renderer: 99 };
+  await h.screens.reload('sports.scorebug');
+  expect(h.box.get().screens.documents[other]).toMatchObject({ load: 'ready', error: expect.stringContaining('renderer 99') });
+  expect(documentMatches(HREF, 'sports')).toBe(true);
+  expect(documentMatches(HREF, 'sports', 'game')).toBe(false);
+  expect(documentMatches(other, 'sports.scorebug')).toBe(true);
+  expect(documentMatches(other, 'sports')).toBe(false);
+  expect(documentMatches(other)).toBe(true);
+});
+
+test('an expired preview token is one flag for the tab: the page fails with preview_expired, the stream stops, a reload tries again', async () => {
+  const h = harness();
+  await h.screens.setPreview('old');
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' }, live: { topic: 't' } });
+  const { key } = open(h);
+  await settle();
+  expect(h.box.get().screens.stream).not.toBe('idle');
+  h.api.auto = null;
+  h.screens.refresh(key);
+  await flush();
+  h.api.calls.at(-1)!.reject(expired());
+  await flush();
+  expect(h.box.get().screens.preview).toEqual({ token: 'old', expired: true });
+  expect(h.page(key).failure).toBe('preview_expired');
+  await settle();
+  expect(h.box.get().screens.stream).toBe('idle');
+  h.api.documentFailure = expired();
+  await h.screens.loadDocument('/vela/v0/screens/sports/pages/game/document');
+  expect(h.box.get().screens.documents['/vela/v0/screens/sports/pages/game/document']!.failure).toBe('preview-expired');
+  h.api.documentFailure = null;
+  h.api.auto = () => ({ rev: 2, sources: { hero: 'h2' }, live: { topic: 't' } });
+  await h.screens.reload();
+  expect(h.box.get().screens.preview!.expired).toBe(false);
+  await flush();
+  await settle();
+  expect(h.page(key).sources.hero).toBe('h2');
 });

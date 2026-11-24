@@ -153,7 +153,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   /** `rendererVersion`: the skin renderer this client draws (RENDERER_VERSION), sent as
    * X-Vela-Screen-Renderer on bootstrap and every screen call. Without it Ether lists no screens. */
-  constructor(private readonly origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void, private readonly rendererVersion?: number) {
+  constructor(private readonly origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void, private readonly rendererVersion?: number,
+    /** The Studio live preview token while previewing (sent as X-Vela-Screen-Preview: drafts instead of published documents). */
+    private readonly screenPreview: () => string | undefined = () => undefined) {
     this.credentials = credentials;
     this.http = new EtherTransport(origin, credentials, capabilityContext, onSessionRejected);
   }
@@ -163,7 +165,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   private get screenHeaders(): Record<string, string> {
     if (!this.rendererVersion) return {};
     const language = localeContext().locale;
-    return { 'X-Vela-Screen-Renderer': String(this.rendererVersion), ...(language ? { 'X-Vela-Language': language } : {}) };
+    const preview = this.screenPreview();
+    return { 'X-Vela-Screen-Renderer': String(this.rendererVersion), ...(language ? { 'X-Vela-Language': language } : {}), ...(preview ? { 'X-Vela-Screen-Preview': preview } : {}) };
   }
 
   setCapabilityContext(context: string): void {
@@ -669,10 +672,11 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   // Plugin screens and surfaces (docs/plugin-screens.md; Ether design sections 6 and 7)
 
   /** A document by its href. Ether serves the current document for a stale `v` (200, no-cache), never a redirect. */
-  async screenDocument(href: string, signal?: AbortSignal): Promise<V.ScreenDocument> {
+  /** `fresh`: read past the cache (a Studio reload); drafts in preview are never cached. */
+  async screenDocument(href: string, signal?: AbortSignal, fresh = false): Promise<V.ScreenDocument> {
     const path = this.http.boundPath(href);
     if (!path) throw new VelaError({ class: 'request', code: 'invalid_document_href', message: 'A screen document must come from this server.', retry: { allowed: false } }, 400);
-    return this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: true, signal, headers: this.screenHeaders });
+    return this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: !this.screenPreview() && !fresh, signal, headers: this.screenHeaders });
   }
 
   screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData> {

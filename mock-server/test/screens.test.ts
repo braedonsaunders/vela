@@ -449,6 +449,52 @@ describe('the news desk: plugin sources and a plugin action', () => {
   });
 });
 
+describe('Studio live preview', () => {
+  let mock: RunningMock;
+  let tokens: V.Tokens;
+  let c: ReturnType<typeof client>;
+  let drafts: string;
+  beforeAll(async () => {
+    drafts = mkdtempSync(join(tmpdir(), 'vela-drafts-'));
+    mkdirSync(join(drafts, 'sports'), { recursive: true });
+    const published = JSON.parse(await Bun.file(join(import.meta.dir, '../../packages/protocol/fixtures/screens/sports/index.json')).text());
+    writeFileSync(join(drafts, 'sports/index.json'), JSON.stringify({ ...published, strings: { ...published.strings, title: 'Sports (draft)' } }));
+    mock = await launchMock({ VELA_MOCK_SPORTS_FREEZE: '1', VELA_MOCK_SCREEN_DRAFTS: drafts, VELA_MOCK_SCREEN_PREVIEW_TOKEN: 'tok' });
+    tokens = await signIn(mock);
+    c = client(mock, () => tokens);
+  });
+  afterAll(async () => { await mock?.stop(); rmSync(drafts, { recursive: true, force: true }); });
+  const preview = (token = 'tok') => ({ 'X-Vela-Screen-Preview': token });
+
+  test('a live token reads drafts (no-store, v ignored); a page without a draft is the published one', async () => {
+    const published = ((await c.json('/bootstrap')) as V.Bootstrap).navigation![0] as V.ScreenNavigationEntry;
+    const drafted = ((await (await c.get('/bootstrap', '19', preview())).json()) as V.Bootstrap).navigation![0] as V.ScreenNavigationEntry;
+    expect(drafted.document.href).not.toBe(published.document.href);
+    const doc = await c.get(published.document.href, '19', preview());
+    expect(doc.status).toBe(200);
+    expect(doc.headers.get('cache-control')).toBe('no-store');
+    expect(((await doc.json()) as V.ScreenDocument).strings!.title).toBe('Sports (draft)');
+    expect(((await (await c.get(published.document.href)).json()) as V.ScreenDocument).strings!.title).toBe('Sports');
+    const game = await c.get('/screens/sports/pages/game/document', '19', preview());
+    expect(game.headers.get('cache-control')).toBe('private, no-cache');
+    const data = await (await c.get(`/screens/sports/pages/index/data${query({})}`, '19', preview())).json() as V.ScreenData;
+    const stream = await readStream(mock, `/live/stream?topic=${data.live!.topic}&since=${data.rev}`, { ...c.headers(), ...preview() }, () => false, 500);
+    expect(stream.status).toBe(200);
+  });
+
+  test('any other token is 403 preview_expired on document, data, action and stream; bootstrap still answers', async () => {
+    const codes = async (response: Response) => [response.status, ((await response.json()) as Json).error?.code];
+    expect(await codes(await c.get('/screens/sports/pages/index/document', '19', preview('stale')))).toEqual([403, 'preview_expired']);
+    expect(await codes(await c.get(`/screens/sports/pages/index/data${query({})}`, '19', preview('stale')))).toEqual([403, 'preview_expired']);
+    const action = await fetch(`${mock.url}/vela/v0/screens/sports/actions/ether.spoilerFree`, { method: 'POST', headers: { ...c.headers(), ...preview('stale'), 'Idempotency-Key': 'p1' },
+      body: JSON.stringify({ page: 'index', params: {}, args: { on: false }, idempotencyKey: 'p1' }) });
+    expect(await codes(action)).toEqual([403, 'preview_expired']);
+    const stream = await readStream(mock, '/live/stream?alerts=1', { ...c.headers(), ...preview('stale') }, () => true);
+    expect([stream.status, stream.body.error.code]).toEqual([403, 'preview_expired']);
+    expect((await c.get('/bootstrap', '19', preview('stale'))).status).toBe(200);
+  });
+});
+
 describe('with the clock running', () => {
   let mock: RunningMock;
   let tokens: V.Tokens;
