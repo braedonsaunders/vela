@@ -125,19 +125,20 @@ decoder → [VelaSoundProcessor: gain + 10 biquads] → Sonic (speed) → AudioT
 
 Music uses the module's `AudioPlayback.swift` (AVQueuePlayer); AetherEngine is the video engine and isn't involved.
 
-- **Gain and EQ**: an `MTAudioProcessingTap` on each `AVPlayerItem`'s `audioMix`.
-  - The tap applies the item's gain and the ten biquads (`vDSP_biquad`) to the PCM AVPlayer decodes.
-  - Because the tap belongs to the item, gain and EQ are exact across a gapless boundary, with no timing guess.
-  - `AVMutableAudioMixInputParameters.setVolume` alone can't do it: it can't go above 1.0 (unity), so it can't raise a quiet song.
-  - Taps work for the progressive files music plays (FLAC, ALAC, AAC, MP3, WAV); HLS isn't used for music.
-- **EQ changes**: they reach the live tap through a lock-free parameter block, with no item rebuild.
-- **Crossfade**: a second `AVQueuePlayer` holds the preloaded item.
-  - A boundary time observer at `at` on the outgoing item starts it, and both taps ramp their gain over `seconds`. Then the roles swap.
-  - Now Playing and the remote commands follow the active player.
-  - The audio session stays active throughout, so this works locked and in the background, as gapless already does.
-- **Later option**: move music onto `AVAudioEngine`.
-  - `AVAudioPlayerNode` scheduling decoded buffers, with `AVAudioUnitEQ`, gives sample-exact crossfades and native beat analysis, like the web player.
-  - It means owning HTTP fetch and decode (AudioFile can't stream), so stage 2 keeps AVQueuePlayer plus taps and reconsiders only if the tap approach falls short.
+- **Gain and EQ**: an `MTAudioProcessingTap` per player (`SoundTap.swift`), put on each item that player queues (`SoundLane`), applying the item's levelling gain, the ten biquads (double precision, exactly `eq.ts`'s `biquad()`) and the fades.
+  - One tap per player, not per item: a separate tap on each `AVPlayerItem` breaks AVQueuePlayer's gapless join (a measured 421 ms gap; with the shared tap it stays at 0.02 ms).
+  - `AVMutableAudioMixInputParameters.setVolume` alone can't do it: it can't go above 1.0, so it can't raise a quiet song.
+  - Taps work for the progressive files music plays (FLAC, ALAC, AAC, MP3, WAV); HLS isn't used for music. Encoder-delay trimming is unchanged (AAC and MP3 joins switch on the trimmed boundary).
+- **Per-item gain across a gapless boundary**: when the queue moves on, AVPlayer relabels the blocks still to come with the next item's clock, so the outgoing item's last samples arrive with negative times. The tap switches to the queued item's gain at time 0, item 2's first sample (measured: on the boundary sample). A seek inside that window cancels a switch that hasn't happened.
+- **Gain and EQ changes** reach the live tap through an atomic parameter block and glide; no item is rebuilt.
+- **Crossfade**: a second AVQueuePlayer holds the preloaded item, prerolled.
+  - An observer fires 1 s before `at`, converts `at` on the outgoing item's clock to host time, and starts the second player at that host time (`setRate(_:time:atHostTime:)`). Each tap fades on its own item's clock. Measured start error, by AVFoundation's clock: 1–3 samples.
+  - Taps render about 368 ms ahead of what is heard, so a late crossfade (late preload, resume, seek) starts no sooner than 0.6 s ahead. A pause after the start was fixed reschedules it.
+  - The role swap, `advanced`, Now Playing and the remote commands follow on the main thread; the outgoing player is released once its fade ends.
+  - The audio session stays active throughout, so this works locked and in the background, as gapless already does (not yet checked on a device).
+- **Known cost**: at speeds other than 1x AVQueuePlayer was never gapless (a 181 ms gap between items with no tap); with the tap it grows to 469 ms. That only affects spoken word played faster, between parts.
+- **Later option**: move music onto `AVAudioEngine` (`AVAudioPlayerNode` with `AVAudioUnitEQ`) for native beat analysis; it means owning HTTP fetch and decode.
+- **Measurement**: debug builds' `audioCapture(path)` makes the taps write their processed output (and silence the device) for `tools/sound-measure/analyse.ts`.
 
 ## What Ether sends (agreed with the Ether music lead, 2026-11-24)
 
