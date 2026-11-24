@@ -56,7 +56,7 @@ const MIN_REFRESH_S = 60;
 const MAX_SOURCES = 16;
 /** The open pages are read again for fresh topics at most this often after the stream ends or is refused. */
 const RENEW_MIN_MS = 60_000;
-/** A source that timed out (Ether: retry allowed) is read again after these waits, then keeps its error. */
+/** A source whose error allows a retry is read again after these waits, then keeps its error. */
 export const TIMEOUT_RETRY_MS = [1500, 3000, 6000];
 
 interface Entry {
@@ -409,13 +409,14 @@ export class Screens {
       const answered = data?.sources && typeof data.sources === 'object' ? data.sources : {};
       const errors = data?.errors && typeof data.errors === 'object' ? data.errors : {};
       const rev = typeof data?.rev === 'number' && Number.isFinite(data.rev) ? data.rev : 0;
-      // A source that timed out with retry allowed is read again shortly (Ether keeps its late
-      // answer), up to three times; it stays pending meanwhile and keeps what it drew.
+      // A source whose error allows a retry (a timeout, whose late answer Ether keeps, or a
+      // transient unavailable) is read again shortly, up to three times; it stays pending
+      // meanwhile and keeps what it drew.
       const retrying = new Set<string>();
       for (const [name, error] of Object.entries(errors)) {
         if (!current(name)) continue;
         const attempts = entry.timeouts.get(name) ?? 0;
-        if (error?.code === 'timeout' && error.retry === true && attempts < this.timeoutRetryMs.length) {
+        if (error?.retry === true && attempts < this.timeoutRetryMs.length) {
           entry.timeouts.set(name, attempts + 1);
           retrying.add(name);
         } else entry.timeouts.delete(name);

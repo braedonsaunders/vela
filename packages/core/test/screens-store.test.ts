@@ -612,3 +612,23 @@ test('400 invalid_topic reads the pages once for fresh topics, then backs off', 
   expect(h.api.streams.length).toBeGreaterThan(2);
   expect(h.box.get().screens.stream).toBe('retrying');
 });
+
+test('any source error that allows a retry (unavailable as well as timeout) is read again; one that does not, is not', async () => {
+  const h = harness();
+  h.api.auto = read => read.sources ? { rev: 2, sources: {}, errors: { schedule: { code: 'unavailable', retry: true } } } : { rev: 1, sources: { hero: 'h' }, errors: { schedule: { code: 'unavailable', retry: true } } };
+  const { key } = open(h);
+  await flush(); await flush();
+  // Cold: pending, no error shown yet.
+  expect(h.page(key)).toMatchObject({ pending: { schedule: true }, errors: {} });
+  h.api.auto = () => ({ rev: 3, sources: { schedule: { date: 'd' } } });
+  await new Promise(resolve => setTimeout(resolve, 40));
+  expect(h.api.calls.at(-1)!.read.sources).toEqual(['schedule']);
+  expect(h.page(key)).toMatchObject({ pending: {}, errors: {}, sources: { schedule: { date: 'd' } } });
+  // An error without retry stays at once (not_found, unsupported).
+  h.api.auto = () => ({ rev: 4, sources: {}, errors: { schedule: { code: 'not_found' } } });
+  const reads = h.api.calls.length;
+  await h.screens.retry(key, ['schedule']);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(h.api.calls.length).toBe(reads + 1);
+  expect(h.page(key).errors.schedule).toBe('not_found');
+});
