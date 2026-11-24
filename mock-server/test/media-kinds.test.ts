@@ -204,6 +204,20 @@ test('an older server (VELA_MOCK_OLD=1) has no media libraries or flags', async 
   } finally { await old.stop(); }
 });
 
+test('a search kept to a media library reaches every level and the people credited, as Ether\'s does', async () => {
+  const search = async (query: string, library?: string) => (await (await post('/search', { query, generation: 1, mode: 'fast', idempotencyKey: key(), ...(library ? { library } : {}) })).json() as V.SearchResponse).items;
+  const scoped = await search('hollow lanterns', 'music');
+  const roles = new Set(scoped.map(title => title.media?.role));
+  // Every level: the artist, its albums, their songs (and its concerts, video children of the artist).
+  expect([...roles]).toEqual(expect.arrayContaining(['album', 'artist', 'track']));
+  // The artist's songs are found by the artist's name; outside a library leaves are not searched.
+  expect(scoped.filter(title => title.media?.role === 'track').length).toBe(mediaGroups.tracks.filter(track => track.media?.parents?.some(parent => parent.name === 'The Hollow Lanterns')).length);
+  expect((await search('hollow lanterns')).some(title => title.media?.role === 'track')).toBe(false);
+  // An audiobook library finds books by their narrator.
+  const narrator = mediaGroups.audiobooks[0]!.media!.credits!.find(credit => credit.role === 'narrator')!.name;
+  expect((await search(narrator, 'audiobooks')).map(title => title.id)).toContain(mediaGroups.audiobooks[0]!.id);
+});
+
 test('the book ZIP writer stores mimetype first, uncompressed, with a correct CRC-32', () => {
   expect(crc32(new TextEncoder().encode('123456789'))).toBe(0xcbf43926);
   const view = new DataView(epubBytes.buffer);

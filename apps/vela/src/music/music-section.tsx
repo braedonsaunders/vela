@@ -12,6 +12,8 @@ import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
 import { listenFrom, listeningOf } from '@vela/skin/src/widgets/music/listening';
+import { forgetSearch, readRecent, rememberSearch } from '@vela/skin/src/widgets/music/search-results';
+import { preferences } from '../data/preferences';
 import { useVela } from '../vela';
 import { useMusicKeys } from './keys';
 import { MusicKeysSheet } from './keys-sheet';
@@ -36,6 +38,15 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const [drawer, setDrawer] = useState<PlaylistDrawerRequest | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
   const [likes, setLikes] = useState<Record<string, boolean>>({});
+  // Recent searches are this library's on this server for this viewer, kept on this device.
+  const searchesKey = useVelaState(state => `music.recentSearches.${state.servers.selectedId}.${state.auth.viewerId || state.auth.viewer}.${libraryId}`);
+  const [searches, setSearches] = useState<string[]>(() => readRecent(preferences.get(searchesKey)));
+  useEffect(() => { setSearches(readRecent(preferences.get(searchesKey))); }, [searchesKey]);
+  const keepSearches = useCallback((change: (list: string[]) => string[]) => setSearches(list => {
+    const next = change(list);
+    preferences.set(searchesKey, JSON.stringify(next));
+    return next;
+  }), [searchesKey]);
   const favorites = useVelaState(state => state.collections);
   const roleLists = useVelaState(state => state.music.liked);
   const likedIds = useMemo(() => {
@@ -55,15 +66,18 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   // screen of its own, so Menu on an album left Vela for the system's Home. Held on every page but
   // music Home, Menu goes back a page, as Back does on Android TV; on music Home the sections'
   // fallback hold takes it to Vela's Home, as from any other section's root.
+  // Search is one of the rail's roots: Back from it goes to music Home on both TVs, whatever page
+  // it was opened from (then, from music Home, to Vela's Home).
   const home = place.kind === 'home';
+  const searching = place.kind === 'search';
   useEffect(() => {
-    if (!Platform.isTV || Platform.OS !== 'ios' || home) return;
+    if (!Platform.isTV || home || (Platform.OS !== 'ios' && !searching)) return;
     return holdBack(() => {
-      if (router.canGoBack()) router.back();
+      if (!searching && router.canGoBack()) router.back();
       else router.replace({ pathname: '/library/[id]', params: { id: libraryId } });
       return true;
     });
-  }, [home, libraryId]);
+  }, [home, searching, libraryId]);
   const app = useMemo<MusicApp>(() => ({
     libraryId,
     listening,
@@ -94,7 +108,10 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
         .catch(() => setLikes(current => ({ ...current, [card.id]: !on })));
     },
     liked: (id: string) => likes[id] ?? likedIds.has(id),
-  }), [libraryId, listening, place, go, store, likes, likedIds]);
+    searches,
+    noteSearch: (query: string) => keepSearches(list => rememberSearch(list, query)),
+    dropSearch: (query?: string) => keepSearches(list => (query === undefined ? [] : forgetSearch(list, query))),
+  }), [libraryId, listening, place, go, store, likes, likedIds, searches, keepSearches]);
 
   const keyActions = useMemo(() => ({ toggleQueue: () => setQueueOpen(open => !open), help: () => setKeysOpen(true) }), []);
   useMusicKeys(store, app, keyActions);

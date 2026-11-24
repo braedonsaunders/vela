@@ -22,6 +22,7 @@ import { samePlace, type MusicPlace } from './place';
 import { FocusGroup, IconButton, Surface, transition } from './parts';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
 import { QueuePanel } from './queue';
+import { ListeningSearch } from './search';
 
 export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
   const app = useMusic();
@@ -58,6 +59,7 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
             {page.kind === 'liked' && music ? <MusicLiked />
               : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
               : page.kind === 'title' ? <ListeningTitle id={page.id} />
+              : page.kind === 'search' ? <ListeningSearch />
               : <ListeningHome />}
           </ScrollView>)}
         {queueOpen ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
@@ -92,6 +94,7 @@ function CompactShell({ top }: { top: string }) {
           : page.kind === 'liked' && music ? <MusicLiked />
           : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
           : page.kind === 'title' ? <ListeningTitle id={page.id} />
+          : page.kind === 'search' ? <ListeningSearch />
           : <ListeningHome />}
       </ScrollView>
     </View>
@@ -125,6 +128,7 @@ function TVShell({ top }: { top: string }) {
           : page.kind === 'liked' && music ? <MusicLiked />
           : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
           : page.kind === 'title' ? <ListeningTitle id={page.id} />
+          : page.kind === 'search' ? <ListeningSearch />
           : <ListeningHome />}
       </ScrollView>
     </View>
