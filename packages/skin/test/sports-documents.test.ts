@@ -151,6 +151,16 @@ describe('the Sports game document', () => {
     expect(tables.every(t => (t as RNode & { highlight?: boolean }).highlight === false)).toBe(true);
   });
 
+  test('an upcoming game says when it starts under the clock', async () => {
+    const data = await json<Sample>('data-game.json');
+    const doc = await json<ScreenDocument>('game.json');
+    const key = Object.keys(data.records).find(k => k.startsWith('event:'))!;
+    const records = { ...data.records, [key]: { rev: 2, value: { ...(data.records[key]!.value as object), phase: 'upcoming', state: 'pre', scored: false, start: '2026-11-24T22:00:00.000Z' } } };
+    const r = resolveScreenDocument(doc, { width: 390, tv: false }, 'en', {});
+    const t = texts(r.tree, screenRoot(page(data.sources), k => records[k]), envAt(390));
+    expect(t.some(x => /^Starts \d/.test(x))).toBe(true);
+  });
+
   test('a phone names the teams short', async () => {
     const t = await draw('game.json', 'data-game.json', 390);
     expect(t).toContain('Giants');

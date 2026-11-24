@@ -14,7 +14,7 @@
     "onBroadcast": "On {arg.name}{arg.more| · }", "broadcastLine": "Broadcast on {arg.name}{arg.more| · }",
     "probability": "Win probability", "plays": "Plays", "noPlays": "Plays appear here once the game starts.", "close": "Close",
     "spoilersHidden": "Spoilers hidden", "revealTitle": "The score is hidden", "revealBody": "You are in spoiler-free mode. Reveal this game's score, plays and box score?",
-    "reveal": "Reveal score", "revealFailed": "The score could not be revealed. Try again.", "startsAt": "Starts {arg.time}", "closeGame": "Close game",
+    "reveal": "Reveal score", "revealFailed": "The score could not be revealed. Try again.", "starts": "Starts", "closeGame": "Close game",
     "leaderboard": "Leaderboard", "resultHidden": "Result hidden", "unavailable": "This game could not be loaded", "retry": "Try again", "loading": "Loading sports"
   },
   "tokens": {
@@ -171,7 +171,7 @@
                 "style": { "font-size": "34px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "22px" } },
               { "type": "text", "text": "{src.game.event.detail}", "when": [{ "test": "src.game.event.scored", "not": true }, { "test": "src.game.event.spoiler", "not": true }, { "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }],
                 "style": { "font-size": "34px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums" }, "small": { "font-size": "22px" } },
-              { "type": "text", "text": "{s:startsAt|with:time=src.game.event.start|start}", "when": [{ "test": "src.game.event.phase", "is": "eq", "value": "upcoming" }],
+              { "type": "text", "text": "{s:starts} {src.game.event.start|start}", "when": [{ "test": "src.game.event.phase", "is": "eq", "value": "upcoming" }],
                 "style": { "margin-top": "6px", "font-size": "15px", "line-height": "1.25", "font-weight": "700", "color": "$palette.onTeam", "line-clamp": "1", "text-overflow": "ellipsis" }, "small": { "font-size": "13px" } },
               { "type": "text", "text": "{src.game.event.detail}", "when": [{ "test": "src.game.event.phase", "is": "ne", "value": "upcoming" }],
                 "style": { "margin-top": "6px", "font-size": "15px", "line-height": "1.25", "font-weight": "700", "color": "$palette.onTeam", "line-clamp": "1", "text-overflow": "ellipsis" }, "small": { "font-size": "13px" } } ] },
