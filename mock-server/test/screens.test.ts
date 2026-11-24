@@ -431,9 +431,11 @@ describe('the news desk: plugin sources and a plugin action', () => {
     expect(answer.toast).toBe('Following Tech');
     expect(answer.sources).toEqual({ mine: { followsTopic: false, topics: ['tech'] } });
     expect(answer.refresh).toBeUndefined();
-    // Ether checks declared types: a bool is JSON true/false, not text.
-    const text = await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: 'true' } });
-    expect(text.status).toBe(400);
+    // Ether coerces text to the declared type ("false"/"0" a bool); anything else is refused.
+    const text = await c.action('/screens/news/actions/follow-topic', { page: 'index', params: { topic: 'tech' }, args: { topic: 'tech', on: 'false' } });
+    expect(text.status).toBe(200);
+    expect(((await text.json()) as V.ScreenActionAnswer).toast).toBe('Stopped following Tech');
+    expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: 'yes' } })).status).toBe(400);
     expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'sports', on: true } })).status).toBe(400);
     expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: true, extra: 'x' } })).status).toBe(400);
     expect((await c.action('/screens/news/actions/delete-everything', { page: 'index', params: {}, args: {} })).status).toBe(404);
