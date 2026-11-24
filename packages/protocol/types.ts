@@ -72,6 +72,8 @@ export interface ServerCapabilities {
     lyrics?: Feature;
     /** PlaybackRequest.context is remembered; GET /recent lists what the viewer played from. */
     playContexts?: Feature;
+    /** GET /titles/:id/continuation: what plays after a title when its queue ends (autoplay). */
+    continuation?: Feature;
     /** PlaybackRequest.queued: a gapless next track's session coexists with the playing one (its media
      * may be read) and takes the device over on its first playing, paused or buffering observation. */
     queuedPlayback?: Feature;
@@ -379,9 +381,10 @@ export interface FavoriteTitlesPage extends Page<{ id: ID; kind: 'title'; title:
 export interface RecentPlayContexts { items: ({ kind: 'title'; title: Title; playedAt: Timestamp } | { kind: 'playlist'; playlist: PlaylistCard; playedAt: Timestamp } | { kind: 'favorites'; role: string; playedAt: Timestamp })[] }
 /** A playable title's lyrics: timed lines when the source has them, else plain text. */
 export interface TitleLyrics { lines: { startMs: number; text: string }[]; plain?: string; instrumental: boolean; source?: string }
-export interface PlaylistCard { id: ID; kind: 'playlist'; name: string; artwork: ArtworkRef[]; itemCount: number; smart: boolean; updatedAt: Timestamp }
+export interface PlaylistCard { id: ID; kind: 'playlist'; name: string; artwork: ArtworkRef[]; itemCount: number; smart: boolean; updatedAt: Timestamp; summary?: string }
 export interface CreatePlaylistRequest extends Mutation { name: string; titleIds?: ID[] }
-export interface RenamePlaylistRequest extends Mutation { name: string }
+/** Name and/or description (Ether 0.3.21+ accepts summary). */
+export interface RenamePlaylistRequest extends Mutation { name?: string; summary?: string }
 export interface AddPlaylistEntriesRequest extends Mutation { titleIds: ID[] }
 export interface MovePlaylistEntryRequest extends Mutation { afterEntryId: ID | null }
 export interface PlaylistEntryCount { entryCount: number }

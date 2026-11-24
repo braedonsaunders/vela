@@ -4,6 +4,7 @@ import type { Card } from '@vela/core';
 import type { CardMenuAnchor, CardMenuOpenMode } from '../card-context-menu';
 import type { Focusable } from '../../escape';
 import type { MusicPlace } from './place';
+import type { PlaylistDrawerRequest } from './playlist-drawer';
 
 export interface MusicMenuRequest {
   card: Card;
@@ -27,13 +28,15 @@ export interface MusicApp {
   menu(request: MusicMenuRequest): void;
   /** Play or pause what is playing. */
   toggle(): void;
+  /** Create a playlist or edit one's name and description. */
+  drawer(request: PlaylistDrawerRequest): void;
   /** Like or unlike (follow, save) a title. */
   like(card: Card, on: boolean): void;
   liked(id: string): boolean;
 }
 
 const noop = () => undefined;
-export const MusicContext = createContext<MusicApp>({ libraryId: '', place: { kind: 'home' }, go: noop, play: noop, playCard: noop, menu: noop, toggle: noop, like: noop, liked: () => false });
+export const MusicContext = createContext<MusicApp>({ libraryId: '', place: { kind: 'home' }, go: noop, play: noop, playCard: noop, menu: noop, toggle: noop, drawer: noop, like: noop, liked: () => false });
 export const useMusic = () => useContext(MusicContext);
 
 /** Where a card opens in the music app. */

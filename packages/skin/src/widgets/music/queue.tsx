@@ -2,7 +2,7 @@
 // what comes next from the source. Rows can be played, removed, and moved by dragging (web) or
 // with Move up / Move down in their menu.
 import { Text, View, ScrollView } from 'react-native';
-import { clock, currentInQueue, msg, queuedNext, sourceNext, type Card } from '@vela/core';
+import { autoplayNext, clock, currentInQueue, msg, queuedNext, sourceNext, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING } from '../common/controls';
@@ -18,6 +18,7 @@ export function QueuePanel({ onClose }: { onClose(): void }) {
   const now = currentInQueue(queue);
   const mine = queue ? queuedNext(queue) : [];
   const rest = queue ? sourceNext(queue) : [];
+  const auto = queue ? autoplayNext(queue) : [];
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
   const position = (card: Card) => (queue ? queue.order.indexOf(queue.items.indexOf(card)) : -1);
   return (
@@ -41,6 +42,12 @@ export function QueuePanel({ onClose }: { onClose(): void }) {
           <>
             <Heading label={queue?.source ? msg('music.nextFrom', { name: queue.source.name }) : msg('media.player.upNext')} />
             {rest.slice(0, 60).map(card => <QueueRow key={`s-${card.id}-${position(card)}`} card={card} onRemove={() => store.audio.remove(position(card))} onPlay={() => store.audio.jump(queue!.items.indexOf(card))} />)}
+          </>
+        ) : null}
+        {auto.length ? (
+          <>
+            <Heading label={msg('music.autoplayFrom', { name: queue?.autoplay?.seed ?? '' })} />
+            {auto.slice(0, 60).map(card => <QueueRow key={`a-${card.id}-${position(card)}`} card={card} onRemove={() => store.audio.remove(position(card))} onPlay={() => store.audio.jump(queue!.items.indexOf(card))} />)}
           </>
         ) : null}
       </ScrollView>

@@ -147,6 +147,8 @@ export function createVela(options: VelaOptions): Vela {
     },
   );
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);
+  const audio = new Audio(box, session, playback);
+  audio.setContinuation(id => music.continuation(id));
   return {
     getState: box.get,
     subscribe: box.subscribe,
@@ -182,7 +184,7 @@ export function createVela(options: VelaOptions): Vela {
     receipts: new Receipts(session),
     previews,
     media: new Media(box, session, width, () => void home.refreshProgress()),
-    audio: new Audio(box, session, playback),
+    audio,
   };
 }
 

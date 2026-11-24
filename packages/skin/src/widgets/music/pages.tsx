@@ -252,6 +252,8 @@ function ArtistView({ card }: { card: Card }) {
   const children = useChildren(card.id);
   const rows = useDetailRows(card.id);
   const top = rows.find(r => r.id.endsWith(':top'))?.items ?? [];
+  const related = rows.find(r => r.id.endsWith(':related'));
+  const similar = (related?.items ?? []).filter(a => a.media?.role === 'artist').slice(0, 20);
   const [more, setMore] = useState(false);
   const albums = (children?.value?.items ?? []).filter(i => i.media?.role === 'album');
   // S0: release type by length until the plugin's releaseType reaches the wire (plan §2.6).
@@ -317,6 +319,11 @@ function ArtistView({ card }: { card: Card }) {
       <View style={{ paddingHorizontal: 16 }}>
         <Shelf title="">{shown.map(a => <MusicTile key={a.id} card={a} size={168} subtitle={[a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ')} />)}</Shelf>
       </View>
+      {similar.length ? (
+        <View style={{ paddingHorizontal: m.small ? 4 : 16 }}>
+          <Shelf title={related?.name || msg('music.fansAlsoLike')}>{similar.map(a => <MusicTile key={a.id} card={a} size={168} />)}</Shelf>
+        </View>
+      ) : null}
       {card.summary ? (
         <View style={{ paddingHorizontal: pad(m), paddingBottom: 40, maxWidth: 860 }}>
           <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginBottom: 10 }]}>{msg('music.about')}</Text>
@@ -398,6 +405,7 @@ export function MusicPlaylist({ id }: { id: string }) {
       <Wash accent={accent} image={tracks[0]?.poster} />
       <View style={{ paddingHorizontal: pad(m) }}>
         <Header eyebrow={msg('music.playlist')} title={name} cover={<Mosaic tracks={tracks} size={coverSize(m)} poster={meta?.poster} />}>
+          {list?.value?.summary ? <Text numberOfLines={2} style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>{list.value.summary}</Text> : null}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: m.ui.accent, alignItems: 'center', justifyContent: 'center' }}><Text style={m.text({ 'font-size': '12px', 'font-weight': '800', color: m.ui.onAccent })}>{viewer.slice(0, 1).toUpperCase()}</Text></View>
             <Text style={m.text({ 'font-size': '15px', 'font-weight': '700', color: '$ui.ink' })}>{viewer}</Text>
@@ -407,7 +415,8 @@ export function MusicPlaylist({ id }: { id: string }) {
         <ActionBar>
           <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" opensPage />
           <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />
-          <IconButton symbol="more" label={msg('music.editDetails')} size={44} iconSize={24} onPress={() => undefined} />
+          <IconButton symbol="more" label={msg('music.editDetails')} size={44} iconSize={24} testID="music-playlist-edit"
+            onPress={() => app.drawer({ mode: 'edit', id, name, summary: list?.value?.summary ?? '' })} />
         </ActionBar>
         <TrackList tracks={tracks} options={{ covers: true, album: true, position: true, source, playlist: { id, entryIds } }} />
         <View style={{ height: 40 }} />

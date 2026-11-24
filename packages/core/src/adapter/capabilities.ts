@@ -126,6 +126,8 @@ export interface MusicLibrary {
   /** Null when the title has none. */
   titleLyrics(id: string): Promise<V.TitleLyrics | null>;
   recentPlayContexts(limit?: number): Promise<V.RecentPlayContexts>;
+  /** Empty when the title's source has no continuation. */
+  titleContinuation(id: string, limit?: number): Promise<V.Page<V.RowEntry>>;
 }
 
 export function hasMusicLibrary(adapter: ServerAdapter): adapter is ServerAdapter & MusicLibrary {

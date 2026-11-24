@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Title } from '../src/wire';
 import { card } from '../src/discovery/models';
-import { clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, queuedNext, removeAt, sourceNext, toggleShuffle, upNext } from '../src/audio/queue';
+import { appendAutoplay, autoplayNext, clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, queuedNext, removeAt, sourceNext, toggleShuffle, upNext } from '../src/audio/queue';
 import { chapterEnd } from '../src/store/audio';
 
 const track: Title = { id: 't', kind: 'episode', name: 'Low Tide', summary: '', genres: [], artwork: [], durationSeconds: 222,
@@ -110,4 +110,15 @@ test('shuffle keeps the viewer queue right after the item playing, on and off', 
   expect(ids(upNext(queue)).slice(0, 2)).toEqual(['x', 'y']);
   queue = toggleShuffle(queue, fixed);
   expect(ids(upNext(queue))).toEqual(['x', 'y', 'b', 'c', 'd', 'e']);
+});
+
+test('autoplay appends after the last item, skips what is queued already, and lists apart', () => {
+  let queue = createQueue(items.slice(0, 2), 1);
+  queue = appendAutoplay(queue, [extra('r1'), items[0]!, extra('r2')], 'b');
+  expect(ids(upNext(queue))).toEqual(['r1', 'r2']);
+  expect(ids(autoplayNext(queue))).toEqual(['r1', 'r2']);
+  expect(sourceNext(queue)).toEqual([]);
+  queue = next(queue, true)!;
+  expect(current(queue)?.id).toBe('r1');
+  expect(ids(autoplayNext(queue))).toEqual(['r2']);
 });

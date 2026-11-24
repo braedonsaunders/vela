@@ -5,7 +5,7 @@
 // started elsewhere takes the session and the audio pauses.
 import type * as V from '../wire';
 import type { Card } from '../models';
-import { clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, removeAt, toggleShuffle, type AudioQueue, type Random } from '../audio/queue';
+import { appendAutoplay, clearQueued, createQueue, current, cycleRepeat, enqueue, jumpTo, moveTo, next, previous, removeAt, toggleShuffle, type AudioQueue, type Random } from '../audio/queue';
 import type { Playback, PlaybackTarget } from './playback';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -74,6 +74,9 @@ export interface AudioRequest {
   source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
 }
 
+/** Autoplay asks for what follows this long before the last item ends, seconds. */
+const AUTOPLAY_LEAD = 60;
+
 export const AUDIO_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 const OBSERVE_EVERY_MS = 10_000;
 
@@ -118,6 +121,10 @@ export class Audio {
   private prepared: Prepared | undefined;
   /** The session and next title whose preparation failed: not asked again until either changes. */
   private declined = '';
+  /** Autoplay: what plays after a music title when the queue runs out (the server's continuation). */
+  private continuation: ((id: string) => Promise<Card[]>) | undefined;
+  /** The last item autoplay was asked for (`at:id`), so it is asked once. */
+  private autoplayAsked = '';
   /** The queue item already played on afresh after it failed while the next was prepared (once each). */
   private retried = '';
 
@@ -146,6 +153,28 @@ export class Audio {
   }
 
   get state(): AudioState { return this.box.get().audio; }
+
+  /** Where autoplay finds what comes next (none: a queue simply ends). */
+  setContinuation(find: ((id: string) => Promise<Card[]>) | undefined): void { this.continuation = find; }
+
+  /**
+   * Autoplay: on the last item of a music queue (repeat off), within a minute of its end, ask once
+   * for what follows and append it, so the preload and gapless join treat it as the next item.
+   */
+  private autoplayNext(remaining: number): void {
+    const queue = this.state.queue;
+    const item = current(queue);
+    if (!queue || !item || !this.continuation || queue.repeat !== 'off' || item.media?.class !== 'music') return;
+    if (queue.at + 1 < queue.order.length || remaining > AUTOPLAY_LEAD) return;
+    const asked = `${queue.at}:${item.id}`;
+    if (this.autoplayAsked === asked) return;
+    this.autoplayAsked = asked;
+    void this.continuation(item.id).then(cards => {
+      const now = this.state.queue;
+      if (!now || !cards.length || current(now)?.id !== item.id) return;
+      this.patch({ queue: appendAutoplay(now, cards, item.name) });
+    }).catch(() => undefined);
+  }
 
   play(request: AudioRequest): void {
     const items = request.items.filter(Boolean);
@@ -380,9 +409,10 @@ export class Audio {
    */
   private lookAhead(position = this.engine?.position() ?? this.state.positionSeconds): void {
     if (!this.engine || !this.sessionId) return;
-    const upcoming = this.upcoming();
     const duration = this.state.durationSeconds;
     const remaining = duration > 0 ? duration - position : Infinity;
+    this.autoplayNext(remaining);
+    const upcoming = this.upcoming();
     const cls = current(this.state.queue)?.media?.class;
     const lead = preloadLead(duration, !this.playback.queuedPlayback && (cls === 'audiobook' || cls === 'podcast'));
     if (this.prepared && (this.prepared.id !== upcoming?.id || remaining > lead + PRELOAD_RELEASE_MARGIN)) this.forget();

@@ -33,6 +33,16 @@ export class Music {
   get lyricsAvailable(): boolean { return this.session.features?.lyrics?.available === true; }
   get recentAvailable(): boolean { return this.session.features?.playContexts?.available === true; }
 
+  /** What plays after a title when its queue ends (autoplay); [] when the server has none. */
+  async continuation(id: string): Promise<Card[]> {
+    if (this.session.features?.continuation?.available !== true) return [];
+    const connection = await this.session.ready();
+    if (!hasMusicLibrary(connection.adapter)) return [];
+    const page = await connection.adapter.titleContinuation(id, 25);
+    const images = await connection.images();
+    return page.items.flatMap(item => (item.kind === 'title' ? [card(item.title, '', images, this.artWidth())] : [])).filter(c => c.media?.audio);
+  }
+
   /** What the viewer last played from (Home's Recently played and quick tiles). */
   async recent(refresh = false): Promise<void> {
     if (!this.recentAvailable) return;
