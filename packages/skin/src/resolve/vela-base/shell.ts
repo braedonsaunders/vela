@@ -148,7 +148,8 @@ const compactNavigation: Node = {
   children: [
     { type: 'icon', symbol: 'menu', style: { width: '18px', height: '18px', 'flex-shrink': '0' } },
     { type: 'text', when: [is('env.section', 'home')], text: '{t:ui.home}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } },
-    { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }], text: '{dest.name}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } } },
+    // Live TV is named once, below, whether or not the server lists it as a library.
+    { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], text: '{dest.name}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } } },
     { type: 'text', when: [is('env.section', 'live')], text: '{t:ui.live}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } },
   ],
 };

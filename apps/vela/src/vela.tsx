@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createVela, type Vela as Store, type VelaState } from '@vela/core';
 import { VelaProvider as StoreProvider, useVelaState } from '@vela/core/react';
 import { VelaPlayerView } from '@vela/player';
+import { useFold } from '@vela/fold';
 import {
   loadFonts,
   RENDERER_VERSION,
@@ -394,9 +395,12 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     window.addEventListener('vela:find', find);
     return () => window.removeEventListener('vela:find', find);
   }, [dispatch, pathname, state.auth.phase]);
+  // A foldable partly open (an iPhone Duo held like a book or stood on a table): where the window
+  // divides. Flat, the viewport is as on any phone or tablet.
+  const fold = useFold();
   const viewport: Viewport = useMemo(
-    () => ({ width, height, insets, sides: { left: safeArea.left, right: safeArea.right } }),
-    [width, height, insets, safeArea.left, safeArea.right],
+    () => ({ width, height, insets, sides: { left: safeArea.left, right: safeArea.right }, ...(fold.posture === 'flat' ? {} : { fold }) }),
+    [width, height, insets, safeArea.left, safeArea.right, fold],
   );
   // Android's content navigator already consumes the system bars. Only watch is
   // full-display; passing the bars to other documents reserves that space twice.
