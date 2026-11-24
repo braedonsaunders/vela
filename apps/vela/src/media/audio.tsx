@@ -19,6 +19,7 @@ import { useMediaPlayerActions } from './player-actions';
 import { useReaderActions } from './reader-actions';
 
 const fill = StyleSheet.absoluteFill;
+const dockStrip = { position: 'absolute', left: 0, right: 0, bottom: 0 } as const;
 /** On iPhone and iPad a title page is a native modal, presented above the root view: the dock rides in
  * a window of its own above it, so the mini player and Now Playing stay on top of an album's page. A TV
  * presents pages inside the root view, and Android draws the dock above its stack already. */
@@ -84,20 +85,31 @@ export function AudioDock() {
   // Now Playing rises out of the mini player and sinks back into it: its top starts and ends at the
   // bar's top edge while the bar fades out under it, then in again (presence.tsx).
   const fromBar = Math.max(0, host.viewport.height - bottom - MINI_PLAYER_HEIGHT);
+  // A TV fades Now Playing in where it stands: risen from the bar, it was far below the screen when
+  // it took focus, and tvOS scrolled its page to the transport, leaving the artwork and the Up Next
+  // tabs above the screen.
+  const nowPlaying = (
+    <Presence shown={playing && open} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
+      <TVFocusTrap open={playing && open}>
+        <NowPlaying onClose={close} panel={panel} />
+      </TVFocusTrap>
+    </Presence>
+  );
   return (
     <HostContext.Provider value={host}>
       <MediaActionsContext.Provider value={actions}>
         <Above>
-          <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+          {/* On tvOS a view drawn over the page hides the focus guides beneath it from the focus engine
+              (the nav, the music rail, a page's bands): a full-screen layer under the mini player kept
+              the remote from leaving it, or a page, for any of them. On a TV the mini player's layer
+              is only as tall as the bar, and Now Playing has a layer of its own while it is open. */}
+          <View pointerEvents="box-none" style={Platform.isTV ? [dockStrip, { height: bottom + MINI_PLAYER_HEIGHT }] : fill}>
             <Presence shown={playing && !open && !inMusicShell} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
               <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
             </Presence>
-            <Presence shown={playing && open} still={still} offstage={{ y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
-              <TVFocusTrap open={playing && open}>
-              <NowPlaying onClose={close} panel={panel} />
-            </TVFocusTrap>
-            </Presence>
+            {Platform.isTV ? null : nowPlaying}
           </View>
+          {Platform.isTV ? nowPlaying : null}
         </Above>
       </MediaActionsContext.Provider>
     </HostContext.Provider>

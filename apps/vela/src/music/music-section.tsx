@@ -1,13 +1,14 @@
 // A music library opens as the music app (wide layouts): the shell from the skin package, given the
 // app's router, player and the card menu. The page in view lives in the address (`?m=`).
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { audioCardsOf, type Card } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import type { SkinHost } from '@vela/skin';
 import { HostContext } from '@vela/skin/src/host';
 import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
+import { holdBack } from '@vela/skin/src/menu-key';
 import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
 import { useVela } from '../vela';
 import { useMusicKeys } from './keys';
@@ -45,6 +46,19 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const go = useCallback((next: MusicPlace) => {
     router.push({ pathname: '/library/[id]', params: { id: libraryId, m: placeParam(next) } });
   }, [libraryId]);
+  // tvOS gives Menu to the app only while something holds it (menu-key.ts); a music page is not a
+  // screen of its own, so Menu on an album left Vela for the system's Home. Held on every page but
+  // music Home, Menu goes back a page, as Back does on Android TV; on music Home it leaves the
+  // section as it does from any other.
+  const home = place.kind === 'home';
+  useEffect(() => {
+    if (!Platform.isTV || Platform.OS !== 'ios' || home) return;
+    return holdBack(() => {
+      if (router.canGoBack()) router.back();
+      else router.replace({ pathname: '/library/[id]', params: { id: libraryId } });
+      return true;
+    });
+  }, [home, libraryId]);
   const app = useMemo<MusicApp>(() => ({
     libraryId,
     place,

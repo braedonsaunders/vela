@@ -98,8 +98,12 @@ function CompactShell({ top }: { top: string }) {
 function TVShell({ top }: { top: string }) {
   const app = useMusic();
   const m = useMediaLook();
+  const host = useHost();
   const page = app.place;
   const queued = useVelaState(state => !!state.audio.queue);
+  // The page ends where the mini player begins, which the dock lifts above the bottom safe inset
+  // (media/audio.tsx): Apple TV's inset is 60pt, and a fixed margin left the last rows under the bar.
+  const dock = MINI_PLAYER_HEIGHT + Math.max(14, host.viewport.insets.bottom + 10) + 14;
   return (
     <View pointerEvents="box-none" style={[{ flex: 1, flexDirection: 'row' }, m.box({ 'padding-top': top })]} testID="music-shell">
       <FocusGroup style={{ width: 96, paddingTop: 24, alignItems: 'center', gap: 10 }}>
@@ -109,7 +113,7 @@ function TVShell({ top }: { top: string }) {
         <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail />
       </FocusGroup>
       {/* The page ends above the floating mini player, so a focused row is never under it. */}
-      <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? MINI_PLAYER_HEIGHT + 28 : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main">
+      <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main">
         {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
           : page.kind === 'liked' ? <MusicLiked />
           : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
