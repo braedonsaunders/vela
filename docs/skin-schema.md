@@ -31,7 +31,9 @@ language with skins, so these additions are available to both:
 Screen documents resolve with `resolveScreenDocument`
 (`packages/skin/src/resolve/screen.ts`). Their holes read data paths instead of the
 vocabulary, with the fixed pipes; any style value may hold a hole, validated once
-filled; literal colours are limited to white, black and the document's palette; the
+filled; lengths in `pt` are points on every platform (`8pt` is 8 points on a TV and on Android
+TV, where `px` scales, and 8 CSS px on the web), in styles, tokens and values from data; border
+widths are points too; literal colours are limited to white, black and the document's palette; the
 `vela:*` kit templates (`packages/skin/src/screen/kit.ts`) draw in the active skin's
 look. `bun tools/skin.ts check <document.json>` checks a screen document as it checks a
 skin. The JSON Schema Ether validates plugin documents with,
