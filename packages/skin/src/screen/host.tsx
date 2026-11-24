@@ -61,6 +61,11 @@ export interface ScreenViewProps {
 }
 
 const BOOL = /^(true|false)$/;
+/** `name=value` or `name:value`: a state value, not a flag. */
+function stateValue(flag: string): [string, string] | undefined {
+  const m = /^([\w-]+)[=:](.*)$/.exec(flag);
+  return m ? [m[1]!, m[2]!] : undefined;
+}
 const patchValue = (value: string): unknown => (BOOL.test(value) ? value === 'true' : value);
 
 /** The arguments of a press without the ones that name the action itself. */
@@ -128,7 +133,8 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     switch (p.action) {
       case 'navigate': navigate(args); return;
       case 'setParam': {
-        const name = args.name ?? '';
+        // `name` (documents), `param` (the tabs block) or the plain argument.
+        const name = args.name || args.param || p.arg;
         if (!name || !page) return;
         const next = { ...page.params, [name]: args.value ?? '' };
         for (const cleared of (args.clear ?? '').split(',').filter(Boolean)) delete next[cleared];
@@ -139,13 +145,19 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
       case 'toggle': setState(s => ({ ...s, [flag]: s[flag] === 'true' ? '' : 'true' })); return;
       case 'open': {
         // `open name=value` sets a state value (tabs bound to state); `open name` sets a flag.
-        const at = flag.indexOf('=');
-        if (at > 0) setState(s => ({ ...s, [flag.slice(0, at)]: flag.slice(at + 1) }));
+        const value = stateValue(flag);
+        if (value) setState(s => ({ ...s, [value[0]]: value[1] }));
         else setState(s => ({ ...s, [flag]: 'true' }));
         return;
       }
       case 'close': setState(s => ({ ...s, [flag]: '' })); return;
-      case 'only': setState(s => (s[flag] === 'true' ? { ...s, [flag]: '' } : { ...Object.fromEntries(Object.keys(s).map(k => [k, ''])), [flag]: 'true' })); return;
+      case 'only': {
+        // The tabs block sets a state-bound tab as `only name:value`.
+        const value = stateValue(flag);
+        if (value) setState(s => ({ ...s, [value[0]]: value[1] }));
+        else setState(s => (s[flag] === 'true' ? { ...s, [flag]: '' } : { ...Object.fromEntries(Object.keys(s).map(k => [k, ''])), [flag]: 'true' }));
+        return;
+      }
       case 'play': actions.play(args); return;
       case 'multiview': if (args.channel || p.arg) actions.multiview?.(args.channel || p.arg); return;
       case 'openLink': {
