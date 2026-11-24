@@ -82,3 +82,9 @@ export function target(spec: string): { selector: string } | { wait: number } {
 
 /** The capture's file name. */
 export const captureName = (viewport: string, view: string) => `${viewport}--${view}.png`;
+
+/** Regions of a platform's capture that belong to the device, not the app, and are left out of
+ * every comparison there: the iPhone Duo cover display's camera and status island (its clock). */
+export const DEVICE_MASKS: Record<string, { x: number; y: number; width: number; height: number }[]> = {
+  'ios-phone': [{ x: 1150, y: 0, width: 248, height: 360 }],
+};
