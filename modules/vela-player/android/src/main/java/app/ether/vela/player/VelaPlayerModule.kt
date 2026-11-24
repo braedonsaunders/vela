@@ -55,10 +55,31 @@ class VelaPlayerModule : Module() {
         @Suppress("UNCHECKED_CAST") (request["access"] as? Map<String, Any?>),
         (request["start"] as? Number)?.toDouble() ?: 0.0, (request["rate"] as? Number)?.toDouble() ?: 1.0)
     }.runOnQueue(Queues.MAIN)
+    // `gain`: the preloaded item's levelling; `crossfade` { seconds, at }: AutoMix (docs/sound.md).
     AsyncFunction("audioPreload") { request: Map<String, Any?>? ->
+      val crossfade = request?.get("crossfade") as? Map<*, *>
       audio().preload((request?.get("id") as? Number)?.toInt(), request?.get("url") as? String,
         @Suppress("UNCHECKED_CAST") (request?.get("access") as? Map<String, Any?>),
-        (request?.get("start") as? Number)?.toDouble() ?: 0.0)
+        (request?.get("start") as? Number)?.toDouble() ?: 0.0,
+        (request?.get("gain") as? Number)?.toDouble() ?: 1.0,
+        crossfade?.let { fade ->
+          val seconds = (fade["seconds"] as? Number)?.toDouble() ?: return@let null
+          val at = (fade["at"] as? Number)?.toDouble() ?: return@let null
+          seconds to at
+        })
+    }.runOnQueue(Queues.MAIN)
+    // Levelling (the playing item's gain, linear) and the EQ ({ preGainDb, filters } or null).
+    AsyncFunction("audioSound") { sound: Map<String, Any?> ->
+      audio().sound((sound["gain"] as? Number)?.toDouble() ?: 1.0, EqChain.from(sound["eq"]))
+    }.runOnQueue(Queues.MAIN)
+    // Measurement only (debuggable builds): captures the processed output to `<path>-deck<n>.wav/.json`
+    // (the device gets silence) until called with null, which returns the files written.
+    AsyncFunction("audioCapture") { path: String? ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Player context unavailable")
+      if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
+        throw IllegalStateException("Audio capture is only in debug builds")
+      }
+      audio().capture(path)
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("audioPlay") { audio().play() }.runOnQueue(Queues.MAIN)
     AsyncFunction("audioPause") { audio().pause() }.runOnQueue(Queues.MAIN)

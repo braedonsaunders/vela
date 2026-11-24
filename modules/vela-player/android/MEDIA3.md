@@ -190,6 +190,48 @@ duration. Media3's `WavFileAudioBufferSink` splits its file at every item change
 when playback is seamless (the sink drains and reconfigures there); measure with a
 single-file tee.
 
+### Sound: levelling, EQ and AutoMix
+
+Each audio ExoPlayer's DefaultAudioSink starts its processor chain with a
+`VelaSoundProcessor` (VelaSound.kt), so it runs on decoded 16-bit (or float) PCM
+at the file's rate, before Sonic. It applies the levelling gain, the EQ (the
+pre-gain, then RBJ cookbook biquads in Direct Form I, double precision, exactly
+as packages/core/src/audio/eq.ts computes them) and AutoMix's equal-power fades.
+A levelling or EQ change glides over 10 ms (an EQ change runs the old and new
+filters side by side, the new one starting from the old one's history).
+
+Per-item gain across a gapless join is sample-exact, with no timing guess: every
+renderer moves the sink to the next item's stream offset after the last buffer of
+one item and before the first of the next, and the sink then drains and flushes
+its processors. `VelaSoundSink` (a ForwardingAudioSink) passes the offset change
+on, and the processor switches to the next item's gain at that flush. Offsets map
+to items in playlist order (`audioPreload` tells the processor which id follows
+which), and an offset seen again (a seek back into an earlier stream) maps back.
+
+A crossfade (`audioPreload` with `crossfade`) prepares a second deck (an
+ExoPlayer with its own processor) with the incoming item, paused. Two seconds
+before `at`, once that deck is ready, the outgoing processor gets its fade-out,
+on its own samples from `at` (later only if it has already passed it); the
+incoming processor fades in from the item's first sample. The only timed step is
+the incoming deck's `play()`: posted on the main thread against the outgoing
+sink's heard position (its last `getCurrentPositionUs`, extrapolated; ExoPlayer's
+`currentPosition` lags the playback thread), less the time a prepared deck takes
+from `play()` to its first sample heard. That lead starts at 80 ms and is learnt
+from every crossfade that plays through. The incoming deck becomes the active
+player at once (`advanced`, status events, the media session); the outgoing one
+keeps the audio focus while it fades, then stops and is kept as the spare deck,
+and the incoming one takes the focus. A pause, a seek, a load or a focus loss
+during the fade ends it.
+
+Measured on the API 34 emulator with the debug capture (`audioCapture`: each
+processor's output to a WAV, silence to the device): gain error under 0.001 dB,
+the gapless gain switch on the boundary sample, the EQ within 0.003 dB of the
+expected response from 31 Hz to 16 kHz, glides of 10 ms with no overshoot, and
+crossfades starting 8 ms early to 15 ms late (the emulator's mixer starts a track
+on its ~22.7 ms cycle), with the summed power within 0.02 dB. Only the MediaCodec
+renderer was measured; the FFmpeg renderer (MP3, ALAC) signals the offset change
+the same way, but that path was not captured.
+
 ## Dolby Vision
 
 Media3 gives Dolby Vision Profile 7 (UHD Blu-ray: an HDR10 base layer plus an
