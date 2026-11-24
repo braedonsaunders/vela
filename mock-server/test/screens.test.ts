@@ -65,7 +65,7 @@ describe('on a frozen clock', () => {
   let fixtures: string;
   let c: ReturnType<typeof client>;
   beforeAll(async () => {
-    // The real Sports documents, plus one test surface (W5 adds Sports' own).
+    // The real Sports documents and surfaces, with two test surfaces in place of the overlays.
     fixtures = mkdtempSync(join(tmpdir(), 'vela-screens-'));
     cpSync(join(import.meta.dir, '../../packages/protocol/fixtures/screens'), fixtures, { recursive: true });
     mkdirSync(join(fixtures, 'sports/surfaces'), { recursive: true });
@@ -87,7 +87,7 @@ describe('on a frozen clock', () => {
     const boot = await c.json('/bootstrap') as V.Bootstrap;
     expect(boot.navigation).toEqual([{ kind: 'screen', id: 'sports', title: 'Sports', icon: 'sports', page: 'index',
       document: { href: expect.stringMatching(/^\/vela\/v0\/screens\/sports\/pages\/index\/document\?v=[0-9a-f]{16}&r=19&l=en$/), renderer: 19 } }]);
-    expect(boot.surfaces!.map(surface => surface.id)).toEqual(['sports.scorebug', 'sports.ticker']);
+    expect(boot.surfaces!.map(surface => surface.id)).toEqual(['sports.scorebug', 'sports.ticker', 'sports.alert', 'sports.tonight']);
     expect(boot.surfaces!.slice(0, 1)).toEqual([{ id: 'sports.scorebug', presentation: 'playerOverlay', anchor: 'topLeft', when: { event: { feed: 'sports' } }, visibility: 'always',
       setting: { id: 'scorebug', label: 'Score', default: true, enabled: true }, document: { href: expect.stringContaining('/vela/v0/surfaces/sports.scorebug/document?v='), renderer: 19 } }]);
   });
@@ -178,6 +178,7 @@ describe('on a frozen clock', () => {
     // Possession names PHI exactly: it moves onto the side and out of the situation ("NYG 38" only mentions a side).
     expect(e.situation).toEqual([{ label: 'Down', value: '3rd & 6' }, { label: 'Ball', value: 'NYG 38' }]);
     expect(e.sides.map((s: Json) => s.possession)).toEqual([false, true]);
+    expect(e.possessionLabel).toBe('Possession');
     const p = e.probability;
     expect(p.subjectSide).toBe(1);
     expect(p.away).toBeCloseTo(1 - p.home, 3);
@@ -197,7 +198,7 @@ describe('on a frozen clock', () => {
   test('event records: upcoming, final, spoiler-free and N-competitor', async () => {
     const data = await c.json(`/screens/sports/pages/index/data${query({ sources: 'schedule,yours' })}`) as V.ScreenData;
     const read = async (id: string) => {
-      const game = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `sports:sports:${id}` })}`) as V.ScreenData;
+      const game = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `event:sports:sports:${id}` })}`) as V.ScreenData;
       return game.records[`event:sports:sports:${id}`]!.value as Json;
     };
     void data;
@@ -211,6 +212,7 @@ describe('on a frozen clock', () => {
     const hidden = await read('epl-che-mci');
     expect(hidden).toMatchObject({ phase: 'final', spoiler: true, scored: false, close: false, situation: [] });
     expect(hidden.probability).toBeUndefined();
+    expect(hidden.possessionLabel).toBeUndefined();
     expect(hidden.sides.every((s: Json) => s.score === '' && !s.winner)).toBe(true);
     const race = await read('f1-las-vegas');
     expect(race.sides).toBeUndefined();
@@ -219,7 +221,7 @@ describe('on a frozen clock', () => {
   });
 
   test('the game page: an event and a detail record (plays both ways, tables with lit rows, series, links)', async () => {
-    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': NFL })}`) as V.ScreenData;
+    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`) as V.ScreenData;
     expect(data.sources.game).toEqual({ event: { $record: `event:${NFL}` }, detail: { $record: `detail:${NFL}` } });
     const detail = data.records[`detail:${NFL}`]!.value as Json;
     expect(detail.id).toBe(NFL);
@@ -234,7 +236,7 @@ describe('on a frozen clock', () => {
     expect(detail.playsNewest.find((p: Json) => p.clock === '3:30').scores).toEqual(['24', '27']);
     const ats = detail.plays.map((p: Json) => Date.parse(p.at));
     expect(ats).toEqual([...ats].sort((a, b) => a - b));
-    const hockey = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nhl-tor-mtl' })}`) as V.ScreenData;
+    const hockey = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'event:sports:sports:nhl-tor-mtl' })}`) as V.ScreenData;
     expect(((hockey.records['detail:sports:sports:nhl-tor-mtl']!.value as Json).plays as Json[]).every(p => p.at === undefined && p.score === undefined && p.scores === undefined)).toBe(true);
     const scoring = detail.tables[0];
     expect(scoring.title).toBe('Scoring');
@@ -243,9 +245,14 @@ describe('on a frozen clock', () => {
     expect(detail.probabilitySeries.length).toBeGreaterThan(2);
     expect(detail.links).toEqual([{ label: 'Game centre', url: { href: `https://example.invalid/sports/${encodeURIComponent(NFL)}`, host: 'example.invalid' } }]);
     // A record key works as the ref too; an unknown event is a 404 for the whole read.
-    expect((await c.get(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`)).status).toBe(200);
+    // A ref param is a record key: a bare id is 400 invalid_request.
+    const bare = await c.get(`/screens/sports/pages/game/data${query({ 'p.event': NFL })}`);
+    expect(bare.status).toBe(400);
+    expect(((await bare.json()) as Json).error.code).toBe('invalid_request');
+    expect((await c.get(`/surfaces/sports.scorebug/data${query({ 'p.event': NFL })}`)).status).toBe(400);
+    expect((await c.get(`/surfaces/sports.scorebug/data${query({ 'p.channel': 'ch-1' })}`)).status).toBe(400);
     // An event the viewer cannot read is that source's not_found, not a 404 (a 404 is only a page the viewer may not see).
-    const missing = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nope' })}`) as V.ScreenData;
+    const missing = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'event:sports:sports:nope' })}`) as V.ScreenData;
     expect(missing.errors).toEqual({ game: { code: 'not_found' } });
     expect(missing.sources.viewer).toBeDefined();
   });
@@ -322,11 +329,13 @@ describe('on a frozen clock', () => {
     expect(extra.status).toBe(400);
     expect(((await extra.json()) as Json).error.code).toBe('invalid_request');
     expect((await c.action('/screens/sports/actions/nope', { page: 'index', params: {}, args: {} })).status).toBe(404);
+    // ref must be an entity: record key.
+    expect((await c.action('/screens/sports/actions/ether.favorite', { page: 'index', params: {}, args: { ref: 'sports:sports:team:nfl-dal', on: 'true' } })).status).toBe(400);
   });
 
   test('reveal and spoiler-free change the event records the viewer reads', async () => {
     const id = 'sports:sports:epl-che-mci';
-    const revealed = await (await c.action('/screens/sports/actions/ether.reveal', { page: 'game', params: { event: id }, args: { event: id } })).json() as V.ScreenActionAnswer;
+    const revealed = await (await c.action('/screens/sports/actions/ether.reveal', { page: 'game', params: { event: `event:${id}` }, args: { event: `event:${id}` } })).json() as V.ScreenActionAnswer;
     expect(revealed.records![`event:${id}`]!.value).toMatchObject({ spoiler: false, scored: true });
     expect(revealed.records![`detail:${id}`]).toBeDefined();
     const on = await (await c.action('/screens/sports/actions/ether.spoilerFree', { page: 'index', params: {}, args: { on: 'true' } })).json() as V.ScreenActionAnswer;
@@ -431,12 +440,60 @@ describe('the news desk: plugin sources and a plugin action', () => {
     expect(answer.toast).toBe('Following Tech');
     expect(answer.sources).toEqual({ mine: { followsTopic: false, topics: ['tech'] } });
     expect(answer.refresh).toBeUndefined();
-    // Ether checks declared types: a bool is JSON true/false, not text.
-    const text = await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: 'true' } });
-    expect(text.status).toBe(400);
+    // Ether coerces text to the declared type ("false"/"0" a bool); anything else is refused.
+    const text = await c.action('/screens/news/actions/follow-topic', { page: 'index', params: { topic: 'tech' }, args: { topic: 'tech', on: 'false' } });
+    expect(text.status).toBe(200);
+    expect(((await text.json()) as V.ScreenActionAnswer).toast).toBe('Stopped following Tech');
+    expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: 'yes' } })).status).toBe(400);
     expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'sports', on: true } })).status).toBe(400);
     expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: true, extra: 'x' } })).status).toBe(400);
     expect((await c.action('/screens/news/actions/delete-everything', { page: 'index', params: {}, args: {} })).status).toBe(404);
+  });
+});
+
+describe('Studio live preview', () => {
+  let mock: RunningMock;
+  let tokens: V.Tokens;
+  let c: ReturnType<typeof client>;
+  let drafts: string;
+  beforeAll(async () => {
+    drafts = mkdtempSync(join(tmpdir(), 'vela-drafts-'));
+    mkdirSync(join(drafts, 'sports'), { recursive: true });
+    const published = JSON.parse(await Bun.file(join(import.meta.dir, '../../packages/protocol/fixtures/screens/sports/index.json')).text());
+    writeFileSync(join(drafts, 'sports/index.json'), JSON.stringify({ ...published, strings: { ...published.strings, title: 'Sports (draft)' } }));
+    mock = await launchMock({ VELA_MOCK_SPORTS_FREEZE: '1', VELA_MOCK_SCREEN_DRAFTS: drafts, VELA_MOCK_SCREEN_PREVIEW_TOKEN: 'tok' });
+    tokens = await signIn(mock);
+    c = client(mock, () => tokens);
+  });
+  afterAll(async () => { await mock?.stop(); rmSync(drafts, { recursive: true, force: true }); });
+  const preview = (token = 'tok') => ({ 'X-Vela-Screen-Preview': token });
+
+  test('a live token reads drafts (no-store, v ignored); a page without a draft is the published one', async () => {
+    const published = ((await c.json('/bootstrap')) as V.Bootstrap).navigation![0] as V.ScreenNavigationEntry;
+    const drafted = ((await (await c.get('/bootstrap', '19', preview())).json()) as V.Bootstrap).navigation![0] as V.ScreenNavigationEntry;
+    expect(drafted.document.href).not.toBe(published.document.href);
+    const doc = await c.get(published.document.href, '19', preview());
+    expect(doc.status).toBe(200);
+    expect(doc.headers.get('cache-control')).toBe('no-store');
+    expect(((await doc.json()) as V.ScreenDocument).strings!.title).toBe('Sports (draft)');
+    expect(((await (await c.get(published.document.href)).json()) as V.ScreenDocument).strings!.title).toBe('Sports');
+    const game = await c.get('/screens/sports/pages/game/document', '19', preview());
+    expect(game.headers.get('cache-control')).toBe('private, no-cache');
+    const data = await (await c.get(`/screens/sports/pages/index/data${query({})}`, '19', preview())).json() as V.ScreenData;
+    const stream = await readStream(mock, `/live/stream?topic=${data.live!.topic}&since=${data.rev}`, { ...c.headers(), ...preview() }, () => false, 500);
+    expect(stream.status).toBe(200);
+  });
+
+  test('any other token is 403 preview_expired on document, data, action and stream; bootstrap still answers', async () => {
+    const codes = async (response: Response) => [response.status, ((await response.json()) as Json).error?.code];
+    expect(await codes(await c.get('/screens/sports/pages/index/document', '19', preview('stale')))).toEqual([403, 'preview_expired']);
+    expect(await codes(await c.get(`/screens/sports/pages/index/data${query({})}`, '19', preview('stale')))).toEqual([403, 'preview_expired']);
+    const action = await fetch(`${mock.url}/vela/v0/screens/sports/actions/ether.spoilerFree`, { method: 'POST', headers: { ...c.headers(), ...preview('stale'), 'Idempotency-Key': 'p1' },
+      body: JSON.stringify({ page: 'index', params: {}, args: { on: false }, idempotencyKey: 'p1' }) });
+    expect(await codes(action)).toEqual([403, 'preview_expired']);
+    const stream = await readStream(mock, '/live/stream?alerts=1', { ...c.headers(), ...preview('stale') }, () => true);
+    expect([stream.status, stream.body.error.code]).toEqual([403, 'preview_expired']);
+    expect((await c.get('/bootstrap', '19', preview('stale'))).status).toBe(200);
   });
 });
 
@@ -452,7 +509,7 @@ describe('with the clock running', () => {
   afterAll(async () => { await mock?.stop(); });
 
   test('a live game pushes newer event records on its page topic', async () => {
-    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': NFL })}`) as V.ScreenData;
+    const data = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`) as V.ScreenData;
     const stream = await readStream(mock, `/live/stream?topic=${data.live!.topic}&since=${data.rev}`, c.headers(),
       events => events.some(e => e.event === 'records' && e.data.records[`event:${NFL}`]), 8000);
     const pushed = stream.events.find(e => e.event === 'records' && e.data.records[`event:${NFL}`])!.data.records as Record<string, V.RecordEntry>;
@@ -465,6 +522,6 @@ describe('with the clock running', () => {
     await Bun.sleep(300);
     await fetch(`${mock.url}/__admin/sports`, { method: 'POST', body: JSON.stringify({ alert: { kind: 'close', eventId: NFL } }) });
     const alert = (await stream).events.find(e => e.event === 'alert')!.data as V.AlertFrame;
-    expect(alert).toEqual({ id: expect.any(String), kind: 'close', title: 'Close game', body: expect.stringContaining('–'), at: expect.any(String), ref: `event:${NFL}`, plugin: 'sports' });
+    expect(alert).toEqual({ id: expect.any(String), kind: 'close', title: 'Close game', body: expect.stringContaining('–'), at: expect.any(String), ref: `event:${NFL}`, plugin: 'sports', surface: 'sports.alert' });
   });
 });

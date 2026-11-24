@@ -42,12 +42,16 @@ export interface SkinHost {
   children?: ReactNode;
 }
 
+/** A press argument as a plugin action takes it (protocol ScreenActionArg). */
+export type ScreenArg = string | number | boolean | string[];
+
 /** A screen document's press, filled where it was drawn (docs/plugin-screens.md: Actions). */
 export interface ScreenPress {
   action: Action;
   arg: string;
-  args: Record<string, string>;
-  optimistic?: { record?: string; source?: string; path: string; value: string };
+  /** Text, or the raw value of an argument written as one hole (a boolean, a number, a list of text). */
+  args: Record<string, ScreenArg>;
+  optimistic?: { record?: string; source?: string; path: string; value: unknown };
   /** The pressed control's identity (its id, test id or label), for its busy state. */
   control: string;
 }

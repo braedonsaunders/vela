@@ -16,3 +16,6 @@ export { BLOCK_KINDS, type BlockKind, type RPress } from './resolve';
 export { resolveScreenDocument, checkScreenDocument, type ResolvedScreen, type ScreenViewport } from './resolve/screen';
 export { screenRoot, screenItems, screenItemKey, tabCtx, bind, type Items } from './screen/items';
 export type { ScreenScope, Bound, RecordReader } from './screen/scope';
+export { RecapBlock, RecapDailyChart, RecapPeriodChip, RecapRankedSection, RecapStatsGrid, RewindCover, RewindShareModal, useHistoryRecap, type RecapBlockProps } from './blocks/recap';
+export { ImportCover, ImportResultView, PlaylistImportBlock, SAMPLE_DEEZER_URL, SAMPLE_M3U, SAMPLE_SPOTIFY_URL, usePlaylistImport, type PlaylistImportBlockProps } from './blocks/import';
+export { DuplicateGroupCard, DuplicatesBlock, DuplicatesCover, useLibraryDuplicates, useTitleRecording, type DuplicatesBlockProps } from './blocks/duplicates';

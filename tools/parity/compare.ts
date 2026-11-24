@@ -10,6 +10,7 @@ import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { decodePng, encodePng } from './png';
 import { diffImages, movingMask, RULE, verdict, type Rect } from './diff';
+import { DEVICE_MASKS } from './views';
 
 interface Capture { viewport: string; view: string; file: string; frame: string; description: string; review?: string; ok: boolean; error?: string }
 interface Manifest { variant: string; platform: string; now: string; captures: Capture[] }
@@ -32,7 +33,7 @@ for (const before of legacy.captures) {
   rows.push(row);
   if (!before.ok || !after?.ok) { row.reasons.push(!before.ok ? `legacy capture failed: ${before.error?.split('\n')[0]}` : after ? `document capture failed: ${after.error?.split('\n')[0]}` : 'no document capture'); continue; }
   const a = png(legacyDir, before.file), b = png(documentDir, after.file);
-  const mask: Rect[] = [];
+  const mask: Rect[] = [...(DEVICE_MASKS[before.viewport] ?? [])];
   for (const [dir, capture, image] of [[legacyDir, before, a], [documentDir, after, b]] as const) {
     if (existsSync(join(dir, capture.frame))) mask.push(...movingMask(image, png(dir, capture.frame)));
   }

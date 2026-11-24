@@ -88,8 +88,11 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
       type: 'box', role: 'button', label: '{arg.label}', style: pill('quiet', false), focus: pillFocus('quiet'), hover: pillFocus('quiet'),
       states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pill(tone, small), focus: pillFocus(tone), hover: pillFocus(tone) })),
       children: [
-        { type: 'icon', symbol: '{arg.glyph}', when: on('glyph'), style: glyph('quiet', false),
+        { type: 'icon', symbol: '{arg.glyph}', when: [...on('glyph'), ...off('glyphSize')], style: glyph('quiet', false),
           states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: glyph(tone, small) })) },
+        // `glyphSize` draws the glyph at its own size (Sports' GridMark is 15px beside 16px glyphs).
+        { type: 'icon', symbol: '{arg.glyph}', when: [...on('glyph'), ...on('glyphSize')], style: { ...glyph('quiet', false), width: '{arg.glyphSize}', height: '{arg.glyphSize}' },
+          states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: { ...glyph(tone, small), width: '{arg.glyphSize}', height: '{arg.glyphSize}' } })) },
         { type: 'text', text: '{arg.label}', style: pillLabel('quiet', false),
           states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pillLabel(tone, small) })) },
       ],
@@ -148,7 +151,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
       style: { width: '{arg.size}', height: '{arg.size}', 'border-radius': '999px', 'background-color': '#f4f5f7', 'align-items': 'center', 'justify-content': 'center',
         overflow: 'hidden', border: 'max(1.5px, calc({arg.size} * 0.05)) solid {arg.color}' },
       children: [
-        { type: 'image', src: '{arg.logo}', alt: '', fade: true, style: { width: '70%', height: '70%', 'object-fit': 'contain' },
+        // The logo is centred at 0.7 of the crest's size over the border, as Crest drew it.
+        { type: 'image', src: '{arg.logo}', alt: '', fade: true, style: { position: 'absolute', width: 'calc({arg.size} * 0.7)', height: 'calc({arg.size} * 0.7)', 'object-fit': 'contain' },
           fallback: {
             type: 'box', style: { position: 'absolute', inset: 'calc(max(1.5px, calc({arg.size} * 0.05)) * -1)', 'border-radius': '999px', 'background-color': '{arg.color}',
               'align-items': 'center', 'justify-content': 'center', border: '0px solid transparent' },
@@ -172,7 +176,7 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
       ],
     },
     'vela:switch': {
-      type: 'box', role: 'switch', label: '{arg.label}', a11y: { checked: on('on') }, style: switchBox(false),
+      type: 'box', role: 'button', label: '{arg.label}', a11y: { pressed: on('on') }, style: switchBox(false),
       focus: { scale: '1.06', 'background-color': 'color-mix(in srgb, $ui.ink 18%, transparent)' },
       states: [{ when: on('on'), style: switchBox(true), focus: { scale: '1.06', 'background-color': 'color-mix(in srgb, $ui.accent 30%, transparent)' } }],
       children: [
@@ -187,8 +191,9 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
     },
     'vela:placeholder': {
       type: 'box', motion: 'kit:breathe', a11y: { hidden: true },
-      style: { width: '{arg.width}', height: '{arg.height}', 'border-radius': radiusCard, 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' },
-      states: [{ when: on('radius'), style: { width: '{arg.width}', height: '{arg.height}', 'border-radius': '{arg.radius}', 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' } }],
+      // A plain block of its size: it never shrinks in a row (a skeleton row clips its last one).
+      style: { width: '{arg.width}', height: '{arg.height}', 'flex-shrink': '0', 'border-radius': radiusCard, 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' },
+      states: [{ when: on('radius'), style: { width: '{arg.width}', height: '{arg.height}', 'flex-shrink': '0', 'border-radius': '{arg.radius}', 'background-color': 'color-mix(in srgb, $ui.ink 7%, transparent)' } }],
     },
     'vela:failure': {
       type: 'box', style: { flex: '1', 'align-items': 'center', 'justify-content': 'center', gap: '16px', padding: 'max(28px, 4vw)' },
@@ -197,6 +202,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
         { type: 'text', text: '{arg.text}', when: on('text'), style: text(18, 700, '$ui.ink', { 'text-align': 'center' }) },
         { type: 'text', text: msg('ui.tryAgain'), when: off('text'), style: text(18, 700, '$ui.ink', { 'text-align': 'center' }) },
         { type: 'text', text: '{arg.message}', when: on('message'), style: text(14, 500, '$ui.inkQuiet', { 'text-align': 'center' }) },
+        // Without a message of its own, the failed read's (Failure showed the error text).
+        { type: 'text', text: '{env.error}', when: [...off('message'), { test: 'env.error' }], style: text(14, 500, '$ui.inkQuiet', { 'text-align': 'center' }) },
         { type: 'use', template: 'vela:pill', when: [{ test: 'env.canRetry' }], with: { label: '{arg.retry}', glyph: 'restart', primary: 'true' }, press: { action: 'retry' } },
       ],
     },

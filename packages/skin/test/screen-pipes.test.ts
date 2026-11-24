@@ -69,9 +69,9 @@ describe('paths', () => {
   });
   test('env keys read the viewport and capabilities, and the skeleton ranges', () => {
     const c = ctx();
-    const t = compileTemplate('{env.small}{env.wide}{env.tv}{env.canMultiview}{env.canPlay}{env.range5.length}', scope());
-    expect(typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, { ...env, canMultiview: true }))).join(''))
-      .toBe('falsetruefalsetruetrue5');
+    const t = compileTemplate('{env.small}{env.wide}{env.tv}{env.isTV}{env.canMultiview}{env.canPlay}{env.range5.length}', scope());
+    expect(typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, { ...env, tv: true, canMultiview: true }))).join(''))
+      .toBe('falsetruetruefalsetruetrue5');
   });
 });
 
@@ -124,6 +124,7 @@ describe('pipes', () => {
     expect(dayText('2026-11-25')).toBe('Tomorrow');
     expect(dayText('2026-11-23')).toBe('Yesterday');
     expect(dayText('2026-11-26')).toBe('Thu 26');
+    expect(dayText('2026-11-22')).toBe('Sun 22');
     expect(dayText('')).toBe('');
     expect(draw('{src.t|time}', {}, ctx(page({ sources: { t: '2026-11-25T00:30:00Z' } })))).toBe('7:30 PM');
     expect(draw('{src.t|date}', {}, ctx(page({ sources: { t: '2026-11-30' } })))).toBe('Nov 30');

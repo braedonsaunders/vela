@@ -14,8 +14,8 @@ const json = async <T>(file: string) => await Bun.file(join(dir, file)).json() a
 interface Sample { sources: Record<string, unknown>; records: Record<string, { rev: number; value: unknown }> }
 
 const envAt = (width: number): Env => ({ small: width < 640, wide: width >= 1200, tv: false, still: true, width, canMultiview: true } as unknown as Env);
-const page = (sources: Record<string, unknown>, params: Record<string, string> = {}): ScreenPageState =>
-  ({ href: 'h', key: 'k', params, sources, pending: {}, errors: {}, load: 'ready', rev: 1 });
+const page = (sources: Record<string, unknown>, params: Record<string, string> = {}, errors: ScreenPageState['errors'] = {}): ScreenPageState =>
+  ({ href: 'h', key: 'k', params, sources, pending: {}, errors, load: 'ready', rev: 1 });
 
 /** Every text drawn (conditions held), depth first, with the testId of the nearest box above it. */
 function texts(tree: RNode, at: Ctx, env: Env): string[] {
@@ -86,11 +86,46 @@ describe('the Sports index document', () => {
   });
 });
 
+test('every navigate to the game page passes the event record key (a ref param)', async () => {
+  const doc = await json<ScreenDocument>('index.json');
+  const data = await json<Sample>('data-sample.json');
+  const env = envAt(1440);
+  const r = resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {});
+  const events: string[] = [];
+  const visit = (n: RNode, c: Ctx) => {
+    if (!holds(n.when, c, env)) return;
+    const node = n as RNode & { children?: RNode[]; item?: RNode; after?: RNode[]; press?: { action: string; args?: Record<string, unknown> } };
+    if (node.press?.action === 'navigate' && node.press.args?.event) events.push(fill(node.press.args.event as never, c, env));
+    if ((n.kind === 'repeat' || n.kind === 'shelf') && node.item) for (const i of items(n as never, c, env)) visit(node.item, i);
+    node.children?.forEach(child => visit(child, c));
+  };
+  visit(r.tree, screenRoot(page(data.sources), key => data.records[key]));
+  expect(events.length).toBeGreaterThan(5);
+  expect(events.every(e => e.startsWith('event:org.ether.sports:sports:'))).toBe(true);
+});
+
+test('All leagues: a generic standings heading; a failed schedule says so instead of "no games"', async () => {
+  const doc = await json<ScreenDocument>('index.json');
+  const data = await json<Sample>('data-sample.json');
+  const r = resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {});
+  const standings = data.sources.standings as { league: object };
+  const sources = { ...data.sources, standings: { ...standings, league: { id: '', name: '', label: '' } }, schedule: { date: '2026-11-24', days: [], events: [] } };
+  const t = texts(r.tree, screenRoot(page(sources, {}, { schedule: { code: 'timeout', retry: true } } as never), key => data.records[key]), envAt(1440));
+  expect(t).toContain('Standings');
+  expect(t).not.toContain(' standings');
+  expect(t).toContain('The schedule could not be loaded.');
+  expect(t).not.toContain('No games on this day.');
+  const quiet = texts(r.tree, screenRoot(page(sources), key => data.records[key]), envAt(1440));
+  expect(quiet).toContain('No games on this day.');
+});
+
 describe('the Sports game document', () => {
   test('score band, where to watch, probability, tables and plays newest first', async () => {
     const t = await draw('game.json', 'data-game.json', 1440);
     expect(t.slice(0, 13)).toEqual(['LIVE', 'NFL · Lincoln Financial Field, Philadelphia', 'Close game',
       'New York Giants', '4-7', '24', '–', '27', 'Q4 · 2:14', 'Philadelphia Eagles', '9-2', 'Down', '3rd & 6']);
+    // Possession comes from the side (sides[].possession), drawn last like legacy's third chip.
+    expect(t.slice(t.indexOf('Ball'), t.indexOf('Ball') + 4)).toEqual(['Ball', 'NYG 38', 'Possession', 'PHI']);
     expect(t).toContain('Where to watch');
     expect(t).toContain('Watch on Matchday · 107');
     expect(t).toContain('Watch on Metro Sports 1 · 120');
@@ -102,9 +137,51 @@ describe('the Sports game document', () => {
     expect(plays.slice(0, 2)).toEqual(['2:14', 'Barkley rush right for 7 yards']);
   });
 
+  test("the game's own tables are not lit (legacy lights only standings)", async () => {
+    const doc = await json<ScreenDocument>('game.json');
+    const tables: RNode[] = [];
+    const visit = (n: RNode) => {
+      const node = n as RNode & { children?: RNode[]; item?: RNode };
+      if (n.kind === 'table') tables.push(n);
+      node.children?.forEach(visit);
+      if (node.item) visit(node.item);
+    };
+    visit(resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {}).tree);
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(t => (t as RNode & { highlight?: boolean }).highlight === false)).toBe(true);
+  });
+
   test('a phone names the teams short', async () => {
     const t = await draw('game.json', 'data-game.json', 390);
     expect(t).toContain('Giants');
     expect(t).not.toContain('New York Giants');
+  });
+});
+
+describe('tabs pin', () => {
+  test('an empty bound param takes the shown default once; nothing else is written', async () => {
+    const { pinnedParamValue } = await import('../src/blocks/layout-math');
+    const base = { pin: true, param: 'teamsLeague', paramValue: '', defaultValue: 'nfl', optionValues: ['nfl', 'nba'] };
+    expect(pinnedParamValue(base)).toBe('nfl');
+    expect(pinnedParamValue({ ...base, pin: false })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, paramValue: 'nba' })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, defaultValue: '' })).toBeUndefined();
+    // A default that is not one of the shown options is not pinned (nothing is shown for it).
+    expect(pinnedParamValue({ ...base, defaultValue: 'mlb' })).toBeUndefined();
+    expect(pinnedParamValue({ ...base, param: undefined })).toBeUndefined();
+  });
+
+  test('the team picker pins its league; the schedule days do not', async () => {
+    const doc = await json<ScreenDocument>('index.json');
+    const tabs: (RNode & { pin?: boolean; bind: { param?: string } })[] = [];
+    const visit = (n: RNode) => {
+      const node = n as RNode & { children?: RNode[]; item?: RNode };
+      if (n.kind === 'tabs') tabs.push(n as never);
+      node.children?.forEach(visit);
+      if (node.item) visit(node.item);
+    };
+    visit(resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {}).tree);
+    const byParam = Object.fromEntries(tabs.map(t => [t.bind.param, t.pin === true]));
+    expect(byParam).toEqual({ league: false, date: false, teamsLeague: true });
   });
 });

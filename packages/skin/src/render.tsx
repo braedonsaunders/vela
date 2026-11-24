@@ -29,7 +29,7 @@ import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
-import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type ScreenPress, type SkinHost } from './host';
+import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type ScreenArg, type ScreenPress, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusPressed, focusTarget, leaveButton, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { useFocusStyles } from './focus';
@@ -54,7 +54,7 @@ import { fill, holds, type CssT, type Layer, type RNode, type RPress, type Resol
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
 import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocabulary';
 import { itemKey, items } from './screen/items';
-import { screenImageSrc } from './screen/scope';
+import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
@@ -94,6 +94,18 @@ const PointerInheritance = createContext<PointerMode>('auto');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
+/** A surface over the picture while the player's chrome is hidden: its presses take no focus (a
+ * pointer or touch still reaches them), so the remote never lands on an overlay it cannot see the
+ * controls around. */
+export const Unfocusable = createContext(false);
+/** Plugin surfaces in skin pages (docs/plugin-screens.md: Surfaces), given by the app: a Home row
+ * whose row is a surface (drawn in place of the skin's row), and title panels after a title's
+ * related rows. Without them (or with surfaces off) those places draw as before. */
+export interface SurfaceSlotViews {
+  row?: ComponentType<{ id: string; surface: string }>;
+  titlePanels?: ComponentType<{ id: string; kind: string }>;
+}
+export const SurfaceSlots = createContext<SurfaceSlotViews | null>(null);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
 const PressLabelContent = createContext(false);
 const HeroInteraction = createContext(false);
@@ -412,13 +424,25 @@ function HeroCopy({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx
 
 /** A screen press with its arguments and optimistic patch filled where it was drawn. */
 function screenPress(press: RPress, arg: string, node: RNode, ctx: Ctx, env: Env): ScreenPress {
-  const args = Object.fromEntries(Object.entries(press.args ?? {}).map(([name, value]) => [name, fill(value, ctx, env)]));
+  const args = Object.fromEntries(Object.entries(press.args ?? {}).map(([name, value]) => {
+    const raw = press.argValues?.[name];
+    return [name, raw ? screenArg(raw(ctx, env), fill(value, ctx, env), ctx) : fill(value, ctx, env)];
+  }));
   const o = press.optimistic;
   return {
     action: press.action, arg, args,
-    ...(o ? { optimistic: { ...(o.record ? { record: fill(o.record, ctx, env) } : {}), ...(o.source ? { source: o.source } : {}), path: o.path, value: fill(o.value, ctx, env) } } : {}),
+    ...(o ? { optimistic: { ...(o.record ? { record: fill(o.record, ctx, env) } : {}), ...(o.source ? { source: o.source } : {}), path: o.path,
+      value: o.raw ? screenArg(o.raw(ctx, env), fill(o.value, ctx, env), ctx) : fill(o.value, ctx, env) } } : {}),
     control: fill(node.id, ctx, env) || fill(node.testId, ctx, env) || fill(node.label, ctx, env) || `${press.action}:${arg}`,
   };
+}
+
+/** A whole-hole argument's raw value when it is one a plugin action takes, else its text. */
+function screenArg(raw: unknown, text: string, ctx: Ctx): ScreenArg {
+  const value = ctx.screen ? derefValue(raw, ctx.screen.record) : raw;
+  if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) return value;
+  if (Array.isArray(value) && value.every(v => typeof v === 'string')) return value as string[];
+  return text;
 }
 
 /** How many times a node's onChange value has changed while drawn (screens). */
@@ -452,6 +476,7 @@ function SkinNodeView({ node, ctx, route, after, hero, changed }: { node: RNode;
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
   const hiddenLibraryNav = useContext(HiddenLibraryNav);
+  const surfaceSlots = useContext(SurfaceSlots);
   if (!loadingLibraryNav && node.id === 'vela-library-views' && env.route === 'library' && env.load !== 'ready') return null;
   if (hiddenLibraryNav && node.kind === 'box' && node.base.style.position === 'sticky'
     && node.children.some(child => child.id === 'vela-library-views')) {
@@ -477,12 +502,18 @@ function SkinNodeView({ node, ctx, route, after, hero, changed }: { node: RNode;
     // focus to the pager, where Select picked the first title).
     let shown = 0;
     const steadyHero = node.over === 'home.hero' && Platform.isTV;
+    const SurfaceRow = node.over === 'home.rows' ? surfaceSlots?.row : undefined;
     const drawn = items(node, ctx, env).flatMap(c => {
       const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
       if (!holds(node.when, c, env)) return [];
       const key = steadyHero ? `hero-shown-${shown++}` : itemKey(node, c, env);
+      // A plugin's Home row draws its surface in the row's place.
+      if (c.row?.surface) return SurfaceRow ? [<SurfaceRow key={key} id={c.row.id} surface={c.row.surface} />] : [];
       return [<SkinNode key={key} node={node.item} ctx={context} hero={node.over === 'home.hero'} />];
     });
+    const TitlePanels = node.over === 'detail.related' ? surfaceSlots?.titlePanels : undefined;
+    const title = TitlePanels ? env.detail?.title[0] : undefined;
+    if (TitlePanels && title) drawn.push(<TitlePanels key="surface-title-panels" id={title.id} kind={title.kind} />);
     const lazy = node.items ? undefined : LAZY_REPEATS[node.over];
     return lazy ? <LazyRepeat axis={lazy.axis} first={lazy.first} batch={lazy.batch}>{drawn}</LazyRepeat> : <>{drawn}</>;
   }
@@ -730,7 +761,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const band = useContext(Band);
   // A section the remote reaches though it presses nothing: below a scroll's last control, or one
   // the document marks (a menu's About line).
-  const stop = useContext(ReadingStop) || (Platform.isTV && node.readingStop === true);
+  const unfocusable = useContext(Unfocusable);
+  const readingStop = useContext(ReadingStop);
+  const stop = !unfocusable && (readingStop || (Platform.isTV && node.readingStop === true));
   const routeFocus = useRouteFocusContext();
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
@@ -1057,7 +1090,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
         {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
-        focusable={selectable(node)}
+        focusable={selectable(node) && !unfocusable}
         {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}), ...(heroSegment ? { velaHeroSegment: String(ctx.index) } : {}) }, onKeyDown: (event) => {
           const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
           const heroTo = heroSegment ? heroSegmentDestination(key, ctx.index, env.home?.hero.length ?? 0) : null;

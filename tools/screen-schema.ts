@@ -209,7 +209,7 @@ export async function drift(): Promise<string[]> {
   // Every screen fixture is a valid document.
   const schema = JSON.parse(text) as Schema;
   const fixtures = join(root, 'packages/protocol/fixtures/screens');
-  for (const path of new Bun.Glob('*/*.json').scanSync(fixtures)) {
+  for (const path of new Bun.Glob('**/*.json').scanSync(fixtures)) {
     if (/(^|\/)data/.test(path)) continue;
     const errors = validate(schema, JSON.parse(await readFile(join(fixtures, path), 'utf8')));
     if (errors.length) problems.push(`fixtures/screens/${path} is not a valid document: ${errors.slice(0, 5).join('; ')}`);

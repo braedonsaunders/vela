@@ -7,7 +7,7 @@
 // Section routes, pages and W5's surface hosts all draw through ScreenView.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, Text, View } from 'react-native';
-import { useRecordReader, useScreenDocument, useScreenPage, useVela } from '@vela/core/react';
+import { useRecordReader, useScreenDocument, useScreenPage, useVela, useVelaState } from '@vela/core/react';
 import { msg, screenDocumentHref, type ScreenTarget } from '@vela/core';
 import type { ScreenDocument, SurfaceContext } from '../../../protocol/screen';
 import type { ScreenPageState } from '../../../core/src/screens/types';
@@ -18,7 +18,7 @@ import { fill, type RNode } from '../resolve';
 import { resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
 import { resolveUi } from '../resolve/ui';
 import { SkinNodeFor, SkinRoot, SkinRoute } from '../render';
-import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, type ScreenBlockRuntime } from '../blocks';
+import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, useBlockLook, type ScreenBlockRuntime } from '../blocks';
 import { screenRoot } from './items';
 
 /** Where a `navigate` goes: a page of a plugin screen, or one of the app's built-in routes. */
@@ -58,10 +58,21 @@ export interface ScreenViewProps {
   route?: boolean;
   /** Drawn when the document cannot be drawn by this client (default: an "update the app" line). */
   refused?: (reason: string) => ReactNode;
+  /** Surfaces: the host's client-only context (chrome, pictureTime, delayed, the playing channel under a
+   *  toast), read by the document's {context.*} holes but never sent to Ether nor part of the page key. */
+  local?: SurfaceContext;
+  /** Surfaces: nothing is drawn until the first read answers, and nothing when it fails or the
+   *  document is refused (a surface that cannot draw is left out, never a skeleton or an error). */
+  quiet?: boolean;
 }
 
 const BOOL = /^(true|false)$/;
-const patchValue = (value: string): unknown => (BOOL.test(value) ? value === 'true' : value);
+/** `name=value` or `name:value`: a state value, not a flag. */
+function stateValue(flag: string): [string, string] | undefined {
+  const m = /^([\w-]+)[=:](.*)$/.exec(flag);
+  return m ? [m[1]!, m[2]!] : undefined;
+}
+const patchValue = (value: unknown): unknown => (typeof value === 'string' && BOOL.test(value) ? value === 'true' : value);
 
 /** The arguments of a press without the ones that name the action itself. */
 function without(args: Record<string, string>, ...names: string[]): Record<string, string> {
@@ -72,34 +83,55 @@ function without(args: Record<string, string>, ...names: string[]): Record<strin
 function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolved?: ResolvedScreen; problem: string } {
   const { width, height } = host.viewport;
   const ui = host.doc.document.ui;
+  // The last document of this page that resolved: a newer one that cannot be drawn (a Studio draft
+  // with an error) leaves it on screen instead of the failure.
+  const lastGood = useRef<{ id: string; resolved: ResolvedScreen } | null>(null);
   return useMemo(() => {
     if (!doc) return { problem: '' };
+    const id = `${doc.screen}/${doc.page}`;
     try {
-      const scale = Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX;
-      const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale }, 'en', resolveUi(ui));
-      if (resolved.warnings.length) console.warn(`${doc.screen}/${doc.page}: ${resolved.warnings.join('; ')}`);
+      const scale = host.viewport.pxScale ?? (Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX);
+      const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale, ...(host.viewport.pxStep ? { step: host.viewport.pxStep } : {}) }, 'en', resolveUi(ui));
+      if (resolved.warnings.length) console.warn(`${id}: ${resolved.warnings.join('; ')}`);
+      lastGood.current = { id, resolved };
       return { resolved, problem: '' };
     } catch (error) {
-      return { problem: error instanceof Error ? error.message : String(error) };
+      const problem = error instanceof Error ? error.message : String(error);
+      if (lastGood.current?.id === id) {
+        console.warn(`${id}: the new document cannot be drawn, the last one stays: ${problem}`);
+        return { resolved: lastGood.current.resolved, problem: '' };
+      }
+      return { problem };
     }
-  }, [doc, width, height, ui]);
+  }, [doc, width, height, ui, host.viewport.pxScale, host.viewport.pxStep]);
 }
 
-export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused }: ScreenViewProps) {
+export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
+  const previewExpired = useVelaState(state => state.screens.preview?.expired === true);
   const { resolved, problem } = useResolved(document.value, host);
-  const request = useMemo(() => (active ? { target, href, params, context } : undefined),
+  // Only the params the page declares are read (an address may carry other keys); before the
+  // document is known every given param goes, so the first read does not wait for it.
+  const declared = document.value?.params;
+  const pageParams = declared ? Object.fromEntries(Object.entries(params).filter(([name]) => name in declared)) : params;
+  const request = useMemo(() => (active ? { target, href, params: pageParams, context } : undefined),
     // Params and context by value: a new object with the same entries is the same page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [active, href, JSON.stringify(target), JSON.stringify(params), JSON.stringify(context ?? null)]);
+    [active, href, JSON.stringify(target), JSON.stringify(pageParams), JSON.stringify(context ?? null)]);
   const { key, page: shown } = useScreenPage(request);
   // Hidden, the page stops following its topic; what it last drew stays until it is shown again.
   const last = useRef<{ key: string; page: ScreenPageState } | null>(null);
   if (shown) last.current = { key, page: shown };
-  const page = shown ?? last.current?.page;
+  const held = shown ?? last.current?.page;
+  // The host's client-only context joins what the page was opened with (it changes without a new read).
+  const page = useMemo(() => (held && local ? { ...held, context: { ...held.context, ...local } } : held),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [held, JSON.stringify(local ?? null)]);
   const pageKey = key || last.current?.key || '';
   const record = useRecordReader();
+  // A section's loading and failure nodes start below a shell bar that floats over the page.
+  const look = useBlockLook();
   const [state, setState] = useState<Record<string, string>>({});
   // A plugin action's answer may carry a line to show (at most 200 characters), for a few seconds.
   const [toast, setToast] = useState('');
@@ -123,12 +155,14 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   }, [actions, href, target]);
 
   const press = useCallback((p: ScreenPress) => {
-    const args = p.args;
+    // Text for the app's own actions; plugin actions get the typed values (ScreenActionArg).
+    const args: Record<string, string> = Object.fromEntries(Object.entries(p.args).map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : String(v)]));
     const flag = args.flag ?? p.arg;
     switch (p.action) {
       case 'navigate': navigate(args); return;
       case 'setParam': {
-        const name = args.name ?? '';
+        // `name` (documents), `param` (the tabs block) or the plain argument.
+        const name = args.name || args.param || p.arg;
         if (!name || !page) return;
         const next = { ...page.params, [name]: args.value ?? '' };
         for (const cleared of (args.clear ?? '').split(',').filter(Boolean)) delete next[cleared];
@@ -139,13 +173,19 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
       case 'toggle': setState(s => ({ ...s, [flag]: s[flag] === 'true' ? '' : 'true' })); return;
       case 'open': {
         // `open name=value` sets a state value (tabs bound to state); `open name` sets a flag.
-        const at = flag.indexOf('=');
-        if (at > 0) setState(s => ({ ...s, [flag.slice(0, at)]: flag.slice(at + 1) }));
+        const value = stateValue(flag);
+        if (value) setState(s => ({ ...s, [value[0]]: value[1] }));
         else setState(s => ({ ...s, [flag]: 'true' }));
         return;
       }
       case 'close': setState(s => ({ ...s, [flag]: '' })); return;
-      case 'only': setState(s => (s[flag] === 'true' ? { ...s, [flag]: '' } : { ...Object.fromEntries(Object.keys(s).map(k => [k, ''])), [flag]: 'true' })); return;
+      case 'only': {
+        // The tabs block sets a state-bound tab as `only name:value`.
+        const value = stateValue(flag);
+        if (value) setState(s => ({ ...s, [value[0]]: value[1] }));
+        else setState(s => (s[flag] === 'true' ? { ...s, [flag]: '' } : { ...Object.fromEntries(Object.keys(s).map(k => [k, ''])), [flag]: 'true' }));
+        return;
+      }
       case 'play': actions.play(args); return;
       case 'multiview': if (args.channel || p.arg) actions.multiview?.(args.channel || p.arg); return;
       case 'openLink': {
@@ -166,7 +206,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
           const o = p.optimistic;
           try {
             const answer = await vela.screens.action(pageKey, {
-              name, args: without(args, 'name'), control: p.control,
+              name, args: Object.fromEntries(Object.entries(p.args).filter(([k]) => k !== 'name')), control: p.control,
               ...(o ? { optimistic: { ...(o.record ? { record: o.record } : {}), ...(o.source ? { source: o.source } : {}), path: o.path, value: patchValue(o.value) } } : {}),
             });
             if (answer?.toast) { setToast(answer.toast.slice(0, 200)); actions.toast(answer.toast.slice(0, 200)); }
@@ -185,7 +225,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
 
   const screenHost = useMemo<SkinHost>(() => ({
     ...host,
-    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true },
+    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true, isTV: Platform.isTV },
     screenPress: press,
   }), [host, actions.multiview, press]);
   const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
@@ -198,14 +238,22 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     },
   ), [pageKey, vela, title, doc?.presentation]);
 
-  const reason = problem || (document.load === 'failed' ? document.error : '');
-  if (reason) return <>{refused ? refused(reason) : <Refused host={host} reason={reason} />}</>;
+  // A Studio preview whose token is no longer live: one message for the whole tab (core's flag).
+  if (previewExpired) return quiet ? null : <Refused host={host} reason="" expired />;
+  // A document that failed to read again keeps drawing the one it had (core keeps it ready).
+  const statusTop = route && document.value?.presentation === 'section' ? look.barTop : 0;
+  const reason = problem || (document.load === 'failed' && !resolved ? document.error : '');
+  if (reason) return <>{quiet ? null : refused ? refused(reason) : <Refused host={host} reason={reason} />}</>;
+  if (quiet && (!resolved || !ctx || !page || page.load !== 'ready')) return null;
   if (!resolved || !ctx || !page) {
     // Before the document or the first read: the document's own skeleton once it is resolved.
-    return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} /> : <View style={{ flex: 1 }} />;
+    return resolved ? <Draw host={screenHost} node={resolved.loading} ctx={screenRoot(LOADING, record, state)} runtime={runtime} route={route} status={statusTop} /> : <View style={{ flex: 1 }} />;
   }
+  // The skeleton starts below the shell's bar; the failure centres in the whole section, as the hard-coded screens drew them.
+  const status = page.load !== 'ready';
+  const statusInset = page.load === 'loading' ? statusTop : 0;
   const node = page.load === 'failed' ? resolved.failure : page.load === 'loading' ? resolved.loading : resolved.tree;
-  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} />;
+  const drawn = <Draw host={screenHost} node={node} ctx={ctx} runtime={runtime} route={route} {...(status ? { status: statusInset } : {})} />;
   if (!toast) return drawn;
   const ui = resolveUi(host.doc.document.ui);
   return (
@@ -221,18 +269,28 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
 
 const LOADING: ScreenPageState = { href: '', key: '', params: {}, sources: {}, pending: {}, errors: {}, load: 'loading', rev: 0 };
 
-function Draw({ host, node, ctx, runtime, route }: { host: SkinHost; node: RNode; ctx: ReturnType<typeof screenRoot>; runtime: ScreenBlockRuntime; route: boolean }) {
+/** The page's tree (its sections scroll and keep clear of the shell themselves); or, with `status`
+ * (the points to keep clear at the top), its loading or failure node filling the page below the
+ * shell's bar, as the hard-coded screens drew their skeleton and failure. */
+function Draw({ host, node, ctx, runtime, route, status }: { host: SkinHost; node: RNode; ctx: ReturnType<typeof screenRoot>; runtime: ScreenBlockRuntime; route: boolean; status?: number }) {
   return (
     <ScreenBlockRuntimeProvider value={runtime}>
-      {route ? <SkinRoute host={host} node={node} ctx={ctx} /> : <SkinRoot host={host} node={node} ctx={ctx} />}
+      {status !== undefined
+        ? <View style={{ flex: 1, paddingTop: status }}><SkinRoot host={host} node={node} ctx={ctx} /></View>
+        : route ? <SkinRoute host={host} node={node} ctx={ctx} /> : <SkinRoot host={host} node={node} ctx={ctx} />}
     </ScreenBlockRuntimeProvider>
   );
 }
 
 /** A document this client cannot draw: a newer renderer, a block it lacks, a broken document. */
-function Refused({ host, reason }: { host: SkinHost; reason: string }) {
+function Refused({ host, reason, expired = false }: { host: SkinHost; reason: string; expired?: boolean }) {
   const ui = resolveUi(host.doc.document.ui);
   const update = /renderer|update|needs /i.test(reason);
+  if (expired) return (
+    <View testID="screen-preview-expired" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 * PX }}>
+      <Text style={{ color: ui.ink, fontSize: 18 * PX, fontWeight: '700', textAlign: 'center' }}>{msg('screen.previewExpired')}</Text>
+    </View>
+  );
   return (
     <View testID="screen-refused" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 * PX, gap: 10 * PX }}>
       <Text style={{ color: ui.ink, fontSize: 18 * PX, fontWeight: '700', textAlign: 'center' }}>

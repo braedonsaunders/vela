@@ -72,7 +72,8 @@ describe('colours and tokens', () => {
     const r = resolve(doc({ type: 'box', style: { 'border-radius': '$radiusPanel', padding: '0 $gutter', 'background-color': '$card', 'border-color': '$hairline' } }, {
       tokens: { radiusPanel: 'min($ui.radiusPanel * 0.6, 22px)', gutter: 'max(28px, 4vw)', card: 'color-mix(in srgb, $ui.page 8%, $ui.raised 92%)', hairline: 'color-mix(in srgb, $ui.ink 8%, transparent)' },
     }));
-    expect(style(r.tree, 'border-radius')).toBe('16.8px');
+    // 28 x 0.6 = 16.8 lands on a half point, as look.px rounded it.
+    expect(style(r.tree, 'border-radius')).toBe('17px');
     expect(style(r.tree, 'padding')).toBe('0 max(28px, 4vw)');
     expect(style(r.tree, 'background-color')).toMatch(/^#[0-9a-f]{8}$/);
     expect(style(r.tree, 'border-color')).toBe('#f5f1e914');
@@ -113,6 +114,18 @@ describe('templates, the kit and variants', () => {
     expect(textOf(box(r.tree).children[0]!, c)).toBe('Score Leafs n:7 []');
     expect(style(box(r.tree).children[1]!, 'background-color', c)).toBe('#00205b');
   });
+  test('a with value naming a token resolves as that token in a style', () => {
+    const r = resolve(doc({ type: 'use', template: 'dot', with: { ink: '$ui.ink', gap: '$gap' } }, { tokens: { gap: '6px' },
+      templates: { dot: { type: 'box', style: { color: '{arg.ink}', gap: '{arg.gap}' } } } }));
+    expect(style(r.tree, 'color')).toBe('#f5f1e9');
+    expect(style(r.tree, 'gap')).toBe('6px');
+    // The skeleton's radius from a document token, and a placeholder that never shrinks in its row.
+    const bar = box(resolve(doc({ type: 'use', template: 'vela:placeholder', with: { width: '286px', height: '128px', radius: '$radiusPanel' } },
+      { tokens: { radiusPanel: 'min($ui.radiusPanel * 0.6, 22px)' } })).tree);
+    const placed = bar.states.find(s => holds(s.when, root({}), env))!;
+    expect(fill(placed.layer.style['border-radius'], root({}), env)).toBe('17px');
+    expect(fill(placed.layer.style['flex-shrink'], root({}), env)).toBe('0');
+  });
   test("a caller's own fields keep reading the caller's arguments inside the template", () => {
     const r = resolve(doc({ type: 'use', template: 'outer', with: { prefix: 'fav' } }, {
       templates: {
@@ -146,6 +159,13 @@ describe('templates, the kit and variants', () => {
     expect(fill(pill.label, c, env)).toBe('Watch');
     expect(pill.states.findIndex(s => holds(s.when, c, env))).toBe(1); // primary, not small
     expect(fill(pill.press!.args!.channel, c, env)).toBe('ch-1');
+    // A whole-hole argument keeps its raw value for typed plugin actions; text stays text.
+    const fav = box(resolve(doc({ type: 'box', press: { action: 'plugin', args: { name: 'ether.favorite', on: '{src.f|not}', ref: 'x-{src.k}' },
+      optimistic: { source: 'viewer', path: 'f', value: '{src.f|not}' } } })).tree);
+    const fc = root({ f: true, k: 'a' });
+    expect(fav.press!.argValues!.on!(fc, env)).toBe(false);
+    expect(fav.press!.argValues!.ref).toBeUndefined();
+    expect(fav.press!.optimistic!.raw!(fc, env)).toBe(false);
     expect((pill.children[0] as Extract<RNode, { kind: 'icon' }>).symbol).toBe('play-fill');
     // An unknown kit template draws nothing, with a warning; an unknown document template refuses.
     expect(resolve(doc({ type: 'use', template: 'vela:hologram' })).warnings[0]).toContain('vela:hologram');
@@ -271,10 +291,23 @@ describe('fixtures', () => {
   });
 });
 
-describe('half points on TV', () => {
+describe('half points', () => {
+  test('a unitless line height beside a px font size draws as px(size x line), on half points everywhere', async () => {
+    const { lineHeightPoints } = await import('../src/resolve/screen-style');
+    expect(lineHeightPoints('11.5px', '1.25')).toBe('14.5px');
+    expect(lineHeightPoints('12.5px', '1.25')).toBe('15.5px');
+    expect(lineHeightPoints('52px', '1.12')).toBe('58px');
+    expect(lineHeightPoints('16px', '1.12')).toBe('18px');
+    expect(lineHeightPoints('{src.x}', '1.25')).toBeUndefined();
+    expect(lineHeightPoints('14px', '18px')).toBeUndefined();
+    const r = resolve(doc({ type: 'text', text: 'x', style: { 'font-size': '13.5px', 'line-height': '1.25', 'letter-spacing': '0.8px' } }));
+    expect(style(r.tree, 'line-height')).toBe('17px');
+    expect(style(r.tree, 'letter-spacing')).toBe('1px');
+  });
+
   test('with a scale, each px length lands on half points once scaled (look.px)', async () => {
     const { halfPoints } = await import('../src/resolve/screen-style');
-    expect(halfPoints('13px 0 2.5px', 1)).toBe('13px 0 2.5px');
+    expect(halfPoints('13px 0 2.5px 0.8px 11.25px', 1)).toBe('13px 0 2.5px 1px 11.5px');
     // 13 x 1.25 = 16.25 -> 16.5 points -> 13.2px.
     expect(halfPoints('13px 0 2.5px', 1.25)).toBe('13.2px 0 2.4px');
     expect(halfPoints('#13pxx a-13px', 1.25)).toBe('#13pxx a-13px');

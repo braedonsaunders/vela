@@ -31,6 +31,8 @@ export interface CardMedia {
   /** Track number, book number in a series, part number; 0 when none. */
   index: number;
   disc: number;
+  /** Shared recording identifier (ISRC or recording fingerprint) across releases (features.duplicates). */
+  recordingId?: string;
   /** The main credit: an album's or track's artist, a book's author ('' when none). */
   byline: string;
   /** Where the byline opens: a person id (`person:`) or a parent title id (`title:`), '' for nothing. */
@@ -109,12 +111,14 @@ export function cardMedia(title: V.Title): CardMedia | undefined {
   const fraction = reading && Number.isFinite(reading.fraction) ? Math.min(1, Math.max(0, reading.fraction)) : 0;
   const index = positive(media.index);
   const format = media.reading?.format;
+  const recordingId = typeof media.recordingId === 'string' && media.recordingId.trim() ? media.recordingId.trim() : undefined;
   return {
     class: cls,
     role,
     shape: shapeOf(cls, role),
     index,
     disc: positive(media.disc),
+    ...(recordingId ? { recordingId } : {}),
     byline,
     bylineTarget,
     narrator: credits.filter(c => c.role === 'narrator').map(c => c.name).join(', '),

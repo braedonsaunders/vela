@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { durationLabel, msg, number, type Card, type PlaylistModel } from '@vela/core';
-import { useVelaState } from '@vela/core/react';
+import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
 import { useHost } from '../../host';
@@ -13,6 +13,9 @@ import { headerInsetOf } from '../../resolve/inherit';
 import { alpha, Cover, useMediaLook } from '../media/parts';
 import { placeOf, useMusic } from './context';
 import { LikedCover, MusicLiked, MusicPlaylist, playlistCard, Chip } from './pages';
+import { MusicRewind } from './rewind';
+import { MusicImport } from './import';
+import { MusicDuplicates } from './duplicates';
 import { ListeningHome, ListeningTitle } from './spoken';
 import { listenedFraction, listeningWords } from './listening';
 import { useLibraryItems, useLibraryRows, useLiked, usePlaylists } from './data';
@@ -22,6 +25,18 @@ import { samePlace, type MusicPlace } from './place';
 import { FocusGroup, IconButton, Surface, transition } from './parts';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
 import { QueuePanel } from './queue';
+import { ListeningSearch } from './search';
+
+function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
+  if (page.kind === 'liked' && music) return <MusicLiked />;
+  if (page.kind === 'rewind') return <MusicRewind />;
+  if (page.kind === 'import' && music) return <MusicImport />;
+  if (page.kind === 'duplicates' && music) return <MusicDuplicates />;
+  if (page.kind === 'playlist') return <MusicPlaylist id={page.id} />;
+  if (page.kind === 'title') return <ListeningTitle id={page.id} />;
+  if (page.kind === 'search') return <ListeningSearch />;
+  return <ListeningHome />;
+}
 
 export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
   const app = useMusic();
@@ -55,10 +70,7 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
         {side(<Sidebar rail={rail} onToggle={() => setCollapsed(!collapsed)} />, rail ? 84 : 316, 'right')}
         {flush(
           <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} testID="music-main">
-            {page.kind === 'liked' && music ? <MusicLiked />
-              : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
-              : page.kind === 'title' ? <ListeningTitle id={page.id} />
-              : <ListeningHome />}
+            {renderMusicPage(page, music)}
           </ScrollView>)}
         {queueOpen ? side(<QueuePanel onClose={() => onQueue(false)} />, 340, 'left') : null}
       </View>
@@ -69,45 +81,49 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
   );
 }
 
-/** Phones and upright tablets: Home, Search and Your Library as chips under the app's
- * navigation, the page full width, and the floating mini player over it. */
+/** Phones and upright tablets: Home, Search and Your Library (plus Rewind when available) as chips
+ * under the app's navigation, the page full width, and the floating mini player over it. */
 function CompactShell({ top }: { top: string }) {
   const app = useMusic();
+  const store = useVela();
   const m = useMediaLook();
   const page = app.place;
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
+  useVelaState(state => state.home.load);
+  const recapAvailable = store.music.recapAvailable;
   const tabs: { label: string; place: MusicPlace }[] = [
     { label: msg('music.home'), place: { kind: 'home' } },
     { label: msg('music.search'), place: { kind: 'search' } },
     { label: msg('music.yourLibrary'), place: { kind: 'library' } },
+    ...(recapAvailable ? [{ label: msg('music.rewind'), place: { kind: 'rewind' as const } }] : []),
   ];
   return (
     <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': top })]} testID="music-shell">
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }} accessibilityRole="tablist">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }} accessibilityRole="tablist">
         {tabs.map(tab => <Chip key={tab.label} label={tab.label} on={samePlace(page, tab.place)} onPress={() => app.go(tab.place)} />)}
-      </View>
+      </ScrollView>
       <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main">
         {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : page.kind === 'liked' && music ? <MusicLiked />
-          : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
-          : page.kind === 'title' ? <ListeningTitle id={page.id} />
-          : <ListeningHome />}
+          : renderMusicPage(page, music)}
       </ScrollView>
     </View>
   );
 }
 
-/** A TV: an icon rail (Home, Search, Your Library and, for music, Liked Songs) beside a full-width page; the
- * focusable mini player floats over it and opens Now Playing. Everything is one focus target at a
- * time; Back walks Now Playing → page → music Home → the app. */
+/** A TV: an icon rail (Home, Search, Your Library, Rewind and, for music, Liked Songs) beside a
+ * full-width page; the focusable mini player floats over it and opens Now Playing. Everything is
+ * one focus target at a time; Back walks Now Playing → page → music Home → the app. */
 function TVShell({ top }: { top: string }) {
   const app = useMusic();
+  const store = useVela();
   const m = useMediaLook();
   const host = useHost();
   const page = app.place;
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
+  useVelaState(state => state.home.load);
+  const recapAvailable = store.music.recapAvailable;
   // The page ends where the mini player begins, which the dock lifts above the bottom safe inset
   // (media/audio.tsx): Apple TV's inset is 60pt, and a fixed margin left the last rows under the bar.
   const dock = MINI_PLAYER_HEIGHT + Math.max(14, host.viewport.insets.bottom + 10) + 14;
@@ -117,15 +133,13 @@ function TVShell({ top }: { top: string }) {
         <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail />
         <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail />
         <NavItem symbol="library" label={msg('music.yourLibrary')} place={{ kind: 'library' }} rail />
+        {recapAvailable ? <NavItem symbol="sparkles" label={msg('music.rewind')} place={{ kind: 'rewind' }} rail /> : null}
         {music ? <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail /> : null}
       </FocusGroup>
       {/* The page ends above the floating mini player, so a focused row is never under it. */}
       <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main">
         {page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
-          : page.kind === 'liked' && music ? <MusicLiked />
-          : page.kind === 'playlist' ? <MusicPlaylist id={page.id} />
-          : page.kind === 'title' ? <ListeningTitle id={page.id} />
-          : <ListeningHome />}
+          : renderMusicPage(page, music)}
       </ScrollView>
     </View>
   );
@@ -149,10 +163,17 @@ function Sidebar(props: { rail: boolean; onToggle(): void; embedded?: boolean })
 
 function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle(): void; embedded?: boolean }) {
   const app = useMusic();
+  const store = useVela();
   const m = useMediaLook();
   const { playlists } = usePlaylists();
   const liked = useLiked();
+  useVelaState(state => state.home.load);
+  const recapAvailable = store.music.recapAvailable;
+  const importAvailable = store.music.playlistImportAvailable;
+  const duplicatesAvailable = store.music.duplicatesAvailable;
+  const toolsAvailable = importAvailable || duplicatesAvailable;
   const [filter, setFilter] = useState<Filter>('all');
+  const [toolsOpen, setToolsOpen] = useState(false);
   // Embedded in a page that scrolls (Your Library on a phone): a plain list.
   const List = (embedded ? View : ScrollView) as typeof ScrollView;
   const entries: { card: Card; subtitle: string }[] = [
@@ -160,12 +181,14 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
     ...(filter === 'all' || filter === 'albums' ? liked.albums.map(a => ({ card: a, subtitle: `${msg('media.ui.album')} · ${a.media?.byline ?? ''}` })) : []),
     ...(filter === 'all' || filter === 'artists' ? liked.artists.map(a => ({ card: a, subtitle: msg('media.ui.artist') })) : []),
   ];
+  const toolsActive = app.place.kind === 'import' || app.place.kind === 'duplicates';
   return (
     <View style={{ flex: 1 }} testID="music-library" accessibilityLabel={msg('music.yourLibrary')} {...({ role: 'navigation' } as object)}>
       {embedded ? null : <>
         <View style={{ padding: rail ? 12 : 10, gap: 2 }}>
           <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail={rail} />
           <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail={rail} />
+          {recapAvailable ? <NavItem symbol="sparkles" label={msg('music.rewind')} place={{ kind: 'rewind' }} rail={rail} testID="music-nav-rewind" /> : null}
         </View>
         <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
       </>}
@@ -174,8 +197,62 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
           <Glyph symbol="library" size={24} color={m.ui.inkSecondary} />
           {!rail ? <Text style={m.text({ 'font-size': '16px', 'font-weight': '750', color: '$ui.inkSecondary' })}>{msg('music.yourLibrary')}</Text> : null}
         </Pressable>
-        {!rail ? <IconButton symbol="playlist-add" label={msg('music.newPlaylist')} size={34} iconSize={19} onPress={() => app.drawer({ mode: 'create' })} testID="music-new-playlist" /> : null}
+        {!rail ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <IconButton symbol="playlist-add" label={msg('music.newPlaylist')} size={34} iconSize={19} onPress={() => app.drawer({ mode: 'create' })} testID="music-new-playlist" />
+            {toolsAvailable ? (
+              <IconButton
+                symbol="sliders"
+                label={msg('music.libraryTools')}
+                size={34}
+                iconSize={17}
+                active={toolsOpen || toolsActive}
+                onPress={() => setToolsOpen(open => !open)}
+                testID="music-library-tools"
+              />
+            ) : null}
+          </View>
+        ) : null}
       </View>
+      {!rail && toolsAvailable && toolsOpen ? (
+        <View
+          testID="music-library-tools-menu"
+          style={{
+            marginHorizontal: 12,
+            marginBottom: 10,
+            padding: 6,
+            borderRadius: 12,
+            backgroundColor: alpha(m.ui.ink, 0.06),
+            borderWidth: 1,
+            borderColor: m.ui.glassEdge,
+            gap: 2,
+          }}>
+          {importAvailable ? (
+            <LibraryToolItem
+              symbol="playlist-add"
+              label={msg('music.import')}
+              active={app.place.kind === 'import'}
+              testID="music-tools-import"
+              onPress={() => {
+                setToolsOpen(false);
+                app.go({ kind: 'import' });
+              }}
+            />
+          ) : null}
+          {duplicatesAvailable ? (
+            <LibraryToolItem
+              symbol="layers"
+              label={msg('music.duplicates.menu')}
+              active={app.place.kind === 'duplicates'}
+              testID="music-tools-duplicates"
+              onPress={() => {
+                setToolsOpen(false);
+                app.go({ kind: 'duplicates' });
+              }}
+            />
+          ) : null}
+        </View>
+      ) : null}
       {!rail ? (
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }} accessibilityRole="radiogroup">
           {(['playlists', 'albums', 'artists'] as const).map(f => <Chip key={f} label={msg(`music.${f}`)} on={filter === f} onPress={() => setFilter(filter === f ? 'all' : f)} />)}
@@ -196,14 +273,59 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
   );
 }
 
+function LibraryToolItem({
+  symbol,
+  label,
+  active,
+  testID,
+  onPress,
+}: {
+  symbol: string;
+  label: string;
+  active: boolean;
+  testID: string;
+  onPress(): void;
+}) {
+  const m = useMediaLook();
+  const { state, handlers } = useInteraction();
+  const lit = state.hover || state.focus;
+  return (
+    <Pressable
+      {...handlers}
+      onPress={onPress}
+      testID={testID}
+      accessibilityRole="menuitem"
+      accessibilityLabel={label}
+      style={[
+        NO_RING,
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingHorizontal: 10,
+          paddingVertical: 8,
+          borderRadius: 8,
+          backgroundColor: active ? alpha(m.ui.accent, 0.16) : lit ? m.ui.control : 'transparent',
+        },
+        transition('background-color', 120),
+      ]}>
+      <Glyph symbol={symbol} size={17} color={active ? m.ui.accent : lit ? m.ui.ink : m.ui.inkSecondary} />
+      <Text style={m.text({ 'font-size': '14px', 'font-weight': '650', color: active ? m.ui.accent : '$ui.ink' })}>{label}</Text>
+    </Pressable>
+  );
+}
+
 /** Your Library for spoken word: the library's books or shows, the viewer's under way first, with
  * In progress, Saved (Following) and Finished as filters. No playlists and no Liked Songs. */
 function SpokenSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onToggle(): void; embedded?: boolean }) {
   const app = useMusic();
+  const store = useVela();
   const m = useMediaLook();
   const words = listeningWords(app.listening);
   const { items } = useLibraryItems(app.libraryId);
   const { rows } = useLibraryRows(app.libraryId);
+  useVelaState(state => state.home.load);
+  const recapAvailable = store.music.recapAvailable;
   const [filter, setFilter] = useState('');
   // What is under way: the library's Continue listening, each part or episode as its book or show.
   const resume = rows.find(row => row.purpose === 'continue')?.items ?? [];
@@ -223,6 +345,7 @@ function SpokenSidebar({ rail, onToggle, embedded = false }: { rail: boolean; on
         <View style={{ padding: rail ? 12 : 10, gap: 2 }}>
           <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail={rail} />
           <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail={rail} />
+          {recapAvailable ? <NavItem symbol="sparkles" label={msg('music.rewind')} place={{ kind: 'rewind' }} rail={rail} testID="music-nav-rewind" /> : null}
         </View>
         <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
       </>}
@@ -265,7 +388,7 @@ function PlaylistThumb({ playlist }: { playlist?: PlaylistModel }) {
   return <View style={{ width: 48, height: 48, borderRadius: 4, backgroundColor: m.ui.control, alignItems: 'center', justifyContent: 'center' }}><Glyph symbol="list" size={20} color={m.ui.inkQuiet} /></View>;
 }
 
-function NavItem({ symbol, label, place, rail }: { symbol: string; label: string; place: MusicPlace; rail: boolean }) {
+function NavItem({ symbol, label, place, rail, testID }: { symbol: string; label: string; place: MusicPlace; rail: boolean; testID?: string }) {
   const app = useMusic();
   const m = useMediaLook();
   const tv = musicTV();
@@ -273,7 +396,7 @@ function NavItem({ symbol, label, place, rail }: { symbol: string; label: string
   const on = samePlace(app.place, place);
   const lit = state.hover || state.focus;
   return (
-    <Pressable {...handlers} onPress={() => app.go(place)} accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={label}
+    <Pressable {...handlers} onPress={() => app.go(place)} testID={testID} accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={label}
       style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 16, height: tv ? 60 : 44, width: tv ? 60 : undefined, paddingHorizontal: rail ? 0 : 12, justifyContent: rail ? 'center' : 'flex-start', borderRadius: tv ? 30 : 10,
         backgroundColor: tv && state.focus ? m.ui.ink : lit ? m.ui.control : on && tv ? m.ui.control : 'transparent', transform: [{ scale: tv && state.focus ? 1.08 : 1 }] }, transition('background-color, transform', 120)]}>
       <Glyph symbol={symbol} size={tv ? 28 : 24} color={tv && state.focus ? m.ui.inkInverse : on || lit ? m.ui.ink : m.ui.inkSecondary} />

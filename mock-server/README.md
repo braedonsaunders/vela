@@ -299,14 +299,17 @@ sections 3b, 5.4, 6 and 7), built on the Sports simulation in `sports.ts`:
 - `POST …/actions/ether.favorite|ether.reveal|ether.spoilerFree` (`Idempotency-Key`; body fields
   page, params, args, context, tz, idempotencyKey only) answer the changed records and every source
   of the page re-read; `PUT /surfaces/{id}/setting {enabled}`.
-- `/live/stream?topic=…&since=&tz=&alerts=1` (or any stream request with the renderer header):
-  replays what changed above `since`, then `records`, `source` and `alert` frames as the
+- `/live/stream?topic=…&since=&tz=&alerts=1`: replays what changed above `since`, then `records`, `source` and `alert` frames as the
   simulation or the viewer's choices change; at most 4 topics.
+
+Studio live preview: `X-Vela-Screen-Preview` equal to `VELA_MOCK_SCREEN_PREVIEW_TOKEN` (default
+`preview-test`) reads drafts from `VELA_MOCK_SCREEN_DRAFTS=<dir>` (the fixtures' layout; a page
+without a draft is the published one), served `no-store` with `v` ignored and listed in bootstrap;
+any other token answers 403 `preview_expired` on document, data, action and stream calls.
 
 Knobs: `VELA_MOCK_SPORTS_FREEZE=1` (with `VELA_MOCK_SPORTS_NOW`) freezes the Sports clock for
 parity captures; `VELA_MOCK_FROM_START=1` adds programme/fromStart to watch targets (not in Ether
 E1/E2); `VELA_MOCK_SCREEN_FIXTURES=<dir>` reads the documents from another directory;
 `POST /__admin/screens {hide: [id], show: [id]}` hides a screen or surface from viewers (404, and
 the streams following it end); `POST /__admin/sports {screenDelayMs, screenFail, favourites,
-spoilerFree, alert}` as in `sports.ts`. The legacy Sports routes (`/screens/{id}`, `/live/events*`,
-`/live/ticker`, `/live/entities`, `/live/preferences`, `/favorites/entities`) stay until the hard cut.
+spoilerFree, alert}` as in `sports.ts`.

@@ -10,9 +10,8 @@ import { Appearance } from './appearance';
 import { Auth, initialAuth, type AuthState } from './auth';
 import { Rows } from './rows';
 import { Catalogue } from './catalogue';
-import { Home, initialHome, type HomeState } from './home';
+import { Home, initialHome, reconcilesHome, type HomeState } from './home';
 import { initialLive, Live, type LiveState } from './live';
-import { initialLiveEvents, LiveEvents, type LiveEventsState } from './live-events';
 import { initialPlayback, Playback, type PlaybackState } from './playback';
 import { initialScreens, Screens, type ScreensState } from './screens';
 import type { MediaCapabilities, VelaPlatform } from './platform';
@@ -20,7 +19,7 @@ import { initialPreviews, Previews, type PreviewState } from './previews';
 import { initialPlaylists, Playlists, type PlaylistsState } from './playlists';
 import { initialMusic, Music, type MusicState } from './music';
 import { Receipts } from './receipts';
-import { initialSearch, Search, type SearchState } from './search';
+import { initialSearch, Search, TYPING_MS, type SearchState } from './search';
 import { Media, type ChildrenModel } from './media';
 import { Audio, initialAudio, type AudioState } from './audio';
 import { initialServers, Servers, type ServersState } from './servers';
@@ -46,12 +45,12 @@ export interface VelaState {
   playlists: PlaylistsState;
   music: MusicState;
   search: SearchState;
+  /** The audio app's search, kept to its library: apart from the app's search and its query. */
+  musicSearch: SearchState;
   playback: PlaybackState;
   /** The audio queue and its engine's state (music, audiobooks). */
   audio: AudioState;
   live: LiveState;
-  /** Live events (Sports): screens, details, favourites, the ticker and alerts, kept current by one stream. */
-  liveEvents: LiveEventsState;
   /** Plugin screens and surfaces: documents, pages, actions in flight and alerts (records live in `screens.records`). */
   screens: ScreensState;
   appearance: Loadable<AppearanceModel>;
@@ -84,9 +83,10 @@ export interface Vela {
   catalogue: Catalogue;
   rows: Rows;
   search: Search;
+  /** The audio app's search (scopeTo its library), answering in `musicSearch`. */
+  musicSearch: Search;
   playback: Playback;
   live: Live;
-  liveEvents: LiveEvents;
   screens: Screens;
   appearance: Appearance;
   receipts: Receipts;
@@ -111,10 +111,10 @@ const initialState: VelaState = {
   playlists: initialPlaylists,
   music: initialMusic,
   search: initialSearch,
+  musicSearch: initialSearch,
   playback: initialPlayback,
   audio: initialAudio,
   live: initialLive,
-  liveEvents: initialLiveEvents,
   screens: initialScreens,
   appearance: idle(),
   previews: initialPreviews,
@@ -147,9 +147,9 @@ export function createVela(options: VelaOptions): Vela {
       catalogue.watched(watched);
       home.watched(watched);
     },
-    watched => {
+    (watched, media) => {
       catalogue.reconcile(watched);
-      void home.reconcile(watched);
+      if (reconcilesHome(media)) void home.reconcile(watched);
     },
   );
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);
@@ -183,9 +183,9 @@ export function createVela(options: VelaOptions): Vela {
     music,
     rows: new Rows(box, session, width),
     search: new Search(box, session, width),
+    musicSearch: new Search(box, session, width, TYPING_MS, 'musicSearch'),
     playback,
     live: new Live(box, session, playback),
-    liveEvents: new LiveEvents(box, session),
     screens: new Screens(box, session, options.rendererVersion),
     appearance,
     receipts: new Receipts(session),

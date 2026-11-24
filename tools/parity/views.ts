@@ -64,12 +64,13 @@ export function reviewed(view: View, viewport: string): string | undefined {
   return view.review;
 }
 
-/** Where a variant draws a page, on the web. The document routes are W3's (`screen/[id]/[page]`),
- * behind the parity flag (`?screens=1`) until the hard cut. */
+/** Where the document variant draws a page (`screen/[id]` and `screen/[id]/[page]`). The legacy
+ * hard-coded Sports was deleted in the hard cut: its captures are archived baselines, and capturing
+ * the legacy variant is refused rather than silently drawing documents. */
 export function webPath(variant: Variant, page: View['page']): string {
-  if ('index' in page) return variant === 'legacy' ? '/screen/sports' : '/screen/sports?screens=1';
-  const event = encodeURIComponent(page.game);
-  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${event}&screens=1`;
+  if (variant === 'legacy') throw new Error('legacy Sports was removed in the hard cut; compare against the archived legacy captures');
+  if ('index' in page) return '/screen/sports';
+  return `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}`;
 }
 
 /** A data-testid prefix, `text:…` or `wait:ms`, as a CSS/Playwright selector (or a wait). */
@@ -81,3 +82,9 @@ export function target(spec: string): { selector: string } | { wait: number } {
 
 /** The capture's file name. */
 export const captureName = (viewport: string, view: string) => `${viewport}--${view}.png`;
+
+/** Regions of a platform's capture that belong to the device, not the app, and are left out of
+ * every comparison there: the iPhone Duo cover display's camera and status island (its clock). */
+export const DEVICE_MASKS: Record<string, { x: number; y: number; width: number; height: number }[]> = {
+  'ios-phone': [{ x: 1150, y: 0, width: 248, height: 360 }],
+};

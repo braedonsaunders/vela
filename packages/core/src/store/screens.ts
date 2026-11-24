@@ -10,13 +10,14 @@ import { localeContext } from '../i18n';
 import { backoffMs } from '../live/events';
 import { eagerSources, isLazy, sourcesToReread } from '../screens/deps';
 import { changedParams, cleanParams, pageKey, sameTarget, serverContext, type PageRequest, type ScreenTarget } from '../screens/keys';
-import { linkHrefs, recordRefs, RecordStore, setPath } from '../screens/records';
+import { linkHrefs, recordRefs, RecordStore, sameJSON, setPath } from '../screens/records';
 import { chooseTopics, connectionKey, emptyQuery, readScreenMessage, streamQuery, type ScreenStreamQuery } from '../screens/stream';
 import type { ScreenPageState } from '../screens/types';
 import type { Session } from './session';
-import { failed, loading, message, ready, type Loadable, type StateBox } from './state';
-import type { LiveStreamPhase } from './live-events';
+import { failed, loading, message, previewExpired, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
+
+export type LiveStreamPhase = 'idle' | 'connecting' | 'open' | 'retrying';
 
 export interface ScreensState {
   /** Documents by href, read once (immutable for their `v`). */
@@ -30,9 +31,12 @@ export interface ScreensState {
   stream: LiveStreamPhase;
   /** Surface switches changed here (surface id → enabled), until bootstrap says the same. */
   settings: Record<string, boolean>;
+  /** Ether Studio's live preview while this tab previews drafts: `expired` once Ether refuses the
+   *  token ("Preview expired, reload from Studio"). */
+  preview: { token: string; expired: boolean } | null;
 }
 
-export const initialScreens: ScreensState = { documents: {}, pages: {}, busy: {}, alerts: [], stream: 'idle', settings: {} };
+export const initialScreens: ScreensState = { documents: {}, pages: {}, busy: {}, alerts: [], stream: 'idle', settings: {}, preview: null };
 export const busyKey = (page: string, control: string) => `${page}#${control}`;
 
 /** One client-only patch while a plugin action is in flight: a record's or a source's value at `path`. */
@@ -160,8 +164,79 @@ export class Screens {
       // Pages opened before their document arrived start their refresh now.
       for (const [key, entry] of this.entries) if (entry.request.href === href && entry.opened) this.startRefresh(key, entry);
     } catch (error) {
+      if (previewExpired(error)) this.expirePreview();
       if (epoch === this.session.epoch) this.set('documents', documents => ({ ...documents, [href]: failed(error, previous) }));
     }
+  }
+
+  // Studio live preview
+
+  /**
+   * Preview drafts from Ether Studio with this token (X-Vela-Screen-Preview on every screen call),
+   * or stop with null/''. Documents and the pages on show are read again under the new mode.
+   */
+  setPreview(token: string | null | undefined): Promise<void> {
+    const next = token || undefined;
+    if (next === this.session.screenPreview && !this.box.get().screens.preview?.expired) return Promise.resolve();
+    this.session.screenPreview = next;
+    this.set('preview', () => next ? { token: next, expired: false } : null);
+    this.connected = '';
+    this.schedule();
+    return this.reload();
+  }
+
+  /**
+   * Studio's reload: read the documents of a screen (and page), or every document, past every
+   * cache, then the data of the pages showing them. A document that now fails (refused, or not
+   * compiling) keeps the last good one, with the failure in its `error`; params, the page state
+   * and the records stay, so the host keeps scroll and focus.
+   */
+  async reload(screen?: string, page?: string): Promise<void> {
+    if (this.box.get().screens.preview?.expired) this.set('preview', preview => preview ? { ...preview, expired: false } : preview);
+    const documents = this.box.get().screens.documents;
+    const hrefs = Object.keys(documents).filter(href => documentMatches(href, screen, page));
+    const epoch = this.session.epoch;
+    await Promise.all(hrefs.map(async href => {
+      const previous = this.box.get().screens.documents[href];
+      try {
+        const document = await (await this.api()).screenDocument(href, undefined, true);
+        if (epoch !== this.session.epoch) return;
+        const problem = documentProblem(document, this.rendererVersion);
+        if (problem) throw new Error(problem);
+        this.set('documents', all => ({ ...all, [href]: ready(document) }));
+      } catch (error) {
+        if (previewExpired(error)) this.expirePreview();
+        if (epoch !== this.session.epoch) return;
+        const failure = failed<V.ScreenDocument>(error, previous);
+        // The last good document keeps drawing; the failure is told beside it.
+        this.set('documents', all => ({ ...all, [href]: previous?.value ? { ...failure, load: 'ready' } : failure }));
+      }
+    }));
+    if (epoch !== this.session.epoch) return;
+    const changed = new Set(hrefs);
+    for (const [key, entry] of this.entries) {
+      if (!entry.opened || !(changed.has(entry.request.href) || documentMatches(entry.request.href, screen, page))) continue;
+      if (entry.timer) { clearInterval(entry.timer); entry.timer = undefined; }
+      this.startRefresh(key, entry);
+      this.refresh(key);
+    }
+  }
+
+  /** The preview token this tab previews with, if any. */
+  preview(): string | undefined {
+    return this.session.screenPreview;
+  }
+
+  /** The connected Ether server's origin (Studio's reload messages must come from it). */
+  origin(): string | undefined {
+    try { return this.session.hasServer() ? this.session.selected().record.origin : undefined; } catch { return undefined; }
+  }
+
+  /** Ether refused the preview token: say so, and stop following the stream until a new one or a reload. */
+  private expirePreview(): void {
+    if (!this.session.screenPreview || this.box.get().screens.preview?.expired) return;
+    this.set('preview', preview => preview ? { ...preview, expired: true } : preview);
+    this.disconnect();
   }
 
   private documentOf(entry: Entry): V.ScreenDocument | undefined {
@@ -343,7 +418,8 @@ export class Screens {
         const values = { ...page.sources }, pending = { ...page.pending }, failures = { ...page.errors };
         for (const [name, value] of Object.entries(answered)) {
           if (!current(name)) continue;
-          values[name] = value;
+          // An unchanged answer keeps the value's identity, so nothing reading it draws again.
+          if (!sameJSON(values[name], value)) values[name] = value;
           delete failures[name];
           entry.revs.set(name, Math.max(entry.revs.get(name) ?? 0, rev));
         }
@@ -360,6 +436,7 @@ export class Screens {
       this.schedule();
       if (retrying.size) this.retrySoon(key, entry, [...retrying]);
     } catch (error) {
+      if (previewExpired(error)) this.expirePreview();
       if (epoch !== this.session.epoch || this.entries.get(key) !== entry) return;
       const code = failureCode(error);
       this.setPage(key, page => {
@@ -368,7 +445,7 @@ export class Screens {
         // The first read failing fails the page (its `failure` node draws); later ones fail their
         // sources. A 404 (the page no longer visible to the viewer, or no variant for this
         // renderer) fails the page whenever it comes.
-        if ((page.load !== 'ready' && !named) || code === 'not_found' || code === 'update_required') return { ...page, pending, load: 'failed', error: message(error), failure: code };
+        if ((page.load !== 'ready' && !named) || code === 'not_found' || code === 'update_required' || code === 'preview_expired') return { ...page, pending, load: 'failed', error: message(error), failure: code };
         return { ...page, pending, errors: failures };
       });
     }
@@ -445,6 +522,7 @@ export class Screens {
       return answer ?? {};
     } catch (error) {
       undo?.();
+      if (previewExpired(error)) this.expirePreview();
       throw error;
     } finally {
       if (control) this.set('busy', busy => { const { [control]: _gone, ...rest } = busy; return rest; });
@@ -547,7 +625,7 @@ export class Screens {
     const key = connectionKey(query);
     if (key === this.connected && this.controller) return;
     this.disconnect();
-    if (emptyQuery(query) || !this.available()) return;
+    if (emptyQuery(query) || !this.available() || this.box.get().screens.preview?.expired) return;
     this.connected = key;
     const controller = new AbortController();
     this.controller = controller;
@@ -584,6 +662,7 @@ export class Screens {
         this.failures = Math.max(this.failures, 1);
       } catch (error) {
         if (controller.signal.aborted) return;
+        if (previewExpired(error)) { this.expirePreview(); return; }
         this.failures++;
         // A topic Ether no longer honours (expired, the page gone): read the pages again for fresh ones.
         const status = (error as { status?: number })?.status;
@@ -625,7 +704,7 @@ export class Screens {
       const [key, entry] = match;
       if (frame.rev <= (entry.revs.get(frame.source) ?? 0)) return;
       entry.revs.set(frame.source, frame.rev);
-      this.setPage(key, page => ({ ...page, sources: { ...page.sources, [frame.source]: frame.value }, rev: Math.max(page.rev, frame.rev) }));
+      this.setPage(key, page => ({ ...page, sources: sameJSON(page.sources[frame.source], frame.value) ? page.sources : { ...page.sources, [frame.source]: frame.value }, rev: Math.max(page.rev, frame.rev) }));
       this.track(key);
     } else if (message.kind === 'alert') {
       const alert = message.alert;
@@ -646,7 +725,8 @@ export class Screens {
     this.entries.clear();
     this.documentReads.clear();
     this.records.clear();
-    this.box.update('screens', () => initialScreens);
+    const preview = this.box.get().screens.preview;
+    this.box.update('screens', () => ({ ...initialScreens, preview }));
     for (const [key, entry] of open) {
       const fresh: Entry = { ...entry, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timer: undefined, timeouts: new Map(), retryTimers: new Set() };
       this.entries.set(key, fresh);
@@ -655,6 +735,15 @@ export class Screens {
     }
     this.schedule();
   }
+}
+
+/** Whether a document href is the given screen's (and page's) or surface's; any document when no screen is named. */
+export function documentMatches(href: string, screen?: string, page?: string): boolean {
+  if (!screen) return true;
+  const path = href.split('?')[0]!;
+  const id = encodeURIComponent(screen);
+  if (path.includes(`/surfaces/${id}/document`)) return true;
+  return path.includes(`/screens/${id}/pages/`) && (!page || path.includes(`/screens/${id}/pages/${encodeURIComponent(page)}/document`));
 }
 
 /** Why a served document cannot be drawn here, or '' when it can. */

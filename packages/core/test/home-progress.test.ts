@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { freshCard, homeWatched, laterProgressRows, reconcileHomeProgress, reconcileProgressRows } from '../src/discovery/progress';
+import { freshCard, homeWatched, laterProgressRows, reconcileHomeProgress, reconcileProgressRows, reconcileShelves } from '../src/discovery/progress';
 import type { Card, HeroAction, HomeModel, Row } from '../src/models';
 
 const card = (id: string, progressSeconds = 0) => ({ id, progressSeconds, progressLabel: `${progressSeconds}`, played: false } as Card);
@@ -43,6 +43,35 @@ describe('Home progress reconciliation', () => {
     expect(merged.heroActions.map(value => value.heroId)).toEqual(['first', 'second']);
     expect(merged.heroActions[0]?.action).toBe('play');
     expect(merged.heroActions[1]).toBe(current.heroActions[1]);
+  });
+});
+
+describe('Home progress shelves read on their own', () => {
+  test('a read shelf takes its fresh copy; the hero and other shelves take its titles\' progress; unread shelves keep theirs', () => {
+    const film = card('film', 10);
+    const watching = { ...row('continue', 'continue'), items: [film] };
+    const nextUp = row('next-up', 'nextUp', 'episode');
+    const trending = { ...row('trending', 'recommendation'), items: [card('film', 10), card('other')] };
+    const current = home([watching, nextUp, trending], [card('film', 10), card('hero-other')], [action('film', 'resume', 0.1)]);
+    const fresh = { ...watching, items: [card('film', 55)] };
+
+    const merged = reconcileShelves(current, [fresh]);
+
+    expect(merged.rows[0]!.items[0]!.progressSeconds).toBe(55);
+    expect(merged.rows[1]).toBe(nextUp);
+    expect(merged.rows[2]!.items[0]!.progressSeconds).toBe(55);
+    expect(merged.rows[2]!.items[1]).toBe(trending.items[1]);
+    expect(merged.hero[0]!.progressSeconds).toBe(55);
+    expect(merged.hero[1]).toBe(current.hero[1]);
+    expect(merged.heroActions).toBe(current.heroActions);
+  });
+
+  test('an emptied shelf goes, and an answer with nothing new is the very same Home', () => {
+    const watching = row('continue', 'continue', 'film');
+    const other = row('other', 'recommendation');
+    const current = home([watching, other]);
+    expect(reconcileShelves(current, [{ ...watching, items: [] }]).rows).toEqual([other]);
+    expect(reconcileShelves(current, [{ ...watching, items: watching.items.map(value => ({ ...value })) }])).toBe(current);
   });
 });
 

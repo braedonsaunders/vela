@@ -22,7 +22,7 @@ import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 import { compileTemplate, holeValue, makeArg, pathField, singleHole, type Arg, type HoleScope, type Value } from './screen/holes';
 import { text as valueText } from './screen/scope';
 import type { Items } from './screen/items';
-import { fold, halfPoints, screenStyleRow } from './resolve/screen-style';
+import { fold, halfPoints, lineHeightPoints, screenStyleRow } from './resolve/screen-style';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
  * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
@@ -41,7 +41,9 @@ const MAX_DEPTH = 32;
 export type Template = string | { parts: (string | Accessor)[] };
 export type CssT = Record<string, Template>;
 
-export interface Test { read: Accessor | ((c: Ctx, e: Env) => string); is: NonNullable<Condition['is']>; value: string; not: boolean }
+export interface Test { read: Accessor | ((c: Ctx, e: Env) => string); is: NonNullable<Condition['is']>; value: string; not: boolean;
+  /** Screens: a `value` holding holes (`channel:{src.game.event.watch.primary.channelId}`), filled when tested. */
+  valueHole?: (c: Ctx, e: Env) => string }
 
 export interface Layer { style: CssT; hover?: CssT; focus?: CssT; groupHover?: CssT; groupFocus?: CssT; label?: Template }
 
@@ -83,7 +85,10 @@ interface Common {
 export interface RPress {
   action: Action; arg?: Template; focus?: Template;
   args?: Record<string, Template>;
-  optimistic?: { record?: Template; source?: string; path: string; value: Template };
+  /** Screens: the raw value of each argument written as one hole (`{t.favourite|not}` is false, not
+   * 'false'), so typed plugin action arguments keep their type. */
+  argValues?: Record<string, Value>;
+  optimistic?: { record?: Template; source?: string; path: string; value: Template; raw?: Value };
 }
 
 export type RNode = Common & (
@@ -104,8 +109,9 @@ export type RNode = Common & (
   | { kind: 'marquee'; items: Items; item: RNode; gap?: string; speed?: number }
   | { kind: 'tabs'; items: Items; value: Template; label: Template; count?: Template; bind: { param?: string; state?: string; clear?: string[] };
     default?: Template; all?: Template; /** The chip each option is drawn with (a box, its args bound to `{$tab.*}`). */ chip: RNode; small: boolean;
-    /** Drawn after the options in the same scroll and focus row. */ after?: RNode[] }
-  | { kind: 'table'; data: Value; compact: boolean; focusRows?: number }
+    /** Drawn after the options in the same scroll and focus row. */ after?: RNode[];
+    /** An empty bound param takes the shown default on first draw. */ pin?: boolean }
+  | { kind: 'table'; data: Value; compact: boolean; focusRows?: number; /** false: rows' highlight is ignored. */ highlight?: false }
   | { kind: 'lineGraph'; series: Value; sides?: Value; subject?: Template; live?: Template; height?: string }
   | { kind: 'player'; channel: Template }
   | { kind: 'paramInput'; param: string; placeholder?: Template }
@@ -154,6 +160,8 @@ export interface ScreenMode {
   warnings: Set<string>;
   /** Points per CSS px where lengths round to half points (TVs), else 1. */
   scale: number;
+  /** The points lengths round to (0.5, or 1 for a host drawing in the player look). */
+  step?: number;
 }
 
 export interface Context {
@@ -210,7 +218,13 @@ export function fill(template: Template | undefined, c: Ctx, e: Env): string {
 }
 
 function tests(list: Condition[] | undefined, r?: Context): Test[] {
-  return (list ?? []).map(k => ({ read: r?.screen ? screenRead(k.test, r.screen.scope) : read(k.test), is: k.is ?? 'set', value: k.value ?? '', not: k.not ?? false }));
+  return (list ?? []).map(k => {
+    const value = k.value ?? '';
+    // A screen compares two values by writing the other as a hole in `value` (a surface's channel against an event's).
+    const holed = r?.screen && /\{[^{]/.test(value) ? compileTemplate(value, r.screen.scope) : undefined;
+    return { read: r?.screen ? screenRead(k.test, r.screen.scope) : read(k.test), is: k.is ?? 'set', value, not: k.not ?? false,
+      ...(holed !== undefined && typeof holed !== 'string' ? { valueHole: (c: Ctx, e: Env) => fill(holed, c, e) } : {}) };
+  });
 }
 
 /** A condition's key in a screen document: a binding path (pipes allowed, braces optional), read as text. */
@@ -223,14 +237,15 @@ function screenRead(key: string, scope: HoleScope): Accessor {
 export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
   for (const k of list ?? []) {
     const v = k.read(c, e);
+    const value = k.valueHole ? k.valueHole(c, e) : k.value;
     const num = (s: string) => Number(s) || 0;
     let ok: boolean;
     switch (k.is) {
-      case 'eq': ok = v === k.value; break;
-      case 'ne': ok = v !== k.value; break;
-      case 'gt': ok = num(v) > num(k.value); break;
-      case 'lt': ok = num(v) < num(k.value); break;
-      case 'mod': { const [n, rem] = k.value.split(':').map(Number); ok = n ? num(v) % n === rem : false; break; }
+      case 'eq': ok = v === value; break;
+      case 'ne': ok = v !== value; break;
+      case 'gt': ok = num(v) > num(value); break;
+      case 'lt': ok = num(v) < num(value); break;
+      case 'mod': { const [n, rem] = value.split(':').map(Number); ok = n ? num(v) % n === rem : false; break; }
       default: ok = !['', 'false', '0'].includes(v);
     }
     if (ok === k.not) return false;
@@ -255,16 +270,28 @@ function tokenValue(raw: string, r: Context): string {
   }));
 }
 
+/** A `with` value that names a token (`ink: "$ui.ink"`) stands in a style as that token, so it resolves. */
+function tokenArgs(text: string, scope: HoleScope): string {
+  return text.replace(/\{arg\.(\^*\w+)\}/g, (hole, name: string) => {
+    const arg = scope.args[name];
+    return arg && typeof arg.template === 'string' && arg.template.includes('$') ? arg.template : hole;
+  });
+}
+
 /** Style tokens substituted and bound values compiled. */
 function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
+  // Screens: a unitless line height beside a px font size becomes a half-point length (look.px).
+  const line = r.screen && style?.['line-height'] && style['font-size']
+    ? lineHeightPoints(tokenValue(style['font-size'], r), style['line-height'], r.screen.scale, r.screen.step) : undefined;
+  if (line) style = { ...style, 'line-height': line };
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
-    const text = tokenValue(String(raw), r);
+    const text = tokenValue(r.screen ? tokenArgs(String(raw), r.screen.scope) : String(raw), r);
     if (r.screen) {
       // Any row may hold a hole; each is validated once filled (resolve/screen-style.ts).
       if (UNSAFE.test(text.replace(/\{[^{}]*\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
-      out[row] = screenStyleRow(row, text, r.screen.scope, r.screen.scale);
+      out[row] = screenStyleRow(row, text, r.screen.scope, r.screen.scale, r.screen.step);
       continue;
     }
     if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
@@ -432,8 +459,13 @@ function pressOf(press: NonNullable<BoxNode['press']>, r: Context): RPress {
   return {
     action: press.action, arg: compile(press.arg, r), focus: compile(press.focus, r),
     ...(r.screen && press.args ? { args: Object.fromEntries(Object.entries(press.args).map(([k, v]) => [k, compile(v, r)!])) } : {}),
+    ...(r.screen && press.args ? { argValues: Object.fromEntries(Object.entries(press.args).flatMap(([k, v]) => {
+      const hole = singleHole(v);
+      return hole && !hole.startsWith('s:') ? [[k, holeValue(hole, r.screen!.scope)]] : [];
+    })) } : {}),
     ...(r.screen && press.optimistic ? { optimistic: { record: compile(press.optimistic.record, r), source: press.optimistic.source,
-      path: press.optimistic.path, value: compile(press.optimistic.value, r)! } } : {}),
+      path: press.optimistic.path, value: compile(press.optimistic.value, r)!,
+      ...(singleHole(press.optimistic.value) && !singleHole(press.optimistic.value)!.startsWith('s:') ? { raw: holeValue(singleHole(press.optimistic.value)!, r.screen.scope) } : {}) } } : {}),
   };
 }
 
@@ -497,7 +529,7 @@ function perClass<T>(value: PerClass<T> | undefined, r: Context): T | undefined 
 /** A length field (`gap`, `itemWidth`, `height`): tokens substituted and folded. */
 function lengthField(value: string | undefined, r: Context): string | undefined {
   if (value === undefined) return undefined;
-  const text = fold(halfPoints(tokenValue(value, r), r.screen!.scale));
+  const text = fold(halfPoints(tokenValue(value, r), r.screen!.scale, r.screen!.step));
   if (UNSAFE.test(text)) throw new Error(`Unsafe length: ${value}`);
   return text;
 }
@@ -526,7 +558,7 @@ function blockNode(node: Node, common: Common, depth: number, r: Context): RNode
     }
     case 'tabs': return tabsNode(node, common, depth, r);
     case 'table': return { ...common, kind: 'table', data: pathField(node.data, r.screen!.scope), compact: node.compact === true,
-      ...(node.focusRows !== undefined ? { focusRows: node.focusRows } : {}) };
+      ...(node.focusRows !== undefined ? { focusRows: node.focusRows } : {}), ...(node.highlight === false ? { highlight: false as const } : {}) };
     case 'lineGraph': return { ...common, kind: 'lineGraph', series: pathField(node.series, r.screen!.scope),
       ...(node.sides ? { sides: pathField(node.sides, r.screen!.scope) } : {}), subject: compile(node.subject, r), live: compile(node.live, r),
       height: lengthField(perClass(node.height, r), r) };
@@ -555,7 +587,7 @@ function tabsNode(node: TabsNode, common: Common, depth: number, r: Context): RN
   return withAlias(r, items.as, () => ({
     ...common, kind: 'tabs' as const, items, value: compile(node.value, r)!, label: compile(node.label, r)!, count: compile(node.count, r),
     bind: { ...(node.bind.param ? { param: node.bind.param } : { state: node.bind.state }), ...(node.bind.clear ? { clear: [...node.bind.clear] } : {}) },
-    default: compile(node.default, r), all: compile(node.all, r), chip, small: node.size === 'small', ...(after ? { after } : {}),
+    default: compile(node.default, r), all: compile(node.all, r), chip, small: node.size === 'small', ...(after ? { after } : {}), ...(node.pin ? { pin: true } : {}),
   }));
 }
 

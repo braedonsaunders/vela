@@ -98,7 +98,7 @@ export function TableBlock({ node, ctx }: { node: TableBlockNode; ctx: Ctx }) {
         ))}
       </View>
       {table.rows.map((row, r) => {
-        const on = row.highlight;
+        const on = row.highlight && node.highlight !== false;
         const last = r === table.rows.length - 1;
         const rowStyle = {
           flexDirection: 'row' as const,

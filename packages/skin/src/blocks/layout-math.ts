@@ -9,8 +9,42 @@ export type ParsedItemWidth =
 
 const ROOT_FONT = 16;
 
-function parseCssLength(raw: string, px: (n: number) => number, availableWidth = 0): number | undefined {
+function splitArgs(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of text) {
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (depth === 0 && ch === ',') {
+      if (current.trim()) out.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+
+function parseCssLength(
+  raw: string,
+  px: (n: number) => number,
+  availableWidth = 0,
+  viewportWidth = availableWidth,
+): number | undefined {
   const text = raw.trim();
+  const fnMatch = /^(min|max|clamp)\((.*)\)$/i.exec(text);
+  if (fnMatch) {
+    const fn = fnMatch[1]!.toLowerCase();
+    const args = splitArgs(fnMatch[2]!).map(a => parseCssLength(a, px, availableWidth, viewportWidth));
+    if (args.some(a => a === undefined)) return undefined;
+    const nums = args as number[];
+    if (fn === 'min') return nums.length ? Math.min(...nums) : undefined;
+    if (fn === 'max') return nums.length ? Math.max(...nums) : undefined;
+    if (fn === 'clamp' && nums.length >= 3) return Math.min(Math.max(nums[0]!, nums[1]!), nums[2]!);
+    return undefined;
+  }
   const m = /^(-?\d*\.?\d+)(px|rem|em|vw|%)?$/i.exec(text);
   if (!m) return undefined;
   const val = Number(m[1]);
@@ -18,14 +52,15 @@ function parseCssLength(raw: string, px: (n: number) => number, availableWidth =
   const unit = (m[2] ?? 'px').toLowerCase();
   if (unit === 'px' || unit === '') return px(val);
   if (unit === 'rem' || unit === 'em') return px(val * ROOT_FONT);
-  if (unit === 'vw' || unit === '%') return (val / 100) * availableWidth;
+  if (unit === 'vw') return (val / 100) * (viewportWidth || availableWidth);
+  if (unit === '%') return (val / 100) * availableWidth;
   return undefined;
 }
 
 /**
  * Parses a shelf `itemWidth` string:
  * - `undefined` / `""` / `"auto"` -> `{ kind: 'auto' }` (items size themselves)
- * - `"286px"` -> `{ kind: 'fixed', width: px(286) }`
+ * - `"286px"` / `"min(272px, 74vw)"` -> `{ kind: 'fixed', width }`
  * - `"100%"` -> `{ kind: 'percent', percent: 100 }`
  * - `"fit 320px..640px"` -> `{ kind: 'fit', min: px(320), max: px(640) }`
  */
@@ -33,20 +68,21 @@ export function parseItemWidth(
   raw: string | undefined,
   px: (n: number) => number,
   availableWidth = 0,
+  viewportWidth = availableWidth,
 ): ParsedItemWidth {
   if (!raw || !raw.trim() || raw.trim().toLowerCase() === 'auto') return { kind: 'auto' };
   const text = raw.trim();
   const fitMatch = /^fit\s+([^\s.]+)\s*\.\.\s*([^\s]+)$/i.exec(text);
   if (fitMatch) {
-    const min = parseCssLength(fitMatch[1]!, px, availableWidth) ?? px(320);
-    const max = parseCssLength(fitMatch[2]!, px, availableWidth) ?? px(640);
+    const min = parseCssLength(fitMatch[1]!, px, availableWidth, viewportWidth) ?? px(320);
+    const max = parseCssLength(fitMatch[2]!, px, availableWidth, viewportWidth) ?? px(640);
     return { kind: 'fit', min: Math.min(min, max), max: Math.max(min, max) };
   }
   const pctMatch = /^(-?\d*\.?\d+)%$/.exec(text);
   if (pctMatch) {
     return { kind: 'percent', percent: Number(pctMatch[1]) };
   }
-  const fixed = parseCssLength(text, px, availableWidth);
+  const fixed = parseCssLength(text, px, availableWidth, viewportWidth);
   return fixed !== undefined ? { kind: 'fixed', width: fixed } : { kind: 'auto' };
 }
 
@@ -134,6 +170,15 @@ export function resolveActiveTabValue(state: TabBindingState): string {
   if (defaultValue !== undefined && defaultValue !== '') return defaultValue;
   if (hasAllOption) return '';
   return optionValues[0] ?? '';
+}
+
+/** A pinned tabs row (`pin`): the value to write into its empty bound param on first draw (the
+ * resolved default), so a later change of the default does not move the selection; undefined when
+ * nothing should be written. */
+export function pinnedParamValue(state: { pin?: boolean; param?: string; paramValue: string; defaultValue: string; optionValues: readonly string[] }): string | undefined {
+  if (!state.pin || !state.param || state.paramValue) return undefined;
+  if (!state.defaultValue || !state.optionValues.includes(state.defaultValue)) return undefined;
+  return state.defaultValue;
 }
 
 /** Chunks a flat array of items into rows of `columns` items each for row-virtualised `grid` rendering. */
