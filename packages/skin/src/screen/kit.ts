@@ -40,6 +40,9 @@ const text = (size: number, weight: number, color: string, extra: Style = {}): S
 export function kitTemplates(ui: UiTokens): Record<string, Node> {
   const liveInk = readableInk(String(ui.live));
   const card = 'color-mix(in srgb, $ui.page 8%, $ui.raised 92%)';
+  // A focused surface's ring in the accent and its lifted shadow (parts.tsx Surface: a 2.5px ring
+  // round the surface, shadow 0.45 over 18px, 10px down).
+  const ring: Style = { outline: '2.5px solid $ui.accent', 'box-shadow': '0px 10px 18px #00000073' };
   const cardHover = 'color-mix(in srgb, $ui.raised 94%, $ui.ink 6%)';
   const radiusCard = 'min($ui.radiusCard, 18px)';
   type Tone = 'quiet' | 'primary' | 'onColor';
@@ -53,7 +56,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
     'flex-direction': 'row', 'align-items': 'center', gap: '8px', height: small ? '34px' : '42px', padding: small ? '0 14px' : '0 18px',
     'border-radius': small ? '17px' : '21px', 'background-color': fills[tone][0], transition: 'scale 160ms, background-color 160ms',
   });
-  const pillFocus = (tone: Tone): Style => ({ scale: '1.06', 'background-color': fills[tone][1] });
+  const pillHover = (tone: Tone): Style => ({ scale: '1.06', 'background-color': fills[tone][1] });
+  const pillFocus = (tone: Tone): Style => ({ ...pillHover(tone), ...ring });
   const glyph = (tone: Tone, small: boolean): Style => {
     const size = small ? '14px' : tone === 'onColor' ? '15px' : '16px';
     return { width: size, height: size, color: inks[tone] };
@@ -85,8 +89,8 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
     'vela:pill': {
       // Quiet (translucent ink), primary (ink fill), or onColor (white on a data colour, the hero's
       // buttons); `small` is the compact size.
-      type: 'box', role: 'button', label: '{arg.label}', style: pill('quiet', false), focus: pillFocus('quiet'), hover: pillFocus('quiet'),
-      states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pill(tone, small), focus: pillFocus(tone), hover: pillFocus(tone) })),
+      type: 'box', role: 'button', label: '{arg.label}', style: pill('quiet', false), focus: pillFocus('quiet'), hover: pillHover('quiet'),
+      states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: pill(tone, small), focus: pillFocus(tone), hover: pillHover(tone) })),
       children: [
         { type: 'icon', symbol: '{arg.glyph}', when: [...on('glyph'), ...off('glyphSize')], style: glyph('quiet', false),
           states: pillStates.map(([tone, small]) => ({ when: pillWhen(tone, small), style: glyph(tone, small) })) },
@@ -141,7 +145,7 @@ export function kitTemplates(ui: UiTokens): Record<string, Node> {
     'vela:panel': {
       type: 'box', readingStop: true,
       style: { padding: '18px', 'border-radius': radiusCard, border: '1px solid color-mix(in srgb, $ui.ink 8%, transparent)', 'background-color': card },
-      focus: { scale: '1.01', 'background-color': cardHover },
+      focus: { scale: '1.01', 'background-color': cardHover, ...ring },
       children: [{ type: 'slot', slot: 'children' }],
     },
     'vela:crest': {
