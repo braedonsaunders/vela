@@ -33,6 +33,7 @@ export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location
     audioTracks: plan.audioTracks.map((t) => ({
       id: t.id,
       label: t.name,
+      default: t.default,
       language: t.language,
       codec: t.codec,
       channels: t.channels,

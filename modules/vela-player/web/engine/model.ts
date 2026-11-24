@@ -6,6 +6,8 @@ import type { SubtitleDelivery, SubtitlePreferences } from './universal/subtitle
 export interface Track {
   id: string;
   label: string;
+  /** The plan marks this audio track as the default. */
+  default?: boolean;
   language?: string;
   url?: string;
   codec?: string;

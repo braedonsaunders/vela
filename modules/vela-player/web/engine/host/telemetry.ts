@@ -6,11 +6,12 @@ import { nativeAudio, pipAvailable, fullscreenAvailable } from './platform';
 import { liveSnapshot } from './live';
 import { readPosition, readDuration } from './position';
 import { browserFormat } from './browser-format';
+import { muxedAudioTrack } from '../muxed-audio';
 
 export function snapshotHost(context: HostContext): Snapshot {
   const ranges = context.surface.video.buffered;
   const quality = context.surface.video.getVideoPlaybackQuality?.();
-  const audioTrackIds =
+  const listedAudio =
     context.media.runtime && context.media.runtime.supportsLocalAudioSwitch !== false
       ? context.media.runtime.audioTrackIds
       : context.session.current?.serverControlled
@@ -20,6 +21,13 @@ export function snapshotHost(context: HostContext): Snapshot {
           : (context.session.current?.audioTracks
               .filter((t) => !!nativeAudio(context, t.id))
               .map((t) => t.id) ?? []);
+  // A stream played by the browser with its audio muxed in knows no track of its own: it carries
+  // the plan's track (muxed-audio.ts), which the menu lists and observations report.
+  const muxedAudio =
+    !context.media.runtime && !context.media.pipeline?.audioTrackId && context.session.current
+      ? muxedAudioTrack(context.session.current.audioTracks, context.session.current.audioTrackId ?? context.tracks.audio)
+      : null;
+  const audioTrackIds = listedAudio.length ? listedAudio : muxedAudio ? [muxedAudio] : [];
   const subtitleTracks =
     context.tracks.overlay?.tracks.map((track) => ({
       id: track.id,
@@ -49,7 +57,8 @@ export function snapshotHost(context: HostContext): Snapshot {
   const audioId =
     context.media.runtime?.readout.audioTrackId ??
     context.media.pipeline?.audioTrackId ??
-    context.tracks.audio;
+    context.tracks.audio ??
+    muxedAudio;
   const readout = context.media.runtime?.readout;
   const rendition =
     context.media.pipeline?.current ??
