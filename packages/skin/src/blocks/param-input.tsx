@@ -40,7 +40,19 @@ export function ParamInputBlock({ node, ctx }: { node: ParamInputBlockNode; ctx:
         clearTimeout(timer.current);
         timer.current = null;
       }
-      host.dispatch('setParam', `${paramName}=${nextValue}`);
+      const screenPress = (host as {
+        screenPress?: (p: { action: string; arg: string; args: Record<string, string>; control: string }) => void;
+      }).screenPress;
+      if (screenPress) {
+        screenPress({
+          action: 'setParam',
+          arg: paramName,
+          args: { name: paramName, param: paramName, value: nextValue },
+          control: `param-${paramName}`,
+        });
+      } else {
+        host.dispatch('setParam', `${paramName}=${nextValue}`);
+      }
     },
     [host, paramName],
   );

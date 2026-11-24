@@ -22,7 +22,7 @@ import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 import { compileTemplate, holeValue, makeArg, pathField, singleHole, type Arg, type HoleScope, type Value } from './screen/holes';
 import { text as valueText } from './screen/scope';
 import type { Items } from './screen/items';
-import { fold, halfPoints, screenStyleRow } from './resolve/screen-style';
+import { fold, halfPoints, lineHeightPoints, screenStyleRow } from './resolve/screen-style';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
  * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
@@ -85,7 +85,10 @@ interface Common {
 export interface RPress {
   action: Action; arg?: Template; focus?: Template;
   args?: Record<string, Template>;
-  optimistic?: { record?: Template; source?: string; path: string; value: Template };
+  /** Screens: the raw value of each argument written as one hole (`{t.favourite|not}` is false, not
+   * 'false'), so typed plugin action arguments keep their type. */
+  argValues?: Record<string, Value>;
+  optimistic?: { record?: Template; source?: string; path: string; value: Template; raw?: Value };
 }
 
 export type RNode = Common & (
@@ -267,6 +270,10 @@ function tokenValue(raw: string, r: Context): string {
 /** Style tokens substituted and bound values compiled. */
 function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
+  // Screens: a unitless line height beside a px font size becomes a half-point length (look.px).
+  const line = r.screen && style?.['line-height'] && style['font-size']
+    ? lineHeightPoints(tokenValue(style['font-size'], r), style['line-height'], r.screen.scale) : undefined;
+  if (line) style = { ...style, 'line-height': line };
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
     const text = tokenValue(String(raw), r);
@@ -441,8 +448,13 @@ function pressOf(press: NonNullable<BoxNode['press']>, r: Context): RPress {
   return {
     action: press.action, arg: compile(press.arg, r), focus: compile(press.focus, r),
     ...(r.screen && press.args ? { args: Object.fromEntries(Object.entries(press.args).map(([k, v]) => [k, compile(v, r)!])) } : {}),
+    ...(r.screen && press.args ? { argValues: Object.fromEntries(Object.entries(press.args).flatMap(([k, v]) => {
+      const hole = singleHole(v);
+      return hole && !hole.startsWith('s:') ? [[k, holeValue(hole, r.screen!.scope)]] : [];
+    })) } : {}),
     ...(r.screen && press.optimistic ? { optimistic: { record: compile(press.optimistic.record, r), source: press.optimistic.source,
-      path: press.optimistic.path, value: compile(press.optimistic.value, r)! } } : {}),
+      path: press.optimistic.path, value: compile(press.optimistic.value, r)!,
+      ...(singleHole(press.optimistic.value) && !singleHole(press.optimistic.value)!.startsWith('s:') ? { raw: holeValue(singleHole(press.optimistic.value)!, r.screen.scope) } : {}) } } : {}),
   };
 }
 

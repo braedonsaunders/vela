@@ -79,7 +79,8 @@ export class EtherTransport {
       return this.fetchBound(`/vela/v0${path}`, init, token);
     };
     let response = await send(tokens);
-    if (response.status === 401 && tokens && retryAuth) {
+    // An expired Studio preview token is not the session's: no token rotation for it.
+    if (response.status === 401 && tokens && retryAuth && !(options.headers?.['X-Vela-Screen-Preview'] && await previewRefused(response))) {
       tokens = await abortable(this.refresh(tokens), signal);
       signal?.throwIfAborted();
       response = await send(tokens, false);
@@ -257,6 +258,11 @@ export class EtherTransport {
       return `${url.pathname.slice('/vela/v0'.length)}${url.search}`;
     } catch { return undefined; }
   }
+}
+
+/** Whether a 401 is Ether refusing the preview token (problem code preview_expired). */
+async function previewRefused(response: Response): Promise<boolean> {
+  try { return ((await response.clone().json()) as V.ErrorResponse)?.error?.code === 'preview_expired'; } catch { return false; }
 }
 
 type CacheEntry = { etag: string; body: unknown };

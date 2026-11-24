@@ -2,11 +2,14 @@
 import { beforeAll, expect, test } from 'bun:test';
 
 process.env.VELA_MOCK_SPORTS_FREEZE = '1';
+let checkArg: (spec: { type: string; max?: number; enum?: string[] }, value: unknown) => unknown;
 let rewrite: (value: unknown, records: { type: string; id: string; value: unknown }[], plugin: unknown, read: unknown) => unknown;
 beforeAll(async () => {
   const sports = await import('../sports');
   sports.initSports([]);
-  rewrite = (await import('../screens')).rewritePlugin as typeof rewrite;
+  const screens = await import('../screens');
+  rewrite = screens.rewritePlugin as typeof rewrite;
+  checkArg = screens.checkArg as typeof checkArg;
   // Read once at import: other test files (and the mocks they launch) must not inherit it.
   delete process.env.VELA_MOCK_SPORTS_FREEZE;
 });
@@ -66,4 +69,25 @@ test('envelopes become references, images and links; everything else that could 
 
 test('more than 500 records refuse the answer', () => {
   expect(() => rewrite({}, Array.from({ length: 501 }, (_, n) => ({ type: 'story', id: `s${n}`, value: {} })), plugin, read())).toThrow();
+});
+
+test('plugin action arguments: raw JSON of the declared type, or text coerced to it', () => {
+  expect([true, 'true', '1', false, 'false', '0'].map(v => checkArg({ type: 'bool' }, v))).toEqual([true, true, true, false, false, false]);
+  expect(() => checkArg({ type: 'bool' }, 'yes')).toThrow();
+  expect(() => checkArg({ type: 'bool' }, 1)).toThrow();
+  expect([12, '12', '-3'].map(v => checkArg({ type: 'int' }, v))).toEqual([12, 12, -3]);
+  expect(() => checkArg({ type: 'int' }, '1.5')).toThrow();
+  expect(() => checkArg({ type: 'int' }, 'twelve')).toThrow();
+  expect(checkArg({ type: 'strings' }, 'a,b')).toEqual(['a', 'b']);
+  expect(checkArg({ type: 'strings' }, ['a', 'b'])).toEqual(['a', 'b']);
+  expect(checkArg({ type: 'strings' }, '')).toEqual([]);
+  expect(() => checkArg({ type: 'strings' }, [1])).toThrow();
+  expect(checkArg({ type: 'string', enum: ['top', 'tech'] }, 'tech')).toBe('tech');
+  expect(() => checkArg({ type: 'string', enum: ['top'] }, 'tech')).toThrow();
+  expect(() => checkArg({ type: 'string' }, true)).toThrow();
+  expect(() => checkArg({ type: 'date' }, '2026-13')).toThrow();
+  expect(checkArg({ type: 'ref' }, 'entity:sports:sports:team:nfl-phi')).toBe('entity:sports:sports:team:nfl-phi');
+  for (const key of ['event:a', 'item:b', 'channel:c', 'p:story:s1']) expect(checkArg({ type: 'ref' }, key)).toBe(key);
+  expect(() => checkArg({ type: 'ref' }, 'sports:sports:nfl-nyg-phi')).toThrow();
+  expect(() => checkArg({ type: 'ref' }, 'detail:x')).toThrow();
 });

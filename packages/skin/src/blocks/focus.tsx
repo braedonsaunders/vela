@@ -3,7 +3,10 @@
 // with `autoFocus`, while long tables (`focusRows`) offer focusable rows so a remote steps row-by-row.
 import { createElement, useCallback, useState, type ReactNode } from 'react';
 import { Platform, Pressable, TVFocusGuideView, View, type ViewStyle } from 'react-native';
+import { hasFocusableChild } from './layout-math';
 import { alpha, type BlockLook } from './look';
+
+export { hasFocusableChild };
 
 /**
  * Wraps a horizontal row or section band in a `TVFocusGuideView` on TV so vertical directional
@@ -44,7 +47,7 @@ export function FocusableTableRow({
         style,
         focused
           ? {
-              backgroundColor: alpha(look.accent, 0.18),
+              backgroundColor: alpha(look.ink, 0.08),
               borderRadius: px(7),
             }
           : null,

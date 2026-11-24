@@ -381,7 +381,7 @@ export interface ScreenDataRead { sources?: string[]; params: Record<string, str
  * the page topics of `/live/stream`. Every call carries the client's renderer version. */
 export interface PluginScreens {
   /** A document by its href (immutable for its `v`; a stale `v` is answered with the current document). */
-  screenDocument(href: string, signal?: AbortSignal): Promise<V.ScreenDocument>;
+  screenDocument(href: string, signal?: AbortSignal, fresh?: boolean): Promise<V.ScreenDocument>;
   screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData>;
   screenAction(target: ScreenTarget, action: string, request: V.ScreenActionRequest, mutation: V.Mutation): Promise<V.ScreenActionAnswer>;
   setSurfaceSetting(id: string, enabled: boolean, mutation: V.Mutation): Promise<void>;

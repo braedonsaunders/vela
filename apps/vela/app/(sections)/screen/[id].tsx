@@ -25,7 +25,7 @@ function DocumentScreen() {
   const host = vela.host('screen', id);
   const active = useSectionFocus() ?? false;
   const entry = useVelaState(state => state.home.value?.screens.find(screen => screen.id === id));
-  const params = useMemo(() => Object.fromEntries(Object.entries(rest).filter(([name, v]) => typeof v === 'string' && name !== 'screens')) as Record<string, string>,
+  const params = useMemo(() => Object.fromEntries(Object.entries(rest).filter(([name, v]) => typeof v === 'string' && name !== 'screens' && name !== 'screenPreview')) as Record<string, string>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(rest)]);
   const back = useCallback(() => host?.dispatch('back', ''), [host]);

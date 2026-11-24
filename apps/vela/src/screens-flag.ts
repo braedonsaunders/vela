@@ -2,6 +2,7 @@
 // plugin screens draw from their documents when EXPO_PUBLIC_VELA_SCREENS=1, or on the web after
 // `?screens=1` (remembered for the tab, `?screens=0` forgets it). Removed before merge (hard cut).
 import { Platform } from 'react-native';
+import { previewToken } from './screen-preview';
 
 const KEY = 'vela.screens';
 
@@ -19,5 +20,6 @@ function fromAddress(): boolean | undefined {
 
 /** Whether plugin screens draw from documents. */
 export function screenDocuments(): boolean {
-  return process.env.EXPO_PUBLIC_VELA_SCREENS === '1' || fromAddress() === true;
+  // A Studio preview always draws the drafts it previews.
+  return process.env.EXPO_PUBLIC_VELA_SCREENS === '1' || fromAddress() === true || !!previewToken();
 }
