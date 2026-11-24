@@ -90,15 +90,11 @@ function CompactShell({ top }: { top: string }) {
   const queued = useVelaState(state => !!state.audio.queue);
   useVelaState(state => state.home.load);
   const recapAvailable = store.music.recapAvailable;
-  const importAvailable = music && store.music.playlistImportAvailable;
-  const duplicatesAvailable = music && store.music.duplicatesAvailable;
   const tabs: { label: string; place: MusicPlace }[] = [
     { label: msg('music.home'), place: { kind: 'home' } },
     { label: msg('music.search'), place: { kind: 'search' } },
     { label: msg('music.yourLibrary'), place: { kind: 'library' } },
     ...(recapAvailable ? [{ label: msg('music.rewind'), place: { kind: 'rewind' as const } }] : []),
-    ...(importAvailable ? [{ label: msg('music.import'), place: { kind: 'import' as const } }] : []),
-    ...(duplicatesAvailable ? [{ label: msg('music.duplicates'), place: { kind: 'duplicates' as const } }] : []),
   ];
   return (
     <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': top })]} testID="music-shell">
@@ -126,7 +122,6 @@ function TVShell({ top }: { top: string }) {
   const queued = useVelaState(state => !!state.audio.queue);
   useVelaState(state => state.home.load);
   const recapAvailable = store.music.recapAvailable;
-  const duplicatesAvailable = music && store.music.duplicatesAvailable;
   // The page ends where the mini player begins, which the dock lifts above the bottom safe inset
   // (media/audio.tsx): Apple TV's inset is 60pt, and a fixed margin left the last rows under the bar.
   const dock = MINI_PLAYER_HEIGHT + Math.max(14, host.viewport.insets.bottom + 10) + 14;
@@ -137,7 +132,6 @@ function TVShell({ top }: { top: string }) {
         <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail />
         <NavItem symbol="library" label={msg('music.yourLibrary')} place={{ kind: 'library' }} rail />
         {recapAvailable ? <NavItem symbol="sparkles" label={msg('music.rewind')} place={{ kind: 'rewind' }} rail /> : null}
-        {duplicatesAvailable ? <NavItem symbol="layers" label={msg('music.duplicates')} place={{ kind: 'duplicates' }} rail /> : null}
         {music ? <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail /> : null}
       </FocusGroup>
       {/* The page ends above the floating mini player, so a focused row is never under it. */}
@@ -175,7 +169,9 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
   const recapAvailable = store.music.recapAvailable;
   const importAvailable = store.music.playlistImportAvailable;
   const duplicatesAvailable = store.music.duplicatesAvailable;
+  const toolsAvailable = importAvailable || duplicatesAvailable;
   const [filter, setFilter] = useState<Filter>('all');
+  const [toolsOpen, setToolsOpen] = useState(false);
   // Embedded in a page that scrolls (Your Library on a phone): a plain list.
   const List = (embedded ? View : ScrollView) as typeof ScrollView;
   const entries: { card: Card; subtitle: string }[] = [
@@ -183,6 +179,7 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
     ...(filter === 'all' || filter === 'albums' ? liked.albums.map(a => ({ card: a, subtitle: `${msg('media.ui.album')} · ${a.media?.byline ?? ''}` })) : []),
     ...(filter === 'all' || filter === 'artists' ? liked.artists.map(a => ({ card: a, subtitle: msg('media.ui.artist') })) : []),
   ];
+  const toolsActive = app.place.kind === 'import' || app.place.kind === 'duplicates';
   return (
     <View style={{ flex: 1 }} testID="music-library" accessibilityLabel={msg('music.yourLibrary')} {...({ role: 'navigation' } as object)}>
       {embedded ? null : <>
@@ -190,8 +187,6 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
           <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail={rail} />
           <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail={rail} />
           {recapAvailable ? <NavItem symbol="sparkles" label={msg('music.rewind')} place={{ kind: 'rewind' }} rail={rail} testID="music-nav-rewind" /> : null}
-          {importAvailable ? <NavItem symbol="playlist-add" label={msg('music.import')} place={{ kind: 'import' }} rail={rail} testID="music-nav-import" /> : null}
-          {duplicatesAvailable ? <NavItem symbol="layers" label={msg('music.duplicates')} place={{ kind: 'duplicates' }} rail={rail} testID="music-nav-duplicates" /> : null}
         </View>
         <View style={[{ marginHorizontal: 12, height: 1 }, m.box({ 'background-color': '$ui.glassEdge' })]} />
       </>}
@@ -202,11 +197,60 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
         </Pressable>
         {!rail ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            {importAvailable ? <IconButton symbol="external" label={msg('music.import')} size={34} iconSize={17} onPress={() => app.go({ kind: 'import' })} testID="music-import-playlist" /> : null}
             <IconButton symbol="playlist-add" label={msg('music.newPlaylist')} size={34} iconSize={19} onPress={() => app.drawer({ mode: 'create' })} testID="music-new-playlist" />
+            {toolsAvailable ? (
+              <IconButton
+                symbol="sliders"
+                label={msg('music.libraryTools')}
+                size={34}
+                iconSize={17}
+                active={toolsOpen || toolsActive}
+                onPress={() => setToolsOpen(open => !open)}
+                testID="music-library-tools"
+              />
+            ) : null}
           </View>
         ) : null}
       </View>
+      {!rail && toolsAvailable && toolsOpen ? (
+        <View
+          testID="music-library-tools-menu"
+          style={{
+            marginHorizontal: 12,
+            marginBottom: 10,
+            padding: 6,
+            borderRadius: 12,
+            backgroundColor: alpha(m.ui.ink, 0.06),
+            borderWidth: 1,
+            borderColor: m.ui.glassEdge,
+            gap: 2,
+          }}>
+          {importAvailable ? (
+            <LibraryToolItem
+              symbol="playlist-add"
+              label={msg('music.import')}
+              active={app.place.kind === 'import'}
+              testID="music-tools-import"
+              onPress={() => {
+                setToolsOpen(false);
+                app.go({ kind: 'import' });
+              }}
+            />
+          ) : null}
+          {duplicatesAvailable ? (
+            <LibraryToolItem
+              symbol="layers"
+              label={msg('music.duplicates.menu')}
+              active={app.place.kind === 'duplicates'}
+              testID="music-tools-duplicates"
+              onPress={() => {
+                setToolsOpen(false);
+                app.go({ kind: 'duplicates' });
+              }}
+            />
+          ) : null}
+        </View>
+      ) : null}
       {!rail ? (
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }} accessibilityRole="radiogroup">
           {(['playlists', 'albums', 'artists'] as const).map(f => <Chip key={f} label={msg(`music.${f}`)} on={filter === f} onPress={() => setFilter(filter === f ? 'all' : f)} />)}
@@ -224,6 +268,48 @@ function MusicSidebar({ rail, onToggle, embedded = false }: { rail: boolean; onT
         </View>
       </List>
     </View>
+  );
+}
+
+function LibraryToolItem({
+  symbol,
+  label,
+  active,
+  testID,
+  onPress,
+}: {
+  symbol: string;
+  label: string;
+  active: boolean;
+  testID: string;
+  onPress(): void;
+}) {
+  const m = useMediaLook();
+  const { state, handlers } = useInteraction();
+  const lit = state.hover || state.focus;
+  return (
+    <Pressable
+      {...handlers}
+      onPress={onPress}
+      testID={testID}
+      accessibilityRole="menuitem"
+      accessibilityLabel={label}
+      style={[
+        NO_RING,
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingHorizontal: 10,
+          paddingVertical: 8,
+          borderRadius: 8,
+          backgroundColor: active ? alpha(m.ui.accent, 0.16) : lit ? m.ui.control : 'transparent',
+        },
+        transition('background-color', 120),
+      ]}>
+      <Glyph symbol={symbol} size={17} color={active ? m.ui.accent : lit ? m.ui.ink : m.ui.inkSecondary} />
+      <Text style={m.text({ 'font-size': '14px', 'font-weight': '650', color: active ? m.ui.accent : '$ui.ink' })}>{label}</Text>
+    </Pressable>
   );
 }
 

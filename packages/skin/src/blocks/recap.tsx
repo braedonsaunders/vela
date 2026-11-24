@@ -18,6 +18,7 @@ import {
   type HistoryRecapModel,
   type HistoryRecapPeriod,
   type Loadable,
+  type RecapChartBucket,
   type RecapEntryModel,
   type RecapLabels,
 } from '@vela/core';
@@ -198,37 +199,123 @@ export function RecapStatsGrid({ recap, labels }: { recap: HistoryRecapModel; la
   );
 }
 
-/** Daily minutes chart (`byDay`). For year/all (365 days), aggregates into display buckets so every bar is crisp on phones and wide displays. */
+/** Daily minutes chart (`byDay`). For year/all (365 days), aggregates into display buckets so every bar is crisp on phones and wide displays, with hover/focus/tap tooltips. */
 export function RecapDailyChart({ byDay, period, accent }: { byDay: { date: string; minutes: number }[]; period: HistoryRecapPeriod; accent: string }) {
   const m = useMediaLook();
   const buckets = useMemo(() => recapChartBuckets(byDay, m.small ? 21 : 31), [byDay, m.small]);
   const max = Math.max(1, ...buckets.map(b => b.minutes));
   const firstDate = byDay[0]?.date ?? '';
   const lastDate = byDay[byDay.length - 1]?.date ?? '';
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setActiveIndex(null);
+  }, [period, firstDate, lastDate]);
+
+  const activeBucket = activeIndex !== null ? buckets[activeIndex] : undefined;
 
   return (
     <View testID="music-rewind-chart" style={{ padding: m.small ? 14 : 20, borderRadius: 16, backgroundColor: alpha(m.ui.ink, 0.05), borderWidth: 1, borderColor: m.ui.glassEdge, gap: 14 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', color: '$ui.ink' })}>{msg('music.rewind.byDay')}</Text>
-        <Text style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>
-          {period === 'year' || period === 'all' ? `${byDay.length} days (${firstDate} → ${lastDate})` : `${firstDate} → ${lastDate}`}
-        </Text>
+        {activeBucket ? (
+          <View testID="music-rewind-chart-tooltip"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: alpha(accent || m.ui.accent, 0.2), borderWidth: 1, borderColor: accent || m.ui.accent }}>
+            <Text style={m.text({ 'font-size': '12px', 'font-weight': '750', color: '$ui.ink', 'font-variant-numeric': 'tabular-nums' })}>
+              {activeBucket.tooltip}
+            </Text>
+          </View>
+        ) : (
+          <Text style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>
+            {period === 'year' || period === 'all' ? `${byDay.length} days (${firstDate} → ${lastDate})` : `${firstDate} → ${lastDate}`}
+          </Text>
+        )}
       </View>
       <View style={{ height: 112, flexDirection: 'row', alignItems: 'flex-end', gap: m.small ? 3 : 5, paddingTop: 8 }}>
-        {buckets.map((b, i) => {
-          const heightPct = Math.max(6, Math.round((b.minutes / max) * 100));
-          return (
-            <View key={`${b.label}-${i}`} style={{ flex: 1, height: '100%', justifyContent: 'flex-end', alignItems: 'center' }}>
-              <View style={{ width: '100%', height: `${heightPct}%`, minHeight: 4, borderRadius: 3, backgroundColor: b.minutes > 0 ? (accent || m.ui.accent) : alpha(m.ui.ink, 0.12) }} />
-            </View>
-          );
-        })}
+        {buckets.map((b, i) => (
+          <RecapChartBar
+            key={`${b.label}-${i}`}
+            bucket={b}
+            index={i}
+            max={max}
+            accent={accent || m.ui.accent}
+            active={activeIndex === i}
+            onActivate={() => setActiveIndex(i)}
+            onDeactivate={() => setActiveIndex(prev => (prev === i ? null : prev))}
+            onToggle={() => setActiveIndex(prev => (prev === i ? null : i))}
+          />
+        ))}
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={m.text({ 'font-size': '11px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>{firstDate}</Text>
         <Text style={m.text({ 'font-size': '11px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>{lastDate}</Text>
       </View>
     </View>
+  );
+}
+
+function RecapChartBar({
+  bucket,
+  index,
+  max,
+  accent,
+  active,
+  onActivate,
+  onDeactivate,
+  onToggle,
+}: {
+  bucket: RecapChartBucket;
+  index: number;
+  max: number;
+  accent: string;
+  active: boolean;
+  onActivate(): void;
+  onDeactivate(): void;
+  onToggle(): void;
+}) {
+  const m = useMediaLook();
+  const { state, handlers } = useInteraction();
+  const lit = active || state.hover || state.focus;
+  useEffect(() => {
+    if (state.hover || state.focus) onActivate();
+  }, [state.hover, state.focus]);
+  const heightPct = Math.max(6, Math.round((bucket.minutes / max) * 100));
+  return (
+    <Pressable
+      {...handlers}
+      {...(web ? ({ title: bucket.tooltip, onMouseLeave: onDeactivate } as object) : {})}
+      onBlur={onDeactivate}
+      onPress={onToggle}
+      testID={`music-rewind-bar-${index}`}
+      accessibilityRole="button"
+      accessibilityLabel={bucket.tooltip}
+      style={[
+        NO_RING,
+        {
+          flex: 1,
+          height: '100%',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          paddingHorizontal: 1,
+        },
+      ]}>
+      <View
+        style={[
+          {
+            width: '100%',
+            height: `${heightPct}%`,
+            minHeight: 4,
+            borderRadius: 3,
+            backgroundColor: bucket.minutes > 0 ? accent : alpha(m.ui.ink, 0.14),
+            opacity: lit ? 1 : bucket.minutes > 0 ? 0.85 : 0.7,
+            transform: [{ scaleY: lit ? 1.04 : 1 }],
+            borderWidth: lit ? 1 : 0,
+            borderColor: lit ? m.ui.ink : 'transparent',
+          },
+          transition('opacity, transform', 120),
+        ]}
+      />
+    </Pressable>
   );
 }
 

@@ -351,7 +351,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.RecentPlayContexts>('GET', `/recent${query({ limit })}`);
   }
 
-  historyRecap(recapQuery: { period: V.HistoryRecapPeriod; at?: string; library?: string }) {
+  historyRecap(recapQuery: { period: V.HistoryRecapPeriod; at?: string; library?: string; tz?: string }) {
     return this.http.request<V.HistoryRecap>('GET', `/history/recap${query(recapQuery)}`);
   }
 

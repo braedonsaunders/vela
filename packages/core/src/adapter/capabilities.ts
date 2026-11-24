@@ -132,7 +132,7 @@ export interface MusicLibrary {
 
 /** Listening recap ("Rewind") across a period and optional library (features.historyRecap). */
 export interface HistoryRecap {
-  historyRecap(query: { period: V.HistoryRecapPeriod; at?: string; library?: string }): Promise<V.HistoryRecap>;
+  historyRecap(query: { period: V.HistoryRecapPeriod; at?: string; library?: string; tz?: string }): Promise<V.HistoryRecap>;
 }
 export function hasHistoryRecap(adapter: ServerAdapter): adapter is ServerAdapter & HistoryRecap {
   return 'historyRecap' in adapter && typeof (adapter as unknown as HistoryRecap).historyRecap === 'function';

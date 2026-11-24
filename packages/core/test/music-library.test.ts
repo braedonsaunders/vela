@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   formatFirstPlayLabel,
   formatRecapSummary,
+  msg,
   recapChartBuckets,
   recapKey,
   recapLabels,
@@ -86,7 +87,7 @@ function makeMusicHarness() {
     titleLyrics: async () => null,
     titleContinuation: async () => ({ items: [], continuation: 'exhausted' as const }),
     recentPlayContexts: async () => ({ items: [] }),
-    historyRecap: async ({ period, library, at }: { period: V.HistoryRecapPeriod; library?: string; at?: string }): Promise<V.HistoryRecap> => {
+    historyRecap: async ({ period, library, at }: { period: V.HistoryRecapPeriod; library?: string; at?: string; tz?: string }): Promise<V.HistoryRecap> => {
       calls.push(`recap:${period}:${library ?? ''}:${at ?? ''}`);
       const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
       return {
@@ -144,18 +145,20 @@ function makeMusicHarness() {
             index: 2,
             source: { title: 'Harbour Lights', artist: 'Mira Solis' },
             reason: 'ambiguous',
+            candidates: [trackOriginal, trackDeluxe],
           },
         ],
       };
     },
     savePlaylistImport: async (id: string, request: V.SavePlaylistImportRequest): Promise<V.PlaylistCard> => {
-      calls.push(`import:save:${id}:${request.name ?? ''}:${(request.exclude ?? []).join(',')}`);
+      const chooseStr = request.choose ? Object.entries(request.choose).map(([k, v]) => `${k}=${v}`).join(';') : '';
+      calls.push(`import:save:${id}:${request.name ?? ''}:${(request.exclude ?? []).join(',')}:${chooseStr}`);
       return {
         id: 'playlist-imported-1',
         kind: 'playlist',
         name: request.name || 'Late Night Harbor',
         smart: false,
-        itemCount: 1,
+        itemCount: 1 + (request.choose ? Object.keys(request.choose).length : 0),
         updatedAt: '2026-11-24T12:00:00.000Z',
         artwork: sampleAlbum.artwork,
       };
@@ -216,7 +219,7 @@ function makeMusicHarness() {
 }
 
 describe('B6 listening recap, B7 playlist import, B8b duplicate review in @vela/core', () => {
-  test('B6 listening recap loads period data, formats stats/summary, and buckets 365-day charts', async () => {
+  test('B6 listening recap loads period data, formats stats/summary, and buckets 365-day charts with tooltips', async () => {
     const { music, box, calls } = makeMusicHarness();
     expect(music.recapAvailable).toBe(true);
     expect(music.recapPeriods).toEqual(['week', 'month', 'year', 'all']);
@@ -236,6 +239,12 @@ describe('B6 listening recap, B7 playlist import, B8b duplicate review in @vela/
     const buckets = recapChartBuckets(recap.byDay, 31);
     expect(buckets.length).toBeLessThanOrEqual(31);
     expect(buckets.length).toBeGreaterThan(25);
+    expect(buckets[0]?.tooltip).toContain('min/day');
+    expect(buckets[0]?.dayCount).toBeGreaterThan(1);
+
+    const monthBuckets = recapChartBuckets(recap.byDay.slice(0, 7), 31);
+    expect(monthBuckets).toHaveLength(7);
+    expect(monthBuckets[1]?.tooltip).toContain('2026-11-02 · 28 min');
 
     const stats = recapStatCards(recap, recapLabels('music'));
     expect(stats.map(s => s.key)).toEqual(['minutes', 'plays', 'artists', 'streak']);
@@ -252,9 +261,11 @@ describe('B6 listening recap, B7 playlist import, B8b duplicate review in @vela/
     expect(formatFirstPlayLabel(recap.firstPlayAt)).toContain('Listening since');
   });
 
-  test('B7 playlist import starts, polls matching progress to done, and saves with exclusions', async () => {
+  test('B7 playlist import starts, polls matching progress to done, maps ambiguous candidates, and saves with exclusions and chosen releases', async () => {
     const { music, box, calls } = makeMusicHarness();
     expect(music.playlistImportAvailable).toBe(true);
+    expect(msg('music.import.matchBy.isrc')).toBe('Exact match');
+    expect(msg('music.import.matchBy.title')).toBe('Matched by title & artist');
 
     const first = await music.startPlaylistImport('music', {
       url: 'https://open.spotify.com/playlist/37i9dQZF1DX4JAvHpjipBk',
@@ -269,14 +280,19 @@ describe('B6 listening recap, B7 playlist import, B8b duplicate review in @vela/
     expect(second?.matched[0]?.by).toBe('isrc');
     expect(second?.matched[0]?.card.name).toBe('Paper Boats');
     expect(second?.unmatched.map(u => u.reason)).toEqual(['not_found', 'ambiguous']);
+    expect(second?.unmatched[1]?.candidates.map(c => c.id)).toEqual([
+      'track-paper-boats-1-01',
+      'track-harbour-sessions-deluxe-1-01',
+    ]);
 
     const saved = await music.savePlaylistImport(first!.id, {
       name: 'My Harbor Mix',
       exclude: [0],
+      choose: { '2': 'track-harbour-sessions-deluxe-1-01' },
     });
     expect(saved?.id).toBe('playlist-imported-1');
     expect(saved?.name).toBe('My Harbor Mix');
-    expect(calls).toContain('import:save:imp-1:My Harbor Mix:0');
+    expect(calls).toContain('import:save:imp-1:My Harbor Mix:0:2=track-harbour-sessions-deluxe-1-01');
 
     music.resetPlaylistImport();
     expect(box.get().music.playlistImport.load).toBe('idle');

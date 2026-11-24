@@ -70,6 +70,7 @@ export function recordingReleasesForTitle(
   const preferredTitleId = state.preferredByRecording.get(recordingId);
   return {
     recordingId,
+    count: matching.length,
     ...(preferredTitleId && matching.some(t => t.id === preferredTitleId) ? { preferredTitleId } : {}),
     titles: matching,
   };
@@ -355,6 +356,24 @@ const importJobs = new Map<string, StoredImportJob>();
 
 const SUPPORTED_LINK_RE = /^https?:\/\/(?:open\.spotify\.com\/(?:playlist|album)\/|spotify\.link\/|(?:www\.)?deezer\.com\/(?:[a-z]{2}\/)?(?:playlist|album)\/|dzr\.page\.link\/)/i;
 
+function resolveAmbiguousCandidates(
+  cleanTitle: string,
+  byName: V.Title[],
+  presentTitle: (title: V.Title) => V.Title,
+): V.Title[] {
+  if (byName.length > 1) return byName.slice(0, 8).map(presentTitle);
+  const baseName = cleanTitle.replace(/\s*\([^)]*\)\s*$/g, '').trim().toLowerCase();
+  const byBase = baseName
+    ? mediaGroups.tracks.filter(t => t.name.toLowerCase().startsWith(baseName))
+    : [];
+  if (byBase.length > 1) return byBase.slice(0, 8).map(presentTitle);
+  const fallbackIds = ['track-late-tram-home-1-01', 'track-coastal-anthology-1-05'];
+  return fallbackIds
+    .map(id => mediaTitle(id))
+    .filter((t): t is V.Title => !!t)
+    .map(presentTitle);
+}
+
 function defaultImportCatalogue(presentTitle: (title: V.Title) => V.Title): {
   matched: V.PlaylistImportMatch[];
   unmatched: V.PlaylistImportUnmatched[];
@@ -387,6 +406,10 @@ function defaultImportCatalogue(presentTitle: (title: V.Title) => V.Title): {
       },
     });
   });
+  const harbourCandidates = ['track-paper-boats-1-06', 'track-harbour-sessions-deluxe-1-03', 'track-coastal-anthology-1-03']
+    .map(id => mediaTitle(id))
+    .filter((t): t is V.Title => !!t)
+    .map(presentTitle);
   const unmatched: V.PlaylistImportUnmatched[] = [
     {
       index: 3,
@@ -396,7 +419,8 @@ function defaultImportCatalogue(presentTitle: (title: V.Title) => V.Title): {
     {
       index: 7,
       reason: 'ambiguous',
-      source: { title: 'Nocturne in Blue', artist: 'Cedar & Wire', album: 'Live at the Corner Booth', durationSeconds: 298 },
+      source: { title: 'Harbour Lights', artist: 'The Hollow Lanterns', album: 'Harbour Sessions', durationSeconds: 265 },
+      candidates: harbourCandidates,
     },
     {
       index: 10,
@@ -488,7 +512,12 @@ function parseImportFileText(
         by: byIsrc ? 'isrc' : 'title',
       });
     } else if (isAmbiguous || byName.length > 1) {
-      unmatched.push({ index, source, reason: 'ambiguous' });
+      unmatched.push({
+        index,
+        source,
+        reason: 'ambiguous',
+        candidates: resolveAmbiguousCandidates(cleanTitle, byName, presentTitle),
+      });
     } else {
       unmatched.push({ index, source, reason: 'not_found' });
     }
@@ -520,7 +549,7 @@ export function startPlaylistImport(
     }
     const isDeezer = /deezer\.com|dzr\.page\.link/i.test(url);
     name = isDeezer ? 'Deezer Coastal Favorites' : 'Midnight Boathouse Sessions';
-    description = `Imported from ${isDeezer ? 'Deezer' : 'Spotify'} · matched by ISRC and title against Music`;
+    description = `Imported from ${isDeezer ? 'Deezer' : 'Spotify'} · matched against Music`;
     holdMatching = /progress|matching|slow/i.test(url);
     catalogue = defaultImportCatalogue(presentTitle);
   } else {
@@ -604,17 +633,32 @@ export function getPlaylistImport(id: string, forceState?: string | null): V.Pla
 export function resolvePlaylistImportSave(
   id: string,
   body: Partial<V.SavePlaylistImportRequest>,
-): { name: string; description?: string; titleIds: string[] } | undefined {
+): { name: string; description?: string; titleIds: string[] } | 'invalid_choice' | undefined {
   const job = importJobs.get(id);
   if (!job) return undefined;
   const excluded = new Set(Array.isArray(body.exclude) ? body.exclude : []);
-  const ordered = [...job.matched]
+  const entries: { index: number; titleId: string }[] = job.matched
     .filter(entry => !excluded.has(entry.index))
-    .sort((a, b) => a.index - b.index);
+    .map(entry => ({ index: entry.index, titleId: entry.title.id }));
+
+  if (body.choose !== undefined) {
+    if (!body.choose || typeof body.choose !== 'object' || Array.isArray(body.choose)) return 'invalid_choice';
+    for (const [rawIdx, chosenId] of Object.entries(body.choose)) {
+      const idx = Number(rawIdx);
+      if (!Number.isInteger(idx) || typeof chosenId !== 'string' || !chosenId) return 'invalid_choice';
+      const ambiguousItem = job.unmatched.find(u => u.index === idx && u.reason === 'ambiguous');
+      if (!ambiguousItem || !ambiguousItem.candidates?.some(c => c.id === chosenId)) return 'invalid_choice';
+      if (!excluded.has(idx)) {
+        entries.push({ index: idx, titleId: chosenId });
+      }
+    }
+  }
+
+  entries.sort((a, b) => a.index - b.index);
   const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : job.name;
   return {
     name,
     description: job.description,
-    titleIds: ordered.map(entry => entry.title.id),
+    titleIds: entries.map(entry => entry.titleId),
   };
 }

@@ -470,6 +470,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (method === 'POST' && importMatch[2] === '/save') {
         const resolved = resolvePlaylistImportSave(importId, body);
         if (!resolved) fail('not-found', 'import_not_found', 'Playlist import job not found');
+        if (resolved === 'invalid_choice') fail('request', 'invalid_choice', 'Chosen release must belong to the ambiguous item candidates');
         const expanded = playlistTitles(resolved.titleIds);
         const value: MockPlaylist = {
           id: `playlist-${crypto.randomUUID()}`,

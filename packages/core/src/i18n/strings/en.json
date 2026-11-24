@@ -1156,8 +1156,8 @@
   "music.import.matching": "Matching against your library ({done} of {total})…",
   "music.import.matchedHeading": "Matched in your library ({count})",
   "music.import.unmatchedHeading": "Not in your library ({count})",
-  "music.import.matchBy.isrc": "ISRC match",
-  "music.import.matchBy.title": "Title & artist",
+  "music.import.matchBy.isrc": "Exact match",
+  "music.import.matchBy.title": "Matched by title & artist",
   "music.import.reason.not_found": "Not in library",
   "music.import.reason.ambiguous": "Multiple releases",
   "music.import.includeTrack": "Include in playlist",
@@ -1182,5 +1182,10 @@
   "music.duplicates.empty": "No duplicate recordings found in this library.",
   "music.duplicates.otherReleases.one": "1 other release",
   "music.duplicates.otherReleases.other": "{count} other releases",
-  "music.duplicates.releasesOf": "Releases of this recording"
+  "music.duplicates.releasesOf": "Releases of this recording",
+  "music.import.chooseRelease": "Choose release",
+  "music.import.releaseChosen": "Release selected",
+  "music.import.clearRelease": "Clear selection",
+  "music.libraryTools": "Library tools",
+  "music.duplicates.menu": "Review duplicates"
 }

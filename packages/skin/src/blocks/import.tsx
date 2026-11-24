@@ -1,18 +1,20 @@
 // Self-contained rich block for B7 Playlist import (`packages/skin/src/blocks/import.tsx`).
-// Exposes the URL/file import form, reading/matching progress bar, matched tracks with ISRC vs Title
-// badges and include/exclude toggles, unmatched tracks with reason badges, and playlist save action
-// over `@vela/core`'s `store.music` playlist import engine, independent of `widgets/music` page code.
+// Exposes the URL/file import form, reading/matching progress bar, matched tracks with plain match
+// badges ("Exact match" / "Matched by title & artist") and include/exclude toggles, unmatched tracks
+// with inline release picker for ambiguous songs, and playlist save action over `@vela/core`'s
+// `store.music` playlist import engine, independent of `widgets/music` page code.
 import { useEffect, useState } from 'react';
 import { Platform, Text, TextInput, View, type ViewStyle } from 'react-native';
 import {
   clock,
   msg,
   number,
+  type Card,
   type Loadable,
   type PlaylistImportFormat,
   type PlaylistImportMatchModel,
   type PlaylistImportModel,
-  type PlaylistImportUnmatched,
+  type PlaylistImportUnmatchedModel,
 } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../focus';
@@ -96,6 +98,7 @@ export function PlaylistImportBlock({
   const [fileText, setFileText] = useState('');
   const [playlistName, setPlaylistName] = useState('');
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
+  const [chosen, setChosen] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -103,6 +106,7 @@ export function PlaylistImportBlock({
     if (nextName) setPlaylistName(nextName);
     onNameChange?.(nextName);
     setExcluded(new Set());
+    setChosen({});
   }, [job?.id, job?.name]);
 
   const updatePlaylistName = (next: string) => {
@@ -156,6 +160,19 @@ export function PlaylistImportBlock({
     });
   };
 
+  const chooseRelease = (idx: number, candidateId: string | null) => {
+    setChosen(prev => {
+      const key = String(idx);
+      const next = { ...prev };
+      if (!candidateId || next[key] === candidateId) {
+        delete next[key];
+      } else {
+        next[key] = candidateId;
+      }
+      return next;
+    });
+  };
+
   const savePlaylist = async () => {
     if (!job || saving) return;
     setSaving(true);
@@ -163,6 +180,7 @@ export function PlaylistImportBlock({
       const created = await store.music.savePlaylistImport(job.id, {
         name: playlistName.trim() || job.name,
         exclude: [...excluded],
+        choose: chosen,
       });
       if (created) {
         await store.playlists.load();
@@ -175,7 +193,8 @@ export function PlaylistImportBlock({
     }
   };
 
-  const includedCount = (job?.matched.length ?? 0) - excluded.size;
+  const chosenCount = Object.keys(chosen).filter(k => !excluded.has(Number(k))).length;
+  const includedCount = (job?.matched.length ?? 0) - excluded.size + chosenCount;
 
   if (!job) {
     return (
@@ -275,6 +294,8 @@ export function PlaylistImportBlock({
       onPlaylistName={updatePlaylistName}
       excluded={excluded}
       onToggleExclude={toggleExclude}
+      chosen={chosen}
+      onChooseRelease={chooseRelease}
       includedCount={includedCount}
       saving={saving}
       onSave={() => void savePlaylist()}
@@ -289,6 +310,8 @@ export function ImportResultView({
   onPlaylistName,
   excluded,
   onToggleExclude,
+  chosen = {},
+  onChooseRelease,
   includedCount,
   saving,
   onSave,
@@ -299,6 +322,8 @@ export function ImportResultView({
   onPlaylistName(name: string): void;
   excluded: Set<number>;
   onToggleExclude(index: number): void;
+  chosen?: Record<string, string>;
+  onChooseRelease?(index: number, candidateId: string | null): void;
   includedCount: number;
   saving: boolean;
   onSave(): void;
@@ -364,9 +389,14 @@ export function ImportResultView({
           <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '24px', color: '$ui.ink' })}>
             {msg('music.import.unmatchedHeading', { count: number(job.unmatched.length) })}
           </Text>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 8 }}>
             {job.unmatched.map(item => (
-              <UnmatchedTrackRow key={item.index} item={item} />
+              <UnmatchedTrackRow
+                key={item.index}
+                item={item}
+                chosenId={chosen[String(item.index)]}
+                onChoose={candidateId => onChooseRelease?.(item.index, candidateId)}
+              />
             ))}
           </View>
         </View>
@@ -382,9 +412,11 @@ function MatchedTrackRow({ match, included, onToggle }: { match: PlaylistImportM
   const card = match.card;
   const album = card.media?.parents.find(p => p.role === 'album')?.name || match.source.album || '';
   const badge = msg(`music.import.matchBy.${match.by}`);
+  const tooltip = match.source.isrc ? `${badge} (${match.source.isrc})` : badge;
   return (
     <Pressable
       {...handlers}
+      {...(web ? ({ title: tooltip } as object) : {})}
       onPress={onToggle}
       testID={`music-import-match-${match.index}`}
       accessibilityRole="checkbox"
@@ -421,7 +453,7 @@ function MatchedTrackRow({ match, included, onToggle }: { match: PlaylistImportM
       </View>
       <View pointerEvents="none" style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: match.by === 'isrc' ? alpha(m.ui.accent, 0.18) : alpha(m.ui.ink, 0.08) }}>
         <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', color: match.by === 'isrc' ? m.ui.accent : '$ui.inkSecondary' })}>
-          {badge}{match.source.isrc ? ` · ${match.source.isrc}` : ''}
+          {badge}
         </Text>
       </View>
       {!m.small ? (
@@ -433,24 +465,147 @@ function MatchedTrackRow({ match, included, onToggle }: { match: PlaylistImportM
   );
 }
 
-function UnmatchedTrackRow({ item }: { item: PlaylistImportUnmatched }) {
+function UnmatchedTrackRow({
+  item,
+  chosenId,
+  onChoose,
+}: {
+  item: PlaylistImportUnmatchedModel;
+  chosenId?: string;
+  onChoose?(candidateId: string | null): void;
+}) {
   const m = useMediaLook();
-  const reason = msg(`music.import.reason.${item.reason}`);
+  const isAmbiguous = item.reason === 'ambiguous' && item.candidates.length > 0;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const chosenCard: Card | undefined = chosenId ? item.candidates.find(c => c.id === chosenId) : undefined;
+  const reason = chosenCard ? msg('music.import.releaseChosen') : msg(`music.import.reason.${item.reason}`);
+  const tooltip = item.source.isrc ? `${reason} (${item.source.isrc})` : reason;
+
   return (
-    <View testID={`music-import-unmatched-${item.index}`}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: alpha(m.ui.ink, 0.03), borderWidth: 1, borderColor: m.ui.glassEdge }}>
-      <View style={{ width: 26, alignItems: 'center' }}>
-        <Glyph symbol="alert" size={16} color={m.ui.inkQuiet} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text numberOfLines={1} style={m.text({ 'font-size': '15px', 'font-weight': '600', color: '$ui.inkSecondary' })}>{item.source.title}</Text>
-        <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>
-          {[item.source.artist, item.source.album, item.source.isrc].filter(Boolean).join(' · ')}
-        </Text>
-      </View>
-      <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: alpha(m.ui.ink, 0.08) }}>
-        <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', color: '$ui.inkSecondary' })}>{reason}</Text>
-      </View>
+    <View
+      testID={`music-import-unmatched-${item.index}`}
+      {...(web ? ({ title: tooltip } as object) : {})}
+      style={{
+        borderRadius: 12,
+        backgroundColor: chosenCard ? alpha(m.ui.accent, 0.08) : alpha(m.ui.ink, 0.03),
+        borderWidth: 1,
+        borderColor: chosenCard ? m.ui.accent : m.ui.glassEdge,
+        overflow: 'hidden',
+      }}>
+      <Pressable
+        disabled={!isAmbiguous}
+        onPress={() => setPickerOpen(open => !open)}
+        testID={isAmbiguous ? `music-import-ambiguous-toggle-${item.index}` : undefined}
+        accessibilityRole={isAmbiguous ? 'button' : undefined}
+        accessibilityLabel={`${item.source.title}, ${item.source.artist}, ${reason}`}
+        style={[
+          NO_RING,
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+          },
+        ]}>
+        <View style={{ width: 26, height: 26, borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: chosenCard ? m.ui.accent : 'transparent' }}>
+          {chosenCard ? (
+            <Glyph symbol="checkmark" size={15} color={m.ui.onAccent} />
+          ) : (
+            <Glyph symbol={isAmbiguous ? 'layers' : 'alert'} size={16} color={isAmbiguous ? m.ui.accent : m.ui.inkQuiet} />
+          )}
+        </View>
+        {chosenCard ? (
+          <View pointerEvents="none">
+            <Cover uri={chosenCard.poster} shape="square" size={40} title={chosenCard.name} accent={chosenCard.accent} lift={0.15} />
+          </View>
+        ) : null}
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text numberOfLines={1} style={m.text({ 'font-size': '15px', 'font-weight': '650', color: chosenCard ? '$ui.ink' : '$ui.inkSecondary' })}>
+            {chosenCard ? chosenCard.name : item.source.title}
+          </Text>
+          <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>
+            {chosenCard
+              ? [chosenCard.media?.byline || item.source.artist, chosenCard.media?.parents.find(p => p.role === 'album')?.name, chosenCard.yearLabel].filter(Boolean).join(' · ')
+              : [item.source.artist, item.source.album].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: chosenCard ? alpha(m.ui.accent, 0.2) : alpha(m.ui.ink, 0.08) }}>
+            <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', color: chosenCard ? m.ui.accent : '$ui.inkSecondary' })}>
+              {isAmbiguous && !chosenCard ? `${reason} · ${msg('music.import.chooseRelease')}` : reason}
+            </Text>
+          </View>
+          {isAmbiguous ? (
+            <Glyph symbol={pickerOpen ? 'chevron-up' : 'chevron-down'} size={15} color={m.ui.inkSecondary} />
+          ) : null}
+        </View>
+      </Pressable>
+
+      {isAmbiguous && pickerOpen ? (
+        <View
+          testID={`music-import-picker-${item.index}`}
+          style={{
+            paddingHorizontal: 12,
+            paddingBottom: 12,
+            paddingTop: 6,
+            gap: 6,
+            borderTopWidth: 1,
+            borderTopColor: m.ui.glassEdge,
+            backgroundColor: alpha(m.ui.ink, 0.02),
+          }}>
+          {item.candidates.map(candidate => {
+            const selected = candidate.id === chosenId;
+            const album = candidate.media?.parents.find(p => p.role === 'album')?.name ?? '';
+            const formatFact = candidate.media?.facts.find(f => f.label === 'Format')?.value ?? '';
+            const details = [
+              album,
+              candidate.yearLabel,
+              formatFact,
+              candidate.media?.clockLabel || (candidate.durationSeconds ? clock(candidate.durationSeconds) : ''),
+            ].filter(Boolean).join(' · ');
+
+            return (
+              <Pressable
+                key={candidate.id}
+                onPress={() => onChoose?.(selected ? null : candidate.id)}
+                testID={`music-import-candidate-${item.index}-${candidate.id}`}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+                accessibilityLabel={`${candidate.name}, ${details}`}
+                style={[
+                  NO_RING,
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 10,
+                    borderRadius: 10,
+                    backgroundColor: selected ? alpha(m.ui.accent, 0.16) : alpha(m.ui.ink, 0.05),
+                    borderWidth: 1,
+                    borderColor: selected ? m.ui.accent : m.ui.glassEdge,
+                  },
+                ]}>
+                <Cover uri={candidate.poster} shape="square" size={40} title={album || candidate.name} accent={candidate.accent} lift={0.15} />
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text numberOfLines={1} style={m.text({ 'font-size': '14px', 'font-weight': '700', color: '$ui.ink' })}>
+                    {album || candidate.name}
+                  </Text>
+                  <Text numberOfLines={1} style={m.text({ 'font-size': '12px', color: '$ui.inkSecondary' })}>
+                    {details}
+                  </Text>
+                </View>
+                <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: selected ? m.ui.accent : m.ui.control }}>
+                  <Text style={m.text({ 'font-size': '11px', 'font-weight': '750', color: selected ? m.ui.onAccent : '$ui.ink' })}>
+                    {selected ? msg('music.import.releaseChosen') : msg('music.import.chooseRelease')}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }

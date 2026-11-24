@@ -82,7 +82,7 @@ describe('B6 Rewind, B7 Playlist Import, B8b Duplicates mock server routes', () 
     expect(empty.byDay).toHaveLength(7);
   });
 
-  test('B7 playlist import handles Spotify/Deezer links, M3U/CSV files, bad links, and playlist saving', async () => {
+  test('B7 playlist import handles Spotify/Deezer links, M3U/CSV files, ambiguous release candidates, bad links, and playlist saving', async () => {
     const badRes = await post('/playlists/import', {
       idempotencyKey: key(),
       library: 'music',
@@ -109,18 +109,32 @@ describe('B6 Rewind, B7 Playlist Import, B8b Duplicates mock server routes', () 
     expect(job.matched.length).toBeGreaterThan(0);
     expect(job.unmatched.length).toBeGreaterThan(0);
     expect(job.matched.some(m => m.by === 'isrc')).toBe(true);
-    expect(job.unmatched.some(u => u.reason === 'ambiguous' || u.reason === 'not_found')).toBe(true);
+    const ambiguous = job.unmatched.find(u => u.reason === 'ambiguous');
+    expect(ambiguous).toBeDefined();
+    expect(ambiguous!.candidates?.length).toBeGreaterThanOrEqual(2);
+
+    // Invalid candidate choice is rejected with 400 invalid_choice
+    const invalidChoiceRes = await post(`/playlists/import/${id}/save`, {
+      idempotencyKey: key(),
+      name: 'Invalid Choice Mix',
+      choose: { [String(ambiguous!.index)]: 'track-not-a-candidate' },
+    });
+    expect(invalidChoiceRes.status).toBe(400);
+    const invalidErr = (await invalidChoiceRes.json()) as V.ErrorResponse;
+    expect(invalidErr.error.code).toBe('invalid_choice');
 
     const excludedIdx = job.matched[0]!.index;
+    const chosenCandidateId = ambiguous!.candidates![1]!.id;
     const saveRes = await post(`/playlists/import/${id}/save`, {
       idempotencyKey: key(),
       name: 'Imported Driftwood Mix',
       exclude: [excludedIdx],
+      choose: { [String(ambiguous!.index)]: chosenCandidateId },
     });
     expect(saveRes.status).toBe(200);
     const created = (await saveRes.json()) as V.PlaylistCard;
     expect(created.name).toBe('Imported Driftwood Mix');
-    expect(created.itemCount).toBe(job.matched.length - 1);
+    expect(created.itemCount).toBe(job.matched.length - 1 + 1);
 
     // M3U file import
     const m3uStart = await post('/playlists/import', {

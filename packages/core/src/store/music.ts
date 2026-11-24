@@ -48,6 +48,10 @@ export interface RecapLabels {
 export interface RecapChartBucket {
   label: string;
   minutes: number;
+  dateRange: string;
+  totalMinutes: number;
+  dayCount: number;
+  tooltip: string;
 }
 
 /** Presentation-aware labels for a listening recap across music, audiobooks and podcasts. */
@@ -82,13 +86,35 @@ export function recapLabels(kind: 'music' | 'audiobook' | 'podcast' = 'music'): 
 /** Aggregate daily recap minutes (`byDay`, up to 365 days) into at most `maxBars` display buckets. */
 export function recapChartBuckets(byDay: readonly { date: string; minutes: number }[], maxBars = 31): RecapChartBucket[] {
   if (!byDay.length || maxBars <= 0) return [];
-  if (byDay.length <= maxBars) return byDay.map(d => ({ label: d.date.slice(5), minutes: d.minutes }));
+  if (byDay.length <= maxBars) {
+    return byDay.map(d => ({
+      label: d.date.slice(5),
+      minutes: d.minutes,
+      dateRange: d.date,
+      totalMinutes: d.minutes,
+      dayCount: 1,
+      tooltip: `${d.date} · ${number(d.minutes)} min`,
+    }));
+  }
   const step = Math.ceil(byDay.length / maxBars);
   const out: RecapChartBucket[] = [];
   for (let i = 0; i < byDay.length; i += step) {
     const slice = byDay.slice(i, i + step);
     const sum = slice.reduce((acc, d) => acc + d.minutes, 0);
-    out.push({ label: slice[0]?.date.slice(5) ?? '', minutes: Math.round(sum / slice.length) });
+    const first = slice[0]?.date ?? '';
+    const last = slice[slice.length - 1]?.date ?? first;
+    const dateRange = first === last ? first : `${first} → ${last}`;
+    const avg = Math.round(sum / slice.length);
+    out.push({
+      label: first.slice(5),
+      minutes: avg,
+      dateRange,
+      totalMinutes: sum,
+      dayCount: slice.length,
+      tooltip: slice.length === 1
+        ? `${dateRange} · ${number(sum)} min`
+        : `${dateRange} · ${number(sum)} min (${number(avg)} min/day)`,
+    });
   }
   return out;
 }
@@ -142,6 +168,13 @@ export interface PlaylistImportMatchModel {
   by: 'isrc' | 'title';
 }
 
+export interface PlaylistImportUnmatchedModel {
+  index: number;
+  source: V.ImportSource;
+  reason: 'not_found' | 'ambiguous';
+  candidates: Card[];
+}
+
 export interface PlaylistImportModel {
   id: string;
   state: 'reading' | 'matching' | 'done' | 'failed';
@@ -151,7 +184,7 @@ export interface PlaylistImportModel {
   total: number;
   done: number;
   matched: PlaylistImportMatchModel[];
-  unmatched: V.PlaylistImportUnmatched[];
+  unmatched: PlaylistImportUnmatchedModel[];
   error?: string;
 }
 
@@ -200,6 +233,15 @@ export const initialMusic: MusicState = {
 
 export function recapKey(period: V.HistoryRecapPeriod, library?: string, at?: string): string {
   return `${library || 'all'}:${period}:${at || ''}`;
+}
+
+function browserTimeZone(): string | undefined {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof tz === 'string' && tz.includes('/') ? tz : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export class Music {
@@ -299,7 +341,13 @@ export class Music {
     try {
       const connection = await this.session.ready();
       if (!hasHistoryRecap(connection.adapter)) throw new Error('Listening recap is unavailable');
-      const answer = await connection.adapter.historyRecap({ period, ...(library ? { library } : {}), ...(at ? { at } : {}) });
+      const tz = browserTimeZone();
+      const answer = await connection.adapter.historyRecap({
+        period,
+        ...(library ? { library } : {}),
+        ...(at ? { at } : {}),
+        ...(tz ? { tz } : {}),
+      });
       const images = await connection.images();
       const width = this.artWidth();
       const mapEntry = (e: V.RecapEntry): RecapEntryModel => ({
@@ -378,7 +426,12 @@ export class Music {
           card: card(m.title, '', images, width),
           by: m.by,
         })),
-        unmatched: answer.unmatched,
+        unmatched: answer.unmatched.map(u => ({
+          index: u.index,
+          source: u.source,
+          reason: u.reason,
+          candidates: (u.candidates ?? []).map(t => card(t, '', images, width)),
+        })),
         ...(answer.error ? { error: answer.error } : {}),
       };
       this.box.update('music', music => ({ ...music, playlistImport: ready<PlaylistImportModel | null>(model) }));
@@ -389,15 +442,20 @@ export class Music {
     }
   }
 
-  /** Save a completed playlist import as a viewer playlist, optionally renaming or excluding matched tracks by source index. */
-  async savePlaylistImport(id: string, options: { name?: string; exclude?: number[] } = {}): Promise<V.PlaylistCard | null> {
+  /** Save a completed playlist import as a viewer playlist, optionally renaming, excluding matched tracks, or choosing ambiguous release candidates. */
+  async savePlaylistImport(
+    id: string,
+    options: { name?: string; exclude?: number[]; choose?: Record<string, string> } = {},
+  ): Promise<V.PlaylistCard | null> {
     if (!this.playlistImportAvailable) return null;
     const connection = await this.session.ready();
     if (!hasPlaylistImports(connection.adapter)) throw new Error('Playlist import is unavailable');
+    const hasChoices = options.choose && Object.keys(options.choose).length > 0;
     const created = await connection.adapter.savePlaylistImport(id, {
       idempotencyKey: this.session.key(),
       ...(options.name?.trim() ? { name: options.name.trim() } : {}),
       ...(options.exclude?.length ? { exclude: options.exclude } : {}),
+      ...(hasChoices ? { choose: options.choose } : {}),
     });
     return created;
   }

@@ -181,9 +181,11 @@ export function DuplicateGroupCard({
             {lead.media?.byline || ''} · {msg('music.duplicates.copies', { count: number(group.count) })}
           </Text>
         </View>
-        <View style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, backgroundColor: alpha(m.ui.ink, 0.08), borderWidth: 1, borderColor: m.ui.glassEdge }}>
-          <Text style={m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.06em', color: '$ui.inkSecondary', 'font-variant-numeric': 'tabular-nums' })}>
-            {msg('music.duplicates.recordingId', { id: group.recordingId })}
+        <View
+          {...(web ? ({ title: msg('music.duplicates.recordingId', { id: group.recordingId }) } as object) : {})}
+          style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, backgroundColor: alpha(m.ui.ink, 0.08), borderWidth: 1, borderColor: m.ui.glassEdge }}>
+          <Text style={m.text({ 'font-size': '12px', 'font-weight': '700', color: '$ui.inkSecondary', 'font-variant-numeric': 'tabular-nums' })}>
+            {msg('music.duplicates.copies', { count: number(group.count) })}
           </Text>
         </View>
       </View>

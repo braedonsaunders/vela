@@ -438,7 +438,7 @@ export interface HistoryRecap {
 /** Source track metadata parsed from an imported playlist link or file (features.playlistImport). */
 export interface ImportSource { title: string; artist: string; album?: string; isrc?: string; durationSeconds?: number }
 export interface PlaylistImportMatch { index: number; source: ImportSource; title: Title; by: 'isrc' | 'title' }
-export interface PlaylistImportUnmatched { index: number; source: ImportSource; reason: 'not_found' | 'ambiguous' }
+export interface PlaylistImportUnmatched { index: number; source: ImportSource; reason: 'not_found' | 'ambiguous'; candidates?: Title[] }
 /** GET /playlists/import/:id (features.playlistImport). */
 export interface PlaylistImport {
   id: ID; state: 'reading' | 'matching' | 'done' | 'failed'; name: string; description?: string; artwork?: ArtworkRef[];
@@ -455,13 +455,13 @@ export interface PlaylistImportRequest extends Mutation {
 }
 export interface PlaylistImportJobRef { id: ID }
 /** POST /playlists/import/:id/save (features.playlistImport); returns the new PlaylistCard in source order. */
-export interface SavePlaylistImportRequest extends Mutation { name?: string; exclude?: number[] }
+export interface SavePlaylistImportRequest extends Mutation { name?: string; exclude?: number[]; choose?: Record<string, ID> }
 
 /** One duplicate recording group within a library (features.duplicates). */
 export interface DuplicateGroup { recordingId: string; count: number; titles: Title[]; preferredTitleId?: ID }
-export type DuplicateGroupsPage = Page<DuplicateGroup>;
+export interface DuplicateGroupsPage extends Page<DuplicateGroup> { total?: number }
 /** GET /titles/:id/recording (features.duplicates): every release of that recording, this one included. */
-export interface RecordingReleases { recordingId: string; preferredTitleId?: ID; titles: Title[] }
+export interface RecordingReleases { recordingId: string; count?: number; preferredTitleId?: ID; titles: Title[] }
 /** POST /libraries/:id/duplicates/:recordingId (features.duplicates): viewer-scoped preferred release and optional hidden releases. */
 export interface DuplicatePreferenceRequest extends Mutation { preferredTitleId: ID; hideOtherIds?: ID[] }
 
