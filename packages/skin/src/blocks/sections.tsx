@@ -1,0 +1,209 @@
+// The `sections` layout block (`docs/plugin-screens.md` §6): vertical page scroll of sections.
+// - Isolates each section child inside an error boundary (`SectionBoundary`) so one bad section
+//   never takes down the page.
+// - Mounts the first `FIRST_SECTIONS = 3` sections on the initial frame and streams the remaining
+//   sections one per animation frame (`useStreamedCount`).
+// - Wraps each section in a staggered entrance motion (`SectionRise`: opacity + 18px translateY, delay
+//   `min(index, 3) * 70ms`, skipped when `still` is true).
+// - Calls `requestNeeds` when a section with `needs: string[]` is about to mount.
+// - Renders a hidden level-1 heading on the web (`aria-level={1}`) for screen readers.
+// - Wraps each section in a TV `FocusBand` (`TVFocusGuideView autoFocus`) for per-section focus memory.
+import { Component, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Platform, ScrollView, Text, View, type TextStyle } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import { InheritedContext, useHost } from '../host';
+import { fill, holds, type Template } from '../resolve';
+import { inheritText } from '../text-inheritance';
+import type { Ctx, Env } from '../vocabulary';
+import { FocusBand } from './focus';
+import { FIRST_SECTIONS, initialStreamedCount, nextStreamedCount, parsePoints } from './layout-math';
+import { useBlockLook, type BlockLook } from './look';
+import { useScreenBlockRuntime, type BlockRNodeCommon, type SectionsBlockNode } from './types';
+
+const HIDDEN_H1: TextStyle = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  opacity: 0,
+  overflow: 'hidden',
+};
+
+export class SectionBoundary extends Component<{ name: string; children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+  override componentDidCatch(error: unknown): void {
+    console.warn(`[skin/sections] section "${this.props.name}" failed to render`, error);
+  }
+  override render(): ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+export function useStreamedCount(count: number): number {
+  const [mounted, setMounted] = useState(() => initialStreamedCount(count, FIRST_SECTIONS));
+  useEffect(() => {
+    if (count <= FIRST_SECTIONS) {
+      setMounted(count);
+      return;
+    }
+    setMounted(n => Math.min(count, Math.max(FIRST_SECTIONS, n)));
+  }, [count]);
+  useEffect(() => {
+    if (mounted >= count) return;
+    const frame = requestAnimationFrame(() =>
+      setMounted(n => nextStreamedCount(n, count, FIRST_SECTIONS)),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [mounted, count]);
+  return Math.min(mounted, count);
+}
+
+function SectionRise({ look, index, children }: { look: BlockLook; index: number; children: ReactNode }) {
+  const t = useSharedValue(look.still ? 1 : 0);
+  useEffect(() => {
+    if (look.still) return;
+    t.value = withDelay(
+      Math.min(index, 8) * 70,
+      withTiming(1, { duration: 620, easing: Easing.bezier(0.16, 1, 0.3, 1) }),
+    );
+    // Only on mount: a section that is already shown does not rise again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animated = useAnimatedStyle(() => ({
+    opacity: t.value,
+    transform: [{ translateY: (1 - t.value) * 18 }],
+  }));
+  return <Animated.View style={animated}>{children}</Animated.View>;
+}
+
+function SectionsPlaceholder({ look }: { look: BlockLook }) {
+  const { px } = look;
+  const cardWidth = look.small ? Math.min(px(272), look.width * 0.74) : px(look.tv ? 300 : 286);
+  return (
+    <View style={{ paddingHorizontal: look.gutter, gap: px(14) }}>
+      <View
+        style={{
+          width: px(180),
+          height: px(20),
+          borderRadius: px(6),
+          backgroundColor: look.chipFill,
+        }}
+      />
+      <View style={{ flexDirection: 'row', gap: px(14), overflow: 'hidden' }}>
+        {[0, 1, 2, 3, 4].map(i => (
+          <View
+            key={i}
+            style={{
+              width: cardWidth,
+              height: px(128),
+              borderRadius: Math.min(px(look.ui.radiusCard), px(18)),
+              backgroundColor: look.chipFill,
+            }}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function collectNodeNeeds(node: unknown): string[] {
+  if (!node || typeof node !== 'object') return [];
+  const n = node as BlockRNodeCommon & { children?: unknown[]; item?: unknown };
+  const out = new Set<string>();
+  if (Array.isArray(n.needs)) {
+    for (const s of n.needs) if (typeof s === 'string' && s) out.add(s);
+  }
+  if (Array.isArray(n.children)) {
+    for (const child of n.children) {
+      for (const s of collectNodeNeeds(child)) out.add(s);
+    }
+  }
+  return [...out];
+}
+
+function sectionWhenHolds(node: unknown, ctx: Ctx, env: Env): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const when = (node as { when?: Parameters<typeof holds>[0] }).when;
+  if (!when || !when.length) return true;
+  return holds(when, ctx, env);
+}
+
+export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx }) {
+  const host = useHost();
+  const look = useBlockLook();
+  const runtime = useScreenBlockRuntime();
+  const parentText = useContext(InheritedContext);
+  const { px } = look;
+
+  const isPage = runtime?.presentation === 'page';
+  const defaultGap = px(isPage ? 22 : 30);
+  const gap = parsePoints(node.gap, px, defaultGap);
+  const topPad = isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
+  const bottomPad = px(isPage ? 48 : 64);
+
+  const inheritedRows: Record<string, string> = {};
+  for (const [k, v] of Object.entries(node.base.style ?? {})) {
+    if (k === 'font-family' || k === 'color' || k === 'font-size' || k === 'line-height' || k === 'font-weight') {
+      inheritedRows[k] = fill(v, ctx, host.env);
+    }
+  }
+  const text = inheritText(parentText, inheritedRows, host.viewport);
+
+  const visibleChildren = node.children.filter(child => sectionWhenHolds(child, ctx, host.env));
+  const mountedCount = useStreamedCount(visibleChildren.length);
+
+  // Trigger lazy `needs` for sections that are mounted or next up to mount.
+  useEffect(() => {
+    if (!runtime?.requestNeeds) return;
+    const upcoming = visibleChildren.slice(0, Math.min(visibleChildren.length, mountedCount + 1));
+    const needed = new Set<string>();
+    for (const child of node.children) {
+      for (const s of collectNodeNeeds(child)) needed.add(s);
+    }
+    for (const child of upcoming) {
+      for (const s of collectNodeNeeds(child)) needed.add(s);
+    }
+    if (needed.size > 0) runtime.requestNeeds([...needed]);
+  }, [runtime, visibleChildren.length, mountedCount, node.children]);
+
+  if (!runtime) return null;
+
+  const title = runtime.pageTitle;
+  const shown = visibleChildren.slice(0, mountedCount);
+  const testID = node.testId ? fill(node.testId as Template, ctx, host.env).trim() || undefined : undefined;
+
+  return (
+    <InheritedContext.Provider value={text}>
+      <ScrollView
+        testID={testID}
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: topPad,
+          paddingBottom: bottomPad,
+          gap,
+        }}
+        showsVerticalScrollIndicator={!Platform.isTV}
+      >
+        {Platform.OS === 'web' && title ? (
+          <Text accessibilityRole="header" {...{ 'aria-level': 1 }} style={HIDDEN_H1}>
+            {title}
+          </Text>
+        ) : null}
+        {shown.map((child, idx) => {
+          const rawId = (child as { id?: Template; testId?: Template })?.id ?? (child as { testId?: Template })?.testId;
+          const id = (rawId ? fill(rawId, ctx, host.env).trim() : '') || `section-${idx}`;
+          return (
+            <SectionBoundary key={id} name={id}>
+              <SectionRise look={look} index={Math.min(idx, FIRST_SECTIONS)}>
+                <FocusBand>{runtime.renderNode(child, ctx)}</FocusBand>
+              </SectionRise>
+            </SectionBoundary>
+          );
+        })}
+        {mountedCount < visibleChildren.length ? <SectionsPlaceholder look={look} /> : null}
+      </ScrollView>
+    </InheritedContext.Provider>
+  );
+}
