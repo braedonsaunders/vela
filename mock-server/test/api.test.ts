@@ -184,6 +184,17 @@ describe('mock server: catalogue and live', () => {
     await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: false, favorite: false, watchlisted: false }, authed(tokens));
   });
 
+  test('Home\'s progress shelves can be read on their own, as Ether serves them after a stop', async () => {
+    const bootstrap = await get<V.Bootstrap>('/bootstrap');
+    const shelves = bootstrap.rows.filter(row => row.purpose === 'continue' || row.purpose === 'nextUp');
+    expect(shelves.length).toBeGreaterThan(0);
+    for (const shelf of shelves) {
+      const row = await get<V.Row>(`/rows/${shelf.id}?limit=20`);
+      expect(row.id).toBe(shelf.id);
+      expect(row.items.map(item => item.id)).toEqual(shelf.items.slice(0, 20).map(item => item.id));
+    }
+  });
+
   test('VELA_MOCK_CHANNELS sizes the lineup', async () => {
     const page = await get<V.Page<V.Channel>>('/live/channels?limit=100');
     expect(page.items).toHaveLength(CHANNELS);
