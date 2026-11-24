@@ -15,7 +15,7 @@ export { ImportCover };
 export function MusicImport() {
   const app = useMusic();
   const m = useMediaLook();
-  const { job, sources } = usePlaylistImport();
+  const { job, sources } = usePlaylistImport({ poll: false });
   const [playlistName, setPlaylistName] = useState('');
   const matchedCards = job?.matched.map(entry => entry.card) ?? [];
 

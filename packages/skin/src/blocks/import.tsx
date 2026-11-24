@@ -43,8 +43,9 @@ Cedar & Wire - Late Tram Home (Live at the Corner Booth).flac
 #EXTINF:265,The Hollow Lanterns - Harbour Lights
 The Hollow Lanterns - Harbour Lights.flac`;
 
-/** Hook into `@vela/core`'s playlist import state and automatic polling (`store.music.pollPlaylistImport`). */
-export function usePlaylistImport(): {
+/** Hook into `@vela/core`'s playlist import state and, unless `poll` is false, poll a running job
+ * (`store.music.pollPlaylistImport`). One mounted hook polls; others on the same screen only read. */
+export function usePlaylistImport({ poll = true }: { poll?: boolean } = {}): {
   job: PlaylistImportModel | null | undefined;
   load: Loadable<PlaylistImportModel | null>['load'];
   error: string;
@@ -60,12 +61,14 @@ export function usePlaylistImport(): {
   const available = store.music.playlistImportAvailable;
   const job = state.value;
   useEffect(() => {
-    if (!available || !job || (job.state !== 'reading' && job.state !== 'matching')) return;
+    // Every poll answers a new job, so this re-arms after each one, including answers whose
+    // progress has not moved yet.
+    if (!poll || !available || !job || (job.state !== 'reading' && job.state !== 'matching')) return;
     const timer = setTimeout(() => {
       void store.music.pollPlaylistImport(job.id);
     }, 900);
     return () => clearTimeout(timer);
-  }, [store, available, job?.id, job?.state, job?.done]);
+  }, [store, poll, available, job]);
   return {
     job,
     load: state.load,
