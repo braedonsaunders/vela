@@ -1016,10 +1016,15 @@ async function dispatch(req: Request): Promise<Response> {
         if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected; if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId; }
       return json(sidecarFixture);
     }
-    // A new revision of every open session's plan, changing nothing: the same source, as a server sends for any update.
+    // A new revision of every open session's plan for the same source, as a server sends for any update; with
+    // {"selectedSubtitleTrackId": id|null}, one in which the server changed the selected subtitle itself.
     if (req.method === 'POST' && url.pathname === '/__admin/revise') {
+      const data = await req.json().catch(() => ({}));
       const revised = [...sessions.values()].filter(s => s.plan.state !== 'ended');
-      for (const s of revised) publish(s);
+      for (const s of revised) {
+        if (data.selectedSubtitleTrackId === null || s.plan.subtitleTracks.some(t => t.id === data.selectedSubtitleTrackId)) s.plan.selectedSubtitleTrackId = data.selectedSubtitleTrackId;
+        publish(s);
+      }
       return json(revised.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, sourceGeneration: s.plan.sourceGeneration })));
     }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);

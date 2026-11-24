@@ -13,7 +13,10 @@ test('the sidecar title delivers its subtitle as an external WebVTT file, select
   Object.assign(sidecarFixture, { enabled: true, selected: true, pathId: 'remux' });
   const p = plan();
   withSidecar(p, '/sessions/media/s/t');
-  expect(p.subtitleTracks).toEqual([expect.objectContaining({ id: 'sub-en', delivery: { kind: 'external', format: 'webvtt', url: '/sessions/media/s/t/subtitles.vtt' } })]);
+  expect(p.subtitleTracks).toEqual([
+    expect.objectContaining({ id: 'sub-en', delivery: { kind: 'external', format: 'webvtt', url: '/sessions/media/s/t/subtitles.vtt' } }),
+    expect.objectContaining({ id: 'sub-fr', streamIndex: 3, delivery: { kind: 'embedded' } }),
+  ]);
   expect(p.selectedSubtitleTrackId).toBe('sub-en');
   expect(p.selectedPathId).toBe('remux');
   expect(p.paths[0]).toMatchObject({ original: true, range: true });

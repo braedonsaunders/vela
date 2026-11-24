@@ -176,12 +176,14 @@ commands return policy/feature_unavailable rather than only changing metadata.
 
 POST `/__admin/sidecar` `{"enabled":true,"selected":true,"pathId":"remux"}` makes new VOD plans of the
 generated fixture a sidecar title: its English WebVTT arrives as an external file (as Jellyfin, Emby
-and Plex text subtitles do), selected from the start when `selected` (a default or remembered
+and Plex text subtitles do), beside a French track embedded in the source (`sub-fr`, which the
+mock's HLS does not actually carry), the sidecar selected from the start when `selected` (a default or remembered
 subtitle), the direct MP4 is the original file (`original: true`), and plans start on `pathId`
 (`direct`, `remux` or `transcode`). While enabled, track commands are answered as Ether answers
 them: the selection changes and, off the original file, the source generation increases. POST
 `/__admin/revise` publishes a new revision of every open session's plan, changing nothing (the same
-source), as a server does for any update. `{"enabled":false}` restores the default fixture.
+source), as a server does for any update; a body `{"selectedSubtitleTrackId":null}` (or a track id)
+makes it one in which the server changed the selected subtitle itself. `{"enabled":false}` restores the default fixture.
 SSE replacement, revocation, session end and disconnect release heartbeat timers;
 streams also close when their bearer grant expires.
 
