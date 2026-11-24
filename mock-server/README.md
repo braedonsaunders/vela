@@ -192,9 +192,11 @@ SSE replacement, revocation, session end and disconnect release heartbeat timers
 streams also close when their bearer grant expires.
 
 Live-specific faults are independent of VOD: GET/POST `/__admin/live-faults`
-accepts `{"gapEvery":0,"delayEvery":0,"delayMs":8000}`. Every Nth broadcast
+accepts `{"gapEvery":0,"delayEvery":0,"delayMs":8000,"mediaLeadSeconds":0}`. Every Nth broadcast
 sequence is marked EXT-X-GAP (and returns 410), or delays segment delivery. Zero
-disables each interval; delay is capped at sixty seconds. Reset both intervals
+disables each interval; delay is capped at sixty seconds. `mediaLeadSeconds` starts
+every segment's media that much later than its playlist time, as a relay starting
+from its backlog did on the lab (5 s): the player meets a hole in front of its first media. Reset both intervals
 to zero after a drive. All channels share the synthetic broadcast clock. Live
 offers English muxed audio only; VOD retains the alternate track fixture.
 

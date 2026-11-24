@@ -7,7 +7,12 @@ import { mediaRoot, serveMedia } from './media';
 export const catchUpEnabled = process.env.VELA_MOCK_CATCHUP !== '0';
 export const timeshiftMinutes = catchUpEnabled ? Math.max(0, Math.min(240, Number(process.env.VELA_MOCK_TIMESHIFT_MINUTES ?? 60) || 0)) : 0;
 const epoch = Date.now() - (timeshiftMinutes ? 20 * 60_000 : 60_000);
-export const liveFaults = { gapEvery: 0, delayEvery: 0, delayMs: 8000 };
+/**
+ * mediaLeadSeconds: every live segment's media starts this much later than its playlist time, as a
+ * relay starting from its backlog published it (Ether, November 2026: 5 s). A player that parks at
+ * the playlist's time sits in front of a hole it never fills.
+ */
+export const liveFaults = { gapEvery: 0, delayEvery: 0, delayMs: 8000, mediaLeadSeconds: 0 };
 /** The newest published segment's sequence number. */
 export const edgeSequence = (now = Date.now()) => Math.floor((now - epoch) / 4000);
 /** The segment carrying a wall-clock instant (negative before the broadcast began: the archive). */
@@ -135,7 +140,7 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
       await new Promise<void>(resolve => { const timer = setTimeout(done, Math.min(60000, liveFaults.delayMs)); function done() { clearTimeout(timer); req.signal.removeEventListener('abort', done); resolve(); } req.signal.addEventListener('abort', done, { once: true }); if (req.signal.aborted) done(); });
       if (req.signal.aborted) return new Response(null, { status: 499 });
     }
-    const bytes = await segmentBytes(segment[1]!, seq, 0);
+    const bytes = await segmentBytes(segment[1]!, seq, -liveFaults.mediaLeadSeconds);
     return new Response(req.method === 'HEAD' ? null : bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'video/iso.segment', 'Cache-Control': 'no-store', 'Content-Length': String(bytes.length) } });
   }
   return serveMedia(req, resource);

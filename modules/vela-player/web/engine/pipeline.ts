@@ -7,6 +7,7 @@ import { parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
+import { gapJump, timeRanges } from './gap-jump';
 import { fragmentStart, initFacts } from './init-codecs';
 
 /** The rendition id of a source's own media playlist, when its plan offers no quality ladder. */
@@ -349,6 +350,7 @@ export class SegmentPipeline {
     let sequence = next.sequence,
       init = '',
       first = true,
+      played = false,
       playlistAdvanced = true;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
     while (!signal.aborted) {
@@ -542,15 +544,13 @@ export class SegmentPipeline {
         await mutation(this.buffer, signal, () => this.buffer!.remove(0, this.video.currentTime - retain));
       }
       await this.audio?.evict(this.video.currentTime - retain, signal);
-      // Skip only tiny holes; large gaps go through visible recovery.
-      if (this.video.readyState < 3)
-        for (let i = 0; i < this.video.buffered.length; i++) {
-          const gap = this.video.buffered.start(i) - this.video.currentTime;
-          if (gap > 0.02 && gap <= 0.25) {
-            this.video.currentTime = this.video.buffered.start(i) + 0.01;
-            break;
-          }
-        }
+      // Tiny holes are stepped over; a live start jumps any hole in front of its first media
+      // (gap-jump.ts). Later large gaps go through visible recovery.
+      if (this.video.readyState >= 3 && !this.video.paused) played = true;
+      if (this.video.readyState < 3) {
+        const to = gapJump(this.video.currentTime, timeRanges(this.video.buffered), live && !played);
+        if (to !== null) this.video.currentTime = to;
+      }
       if (live && this.video.buffered.length) {
         this.video.playbackRate = this.livePlaybackRate;
       }
