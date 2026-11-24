@@ -66,7 +66,7 @@ function harness() {
     epoch: 0, hasServer: () => true, selected: () => ({ adapter: api }), ready: async () => ({ adapter: api }),
     key: () => `key-${++keys}`, onReset: (listener: () => void) => { resets.add(listener); return () => resets.delete(listener); },
   } as unknown as Session;
-  const screens = new Screens(box, session, 19, () => 5);
+  const screens = new Screens(box, session, 19, () => 5, [20, 40, 80]);
   const reset = () => { (session as { epoch: number }).epoch++; for (const listener of resets) listener(); };
   return { api, box, screens, reset, page: (key: string) => box.get().screens.pages[key]! };
 }
@@ -162,10 +162,10 @@ test('lazy sources are read when needed, once, and join refreshes', async () => 
 
 test('a source error leaves the rest drawn and retry reads only it; a failed first read fails the page', async () => {
   const h = harness();
-  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' }, errors: { schedule: { code: 'timeout', retry: true } } });
+  h.api.auto = () => ({ rev: 1, sources: { hero: 'h' }, errors: { schedule: { code: 'unavailable' } } });
   const { key } = open(h);
   await flush(); await flush();
-  expect(h.page(key)).toMatchObject({ load: 'ready', sources: { hero: 'h' }, errors: { schedule: 'timeout' } });
+  expect(h.page(key)).toMatchObject({ load: 'ready', sources: { hero: 'h' }, errors: { schedule: 'unavailable' } });
   h.api.auto = () => ({ rev: 2, sources: { schedule: 's' } });
   await h.screens.retry(key);
   expect(h.api.calls.at(-1)!.read.sources).toEqual(['schedule']);
@@ -410,4 +410,44 @@ test('an action answer with every source (lazy ones too) replaces them; lazy one
   h.screens.refresh(key);
   await flush();
   expect(h.api.calls.at(-1)!.read.sources).toContain('standings');
+});
+
+test('a timed-out source is read again after 1.5, 3 and 6 s (here scaled), pending meanwhile, then keeps its error', async () => {
+  const h = harness();
+  let calls = 0;
+  h.api.auto = read => {
+    calls++;
+    if (!read.sources) return { rev: 1, sources: { hero: 'h', live: 'old' } };
+    return { rev: 1 + calls, sources: {}, errors: { live: { code: 'timeout', retry: true } } };
+  };
+  const { key } = open(h);
+  await flush(); await flush();
+  h.api.auto = read => read.sources ? { rev: 2, sources: {}, errors: { live: { code: 'timeout', retry: true } } } : { rev: 1, sources: {} };
+  void h.screens.retry(key, ['live']);
+  await flush(); await flush();
+  // Timed out: still pending, its old value drawn, no error yet.
+  expect(h.page(key)).toMatchObject({ pending: { live: true }, sources: { live: 'old' }, errors: {} });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  expect(h.api.calls.at(-1)!.read.sources).toEqual(['live']);
+  expect(h.page(key).pending.live).toBe(true);
+  // Late answer lands on the second retry.
+  h.api.auto = () => ({ rev: 9, sources: { live: 'fresh' } });
+  await new Promise(resolve => setTimeout(resolve, 60));
+  expect(h.page(key)).toMatchObject({ sources: { live: 'fresh' }, pending: {}, errors: {} });
+  const total = h.api.calls.length;
+  await new Promise(resolve => setTimeout(resolve, 120));
+  expect(h.api.calls.length).toBe(total); // answered: no more retries
+
+  // Never answering: three retries, then the error stays.
+  h.api.auto = () => ({ rev: 10, sources: {}, errors: { live: { code: 'timeout', retry: true } } });
+  void h.screens.retry(key, ['live']);
+  await new Promise(resolve => setTimeout(resolve, 260));
+  const reads = h.api.calls.slice(total).map(call => call.read.sources);
+  expect(reads).toEqual([['live'], ['live'], ['live'], ['live']]);
+  expect(h.page(key)).toMatchObject({ pending: {}, errors: { live: 'timeout' }, sources: { live: 'fresh' } });
+  // A timeout without retry is an error at once.
+  h.api.auto = () => ({ rev: 11, sources: {}, errors: { hero: { code: 'timeout', retry: false } } });
+  await h.screens.retry(key, ['hero']);
+  expect(h.page(key).errors.hero).toBe('timeout');
+  expect(h.page(key).pending.hero).toBeUndefined();
 });
