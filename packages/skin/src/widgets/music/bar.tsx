@@ -1,22 +1,29 @@
-// The now-playing bar along the bottom of the music app: what is playing (cover, title, artist,
-// the heart), the transport and the seek bar, and on the right lyrics, the queue, volume and full
-// screen. Space, arrows and the media keys work through the keyboard map (keys.ts).
+// The now-playing bar along the bottom of the audio app: what is playing (cover, title, artist or
+// chapter, the heart), the transport and the seek bar, and on the right lyrics, the queue, volume
+// and full screen. Spoken word (an audiobook, a podcast episode) trades shuffle, previous, next and
+// repeat for speed, 15/30 s skips and the sleep timer. Space, arrows and the media keys work
+// through the keyboard map (keys.ts).
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
-import { clock, currentInQueue, msg } from '@vela/core';
+import { AUDIO_RATES, clock, currentInQueue, durationLabel, msg, number } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING } from '../common/controls';
 import { Cover, useMediaLook } from '../media/parts';
 import { MediaGlyph } from '../media/icons';
-import { useMusic } from './context';
+import { placeOf, useMusic } from './context';
+import { isSpoken, listeningWords } from './listening';
 import { Heart, IconButton, transition } from './parts';
 import { openNowPlaying } from './hub';
+import { Chip } from './pages';
 
 export const NOW_PLAYING_BAR_HEIGHT = 84;
 const web = Platform.OS === 'web';
 
-export function NowPlayingBar({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(): void }) {
+/** Spoken word's speed and sleep choices, opened from the bar over the page above it. */
+export type BarPanel = '' | 'speed' | 'sleep';
+
+export function NowPlayingBar({ queueOpen, onQueue, panel, onPanel }: { queueOpen: boolean; onQueue(): void; panel: BarPanel; onPanel(panel: BarPanel): void }) {
   const app = useMusic();
   const m = useMediaLook();
   const store = useVela();
@@ -26,6 +33,11 @@ export function NowPlayingBar({ queueOpen, onQueue }: { queueOpen: boolean; onQu
   const album = item?.media?.parents.find(p => p.role === 'album');
   const artist = item?.media?.parents.find(p => p.role === 'artist');
   const repeat = audio.queue?.repeat ?? 'off';
+  // What plays decides the controls; with nothing playing, the library does.
+  const spoken = item ? isSpoken(item.media?.class) : listeningWords(app.listening).transport === 'spoken';
+  const chapter = spoken ? [...audio.chapters].reverse().find(c => c.startSeconds <= audio.positionSeconds) : undefined;
+  const container = item?.media?.parent;
+  const sleeping = audio.sleep.mode !== 'off';
   return (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 }} testID="now-playing-bar" accessibilityRole="toolbar" accessibilityLabel={msg('media.player.nowPlaying')}>
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -35,8 +47,14 @@ export function NowPlayingBar({ queueOpen, onQueue }: { queueOpen: boolean; onQu
               <Cover uri={item.poster} shape="square" size={58} title={item.name} accent={item.accent} lift={0.5} />
             </Pressable>
             <View style={{ minWidth: 0, flexShrink: 1 }}>
-              <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} />
-              <Link label={item.media?.byline ?? ''} onPress={() => artist && app.go({ kind: 'title', id: artist.id })} />
+              {spoken ? <>
+                {/* A book or episode opens its page; the line under it is the chapter, else the book or show it is from. */}
+                <Link label={item.name} strong onPress={() => app.go(placeOf(item))} testID="bar-title" />
+                <Link label={chapter?.name || container?.name || item.media?.byline || ''} onPress={() => app.go(placeOf(item))} testID="bar-subtitle" />
+              </> : <>
+                <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} testID="bar-title" />
+                <Link label={item.media?.byline ?? ''} onPress={() => artist && app.go({ kind: 'title', id: artist.id })} testID="bar-subtitle" />
+              </>}
             </View>
             <Heart card={item} size={34} iconSize={18} />
           </>
@@ -44,14 +62,24 @@ export function NowPlayingBar({ queueOpen, onQueue }: { queueOpen: boolean; onQu
       </View>
       <View style={{ flex: 1.3, maxWidth: 720, alignItems: 'center', gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <IconButton symbol="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={!!audio.queue?.shuffle} size={34} iconSize={18} testID="bar-shuffle" />
-          <Transport icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} />
+          {spoken ? <>
+            <RateButton rate={audio.rate} active={audio.rate !== 1 || panel === 'speed'} onPress={() => onPanel(panel === 'speed' ? '' : 'speed')} />
+            <IconButton symbol="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={34} iconSize={20} testID="bar-back15" />
+          </> : <>
+            <IconButton symbol="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={!!audio.queue?.shuffle} size={34} iconSize={18} testID="bar-shuffle" />
+            <Transport icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} />
+          </>}
           <Pressable onPress={() => store.audio.toggle()} disabled={!item} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')} testID="bar-toggle"
             style={[NO_RING, { width: 40, height: 40, borderRadius: 20, backgroundColor: m.ui.ink, alignItems: 'center', justifyContent: 'center', opacity: item ? 1 : 0.5 }]}>
             <MediaGlyph name={playing ? 'pause' : 'play'} size={18} color={m.ui.inkInverse} />
           </Pressable>
-          <Transport icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} />
-          <IconButton symbol={repeat === 'one' ? 'repeat-one' : 'repeat'} label={msg('media.player.repeat')} onPress={() => store.audio.cycleRepeat()} active={repeat !== 'off'} size={34} iconSize={18} testID="bar-repeat" />
+          {spoken ? <>
+            <IconButton symbol="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={34} iconSize={20} testID="bar-forward30" />
+            <IconButton symbol="moon" label={sleeping ? sleepLabel(audio.sleep) : msg('media.player.sleep')} onPress={() => onPanel(panel === 'sleep' ? '' : 'sleep')} active={sleeping || panel === 'sleep'} size={34} iconSize={18} testID="bar-sleep" />
+          </> : <>
+            <Transport icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} />
+            <IconButton symbol={repeat === 'one' ? 'repeat-one' : 'repeat'} label={msg('media.player.repeat')} onPress={() => store.audio.cycleRepeat()} active={repeat !== 'off'} size={34} iconSize={18} testID="bar-repeat" />
+          </>}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch' }}>
           <Text style={[m.text({ 'font-size': '12px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), { width: 40, textAlign: 'right' }]}>{clock(audio.positionSeconds)}</Text>
@@ -60,11 +88,58 @@ export function NowPlayingBar({ queueOpen, onQueue }: { queueOpen: boolean; onQu
         </View>
       </View>
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-        {store.music.lyricsAvailable ? <IconButton symbol="lyrics" label={msg('music.lyrics')} onPress={() => openNowPlaying('lyrics')} size={34} iconSize={18} testID="bar-lyrics" /> : null}
+        {spoken ? (audio.chapters.length ? <IconButton symbol="chapters" label={msg('media.player.chapters')} onPress={() => openNowPlaying()} size={34} iconSize={18} testID="bar-chapters" /> : null)
+          : store.music.lyricsAvailable ? <IconButton symbol="lyrics" label={msg('music.lyrics')} onPress={() => openNowPlaying('lyrics')} size={34} iconSize={18} testID="bar-lyrics" /> : null}
         <IconButton symbol="queue" label={msg('music.queue')} onPress={onQueue} active={queueOpen} size={34} iconSize={18} testID="bar-queue" />
         <IconButton symbol={audio.muted || audio.volume === 0 ? 'speaker-mute' : 'speaker'} label={msg('music.mute')} onPress={() => store.audio.toggleMute()} size={34} iconSize={18} testID="bar-mute" />
         <View style={{ width: 110 }}><Slider value={audio.muted ? 0 : audio.volume} onChange={v => store.audio.setVolume(v)} label={msg('music.volume')} testID="bar-volume" /></View>
         <IconButton symbol="expand" label={msg('media.player.open')} onPress={() => openNowPlaying()} size={34} iconSize={17} testID="bar-expand" />
+      </View>
+    </View>
+  );
+}
+
+function rateLabel(rate: number): string { return `${number(rate, { minimumFractionDigits: rate % 1 ? 1 : 0, maximumFractionDigits: 2 })}×`; }
+
+function sleepLabel(sleep: { mode: string; endsAt: number }): string {
+  return sleep.mode === 'timer' ? msg('media.player.sleepIn', { time: durationLabel(Math.max(0, (sleep.endsAt - Date.now()) / 1000)) })
+    : sleep.mode === 'chapter' ? msg('media.player.sleepChapter') : msg('media.player.sleep');
+}
+
+/** The speed, as its value ("1.25×"): a pill that opens the choices. */
+function RateButton({ rate, active, onPress }: { rate: number; active: boolean; onPress(): void }) {
+  const m = useMediaLook();
+  const [hover, setHover] = useState(false);
+  return (
+    <Pressable onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="button" accessibilityLabel={`${msg('media.player.speed')}: ${rateLabel(rate)}`} testID="bar-speed"
+      style={[NO_RING, { minWidth: 44, height: 26, paddingHorizontal: 8, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: hover ? m.ui.control : 'transparent', borderWidth: 1, borderColor: active ? m.ui.accent : m.ui.glassEdge }]}>
+      <Text style={m.text({ 'font-size': '12px', 'font-weight': '700', color: active ? m.ui.accent : hover ? '$ui.ink' : '$ui.inkSecondary', 'font-variant-numeric': 'tabular-nums' })}>{rateLabel(rate)}</Text>
+    </Pressable>
+  );
+}
+
+/** Speed or sleep choices, floating above the bar's transport. Chosen, it closes. */
+export function BarPanelView({ panel, onClose }: { panel: BarPanel; onClose(): void }) {
+  const m = useMediaLook();
+  const store = useVela();
+  const audio = useVelaState(s => s.audio);
+  if (!panel) return null;
+  const sleeping = audio.sleep.mode !== 'off';
+  const pick = (then: () => void) => () => { then(); onClose(); };
+  return (
+    <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: NOW_PLAYING_BAR_HEIGHT + 10, alignItems: 'center' }}>
+      <View testID={`bar-panel-${panel}`} accessibilityRole="radiogroup" accessibilityLabel={panel === 'speed' ? msg('media.player.speed') : msg('media.player.sleep')}
+        style={[{ maxWidth: 560, padding: 14, borderRadius: 16, gap: 10 }, m.box({ 'background-color': '$ui.popover', border: '1px solid $ui.glassEdge', 'box-shadow': '0px 18px 48px -12px rgba(0,0,0,0.6)' })]}>
+        <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', color: '$ui.inkSecondary' })}>{panel === 'speed' ? msg('media.player.speed') : msg('media.player.sleep')}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {panel === 'speed'
+            ? AUDIO_RATES.map(rate => <Chip key={rate} label={rateLabel(rate)} on={audio.rate === rate} onPress={pick(() => store.audio.setRate(rate))} />)
+            : <>
+              <Chip label={msg('media.player.sleepOff')} on={!sleeping} onPress={pick(() => store.audio.setSleep('off'))} />
+              {[15, 30, 45, 60].map(minutes => <Chip key={minutes} label={msg('media.player.sleepMinutes', { count: number(minutes) })} on={false} onPress={pick(() => store.audio.setSleep('timer', minutes))} />)}
+              {audio.chapters.length ? <Chip label={msg('media.player.sleepChapter')} on={audio.sleep.mode === 'chapter'} onPress={pick(() => store.audio.setSleep('chapter'))} /> : null}
+            </>}
+        </View>
       </View>
     </View>
   );
@@ -80,11 +155,11 @@ function Transport({ icon, label, onPress }: { icon: string; label: string; onPr
   );
 }
 
-function Link({ label, strong = false, onPress }: { label: string; strong?: boolean; onPress(): void }) {
+function Link({ label, strong = false, onPress, testID }: { label: string; strong?: boolean; onPress(): void; testID?: string }) {
   const m = useMediaLook();
   const [hover, setHover] = useState(false);
   return (
-    <Pressable onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link" style={NO_RING}>
+    <Pressable onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link" style={NO_RING} testID={testID}>
       <Text numberOfLines={1} style={m.text({ 'font-size': strong ? '15px' : '13px', 'font-weight': strong ? '650' : '450', color: strong ? '$ui.ink' : '$ui.inkQuiet', 'text-decoration-line': hover ? 'underline' : 'none' })}>{label}</Text>
     </Pressable>
   );

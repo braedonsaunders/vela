@@ -622,16 +622,16 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   // stream keeps it current and a stale answer would show an old score.
 
   async screen(id: string, screenQuery: ScreenQuery = {}, signal?: AbortSignal) {
-    return normaliseScreen(await this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal }));
+    return normaliseScreen(await this.http.request<V.Screen>('GET', `/screens/${segment(id)}${query(screenQuery)}`, undefined, { signal }), this.origin);
   }
 
   async liveEvents(ids: string[]): Promise<V.LiveEventsResponse> {
     const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/events${query({ ids: ids.length ? ids.join(',') : undefined })}`);
-    return { ...response, events: normaliseEvents(response?.events) };
+    return { ...response, events: normaliseEvents(response?.events, this.origin) };
   }
 
   async liveEvent(id: string): Promise<V.LiveEventDetail> {
-    const detail = normaliseDetail(await this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`));
+    const detail = normaliseDetail(await this.http.request<V.LiveEventDetail>('GET', `/live/events/${segment(id)}`), this.origin);
     if (!detail) throw new VelaError({ class: 'source', code: 'invalid_live_event', message: 'The server sent an unreadable live event.', retry: { allowed: true } }, 502);
     return detail;
   }
@@ -658,7 +658,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async liveTicker(screen?: string): Promise<V.LiveEventsResponse> {
     const response = await this.http.request<V.LiveEventsResponse>('GET', `/live/ticker${query({ screen })}`);
-    return { ...response, events: normaliseEvents(response?.events) };
+    return { ...response, events: normaliseEvents(response?.events, this.origin) };
   }
 
   streamLive(live: LiveStreamQuery, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
@@ -668,12 +668,11 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   // Plugin screens and surfaces (docs/plugin-screens.md; Ether design sections 6 and 7)
 
-  async screenDocument(href: string, signal?: AbortSignal): Promise<{ document: V.ScreenDocument; href: string }> {
+  /** A document by its href. Ether serves the current document for a stale `v` (200, no-cache), never a redirect. */
+  async screenDocument(href: string, signal?: AbortSignal): Promise<V.ScreenDocument> {
     const path = this.http.boundPath(href);
     if (!path) throw new VelaError({ class: 'request', code: 'invalid_document_href', message: 'A screen document must come from this server.', retry: { allowed: false } }, 400);
-    let read = path;
-    const document = await this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: true, signal, headers: this.screenHeaders, follow: true, moved: moved => { read = moved; } });
-    return { document, href: read === path ? href : `/vela/v0${read}` };
+    return this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: true, signal, headers: this.screenHeaders });
   }
 
   screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData> {

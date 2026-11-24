@@ -49,7 +49,7 @@ export function listenWebHandoff(receive: (value: { code?: string; consoleUrl?: 
 
 export function screenArtWidth(): number {
   const { width, height } = Dimensions.get('window');
-  return Math.ceil(Math.max(width, height, 960) * Math.min(2, PixelRatio.get()));
+  return Math.min(3840, Math.ceil(Math.max(width, height, 960) * Math.min(2, PixelRatio.get())));
 }
 
 /** A desktop app (Windows, macOS, Linux) hosting this bundle from its own origin, as its shell

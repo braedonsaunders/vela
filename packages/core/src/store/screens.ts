@@ -1,5 +1,5 @@
 // Plugin screens and surfaces (docs/plugin-screens.md: Data, records and live updates): documents
-// by href (immutable, read once), pages by canonical key (one data read per param set, re-read by
+// by href (read once), pages by canonical key (one data read per param set, re-read by
 // `deps`), the shared record pool, plugin actions with optimistic patches, and ONE /live/stream
 // connection following the topics of the pages on show. Hosts open a page while they show it; a
 // page released stays a little while (a param change seeds the next one from it, a quick re-show
@@ -19,7 +19,7 @@ import type { LiveStreamPhase } from './live-events';
 import type { VelaState } from './index';
 
 export interface ScreensState {
-  /** Documents by href, read once (they are immutable). A moved href is stored under both. */
+  /** Documents by href, read once (immutable for their `v`). */
   documents: Record<string, Loadable<V.ScreenDocument>>;
   /** Pages and surfaces by `pageKey`. */
   pages: Record<string, ScreenPageState>;
@@ -37,7 +37,9 @@ export const busyKey = (page: string, control: string) => `${page}#${control}`;
 
 /** One client-only patch while a plugin action is in flight: a record's or a source's value at `path`. */
 export interface OptimisticPatch { record?: string; source?: string; path: string; value: unknown }
-export interface ScreenActionCall { name: string; args?: Record<string, string>; optimistic?: OptimisticPatch; control?: string }
+/** `args` go to Ether as given: pass each in its declared type (a plugin action's `bool` must be
+ * true/false, an `int` a number; Ether's built-ins also take "true"/"false"). */
+export interface ScreenActionCall { name: string; args?: Record<string, V.ScreenActionArg>; optimistic?: OptimisticPatch; control?: string }
 export interface PageHandle { key: string; release(): void }
 
 /** A page released this recently and opened again is not read again (a remount, StrictMode). */
@@ -48,6 +50,8 @@ const SETTLE_MS = 120;
 const MAX_ALERTS = 5;
 const MIN_REFRESH_S = 60;
 const MAX_SOURCES = 16;
+/** A source that timed out (Ether: retry allowed) is read again after these waits, then keeps its error. */
+export const TIMEOUT_RETRY_MS = [1500, 3000, 6000];
 
 interface Entry {
   request: Required<Pick<PageRequest, 'target' | 'href'>> & { params: Record<string, string>; context?: V.SurfaceContext };
@@ -67,6 +71,9 @@ interface Entry {
   /** Record keys the page's sources reach (through records too). */
   refs: Set<string>;
   timer?: ReturnType<typeof setInterval>;
+  /** Timed-out sources being read again: attempts so far, and the pending timers. */
+  timeouts: Map<string, number>;
+  retryTimers: Set<ReturnType<typeof setTimeout>>;
 }
 
 export class Screens {
@@ -89,6 +96,8 @@ export class Screens {
     private readonly rendererVersion = Number.POSITIVE_INFINITY,
     /** Seam for tests: the reconnection delay after consecutive failures. */
     private readonly backoff: (failures: number) => number = backoffMs,
+    /** Seam for tests: the waits before a timed-out source is read again. */
+    private readonly timeoutRetryMs: readonly number[] = TIMEOUT_RETRY_MS,
   ) {
     session.onReset(() => this.reset());
   }
@@ -143,11 +152,11 @@ export class Screens {
     const previous = this.box.get().screens.documents[href];
     this.set('documents', documents => ({ ...documents, [href]: loading(previous) }));
     try {
-      const { document, href: read } = await (await this.api()).screenDocument(href);
+      const document = await (await this.api()).screenDocument(href);
       if (epoch !== this.session.epoch) return;
       const problem = documentProblem(document, this.rendererVersion);
       if (problem) throw new Error(problem);
-      this.set('documents', documents => ({ ...documents, [href]: ready(document), ...(read !== href ? { [read]: ready(document) } : {}) }));
+      this.set('documents', documents => ({ ...documents, [href]: ready(document) }));
       // Pages opened before their document arrived start their refresh now.
       for (const [key, entry] of this.entries) if (entry.request.href === href && entry.opened) this.startRefresh(key, entry);
     } catch (error) {
@@ -174,7 +183,7 @@ export class Screens {
     const now = Date.now();
     if (!entry) {
       entry = { request: { target: request.target, href: request.href, params, ...(request.context ? { context: request.context } : {}) },
-        opened: 0, shownAt: 0, hiddenOrder: 0, hiddenAt: 0, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set() };
+        opened: 0, shownAt: 0, hiddenOrder: 0, hiddenAt: 0, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timeouts: new Map(), retryTimers: new Set() };
       this.entries.set(key, entry);
       const seed = from && from !== key ? this.entries.get(from) : undefined;
       const seeded = seed && sameTarget(seed.request.target, request.target) && this.page(from!)?.load === 'ready';
@@ -234,7 +243,7 @@ export class Screens {
     const hidden = [...this.entries].filter(([, entry]) => !entry.opened).sort(([, a], [, b]) => b.hiddenOrder - a.hiddenOrder);
     const gone = hidden.slice(KEEP_HIDDEN).map(([key]) => key);
     if (!gone.length) return;
-    for (const key of gone) this.entries.delete(key);
+    for (const key of gone) { for (const timer of this.entries.get(key)!.retryTimers) clearTimeout(timer); this.entries.delete(key); }
     this.set('pages', pages => {
       const next = { ...pages };
       for (const key of gone) delete next[key];
@@ -318,6 +327,18 @@ export class Screens {
       const answered = data?.sources && typeof data.sources === 'object' ? data.sources : {};
       const errors = data?.errors && typeof data.errors === 'object' ? data.errors : {};
       const rev = typeof data?.rev === 'number' && Number.isFinite(data.rev) ? data.rev : 0;
+      // A source that timed out with retry allowed is read again shortly (Ether keeps its late
+      // answer), up to three times; it stays pending meanwhile and keeps what it drew.
+      const retrying = new Set<string>();
+      for (const [name, error] of Object.entries(errors)) {
+        if (!current(name)) continue;
+        const attempts = entry.timeouts.get(name) ?? 0;
+        if (error?.code === 'timeout' && error.retry === true && attempts < this.timeoutRetryMs.length) {
+          entry.timeouts.set(name, attempts + 1);
+          retrying.add(name);
+        } else entry.timeouts.delete(name);
+      }
+      for (const name of Object.keys(answered)) if (current(name)) entry.timeouts.delete(name);
       this.setPage(key, page => {
         const values = { ...page.sources }, pending = { ...page.pending }, failures = { ...page.errors };
         for (const [name, value] of Object.entries(answered)) {
@@ -327,15 +348,17 @@ export class Screens {
           entry.revs.set(name, Math.max(entry.revs.get(name) ?? 0, rev));
         }
         for (const [name, error] of Object.entries(errors)) {
-          if (!current(name)) continue;
+          if (!current(name) || retrying.has(name)) continue;
           failures[name] = typeof error?.code === 'string' && error.code ? error.code : 'unavailable';
         }
         for (const name of [...marked, ...Object.keys(answered), ...Object.keys(errors)]) if (current(name)) delete pending[name];
+        for (const name of retrying) pending[name] = true;
         const topic = typeof data?.live?.topic === 'string' && data.live.topic ? data.live.topic : page.topic;
         return { ...page, sources: values, pending, errors: failures, load: 'ready', rev: Math.max(page.rev, rev), ...(topic ? { topic } : {}) };
       });
       this.track(key);
       this.schedule();
+      if (retrying.size) this.retrySoon(key, entry, [...retrying]);
     } catch (error) {
       if (epoch !== this.session.epoch || this.entries.get(key) !== entry) return;
       const code = failureCode(error);
@@ -349,6 +372,19 @@ export class Screens {
         return { ...page, pending, errors: failures };
       });
     }
+  }
+
+  /** Read timed-out sources again after the backoff for their attempt (one timer per batch). */
+  private retrySoon(key: string, entry: Entry, names: string[]): void {
+    const attempt = Math.max(...names.map(name => entry.timeouts.get(name) ?? 1));
+    const timer = setTimeout(() => {
+      entry.retryTimers.delete(timer);
+      if (this.entries.get(key) !== entry) return;
+      // Only those still waiting: a read in between may have answered them.
+      const still = names.filter(name => entry.timeouts.has(name));
+      if (still.length) void this.read(key, still);
+    }, this.timeoutRetryMs[attempt - 1]);
+    entry.retryTimers.add(timer);
   }
 
   /** The record keys a page reaches, kept for the stream's revs and for releasing records. */
@@ -602,14 +638,17 @@ export class Screens {
   /** Another viewer or server: nothing read stays. Pages still on show read again under the new session. */
   private reset(): void {
     this.disconnect();
-    for (const entry of this.entries.values()) if (entry.timer) clearInterval(entry.timer);
+    for (const entry of this.entries.values()) {
+      if (entry.timer) clearInterval(entry.timer);
+      for (const timer of entry.retryTimers) clearTimeout(timer);
+    }
     const open = [...this.entries].filter(([, entry]) => entry.opened > 0);
     this.entries.clear();
     this.documentReads.clear();
     this.records.clear();
     this.box.update('screens', () => initialScreens);
     for (const [key, entry] of open) {
-      const fresh: Entry = { ...entry, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timer: undefined };
+      const fresh: Entry = { ...entry, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timer: undefined, timeouts: new Map(), retryTimers: new Set() };
       this.entries.set(key, fresh);
       this.fresh(key, fresh);
       void this.loadDocument(entry.request.href);

@@ -380,8 +380,8 @@ export interface ScreenDataRead { sources?: string[]; params: Record<string, str
 /** Plugin screens and surfaces (docs/plugin-screens.md): documents, per-viewer data, actions and
  * the page topics of `/live/stream`. Every call carries the client's renderer version. */
 export interface PluginScreens {
-  /** An immutable document by its href; a stale href answers 301 and is followed (the href read is returned). */
-  screenDocument(href: string, signal?: AbortSignal): Promise<{ document: V.ScreenDocument; href: string }>;
+  /** A document by its href (immutable for its `v`; a stale `v` is answered with the current document). */
+  screenDocument(href: string, signal?: AbortSignal): Promise<V.ScreenDocument>;
   screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData>;
   screenAction(target: ScreenTarget, action: string, request: V.ScreenActionRequest, mutation: V.Mutation): Promise<V.ScreenActionAnswer>;
   setSurfaceSetting(id: string, enabled: boolean, mutation: V.Mutation): Promise<void>;

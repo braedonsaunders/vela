@@ -787,3 +787,38 @@ titles open with `POST /titles/:id/read` (a short-lived range-capable URL) and
 save `{locator, fraction}` with `POST /titles/:id/reading-progress`; the progress
 returns as `WatchState.reading`. Clients gate on `features.mediaClasses`,
 `features.audioPlayback` and `features.reading`.
+
+### Library experience
+
+`Library.experience` names how a client presents the whole library. Vela's experiences:
+
+| Id | Vela draws |
+| --- | --- |
+| `watch` | films and TV: the standard library pages (tabs, grid, list, filters) |
+| `listen` | the audio app for music, audiobooks and podcasts: Your Library down the side, the page in the middle, the now-playing bar, the queue and Now Playing |
+| `read` | books and comics (today the standard library, whose books open the book pages and the reader) |
+| `gallery` | photos and home videos (today the standard library, whose photos open the photo viewer) |
+| `live` | the guide, multiview and sports (today the live library and the guide) |
+
+```jsonc
+{ "id": "audiobooks", "media": "audiobook", "experience": "listen", "presentation": { "card": "square" } }
+```
+
+The set is open: a client draws an id it does not know as `watch`, never an error. A server
+advertising `features.libraryExperiences` (`{ available, experiences: ["watch", "listen", "read",
+"gallery", "live"] }`, the ids it sends) sends it on every library, and its word is final: a plugin
+can ask for any experience on any library. Without the feature (older Ether, Jellyfin, Emby,
+Plex), or for a library without the field, the client chooses by what the library holds:
+`music`, `audiobook` and `podcast` listen; `book` (and comics) read; `photo` is a gallery; a
+library of kind `live` is live; everything else watches. That is what every server already
+implies, so a library keeps working on any server and any client version.
+
+It is per library: an experience replaces the library's page, so there is no `LibraryTab`
+counterpart (`LibraryTab.layout`, grid/list/timeline, is unrelated). In `listen` Vela words
+pages, rows and the player by the library's class and each title's role
+(`docs/media-kinds.md`): albums and tracks for music, books, authors, narrators and chapters
+for audiobooks, shows, hosts and episodes for podcasts, with 15/30 s skips, speed and the sleep
+timer for spoken word. It reads only existing fields: the library's home rows (a `continue` row
+is Continue listening; the `home` tab's when the library declares one), children,
+`TitleDetail.chapters`, credits and watch state. Ether's plugins set it as
+`mediaKinds[].library.experience` in the manifest, with the same defaults by class.

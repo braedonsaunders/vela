@@ -1,6 +1,7 @@
 # Experiences, one renderer, author tools (design, for approval)
 
-Status: proposal, 2026-11-24, for the owner's approval before anything is built past Sports. It
+Status: approved by the owner on 2026-11-24 (decisions below). Sports finishes first, then the
+shared groundwork and Listen. It
 extends [plugin screens](plugin-screens.md), which is approved and being built. This document is
 being agreed with Ether's plugin-screens lead (thr_mmzvx5afhi) and music lead (thr_9ahkvmww6a).
 The library field change (`Library.experience`) is landing separately as a clean cut
@@ -321,12 +322,21 @@ Risks:
 
 ## Owner decisions
 
-1. Approve the unified model:
+The owner approved this design on 2026-11-24:
+
+1. **The unified model:**
    - experiences as built-in documents;
    - one renderer and schema for skins, built-in pages and plugin documents;
    - local `vela.*` sources;
    - skin overrides;
    - slot surfaces.
-2. Approve the order: Sports, Listen, Read, Gallery, Watch, with Live after Watch.
-3. Whether plugins may define new experiences later, or only choose among Vela's.
-4. The reference TV device for measured budgets.
+2. **The order:** Sports, Listen, Read, Gallery, Watch, then Live.
+3. **Plugin-defined experiences** are allowed later. The contract stays open for them now:
+   - `Library.experience` is an open slug;
+   - built-in experience documents are addressed by id, as plugin screens are;
+   - slots, sources and schema carry nothing that assumes Vela-only experiences.
+4. **TV performance floor:**
+   - The floor is a budget Google TV stick (onn 4K or Chromecast with Google TV class).
+   - Apple TV 4K is the high end.
+   - Measured budgets run on an Android TV emulator profile matched to that floor: 2 GB RAM, a
+     quad-core A55-class CPU throttled to match, and 1080p output.

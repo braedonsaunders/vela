@@ -55,9 +55,13 @@ export function changedParams(before: Record<string, string>, after: Record<stri
   return [...names].filter(name => (before[name] ?? '') !== (after[name] ?? '')).sort();
 }
 
-/** Another page's document href beside a known one (navigate within a screen): the same
- * `v`, `r` and `l`, with `/pages/<page>/` swapped. Ether serves that page's variant (a stale `v`
- * answers 301 with the fresh href, which the client follows). */
+/** Another page's document href beside a known one (navigate within a screen): `/pages/<page>/`
+ * swapped, `r` and `l` kept, `v` dropped (the index's version does not name the other page's;
+ * Ether answers with that page's current document). */
 export function screenDocumentHref(href: string, page: string): string {
-  return href.replace(/\/pages\/[^/?#]+\/document/, `/pages/${encodeURIComponent(page)}/document`);
+  const [path, query = ''] = href.split('?');
+  const params = new URLSearchParams(query);
+  params.delete('v');
+  const search = params.toString();
+  return `${path!.replace(/\/pages\/[^/]+\/document$/, `/pages/${encodeURIComponent(page)}/document`)}${search ? `?${search}` : ''}`;
 }
