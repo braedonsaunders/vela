@@ -24,6 +24,17 @@ export function startFailure(playback: PlaybackState, target: ChromeTarget): Sta
   return startFailureOf({ message: playback.error, errorClass: playback.errorClass, code: playback.errorCode }, target);
 }
 
+/**
+ * A live channel whose session another owner holds (the guide's tile): the owner's refusal once it
+ * gave up, or core giving up on the owner's session after its restarts. The owner still holds that
+ * session's plan then, so without the second the viewer would wait on "Starting" for ever.
+ */
+export function ownedStartFailure(ownerFailure: StartRefusal | null, playback: PlaybackState, target: ChromeTarget): StartFailure | null {
+  if (ownerFailure) return startFailureOf(ownerFailure, target);
+  if (playback.target?.kind !== target.kind || playback.target.id !== target.id) return null;
+  return startFailure(playback, target);
+}
+
 /** A refused start core asks again for, on the server's terms. */
 export function startRetrying(playback: PlaybackState): StartRetrying | null {
   if (playback.phase !== 'failed' || playback.retryAfterSeconds <= 0) return null;

@@ -3,7 +3,7 @@ import { VelaError, type PlaybackState } from '@vela/core';
 import type { PlaybackPlan } from '../../protocol/types';
 import { Tile } from '../src/widgets/guide/tile';
 import type { LiveSource } from '../src/widgets/guide/source';
-import { startFailure, startFailureOf, startRetrying } from '../src/widgets/player/start-failure';
+import { ownedStartFailure, startFailure, startFailureOf, startRetrying } from '../src/widgets/player/start-failure';
 import { liveWatchOf } from '../src/widgets/player/target';
 
 const initialPlayback: PlaybackState = { phase: 'idle', target: null, plan: null, sessionId: '', error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, live: null, versions: null };
@@ -114,6 +114,21 @@ test('core\'s refused start is a failure only once it stops retrying, and a retr
   expect(startRetrying(waiting)).toEqual({ seconds: 4, message: failed.error });
   expect(startFailure({ ...initialPlayback, phase: 'starting' }, target)).toBeNull();
   expect(startRetrying({ ...initialPlayback, phase: 'starting' })).toBeNull();
+});
+
+test('a channel the tile owns ends in the error when core gives up on its session, though the tile still holds the plan', () => {
+  const target = { kind: 'channel', id: 'bbc' } as const;
+  // Playing, or restarting: nothing to show.
+  expect(ownedStartFailure(null, { ...initialPlayback, phase: 'playing', target }, target)).toBeNull();
+  expect(ownedStartFailure(null, { ...initialPlayback, phase: 'preparing', target }, target)).toBeNull();
+  // Core gave up after its restarts (playback_stalled, no words of the server's): the channel's own message.
+  const gaveUp = { ...initialPlayback, phase: 'failed' as const, target, errorCode: 'playback_stalled', errorClass: 'transient' };
+  expect(ownedStartFailure(null, gaveUp, target)).toEqual({ capacity: false, message: 'This channel isn\'t available right now.' });
+  // Another channel's failure is not this one's.
+  expect(ownedStartFailure(null, { ...gaveUp, target: { kind: 'channel', id: 'itv' } }, target)).toBeNull();
+  // The tile's own refusal comes first, with the server's reason.
+  const refusal = { message: 'The connection to the Live TV provider failed.', code: 'network', errorClass: 'source' };
+  expect(ownedStartFailure(refusal, initialPlayback, target)?.message).toBe('This channel isn\'t available right now: The connection to the Live TV provider failed.');
 });
 
 test('the chrome is live from the request target before any plan, and zaps from its channel', () => {

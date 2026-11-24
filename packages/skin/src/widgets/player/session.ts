@@ -12,7 +12,7 @@ import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-a
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, qualityReached } from './present';
 import { stopsInBackground } from './background';
-import { startFailure, startFailureOf, startRetrying } from './start-failure';
+import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
 
 export interface PlaybackSession {
@@ -271,7 +271,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       plan: chromePlan,
       snapshot: playback.phase === 'preparing' ? null : snapshot,
       startFailure: owner
-        ? (owned?.failure ? startFailureOf(owned.failure, chromeTarget) : null)
+        ? ownedStartFailure(owned?.failure ?? null, playback, chromeTarget)
         : startFailure(playback, chromeTarget),
       retrying: owner
         ? (owned && !owned.failure ? owned.retrying : null)
