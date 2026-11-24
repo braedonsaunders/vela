@@ -86,6 +86,24 @@ describe('the Sports index document', () => {
   });
 });
 
+test('every navigate to the game page passes the event record key (a ref param)', async () => {
+  const doc = await json<ScreenDocument>('index.json');
+  const data = await json<Sample>('data-sample.json');
+  const env = envAt(1440);
+  const r = resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {});
+  const events: string[] = [];
+  const visit = (n: RNode, c: Ctx) => {
+    if (!holds(n.when, c, env)) return;
+    const node = n as RNode & { children?: RNode[]; item?: RNode; after?: RNode[]; press?: { action: string; args?: Record<string, unknown> } };
+    if (node.press?.action === 'navigate' && node.press.args?.event) events.push(fill(node.press.args.event as never, c, env));
+    if ((n.kind === 'repeat' || n.kind === 'shelf') && node.item) for (const i of items(n as never, c, env)) visit(node.item, i);
+    node.children?.forEach(child => visit(child, c));
+  };
+  visit(r.tree, screenRoot(page(data.sources), key => data.records[key]));
+  expect(events.length).toBeGreaterThan(5);
+  expect(events.every(e => e.startsWith('event:org.ether.sports:sports:'))).toBe(true);
+});
+
 describe('the Sports game document', () => {
   test('score band, where to watch, probability, tables and plays newest first', async () => {
     const t = await draw('game.json', 'data-game.json', 1440);

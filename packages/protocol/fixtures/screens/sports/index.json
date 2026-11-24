@@ -96,7 +96,7 @@
 
     "eventCard": {
       "type": "box", "role": "button", "testId": "sports-{arg.prefix}-{e.id}", "label": "{e.title}",
-      "press": { "action": "navigate", "args": { "page": "game", "event": "{e.id}" } },
+      "press": { "action": "navigate", "args": { "page": "game", "event": "{e.$key}" } },
       "style": { "width": "286px", "min-height": "128px", "padding": "13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $hairline" },
       "small": { "width": "min(272px, 74vw)" }, "above": { "1600": { "width": "300px" } },
       "hover": { "background-color": "$cardHover", "scale": "1.04" },
@@ -115,7 +115,7 @@
 
     "miniCard": {
       "type": "box", "role": "button", "label": "{e.title}", "testId": "sports-mini-{e.id}",
-      "press": { "action": "navigate", "args": { "page": "game", "event": "{e.id}" } },
+      "press": { "action": "navigate", "args": { "page": "game", "event": "{e.$key}" } },
       "style": { "flex": "1", "justify-content": "center", "padding": "10px 13px", "border-radius": "$radiusCard", "background-color": "$card", "border": "1px solid $hairline" },
       "hover": { "background-color": "$cardHover", "scale": "1.03" },
       "focus": { "background-color": "$cardHover", "scale": "1.03" },
@@ -231,7 +231,7 @@
               "with": { "label": "{s:addToMultiview}", "glyph": "tiles" },
               "press": { "action": "multiview", "args": { "channel": "{e.watch.primary.channelId}" } } },
             { "type": "use", "template": "heroButton", "testId": "sports-hero-details", "with": { "label": "{s:gameDetails}", "glyph": "list" },
-              "press": { "action": "navigate", "args": { "page": "game", "event": "{e.id}" } } },
+              "press": { "action": "navigate", "args": { "page": "game", "event": "{e.$key}" } } },
             { "type": "box", "when": [{ "test": "e.watch.primary.channelId", "not": true }, { "test": "e.watch.airing.0.name" }],
               "style": { "flex-direction": "row", "flex-shrink": "1", "align-items": "center", "gap": "7px", "height": "42px", "padding": "0 4px" }, "children": [
               { "type": "icon", "symbol": "tv", "style": { "width": "15px", "height": "15px", "color": "#ffffffb3" } },

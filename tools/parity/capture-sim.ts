@@ -32,7 +32,7 @@ const env = { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR ?? '/Appl
 export function appRoute(variant: Variant, page: View['page']): string {
   if ('index' in page) return variant === 'legacy' ? '/screen/sports' : '/screen/sports?screens=1';
   const event = encodeURIComponent(page.game);
-  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${event}&screens=1`;
+  return variant === 'legacy' ? `/game/${event}` : `/screen/sports/game?event=${encodeURIComponent(`event:${page.game}`)}&screens=1`;
 }
 
 const root = resolve(import.meta.dir, '../..');
