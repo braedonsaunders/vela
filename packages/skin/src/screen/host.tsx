@@ -66,7 +66,7 @@ function stateValue(flag: string): [string, string] | undefined {
   const m = /^([\w-]+)[=:](.*)$/.exec(flag);
   return m ? [m[1]!, m[2]!] : undefined;
 }
-const patchValue = (value: string): unknown => (BOOL.test(value) ? value === 'true' : value);
+const patchValue = (value: unknown): unknown => (typeof value === 'string' && BOOL.test(value) ? value === 'true' : value);
 
 /** The arguments of a press without the ones that name the action itself. */
 function without(args: Record<string, string>, ...names: string[]): Record<string, string> {
@@ -128,7 +128,8 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   }, [actions, href, target]);
 
   const press = useCallback((p: ScreenPress) => {
-    const args = p.args;
+    // Text for the app's own actions; plugin actions get the typed values (ScreenActionArg).
+    const args: Record<string, string> = Object.fromEntries(Object.entries(p.args).map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : String(v)]));
     const flag = args.flag ?? p.arg;
     switch (p.action) {
       case 'navigate': navigate(args); return;
@@ -178,7 +179,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
           const o = p.optimistic;
           try {
             const answer = await vela.screens.action(pageKey, {
-              name, args: without(args, 'name'), control: p.control,
+              name, args: Object.fromEntries(Object.entries(p.args).filter(([k]) => k !== 'name')), control: p.control,
               ...(o ? { optimistic: { ...(o.record ? { record: o.record } : {}), ...(o.source ? { source: o.source } : {}), path: o.path, value: patchValue(o.value) } } : {}),
             });
             if (answer?.toast) { setToast(answer.toast.slice(0, 200)); actions.toast(answer.toast.slice(0, 200)); }

@@ -29,7 +29,7 @@ import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
-import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type ScreenPress, type SkinHost } from './host';
+import { GroupContext, HostContext, InheritedContext, TrackedHost, WidgetInteractionContext, measure, useHost, type GroupState, type ScreenArg, type ScreenPress, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusPressed, focusTarget, leaveButton, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { useFocusStyles } from './focus';
@@ -54,7 +54,7 @@ import { fill, holds, type CssT, type Layer, type RNode, type RPress, type Resol
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
 import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocabulary';
 import { itemKey, items } from './screen/items';
-import { screenImageSrc } from './screen/scope';
+import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
@@ -412,13 +412,25 @@ function HeroCopy({ node, ctx }: { node: Extract<RNode, { kind: 'repeat' }>; ctx
 
 /** A screen press with its arguments and optimistic patch filled where it was drawn. */
 function screenPress(press: RPress, arg: string, node: RNode, ctx: Ctx, env: Env): ScreenPress {
-  const args = Object.fromEntries(Object.entries(press.args ?? {}).map(([name, value]) => [name, fill(value, ctx, env)]));
+  const args = Object.fromEntries(Object.entries(press.args ?? {}).map(([name, value]) => {
+    const raw = press.argValues?.[name];
+    return [name, raw ? screenArg(raw(ctx, env), fill(value, ctx, env), ctx) : fill(value, ctx, env)];
+  }));
   const o = press.optimistic;
   return {
     action: press.action, arg, args,
-    ...(o ? { optimistic: { ...(o.record ? { record: fill(o.record, ctx, env) } : {}), ...(o.source ? { source: o.source } : {}), path: o.path, value: fill(o.value, ctx, env) } } : {}),
+    ...(o ? { optimistic: { ...(o.record ? { record: fill(o.record, ctx, env) } : {}), ...(o.source ? { source: o.source } : {}), path: o.path,
+      value: o.raw ? screenArg(o.raw(ctx, env), fill(o.value, ctx, env), ctx) : fill(o.value, ctx, env) } } : {}),
     control: fill(node.id, ctx, env) || fill(node.testId, ctx, env) || fill(node.label, ctx, env) || `${press.action}:${arg}`,
   };
+}
+
+/** A whole-hole argument's raw value when it is one a plugin action takes, else its text. */
+function screenArg(raw: unknown, text: string, ctx: Ctx): ScreenArg {
+  const value = ctx.screen ? derefValue(raw, ctx.screen.record) : raw;
+  if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) return value;
+  if (Array.isArray(value) && value.every(v => typeof v === 'string')) return value as string[];
+  return text;
 }
 
 /** How many times a node's onChange value has changed while drawn (screens). */

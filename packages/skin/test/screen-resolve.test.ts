@@ -146,6 +146,13 @@ describe('templates, the kit and variants', () => {
     expect(fill(pill.label, c, env)).toBe('Watch');
     expect(pill.states.findIndex(s => holds(s.when, c, env))).toBe(1); // primary, not small
     expect(fill(pill.press!.args!.channel, c, env)).toBe('ch-1');
+    // A whole-hole argument keeps its raw value for typed plugin actions; text stays text.
+    const fav = box(resolve(doc({ type: 'box', press: { action: 'plugin', args: { name: 'ether.favorite', on: '{src.f|not}', ref: 'x-{src.k}' },
+      optimistic: { source: 'viewer', path: 'f', value: '{src.f|not}' } } })).tree);
+    const fc = root({ f: true, k: 'a' });
+    expect(fav.press!.argValues!.on!(fc, env)).toBe(false);
+    expect(fav.press!.argValues!.ref).toBeUndefined();
+    expect(fav.press!.optimistic!.raw!(fc, env)).toBe(false);
     expect((pill.children[0] as Extract<RNode, { kind: 'icon' }>).symbol).toBe('play-fill');
     // An unknown kit template draws nothing, with a warning; an unknown document template refuses.
     expect(resolve(doc({ type: 'use', template: 'vela:hologram' })).warnings[0]).toContain('vela:hologram');
