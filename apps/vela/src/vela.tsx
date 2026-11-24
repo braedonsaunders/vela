@@ -43,6 +43,7 @@ import { useLast } from '@vela/skin/src/presence';
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
+import { useMediaAccess } from './media-access';
 import { useLiveController } from './live';
 import { useMultiviewController } from './multiview';
 import { MultiviewProvider, useMultiview } from '@vela/skin/src/widgets/multiview';
@@ -140,6 +141,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   const state = useVelaState(selectHostState);
   const { auth, servers } = state;
   const signedIn = auth.phase === 'signed-in';
+  useMediaAccess(store, signedIn ? auth.revision : null);
   const live = useLiveController(store, signedIn ? auth.revision : null);
   const multiview = useMultiviewController(store, signedIn ? auth.revision : null, live);
   useSignedOutGate(auth.phase);

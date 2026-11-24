@@ -4,7 +4,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import type { Vela as Store } from '@vela/core';
-import { VelaPlayer, sampleUIFrames } from '@vela/player';
+import { sampleUIFrames } from '@vela/player';
 import { LiveController, liveSource } from '@vela/skin/src/widgets/guide';
 import { preferences } from './data/preferences';
 
@@ -33,10 +33,9 @@ export function useLiveController(store: Store, session: number | null): LiveCon
     if (session === null) return;
     let made: LiveController | null = null;
     let current = true;
-    Promise.all([store.live.access(), store.playback.mediaAccess()]).then(
-      ([access, media]) => {
+    store.live.access().then(
+      access => {
         if (!current || !access) return;
-        VelaPlayer.setMediaAccess(media);
         made = new LiveController({
           source: liveSource(access.api, access.client),
           scope: access.scope,
@@ -54,7 +53,6 @@ export function useLiveController(store: Store, session: number | null): LiveCon
     return () => {
       current = false;
       made?.dispose();
-      VelaPlayer.setMediaAccess(null);
       setController(null);
     };
   }, [store, session]);

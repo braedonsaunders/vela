@@ -6,7 +6,7 @@ import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'ex
 import { useCallback, useEffect, useMemo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { msg, type PlaybackTarget } from '@vela/core';
-import { pictureInPicture, VelaPlayer, VelaPlayerView } from '@vela/player';
+import { pictureInPicture, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
 import { useLiveContext, useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
 import { backFromNavigation, useBackHeld, usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
@@ -69,21 +69,7 @@ export default function Watch() {
 
   useEffect(() => (id && target.kind === 'title' ? openTitle(id) : undefined), [id, target.kind, openTitle]);
 
-  // Each session's media authorization goes straight to the player, never through props or state.
-  useEffect(() => {
-    if (!sessionId || owned) return;
-    let live = true;
-    store.playback.mediaAccess().then(
-      grant => {
-        if (live) VelaPlayer.setMediaAccess(grant);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-      VelaPlayer.setMediaAccess(null);
-    };
-  }, [store, sessionId, !!owned]);
+  // Media authorization belongs to the signed-in session (src/media-access.ts), not to a watch.
 
   const { stop } = session;
   const close = useCallback(() => {
