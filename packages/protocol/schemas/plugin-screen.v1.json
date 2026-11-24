@@ -2861,13 +2861,31 @@
       },
       "type": "object"
     },
+    "ScreenActionArg": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
     "ScreenActionRequest": {
       "additionalProperties": false,
-      "description": "POST /screens/{id}/actions/{action}",
       "properties": {
         "args": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/ScreenActionArg"
           },
           "type": "object"
         },

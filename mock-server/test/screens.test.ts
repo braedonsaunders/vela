@@ -229,11 +229,13 @@ describe('on a frozen clock', () => {
     expect(detail.plays.findIndex((p: Json) => p.clock === '11:02')).toBeLessThan(detail.plays.findIndex((p: Json) => p.clock === '2:14'));
     expect(detail.plays[0]).toMatchObject({ text: expect.any(String), emphasis: expect.stringMatching(/^(score|key|normal)$/) });
     // Timed plays (at, and the score after each) for asOf; times rise with the game.
-    expect(detail.plays.find((p: Json) => p.clock === '6:40')).toMatchObject({ at: expect.any(String), score: { 'nfl-nyg': '24', 'nfl-phi': '24' } });
+    expect(detail.plays.find((p: Json) => p.clock === '6:40')).toMatchObject({ at: expect.any(String), score: { 'nfl-nyg': '24', 'nfl-phi': '24' }, scores: ['24', '24'] });
+    // scores: the score map in sides order (away NYG, home PHI), on both lists.
+    expect(detail.playsNewest.find((p: Json) => p.clock === '3:30').scores).toEqual(['24', '27']);
     const ats = detail.plays.map((p: Json) => Date.parse(p.at));
     expect(ats).toEqual([...ats].sort((a, b) => a - b));
     const hockey = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nhl-tor-mtl' })}`) as V.ScreenData;
-    expect(((hockey.records['detail:sports:sports:nhl-tor-mtl']!.value as Json).plays as Json[]).every(p => p.at === undefined && p.score === undefined)).toBe(true);
+    expect(((hockey.records['detail:sports:sports:nhl-tor-mtl']!.value as Json).plays as Json[]).every(p => p.at === undefined && p.score === undefined && p.scores === undefined)).toBe(true);
     const scoring = detail.tables[0];
     expect(scoring.title).toBe('Scoring');
     expect(scoring.rows.find((r: Json) => r.cells[0] === 'PHI').highlight).toBe(true);
@@ -244,7 +246,7 @@ describe('on a frozen clock', () => {
     expect((await c.get(`/screens/sports/pages/game/data${query({ 'p.event': `event:${NFL}` })}`)).status).toBe(200);
     // An event the viewer cannot read is that source's not_found, not a 404 (a 404 is only a page the viewer may not see).
     const missing = await c.json(`/screens/sports/pages/game/data${query({ 'p.event': 'sports:sports:nope' })}`) as V.ScreenData;
-    expect(missing.errors).toEqual({ game: { code: 'not_found', retry: false } });
+    expect(missing.errors).toEqual({ game: { code: 'not_found' } });
     expect(missing.sources.viewer).toBeDefined();
   });
 
@@ -274,6 +276,16 @@ describe('on a frozen clock', () => {
     expect(teams.leagues.map((l: Json) => l.id)).toContain('f1');
     expect((((await picker({ 'p.league': 'nba' })).sources.teams) as Json).opening).toBe('nba'); // prefer
     expect((((await picker({ 'p.league': 'nba', 'p.teamsLeague': 'nhl' })).sources.teams) as Json).opening).toBe('nhl');
+  });
+
+  test('a forced timeout answers errors.<id> = {code: timeout, retry: true} for that many reads', async () => {
+    await fetch(`${mock.url}/__admin/screens`, { method: 'POST', body: JSON.stringify({ timeout: { source: 'live', times: 2 } }) });
+    for (let n = 0; n < 2; n++) {
+      const data = await c.json(`/screens/sports/pages/index/data${query({ sources: 'live,hero' })}`) as V.ScreenData;
+      expect(data.errors).toEqual({ live: { code: 'timeout', retry: true } });
+      expect(data.sources.hero).toBeDefined();
+    }
+    expect(((await c.json(`/screens/sports/pages/index/data${query({ sources: 'live' })}`)) as V.ScreenData).errors).toBeUndefined();
   });
 
   test('the ticker window: in progress, finals started under 30 h ago, upcoming within 6 h, featured order', async () => {
@@ -328,7 +340,7 @@ describe('on a frozen clock', () => {
   test('surfaces: context reads as p.<name>, an unknown ref fails its source, the setting is remembered', async () => {
     const data = await c.json(`/surfaces/sports.scorebug/data${query({ 'p.event': `event:${NFL}` })}`) as V.ScreenData;
     expect(data.sources.game).toEqual({ event: { $record: `event:${NFL}` }, detail: { $record: `detail:${NFL}` } });
-    expect(((await c.json(`/surfaces/sports.scorebug/data${query({ 'p.event': 'event:sports:sports:nope' })}`)) as V.ScreenData).errors).toEqual({ game: { code: 'not_found', retry: false } });
+    expect(((await c.json(`/surfaces/sports.scorebug/data${query({ 'p.event': 'event:sports:sports:nope' })}`)) as V.ScreenData).errors).toEqual({ game: { code: 'not_found' } });
     const put = await fetch(`${mock.url}/vela/v0/surfaces/sports.scorebug/setting`, { method: 'PUT', headers: { ...c.headers(), 'Idempotency-Key': 'set-1' }, body: JSON.stringify({ enabled: false, idempotencyKey: 'set-1' }) });
     expect(put.status).toBe(204);
     expect(((await c.json('/bootstrap')) as V.Bootstrap).surfaces![0]!.setting!.enabled).toBe(false);
@@ -379,6 +391,52 @@ describe('an owner hiding a screen', () => {
     expect((await c.get(`/screens/sports/pages/index/data${query({})}`)).status).toBe(404);
     await fetch(`${mock.url}/__admin/screens`, { method: 'POST', body: JSON.stringify({ show: ['sports'] }) });
     expect((await c.get(`/screens/sports/pages/index/data${query({})}`)).status).toBe(200);
+  });
+});
+
+describe('the news desk: plugin sources and a plugin action', () => {
+  let mock: RunningMock;
+  let tokens: V.Tokens;
+  let c: ReturnType<typeof client>;
+  beforeAll(async () => {
+    mock = await launchMock({ VELA_MOCK_SPORTS_FREEZE: '1', VELA_MOCK_NEWS: '1' });
+    tokens = await signIn(mock);
+    c = client(mock, () => tokens);
+  });
+  afterAll(async () => { await mock?.stop(); });
+
+  test('a plugin source arrives rewritten: p: records, same-origin images, https links, no bare URLs', async () => {
+    const boot = await c.json('/bootstrap') as V.Bootstrap;
+    expect(boot.navigation!.map(entry => entry.id)).toEqual(['sports', 'news']);
+    const data = await c.json(`/screens/news/pages/index/data${query({ 'p.topic': 'tech' })}`) as V.ScreenData;
+    const front = data.sources.front as Json;
+    expect(front.topicName).toBe('Tech');
+    expect(front.breaking).toBeNull();
+    expect(front.lead).toEqual([{ $record: 'p:story:chips' }]);
+    expect(front.stories).toEqual([{ $record: 'p:story:open' }]);
+    expect(front.source).toEqual({ href: 'https://news.example/front', host: 'news.example' });
+    const story = data.records['p:story:chips']!.value as Json;
+    expect(story).toMatchObject({ title: expect.any(String), section: 'Hardware', link: { href: 'https://news.example/story/chips', host: 'news.example' } });
+    expect(story.image).toMatch(/^\/vela\/v0\/artwork\/[0-9a-f]{12}\?/);
+    // items and channels are not in Ether E1/E2; the rest of the page draws.
+    expect(data.errors).toEqual({ watch: { code: 'unsupported' }, liveNews: { code: 'unsupported' } });
+    const mine = await c.json(`/screens/news/pages/index/data${query({ sources: 'mine' })}`) as V.ScreenData;
+    expect(mine.sources.mine).toEqual({ followsTopic: false, topics: [] });
+  });
+
+  test('a plugin action: typed arguments, refresh read again into sources, toast; undeclared or mistyped refused', async () => {
+    const response = await c.action('/screens/news/actions/follow-topic', { page: 'index', params: { topic: 'tech' }, args: { topic: 'tech', on: true } });
+    expect(response.status).toBe(200);
+    const answer = await response.json() as V.ScreenActionAnswer;
+    expect(answer.toast).toBe('Following Tech');
+    expect(answer.sources).toEqual({ mine: { followsTopic: false, topics: ['tech'] } });
+    expect(answer.refresh).toBeUndefined();
+    // Ether checks declared types: a bool is JSON true/false, not text.
+    const text = await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: 'true' } });
+    expect(text.status).toBe(400);
+    expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'sports', on: true } })).status).toBe(400);
+    expect((await c.action('/screens/news/actions/follow-topic', { page: 'index', params: {}, args: { topic: 'tech', on: true, extra: 'x' } })).status).toBe(400);
+    expect((await c.action('/screens/news/actions/delete-everything', { page: 'index', params: {}, args: {} })).status).toBe(404);
   });
 });
 
