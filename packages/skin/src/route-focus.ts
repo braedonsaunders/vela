@@ -51,8 +51,9 @@ const PRIMARY_WAIT_MS = 500;
 const OPENING_PRESS_MS = 400;
 /** When a route's opening motion has settled (velaOpen, the longest, runs 640 ms). */
 const SETTLED_MS = 700;
-/** Presses that open a route's content, its first focus when it has no play press. */
-const CONTENT = new Set(['select', 'playExtra']);
+/** Presses that open a route's content, its first focus when it has no play press; on a plugin
+ * screen also its navigation and plugin presses, and (`stop`) a reading stop, in document order. */
+const CONTENT = new Set(['select', 'playExtra', 'navigate', 'plugin', 'setParam', 'stop']);
 
 interface Measurable {
   measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void;

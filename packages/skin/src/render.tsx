@@ -64,6 +64,7 @@ import { moveWebRowFocus } from './web-row-navigation';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
+const NOTHING = () => {};
 function contextCard(id: string, kind: string, name: string, image = ''): Card {
   return {
     id, kind, name, summary: '', airDate: '', year: 0, rating: '', durationSeconds: 0,
@@ -774,7 +775,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // the document marks (a menu's About line).
   const unfocusable = useContext(Unfocusable);
   const readingStop = useContext(ReadingStop);
-  const stop = !unfocusable && (readingStop || (Platform.isTV && node.readingStop === true));
+  // A box marked a reading stop, or one only while its conditions hold (vela:panel with a bound `focusable`).
+  const marked = node.kind === 'box' && (node.readingStop === true || (!!node.readingStopWhen?.length && holds(node.readingStopWhen, ctx, env)));
+  const stop = !unfocusable && (readingStop || (Platform.isTV && marked));
   const routeFocus = useRouteFocusContext();
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
@@ -1050,6 +1053,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const kind = (node.id && fill(node.id, ctx, env).startsWith('episode-')) ? 'episode' : press?.action === 'select' && arg.includes('|season|') ? 'season' : press?.action === 'playExtra' ? 'extra' : undefined;
       const unepisode = kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
       if (press) routeFocus?.offer(target, press.action);
+      // A reading stop is the route's first focus when nothing else offers itself first (a final game's panels).
+      else if (stop && ctx.screen) routeFocus?.offer(target, 'stop');
       const release = () => {
         if (releaseButton.current !== release) return;
         releaseButton.current = undefined;
@@ -1141,9 +1146,17 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={expanded === undefined ? a11y.accessibilityState : { ...a11y.accessibilityState, expanded }}
         testID={a11y.testID} />
     ) : null;
+    // On a TV a reading stop is a real focusable responder (the tvOS focus engine passes over a
+    // plain focusable view): a button that does nothing, over the section, wearing the focus look.
+    const stopButton = !press && stop && !web ? (
+      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} focusable onPress={NOTHING}
+        onFocus={() => { set('focus', true); routeFocus?.focused(); if (reveal && buttonRef.current) reveal(buttonRef.current); }}
+        onBlur={() => set('focus', false)}
+        accessible accessibilityRole="summary" accessibilityLabel={a11y.accessibilityLabel ?? sectionText(node, ctx, env)} testID={a11y.testID} />
+    ) : null;
     const guide = node.press ? undefined : tvGuide(node, env, band);
     // A reading stop takes focus without doing anything, so the remote can scroll to it.
-    const stopProps = stop ? {
+    const stopProps = stop && web ? {
       focusable: true,
       onFocus: () => set('focus', true),
       onBlur: () => set('focus', false),
@@ -1164,6 +1177,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         {layers}
         {content}
         {button}
+        {stopButton}
       </Frame>
     );
   }
@@ -1255,7 +1269,7 @@ function focusableWithin(node: RNode): boolean {
   if (known !== undefined) return known;
   let found: boolean;
   switch (node.kind) {
-    case 'box': found = (!!node.press && selectable(node)) || node.children.some(focusableWithin); break;
+    case 'box': found = (!!node.press && selectable(node)) || (Platform.isTV && (node.readingStop === true || !!node.readingStopWhen?.length)) || node.children.some(focusableWithin); break;
     case 'repeat': found = focusableWithin(node.item); break;
     case 'slot': found = node.slot === 'searchField' && !SYSTEM_SEARCH; break;
     case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget); break;
