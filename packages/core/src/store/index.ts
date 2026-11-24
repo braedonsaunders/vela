@@ -10,7 +10,7 @@ import { Appearance } from './appearance';
 import { Auth, initialAuth, type AuthState } from './auth';
 import { Rows } from './rows';
 import { Catalogue } from './catalogue';
-import { Home, initialHome, type HomeState } from './home';
+import { Home, initialHome, reconcilesHome, type HomeState } from './home';
 import { initialLive, Live, type LiveState } from './live';
 import { initialLiveEvents, LiveEvents, type LiveEventsState } from './live-events';
 import { initialPlayback, Playback, type PlaybackState } from './playback';
@@ -147,9 +147,9 @@ export function createVela(options: VelaOptions): Vela {
       catalogue.watched(watched);
       home.watched(watched);
     },
-    watched => {
+    (watched, media) => {
       catalogue.reconcile(watched);
-      void home.reconcile(watched);
+      if (reconcilesHome(media)) void home.reconcile(watched);
     },
   );
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);

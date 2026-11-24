@@ -785,7 +785,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { collection: { id: row.id, kind: 'collection', name: row.name, artwork: [] }, ...page(boundRow(g, row).items, url, g, `collection:${row.id}`) } satisfies V.CollectionContents, g.id);
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
-  if (method === 'GET' && rowMatch) { const r = [...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
+  if (method === 'GET' && rowMatch) { const r = [...progressRows(), ...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
   if (versionsMatch) {
     if (capabilities.features.versions?.available !== true) fail('policy', 'feature_unavailable', 'Versions are unavailable');

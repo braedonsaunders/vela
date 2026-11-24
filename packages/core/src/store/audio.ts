@@ -331,11 +331,13 @@ export class Audio {
     this.begin(playback.plan, startSeconds);
   }
 
-  /** The playback target for a queue item: a title, with the queue's source as its play context. */
+  /** The playback target for a queue item: a title, with the queue's source as its play context
+   * and the item's media class (a track's stop does not re-read Home's progress shelves). */
   private target(id: string, startSeconds = 0): Extract<PlaybackTarget, { kind: 'title' }> {
     const source = this.state.queue?.source;
     const context = source?.kind ? { kind: source.kind, id: source.id } : undefined;
-    return { kind: 'title', id, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}), ...(context ? { context } : {}) };
+    const media = this.state.queue?.items.find(item => item.id === id)?.media?.class;
+    return { kind: 'title', id, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}), ...(context ? { context } : {}), ...(media ? { media } : {}) };
   }
 
   private begin(plan: V.PlaybackPlan, startSeconds: number): void {
