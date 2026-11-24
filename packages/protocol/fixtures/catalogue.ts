@@ -59,7 +59,7 @@ export const featuredSources: (Pick<Hero, 'title' | 'reason' | 'action' | 'label
 export const featuredTitles = featuredSources.map(source => source.title);
 const featuredIds = new Set(featuredTitles.map(t => t.id));
 const topTen: Row = {
-  id: 'row-top10', name: 'Top 10 this week', purpose: 'recommendation', presentation: 'ranked', style: 'landscape',
+  id: 'row-top10', name: 'Top 10 this week', purpose: 'recommendation', presentation: 'ranked', card: 'landscape',
   receiptToken: 'row-top10', previewOnFocus: false, continuation: 'exhausted',
   items: ['title-3-2', 'title-1-4', 'title-6-3', 'title-2-5', 'title-5-4', 'title-4-3', 'title-1-7', 'title-6-8', 'title-2-10', 'title-5-9'].map(id => {
     const title = titles.find(title => title.id === id);
@@ -67,7 +67,7 @@ const topTen: Row = {
     return { id: `top10:${id}`, kind: 'title', title, receiptToken: `top10:${id}` };
   }),
 };
-export const rows: Row[] = [topTen, ...collections.map<Row>(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, style: row === 3 ? 'landscape' : 'poster', items: [...titles.slice(row * 15, row * 15 + 15), ...additionalTitles.filter(t => t.id.startsWith(`title-${row + 1}-`))].filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }))];
+export const rows: Row[] = [topTen, ...collections.map<Row>(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, card: row === 3 ? 'landscape' : 'poster', items: [...titles.slice(row * 15, row * 15 + 15), ...additionalTitles.filter(t => t.id.startsWith(`title-${row + 1}-`))].filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }))];
 const channelNames = ['World News', 'Field & Forest', 'Cinema One', 'Classic Evenings', 'Discovery Lab', 'Coastal Living', 'Matchday', 'The Kitchen', 'Young Explorers', 'Arts & Culture', 'Night Music', 'Open Roads'];
 const programmeGenres = ['News', 'Sports', 'Movies', 'Kids', 'Documentary', 'Drama', 'Comedy', 'Music', 'Lifestyle'];
 const fixtureGuides = [

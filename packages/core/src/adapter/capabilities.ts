@@ -69,7 +69,7 @@ export interface DescriptiveSearch {
 /** Server-provided recommendation rows scoped to a single library. */
 export interface LibraryRecommendations {
   /** `tab`: a recommended tab's own shelves, sent only with features.pluginLevels.tabRows. */
-  libraryRows(id: string, kind: V.Library['kind'], fresh?: boolean, tab?: string): Promise<V.Row[]>;
+  libraryRows(id: string, kind: V.Library['kind'], fresh?: boolean, tab?: string): Promise<(V.Row | V.SurfaceRow)[]>;
   libraryCollections(id: string, cursor?: string, tab?: string, search?: string): Promise<V.Page<V.RowEntry>>;
   libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
 }

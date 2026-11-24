@@ -18,7 +18,7 @@ test('a recommended tab reads its own shelves; an artist reads albums and concer
   const { mock, adapter } = await connect();
   try {
     expect((await adapter.describe()).features.pluginLevels).toEqual({ available: true, tabRows: true, childRoles: true });
-    const concerts = await adapter.libraryRows('music', 'shows', false, 'concerts');
+    const concerts = await adapter.libraryRows('music', 'shows', false, 'concerts') as import('../src/wire').Row[];
     expect(concerts.length).toBeGreaterThan(2);
     expect(concerts.every(row => row.id.startsWith('plugin:music:tab:concerts:shelf:'))).toBe(true);
     const titles = concerts.flatMap(row => row.items.flatMap(item => item.kind === 'title' ? [item.title] : []));

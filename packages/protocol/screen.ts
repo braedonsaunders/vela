@@ -171,8 +171,11 @@ export interface SurfaceContext {
 /** /live/stream `event: alert` (alerts=1), the frame a toast surface draws. */
 export interface AlertFrame { id: ID; kind: string; title: string; body: string; at: Timestamp; ref?: string; plugin?: string; surface?: ID }
 
-/** A Home row that is a surface (bootstrap and home rows), placed after the first row: id `surface:<pluginID>:<id>` (`surface:org.ether.sports:tonight`), surface the surface id (`sports.tonight`). */
-export interface SurfaceRow { kind: 'surface'; id: ID; surface: ID }
+/** A row a plugin's homeRow surface fills, a stub in page order among the rows (bootstrap, /rows,
+ * a library's rows tab): no items, receiptToken or continuation. The id is opaque (never parse it):
+ * `plugin`, `surface` (the wire id, as bootstrap `surfaces` lists it) and `library` say what it is.
+ * Sent only to a client with X-Vela-Screen-Renderer, for a surface published for the viewer. */
+export interface SurfaceRow { kind: 'surface'; id: ID; name: string; plugin: string; surface: ID; library?: ID; purpose?: string }
 
 /** The navigation entry of a plugin screen (bootstrap `navigation`). */
 export interface ScreenNavigationEntry { kind: 'screen'; id: ID; title: string; icon?: string; page: ID; document: ScreenDocumentRef }

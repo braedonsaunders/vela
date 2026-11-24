@@ -1,5 +1,6 @@
 // Projections of the wire's discovery data (home, rows, titles) into the display models of
 // models.ts: labels formatted for the current locale, artwork sized for each slot.
+import type * as V from '../wire';
 import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, ScreenNavigationEntry, SurfaceContribution, SurfaceRow, Title, TitleDetail } from '../wire';
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
@@ -234,20 +235,41 @@ function plainCard(id: string, kind: string, name: string, rating: string, art: 
   };
 }
 
-export function feedRow(row: WireRow, images?: Images, artWidth = 2560): Row {
+const LAYOUTS: readonly V.RowLayout[] = ['standard', 'hero', 'wide', 'tiles', 'tracks'];
+const CARDS: readonly V.RowCard[] = ['poster', 'landscape', 'square', 'round'];
+const EXPERIENCES: readonly V.RowExperience[] = ['watch', 'listen', 'read', 'gallery', 'live'];
+const known = <T extends string>(values: readonly T[], value: unknown): T | undefined => values.includes(value as T) ? value as T : undefined;
+const text = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value.trim() : undefined;
+
+/** A row as the skins read it. Presentation values Vela does not know read as a standard shelf; a
+ * plugin surface's row (a stub in page order) keeps its plugin, surface and library, never its id's parts. */
+export function feedRow(row: WireRow | SurfaceRow, images?: Images, artWidth = 2560): Row {
+  if (isSurfaceRow(row)) {
+    const library = text(row.library);
+    return { id: text(row.id) ?? `surface:${row.surface}`, name: typeof row.name === 'string' ? row.name : '', purpose: 'recommendation', receipt: '', items: [], nextCursor: '',
+      continuation: 'exhausted', previewOnFocus: false, presentation: '', layout: 'standard', personal: false,
+      surface: row.surface, ...(text(row.plugin) ? { plugin: text(row.plugin) } : {}), ...(library ? { library } : {}) };
+  }
+  const card = known(CARDS, row.card), role = text(row.role), library = text(row.library), experience = known(EXPERIENCES, row.experience);
   return {
     id: row.id,
     name: row.name,
     purpose: row.purpose,
     receipt: row.receiptToken,
-    items: row.items.map(item => entry(item, images, artWidth)),
+    items: (row.items ?? []).map(item => entry(item, images, artWidth)),
     nextCursor: row.nextCursor ?? '',
     continuation: row.continuation,
     previewOnFocus: row.previewOnFocus ?? false,
-    presentation: row.presentation ?? '',
-    cardStyle: row.style === 'poster' || row.style === 'landscape' || row.style === 'square' ? row.style : undefined,
+    presentation: row.presentation === 'ranked' ? 'ranked' : '',
+    layout: known(LAYOUTS, row.layout) ?? 'standard',
+    personal: row.personal === true,
+    ...(card ? { card } : {}), ...(role ? { role } : {}), ...(library ? { library } : {}), ...(experience ? { experience } : {}),
   };
 }
+
+/** Whether a wire row is a plugin surface's stub. */
+export const isSurfaceRow = (row: unknown): row is SurfaceRow =>
+  !!row && typeof row === 'object' && (row as { kind?: unknown }).kind === 'surface' && typeof (row as { surface?: unknown }).surface === 'string';
 
 type WireHero = NonNullable<Bootstrap['heroes']>[number];
 
@@ -319,7 +341,8 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     previews,
     // A row with nothing in it (no shows to continue, say) is a heading over an empty shelf: left out.
     // A plugin's Home-row surface keeps its place, drawn by the Home-row host from its document.
-    rows: data.rows.flatMap(row => isSurfaceRow(row) ? surfaceRow(row, surfaces) : row.items.length > 0 ? [feedRow(row, images, artWidth)] : []),
+    // A plugin's surface row keeps its place in page order; its host draws it (or nothing).
+    rows: data.rows.flatMap(row => isSurfaceRow(row) || row.items?.length > 0 ? [feedRow(row, images, artWidth)] : []),
     nextCursor: data.nextCursor ?? '',
     liveAvailable: features.liveTV.available,
     libraryLiveAvailable: features.libraryLive?.available ?? false,
@@ -362,15 +385,6 @@ export function surfaceContributions(surfaces: Bootstrap['surfaces']): SurfaceCo
     seen.add(surface.id);
     return [surface];
   });
-}
-
-const isSurfaceRow = (row: Bootstrap['rows'][number]): row is SurfaceRow => (row as { kind?: unknown }).kind === 'surface';
-
-/** A Home row a plugin's homeRow surface fills: kept only when that surface was contributed. */
-function surfaceRow(row: SurfaceRow, surfaces: readonly SurfaceContribution[]): Row[] {
-  if (typeof row.surface !== 'string' || !surfaces.some(surface => surface.id === row.surface && surface.presentation === 'homeRow')) return [];
-  return [{ id: typeof row.id === 'string' && row.id ? row.id : `surface:${row.surface}`, name: '', purpose: 'recommendation', receipt: '', items: [], nextCursor: '',
-    continuation: 'exhausted', previewOnFocus: false, presentation: '', surface: row.surface }];
 }
 
 /** A title's technical summary stays compact; individual tracks belong in the player menus. */

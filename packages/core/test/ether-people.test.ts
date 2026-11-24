@@ -65,14 +65,15 @@ test('lab-shaped library rows retain row continuations and ranked shelves', asyn
     expect(libraries.items.map(library => [library.id, library.kind])).toEqual([['1', 'movies'], ['2', 'shows'], ['4', 'shows']]);
     const result = await adapter.rows({ placement: 'library', libraryId: '1' });
     expect(result.continuation).toBe('exhausted');
-    expect(result.items.map(row => [row.name, row.items.length, row.continuation])).toEqual([
+    const feed = result.items as import('../src/wire').Row[];
+    expect(feed.map(row => [row.name, row.items.length, row.continuation])).toEqual([
       ['Trending Now', 20, 'more'], ['Top 10 on Ether On Air Lab Today', 10, 'exhausted'],
       ['New & Noteworthy', 17, 'exhausted'], ['Acclaimed Thrillers', 20, 'more'],
       ['Acclaimed Romances', 20, 'more'], ['Acclaimed History', 20, 'more'],
       ['Under 100 Minutes', 20, 'more'], ['Top Rated', 19, 'exhausted'],
     ]);
-    expect(result.items[1]!.presentation).toBe('ranked');
-    const first = result.items[0]!;
+    expect(feed[1]!.presentation).toBe('ranked');
+    const first = feed[0]!;
     expect((await adapter.row!(first.id, first.nextCursor)).items).toHaveLength(10);
     expect((await adapter.home()).capabilities.features.liveTV?.available).toBe(true);
   } finally { await mock.stop(); }

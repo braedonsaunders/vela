@@ -115,3 +115,13 @@ test('an expired preview token is not taken for an expired session (no token rot
   expect(failure.detail.code).toBe('preview_expired');
   expect(seen.map(r => r.url.pathname)).toEqual(['/vela/v0/screens/sports/pages/index/data']);
 });
+
+test('rows lists (Home pages, a library\'s rows) say the renderer, since they may hold surface rows', async () => {
+  const page = { items: [], continuation: 'exhausted' };
+  const seen = routeFetch({ 'GET /vela/v0/rows': page, 'GET /vela/v0/libraries/music/rows': page, 'GET /vela/v0/libraries': { items: [{ id: 'music', name: 'Music', kind: 'mixed', artwork: [], browse: { filters: {} }, tabs: [{ id: 'recommended', label: 'Recommendations', kind: 'recommended' }] }], continuation: 'exhausted' } });
+  const api = adapter();
+  await api.rows({ placement: 'home', cursor: 'c1' });
+  await api.libraries({});
+  await api.libraryRows('music', 'mixed', true);
+  expect(seen.filter(r => r.url.pathname.endsWith('/rows')).map(r => r.headers.get('x-vela-screen-renderer'))).toEqual(['19', '19']);
+});

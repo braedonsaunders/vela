@@ -111,14 +111,17 @@ const surfaceHref = (spec: SurfaceSpec, doc: Compiled, l = 'en') => `/vela/v0/su
 /** Screens and surfaces the owner has hidden from viewers (POST /__admin/screens): 404, and their streams end. */
 const hidden = new Set<string>();
 
+/** Surface rows' names (the page row's title). */
+const SURFACE_NAMES: Record<string, string> = { 'sports.tonight': 'Sports Tonight' };
+
 // Viewer state that is the screens' own: surface switches.
 const surfaceSettings = new Map<string, Map<string, boolean>>();
 const settingOf = (viewerId: string, spec: SurfaceSpec) => surfaceSettings.get(viewerId)?.get(spec.id) ?? spec.contribution.setting?.default ?? true;
 
 /** Bootstrap's navigation, surfaces and the surface Home row, for a client that draws screens. */
-export function screensBootstrap(req: Request, viewerId: string): { navigation?: V.ScreenNavigationEntry[]; surfaces?: V.SurfaceContribution[]; homeRow?: V.SurfaceRow } {
+export function screensBootstrap(req: Request, viewerId: string): { navigation?: V.ScreenNavigationEntry[]; surfaces?: V.SurfaceContribution[]; homeRows: V.SurfaceRow[] } {
   const renderer = rendererOf(req);
-  if (!sportsEnabled || !renderer) return {};
+  if (!sportsEnabled || !renderer) return { homeRows: [] };
   const language = languageOf(req);
   // A live preview token lists the drafts (an expired one is ignored here: bootstrap still answers).
   const draft = req.headers.get('x-vela-screen-preview') === PREVIEW_TOKEN;
@@ -133,9 +136,10 @@ export function screensBootstrap(req: Request, viewerId: string): { navigation?:
     const setting = spec.contribution.setting ? { ...spec.contribution.setting, enabled: settingOf(viewerId, spec) } : undefined;
     return [{ id: spec.id, ...spec.contribution, ...(setting ? { setting } : {}), document: { href: surfaceHref(spec, doc, language), renderer: doc.document.renderer } } as V.SurfaceContribution];
   });
-  const row = surfaces.find(surface => surface.presentation === 'homeRow');
-  return { ...(navigation.length ? { navigation } : {}), ...(surfaces.length ? { surfaces } : {}),
-    ...(row ? { homeRow: { kind: 'surface', id: `surface:sports:${row.id.split('.')[1]}`, surface: row.id } } : {}) };
+  // A published homeRow surface is a row stub on Home, in page order (main.ts places it); the id is opaque.
+  const homeRows = surfaces.filter(surface => surface.presentation === 'homeRow').map((surface): V.SurfaceRow => ({
+    kind: 'surface', id: `surface:sports:${surface.id}`, name: SURFACE_NAMES[surface.id] ?? surface.id, plugin: 'sports', surface: surface.id }));
+  return { ...(navigation.length ? { navigation } : {}), ...(surfaces.length ? { surfaces } : {}), homeRows };
 }
 
 function serveDocument(req: Request, url: URL, doc: Compiled, fail: Fail): Response {
