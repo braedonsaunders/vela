@@ -2,7 +2,7 @@
 // text colour. Vela's own geometry; a document may instead give its own `paths`. The roles from
 // `filter` down are the compiled skins' shapes (Exact's symbol table at exact-client-final).
 export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
-  // Plugin screens (the kit and Sports' documents; widgets/sports/parts.tsx EXTRA and GridMark).
+  // Plugin screens (the kit and plugin documents; Sports' glyphs).
   grid: { paths: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'], stroke: true },
   /** Add to multiview on a plugin screen: four rounded 8x8 tiles (Sports' GridMark). */
   tiles: { paths: ['M4.5 3h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 3 9.5v-5A1.5 1.5 0 0 1 4.5 3z', 'M14.5 3h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 13 9.5v-5A1.5 1.5 0 0 1 14.5 3z', 'M4.5 13h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 3 19.5v-5A1.5 1.5 0 0 1 4.5 13z', 'M14.5 13h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 13 19.5v-5A1.5 1.5 0 0 1 14.5 13z'], stroke: true },

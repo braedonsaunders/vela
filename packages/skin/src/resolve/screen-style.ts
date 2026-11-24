@@ -102,8 +102,8 @@ function mixed(text: string): string {
 }
 
 /**
- * Lengths that draw on whole and half points on every platform, as the hard-coded screens drew them
- * (SportsLook.px): with `scale` points per CSS px (1 on the web and phones, 1.25 on Apple TV, the
+ * Lengths that draw on whole and half points on every platform, as the built-in Sports screen drew
+ * them: with `scale` points per CSS px (1 on the web and phones, 1.25 on Apple TV, the
  * Android TV pixel scale), each `<n>px` becomes the length that the renderer's scaling turns into
  * round(n x scale x 2) / 2 points.
  */

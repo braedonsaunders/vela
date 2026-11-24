@@ -204,7 +204,7 @@ const leagueOf = (league: V.LiveLeague) => ({ id: league.id, name: league.name, 
 
 const POSSESSION = /^(possession|ball|serving|serve|batting|at bat)$/i;
 const same = (a: string | undefined, b: string) => !!a && a.trim().toLowerCase() === b.trim().toLowerCase();
-/** The situation entry that names which side has the ball (legacy possessor()): a possession key
+/** The situation entry that names which side has the ball (Ether's possession rule): a possession key
  * whose value is exactly a side's abbr, short name, name or id. "NYG 38" only mentions a side. */
 export function possessor(situation: Record<string, string> | undefined, pair: readonly V.LiveCompetitor[]): { id?: string; key?: string } {
   for (const [key, value] of Object.entries(situation ?? {})) {
@@ -408,7 +408,7 @@ function resolveSource(spec: V.SourceSpec, args: Json, read: Read): unknown {
       if (query.window === 'today') sims = sims.filter(sim => sim.state === 'in' || localDay(sim.start, read.tz) === today);
       if (query.window === 'week') sims = sims.filter(sim => Math.abs(sim.start - now) < 7 * 24 * H);
       if (query.window === 'recent') sims = sims.filter(sim => sim.state === 'post' && now - sim.start < 48 * H);
-      // The ticker (legacy /live/ticker): in progress, finals started under 30 h ago, upcoming within 6 h.
+      // The ticker: in progress, finals started under 30 h ago, upcoming within 6 h.
       if (query.window === 'ticker') sims = sims.filter(sim => sim.state === 'in' || (sim.state === 'post' && now - sim.start < 30 * H) || ((sim.state === 'pre' || sim.state === 'delayed') && sim.start - now < 6 * H));
       sims.sort(args.sort === 'start' ? (a, b) => a.start - b.start : featured(read.viewerId));
       const limit = Math.max(1, Math.min(100, Number(args.limit) || 100));
