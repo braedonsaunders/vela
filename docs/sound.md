@@ -62,7 +62,12 @@ The engine performs the crossfade on its own clock, not on a JavaScript timer, s
 
 AutoMix needs `features.queuedPlayback`. While songs overlap, two Ether sessions play at once. A server without queued sessions ends the playing one when the next is asked for, so there AutoMix stays gapless.
 
-The outgoing session's stop reports the position where it was faded out. That is ordinary queued-session behaviour, but I'll confirm it with the Ether lead before stage 2.
+How the overlap works on Ether (agreed with the Ether music lead, 2026-11-24; Ether change pending):
+
+- When a queued successor takes over, Ether records the outgoing item as played through, once. Vela doesn't mark it played.
+- The outgoing session stays alive for up to 15 s after takeover: its byte reads keep serving, and its progress and stop are accepted. It retires at Vela's stop or at 15 s, whichever comes first. It no longer owns the device and doesn't count as a second stream.
+- Vela stops it at the fade point and reports the real position.
+- Ether advertises the grace as `features.queuedPlayback.handoverSeconds` (proposed). Vela crossfades only when it is present, or when the outgoing tail is already fully buffered; otherwise it stays gapless. Today's Ether interrupts the outgoing session's reads at takeover.
 
 ### Beat alignment
 

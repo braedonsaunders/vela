@@ -77,8 +77,10 @@ export interface ServerCapabilities {
     /** GET /titles/:id/continuation: what plays after a title when its queue ends (autoplay). */
     continuation?: Feature;
     /** PlaybackRequest.queued: a gapless next track's session coexists with the playing one (its media
-     * may be read) and takes the device over on its first playing, paused or buffering observation. */
-    queuedPlayback?: Feature;
+     * may be read) and takes the device over on its first playing, paused or buffering observation.
+     * `handoverSeconds` (pending Ether): the superseded session keeps serving reads and accepting
+     * progress for that long after the takeover, so two may overlap (an AutoMix crossfade). */
+    queuedPlayback?: Feature & { handoverSeconds?: number };
     /** GET /history/recap: listening recap across week, month, year or all time. */
     historyRecap?: Feature & { periods: HistoryRecapPeriod[] };
     /** POST /playlists/import, GET /playlists/import/:id, POST /playlists/import/:id/save. */
