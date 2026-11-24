@@ -329,8 +329,7 @@
         ] } ] },
 
       { "type": "tabs", "id": "leagues", "over": "src.leagues.leagues", "as": "l", "value": "{l.id}", "label": "{l.label}", "bind": { "param": "league", "clear": ["teamsLeague"] },
-        "all": "{s:all}", "testId": "sports-league-{l.id}", "style": { "padding": "3px $gutter", "gap": "8px", "margin-bottom": "-10px" }, "small": { "padding": "3px 18px" },
-        "tv": { "padding": "2.4px $gutter", "gap": "6.4px", "margin-bottom": "-10px" },
+        "all": "{s:all}", "testId": "sports-league-{l.id}", "style": { "padding": "3pt $gutter", "gap": "8pt", "margin-bottom": "-10px" }, "small": { "padding": "3pt 18px" },
         "after": [
           { "type": "use", "template": "vela:switch", "when": [{ "test": "src.viewer.canSetSpoilerFree" }], "testId": "sports-hide-scores", "style": { "margin-left": "10px" },
             "with": { "on": "{src.viewer.spoilerFree}", "label": "{s:hideScores}", "glyph": "eye-off" },
