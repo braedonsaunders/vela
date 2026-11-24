@@ -29,7 +29,7 @@ export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protoc
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
-export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse } from './wire';
+export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse, HistoryRecapPeriod, PlaylistImportFormat, ImportSource, PlaylistImportUnmatched } from './wire';
 export type { LiveState, LiveTvAccess } from './store/live';
 export { entitiesKey, screenKey, spoilerFreeOf, type LiveEventsState, type LiveStreamPhase, type ScreenParams } from './store/live-events';
 export { backoffMs, isFavoriteCompetitor, isNewer, mergeEvents, probabilityFor, readLiveMessage, screenEvents, seriesPoints, sides, streamQuery, teamColor, venueText, withEvent, type LiveInterest } from './live/events';
@@ -58,5 +58,5 @@ export type { ChildrenModel, MediaFeatures } from './store/media';
 export { AUDIO_RATES, chapterEnd, preloadLead, type AudioEngine, type AudioEngineEvent, type AudioPreload, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
 export { autoplayNext, current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf } from './audio/cards';
-export type { LikedList, Lyrics as MusicLyrics, RecentContext } from './store/music';
+export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, recapLabels, recapStatCards, type DuplicateGroupModel, type DuplicateGroupsList, type HistoryRecapModel, type LikedList, type Lyrics as MusicLyrics, type PlaylistImportMatchModel, type PlaylistImportModel, type PlaylistImportUnmatchedModel, type RecapChartBucket, type RecapEntryModel, type RecapLabels, type RecentContext, type RecordingReleasesModel } from './store/music';
 export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, childSectionsWait, recommendationTabWaits, settledPluginLevels, videoRoleLabel, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';

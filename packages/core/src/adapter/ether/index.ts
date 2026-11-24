@@ -11,13 +11,16 @@ import type {
   DeviceGrantSignIn,
   EventStream,
   FallbackCommand,
+  HistoryRecap,
   Interactions,
+  LibraryDuplicates,
   LibraryLive,
   LiveEntitiesQuery,
   LiveEvents,
   LiveStreamQuery,
   LiveTv,
   Multiview,
+  PlaylistImports,
   TileReplan,
   PasswordSignIn,
   PathSwitching,
@@ -53,7 +56,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  LiveEvents, Multiview, TileReplan, SubtitleSearch {
+  LiveEvents, Multiview, TileReplan, SubtitleSearch, HistoryRecap, PlaylistImports, LibraryDuplicates {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -346,6 +349,34 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   recentPlayContexts(limit?: number) {
     return this.http.request<V.RecentPlayContexts>('GET', `/recent${query({ limit })}`);
+  }
+
+  historyRecap(recapQuery: { period: V.HistoryRecapPeriod; at?: string; library?: string; tz?: string }) {
+    return this.http.request<V.HistoryRecap>('GET', `/history/recap${query(recapQuery)}`);
+  }
+
+  startPlaylistImport(request: V.PlaylistImportRequest) {
+    return this.http.request<V.PlaylistImportJobRef>('POST', '/playlists/import', request);
+  }
+
+  playlistImport(id: string) {
+    return this.http.request<V.PlaylistImport>('GET', `/playlists/import/${segment(id)}`);
+  }
+
+  savePlaylistImport(id: string, request: V.SavePlaylistImportRequest) {
+    return this.http.request<V.PlaylistCard>('POST', `/playlists/import/${segment(id)}/save`, request);
+  }
+
+  libraryDuplicates(libraryId: string, cursor?: string, limit?: number) {
+    return this.http.request<V.DuplicateGroupsPage>('GET', `/libraries/${segment(libraryId)}/duplicates${query({ cursor, limit })}`);
+  }
+
+  titleRecording(id: string) {
+    return this.http.request<V.RecordingReleases>('GET', `/titles/${segment(id)}/recording`);
+  }
+
+  setDuplicatePreference(libraryId: string, recordingId: string, request: V.DuplicatePreferenceRequest) {
+    return this.http.request<V.DuplicateGroup>('POST', `/libraries/${segment(libraryId)}/duplicates/${segment(recordingId)}`, request);
   }
 
   async titleLyrics(id: string): Promise<V.TitleLyrics | null> {

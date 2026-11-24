@@ -48,6 +48,8 @@ export type SearchDirection = 'asc' | 'desc';
 export type SearchKind = string;
 export type SearchKindCapability = string | { id: string; label?: string };
 export interface SearchOptions { sort?: SearchSort; direction?: SearchDirection; kind?: SearchKind; library?: ID }
+export type HistoryRecapPeriod = 'week' | 'month' | 'year' | 'all';
+export type PlaylistImportFormat = 'm3u' | 'csv';
 export interface ServerCapabilities {
   /** Complete, unpaginated live guide windows when advertised. */
   liveGuideWindow?: { maxChannels: number; maxWindowMinutes: number };
@@ -77,6 +79,12 @@ export interface ServerCapabilities {
     /** PlaybackRequest.queued: a gapless next track's session coexists with the playing one (its media
      * may be read) and takes the device over on its first playing, paused or buffering observation. */
     queuedPlayback?: Feature;
+    /** GET /history/recap: listening recap across week, month, year or all time. */
+    historyRecap?: Feature & { periods: HistoryRecapPeriod[] };
+    /** POST /playlists/import, GET /playlists/import/:id, POST /playlists/import/:id/save. */
+    playlistImport?: Feature & { links: string[]; files: PlaylistImportFormat[]; maxTracks: number };
+    /** TitleMedia.recordingId, GET /libraries/:id/duplicates, POST /libraries/:id/duplicates/:recordingId, GET /titles/:id/recording. */
+    duplicates?: Feature;
     /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
     mediaClasses?: Feature & { classes: MediaClass[] };
     /** POST /titles/:id/read and reading progress, for these formats. */
@@ -157,6 +165,8 @@ export interface TitleMedia {
   credits?: { name: string; role: MediaCreditRole | string; personId?: ID }[];
   /** Readable documents only. */ reading?: { format: ReadingFormat; pages?: number };
   /** Plain facts a page shows as written (label, publisher, ISBN). */ facts?: { label: string; value: string }[];
+  /** Recording identity (ISRC or fingerprint) shared by every release of one recording (features.duplicates). */
+  recordingId?: string;
 }
 /** Opaque locator (EPUB CFI, page index) plus the share of the whole document; shared Ether watch state. */
 export interface ReadingProgress { locator: string; fraction: number; label?: string; updatedAt: Timestamp }
@@ -409,6 +419,51 @@ export interface MovePlaylistEntryRequest extends Mutation { afterEntryId: ID | 
 export interface PlaylistEntryCount { entryCount: number }
 export interface TitlePlaylistMembership { id: ID; name: string; smart: boolean; entryIds: ID[] }
 export interface TitlePlaylists { items: TitlePlaylistMembership[] }
+
+/** One entry in a period listening recap (features.historyRecap). */
+export interface RecapEntry { title: Title; plays: number; minutes: number }
+/** GET /history/recap?period=week|month|year|all&at=YYYY-MM-DD&library=<id> (features.historyRecap). */
+export interface HistoryRecap {
+  period: HistoryRecapPeriod; from: Timestamp; to: Timestamp;
+  minutes: number; plays: number; distinctTracks: number; distinctArtists: number;
+  /** Up to 10 each, ordered by plays descending. */
+  topArtists: RecapEntry[]; topTracks: RecapEntry[]; topAlbums: RecapEntry[];
+  /** Consecutive days with at least one play. */
+  streak: { current: number; longest: number };
+  /** Every day in the period, zeros included (year: 365 entries), YYYY-MM-DD. */
+  byDay: { date: string; minutes: number }[];
+  firstPlayAt?: Timestamp; generatedAt: Timestamp;
+}
+
+/** Source track metadata parsed from an imported playlist link or file (features.playlistImport). */
+export interface ImportSource { title: string; artist: string; album?: string; isrc?: string; durationSeconds?: number }
+export interface PlaylistImportMatch { index: number; source: ImportSource; title: Title; by: 'isrc' | 'title' }
+export interface PlaylistImportUnmatched { index: number; source: ImportSource; reason: 'not_found' | 'ambiguous'; candidates?: Title[] }
+/** GET /playlists/import/:id (features.playlistImport). */
+export interface PlaylistImport {
+  id: ID; state: 'reading' | 'matching' | 'done' | 'failed'; name: string; description?: string; artwork?: ArtworkRef[];
+  total: number; done: number;
+  matched: PlaylistImportMatch[];
+  unmatched: PlaylistImportUnmatched[];
+  error?: string;
+}
+/** POST /playlists/import (features.playlistImport); returns 202 PlaylistImportJobRef. */
+export interface PlaylistImportRequest extends Mutation {
+  library: ID;
+  url?: string;
+  file?: { name: string; format: PlaylistImportFormat; text: string };
+}
+export interface PlaylistImportJobRef { id: ID }
+/** POST /playlists/import/:id/save (features.playlistImport); returns the new PlaylistCard in source order. */
+export interface SavePlaylistImportRequest extends Mutation { name?: string; exclude?: number[]; choose?: Record<string, ID> }
+
+/** One duplicate recording group within a library (features.duplicates). */
+export interface DuplicateGroup { recordingId: string; count: number; titles: Title[]; preferredTitleId?: ID }
+export interface DuplicateGroupsPage extends Page<DuplicateGroup> { total?: number }
+/** GET /titles/:id/recording (features.duplicates): every release of that recording, this one included. */
+export interface RecordingReleases { recordingId: string; count?: number; preferredTitleId?: ID; titles: Title[] }
+/** POST /libraries/:id/duplicates/:recordingId (features.duplicates): viewer-scoped preferred release and optional hidden releases. */
+export interface DuplicatePreferenceRequest extends Mutation { preferredTitleId: ID; hideOtherIds?: ID[] }
 
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated' | 'lastViewed';
 export type SortDirection = 'asc' | 'desc';

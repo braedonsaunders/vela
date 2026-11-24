@@ -18,6 +18,7 @@ import { Byline, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf,
 import { listeningWords } from './listening';
 import { TrackList } from './tracks';
 import { compactMusic, musicTV } from './layout';
+import { RewindCover } from './rewind';
 export { compactMusic };
 
 /** A page's side margin: tighter on a phone. */
@@ -84,22 +85,31 @@ export function greeting(): string {
 
 export function MusicHome() {
   const app = useMusic();
+  const store = useVela();
   const m = useMediaLook();
   const { rows } = useLibraryRows(app.libraryId);
   const { playlists, liked } = usePlaylists();
   const likedTotal = useLiked().trackTotal;
   const jump = rows.find(r => r.id.endsWith(':jump-back-in'))?.items ?? [];
   const recent = useRecent();
+  useVelaState(s => s.home.load);
+  const recapAvailable = store.music.recapAvailable;
   const [quickWidth, setQuickWidth] = useState(0);
   const recentCards = recent.items.flatMap(item => (item.kind === 'favorites' ? [] : [item.card]));
   const likedRecently = recent.items.some(item => item.kind === 'favorites');
-  // Quick tiles: what you played from most recently (Liked Songs among it), then your playlists.
+  // Quick tiles: what you played from most recently (Liked Songs and Rewind among it), then your playlists.
   const seen = new Set<string>();
-  const quick: (Card | 'liked')[] = [...(liked || likedRecently ? ['liked' as const] : []), ...recentCards, ...playlists.map(playlistCard), ...jump]
-    .filter(item => (item === 'liked' ? true : !seen.has(item.id) && !!seen.add(item.id))).slice(0, 8);
+  const quick: (Card | 'liked' | 'rewind')[] = [
+    ...(liked || likedRecently ? ['liked' as const] : []),
+    ...(recapAvailable ? ['rewind' as const] : []),
+    ...recentCards,
+    ...playlists.map(playlistCard),
+    ...jump,
+  ].filter(item => (item === 'liked' || item === 'rewind' ? true : !seen.has(item.id) && !!seen.add(item.id))).slice(0, 8);
   // The plugin's Recently played (tracks) gives way to the server's play contexts when it has them.
   const shelves = rows.filter(r => !r.id.endsWith(':jump-back-in') && !(recent.available && r.id.endsWith(':recently-played')) && r.items.length);
-  const accent = typeof quick[1] === 'object' ? quick[1].accent : '';
+  const firstCard = quick.find((x): x is Card => typeof x === 'object');
+  const accent = firstCard?.accent ?? '';
   return (
     <View>
       <Wash accent={accent} height={360} />
@@ -108,7 +118,9 @@ export function MusicHome() {
         <FocusScope.Provider value="quick"><QuickColumns.Provider value={quickColumns(quickWidth || m.width)}><View onLayout={e => setQuickWidth(e.nativeEvent.layout.width)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 8 : 10, marginBottom: m.small ? 24 : 36 }} testID="music-quick">
           {quick.map(item => item === 'liked'
             ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={musicTV() ? 72 : m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'liked' })} />
-            : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={musicTV() ? 72 : m.small ? 52 : 64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
+            : item === 'rewind'
+              ? <QuickTile key="rewind" focusKey="rewind" title={msg('music.rewind')} subtitle={msg('music.rewind.eyebrow')} cover={<RewindCover size={musicTV() ? 72 : m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'rewind' })} />
+              : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={musicTV() ? 72 : m.small ? 52 : 64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
         </View></QuickColumns.Provider></FocusScope.Provider>
       </View>
       <View style={{ paddingHorizontal: m.small ? 4 : 8 }}>
@@ -143,7 +155,7 @@ function quickColumns(width: number): number {
   return musicTV() ? 4 : width >= 940 ? 4 : width >= 600 ? 3 : 2;
 }
 
-function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; title: string; subtitle?: string; cover: ReactNode; onPress(): void }) {
+function QuickTile({ card, focusKey, title, subtitle, cover, onPress }: { card?: Card; focusKey?: string; title: string; subtitle?: string; cover: ReactNode; onPress(): void }) {
   const app = useMusic();
   const m = useMediaLook();
   const columns = useContext(QuickColumns);
@@ -151,7 +163,7 @@ function QuickTile({ card, title, subtitle, cover, onPress }: { card?: Card; tit
   const width = `${100 / columns - (columns === 4 ? 1.2 : columns === 3 ? 1.4 : 1.6)}%`;
   const tv = musicTV();
   return (
-    <Surface onPress={onPress} onMenu={card ? (anchor, mode, opener) => app.menu({ card, anchor, mode, opener }) : undefined} focusId={card?.id ?? 'liked'} label={title}
+    <Surface onPress={onPress} onMenu={card ? (anchor, mode, opener) => app.menu({ card, anchor, mode, opener }) : undefined} focusId={card?.id ?? focusKey ?? 'liked'} label={title}
       style={(lit, focus) => [{ width: width as never, height: tv ? 76 : m.small ? 52 : 64, borderRadius: tv ? 12 : 8, overflow: 'hidden', backgroundColor: lit ? m.ui.controlHover : alpha(m.ui.ink, 0.07) },
         tv ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.03 : 1 }] } : {}, transition('background-color, transform', 140)]}
       contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: m.small ? 10 : 14, paddingRight: m.small ? 8 : 12 }}>
@@ -468,4 +480,3 @@ export function MusicLiked() {
     </View>
   );
 }
-

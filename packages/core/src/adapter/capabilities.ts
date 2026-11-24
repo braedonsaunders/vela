@@ -130,6 +130,36 @@ export interface MusicLibrary {
   titleContinuation(id: string, limit?: number): Promise<V.Page<V.RowEntry>>;
 }
 
+/** Listening recap ("Rewind") across a period and optional library (features.historyRecap). */
+export interface HistoryRecap {
+  historyRecap(query: { period: V.HistoryRecapPeriod; at?: string; library?: string; tz?: string }): Promise<V.HistoryRecap>;
+}
+export function hasHistoryRecap(adapter: ServerAdapter): adapter is ServerAdapter & HistoryRecap {
+  return 'historyRecap' in adapter && typeof (adapter as unknown as HistoryRecap).historyRecap === 'function';
+}
+
+/** Playlist import from external URLs or M3U/CSV files (features.playlistImport). */
+export interface PlaylistImports {
+  startPlaylistImport(request: V.PlaylistImportRequest): Promise<V.PlaylistImportJobRef>;
+  playlistImport(id: string): Promise<V.PlaylistImport>;
+  savePlaylistImport(id: string, request: V.SavePlaylistImportRequest): Promise<V.PlaylistCard>;
+}
+export function hasPlaylistImports(adapter: ServerAdapter): adapter is ServerAdapter & PlaylistImports {
+  const a = adapter as unknown as Record<string, unknown>;
+  return typeof a.startPlaylistImport === 'function' && typeof a.playlistImport === 'function' && typeof a.savePlaylistImport === 'function';
+}
+
+/** Duplicate recording groups and per-viewer preferred release selection (features.duplicates). */
+export interface LibraryDuplicates {
+  libraryDuplicates(libraryId: string, cursor?: string, limit?: number): Promise<V.DuplicateGroupsPage>;
+  titleRecording(id: string): Promise<V.RecordingReleases>;
+  setDuplicatePreference(libraryId: string, recordingId: string, request: V.DuplicatePreferenceRequest): Promise<V.DuplicateGroup>;
+}
+export function hasLibraryDuplicates(adapter: ServerAdapter): adapter is ServerAdapter & LibraryDuplicates {
+  const a = adapter as unknown as Record<string, unknown>;
+  return typeof a.libraryDuplicates === 'function' && typeof a.titleRecording === 'function' && typeof a.setDuplicatePreference === 'function';
+}
+
 export function hasMusicLibrary(adapter: ServerAdapter): adapter is ServerAdapter & MusicLibrary {
   const a = adapter as unknown as Record<string, unknown>;
   return typeof a.favoriteTitles === 'function' && typeof a.titleLyrics === 'function' && typeof a.recentPlayContexts === 'function';
