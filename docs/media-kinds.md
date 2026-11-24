@@ -282,6 +282,7 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   | Web, plain http (Web Audio decoder) | 0, bit-exact | 0 | 0 |
   | Web, `<audio>` fallback | 1014-1403 of silence (23-32 ms) | same | not run |
   | Android (PCM fed to the AudioTrack, API 34 emulator) | 0, bit-exact | 0 | 630-1019 of padding (14-23 ms) |
+  | Apple (iOS simulator: per-item tap; player clock) | 0, exact lengths; ≤ 0.1 ms | 0; ≤ 0.1 ms | 0; ≤ 0.1 ms |
 
   The lossy formats' own edge at a cut (each part was encoded alone) is in the files:
   ffmpeg's decode shows it too. On Android, ffmpeg-muxed M4A files mark their end by

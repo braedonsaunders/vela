@@ -202,6 +202,26 @@ Every command goes to JavaScript, which drives the queue as the app's own button
 do. Between items a background task keeps the app running while JavaScript asks for
 the next plan.
 
+Gapless: `AudioPlayback` is an AVQueuePlayer. The store hands it the next queue item
+before the current one ends (`audioPreload`); the next AVPlayerItem waits behind the
+current one, and `actionAtItemEnd` is `.advance` only while one does (otherwise the
+finished item stays, paused, as before). The `currentItem` change sends `advanced`
+with the new item's id, moves the item observers, and holds Now Playing for JavaScript's
+title of the new item (a second at most) instead of publishing the finished item's
+title over the new position. An item that resumes part-way is not queued.
+
+Measured on the mock's gapless test albums in an iOS 27.1 simulator (Release build):
+an MTAudioProcessingTap on every item received exactly the expected samples per part
+(the delay and padding of FLAC, LAME MP3 and edit-listed AAC trimmed), and the parts
+joined measure 0 samples at every join; in separate runs without the tap (attaching
+one made AVQueuePlayer start each item afresh, with ~0.3 s between them), the
+player's clock sampled every 2 ms went from one item to the next within 0.1 ms
+(about 4 samples, the sampling limit) at every join, FLAC, MP3 and AAC alike. That is
+AVFoundation's clock, not the speaker; a device and the lock screen were not checked.
+The tvOS target builds with the same player. AVFoundation's reported durations differ
+from the real ones by a few tens of milliseconds (FLAC +37 ms, MP3 +40 ms, AAC -25 ms),
+which affects only the displayed duration.
+
 ## Multiview tiles
 
 A view with the `tile` prop (0-3) is one of up to four live tiles on one screen.

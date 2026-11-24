@@ -33,6 +33,10 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     private var queued: (item: AVPlayerItem, id: Int)?
     private var playerObserver: NSKeyValueObservation?
     private var currentItemObserver: NSKeyValueObservation?
+    /// After an advance Now Playing waits for JavaScript's title for the new item (a second at most),
+    /// rather than showing the finished item's title over the new item's position.
+    private var nowPlayingHeld = false
+    private var nowPlayingRelease: Timer?
     private var itemObservers: [NSKeyValueObservation] = []
     private var itemNotifications: [NSObjectProtocol] = []
     private var loadID = 0
@@ -155,6 +159,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         pendingStart = nil
         lastSent = nil
         observe(next.item)
+        holdNowPlaying()
         emit?(["id": next.id, "type": "advanced", "position": position, "duration": duration])
         publish(tick: true)
     }
@@ -219,6 +224,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     func setNowPlaying(_ value: NowPlaying?) {
         let restyled = (value?.spoken == true) != (info?.spoken == true)
         info = value
+        releaseNowPlaying()
         guard item != nil else { return }
         if restyled { SystemMediaControls.shared.claim(self) }
         updateNowPlaying()
@@ -352,8 +358,26 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         }
     }
 
+    private func holdNowPlaying() {
+        nowPlayingHeld = true
+        nowPlayingRelease?.invalidate()
+        nowPlayingRelease = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.nowPlayingHeld else { return }
+                self.releaseNowPlaying()
+                self.updateNowPlaying()
+            }
+        }
+    }
+
+    private func releaseNowPlaying() {
+        nowPlayingHeld = false
+        nowPlayingRelease?.invalidate()
+        nowPlayingRelease = nil
+    }
+
     private func updateNowPlaying() {
-        guard item != nil else { return }
+        guard item != nil, !nowPlayingHeld else { return }
         let state = self.state
         let now = NowPlayingState(
             title: info?.title.isEmpty == false ? info!.title : "Vela",
