@@ -64,6 +64,7 @@
                       {
                         "type": "text",
                         "text": "{context.alert.title}",
+                        "tv": { "letter-spacing": "0.4px" },
                         "style": { "font-size": "13px", "font-weight": "800", "color": "$ui.inkSecondary", "flex": "1", "line-clamp": "1" },
                         "states": [
                           { "when": [{ "test": "context.alert.kind", "is": "eq", "value": "started" }], "style": { "color": "$ui.live" } },

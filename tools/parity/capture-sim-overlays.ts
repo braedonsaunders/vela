@@ -125,7 +125,9 @@ async function admin(body: object): Promise<{ now: string; frozen: boolean }> {
 }
 const state = await admin(DEFAULT_KNOBS);
 if (!state.frozen) throw new Error('start the mock with VELA_MOCK_SPORTS_FREEZE=1');
+// A fresh sign-in: tokens from an earlier mock (or its sign-out) stop the mock's demo sign-in.
 if (platform === 'androidtv') adb('shell', 'pm', 'clear', APP);
+else { try { simctl('terminate', udid, APP); } catch {} simctl('keychain', udid, 'reset'); }
 
 /** The document ticker is a viewer setting Ether remembers: switched on for the ticker run (and off after). */
 async function tickerSetting(enabled: boolean): Promise<void> {

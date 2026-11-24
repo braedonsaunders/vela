@@ -160,6 +160,8 @@ export interface ScreenMode {
   warnings: Set<string>;
   /** Points per CSS px where lengths round to half points (TVs), else 1. */
   scale: number;
+  /** The points lengths round to (0.5, or 1 for a host drawing in the player look). */
+  step?: number;
 }
 
 export interface Context {
@@ -273,7 +275,7 @@ function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
   // Screens: a unitless line height beside a px font size becomes a half-point length (look.px).
   const line = r.screen && style?.['line-height'] && style['font-size']
-    ? lineHeightPoints(tokenValue(style['font-size'], r), style['line-height'], r.screen.scale) : undefined;
+    ? lineHeightPoints(tokenValue(style['font-size'], r), style['line-height'], r.screen.scale, r.screen.step) : undefined;
   if (line) style = { ...style, 'line-height': line };
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
@@ -281,7 +283,7 @@ function css(style: Style | undefined, r: Context): CssT {
     if (r.screen) {
       // Any row may hold a hole; each is validated once filled (resolve/screen-style.ts).
       if (UNSAFE.test(text.replace(/\{[^{}]*\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
-      out[row] = screenStyleRow(row, text, r.screen.scope, r.screen.scale);
+      out[row] = screenStyleRow(row, text, r.screen.scope, r.screen.scale, r.screen.step);
       continue;
     }
     if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
@@ -519,7 +521,7 @@ function perClass<T>(value: PerClass<T> | undefined, r: Context): T | undefined 
 /** A length field (`gap`, `itemWidth`, `height`): tokens substituted and folded. */
 function lengthField(value: string | undefined, r: Context): string | undefined {
   if (value === undefined) return undefined;
-  const text = fold(halfPoints(tokenValue(value, r), r.screen!.scale));
+  const text = fold(halfPoints(tokenValue(value, r), r.screen!.scale, r.screen!.step));
   if (UNSAFE.test(text)) throw new Error(`Unsafe length: ${value}`);
   return text;
 }
