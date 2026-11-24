@@ -137,6 +137,20 @@ describe('the Sports game document', () => {
     expect(plays.slice(0, 2)).toEqual(['2:14', 'Barkley rush right for 7 yards']);
   });
 
+  test("the game's own tables are not lit (legacy lights only standings)", async () => {
+    const doc = await json<ScreenDocument>('game.json');
+    const tables: RNode[] = [];
+    const visit = (n: RNode) => {
+      const node = n as RNode & { children?: RNode[]; item?: RNode };
+      if (n.kind === 'table') tables.push(n);
+      node.children?.forEach(visit);
+      if (node.item) visit(node.item);
+    };
+    visit(resolveScreenDocument(doc, { width: 1440, tv: false }, 'en', {}).tree);
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(t => (t as RNode & { highlight?: boolean }).highlight === false)).toBe(true);
+  });
+
   test('a phone names the teams short', async () => {
     const t = await draw('game.json', 'data-game.json', 390);
     expect(t).toContain('Giants');

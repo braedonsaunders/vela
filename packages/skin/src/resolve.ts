@@ -110,7 +110,7 @@ export type RNode = Common & (
   | { kind: 'tabs'; items: Items; value: Template; label: Template; count?: Template; bind: { param?: string; state?: string; clear?: string[] };
     default?: Template; all?: Template; /** The chip each option is drawn with (a box, its args bound to `{$tab.*}`). */ chip: RNode; small: boolean;
     /** Drawn after the options in the same scroll and focus row. */ after?: RNode[] }
-  | { kind: 'table'; data: Value; compact: boolean; focusRows?: number }
+  | { kind: 'table'; data: Value; compact: boolean; focusRows?: number; /** false: rows' highlight is ignored. */ highlight?: false }
   | { kind: 'lineGraph'; series: Value; sides?: Value; subject?: Template; live?: Template; height?: string }
   | { kind: 'player'; channel: Template }
   | { kind: 'paramInput'; param: string; placeholder?: Template }
@@ -547,7 +547,7 @@ function blockNode(node: Node, common: Common, depth: number, r: Context): RNode
     }
     case 'tabs': return tabsNode(node, common, depth, r);
     case 'table': return { ...common, kind: 'table', data: pathField(node.data, r.screen!.scope), compact: node.compact === true,
-      ...(node.focusRows !== undefined ? { focusRows: node.focusRows } : {}) };
+      ...(node.focusRows !== undefined ? { focusRows: node.focusRows } : {}), ...(node.highlight === false ? { highlight: false as const } : {}) };
     case 'lineGraph': return { ...common, kind: 'lineGraph', series: pathField(node.series, r.screen!.scope),
       ...(node.sides ? { sides: pathField(node.sides, r.screen!.scope) } : {}), subject: compile(node.subject, r), live: compile(node.live, r),
       height: lengthField(perClass(node.height, r), r) };
