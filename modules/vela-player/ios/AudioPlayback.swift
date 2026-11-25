@@ -91,6 +91,43 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         center.addObserver(self, selector: #selector(routeChanged(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
     }
 
+    private var missingVisualizerID: Int?
+    func markMissingVisualizerPCM(id: Int) {
+        guard id == loadID else { return }
+        missingVisualizerID = id
+        updateVisualizerAvailability()
+    }
+
+    @discardableResult private func updateVisualizerAvailability() -> Bool {
+        let available = item.map { missingVisualizerID != loadID && !lane.hasNoTap($0) && !lane.context.visualizerFeed.unsupported } ?? true
+        VisualizerAvailability.shared.update(available)
+        return available
+    }
+
+    /// The same monotonic instant projected onto each audible item's clock. Subscribing
+    /// observes existing taps only, including a scheduled incoming lane during handover.
+    func visualizerLanes() -> [VisualizerHeardLane]? {
+        guard let item else { return [] }
+        guard updateVisualizerAvailability() else { return nil }
+        let host = CMClockGetHostTimeClock()
+        let now = CMClockGetTime(host)
+        var lanes: [VisualizerHeardLane] = []
+        func observe(_ item: AVPlayerItem, _ id: Int, _ lane: SoundLane, audible: Bool = true) {
+            guard let clock = item.timebase else { return }
+            let seconds = CMSyncConvertTime(now, from: host, to: clock).seconds
+            let rate = CMTimebaseGetRate(clock)
+            guard seconds.isFinite else { return }
+            lanes.append(VisualizerHeardLane(buffer: lane.context.visualizerFeed.subscribe(), id: id, seconds: seconds,
+                                             speed: audible && wantsPlay && seekTarget == nil ? rate : 0))
+        }
+        observe(item, loadID, lane)
+        if let fading { observe(fading.item, fading.id, fading.lane) }
+        if let pending = crossfade, let spareLane {
+            observe(pending.item, pending.id, spareLane, audible: pending.startHost.map { now >= $0 } ?? false)
+        }
+        return lanes
+    }
+
     private static func makePlayer() -> AVQueuePlayer {
         let player = AVQueuePlayer()
         player.actionAtItemEnd = .pause
@@ -464,6 +501,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
 
     /// Reports the state to JavaScript when it changed, and every half second while playing.
     private func publish(tick: Bool = false) {
+        updateVisualizerAvailability()
         guard let item else { return }
         sampleClock(item)
         let state = self.state
@@ -550,6 +588,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         itemNotifications.forEach { NotificationCenter.default.removeObserver($0) }
         itemNotifications = []
         item = nil
+        missingVisualizerID = nil
+        updateVisualizerAvailability()
     }
 
     // MARK: Sound and AutoMix
@@ -601,6 +641,7 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
     }
 
     private func tapAttached(_ id: Int, _ tapped: Bool) {
+        if id == loadID { updateVisualizerAvailability() }
         #if DEBUG
         SoundCapture.shared.event("tap", ["id": id, "tapped": tapped])
         #endif

@@ -58,12 +58,28 @@ final class MetalExecutor {
     private let staging: [MTLBuffer]; private var stagingAt = 0, stagingIx = 0
     private let inFlight = DispatchSemaphore(value: 2)
     // measurements
-    private(set) var gpuMs: Double = 0, encodeMs: Double = 0, linkMs: Double = 0, draws = 0, passes = 0
-    var onFrameDone: ((Double) -> Void)?
+    private let completionLock = NSLock()
+    private var lastGpuMs: Double = 0, gpuFailed = false
+    var gpuMs: Double { completionLock.lock(); defer { completionLock.unlock() }; return lastGpuMs }
+    private(set) var encodeMs: Double = 0, linkMs: Double = 0, draws = 0, passes = 0
 
-    init(device: MTLDevice, table: ShaderTable) {
-        self.device = device; queue = device.makeCommandQueue()!; self.table = table.entries
-        staging = (0..<3).map { _ in device.makeBuffer(length: 4 << 20, options: .storageModeShared)! }
+    private var failed = false
+    var hasFailed: Bool {
+        completionLock.lock()
+        defer { completionLock.unlock() }
+        return failed || gpuFailed
+    }
+    init(device: MTLDevice, table: ShaderTable) throws {
+        guard let queue = device.makeCommandQueue() else { throw NSError(domain: "MetalExecutor", code: 1) }
+        self.device = device
+        self.queue = queue
+        self.table = table.entries
+        staging = (0..<3).compactMap { _ in device.makeBuffer(length: 4 << 20, options: .storageModeShared) }
+        guard staging.count == 3 else { throw NSError(domain: "MetalExecutor", code: 2) }
+    }
+
+    deinit {
+        if cmd != nil { endEncoder(); inFlight.signal() }
     }
 
     // MARK: link (synchronous, from JS)
@@ -92,6 +108,7 @@ final class MetalExecutor {
         let I = raw.assumingMemoryBound(to: Int32.self)
         @inline(__always) func f(_ k: Int) -> Float { raw.load(fromByteOffset: k * 4, as: Float.self) }
         if cmd == nil { beginFrame() }
+        guard cmd != nil else { return }
         var k = 1
         while k < words {
             let op = I[k]; k += 1
@@ -105,6 +122,7 @@ final class MetalExecutor {
                 let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: t.format, width: max(1, w), height: max(1, h), mipmapped: false)
                 d.usage = [.shaderRead, .renderTarget]; d.storageMode = .private
                 t.mtl = device.makeTexture(descriptor: d); t.sampler = nil
+                if t.mtl == nil { failed = true }
                 let len = Int(I[k])
                 if len > 0 { upload(t, x: 0, y: 0, w: w, h: h, fmt: fmt, type: type, flip: flip, src: raw.advanced(by: (k + 1) * 4), len: len) }
                 k += 1 + (len + 3) / 4
@@ -133,6 +151,7 @@ final class MetalExecutor {
                     d.usage = [.renderTarget]; d.storageMode = .private
                     if samples > 1 { d.textureType = .type2DMultisample; d.sampleCount = samples }
                     r.mtl = device.makeTexture(descriptor: d); r.samples = samples
+                    if r.mtl == nil { failed = true }
                 }
                 k += 5
             case 14: k += 1
@@ -170,7 +189,7 @@ final class MetalExecutor {
             case 28: resolve(read: I[k], draw: I[k + 1]); k += 12
             case 29: programs[I[k]] = nil; k += 1
             case 30: endFrame()
-            default: fatalError("viz: unknown opcode \(op) at word \(k - 1)")
+            default: failed = true; endFrame(); return
             }
         }
         encodeMs += (CACurrentMediaTime() - t0) * 1000
@@ -180,14 +199,21 @@ final class MetalExecutor {
     private func beginFrame() {
         inFlight.wait()
         cmd = queue.makeCommandBuffer(); stagingIx = (stagingIx + 1) % staging.count; stagingAt = 0; draws = 0; passes = 0
+        if cmd == nil { failed = true; inFlight.signal() }
     }
     private func endFrame() {
         endEncoder()
         guard let c = cmd else { return }
         if let d = drawable { c.present(d) }
-        c.addCompletedHandler { [weak self] cb in
+        c.addCompletedHandler { [weak self, inFlight] cb in
             let ms = (cb.gpuEndTime - cb.gpuStartTime) * 1000
-            self?.gpuMs = ms; self?.onFrameDone?(ms); self?.inFlight.signal()
+            if let self {
+                completionLock.lock()
+                lastGpuMs = ms
+                gpuFailed = gpuFailed || cb.status == .error
+                completionLock.unlock()
+            }
+            inFlight.signal()
         }
         c.commit(); cmd = nil; drawable = nil
     }
@@ -262,7 +288,7 @@ final class MetalExecutor {
                 }
                 d.vertexDescriptor = vd
             }
-            do { pso = try device.makeRenderPipelineState(descriptor: d) } catch { NSLog("viz: pipeline: \(error)"); return }
+            do { pso = try device.makeRenderPipelineState(descriptor: d) } catch { failed = true; NSLog("viz: pipeline: \(error)"); return }
             p.pipelines[key] = pso
         }
         e.setRenderPipelineState(pso)
@@ -286,16 +312,16 @@ final class MetalExecutor {
         draws += 1
     }
 
-    private func depthState() -> MTLDepthStencilState {
+    private func depthState() -> MTLDepthStencilState? {
         let test = flags & 2 != 0, write = test && flags & 16 != 0
         let key = (test ? 1 : 0) | (write ? 2 : 0) | Int(depthFunc) << 2
         if let s = depthStates[key] { return s }
         let d = MTLDepthStencilDescriptor()
         d.isDepthWriteEnabled = write
         d.depthCompareFunction = !test ? .always : [0x0200: .never, 0x0201: .less, 0x0202: .equal, 0x0203: .lessEqual, 0x0204: .greater, 0x0206: .greaterEqual, 0x0207: .always][depthFunc] ?? .less
-        let s = device.makeDepthStencilState(descriptor: d)!; depthStates[key] = s; return s
+        guard let s = device.makeDepthStencilState(descriptor: d) else { failed = true; return nil }; depthStates[key] = s; return s
     }
-    private func sampler(_ t: Tex) -> MTLSamplerState {
+    private func sampler(_ t: Tex) -> MTLSamplerState? {
         if let s = t.sampler { return s }
         let key = "\(t.minF)|\(t.magF)|\(t.wrapS)|\(t.wrapT)"
         if let s = samplers[key] { t.sampler = s; return s }
@@ -304,14 +330,14 @@ final class MetalExecutor {
         d.mipFilter = t.minF == GL.LINEAR_MIPMAP_LINEAR ? .linear : t.minF == GL.LINEAR_MIPMAP_NEAREST ? .nearest : .notMipmapped
         let wrap: (Int32) -> MTLSamplerAddressMode = { $0 == GL.REPEAT ? .repeat : $0 == GL.MIRRORED_REPEAT ? .mirrorRepeat : .clampToEdge }
         d.sAddressMode = wrap(t.wrapS); d.tAddressMode = wrap(t.wrapT)
-        let s = device.makeSamplerState(descriptor: d)!; samplers[key] = s; t.sampler = s; return s
+        guard let s = device.makeSamplerState(descriptor: d) else { failed = true; return nil }; samplers[key] = s; t.sampler = s; return s
     }
 
     // MARK: uniforms and uploads
     private func generateMipmaps(_ texture: Tex) {
         guard let base = texture.mtl, base.width > 1 || base.height > 1 else { return }
         endEncoder()
-        let blit = cmd!.makeBlitCommandEncoder()!
+        guard let blit = cmd?.makeBlitCommandEncoder() else { failed = true; return }
         defer { blit.endEncoding() }
         if base.mipmapLevelCount > 1 {
             blit.generateMipmaps(for: base)
@@ -325,6 +351,7 @@ final class MetalExecutor {
         descriptor.usage = base.usage
         descriptor.storageMode = base.storageMode
         guard let chain = device.makeTexture(descriptor: descriptor) else {
+            failed = true
             NSLog("viz: could not allocate mip chain for \(base.width) × \(base.height) texture")
             return
         }
@@ -357,7 +384,11 @@ final class MetalExecutor {
         let rowBytes = w * outBpp, size = rowBytes * h
         // stage
         var buf = staging[stagingIx], off = (stagingAt + 255) & ~255
-        if off + size > buf.length { buf = device.makeBuffer(length: size, options: .storageModeShared)!; off = 0 } else { stagingAt = off + size }
+        if off + size > buf.length {
+            guard let overflow = device.makeBuffer(length: size, options: .storageModeShared) else { failed = true; return }
+            buf = overflow
+            off = 0
+        } else { stagingAt = off + size }
         let dst = buf.contents().advanced(by: off)
         let inBpp = comps * (type == GL.UNSIGNED_BYTE ? 1 : type == GL.HALF_FLOAT ? 2 : 4)
         for row in 0..<h {
@@ -369,7 +400,7 @@ final class MetalExecutor {
         }
         _ = len
         endEncoder()
-        let b = cmd!.makeBlitCommandEncoder()!
+        guard let b = cmd?.makeBlitCommandEncoder() else { failed = true; return }
         b.copy(from: buf, sourceOffset: off, sourceBytesPerRow: rowBytes, sourceBytesPerImage: size, sourceSize: MTLSize(width: w, height: h, depth: 1),
                to: tex, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin(x: x, y: y, z: 0))
         b.endEncoding()

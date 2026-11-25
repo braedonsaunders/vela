@@ -31,7 +31,7 @@ final class VizHost: NSObject {
         self.layer = layer; self.tap = tap; autoCycle = cycleSeconds
         let device = layer.device ?? MTLCreateSystemDefaultDevice()!
         layer.device = device; layer.pixelFormat = .bgra8Unorm; layer.framebufferOnly = true
-        exec = MetalExecutor(device: device, table: try ShaderTable(url: tableURL)); exec.layer = layer
+        exec = try MetalExecutor(device: device, table: try ShaderTable(url: tableURL)); exec.layer = layer
         cmd = .allocate(byteCount: cmdBytes, alignment: 16)
         bandDb.initialize(repeating: -100, count: 256); wave.initialize(repeating: 0, count: 512)
         super.init()
