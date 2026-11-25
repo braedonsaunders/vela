@@ -18,6 +18,10 @@ export const LISTEN_MOCK_ENV: Record<string, string> = {
   VELA_MOCK_NOW: LISTEN_NOW,
   VELA_MOCK_SPORTS_FREEZE: '1',
   VELA_MOCK_SILENT_MEDIA: '1',
+  VELA_MOCK_FAVORITES_LIST: '1',
+  VELA_MOCK_LYRICS: '1',
+  VELA_MOCK_PLAYLIST_TRACKS: ['track-neon-orchard-1-02', 'track-late-tram-home-1-01', 'track-paper-boats-1-02', 'track-glasshouse-weather-1-01',
+    'track-afterglow-arcade-1-03', 'track-copper-kettle-sessions-1-04'].join(','),
   VELA_MOCK_LIKED: ['track-paper-boats-1-01', 'track-paper-boats-1-03', 'track-late-tram-home-1-02', 'track-glasshouse-weather-1-04',
     'track-neon-orchard-1-01', 'album-glasshouse-weather', 'album-late-tram-home', 'artist-mira-solenne'].join(','),
 };
@@ -51,6 +55,9 @@ export interface ListenView {
   /** Wait for this (a data-testid prefix, or text:…) before the steps. */
   ready: string;
   steps?: Step[];
+  /** On a TV (and the simulators axe drives), the steps as remote keys: HID usage codes (40 select,
+   * 41 Menu/Back, 79 right, 80 left, 81 down, 82 up). */
+  keys?: number[];
   /** After the steps, wait for this before capturing. */
   settled?: string;
   scrollTo?: string;
@@ -77,7 +84,8 @@ export const LISTEN_VIEWS: ListenView[] = [
   { name: 'album', description: 'Album page of the queued album: header, track table with the current row lit', place: 'title:album-paper-boats', ready: 'music-tracklist' },
   { name: 'album-discs', description: 'A two-disc album (disc headings)', place: 'title:album-northern-almanac', ready: 'music-tracklist' },
   { name: 'album-liked', description: 'A liked album (filled heart)', place: 'title:album-glasshouse-weather', ready: 'music-tracklist' },
-  { name: 'playlist', description: 'A playlist page', place: 'playlist:playlist-weekend', ready: 'music-tracklist' },
+  { name: 'playlist', description: 'A music playlist page (Evening Drive)', place: 'playlist:playlist-evening-drive', ready: 'music-tracklist' },
+  { name: 'playlist-video', description: 'A playlist of videos only (no songs to list)', place: 'playlist:playlist-weekend', ready: 'music-tracklist', only: ['web-1440', 'web-390'] },
   { name: 'albums', description: 'Every album matching "a" (Search\'s Albums See all)', place: 'albums:a', ready: 'music-albums' },
   { name: 'rewind', description: 'Rewind: listening recap, stats and chart', place: 'rewind', ready: 'music-rewind-page' },
   { name: 'import', description: 'Playlist Import: the form', place: 'import', ready: 'music-import-page' },

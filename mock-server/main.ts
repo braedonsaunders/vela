@@ -71,6 +71,12 @@ for (const id of (process.env.VELA_MOCK_LIKED ?? '').split(',').filter(Boolean))
   const title = mediaTitle(id);
   if (title) title.watch = { ...(title.watch ?? { positionSeconds: 0, played: false, watchlisted: false }), favorite: true };
 }
+// VELA_MOCK_FAVORITES_LIST=1: Ether's liked lists by role (GET /favorites/titles), as Liked Songs reads them.
+if (mediaEnabled && process.env.VELA_MOCK_FAVORITES_LIST === '1') capabilities.features.favoritesList = { available: true };
+// VELA_MOCK_LYRICS=1: GET /titles/:id/lyrics, timed lines for the music tracks (a fictional verse
+// every five seconds, so a paused position lights a known line), plain text for none, instrumental
+// for the test signals.
+if (mediaEnabled && process.env.VELA_MOCK_LYRICS === '1') capabilities.features.lyrics = { available: true };
 const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
 // Loudness levelling and AutoMix markers on music tracks; VELA_MOCK_NO_LOUDNESS=1 is an Ether without them.
 if (mediaEnabled && process.env.VELA_MOCK_NO_LOUDNESS !== '1') capabilities.features.loudness = { available: true, album: true, fades: true };
@@ -416,6 +422,11 @@ const playlists: MockPlaylist[] = [
     { entryId: 'entry-smart-1', titleId: titles[2]!.id },
   ] },
 ];
+// VELA_MOCK_PLAYLIST_TRACKS=<track id>,…: a music playlist, "Evening Drive" (parity captures of a playlist page).
+if (process.env.VELA_MOCK_PLAYLIST_TRACKS) playlists.push({ id: 'playlist-evening-drive', name: 'Evening Drive', summary: 'Windows down, the long way home.', smart: false,
+  updatedAt: new Date(Date.parse(process.env.VELA_MOCK_NOW ?? '') || Date.now()).toISOString(),
+  entries: process.env.VELA_MOCK_PLAYLIST_TRACKS.split(',').filter(Boolean).map((titleId, n) => ({ entryId: `entry-evening-drive-${n + 1}`, titleId })) });
+if (process.env.VELA_MOCK_NOW) for (const value of playlists) value.updatedAt = new Date(Date.parse(process.env.VELA_MOCK_NOW) || Date.now()).toISOString();
 function playlistArtwork(g: Grant, titleId: string): V.ArtworkRef {
   const media = findMediaTitle(titleId);
   if (media) return media.artwork[0] ?? mediaArtwork(media.id, 'square');
@@ -815,6 +826,24 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, paging, g, scope), total: items.length } satisfies V.LibraryContents, g.id);
   }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
+  const lyricsMatch = /^\/titles\/([^/]+)\/lyrics$/.exec(path);
+  if (method === 'GET' && lyricsMatch && capabilities.features.lyrics?.available) {
+    const track = mediaTitle(decodeURIComponent(lyricsMatch[1]!));
+    if (!track || track.media?.role !== 'track') fail('not-found', 'lyrics_not_found', 'No lyrics for this title');
+    if (track!.genres.includes('Test Signal')) return json({ lines: [], instrumental: true, source: 'Mock' } satisfies V.TitleLyrics);
+    const words = ['the tide comes in', 'over the harbour wall', 'lanterns in the window', 'a kettle on the stove', 'paper boats are sailing',
+      'down the long field', 'we sing it once again', 'the morning train to wells'];
+    const lines = Array.from({ length: Math.ceil((track!.durationSeconds ?? 60) / 5) }, (_, n) => ({ startMs: n * 5000,
+      text: `${words[(n + track!.name.length) % words.length]![0]!.toUpperCase()}${words[(n + track!.name.length) % words.length]!.slice(1)}${n % 4 === 3 ? '' : ','}` }));
+    return json({ lines, instrumental: false, source: 'Mock' } satisfies V.TitleLyrics);
+  }
+  if (method === 'GET' && path === '/favorites/titles' && capabilities.features.favoritesList?.available) {
+    const role = url.searchParams.get('role') ?? '';
+    const liked = [...mediaGroups.tracks, ...mediaGroups.albums, ...mediaGroups.artists].filter(t => t.watch?.favorite && (!role || t.media?.role === role));
+    const likedAt = new Date(Date.parse(process.env.VELA_MOCK_NOW ?? '') || Date.now()).toISOString();
+    const items = liked.map(t => ({ id: t.id, kind: 'title' as const, title: present(g, t), likedAt, receiptToken: receipt(g, `favorites:${t.id}`) }));
+    return json({ ...page(items, url, g, `favorites:${role}:${mac(JSON.stringify(liked.map(t => t.id)))}`, 100), total: items.length } satisfies V.FavoriteTitlesPage);
+  }
   if (method === 'GET' && path === '/events') return serverEvents(req, () => !g.revoked && g.expires > Date.now());
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
