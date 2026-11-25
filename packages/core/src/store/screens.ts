@@ -12,7 +12,7 @@ import { eagerSources, isLazy, sourcesToReread } from '../screens/deps';
 import { changedParams, cleanParams, pageKey, sameTarget, serverContext, type PageRequest, type ScreenTarget } from '../screens/keys';
 import { linkHrefs, recordRefs, RecordStore, sameJSON, setPath } from '../screens/records';
 import { LocalSources, type LocalServer, type LocalStores } from '../screens/local';
-import type { LocalScope } from '../screens/local-records';
+import { sourceArgs, sourceDependencies, type LocalScope } from '../screens/local-records';
 import { chooseTopics, connectionKey, emptyQuery, readScreenMessage, streamQuery, type ScreenStreamQuery } from '../screens/stream';
 import type { ScreenPageState } from '../screens/types';
 import type { Session } from './session';
@@ -84,6 +84,10 @@ interface Entry {
   retryTimers: Set<ReturnType<typeof setTimeout>>;
   /** Live `vela.*` sources this page follows while shown (source name -> stop following). */
   live: Map<string, () => void>;
+  /** `vela.*` sources waiting for the sources their `{src.…}` holes read, and the arguments each
+   *  local source was last read with (a dependency's new value re-reads it only if they change). */
+  waiting: Set<string>;
+  argsRead: Map<string, string>;
 }
 
 /** A built-in page document's href: `vela:<experience>/<page>` (bundled, never fetched). */
@@ -323,7 +327,7 @@ export class Screens {
     const now = Date.now();
     if (!entry) {
       entry = { request: { target: request.target, href: request.href, params, ...(request.context ? { context: request.context } : {}) },
-        opened: 0, shownAt: 0, hiddenOrder: 0, hiddenAt: 0, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timeouts: new Map(), retryTimers: new Set(), live: new Map() };
+        opened: 0, shownAt: 0, hiddenOrder: 0, hiddenAt: 0, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timeouts: new Map(), retryTimers: new Set(), live: new Map(), waiting: new Set(), argsRead: new Map() };
       this.entries.set(key, entry);
       const seed = from && from !== key ? this.entries.get(from) : undefined;
       const seeded = seed && sameTarget(seed.request.target, request.target) && this.page(from!)?.load === 'ready';
@@ -480,12 +484,14 @@ export class Screens {
   }
 
   /** The page's params and a surface's context, which a `vela.*` source's holes read. */
-  private localScope(entry: Entry): LocalScope {
+  private localScope(entry: Entry, key?: string): LocalScope {
     const context = serverContext(entry.request.context);
     // A param left out reads its declared default (Ether applies them for its own sources).
     const defaults: Record<string, string> = {};
     for (const [name, spec] of Object.entries(this.documentOf(entry)?.params ?? {})) if (typeof spec?.default === 'string' && spec.default !== '') defaults[name] = spec.default;
-    return { params: { ...defaults, ...entry.request.params }, ...(Object.keys(context).length ? { context } : {}) };
+    const sources = key ? this.page(key)?.sources : undefined;
+    return { params: { ...defaults, ...entry.request.params }, ...(Object.keys(context).length ? { context } : {}),
+      ...(sources ? { sources, record: (record: string) => this.records.get(record)?.value } : {}) };
   }
 
   /** `vela.*` sources answered on the device, each as soon as it is known. `again`: answered anew from
@@ -501,12 +507,21 @@ export class Screens {
     const current = (name: string) => (entry.seq.get(name) ?? 0) <= seq;
     // A page with no Ether source is ready with its first local answer; one with some waits for Ether's.
     const onlyLocal = isBuiltInHref(entry.request.href) || Object.entries(document.sources).every(([, spec]) => spec?.lazy || LocalSources.isLocal(spec));
-    const scope = this.localScope(entry);
     await Promise.all(names.map(async name => {
       const spec = document.sources[name];
-      const answer = this.local && spec && LocalSources.isLocal(spec)
-        ? await this.local.read(spec, scope, !again && name in held)
-        : { error: 'unsupported' as const };
+      // A source reading others' values (`{src.…}`) is read once they have answered: it waits,
+      // still pending, and is read by readDependents; a failed dependency fails it the same way.
+      const deps = spec ? sourceDependencies(spec).filter(dep => dep !== name && dep in document.sources) : [];
+      const holding = this.page(key);
+      const failedDep = deps.find(dep => holding?.errors[dep]);
+      if (!failedDep && deps.some(dep => !(dep in (holding?.sources ?? {})))) { entry.waiting.add(name); return; }
+      entry.waiting.delete(name);
+      const scope = this.localScope(entry, key);
+      if (spec) entry.argsRead.set(name, JSON.stringify(sourceArgs(spec, scope)));
+      const answer = failedDep ? { error: holding!.errors[failedDep]! }
+        : this.local && spec && LocalSources.isLocal(spec)
+          ? await this.local.read(spec, scope, !again && name in held)
+          : { error: 'unsupported' as const };
       if (epoch !== this.session.epoch || this.entries.get(key) !== entry || !current(name)) return;
       // The records first, then the value reaching them, then tracking: one turn, nothing released between.
       if ('value' in answer) this.local?.write(answer.records);
@@ -519,8 +534,24 @@ export class Screens {
         return { ...page, pending, errors, sources, ...(onlyLocal ? { load: 'ready' as const } : {}) };
       });
       this.track(key);
+      this.readDependents(key, entry, [name]);
     }));
     if (entry.opened && this.entries.get(key) === entry) this.bindLive(key, entry);
+  }
+
+  /** Read the local sources whose `{src.…}` holes read a source that just answered (or failed):
+   * those waiting for it, and those whose filled arguments now differ from their last read. */
+  private readDependents(key: string, entry: Entry, changed: readonly string[]): void {
+    const document = this.documentOf(entry);
+    const page = this.page(key);
+    if (!document || !page || this.entries.get(key) !== entry || !changed.length) return;
+    const scope = this.localScope(entry, key);
+    const due = Object.entries(document.sources).filter(([name, spec]) => spec && LocalSources.isLocal(spec)
+      && (!spec.lazy || entry.lazy.has(name) || name in page.sources || entry.waiting.has(name))
+      && sourceDependencies(spec).some(dep => dep !== name && changed.includes(dep))
+      && (entry.waiting.has(name) || JSON.stringify(sourceArgs(spec, scope)) !== entry.argsRead.get(name)))
+      .map(([name]) => name);
+    if (due.length) void this.readLocal(key, entry, due);
   }
 
   /** Follow the page's live `vela.*` sources (the queue, Now Playing), and the stores behind the
@@ -539,7 +570,7 @@ export class Screens {
       // A source the page holds follows the store it reads: a playlist reordered, a like, a title read
       // again elsewhere answer it anew.
       if (!page || !(name in page.sources)) continue;
-      entry.live.set(name, this.local.watch(spec, this.localScope(entry), () => { void this.readLocal(key, entry, [name], true); }));
+      entry.live.set(name, this.local.watch(spec, this.localScope(entry, key), () => { void this.readLocal(key, entry, [name], true); }));
     }
   }
 
@@ -616,6 +647,7 @@ export class Screens {
       });
       this.track(key);
       this.schedule();
+      this.readDependents(key, entry, [...Object.keys(answered), ...Object.keys(errors)]);
       if (retrying.size) this.retrySoon(key, entry, [...retrying]);
     } catch (error) {
       if (previewExpired(error)) this.expirePreview();
@@ -762,6 +794,7 @@ export class Screens {
       if (entry) for (const name of Object.keys(sources)) entry.lazy.add(name);
       this.setPage(key, page => ({ ...page, sources: { ...page.sources, ...sources } }));
       this.track(key);
+      if (entry) this.readDependents(key, entry, Object.keys(sources));
     }
     const refresh = Array.isArray(answer.refresh) ? answer.refresh.filter((name): name is string => typeof name === 'string' && !!name) : [];
     if (refresh.length) void this.read(key, refresh);
@@ -935,6 +968,7 @@ export class Screens {
       entry.revs.set(frame.source, frame.rev);
       this.setPage(key, page => ({ ...page, sources: sameJSON(page.sources[frame.source], frame.value) ? page.sources : { ...page.sources, [frame.source]: frame.value }, rev: Math.max(page.rev, frame.rev) }));
       this.track(key);
+      this.readDependents(key, entry, [frame.source]);
     } else if (message.kind === 'alert') {
       const alert = message.alert;
       this.set('alerts', alerts => alerts.some(known => known.id === alert.id) ? alerts : [...alerts, alert].slice(-MAX_ALERTS));
@@ -960,7 +994,7 @@ export class Screens {
     const preview = this.box.get().screens.preview;
     this.box.update('screens', () => ({ ...initialScreens, preview }));
     for (const [key, entry] of open) {
-      const fresh: Entry = { ...entry, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timer: undefined, timeouts: new Map(), retryTimers: new Set(), live: new Map() };
+      const fresh: Entry = { ...entry, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timer: undefined, timeouts: new Map(), retryTimers: new Set(), live: new Map(), waiting: new Set(), argsRead: new Map() };
       this.entries.set(key, fresh);
       if (isBuiltInHref(entry.request.href)) this.builtIn(entry.request.href);
       this.fresh(key, fresh);

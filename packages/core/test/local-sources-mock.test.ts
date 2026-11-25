@@ -246,6 +246,22 @@ test('a param left out reads its default; a playlist reordered in the store is a
   handle.release();
 });
 
+test('a playlist read with audio lists only what plays as audio, entry ids and total alike', async () => {
+  await store.playlists.load();
+  // The mock's playlist of videos: the music app shows it with no songs.
+  const videos = store.getState().playlists.list.value!.find(item => item.name === 'Weekend watch')!;
+  const doc: ScreenDocument = { ...albumPage, page: 'audioList', params: {}, sources: { all: { from: 'vela.playlist', id: videos.id }, songs: { from: 'vela.playlist', id: videos.id, audio: 'true' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/audioList' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'audioList' }, href: 'vela:listen/audioList' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  const all = page().sources.all as PlaylistValue, songs = page().sources.songs as PlaylistValue;
+  expect(all.items.length).toBeGreaterThan(0);
+  expect(all.entryIds).toHaveLength(all.items.length);
+  expect(songs).toMatchObject({ items: [], entryIds: [], total: 0 });
+  handle.release();
+});
+
 test("the library's album view answers unsupported where the library has none", async () => {
   const doc: ScreenDocument = { ...albumPage, page: 'albums', params: { query: { type: 'string' } }, sources: { albums: { from: 'vela.library', id: 'music', view: 'albums', q: '{param.query}', limit: '50' } } };
   store.screens.provideDocuments(href => (href === 'vela:listen/albums' ? doc : undefined));
@@ -253,5 +269,23 @@ test("the library's album view answers unsupported where the library has none", 
   const page = () => store.getState().screens.pages[handle.key]!;
   await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
   expect(page().errors.albums).toBe('unsupported');
+  handle.release();
+});
+
+test("a source reading another's value waits for it, then reads with it ({src.…} holes)", async () => {
+  const doc: ScreenDocument = { ...albumPage, page: 'moreBy', params: { id: { type: 'string' } }, sources: {
+    title: { from: 'vela.title', id: '{param.id}' },
+    moreBy: { from: 'vela.children', id: '{src.title.item.media.parents.0.id}', role: 'album' },
+    broken: { from: 'vela.children', id: '{src.missing.item.id}' },
+  } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/moreBy' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'moreBy' }, href: 'vela:listen/moreBy', params: { id: album.id } });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && 'moreBy' in page().sources);
+  const artist = album.media!.parents!.find(parent => parent.role === 'artist')!.id;
+  const albums = mediaChildren(artist, 'album').map(item => `item:${item.id}`);
+  expect((page().sources.moreBy as ListValue).items.map(item => item.$record)).toEqual(albums);
+  // A hole reading a source the page does not have reads empty: a required id is refused.
+  expect(page().errors.broken).toBe('invalid_request');
   handle.release();
 });

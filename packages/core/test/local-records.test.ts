@@ -1,7 +1,7 @@
 // Vela's own sources as records: lists of references, the queue and Now Playing records, source
 // arguments filled from a page's params, and action arguments read in their declared types.
 import { describe, expect, test } from 'bun:test';
-import { boolArg, cardList, cardOf, intsArg, lyricsLine, musicHomeValue, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, rowsValue, sourceArgs } from '../src/screens/local-records';
+import { boolArg, cardList, cardOf, intsArg, lyricsLine, musicHomeValue, pathText, sourceDependencies, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, rowsValue, sourceArgs } from '../src/screens/local-records';
 import { importRecord, libraryQuery, LocalSources, playlistCard } from '../src/screens/local';
 import { createQueue, enqueue } from '../src/audio/queue';
 import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_SOURCES } from '../../protocol/vela-sources';
@@ -173,5 +173,16 @@ describe('music Home', () => {
     const legacy = musicHomeValue({ ...base, rows: [row('p:jump-back-in', [card('j')]), row('p:recently-played', [card('k')])] }).value;
     expect(legacy.jump).toEqual([{ $record: 'item:j' }]);
     expect(legacy.shelves).toEqual([]);
+  });
+});
+
+describe('{src.…} holes', () => {
+  test('a path follows record references; dependencies are listed', () => {
+    const records: Record<string, unknown> = { 'item:al1': { media: { parents: [{ id: 'ar1' }] } } };
+    const scope = { params: {}, sources: { title: { item: { $record: 'item:al1' } } }, record: (key: string) => records[key] };
+    const spec = { from: 'vela.children', id: '{src.title.item.media.parents.0.id}', role: 'album', other: '{src.none.x|or:fallback}' };
+    expect(sourceArgs(spec, scope)).toEqual({ id: 'ar1', role: 'album', other: 'fallback' });
+    expect(sourceDependencies(spec)).toEqual(['none', 'title']);
+    expect(pathText({ list: [1, 2, 3] }, 'list.length')).toBe('3');
   });
 });
