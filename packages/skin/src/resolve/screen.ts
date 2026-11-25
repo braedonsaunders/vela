@@ -10,6 +10,7 @@ import { EXPERIENCE_ID, slotSpec, type ExperienceOverride, type PageOverride } f
 import { RICH_BLOCKS } from '../../../protocol/rich-blocks';
 import { VELA_ACTIONS, VELA_SOURCES } from '../../../protocol/vela-sources';
 import { twoPanes } from '../widgets/media/window-layout';
+import { msg } from '../../../core/src/i18n';
 import { BLOCK_KINDS, RENDERER_VERSION, convertNode, type Context, type RNode, type Template } from '../resolve';
 import type { Keyframes, Motion } from '../keyframes';
 import { compileTemplate } from '../screen/holes';
@@ -304,7 +305,7 @@ export function resolveScreenDocument(doc: ScreenDocument, viewport: ScreenViewp
   const r: Context = {
     doc: pseudo, ui: tokens, strings, width: viewport.width, tv: viewport.tv === true, fold: viewport.fold === true, platform: viewport.platform,
     count: 0, unsupported: new Set(),
-    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page) }, kit: kitTemplates(tokens, viewport.scale ?? 1), palette, warnings, scale: viewport.scale ?? 1, step: viewport.step ?? 0.5,
+    screen: { scope: { strings, args: {}, aliases: new Set(), page: String(tokens.page), ...(doc.owner === 'vela' ? { fallback: velaString } : {}) }, kit: kitTemplates(tokens, viewport.scale ?? 1), palette, warnings, scale: viewport.scale ?? 1, step: viewport.step ?? 0.5,
       parts: { doc: held(doc.parts ?? {}) as Record<string, PartStyle>, skin: override?.parts ?? {} },
       partTemplates: { doc: Object.fromEntries(Object.entries(docTemplates).filter(([name]) => PART_TEMPLATES.has(name))),
         skin: Object.fromEntries(skinTemplates.filter(([name]) => PART_TEMPLATES.has(name))) } },
@@ -344,3 +345,56 @@ const DEFAULT_LOADING: Node = { type: 'box', style: { padding: '12px max(28px, 4
 const DEFAULT_FAILURE: Node = { type: 'use', template: 'vela:failure' };
 
 export type { Node };
+
+/** A built-in document's string from Vela's locale tables (`{s:music.liked}`), its `{name}` placeholders
+ * as `{arg.name}` (filled by `with:` or `plural:`); undefined when the tables have no such key. */
+export function velaString(key: string): string | undefined {
+  const found = msg(key);
+  if (found === key) return undefined;
+  return found.replace(/\{\{/g, '\u0000').replace(/\{([A-Za-z0-9_]+)\}/g, '{arg.$1}').replace(/\u0000/g, '{{');
+}
+
+/** The viewports a skin's experience overrides are checked at: a desktop, a phone and a TV. */
+const OVERRIDE_VIEWPORTS: (ScreenViewport & { name: string })[] = [
+  { name: 'desktop', width: 1440, height: 900, platform: 'web' },
+  { name: 'phone', width: 390, height: 844, platform: 'ios' },
+  { name: 'tv', width: 1920, height: 1080, tv: true, scale: 1.25, platform: 'tv' },
+];
+
+export interface OverrideFinding { level: 'error' | 'warn'; experience: string; page: string; viewport?: string; message: string }
+
+/**
+ * A skin's `experiences` overrides checked against the built-in pages they override (`pages`: the
+ * page's built-in document, by id): an override of a page or experience Vela does not build in, or
+ * one that does not resolve over its page (an unknown template, a hole the page cannot read), is an
+ * error; resolver warnings (unknown parts, props) are warnings. The shell is checked through the
+ * page `shell`. For `bun tools/skin.ts check` and the tests.
+ */
+export function checkExperienceOverrides(skin: Pick<SkinDocument, 'experiences' | 'tokens' | 'strings'>,
+  pages: (experience: string) => Record<string, ScreenDocument>): OverrideFinding[] {
+  const findings: OverrideFinding[] = [];
+  for (const [experience, override] of Object.entries(skin.experiences ?? {})) {
+    if (!EXPERIENCE_ID.test(experience)) { findings.push({ level: 'error', experience, page: '', message: `${experience} is not an experience id` }); continue; }
+    const builtIn = pages(experience);
+    const wanted = new Set([...Object.keys(override.pages ?? {}), ...(override.shell ? ['shell'] : [])]);
+    // Templates and parts apply to every page: check them over each.
+    const checked = override.templates || override.parts ? Object.keys(builtIn) : [...wanted];
+    for (const page of new Set([...wanted, ...checked])) {
+      const doc = builtIn[page];
+      if (!doc) { findings.push({ level: 'error', experience, page, message: `${experience} has no built-in page ${page}` }); continue; }
+      const seen = new Set<string>();
+      for (const viewport of OVERRIDE_VIEWPORTS) {
+        try {
+          for (const warning of resolveScreenDocument(doc, viewport, 'en', {}, { skin }).warnings) {
+            if (seen.has(warning)) continue;
+            seen.add(warning);
+            findings.push({ level: 'warn', experience, page, viewport: viewport.name, message: warning });
+          }
+        } catch (error) {
+          findings.push({ level: 'error', experience, page, viewport: viewport.name, message: error instanceof Error ? error.message : String(error) });
+        }
+      }
+    }
+  }
+  return findings;
+}
