@@ -41,6 +41,9 @@ final class PlaybackSession {
     private var recoveryLimit: Timer?
     private var plan: VelaPlan?
     private var activeSource = ""
+    /// The loaded item's clock against the title's (a server's VOD HLS may start partway into the title):
+    /// the engine is given and reports item seconds; everything else here is in title seconds.
+    private var timeline = MediaTimeline()
     /// The external subtitle added to this load's engine and selected.
     private var sidecar = SidecarSubtitle()
     private var lastCommand = -1
@@ -218,7 +221,7 @@ final class PlaybackSession {
         guard let path = next.selectedPath else {
             return
         }
-        let source = "\(next.sessionId):\(path.id):\(next.sourceGeneration)"
+        let source = next.sourceKey(path)
         // A server may increment the source generation for a track choice even though the
         // original file is unchanged. player can apply its streams without loading that file again.
         let sameFile = previous?.sessionId == next.sessionId && path.isOriginalFile &&
@@ -337,6 +340,9 @@ final class PlaybackSession {
         authorizedGeneration = authorized == nil ? nil : VelaMediaAccessStore.activeGeneration
         recoveryPosition = nil
         state = PlayerState()
+        timeline = MediaTimeline(plan: plan, path: path)
+        // Until the engine's clock arrives, the title position the item starts at (not zero).
+        if !plan.isLive { state.position = plan.positionSeconds }
         pendingSeek = nil
         pendingLiveStart = plan.live?.mode == "startOver" ? plan.positionSeconds : nil
         report.pathId = path.id
@@ -387,7 +393,10 @@ final class PlaybackSession {
         let subtitle = plan.subtitleTrack(report.subtitleTrackId)
         if let index = plan.audioTrack(report.audioTrackId)?.streamIndex { client.set("aid", String(index)) }
         client.set("sid", subtitle?.isExternal == false ? subtitle?.streamIndex.map(String.init) ?? "no" : "no")
-        var options = ["start=\(plan.positionSeconds)"]
+        var options = ["start=\(timeline.mediaTime(plan.positionSeconds))"]
+        if timeline.origin > 0 {
+            print("[vela-player] item starts at title \(timeline.origin)s; resuming title \(plan.positionSeconds)s")
+        }
         if path.isOriginalFile {
             // Source stream indexes are FFmpeg's; player selects by its own ids, mapped once loaded (applyTracks).
             options.append(subtitle == nil || subtitle?.isExternal == true ? "sid=no" : "sid=auto")
@@ -464,7 +473,7 @@ final class PlaybackSession {
     // MARK: player
 
     private func propertyChanged(_ name: String, _ value: Any?) {
-        state.update(name, value)
+        state.update(name, timeline.titleProperty(name, value))
         keepAwake(!ambient && (state.phase == .playing || state.phase == .buffering || state.phase == .loading))
         if name == "track-list" {
             applyTracks()
@@ -640,7 +649,7 @@ final class PlaybackSession {
             target = max(0, min(seconds, end))
         }
         pendingSeek = target
-        player?.command(["seek", String(target), "absolute+keyframes"])
+        player?.command(["seek", String(timeline.mediaTime(target)), "absolute+keyframes"])
     }
 
     // MARK: Commands
@@ -873,7 +882,7 @@ final class PlaybackSession {
         guard host.attached else {
             return
         }
-        start(plan, path: path, url: url, source: "\(plan.sessionId):\(path.id):\(plan.sourceGeneration)")
+        start(plan, path: path, url: url, source: plan.sourceKey(path))
     }
 
     private func number(_ value: Any?) -> Double? {
