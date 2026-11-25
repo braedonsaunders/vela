@@ -4,6 +4,7 @@
 // never fetched from or read through Ether.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createVela, type Vela } from '../src/store';
+import { listenFrom } from '../src/audio/cards';
 import type { VelaPlatform } from '../src/store/platform';
 import type { ScreenDocument } from '../src/wire';
 import { launchMock, type RunningMock } from '../../../mock-server/test/launch';
@@ -173,4 +174,21 @@ test('a built-in page with nothing to read now (a shell) is ready at once', () =
   const none = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'shell2' }, href: 'vela:listen/shell2' });
   expect(store.getState().screens.pages[none.key]!.load).toBe('failed');
   none.release();
+});
+
+test('vela.play on a podcast show plays its newest unheard episode, as the app does', async () => {
+  const show = mediaGroups.shows[0]!;
+  // What today's app plays for it: core's listenFrom over the show's episodes as the store reads them.
+  await store.media.children(show.id);
+  await store.catalogue.title(show.id);
+  const expected = listenFrom(store.getState().titles[show.id]!.value!.title[0]!, store.getState().children[show.id]!.value!.items).items[0]!;
+  const handle = store.screens.open({ target, href: 'vela:listen/album', params: { id: album.id } });
+  await until(() => store.getState().screens.pages[handle.key]?.load === 'ready');
+  await store.screens.action(handle.key, { name: 'vela.play', args: { item: `item:${show.id}` } });
+  await until(() => !!store.getState().audio.queue);
+  const queue = store.getState().audio.queue!;
+  expect(queue.items.map(card => card.id)).toEqual([expected.id]);
+  expect(queue.source).toMatchObject({ id: show.id, kind: 'title' });
+  await store.audio.stop();
+  handle.release();
 });
