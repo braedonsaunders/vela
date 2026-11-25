@@ -73,6 +73,7 @@ export { DEFAULT_STREAMING, STREAMING_LIMITS, STREAMING_QUALITIES, streamingSett
 export { storedPlayerSettings, type PictureFit, type PlayerSettingsState, type StoredPlayerSettings } from './store/player-settings';
 export { autoplayNext, current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf, listenFrom, playStart, resumePoint } from './audio/cards';
+export { audioKey, isLiked, likedTitleIds, nextRate, playingItem, runAudioKey, setTitleLiked, type AudioKeyCommand, type AudioKeyInput } from './audio/keys';
 export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, recapLabels, recapStatCards, type DuplicateGroupModel, type DuplicateGroupsList, type HistoryRecapModel, type LikedList, type Lyrics as MusicLyrics, type PlaylistImportMatchModel, type PlaylistImportModel, type PlaylistImportUnmatchedModel, type RecapChartBucket, type RecapEntryModel, type RecapLabels, type RecentContext, type RecordingReleasesModel } from './store/music';
 export { biquad, biquadResponseDb, chainResponseDb, crossfadeGains, eqChain, EQ_Q, type Biquad, type EqChain, type EqFilter, type FilterType } from './audio/eq';
 export { albumInOrder, DEFAULT_SOUND, EQ_BANDS_HZ, EQ_PRESETS, EQ_RANGE_DB, LEVELLING_MODES, levellingGain, loudnessOf, PREAMP_RANGE_DB, presetOf, soundSettings, transitionBetween, TRANSITION_LENGTHS, withBand, withPreset, type LevellingMode, type Levelling, type SoundSettings, type Transition, type TransitionLength } from './audio/sound';

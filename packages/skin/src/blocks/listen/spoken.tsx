@@ -12,7 +12,8 @@ import { alpha, Cover, Progress, useMediaLook } from '../../widgets/media/parts'
 import { MediaGlyph } from '../../widgets/media/icons';
 import { placeOf, useMusic } from './app';
 import { useChildren, useLibraryRows, useTitle } from './data';
-import { creditLines, listColumns, listenFrom, listenedFraction, roleLabel } from './listening';
+import { creditLines, listColumns, listenFrom, listenedFraction, roleLabel, spokenMode } from './listening';
+export { spokenMode, type SpokenMode } from './listening';
 import { musicTV } from './layout';
 import { ActionBar, coverSize, Genres, greeting, Header, MoreButton, MusicHome, MusicTitle, pad, usePlayingFrom } from './pages';
 import { Chip, FocusGroup, FocusScope, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash, type MenuOpen } from './parts';
@@ -197,15 +198,6 @@ function StartOver({ onPress }: { onPress(): void }) {
 }
 
 // ——— Audiobook ————————————————————————————————————————————————————————————————————
-
-/** What a spoken-word title page is: an audiobook, a podcast show (or a lone episode), or any other container. */
-export type SpokenMode = 'audiobook' | 'show' | 'collection';
-export function spokenMode(card: Pick<Card, 'media'>): SpokenMode {
-  const media = card.media;
-  if (media?.role === 'audiobook' || (media?.role === 'book' && media.audio)) return 'audiobook';
-  if (media?.role === 'show' || media?.class === 'podcast') return 'show';
-  return 'collection';
-}
 
 /** An audiobook's reads: its parts or chapters, where the viewer is through the whole book, and how to listen. */
 function useAudiobook(card: Card) {

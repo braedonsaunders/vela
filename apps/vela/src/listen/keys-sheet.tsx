@@ -1,4 +1,5 @@
-// The `?` sheet: the audio app's keyboard shortcuts for what it plays, in the document's look.
+// The `?` sheet: the audio app's keyboard shortcuts for what it plays, in the skin's look. App-wide:
+// the music widgets and the listen experience's documents both open it (./keys.tsx).
 import { StyleSheet, Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';

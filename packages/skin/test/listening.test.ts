@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Card } from '@vela/core';
-import { creditLines, isSpoken, keyboardMap, listColumns, listenFrom, listenedFraction, listeningOf, listeningWords, roleLabel } from '../src/blocks/listen/listening';
+import { creditLines, isSpoken, keyboardMap, listColumns, listenFrom, listenedFraction, listeningOf, listeningWords, roleLabel, spokenMode } from '../src/blocks/listen/listening';
 
 const catalogue = JSON.parse(readFileSync(join(import.meta.dir, '../../core/src/i18n/strings/en.json'), 'utf8')) as Record<string, string>;
 
@@ -105,4 +105,12 @@ test('only spoken word shows how far the viewer got', () => {
   expect(listenedFraction(card('e', { class: 'podcast', role: 'episode' }, { progressSeconds: 25 }))).toBe(0.25);
   expect(listenedFraction(card('e', { class: 'podcast', role: 'episode' }, { progressSeconds: 25, played: true }))).toBe(0);
   expect(listenedFraction(card('t', { class: 'music', role: 'track' }, { progressSeconds: 25 }))).toBe(0);
+});
+
+test('a spoken title page is an audiobook, a show or another container', () => {
+  expect(spokenMode(card('b', { class: 'audiobook', role: 'audiobook' }))).toBe('audiobook');
+  expect(spokenMode(card('b', { class: 'book', role: 'book', audio: true }))).toBe('audiobook');
+  expect(spokenMode(card('s', { class: 'podcast', role: 'show' }))).toBe('show');
+  expect(spokenMode(card('e', { class: 'podcast', role: 'episode' }))).toBe('show');
+  expect(spokenMode(card('c', { class: 'audiobook', role: 'series' }))).toBe('collection');
 });

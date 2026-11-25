@@ -49,6 +49,7 @@ export const RICH_BLOCKS = {
       header: flag('Draw the column header (never on a phone).', 'true'),
       discs: flag('Group a multi-disc album under disc headings.', 'false'),
       reorder: flag('Drag rows to reorder (a playlist the viewer owns; web pointer only). Needs playlist and entryIds.', 'false'),
+      limit: { type: 'number', default: '0', doc: 'At most this many rows (Popular\'s 5, or 10 after See more); 0 is all.' },
     },
     parts: ['trackTable.header', 'trackTable.row', 'trackTable.activeRow', 'trackTable.number', 'trackTable.title', 'trackTable.artist', 'trackTable.album', 'trackTable.duration', 'trackTable.disc'],
     templates: ['trackTable.row', 'trackTable.empty'],
@@ -234,6 +235,9 @@ export const RICH_BLOCKS = {
       tileSize: { type: 'number', default: '176', doc: 'px (smaller on a phone).' },
       subtitle: { type: 'enum', values: ['none', 'year', 'byline', 'release', 'playlist'], default: 'none', doc: 'The line under each tile.' },
       dedupeAlbums: flag('Show each song\'s album once.', 'false'),
+      exclude: { type: 'template', doc: 'A title id left out (an album\'s More by leaves the album out).' },
+      role: { type: 'template', doc: 'Keep only titles of this role (artist, album).' },
+      limit: { type: 'number', default: '0', doc: 'At most this many tiles; 0 is all.' },
     },
     parts: [], templates: [], tv: 'One focus row that remembers its position.',
   },
@@ -296,6 +300,7 @@ export const RICH_BLOCKS = {
   searchField: { doc: 'The audio app\'s search field: focused as the page opens, Escape clears it, Vela\'s or the system\'s keyboard on a TV. Its query is the store\'s, shared with recentSearches and searchResults.', props: {}, parts: [], templates: [], tv: 'One focus target that opens the keyboard; the clear button beside it.' },
   recentSearches: { doc: 'This library\'s recent searches (or the intro) while the field is empty; nothing once something is typed.', props: {}, parts: [], templates: [], tv: 'Rows are focus targets.' },
   searchResults: { doc: 'The results for what is typed, grouped by what the library holds (top result, songs, albums, artists, people, playlists), with loading, failed and empty states; nothing while the field is empty.', props: {}, parts: [], templates: [], tv: 'As the page.' },
+  importSubtitle: { doc: 'The import page\'s line under its title: the import\'s description, else what can be imported from (the advertised sources).', props: {}, parts: [], templates: [], tv: 'No focus.' },
 } as const satisfies Record<string, RichBlockSpec>;
 
 export type RichBlockName = keyof typeof RICH_BLOCKS;

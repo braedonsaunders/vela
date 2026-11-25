@@ -3,25 +3,23 @@
 // audiobooks, podcasts). The page in view lives in the address (`?m=`).
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
-import { audioCardsOf, type Card } from '@vela/core';
+import { View } from 'react-native';
+import { audioCardsOf, likedTitleIds, setTitleLiked, type Card } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import type { SkinHost } from '@vela/skin';
 import { TrackedHost } from '@vela/skin/src/host';
 import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
-import { holdBack } from '@vela/skin/src/menu-key';
 import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
 import { listenFrom, listeningOf } from '@vela/skin/src/blocks/listen/listening';
 import { forgetSearch, readRecent, rememberSearch } from '@vela/skin/src/blocks/listen/search-results';
 import { preferences } from '../data/preferences';
 import { useVela } from '../vela';
-import { useMusicKeys } from './keys';
 import { ExperienceView, hasExperience } from '@vela/skin/src/screen/experience';
 import { addressOfPlace, placeOfAddress, type ExperiencePlace } from '@vela/skin/src/screen/experience-route';
 import type { ScreenStateHandle } from '@vela/skin/src/screen/host';
 import { useAppScreenActions } from '../screen-actions';
 import { config } from '../data/config';
-import { MusicKeysSheet } from './keys-sheet';
+import { ListenKeys, useListenBack } from '../listen/keys';
 
 /** Titles the audio app opens in place: its roles (and the card kinds media titles carry). */
 const OPENS_IN_PLACE = ['artist', 'album', 'track', 'season', 'show', 'audiobook', 'part', 'series', 'episode', 'podcast', 'podcastEpisode'];
@@ -37,7 +35,6 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const [menu, setMenu] = useState<MusicMenuRequest | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [drawer, setDrawer] = useState<PlaylistDrawerRequest | null>(null);
-  const [keysOpen, setKeysOpen] = useState(false);
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   // Recent searches are this library's on this server for this viewer, kept on this device.
   const searchesKey = useVelaState(state => `music.recentSearches.${state.servers.selectedId}.${state.auth.viewerId || state.auth.viewer}.${libraryId}`);
@@ -50,28 +47,16 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   }), [searchesKey]);
   const favorites = useVelaState(state => state.collections);
   const roleLists = useVelaState(state => state.music.liked);
-  const likedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const list of Object.values(roleLists)) for (const item of list?.value?.items ?? []) ids.add(item.id);
-    for (const value of Object.values(favorites)) {
-      if (value?.value?.name !== 'Favorites') continue;
-      for (const item of value.value.items) ids.add(item.id);
-    }
-    return ids;
-  }, [favorites, roleLists]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const likedIds = useMemo(() => likedTitleIds(store.getState()), [store, favorites, roleLists]);
 
   // One like or unlike, from a heart, Follow or a card's menu: the hearts change at once, the
   // title leaves Liked Songs and Your Library at once (the store's optimistic watch change), and
   // the lists that show it read again. A refusal puts the heart back and rejects.
   const setLike = useCallback((card: Card, on: boolean): Promise<void> => {
     setLikes(current => ({ ...current, [card.id]: on }));
-    return store.catalogue.setTitleWatch(card.id, { favorite: on })
-      .then(() => {
-        const role = card.media?.role;
-        if (store.music.likedAvailable && role) { void store.music.liked(role, false, true); return; }
-        const liked = store.getState().playlists.list.value?.find(p => p.name === 'Favorites');
-        if (liked) void store.playlists.open(liked.id, false, true);
-      }, (error: unknown) => {
+    return setTitleLiked(store, card, on)
+      .then(() => undefined, (error: unknown) => {
         setLikes(current => ({ ...current, [card.id]: !on }));
         throw error;
       });
@@ -88,14 +73,11 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   // it was opened from (then, from music Home, to Vela's Home).
   const home = place.kind === 'home';
   const searching = place.kind === 'search';
-  useEffect(() => {
-    if (!Platform.isTV || home || (Platform.OS !== 'ios' && !searching)) return;
-    return holdBack(() => {
-      if (!searching && router.canGoBack()) router.back();
-      else router.replace({ pathname: '/library/[id]', params: { id: libraryId } });
-      return true;
-    });
-  }, [home, searching, libraryId]);
+  useListenBack({
+    home, searching,
+    back: () => { if (!router.canGoBack()) return false; router.back(); return true; },
+    toHome: () => router.replace({ pathname: '/library/[id]', params: { id: libraryId } }),
+  });
   const app = useMemo<MusicApp>(() => ({
     libraryId,
     listening,
@@ -123,11 +105,10 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   // Until the hard cut the listen documents draw only in builds that ask for them (parity captures).
   const documents = config.listen === 'documents' && hasExperience('listen');
   const shell = useRef<ScreenStateHandle | null>(null);
-  const keyActions = useMemo(() => ({
+  const keysApp = useMemo(() => ({
+    listening, searching, search: () => go({ kind: 'search' }), like: app.like, liked: app.liked,
     toggleQueue: () => (documents ? shell.current?.toggle('queue', { clear: ['sound'] }) : setQueueOpen(open => !open)),
-    help: () => setKeysOpen(true),
-  }), [documents]);
-  useMusicKeys(store, app, keyActions);
+  }), [listening, searching, go, app, documents]);
 
   // In the music app a title opens in place, not as the title page above it.
   const host = useMemo<SkinHost | null>(() => base ? {
@@ -149,7 +130,6 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const setParams = useCallback((next: Record<string, string>) => router.setParams(next), []);
   const screenActions = useAppScreenActions({ host, back, setParams });
   const closeDrawer = useCallback(() => setDrawer(null), []);
-  const closeKeys = useCallback(() => setKeysOpen(false), []);
   if (!host) return null;
   // A tracked host: the music app's parts draw again only for the host and env keys they read,
   // not whenever any of Vela's view state changes (a flag elsewhere, the home hero).
@@ -161,7 +141,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
             ? <ExperienceView experience="listen" libraryId={libraryId} place={placeOfAddress(at)} go={goPlace} host={host} active actions={screenActions} shell={shell} />
             : <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />}
           <PlaylistDrawer request={drawer} close={closeDrawer} />
-          <MusicKeysSheet open={keysOpen} close={closeKeys} listening={listening} />
+          <ListenKeys store={store} app={keysApp} />
           {menu ? (
             <CardContextMenu card={menu.card} primary={{ action: 'select', arg: `${menu.card.id}|${menu.card.media?.role ?? menu.card.kind}|` }}
               anchor={menu.anchor} mode={menu.mode ?? 'pointer'} opener={menu.opener ?? null} playlistEntry={menu.entry} close={() => setMenu(null)}

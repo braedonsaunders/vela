@@ -85,6 +85,22 @@ templates, so the engine draws exactly as before.
 | `recap`, `playlistImport`, `duplicates` | `blocks/recap`, `blocks/import`, `blocks/duplicates` | Blocks (libraryId; period and name as document state) |
 | `visualizer` | `visualizer.tsx` over `apps/vela/src/visualizer` | Block; the stage comes from the app's host |
 
+### Page-level blocks
+
+The pieces of today's music pages, so page documents can arrange them (`page-blocks.tsx` over
+`pages.tsx`, `parts.tsx`, `spoken.tsx`, `search.tsx`, `albums.tsx`; each page is composed of exactly
+these components, so the same paddings around them reproduce it):
+
+| Block | Draws |
+| --- | --- |
+| `wash`, `collectionHeader` (+ `collectionHeader.cover`, `.byline` templates), `cover`, `actionBar`, `byline` | A collection page's top |
+| `musicShelf`, `tileGrid` | Shelves and paged grids of music tiles over list sources |
+| `quickTiles`, `homeShelves`, `genres` | Music Home |
+| `artistHero`, `artistLiked`, `discography` | The artist page |
+| `continueListening`, `spokenCredits`, `spokenFacts`, `spokenProgress`, `spokenPlay`, `spokenItems`, `spokenAbout` | Spoken word's Home and title pages (the kind is picked from the item) |
+| `searchField`, `recentSearches`, `searchResults` | Search (they share core's search query) |
+| `listenSearch`, `spokenHome`, `spokenTitle`, `albumsGrid` | Whole pages, kept while documents replace them |
+
 ### Hosting a background (the visualizer)
 
 `nowPlaying` publishes a `nowPlaying.background` part template, drawn behind the artwork stage
