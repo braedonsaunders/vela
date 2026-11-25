@@ -1,0 +1,89 @@
+{
+  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
+  "screen": "listen", "page": "title", "version": "1",
+  "title": "{src.title.item.name}", "presentation": "section",
+  "params": { "id": { "type": "string" }, "library": { "type": "string" } },
+  "sources": {
+    "title": { "from": "vela.title", "id": "{param.id}" },
+    "tracks": { "from": "vela.children", "id": "{param.id}", "role": "track", "lazy": true },
+    "moreBy": { "from": "vela.children", "id": "{src.title.item.media.parents.0.id}", "role": "album", "lazy": true },
+    "rows": { "from": "vela.rows", "placement": "detail", "titleId": "{param.id}", "lazy": true }
+  },
+  "templates": {
+    "pad": { "type": "box", "style": { "padding-left": "28px", "padding-right": "28px" }, "small": { "padding-left": "16px", "padding-right": "16px" }, "children": [{ "type": "slot", "slot": "children" }] },
+    "albumHeader": {
+      "type": "collectionHeader", "props": { "eyebrow": "{arg.eyebrow}", "title": "{src.title.item.name}" },
+      "partTemplates": {
+        "collectionHeader.cover": { "type": "cover", "props": { "kind": "square", "item": "{src.title.item}", "lift": "2" } },
+        "collectionHeader.byline": { "type": "byline", "props": { "item": "{src.title.item}", "facts": "{src.title.item.yearLabel}|{src.tracks.items|totalLabel}" } }
+      }
+    },
+    "heading": { "type": "text", "role": "heading", "text": "{arg.text}", "style": { "font-family": "$ui.fontDisplay", "font-size": "26px", "color": "$ui.ink", "margin-bottom": "10px" } },
+    "album": {
+      "type": "sections", "needs": ["tracks", "moreBy"], "style": { "padding-bottom": "32px" },
+      "children": [
+        { "type": "box", "children": [
+          { "type": "wash", "props": { "accent": "{src.title.item.accent}", "image": "{src.title.item.poster}" } },
+          { "type": "use", "template": "pad", "children": [
+            { "type": "use", "template": "albumHeader", "with": { "eyebrow": "{s:music.single}" }, "when": [{ "test": "src.title.item.media.childCount", "is": "lt", "value": "4" }] },
+            { "type": "use", "template": "albumHeader", "with": { "eyebrow": "{s:music.ep}" }, "when": [{ "test": "src.title.item.media.childCount", "is": "gt", "value": "3" }, { "test": "src.title.item.media.childCount", "is": "lt", "value": "7" }] },
+            { "type": "use", "template": "albumHeader", "with": { "eyebrow": "{s:media.ui.album}" }, "when": [{ "test": "src.title.item.media.childCount", "is": "gt", "value": "6" }] },
+            { "type": "actionBar", "props": { "buttons": "play,shuffle,heart,more", "item": "{src.title.item}", "tracks": "{src.tracks}", "sourceId": "{param.id}", "sourceName": "{src.title.item.name}", "sourceKind": "title" } },
+            { "type": "trackTable", "props": { "tracks": "{src.tracks}", "sourceId": "{param.id}", "sourceName": "{src.title.item.name}", "sourceKind": "title" } },
+            { "type": "box", "style": { "padding-top": "28px", "padding-bottom": "28px", "gap": "4px" }, "children": [
+              { "type": "text", "when": [{ "test": "src.title.item.airDate" }], "text": "{src.title.item.airDate|fullDate}", "style": { "font-size": "14px", "color": "$ui.inkSecondary" } },
+              { "type": "repeat", "over": "src.title.item.media.facts", "as": "fact", "item":
+                { "type": "text", "when": [{ "test": "fact.label", "is": "eq", "value": "Label" }], "text": "© {fact.value}", "style": { "font-size": "12px", "color": "$ui.inkQuiet" } } }
+            ] }
+          ] }
+        ] },
+        { "type": "slot", "slot": "plugin:listen.album.panel", "context": { "title": "{src.title.item.$key}" } },
+        { "type": "box", "style": { "padding-left": "16px", "padding-right": "16px" }, "when": [{ "test": "src.moreBy.items.length", "is": "gt", "value": "1" }], "children": [
+          { "type": "musicShelf", "props": { "title": "{s:music.moreBy|with:name=src.title.item.media.parents.0.name}", "items": "{src.moreBy}", "exclude": "{param.id}", "limit": "12", "tileSize": "168", "subtitle": "year" } }
+        ] }
+      ]
+    },
+    "artist": {
+      "type": "sections", "needs": ["rows"], "style": { "padding-bottom": "32px" },
+      "children": [
+        { "type": "artistHero", "props": { "item": "{src.title.item}" } },
+        { "type": "use", "template": "pad", "children": [
+          { "type": "repeat", "over": "src.rows.rows", "as": "row", "limit": 1, "item": { "type": "box", "when": [{ "test": "row.purpose", "is": "eq", "value": "top" }], "children": [
+            { "type": "actionBar", "props": { "buttons": "play,shuffle,follow,more", "item": "{src.title.item}", "tracks": "{row.items}", "sourceId": "{param.id}", "sourceName": "{src.title.item.name}", "sourceKind": "title" } }
+          ] } },
+          { "type": "box", "style": { "flex-direction": "row", "gap": "40px", "flex-wrap": "wrap" }, "small": { "flex-direction": "column", "gap": "28px" }, "children": [
+            { "type": "box", "style": { "flex": "2", "min-width": "520px" }, "small": { "flex": "none", "min-width": "0px", "align-self": "stretch" }, "children": [
+              { "type": "use", "template": "heading", "with": { "text": "{s:music.popular}" } },
+              { "type": "repeat", "over": "src.rows.rows", "as": "row", "item": { "type": "box", "when": [{ "test": "row.purpose", "is": "eq", "value": "top" }], "children": [
+                { "type": "trackTable", "props": { "tracks": "{row.items}", "limit": "{state.popularMore|then:10,5}", "covers": "true", "position": "true", "sourceId": "{param.id}", "sourceName": "{src.title.item.name}", "sourceKind": "title" } },
+                { "type": "box", "when": [{ "test": "row.items.length", "is": "gt", "value": "5" }], "role": "button", "press": { "action": "toggle", "arg": "popularMore" },
+                  "style": { "padding-left": "16px", "padding-right": "16px", "padding-top": "12px", "padding-bottom": "12px" },
+                  "children": [{ "type": "text", "text": "{state.popularMore|then:s:music.showLess,s:music.seeMore}", "style": { "font-size": "14px", "font-weight": "700", "color": "$ui.inkSecondary" } }] }
+              ] } }
+            ] },
+            { "type": "artistLiked", "props": { "item": "{src.title.item}" } }
+          ] }
+        ] },
+        { "type": "discography", "props": { "item": "{src.title.item}" } },
+        { "type": "repeat", "over": "src.rows.rows", "as": "row", "item": { "type": "box", "when": [{ "test": "row.purpose", "is": "eq", "value": "related" }],
+          "style": { "padding-left": "16px", "padding-right": "16px" }, "small": { "padding-left": "4px", "padding-right": "4px" }, "children": [
+          { "type": "musicShelf", "props": { "title": "{row.name}", "items": "{row.items}", "role": "artist", "limit": "20", "tileSize": "168" } }
+        ] } },
+        { "type": "slot", "slot": "plugin:listen.artist.panel", "context": { "title": "{src.title.item.$key}" } },
+        { "type": "box", "when": [{ "test": "src.title.item.summary" }], "style": { "padding-left": "28px", "padding-right": "28px", "padding-bottom": "40px", "max-width": "860px" }, "small": { "padding-left": "16px", "padding-right": "16px" }, "children": [
+          { "type": "use", "template": "heading", "with": { "text": "{s:music.about}" } },
+          { "type": "text", "text": "{src.title.item.summary}", "style": { "font-size": "15px", "line-height": "1.6", "color": "$ui.inkSecondary" } }
+        ] }
+      ]
+    }
+  },
+  "tree": {
+    "type": "box", "style": { "flex": "1" }, "children": [
+      { "type": "use", "template": "artist", "when": [{ "test": "src.title.item.media.role", "is": "eq", "value": "artist" }] },
+      { "type": "use", "template": "album", "when": [{ "test": "src.title.item.media.class", "is": "eq", "value": "music" }, { "test": "src.title.item.media.role", "is": "ne", "value": "artist" }] },
+      { "type": "box", "testId": "listen-title-spoken", "style": { "flex": "1" }, "when": [{ "test": "src.title.item.media.class", "is": "ne", "value": "music" }], "children": [
+        { "type": "spokenTitle", "props": { "id": "{param.id}" } }
+      ] }
+    ]
+  }
+}

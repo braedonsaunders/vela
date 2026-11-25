@@ -5,10 +5,13 @@
 // page of the same experience moves the address; the rest leaves as any screen's actions do. Each
 // page keeps its scroll by its key. The active skin's overrides of the experience apply to both
 // (resolveScreenDocument). The app shows this only where the experience has a shell.
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, type MutableRefObject, type ReactNode } from 'react';
+import { View } from 'react-native';
 import type { SkinHost } from '../host';
+import { headerInsetOf } from '../resolve/inherit';
+import { useMediaLook } from '../widgets/media/parts';
 import { builtinDocument, builtinHref, builtinScreenId } from '../resolve/builtin';
-import { ScreenView, type ScreenAppActions, type ScreenDestination } from './host';
+import { ScreenView, type ScreenAppActions, type ScreenDestination, type ScreenStateHandle } from './host';
 import { HOME_PLACE, placeKey, type ExperiencePlace } from './experience-route';
 
 export interface ExperienceViewProps {
@@ -24,6 +27,8 @@ export interface ExperienceViewProps {
   actions: ScreenAppActions;
   /** Drawn when the experience has no shell (or the page none and no home): the app's fallback. */
   missing?: ReactNode;
+  /** The shell document's local state for app code: `shell.current?.toggle('queue', { clear: ['sound'] })`. */
+  shell?: MutableRefObject<ScreenStateHandle | null>;
 }
 
 /** Whether Vela builds this experience in (it has a shell document). */
@@ -34,7 +39,7 @@ export function drawnPlace(experience: string, place: ExperiencePlace): Experien
   return builtinDocument(builtinHref(experience, place.page)) ? place : HOME_PLACE;
 }
 
-export function ExperienceView({ experience, libraryId, place: asked, go, host, active, actions, missing = null }: ExperienceViewProps) {
+export function ExperienceView({ experience, libraryId, place: asked, go, host, active, actions, missing = null, shell }: ExperienceViewProps) {
   const screen = builtinScreenId(experience);
   const place = drawnPlace(experience, asked);
   const key = placeKey(place);
@@ -61,6 +66,14 @@ export function ExperienceView({ experience, libraryId, place: asked, go, host, 
   );
   // The shell draws the page where its document puts the `children` slot.
   const shellHost = useMemo<SkinHost>(() => ({ ...host, children: page }), [host, page]);
+  // The shell starts below the skin's navigation, wherever the skin draws it (overlay or in flow): the
+  // inset is the host's, so every experience's shell gets it; the shell document adds its own space.
+  const m = useMediaLook();
+  const inset = host.doc.document.traits?.headerInset ?? headerInsetOf(host.doc.document.slots?.shell);
   if (!hasExperience(experience)) return <>{missing}</>;
-  return <ScreenView target={shellTarget} href={builtinHref(experience, 'shell')} params={shellParams} host={shellHost} active={active} actions={pageActions} route={false} />;
+  return (
+    <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': m.small ? inset.small : inset.wide })]} testID="experience-shell">
+      <ScreenView target={shellTarget} href={builtinHref(experience, 'shell')} params={shellParams} host={shellHost} active={active} actions={pageActions} route={false} handle={shell} />
+    </View>
+  );
 }

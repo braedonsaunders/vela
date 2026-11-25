@@ -100,7 +100,9 @@ export type RNode = Common & (
   | { kind: 'box'; children: RNode[]; press?: RPress; pager?: { inset?: number; peek?: number }; fit?: 'nav'; readingStop?: true;
     /** Screens: a reading stop only while these hold (`vela:panel` with a bound `focusable`). */
     readingStopWhen?: Test[]; controlStates: boolean }
-  | { kind: 'text'; text: Template; summary?: boolean; avatar?: boolean }
+  | { kind: 'text'; text: Template; summary?: boolean; avatar?: boolean;
+    /** Renderer 20: inline runs after the text, each with its own text rows. */
+    spans?: { text: Template; style: CssT; when: Test[] }[] }
   | { kind: 'image'; src: Template; alt?: Template; fade: boolean; /** Screens: drawn until the image loads, and instead of an empty, refused or failed one. */ fallback?: RNode }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
   | { kind: 'repeat'; over: string; limit: number; implicitLimit?: boolean; item: RNode; /** Screens: a data collection (screen/items.ts). */ items?: Items }
@@ -269,6 +271,8 @@ export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
       case 'gt': ok = num(v) > num(value); break;
       case 'lt': ok = num(v) < num(value); break;
       case 'mod': { const [n, rem] = value.split(':').map(Number); ok = n ? num(v) % n === rem : false; break; }
+      case 'starts': ok = value !== '' && v.startsWith(value); break;
+      case 'ends': ok = value !== '' && v.endsWith(value); break;
       default: ok = !['', 'false', '0'].includes(v);
     }
     if (ok === k.not) return false;
@@ -430,7 +434,8 @@ function convert(node: Node, depth: number, r: Context): RNode {
     // A text that is the viewer's initial is their badge: the renderer draws their avatar over it,
     // in whatever shape the skin gives the badge, so every document's profile control shows it.
     case 'text': return { ...common, kind: 'text', text: compile(node.text, r)!, summary: ['{detail.summary}', '{personPage.biography}'].includes(node.text.trim()),
-      avatar: node.text.trim() === '{env.viewerInitial}' };
+      avatar: node.text.trim() === '{env.viewerInitial}',
+      ...(node.spans?.length ? { spans: node.spans.map(span => ({ text: compile(span.text, r)!, style: css(span.style, r), when: tests(span.when, r) })) } : {}) };
     case 'image': return { ...common, kind: 'image', src: compile(node.src, r, true)!, alt: compile(node.alt, r), fade: node.fade === true,
       ...(r.screen && node.fallback ? { fallback: convert(node.fallback, depth + 1, r) } : {}) };
     case 'icon': return { ...common, kind: 'icon', symbol: r.screen ? screenSymbol(node.symbol, r) : node.symbol, paths: node.paths, viewBox: node.viewBox, fillRule: node.fillRule };

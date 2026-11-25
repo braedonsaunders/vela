@@ -51,8 +51,9 @@ export interface PartLayers {
 export interface Condition {
   /** A binding key (`card.played`, `hero.backdrop`, `env.small`), or `flag:<name>`. */
   test: string;
-  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` "n:r", the number % n == r. */
-  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt' | 'mod';
+  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` "n:r", the number % n == r.
+   *  Renderer 20: starts/ends: the text begins or ends with `value` (a row id's ":top"). */
+  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt' | 'mod' | 'starts' | 'ends';
   value?: string;
   not?: boolean;
 }
@@ -149,7 +150,12 @@ export interface BoxNode extends NodeBase {
 }
 /** A text. One that is exactly `{env.viewerInitial}` and sets its own width and height is the viewer's
  * badge: the renderer draws the viewer's avatar over it, clipped to its shape, where the server gives one. */
-export interface TextNode extends NodeBase { type: 'text'; text: Template }
+export interface TextNode extends NodeBase { type: 'text'; text: Template;
+  /** Renderer 20: runs drawn inline after `text`, in the same line box (a bold name inside a sentence),
+   *  each with its own text rows (colour, font, size, weight, style, letter-spacing, text-transform). */
+  spans?: TextSpan[] }
+/** Renderer 20: an inline run of a text node. */
+export interface TextSpan { text: Template; style?: Style; when?: Condition[] }
 /** Breakpoints at the document's own widths, evaluated against the slot's width. */
 export interface Breakpoints { below?: Record<string, Style>; above?: Record<string, Style> }
 export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?: Template; /** Fade in once loaded. */ fade?: boolean;

@@ -142,10 +142,13 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   const { px } = look;
 
   const isPage = runtime?.presentation === 'page';
-  const defaultGap = px(isPage ? 22 : 30);
+  // A page inside an experience's shell (renderer 20) lays out its own column: the shell keeps it
+  // clear of its bars, so no inset, no end space and no gap of the section's own.
+  const embedded = !!runtime?.scrollKey;
+  const defaultGap = embedded ? 0 : px(isPage ? 22 : 30);
   const gap = parsePoints(node.gap, px, defaultGap);
-  const topPad = isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
-  const bottomPad = px(isPage ? 48 : 64) + (isPage ? 0 : gap);
+  const topPad = embedded || isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
+  const bottomPad = embedded ? 0 : px(isPage ? 48 : 64) + (isPage ? 0 : gap);
 
   const inheritedRows: Record<string, string> = {};
   for (const [k, v] of Object.entries(node.base.style ?? {})) {
