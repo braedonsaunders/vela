@@ -25,8 +25,7 @@
   "tracks": {
    "from": "vela.children",
    "id": "{param.id}",
-   "role": "track",
-   "lazy": true
+   "role": "track"
   },
   "moreBy": {
    "from": "vela.children",
@@ -36,9 +35,8 @@
   },
   "rows": {
    "from": "vela.rows",
-   "placement": "detail",
-   "titleId": "{param.id}",
-   "lazy": true
+   "placement": "title",
+   "titleId": "{param.id}"
   }
  },
  "templates": {
@@ -95,14 +93,7 @@
    }
   },
   "album": {
-   "type": "sections",
-   "needs": [
-    "tracks",
-    "moreBy"
-   ],
-   "style": {
-    "padding-bottom": "32px"
-   },
+   "type": "box",
    "children": [
     {
      "type": "box",
@@ -266,17 +257,10 @@
       }
      ]
     }
-   ],
-   "testId": "music-main"
+   ]
   },
   "artist": {
-   "type": "sections",
-   "needs": [
-    "rows"
-   ],
-   "style": {
-    "padding-bottom": "32px"
-   },
+   "type": "box",
    "children": [
     {
      "type": "artistHero",
@@ -292,14 +276,13 @@
        "type": "repeat",
        "over": "src.rows.rows",
        "as": "row",
-       "limit": 1,
        "item": {
         "type": "box",
         "when": [
          {
-          "test": "row.purpose",
-          "is": "eq",
-          "value": "top"
+          "test": "row.id",
+          "is": "ends",
+          "value": ":top"
          }
         ],
         "children": [
@@ -326,7 +309,8 @@
        },
        "small": {
         "flex-direction": "column",
-        "gap": "28px"
+        "gap": "28px",
+        "flex-wrap": "nowrap"
        },
        "children": [
         {
@@ -356,9 +340,9 @@
             "type": "box",
             "when": [
              {
-              "test": "row.purpose",
-              "is": "eq",
-              "value": "top"
+              "test": "row.id",
+              "is": "ends",
+              "value": ":top"
              }
             ],
             "children": [
@@ -435,9 +419,9 @@
       "type": "box",
       "when": [
        {
-        "test": "row.purpose",
-        "is": "eq",
-        "value": "related"
+        "test": "row.id",
+        "is": "ends",
+        "value": ":related"
        }
       ],
       "style": {
@@ -505,15 +489,11 @@
       }
      ]
     }
-   ],
-   "testId": "music-main"
+   ]
   }
  },
  "tree": {
-  "type": "box",
-  "style": {
-   "flex": "1"
-  },
+  "type": "sections",
   "children": [
    {
     "type": "use",
@@ -557,8 +537,7 @@
     ],
     "children": [
      {
-      "type": "sections",
-      "testId": "music-main",
+      "type": "box",
       "children": [
        {
         "type": "box",
@@ -804,6 +783,14 @@
      }
     ]
    }
-  ]
+  ],
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "tv": {
+   "padding-bottom": "48px",
+   "padding-right": "32px"
+  },
+  "testId": "music-main"
  }
 }

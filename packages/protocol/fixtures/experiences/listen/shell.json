@@ -14,7 +14,11 @@
    "type": "string"
   }
  },
- "sources": {},
+ "sources": {
+  "queue": {
+   "from": "vela.queue"
+  }
+ },
  "tokens": {
   "hairline": "$ui.glassEdge"
  },
@@ -260,20 +264,10 @@
    },
    "children": [
     {
-     "type": "box",
-     "style": {
-      "width": "96px",
-      "padding-top": "24px",
-      "align-items": "center"
-     },
-     "children": [
-      {
-       "type": "rail",
-       "props": {
-        "mode": "icons"
-       }
-      }
-     ]
+     "type": "rail",
+     "props": {
+      "mode": "icons"
+     }
     },
     {
      "type": "slot",
@@ -284,7 +278,21 @@
      },
      "inner": {
       "flex": "1"
-     }
+     },
+     "states": [
+      {
+       "when": [
+        {
+         "test": "src.queue.current"
+        }
+       ],
+       "style": {
+        "flex": "1",
+        "min-height": "0px",
+        "margin-bottom": "146px"
+       }
+      }
+     ]
     }
    ]
   }
