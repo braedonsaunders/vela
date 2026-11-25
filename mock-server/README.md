@@ -88,7 +88,7 @@ qualities=[]; TS is not offered to the fMP4 MSE pipeline or added to normal plan
 GET/POST `/__admin/faults` reads/patches:
 
 ```json
-{"rangeFailSeconds":0,"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false,"refreshFailSeconds":0,"refreshFailStatus":500,"refreshStallMs":0,"refreshAbandonMs":0}
+{"rangeFailSeconds":0,"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false,"refreshFailSeconds":0,"refreshFailStatus":500,"refreshStallMs":0,"refreshAbandonMs":0,"audioStartPending":0,"videoStartPending":0,"startStoppedSession":0}
 ```
 
 Session faults: `refreshFailSeconds` makes `POST /vela/v0/auth/refresh` fail for that
@@ -101,6 +101,15 @@ mock sees is stored, held that long, then answered 409 `mutation_outcome_unknown
 (`retry.allowed: false`) without rotating the token; that key answers the same 409
 at once from then on, while a new key for the same token rotates normally. Setting
 it again re-arms one abandonment and forgets the earlier keys; zero clears them.
+
+Playback start faults: `audioStartPending` and `videoStartPending` answer the next
+that many track/audiobook/part, or film/episode, starts with 503 `preparation_pending`
+(`retry.allowed`, `afterSeconds: 1`, `Retry-After: 1`), as Ether answers a start it is
+still preparing; each refusal counts one down, so the retry under the same key plays.
+`startStoppedSession` answers the next that many starts with the viewer's most recently
+stopped session, its state shown as `ready` (Ether rc.15's broker reused one). Queued
+(gapless) starts are never faulted. For example
+`curl -X POST 127.0.0.1:7777/__admin/faults -d '{"audioStartPending":1}'`.
 
 Zero disables each numeric fault. Bandwidth applies per response (bits/s).
 failEvery/truncateEvery affect every Nth requested CMAF media segment globally;

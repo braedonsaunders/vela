@@ -144,6 +144,27 @@ async function abandonedRefresh(key: string): Promise<void> {
   await Bun.sleep(Math.min(faults.refreshAbandonMs, 600_000));
   unknown();
 }
+/** Each viewer's most recently stopped session (the `startStoppedSession` fault answers a start with it). */
+const lastStopped = new Map<string, string>();
+/**
+ * The playback start faults (Faults in media.ts), for a start that is not queued: a 503
+ * `preparation_pending` while `pending` names a count left, else the viewer's last stopped session
+ * shown as `ready`. Undefined when no fault applies.
+ */
+function startFault(g: Grant, body: V.PlaybackRequest, pending: 'audioStartPending' | 'videoStartPending'): V.PlaybackPlan | undefined {
+  if (body.queued) return undefined;
+  if (faults[pending] > 0) {
+    faults[pending]--;
+    throw Response.json({ error: { class: 'transient', code: 'preparation_pending', message: 'Playback is being prepared', retry: { allowed: true, afterSeconds: 1 } } } satisfies V.ErrorResponse,
+      { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '1' } });
+  }
+  const stopped = sessions.get(lastStopped.get(g.id) ?? '');
+  if (faults.startStoppedSession > 0 && stopped) {
+    faults.startStoppedSession--;
+    return { ...stopped.plan, state: 'ready' };
+  }
+  return undefined;
+}
 function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}, statusOverride?: number): never {
   const status = statusOverride ?? { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, playback: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
   throw Response.json({ error: { class: cls, code, message, retry: { allowed: ['capacity', 'transient'].includes(cls), ...(cls === 'capacity' ? { afterSeconds: 3, maxAttempts: 3 } : {}) }, ...extra } } satisfies V.ErrorResponse, { status, headers: { 'Cache-Control': 'no-store', ...(cls === 'capacity' ? { 'Retry-After': '3' } : {}) } });
@@ -1040,6 +1061,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (!source) fail('request', 'not_playable', listening.media?.reading ? 'Books open with POST /titles/:id/read' : 'Select a track, audiobook or part to play');
       if (faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted');
       if (body.positionSeconds !== undefined && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > source.durationSeconds)) fail('request', 'invalid_position', `Position must be 0–${source.durationSeconds}`);
+      const faulted = startFault(g, body, 'audioStartPending');
+      if (faulted) return json(faulted);
       const s = await createAudioSession(g.id, body, listening);
       if (!s) fail('source', 'media_not_generated', `Run bun ${musicGenerator} first`);
       return json(s.plan);
@@ -1050,6 +1073,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     // VELA_MOCK_DOWN_CHANNELS (ids or numbers): channels whose provider is down, refused as final the way a lab's broken tuner is.
     if (channel && (process.env.VELA_MOCK_DOWN_CHANNELS ?? '').split(',').some(down => down && (down === channel.id || down === String(channel.number)))) fail('source', 'network', 'The connection to the Live TV provider failed.', {}, 503);
     if (title && !['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Select an episode to play');
+    if (title && !channel && !extra) { const faulted = startFault(g, body, 'videoStartPending'); if (faulted) return json(faulted); }
     // A programme from the channel's archive (spec C3): an ended one, or the one on air from its start.
     const archive = channel && (body.programmeId || body.startAt) ? archiveRange(body, channel, id => {
       const start = Number(id.slice(id.lastIndexOf(':') + 1));
@@ -1145,7 +1169,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (body.kind === 'seek' && !s.plan.live && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > duration)) fail('request', 'invalid_position', `Position must be 0–${duration}`);
       if (body.kind === 'tracks' && !sidecarFixture.enabled) fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!sidecarFixture.enabled && !p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
-      if (body.kind === 'stop') recordPlayback(s, false);
+      if (body.kind === 'stop') { recordPlayback(s, false); lastStopped.set(s.owner, s.plan.sessionId); }
       applyCommand(s, body); return json(s.plan);
     }
   }

@@ -6,6 +6,7 @@ import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
 import type { Card } from '../src/models';
 import type { PlaybackPlan } from '../src/wire';
+import { VelaError } from '../src/adapter/errors';
 
 // The audio queue drives an ordinary playback session, whose stall watchdog replaces a session
 // whose player stops reporting progress. A paused, stopped or finished item is not stalled.
@@ -34,8 +35,15 @@ async function advance(ms: number): Promise<void> {
   now = end;
 }
 
-/** `eagerPause`: the engine says 'paused' on every pause, at once, as the web's engines do. */
-function harness({ eagerPause = false } = {}) {
+/** Ether's answer while it is still preparing a start: retry allowed, after a second. */
+const preparing = () => new VelaError({ class: 'transient', code: 'preparation_pending', message: 'Playback is being prepared', retry: { allowed: true, afterSeconds: 1 } }, 503, '1');
+
+/**
+ * `eagerPause`: the engine says 'paused' on every pause, at once, as the web's engines do.
+ * `answer`: what the server says to the nth start (1-based) instead of a new session: an error it
+ * throws, or the id of an earlier session it hands back.
+ */
+function harness({ eagerPause = false, answer }: { eagerPause?: boolean; answer?: (n: number) => Error | string | undefined } = {}) {
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
   const lost = new Set<string>();
   const plan = (id: string, titleId: string): PlaybackPlan => ({
@@ -44,7 +52,12 @@ function harness({ eagerPause = false } = {}) {
     selectedPathId: 'direct', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null,
   } as unknown as PlaybackPlan);
   const adapter = {
-    startPlayback: async (request: { titleId: string }) => { starts.push(request.titleId); return plan(`s${starts.length}`, request.titleId); },
+    startPlayback: async (request: { titleId: string }) => {
+      starts.push(request.titleId);
+      const scripted = answer?.(starts.length);
+      if (scripted instanceof Error) throw scripted;
+      return plan(scripted ?? `s${starts.length}`, request.titleId);
+    },
     // A session that never streams events is read again every five seconds.
     sessionSnapshot: async (id: string) => { if (lost.has(id)) throw new Error('session follow lost'); return { plan: plan(id, 'x') }; },
     command: async (id: string, command: { kind: string }) => { if (command.kind === 'stop') stops.push(id); return plan(id, 'x'); },
@@ -177,5 +190,79 @@ test('a film starting over paused music leaves the music paused, with an engine 
   expect(h.starts).toEqual(['t1', 'film']);
   expect(h.box.get().playback.sessionId).toBe('s2');
   expect(h.box.get().audio.phase).toBe('paused');
+  expect(h.isPlaying()).toBe(false);
+});
+
+test('a track whose first start is refused as still preparing plays once the retry answers', async () => {
+  const h = harness({ answer: n => n === 1 ? preparing() : undefined });
+  h.audio.play({ items: [track('t1')], index: 0 });
+  await settle();
+  // The server allowed a retry: the item waits for it, it has not failed.
+  expect(h.box.get().audio.phase).toBe('loading');
+  await advance(1000);
+  expect(h.starts).toEqual(['t1', 't1']);
+  expect(h.loads).toEqual(['/media/s2']);
+  expect(h.isPlaying()).toBe(true);
+  expect(h.box.get().audio.phase).toBe('playing');
+  await h.play(30);
+  // Playing on: the stall watchdog has nothing to recover.
+  expect(h.starts).toEqual(['t1', 't1']);
+  expect(h.stops).toEqual([]);
+});
+
+test('a pause while a refused start waits for its retry holds the item paused once it arrives', async () => {
+  const h = harness({ answer: n => n === 1 ? preparing() : undefined });
+  h.audio.play({ items: [track('t1')], index: 0 });
+  await settle();
+  h.audio.pause();
+  await advance(1000);
+  expect(h.loads).toEqual(['/media/s2']);
+  expect(h.isPlaying()).toBe(false);
+  expect(h.box.get().audio.phase).toBe('paused');
+  h.audio.resume();
+  expect(h.isPlaying()).toBe(true);
+});
+
+test('a start refused until the server stops allowing retries fails the item', async () => {
+  const h = harness({ answer: () => preparing() });
+  h.audio.play({ items: [track('t1')], index: 0 });
+  await settle();
+  await advance(60_000);
+  expect(h.starts).toEqual(['t1', 't1', 't1']);
+  expect(h.loads).toEqual([]);
+  expect(h.box.get().audio.phase).toBe('failed');
+});
+
+test('a recovery the server answers with the session just stopped asks once more afresh, then plays', async () => {
+  // s1 stalls; the recovery's first start is answered with s1 again (stopped, though it says ready).
+  const h = harness({ answer: n => n === 2 ? 's1' : undefined });
+  h.audio.play({ items: [track('t1')], index: 0 });
+  await settle();
+  await h.play(2);
+  h.lost.add('s1');
+  // The follow fails at the next five-second read; the recovery asks a second later.
+  await h.play(7);
+  expect(h.stops).toEqual(['s1']);
+  expect(h.starts).toEqual(['t1', 't1', 't1']);
+  expect(h.loads).toEqual(['/media/s1', '/media/s3']);
+  expect(h.box.get().playback.sessionId).toBe('s3');
+  expect(h.isPlaying()).toBe(true);
+  await h.play(30);
+  expect(h.starts).toEqual(['t1', 't1', 't1']);
+});
+
+test('a recovery answered twice with the stopped session fails the item instead of playing it', async () => {
+  const h = harness({ answer: n => n >= 2 ? 's1' : undefined });
+  h.audio.play({ items: [track('t1')], index: 0 });
+  await settle();
+  await h.play(2);
+  h.lost.add('s1');
+  await advance(60_000);
+  // One fresh attempt after the stopped session came back, then the error: no endless loop.
+  expect(h.starts).toEqual(['t1', 't1', 't1']);
+  expect(h.loads).toEqual(['/media/s1']);
+  expect(h.box.get().playback.phase).toBe('failed');
+  expect(h.box.get().playback.sessionId).toBe('');
+  expect(h.box.get().audio.phase).toBe('failed');
   expect(h.isPlaying()).toBe(false);
 });

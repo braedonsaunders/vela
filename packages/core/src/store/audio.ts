@@ -142,6 +142,12 @@ export class Audio {
   private sessionId = '';
   private url = '';
   private loadToken: object | undefined;
+  /**
+   * The item whose session start was asked for and not yet answered for good: settled as playback
+   * moves (`settle`). A start the server refuses for now (503 `preparation_pending`, retry allowed)
+   * is asked again by playback on the server's terms; the item waits for that, it has not failed.
+   */
+  private starting: { token: object; id: string; startSeconds: number } | undefined;
   /** Whether the item being loaded starts playing once its plan arrives (a pause while loading clears it). */
   private autoplay = true;
   private sequence = 0;
@@ -404,13 +410,30 @@ export class Audio {
     }
     await this.playback.start(this.target(item.id, startSeconds));
     if (this.loadToken !== token) return;
-    this.loadToken = undefined;
+    this.starting = { token, id: item.id, startSeconds };
+    this.settle();
+  }
+
+  /**
+   * The start being waited on, as playback stands now: its plan loads the engine, a refusal the
+   * server allows retrying goes on waiting (playback asks again; its answer comes through `follow`),
+   * and anything else fails the item. Another title taking the session ends the wait.
+   */
+  private settle(): void {
+    const starting = this.starting;
+    if (!starting) return;
+    if (this.loadToken !== starting.token) { this.starting = undefined; return; }
     const playback = this.box.get().playback;
-    if (playback.phase === 'failed' || !playback.plan) {
-      this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
+    const mine = playback.target?.kind === 'title' && playback.target.id === starting.id;
+    const waiting = mine && (playback.phase === 'starting' || playback.phase === 'preparing' || (playback.phase === 'failed' && playback.retryAfterSeconds > 0));
+    if (waiting) return;
+    this.starting = undefined;
+    this.loadToken = undefined;
+    if (mine && playback.phase === 'playing' && playback.plan && playback.sessionId) {
+      this.begin(playback.plan, starting.startSeconds);
       return;
     }
-    this.begin(playback.plan, startSeconds);
+    this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
   }
 
   /** The playback target for a queue item: a title, with the queue's source as its play context
@@ -600,7 +623,7 @@ export class Audio {
   }
 
   private follow(): void {
-    if (!this.sessionId) return;
+    if (!this.sessionId) { this.settle(); return; }
     const playback = this.box.get().playback;
     if (playback.sessionId === this.sessionId && playback.plan) {
       const path = playback.plan.paths.find(p => p.id === playback.plan!.selectedPathId);
@@ -631,14 +654,16 @@ export class Audio {
       });
       return;
     }
-    // Another session took over. Let go of ours first: an engine that reports its pause at once
-    // must not find it still here, or the paused state's patch follows again, without end.
+    // Another session took over, or playback gave this item up (its recovery failed). Let go of ours
+    // first: an engine that reports its pause at once must not find it still here, or the paused
+    // state's patch follows again, without end.
     if (playback.sessionId !== this.sessionId && playback.phase !== 'preparing') {
       this.sessionId = ''; this.url = '';
       this.forget();
       this.engine?.pause();
       this.engine?.unload();
-      if (this.state.phase !== 'idle' && this.state.phase !== 'ended') this.patch({ phase: 'paused' });
+      if (mine && playback.phase === 'failed') this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
+      else if (this.state.phase !== 'idle' && this.state.phase !== 'ended') this.patch({ phase: 'paused' });
     }
   }
 
@@ -742,6 +767,7 @@ export class Audio {
   private halt(): void {
     this.forget();
     this.loadToken = undefined;
+    this.starting = undefined;
     this.engine?.unload();
     this.sessionId = ''; this.url = '';
   }
