@@ -127,16 +127,17 @@ describe('Plex versions', () => {
     expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId, `${plan.sessionId}-1`, `${plan.sessionId}-3`]);
   });
 
-  test('a switch from the file after watching the server\'s stream still stops that stream', async () => {
+  test('the server\'s stream left for the file is stopped then, and not again by a version switch', async () => {
     const seen = route();
     const adapter = plex();
     const plan = await adapter.startPlayback({ titleId: '5', client, idempotencyKey: 'p', versionId: '52' } as never);
     expect(plan.paths.map(p => p.id)).toEqual(['original', 'plex-hls']);
     await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'plex-hls', atSeconds: 5, idempotencyKey: 'p1', sourceGeneration: 0, seekGeneration: 0 });
     await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'original', atSeconds: 8, idempotencyKey: 'p2', sourceGeneration: 1, seekGeneration: 0 });
+    expect(at(seen, 'stop', plan.sessionId)).toBeGreaterThan(-1);
     const next = await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '51', idempotencyKey: 'p3', sourceGeneration: 2, seekGeneration: 0 });
     expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId]);
-    expect(at(seen, 'decision', `${plan.sessionId}-3`)).toBeLessThan(at(seen, 'stop'));
+    expect(at(seen, 'stop')).toBeLessThan(at(seen, 'decision', `${plan.sessionId}-3`));
     // The remux's stream (now playing) is the one a further switch stops.
     await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '52', idempotencyKey: 'p4', sourceGeneration: next.sourceGeneration, seekGeneration: 0 });
     expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId, `${plan.sessionId}-3`]);
@@ -152,7 +153,7 @@ describe('Plex versions', () => {
     expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId]);
   });
 
-  test('a stream that copies the video, left for the file, is still stopped by a version switch', async () => {
+  test('a stream that copies the video, left for the file, is stopped like a converted one', async () => {
     const seen = routeFetch({ 'GET /library/metadata/5': { MediaContainer: { Metadata: [movie] } }, 'GET /video/:/transcode/universal/stop': {},
       'GET /video/:/transcode/universal/decision': { MediaContainer: { Metadata: [{ Media: [{ selected: true, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', Part: [{ Stream: [{ streamType: 1, decision: 'copy' }] }] }] }] } } });
     const adapter = plex();

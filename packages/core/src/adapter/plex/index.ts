@@ -21,9 +21,8 @@ interface PlexSession {
   metadata: Node;
   sequence: number;
   pending: Promise<unknown>;
+  /** The transcode session of the server's stream while one is started (none while the stream is deferred). */
   transcodeId?: string;
-  /** The server's stream was selected under the current transcode session, which may still run after a switch to the file. */
-  streamed?: boolean;
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
@@ -711,10 +710,10 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const at = inside(asked, duration);
       const transcodeId = `${sessionId}-${s.plan.sourceGeneration + 1}`;
       const source = await this.videoSource(s.request, s.plan.titleId, s.metadata, media, at, transcodeId);
-      if (s.streamed || s.plan.selectedPathId === 'plex-hls') await this.stopTranscode(s.transcodeId ?? sessionId);
+      // The stream is stopped only where it plays: one left for the file was stopped when it was left.
+      if (s.plan.selectedPathId === 'plex-hls') await this.stopTranscode(s.transcodeId ?? sessionId);
       s.part = source.part;
       s.transcodeId = source.transcodeId ?? transcodeId;
-      s.streamed = false;
       // Scrub thumbnails are the file's own (its part's index); markers are the title's and stay.
       delete s.thumbnails;
       if (source.stack) s.stack = source.stack; else delete s.stack;
@@ -963,19 +962,47 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       if (!Number.isFinite(r.atSeconds) || r.atSeconds < 0) fail('Invalid switch position');
       if (path.kind === 'direct' && !this.audible(s, s.plan.selectedAudioTrackId)) fail('The selected audio track cannot play from the original file', 'playback');
       if (path.readiness === 'on-demand') {
-        // The stream deferred at the start, decided now from the start's own request (the whole file from zero).
+        // The stream deferred at the start (or left for the file), decided now from its own request.
         const stream = s.deferred && s.request ? await this.serverStream(s.deferred, s.request.client) : null;
         if (!stream) fail('Plex will not stream this title', 'playback');
-        s.plan.paths = s.plan.paths.map(p => p.id === path.id ? { ...p, readiness: 'ready' as const, ...stream.path } : p);
+        // A decision that states no output size leaves the stream unnumbered rather than at an earlier one's size.
+        s.plan.paths = s.plan.paths.map(p => {
+          if (p.id !== path.id) return p;
+          const { quality: _, ...rest } = p;
+          return { ...rest, readiness: 'ready' as const, ...stream.path };
+        });
         s.transcodeId = stream.session;
         delete s.deferred;
       }
-      // Leaving the server's stream does not stop it: a version switch still does.
-      if (s.plan.selectedPathId === 'plex-hls') s.streamed = true;
+      const left = s.plan.selectedPathId === 'plex-hls' && r.pathId !== 'plex-hls' ? this.deferStream(s) : undefined;
       s.plan.selectedPathId = r.pathId;
       s.plan.positionSeconds = r.atSeconds;
       s.plan.sourceGeneration++;
+      // The stream left is stopped (Plex would run it until it expires it), best-effort and not waited for. That
+      // stop can end the server's whole session, so the playing file's timeline is reported again after it.
+      if (left) void this.stopTranscode(left).then(() => this.serialize(s, async () => {
+        if (s.plan.state !== 'ended') await this.timeline(s, s.plan.state === 'paused' ? 'paused' : 'playing');
+      })).catch(() => undefined);
     });
+  }
+  /**
+   * The server's stream, being left for the file, made a choice again: its accepted request kept (decided
+   * again when it is next chosen) under a transcode session of its own, its URL dropped. The running
+   * transcode session it was played under, for the caller to stop.
+   */
+  private deferStream(s: PlexSession): string | undefined {
+    const hls = s.plan.paths.find(p => p.id === 'plex-hls');
+    if (!hls?.url) return undefined;
+    // Each generation's stream has its own session: this one is named for the switch's generation.
+    s.deferred = { ...Object.fromEntries(new URL(hls.url).searchParams), session: `${s.plan.sessionId}-${s.plan.sourceGeneration + 1}` };
+    s.plan.paths = s.plan.paths.map(p => {
+      if (p.id !== hls.id) return p;
+      const { url: _, ...rest } = p;
+      return { ...rest, readiness: 'on-demand' as const };
+    });
+    const running = s.transcodeId ?? s.plan.sessionId;
+    delete s.transcodeId;
+    return running;
   }
 
   /** Apply one session mutation once per idempotency key, at the generations it was issued for. */
