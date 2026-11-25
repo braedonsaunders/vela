@@ -2,12 +2,13 @@
 // same-address entry lets the browser close it while retaining the router's ID,
 // the underlying title page and the transport that opened it.
 const marker = 'velaMusicVisualizer';
-export function inVisualizerHistory(history: History): boolean {
+type VisualizerHistory = Pick<History, 'state' | 'pushState' | 'back'>;
+export function inVisualizerHistory(history: VisualizerHistory): boolean {
   return history.state?.[marker] === true;
 }
-export function pushVisualizerHistory(history: History) {
+export function pushVisualizerHistory(history: VisualizerHistory) {
   if (!inVisualizerHistory(history)) history.pushState({ ...history.state, [marker]: true }, '');
 }
-export function popVisualizerHistory(history: History) {
+export function popVisualizerHistory(history: VisualizerHistory) {
   if (inVisualizerHistory(history)) history.back();
 }

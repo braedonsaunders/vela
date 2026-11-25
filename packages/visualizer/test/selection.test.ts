@@ -30,17 +30,17 @@ test('retired IDs fall back to the document default or first scene; remote chang
 
 test('browser Back from the visualizer preserves the router entry and avoids duplicate opens', async () => {
   const { inVisualizerHistory, pushVisualizerHistory, popVisualizerHistory } = await import('../../../apps/vela/src/visualizer/page-history');
-  const entries: unknown[] = [{ id: 'title-page' }];
+  const entries: Record<string, unknown>[] = [{ id: 'title-page' }];
   const history = {
     get state() { return entries.at(-1); },
-    pushState(state: unknown) { entries.push(state); },
+    pushState(state: Record<string, unknown>) { entries.push(state); },
     back() { entries.pop(); },
-  } as History;
+  };
   pushVisualizerHistory(history);
   pushVisualizerHistory(history);
   expect(inVisualizerHistory(history)).toBe(true);
   expect(entries.length).toBe(2);
-  expect(history.state.id).toBe('title-page');
+  expect(history.state?.id).toBe('title-page');
   popVisualizerHistory(history);
   popVisualizerHistory(history);
   expect(entries).toEqual([{ id: 'title-page' }]);
