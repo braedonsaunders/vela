@@ -192,3 +192,16 @@ test('vela.play on a podcast show plays its newest unheard episode, as the app d
   await store.audio.stop();
   handle.release();
 });
+
+test('library info and the viewer answer what pages branch on', async () => {
+  const doc: ScreenDocument = { ...albumPage, page: 'info', params: {}, sources: { lib: { from: 'vela.libraryInfo', id: 'music' }, me: { from: 'vela.viewer' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/info' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'info' }, href: 'vela:listen/info' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors).toEqual({});
+  expect(page().sources.lib).toMatchObject({ id: 'music', media: 'music', experience: 'listen', listening: 'music', features: { likedByRole: false, playlists: expect.any(Boolean), recap: expect.any(Boolean) } });
+  expect((page().sources.me as { name: string }).name).toBe(store.getState().auth.viewer);
+  expect((page().sources.me as { name: string }).name).not.toBe('');
+  handle.release();
+});

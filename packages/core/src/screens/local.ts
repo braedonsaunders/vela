@@ -7,7 +7,7 @@
 // current while some page reads them. Actions answer as plugin actions do (ScreenActionAnswer).
 import type * as V from '../wire';
 import type { SourceSpec } from '../../../protocol/screen';
-import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_LOCAL_RECORDS, VELA_SOURCES, type ImportRecord, type ListValue, type PlaylistValue, type TitleValue, type VelaActionName, type VelaSourceName } from '../../../protocol/vela-sources';
+import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_LOCAL_RECORDS, VELA_SOURCES, type ImportRecord, type LibraryInfoValue, type ListValue, type PlaylistValue, type TitleValue, type VelaActionName, type VelaSourceName } from '../../../protocol/vela-sources';
 import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasLiveTv, hasMusicLibrary, hasTitleChildren } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { audioCardsOf, playStart, resumePoint } from '../audio/cards';
@@ -386,6 +386,32 @@ export class LocalSources {
           return { kind: context.kind, item: ref(itemKey(context.card.id)), playedAt: context.playedAt };
         });
         return { value: { items }, records };
+      }
+      case 'vela.libraryInfo': {
+        await this.features();
+        await stores.home.libraries();
+        const loaded = await settled(stores, () => stores.getState().libraries);
+        const library = loaded?.value?.find(item => item.id === args.id);
+        if (!library) return { error: loaded?.value ? 'not_found' : loadableError(loaded) };
+        const media = library.media ?? 'video';
+        const value: LibraryInfoValue = {
+          id: library.id, name: library.name, kind: library.kind, media,
+          experience: library.experience ?? library.declaredExperience ?? 'watch',
+          listening: media === 'music' || media === 'audiobook' || media === 'podcast' ? media : 'audio',
+          tabs: (library.tabs ?? []).map(tab => ({ id: tab.id, label: tab.label, kind: tab.kind, ...(tab.level ? { level: tab.level } : {}) })),
+          features: {
+            likedByRole: stores.music.likedAvailable, playlists: stores.playlists.available, recent: stores.music.recentAvailable,
+            lyrics: stores.music.lyricsAvailable, recap: stores.music.recapAvailable, recapPeriods: stores.music.recapAvailable ? stores.music.recapPeriods : [],
+            playlistImport: stores.music.playlistImportAvailable, duplicates: stores.music.duplicatesAvailable, loudness: stores.music.loudnessAvailable,
+          },
+        };
+        return { value };
+      }
+      case 'vela.viewer': {
+        const auth = stores.getState().auth;
+        if (auth.phase !== 'signed-in') await this.features();
+        const now = stores.getState();
+        return { value: { id: now.auth.viewerId ?? '', name: now.auth.viewer ?? '', avatar: now.home.value?.viewerAvatar ?? '' } };
       }
       case 'vela.queue':
       case 'vela.nowPlaying':
