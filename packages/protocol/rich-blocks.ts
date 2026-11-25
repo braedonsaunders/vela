@@ -1,72 +1,173 @@
-// The rich blocks' published contract (docs/experiences.md: Blocks), as data: each block's props,
-// the parts a document may style and the parts whose template it may replace. Pure data with no
-// imports, so the resolver, the validator and the schema tool (which emits it as
-// $defs.RichBlocks) all read the same list.
-//
-// Owned by L1 (the Listen blocks). This first cut is G2's stub from the names in
-// docs/experiences.md, so the document language can land first; L1 replaces its contents.
+// The rich blocks (docs/experiences.md: Blocks): native engines a document places and styles but
+// never replaces. Each block publishes its props, its named parts (styled by `parts`, by a skin's
+// `experiences.<id>.parts`, and by the document's own `parts`) and the parts whose template a
+// document may replace (`partTemplates`, or a document template named after the part). Pure data:
+// the resolver validates against it, the schema tool emits it as `$defs.RichBlocks`, and the Listen
+// blocks (packages/skin/src/blocks/listen) draw from it. Owned by the Listen blocks; additive within
+// a renderer version.
+
+export type RichPropType = 'value' | 'template' | 'boolean' | 'number' | 'enum';
 
 export interface RichPropSpec {
-  /** value: any data (a single hole keeps its raw value); template: text; boolean, number; enum: one of `values`. */
-  type: 'value' | 'template' | 'boolean' | 'number' | 'enum';
+  /** value: a raw read (a list, a record); template: text; boolean / number / enum: text parsed. */
+  type: RichPropType;
   values?: readonly string[];
   required?: boolean;
+  /** Used when the prop is absent. */
+  default?: string;
+  doc: string;
 }
 
 export interface RichBlockSpec {
-  props: Readonly<Record<string, RichPropSpec>>;
-  /** Parts a document styles (`parts: { "<block>.<part>": Style }`). */
+  doc: string;
+  props: Record<string, RichPropSpec>;
+  /** Named parts, `<block>.<part>`. */
   parts: readonly string[];
-  /** Parts whose template a document may replace (`partTemplates`, or a document template named after the part). */
+  /** The parts whose template a document may replace. */
   templates: readonly string[];
+  /** What a part template reads beside `{item.*}` and `{$index}`: `{part.<name>}`, per template. */
+  templateScope?: Record<string, readonly string[]>;
+  /** TV and performance rules the block keeps (docs/experiences.md: TV performance budgets). */
+  tv: string;
 }
 
+const flag = (doc: string, fallback?: 'true' | 'false'): RichPropSpec => ({ type: 'boolean', doc, ...(fallback ? { default: fallback } : {}) });
+
 export const RICH_BLOCKS = {
-  player: {
-    props: {},
-    parts: ['player.surface', 'player.transport', 'player.scrubber', 'player.menu'],
-    templates: [],
-  },
-  nowPlaying: {
-    props: { item: { type: 'value' } },
-    parts: ['nowPlaying.stage', 'nowPlaying.artwork', 'nowPlaying.title', 'nowPlaying.subtitle', 'nowPlaying.transport'],
-    templates: [],
-  },
-  queue: {
-    props: { queue: { type: 'value' }, reorder: { type: 'boolean' } },
-    parts: ['queue.heading', 'queue.row', 'queue.activeRow'],
-    templates: ['queue.row'],
-  },
-  lyrics: {
-    props: { item: { type: 'value' }, translate: { type: 'boolean' } },
-    parts: ['lyrics.line', 'lyrics.activeLine', 'lyrics.translation'],
-    templates: [],
-  },
   trackTable: {
-    props: { tracks: { type: 'value', required: true }, columns: { type: 'template' }, discs: { type: 'boolean' }, reorder: { type: 'boolean' } },
-    parts: ['trackTable.header', 'trackTable.row', 'trackTable.activeRow', 'trackTable.disc'],
+    doc: 'A tracklist: number (a play control on hover, a live meter on the track playing), cover, title with the explicit mark and artist, album, the heart, duration and the row menu. Double-click or Enter plays from a track (a tap on touch, select on TV); right-click or long-press opens the menu.',
+    props: {
+      tracks: { type: 'value', required: true, doc: 'The tracks: a list source ({items, more}) or a list of item: records.' },
+      entryIds: { type: 'value', doc: 'Playlist entry ids, parallel to tracks (a vela.playlist source\'s entryIds): Remove from this playlist, and drag reorder.' },
+      playlist: { type: 'template', doc: 'The playlist id when the tracks are its entries.' },
+      sourceId: { type: 'template', doc: 'Where the tracks are listed (Now Playing\'s "Playing from"): its id.' },
+      sourceName: { type: 'template', doc: 'Its name.' },
+      sourceKind: { type: 'enum', values: ['title', 'playlist', 'favorites'], doc: 'Its kind.' },
+      covers: flag('Show each track\'s cover (a playlist, Liked Songs, Top Tracks).', 'false'),
+      album: flag('Show the album column (wide windows only, never on TV).', 'false'),
+      position: flag('Number by position instead of track number.', 'false'),
+      header: flag('Draw the column header (never on a phone).', 'true'),
+      discs: flag('Group a multi-disc album under disc headings.', 'false'),
+      reorder: flag('Drag rows to reorder (a playlist the viewer owns; web pointer only). Needs playlist and entryIds.', 'false'),
+    },
+    parts: ['trackTable.header', 'trackTable.row', 'trackTable.activeRow', 'trackTable.number', 'trackTable.title', 'trackTable.artist', 'trackTable.album', 'trackTable.duration', 'trackTable.disc'],
     templates: ['trackTable.row'],
-  },
-  eq: {
-    props: {},
-    parts: ['eq.band', 'eq.label'],
-    templates: [],
-  },
-  rail: {
-    props: { items: { type: 'value' }, collapsed: { type: 'boolean' } },
-    parts: ['rail.row', 'rail.activeRow', 'rail.heading'],
-    templates: ['rail.row'],
+    templateScope: { 'trackTable.row': ['index', 'number', 'active', 'playing', 'disc', 'lit'] },
+    tv: 'Each row is one focus target (select plays, a long select opens the menu); nothing inside a row takes focus. Rows draw with the page; a list longer than 200 rows draws its first 200 and the rest as the viewer nears the end.',
   },
   bar: {
-    props: { position: { type: 'enum', values: ['bottom', 'top'] } },
-    parts: ['bar.surface', 'bar.cover', 'bar.title', 'bar.transport', 'bar.scrubber'],
+    doc: 'The persistent now-playing bar: what is playing (cover, title, artist or chapter, the heart), the transport and the seek bar, and lyrics, Sound, the queue, volume and full screen. Spoken word trades shuffle, previous, next and repeat for speed, 15/30 s skips and the sleep timer.',
+    props: {
+      queueFlag: { type: 'template', default: 'queue', doc: 'The document state flag the queue button toggles (the shell shows the queue block while it is set).' },
+      soundFlag: { type: 'template', default: 'sound', doc: 'The document state flag the Sound button toggles; opening one closes the other.' },
+      sound: flag('Show the Sound button.', 'true'),
+    },
+    parts: ['bar.root', 'bar.cover', 'bar.title', 'bar.subtitle', 'bar.transport', 'bar.toggle', 'bar.scrubber', 'bar.time', 'bar.actions', 'bar.panel'],
     templates: [],
+    tv: 'Not drawn on TV (the TV shell floats the mini player). Reads the audio position once a second.',
+  },
+  queue: {
+    doc: 'The queue: what is playing, what the viewer queued (Play next, Add to queue) and what comes next from the source and autoplay. Rows play, remove and move (drag on web pointers, Move up / Move down in their menu).',
+    props: {
+      closeFlag: { type: 'template', doc: 'The document state flag the close button clears; no close button without it.' },
+      header: flag('Draw the Queue heading.', 'true'),
+      limit: { type: 'number', default: '60', doc: 'Rows drawn per section, at most 200.' },
+    },
+    parts: ['queue.heading', 'queue.section', 'queue.row', 'queue.activeRow', 'queue.title', 'queue.byline'],
+    templates: ['queue.row'],
+    templateScope: { 'queue.row': ['index', 'section', 'active', 'playing', 'lit'] },
+    tv: 'Each row is one focus target. Redraws when the queue changes, not with the position.',
+  },
+  lyrics: {
+    doc: 'Lyrics that follow playback: the line being sung is lit (word by word when the lyrics are word-timed), sung lines fade, the list keeps the line in view, and pressing a line seeks there. Plain lyrics scroll as text.',
+    props: {
+      item: { type: 'value', doc: 'The track (an item: record); the one playing when absent.' },
+      large: flag('Now Playing\'s large type.', 'false'),
+      translate: flag('Show the translation under each line when the lyrics carry one.', 'false'),
+    },
+    parts: ['lyrics.line', 'lyrics.activeLine', 'lyrics.pastLine', 'lyrics.word', 'lyrics.activeWord', 'lyrics.translation', 'lyrics.source', 'lyrics.message'],
+    templates: [],
+    tv: 'Lines are reading stops; the active line scrolls into view without motion when motion is reduced. Word timing redraws only the active line.',
+  },
+  nowPlaying: {
+    doc: 'Now Playing: the artwork stage with its ambient tint, the title and byline, the scrubber and transport, and the queue, chapters, lyrics and Sound beside the stage (side by side by width, as the Duo window layout) or under it.',
+    props: {
+      panel: { type: 'enum', values: ['queue', 'chapters', 'lyrics', 'sound'], doc: 'The list shown first.' },
+      closeFlag: { type: 'template', doc: 'The document state flag the close button clears; no close button without it.' },
+      visualizer: flag('Offer the visualizer (the header button and the Sound panel\'s switch) where env.canVisualize.', 'true'),
+    },
+    parts: ['nowPlaying.stage', 'nowPlaying.artwork', 'nowPlaying.title', 'nowPlaying.byline', 'nowPlaying.tint', 'nowPlaying.tabs', 'nowPlaying.header'],
+    templates: ['nowPlaying.background'],
+    templateScope: { 'nowPlaying.background': ['playing', 'accent'] },
+    tv: 'The transport row and the list beside it are focus guides; the play button takes focus first. A background template is drawn behind the stage and takes no focus.',
+  },
+  player: {
+    doc: 'The audio transport on its own (a Listen player; with `channel` the node is instead the muted live preview): scrubber with chapter marks, time, transport, and the quality and audio menus.',
+    props: {
+      size: { type: 'enum', values: ['compact', 'large'], default: 'large', doc: 'The mini player\'s scale or Now Playing\'s.' },
+      menus: flag('Show the quality and audio (speed, sleep) menus.', 'true'),
+    },
+    parts: ['player.scrubber', 'player.transport', 'player.toggle', 'player.time', 'player.quality', 'player.menu'],
+    templates: [],
+    tv: 'The scrubber is focusable (left and right seek); the toggle is the preferred focus.',
+  },
+  eq: {
+    doc: 'Sound: AutoMix, volume levelling and the equalizer, or only the equalizer bands (`bands`).',
+    props: {
+      bands: flag('Only the equalizer bands and presets.', 'false'),
+      closeFlag: { type: 'template', doc: 'The document state flag the close button clears; draws its own header with it.' },
+    },
+    parts: ['eq.section', 'eq.band', 'eq.preset'],
+    templates: [],
+    tv: 'Sliders become − and + (a remote\'s arrows move the focus).',
+  },
+  rail: {
+    doc: 'Your Library: Home, Search and Rewind, the library heading with collapse, new playlist and the library tools, filters, and the playlists, liked albums and artists (spoken word: the books or shows under way). Collapsed it is an icon rail; embedded (a phone, a TV) a plain list.',
+    props: {
+      mode: { type: 'enum', values: ['auto', 'expanded', 'collapsed', 'embedded'], default: 'auto', doc: 'auto collapses below 1180 px and keeps the viewer\'s choice.' },
+      collapseFlag: { type: 'template', default: 'railCollapsed', doc: 'The document state flag holding the viewer\'s collapse (the shell sizes the rail from it).' },
+    },
+    parts: ['rail.nav', 'rail.navItem', 'rail.activeNavItem', 'rail.heading', 'rail.filter', 'rail.row', 'rail.activeRow'],
+    templates: [],
+    tv: 'Rows are single focus targets; the rail is one focus column.',
   },
   visualizer: {
-    props: { mode: { type: 'enum', values: ['background', 'fullscreen'], required: true }, sceneId: { type: 'template' } },
+    doc: 'The music visualizer (implementation: the visualizer lead): Now Playing\'s background or full screen with the scene picker.',
+    props: {
+      mode: { type: 'enum', values: ['background', 'fullscreen'], required: true, doc: 'Where it draws.' },
+      sceneId: { type: 'template', doc: 'The scene; the viewer\'s choice when absent.' },
+    },
     parts: ['visualizer.scenePicker', 'visualizer.sceneChip', 'visualizer.sceneChipActive', 'visualizer.caption'],
     templates: [],
+    tv: 'Drawn only where env.canVisualize; a generic fallback elsewhere.',
+  },
+  recap: {
+    doc: 'Rewind: the listening recap for a period with its charts (section-B recap block).',
+    props: {},
+    parts: [],
+    templates: [],
+    tv: 'As the Rewind page.',
+  },
+  playlistImport: {
+    doc: 'The playlist import flow over the local import: record (section-B import block).',
+    props: {},
+    parts: [],
+    templates: [],
+    tv: 'Not offered on TV.',
+  },
+  duplicates: {
+    doc: 'Duplicate recordings in a library and the preferred version of each (section-B duplicates block).',
+    props: {},
+    parts: [],
+    templates: [],
+    tv: 'Not offered on TV.',
   },
 } as const satisfies Record<string, RichBlockSpec>;
 
 export type RichBlockName = keyof typeof RICH_BLOCKS;
+
+export const RICH_BLOCK_NAMES = Object.keys(RICH_BLOCKS) as RichBlockName[];
+
+export function isRichBlock(name: string): name is RichBlockName {
+  return Object.prototype.hasOwnProperty.call(RICH_BLOCKS, name);
+}

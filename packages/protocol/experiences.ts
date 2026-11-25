@@ -61,6 +61,10 @@ export interface SlotSpec {
   version: number;
 }
 
+/** A title's slot: the title (`item:`), and its kind, which picks the surfaces whose `when.titleKind`
+ * matches (the host's to give; never sent to Ether). */
+const TITLE_CONTEXT = [{ name: 'title', ref: 'item' }, { name: 'titleKind' }] as const;
+
 const PLAYER_CONTEXT = [
   { name: 'channel', ref: 'channel' }, { name: 'event', ref: 'event' }, { name: 'title', ref: 'item' },
   { name: 'kind' }, { name: 'chrome' }, { name: 'pictureTime' }, { name: 'delayed' },
@@ -69,12 +73,12 @@ const PLAYER_CONTEXT = [
 /** The published slot list. Additive within a renderer version: a new slot is a re-vendor for Ether. */
 export const SLOTS = [
   { id: 'home.rows', context: [], cap: { perPlugin: 1 }, version: 20 },
-  { id: 'title.panel', context: [{ name: 'title', ref: 'item' }, { name: 'kind' }], cap: { perPlugin: 1 }, version: 20 },
-  { id: 'listen.album.panel', context: [{ name: 'title', ref: 'item' }], cap: { perPlugin: 1, perSlot: 3 }, version: 20 },
-  { id: 'listen.artist.panel', context: [{ name: 'title', ref: 'item' }], cap: { perPlugin: 1, perSlot: 3 }, version: 20 },
-  { id: 'listen.nowPlaying.panel', context: [{ name: 'title', ref: 'item' }], cap: { perPlugin: 1, perSlot: 2 }, version: 20 },
-  { id: 'read.sidePanel', context: [{ name: 'title', ref: 'item' }], cap: { perPlugin: 1, perSlot: 2 }, version: 20 },
-  { id: 'gallery.photo.panel', context: [{ name: 'title', ref: 'item' }], cap: { perPlugin: 1, perSlot: 2 }, version: 20 },
+  { id: 'title.panel', context: TITLE_CONTEXT, cap: { perPlugin: 1 }, version: 20 },
+  { id: 'listen.album.panel', context: TITLE_CONTEXT, cap: { perPlugin: 1, perSlot: 3 }, version: 20 },
+  { id: 'listen.artist.panel', context: TITLE_CONTEXT, cap: { perPlugin: 1, perSlot: 3 }, version: 20 },
+  { id: 'listen.nowPlaying.panel', context: TITLE_CONTEXT, cap: { perPlugin: 1, perSlot: 2 }, version: 20 },
+  { id: 'read.sidePanel', context: TITLE_CONTEXT, cap: { perPlugin: 1, perSlot: 2 }, version: 20 },
+  { id: 'gallery.photo.panel', context: TITLE_CONTEXT, cap: { perPlugin: 1, perSlot: 2 }, version: 20 },
   { id: 'player.overlay.topLeft', context: PLAYER_CONTEXT, cap: { perSlot: 2 }, version: 20 },
   { id: 'player.overlay.topRight', context: PLAYER_CONTEXT, cap: { perSlot: 2 }, version: 20 },
   { id: 'player.overlay.bottom', context: PLAYER_CONTEXT, cap: { perSlot: 2 }, version: 20 },
