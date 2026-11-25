@@ -58,7 +58,7 @@ export const VELA_SOURCES = {
   'vela.library': {
     args: {
       id: id('The library.'),
-      sort: id('A sort the library offers (name, added, year, …).', false),
+      sort: id('A sort the library offers (title, added, year, …).', false),
       direction: { type: 'enum', enum: ['asc', 'desc'] },
       kind: id('A kind filter.', false),
       genre: id('A genre filter.', false),
@@ -66,6 +66,8 @@ export const VELA_SOURCES = {
       favorite: { type: 'bool' },
       year: { type: 'int' },
       q: id('Search within the library.', false),
+      tab: id('One of the library\'s tabs (its album view, say).', false),
+      limit: { type: 'int', doc: 'Titles per page (1 to 100; the server\'s default when absent).' },
     },
     doc: 'A library listing, paged: ListValue.',
   },
@@ -77,8 +79,8 @@ export const VELA_SOURCES = {
   'vela.playlist': { args: { id: id('The playlist.') }, doc: 'One playlist and its entries: PlaylistValue.' },
   'vela.recent': { args: {}, doc: 'What the viewer last played from: RecentValue.' },
   'vela.search': {
-    args: { q: id('The query; empty answers no items.'), kind: id('A result kind (track, album, artist, playlist, …).', false), library: id('Search within one library.', false) },
-    doc: 'Search results, paged: ListValue.',
+    args: { q: id('The query; empty answers no items.', false), kind: id('A result kind the server offers (searchKinds).', false), library: id('Search within one library (its media class when the server cannot scope).', false) },
+    doc: "Search results, paged: SearchValue (the audio app's search).",
   },
   'vela.queue': { args: {}, live: true, doc: 'The audio queue: a reference to the `queue:current` record (QueueRecord).' },
   'vela.nowPlaying': { args: {}, live: true, doc: 'What plays now: a reference to `nowPlaying:current` (NowPlayingRecord), pushed about once a second while a page reads it.' },
@@ -214,15 +216,36 @@ export interface NowPlayingRecord {
   sleep: { mode: string; endsAt: number };
 }
 
+/** One lyrics line; word timing, translation and romanisation when the server sends them. */
+export interface LyricsLine {
+  startMs: number;
+  endMs?: number;
+  text: string;
+  words?: { startMs: number; endMs?: number; text: string }[];
+  translation?: string;
+  romanised?: string;
+}
+
 export interface LyricsValue {
   /** Synced lines (startMs) or plain lines (startMs -1). */
-  lines: { startMs: number; text: string }[];
+  lines: LyricsLine[];
   synced: boolean;
   plain: string;
   instrumental: boolean;
   source: string;
   /** The title has no lyrics. */
   none: boolean;
+}
+
+/** `vela.search`: the server's ranked list, with the best match and the list by role. */
+export interface SearchValue extends ListValue {
+  q: string;
+  /** The list is a description match (no title was named). */
+  byDescription: boolean;
+  /** An exact name match (containers first), else the server's first. */
+  top: RecordRef | null;
+  /** `items` by media role (track, album, artist, playlist, audiobook, …), in the server's order. */
+  groups: Record<string, RecordRef[]>;
 }
 
 export interface GuideValue { channels: RecordRef[]; from: string; to: string }
