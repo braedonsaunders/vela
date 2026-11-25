@@ -109,6 +109,9 @@ jobs:
         run: bun run export:web
         working-directory: apps/vela
 
+      - name: Install ffmpeg (mock media generation)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - name: Generate silent deterministic media
         env:
           VELA_MOCK_SILENT_MEDIA: 1
