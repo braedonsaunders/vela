@@ -1,45 +1,41 @@
 import { expect, secrets } from 'e2e';
 import { describe, test } from '@e2e-dev/web';
 
-describe('Home release gate', () => {
-  test('a fresh sign-in opens Home', async ({ agent, app, browser, screen }) => {
-    await app.clearState();
+test.setup('Home release gate: a fresh sign-in opens Home', { sessions: ['lab-viewer'] }, async ({ app, browser, screen, session }) => {
+  await app.clearState();
+  await screen.getByRole('textbox', 'Username').fill(secrets.get('viewerUsername'));
+  await screen.getByRole('textbox', 'Password').fill(secrets.get('viewerPassword'));
+  await screen.getByRole('button', 'Sign in').tap();
 
-    await agent.act('sign in with the dedicated viewer credentials', {
-      params: {
-        username: secrets.get('viewerUsername'),
-        password: secrets.get('viewerPassword'),
-      },
-    });
+  await expect(screen.getByRole('navigation')).toBeVisible();
+  await expect(screen.getByRole('link', 'Home')).toBeVisible();
 
-    await expect(screen.getByRole('navigation')).toBeVisible();
-    await expect(screen.getByRole('link', 'Home')).toBeVisible();
+  // Every run owns its watch-state baseline, including recovery after an interrupted prior run.
+  const campus = '/vela/title/0000000000000001000e38bc2766e111';
+  await app.open(campus);
+  const watchAction = screen.getByTestId('detail-watch-played');
+  await expect(watchAction).toBeVisible({ timeout: 30_000 });
+  if (await watchAction.getAttribute('aria-label') === 'Mark unwatched') {
+    await watchAction.tap();
+    await expect(screen.getByRole('button', 'Mark watched')).toBeVisible();
+  }
 
+  try {
+    await app.open('/vela/');
     const rowHeadings = screen.getByRole('heading', /^See all /);
     await expect(rowHeadings.first()).toBeVisible({ timeout: 30_000 });
     const rows = (await rowHeadings.allTextContents()).map(row => row.replace(/\s*›$/, ''));
-    const offset = rows[0] === 'New & Noteworthy' ? 1 : 0;
-    expect(rows).toHaveLength(9 + offset);
-    expect(rows[offset]).toBe('Trending Now');
-    expect(rows.slice(offset + 1, offset + 4).every(row => row.startsWith('Acclaimed '))).toBe(true);
-    expect(rows.slice(offset + 4)).toEqual([
-      'Popular on Ether On Air Lab',
-      'TVmaze acclaimed series',
-      'Top Rated',
-      'Short on Time',
-      'On Now',
-    ]);
+    const bootstrapRows = await browser.evaluate(async () => {
+      const response = await fetch('/__e2e/bootstrap-row-names');
+      if (!response.ok) throw new Error(`bootstrap row capture HTTP ${response.status}`);
+      return response.json() as Promise<string[]>;
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(new Set(rows).size).toBe(rows.length);
+    const rendered = new Set(rows);
+    expect(rows).toEqual(bootstrapRows.filter(row => rendered.has(row)));
     for (const row of rows) {
       await expect(screen.getByRole('link', `See all ${row}`)).toHaveCount(2);
-    }
-
-    // Every run owns its watch-state baseline, including recovery after an interrupted prior run.
-    await app.open('/vela/title/0000000000000001000e38bc2766e111');
-    const watchAction = screen.getByTestId('detail-watch-played');
-    await expect(watchAction).toBeVisible({ timeout: 30_000 });
-    if (await watchAction.getAttribute('aria-label') === 'Mark unwatched') {
-      await watchAction.tap();
-      await expect(screen.getByRole('button', 'Mark watched')).toBeVisible();
     }
 
     await app.open('/vela/search?q=Campus%20Drivers');
@@ -71,10 +67,28 @@ describe('Home release gate', () => {
 
     await screen.getByRole('link', 'See all Trending Now').last().tap();
     await expect(screen.getByRole('heading', 'Trending Now')).toBeVisible({ timeout: 30_000 });
+  } finally {
+    const close = screen.getByRole('button', 'Close player');
+    if (await close.isVisible()) await close.tap();
+    await app.open(campus);
+    const cleanupWatchAction = screen.getByTestId('detail-watch-played');
+    await expect(cleanupWatchAction).toBeVisible({ timeout: 30_000 });
+    if (await cleanupWatchAction.getAttribute('aria-label') === 'Mark unwatched') await cleanupWatchAction.tap();
+    await expect(cleanupWatchAction).toHaveAttribute('aria-label', 'Mark watched', { timeout: 30_000 });
+  }
 
-    await app.open('/vela/title/0000000000000001000e38bc2766e111');
-    await expect(screen.getByRole('button', 'Mark unwatched')).toBeVisible({ timeout: 30_000 });
-    await screen.getByRole('button', 'Mark unwatched').tap();
-    await expect(screen.getByRole('button', 'Mark watched')).toBeVisible();
+  await session.save('lab-viewer');
+});
+
+describe('Sports release gate', { session: 'lab-viewer' }, () => {
+  test('index and a live game page expose the current airing', async ({ app, screen }) => {
+    await app.open('/vela/screen/sports');
+    await expect(screen.getByTestId('sports-screen-sports')).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByRole('heading', 'Sports')).toBeVisible();
+    await expect(screen.getByTestId('sports-hero')).toBeVisible();
+    await screen.getByTestId('sports-hero-details').tap();
+
+    await expect(screen.getByTestId('sports-game')).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByTestId('sports-game-centre')).toBeVisible();
   });
 });

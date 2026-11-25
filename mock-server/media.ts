@@ -57,13 +57,15 @@ export interface Faults {
    */
   audioStartPending: number;
   videoStartPending: number;
+  /** The next this many bootstrap reads return row ids from the preceding feed snapshot. */
+  bootstrapStaleReads: number;
   /**
    * The next this many playback starts are answered with the viewer's most recently stopped session,
    * its state shown as `ready`, as Ether rc.15's broker reused a stopped session (main.ts).
    */
   startStoppedSession: number;
 }
-export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, startStoppedSession: 0 };
+export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, bootstrapStaleReads: 0, startStoppedSession: 0 };
 let segmentCount = 0;
 let rangeFailureUntil = 0;
 let rangeFailureSetting = 0;
