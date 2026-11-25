@@ -43,7 +43,9 @@ const PATH = /^[$A-Za-z_][\w$-]*(\.[\w$^-]+)*$/;
 
 const ENV_KEYS = new Set(['small', 'wide', 'tv', 'isTV', 'still', 'canMultiview', 'canPlay', 'canRetry', 'error', 'range5', 'range6',
   // Renderer 20: a device capability, the platform, the form factor and a partly open foldable's posture.
-  'canVisualize', 'platform', 'form', 'fold']);
+  'canVisualize', 'platform', 'form', 'fold',
+  // Renderer 20: the viewer's name and the time now (epoch ms; {env.now|greeting}).
+  'viewer', 'now']);
 
 const fillT = (t: Template, c: Ctx, e: Env): string =>
   typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
@@ -90,6 +92,8 @@ export function pathValue(path: string, scope: HoleScope): Value {
           case 'platform': return e.platform ?? '';
           case 'form': return e.form ?? (e.tv ? 'tv' : e.small ? 'small' : 'wide');
           case 'fold': return e.fold ?? '';
+          case 'viewer': return e.viewer ?? '';
+          case 'now': return Date.now();
           // The first read's failure as the server or the network gave it (the failure node's message line).
           case 'error': return c.screen?.page.load === 'failed' ? c.screen.page.error ?? '' : '';
           case 'canRetry': return c.screen ? c.screen.page.load === 'failed' || Object.keys(c.screen.page.errors).length > 0 : false;
@@ -121,14 +125,15 @@ function bars(body: string): string[] {
   return body.split('|');
 }
 
-/** `with:a=path,b=path` as arguments compiled in the caller's scope. */
+/** `with:a=path,b=path` as arguments compiled in the caller's scope. A path may carry argument-less
+ * pipes after `~` (`with:date=src.recap.firstPlayAt~fullDate`, renderer 20). */
 function withArgs(spec: string, scope: HoleScope): Record<string, Arg> {
   const args: Record<string, Arg> = {};
   for (const pair of spec.split(',')) {
     const at = pair.indexOf('=');
     if (at <= 0) throw new Error(`with: takes name=path pairs (${spec})`);
-    const name = pair.slice(0, at).trim(), path = pair.slice(at + 1).trim();
-    const value = holeValue(path, scope);
+    const name = pair.slice(0, at).trim(), [path = '', ...pipes] = pair.slice(at + 1).trim().split('~');
+    const value = holeValue([path.trim(), ...pipes.map(p => p.trim())].join('|'), scope);
     args[name] = { template: { parts: [(c, e) => text(value(c, e), reader(c))] }, value, path };
   }
   return args;

@@ -378,3 +378,19 @@ describe('words in built-in documents', () => {
     expect(words('{src.a.n|plural:n}', { a: { n: 1 } }, false)).toBe('1 goal');
   });
 });
+
+describe('renderer 20 pipes and env', () => {
+  const draw = (text: string, sources: Record<string, unknown> = {}, e: Env = env) => fill((resolveScreenDocument(builtIn({ type: 'text', text }), at()).tree as Extract<RNode, { kind: 'text' }>).text, root(sources), e);
+  test('fullDate, lower and with: pipes after ~', () => {
+    expect(draw('{src.r.at|fullDate}', { r: { at: '2019-04-12' } })).toBe('Apr 12, 2019');
+    expect(draw('{src.r.p|lower}', { r: { p: 'This Month' } })).toBe('this month');
+    expect(draw('{s:music.rewind.firstPlay|with:date=src.r.at~fullDate}', { r: { at: '2019-04-12' } })).toContain('Apr 12, 2019');
+  });
+  test('greeting for the time of day; env.viewer and env.now', () => {
+    const at = (hour: number) => new Date(2026, 10, 24, hour).getTime();
+    expect(draw('{src.t|greeting}', { t: at(9) })).toBe('Good morning');
+    expect(draw('{src.t|greeting}', { t: at(15) })).toBe('Good afternoon');
+    expect(draw('{env.viewer}', {}, { ...env, viewer: 'Demo Viewer' } as Env)).toBe('Demo Viewer');
+    expect(Number(draw('{env.now}'))).toBeGreaterThan(0);
+  });
+});
