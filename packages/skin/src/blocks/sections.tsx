@@ -147,8 +147,16 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   const embedded = !!runtime?.scrollKey;
   const defaultGap = embedded ? 0 : px(isPage ? 22 : 30);
   const gap = parsePoints(node.gap, px, defaultGap);
-  const topPad = embedded || isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
-  const bottomPad = embedded ? 0 : px(isPage ? 48 : 64) + (isPage ? 0 : gap);
+  // An embedded page's own padding rows pad its scroll content (so the end space counts in the scroll,
+  // as the music pages' contentContainerStyle did).
+  const own = (row: string) => {
+    const raw = node.base.style?.[row];
+    return embedded && raw !== undefined ? parsePoints(fill(raw, ctx, host.env), px, 0) : undefined;
+  };
+  const padAll = own('padding');
+  const topPad = embedded ? own('padding-top') ?? padAll ?? 0 : isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
+  const bottomPad = embedded ? own('padding-bottom') ?? padAll ?? 0 : px(isPage ? 48 : 64) + (isPage ? 0 : gap);
+  const sidePads = embedded ? { paddingLeft: own('padding-left') ?? padAll ?? 0, paddingRight: own('padding-right') ?? padAll ?? 0 } : {};
 
   const inheritedRows: Record<string, string> = {};
   for (const [k, v] of Object.entries(node.base.style ?? {})) {
@@ -206,6 +214,7 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
         contentContainerStyle={{
           paddingTop: topPad,
           paddingBottom: bottomPad,
+          ...sidePads,
           gap,
         }}
         showsVerticalScrollIndicator={!Platform.isTV}

@@ -23,6 +23,12 @@
    "from": "vela.musicHome",
    "library": "{param.library}",
    "lazy": true
+  },
+  "rows": {
+   "from": "vela.rows",
+   "placement": "library",
+   "libraryId": "{param.library}",
+   "lazy": true
   }
  },
  "tree": {
@@ -135,7 +141,130 @@
     "testId": "listen-home-spoken",
     "children": [
      {
-      "type": "spokenHome"
+      "type": "sections",
+      "testId": "music-main",
+      "children": [
+       {
+        "type": "box",
+        "testId": "spoken-home",
+        "children": [
+         {
+          "type": "repeat",
+          "over": "src.rows.rows",
+          "as": "r",
+          "item": {
+           "type": "wash",
+           "when": [
+            {
+             "test": "r.purpose",
+             "is": "eq",
+             "value": "continue"
+            },
+            {
+             "test": "r.items.length"
+            }
+           ],
+           "props": {
+            "accent": "{r.items.0.accent}",
+            "height": "360"
+           }
+          }
+         },
+         {
+          "type": "box",
+          "style": {
+           "padding-left": "20px",
+           "padding-right": "20px",
+           "padding-top": "28px"
+          },
+          "small": {
+           "padding-left": "16px",
+           "padding-right": "16px",
+           "padding-top": "16px"
+          },
+          "children": [
+           {
+            "type": "text",
+            "role": "heading",
+            "level": 1,
+            "text": "{env.now|greeting}",
+            "style": {
+             "font-family": "$ui.fontDisplay",
+             "font-size": "38px",
+             "color": "$ui.ink",
+             "letter-spacing": "-0.01em",
+             "margin-bottom": "20px"
+            },
+            "small": {
+             "font-size": "30px",
+             "margin-bottom": "14px"
+            }
+           },
+           {
+            "type": "repeat",
+            "over": "src.rows.rows",
+            "as": "r",
+            "item": {
+             "type": "continueListening",
+             "when": [
+              {
+               "test": "r.purpose",
+               "is": "eq",
+               "value": "continue"
+              },
+              {
+               "test": "r.items.length"
+              }
+             ],
+             "props": {
+              "row": "{r}"
+             }
+            }
+           }
+          ]
+         },
+         {
+          "type": "box",
+          "style": {
+           "padding-left": "8px",
+           "padding-right": "8px"
+          },
+          "small": {
+           "padding-left": "4px",
+           "padding-right": "4px"
+          },
+          "children": [
+           {
+            "type": "repeat",
+            "over": "src.rows.rows",
+            "as": "r",
+            "item": {
+             "type": "musicShelf",
+             "when": [
+              {
+               "test": "r.purpose",
+               "is": "ne",
+               "value": "continue"
+              }
+             ],
+             "props": {
+              "title": "{r.name}",
+              "items": "{r.items}",
+              "tileSize": "176"
+             }
+            }
+           },
+           {
+            "type": "genres"
+           }
+          ]
+         }
+        ],
+        "needs": [
+         "rows"
+        ]
+       }
+      ]
      }
     ]
    }

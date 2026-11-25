@@ -440,3 +440,15 @@ describe('starts/ends conditions and the initial pipe', () => {
     expect(children(tree).filter(n => holds(n.when, other, env)).length).toBe(1);
   });
 });
+
+describe('roleLabel and spokenMode pipes', () => {
+  test('name a title as the music pages do, and pick how a spoken title draws', () => {
+    const draw = (text: string, sources: Record<string, unknown>) => textOf(resolveScreenDocument(builtIn({ type: 'text', text }), at()).tree, root(sources));
+    expect(draw('{src.t|roleLabel}', { t: { item: { media: { role: 'audiobook', class: 'audiobook' } } } })).toBe('Audiobook');
+    expect(draw('{src.t|spokenMode}', { t: { item: { media: { role: 'audiobook' } } } })).toBe('audiobook');
+    expect(draw('{src.t|spokenMode}', { t: { media: { role: 'show', class: 'podcast' } } })).toBe('show');
+    expect(draw('{src.t|spokenMode}', { t: { media: { role: 'book', audio: true } } })).toBe('audiobook');
+    expect(draw('{src.t|spokenMode}', { t: { media: { role: 'series' } } })).toBe('collection');
+    expect(draw('{src.t|spokenMode}', {})).toBe('');
+  });
+});

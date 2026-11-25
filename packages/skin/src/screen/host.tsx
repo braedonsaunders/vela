@@ -273,7 +273,11 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     screenPress: press,
   }), [host, actions.multiview, press]);
   // env.canVisualize is the app's to say (host.env.canVisualize): false where it does not say.
-  const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
+  // A page in an experience's shell scrolls by its root `sections`; any other root gets a second scroller.
+  useEffect(() => {
+    if (scrollKey && resolved && resolved.tree.kind !== 'sections') console.warn(`${href}: an experience page's root is a sections block (this one is ${resolved.tree.kind}); its column will not scroll as one`);
+  }, [scrollKey, resolved, href]);
+    const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
   const runtime = useMemo<ScreenBlockRuntime>(() => createScreenBlockRuntime(
     (node, at) => <SkinNodeFor node={node as RNode} ctx={at} />,
     {
