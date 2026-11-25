@@ -20,6 +20,7 @@ import { TrackList } from './track-table';
 import { compactMusic, musicTV } from './layout';
 import { RewindCover } from '../recap';
 import { musicHomeRows } from './home-rows';
+import { dedupeAlbums } from './props';
 export { compactMusic };
 
 /** A page's side margin: tighter on a phone. */
@@ -171,10 +172,6 @@ function RowShelf({ row }: { row: Row }) {
   return <Shelf title={row.name}>{items.map(card => <MusicTile key={card.id} card={card} size={176} subtitle={tracks ? card.media?.byline : undefined} />)}</Shelf>;
 }
 
-function dedupeAlbums(items: Card[]): Card[] {
-  const seen = new Set<string>();
-  return items.filter(item => { const album = item.media?.parent?.id ?? item.id; if (seen.has(album)) return false; seen.add(album); return true; });
-}
 
 
 /** How many quick tiles fit a row of the page's measured width. */
@@ -460,7 +457,7 @@ export function DiscographyShelf({ card }: { card: Card }) {
   );
 }
 
-function FollowButton({ on, onPress }: { on: boolean; onPress(): void }) {
+export function FollowButton({ on, onPress }: { on: boolean; onPress(): void }) {
   const m = useMediaLook();
   const { state, handlers } = useInteraction();
   const lit = state.hover || state.focus;
