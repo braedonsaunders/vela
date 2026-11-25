@@ -23,7 +23,7 @@ import { Byline, Heart, IconButton, LikedCover, MusicTile, PlayFab, Shelf, Wash 
 import { cardOf, cardsOf, dedupeAlbums, shelfSubtitle } from './props';
 import type { Props } from './rich';
 import { ListeningSearch, RecentSearches, SearchField, SearchResults } from './search';
-import { ContinueListening, Credits, ListeningHome, ListeningTitle, SpokenAbout, SpokenFacts, SpokenItems, SpokenPlay, SpokenProgress } from './spoken';
+import { ContinueListening, Credits, ListeningHome, ListeningTitle, SpokenAbout, SpokenCollectionShelf, SpokenFacts, SpokenItems, SpokenPlay, SpokenProgress } from './spoken';
 import { PageEnd } from './paging';
 import { FocusGroup, FocusScope } from './parts';
 import { musicTV } from './layout';
@@ -32,7 +32,7 @@ import { Cover } from '../../widgets/media/parts';
 
 export const PAGE_BLOCKS = ['wash', 'collectionHeader', 'cover', 'actionBar', 'byline', 'musicShelf', 'quickTiles', 'homeShelves', 'genres',
   'artistHero', 'artistLiked', 'discography', 'listenSearch', 'spokenHome', 'spokenTitle', 'albumsGrid',
-  'importSubtitle', 'searchField', 'recentSearches', 'searchResults', 'tileGrid', 'continueListening', 'spokenCredits', 'spokenFacts', 'spokenProgress', 'spokenPlay', 'spokenItems', 'spokenAbout'] as const;
+  'importSubtitle', 'searchField', 'recentSearches', 'searchResults', 'tileGrid', 'continueListening', 'spokenCredits', 'spokenFacts', 'spokenProgress', 'spokenPlay', 'spokenItems', 'spokenAbout', 'spokenCollectionShelf'] as const;
 export type PageBlockName = (typeof PAGE_BLOCKS)[number];
 
 export function isPageBlock(name: string): name is PageBlockName {
@@ -69,6 +69,7 @@ export function PageBlock({ name, props, read, template, press }: { name: PageBl
     case 'spokenProgress': return <WithCard props={props} read={read}>{card => <SpokenProgress card={card} />}</WithCard>;
     case 'spokenPlay': return <WithCard props={props} read={read}>{card => <SpokenPlay card={card} />}</WithCard>;
     case 'spokenItems': return <WithCard props={props} read={read}>{card => <SpokenItems card={card} />}</WithCard>;
+    case 'spokenCollectionShelf': return <WithCard props={props} read={read}>{card => <SpokenCollectionShelf card={card} />}</WithCard>;
     case 'spokenAbout': return <WithCard props={props} read={read}>{card => <SpokenAbout card={card} />}</WithCard>;
   }
 }
@@ -101,7 +102,8 @@ function CoverBlock({ props, read }: { props: Props; read: RecordReader }) {
     case 'duplicates': return <DuplicatesCover size={size} />;
     case 'mosaic': return <Mosaic tracks={cardsOf(props.value('tracks'), read)} size={size} poster={props.text('poster') || card?.poster || undefined} />;
     default:
-      return card ? <Cover uri={card.poster} shape={kind} size={kind === 'book' ? Math.round(size / 1.5) : size} title={card.name} accent={card.accent} lift={lift} /> : null;
+      return card ? <Cover uri={card.poster} shape={kind} size={kind === 'book' ? Math.round(size / 1.5) : size} title={card.name} accent={card.accent} lift={lift}
+        {...(props.bool('byline') ? { byline: card.media?.byline } : {})} /> : null;
   }
 }
 

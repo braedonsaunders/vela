@@ -3460,6 +3460,11 @@
           "doc": "A cover: a title's artwork (square, round for artists, book), Liked Songs' heart, a playlist's mosaic, or Rewind's, import's or duplicates' covers.",
           "parts": [],
           "props": {
+            "byline": {
+              "default": "false",
+              "doc": "Letter the byline on the drawn cover too (spoken word's pages).",
+              "type": "boolean"
+            },
             "item": {
               "doc": "The title (an item: record or a vela.title value).",
               "type": "value"
@@ -3886,6 +3891,19 @@
           },
           "templates": [],
           "tv": "No focus."
+        },
+        "spokenCollectionShelf": {
+          "doc": "A collection whose items do not all play: them as a shelf of tiles (else nothing).",
+          "parts": [],
+          "props": {
+            "item": {
+              "doc": "The collection.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "One focus row."
         },
         "spokenCredits": {
           "doc": "A spoken title's credits: by the author, narrated by, hosted by.",
@@ -4462,6 +4480,7 @@
             "searchField",
             "searchResults",
             "spokenAbout",
+            "spokenCollectionShelf",
             "spokenCredits",
             "spokenFacts",
             "spokenHome",
