@@ -18,6 +18,8 @@ const track = { ratingKey: '9', type: 'track', title: 'Opening', index: 1, paren
 const twofold = { ratingKey: '1', type: 'movie', title: 'Twofold', duration: 60000, Media: [{ id: 1, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', duration: 60000,
   Part: [{ id: 1, key: '/library/parts/1/1/file.mp4', duration: 30000 }, { id: 2, key: '/library/parts/2/1/file.mp4', duration: 30000 }] }] };
 const client = { device: { id: 'd', name: 'd', platform: 'web', appVersion: '1' }, containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: [], hls: true, mse: true } as never;
+/** Lets detached work (a stop not waited for, and the timeline after it) run. */
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('Plex media classes', () => {
   test('music maps to artists, albums and tracks; a section named for audiobooks holds books and their parts', () => {
@@ -239,10 +241,80 @@ describe('Plex stream beside a playable original', () => {
     expect(asked).toHaveLength(1);
     expect(Object.fromEntries(asked[0]!.url.searchParams)).toEqual(Object.fromEntries(new URL(stream.url!).searchParams));
     expect([asked[0]!.url.searchParams.get('session'), asked[0]!.url.searchParams.get('offset')]).toEqual([plan.sessionId, '0']);
-    // Back to the file and to the stream again: it is already decided.
-    await adapter.switchPath(plan.sessionId, switchTo('original', 50, 's2', 1));
-    await adapter.switchPath(plan.sessionId, switchTo('plex-hls', 55, 's3', 2));
-    expect(decisions(seen)).toHaveLength(1);
+  });
+
+  test('leaving the stream for the file stops its transcode, reports the file\'s timeline again, and a return decides a new one', async () => {
+    const seen = route();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'l' } as never);
+    const streamed = await adapter.switchPath(plan.sessionId, switchTo('plex-hls', 42, 'l1', 0));
+    const stops = () => seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'));
+    expect(stops()).toEqual([]);
+    const back = await adapter.switchPath(plan.sessionId, switchTo('original', 50, 'l2', 1));
+    // Repeated, the switch is not applied (or stopped) twice.
+    expect(await adapter.switchPath(plan.sessionId, switchTo('original', 50, 'l2', 1))).toEqual(back);
+    await settle();
+    expect(stops()).toEqual([plan.sessionId]);
+    const stream = back.paths.find(p => p.id === 'plex-hls')!;
+    // The stream is a choice again: no URL to a stopped transcode, its last facts kept for the menu.
+    expect([back.selectedPathId, back.positionSeconds, back.sourceGeneration, stream.readiness, stream.url, stream.quality]).toEqual(
+      ['original', 50, 2, 'on-demand', undefined, streamed.paths.find(p => p.id === 'plex-hls')!.quality]);
+    // After the stop, the session's timeline is the file's, at the switch's position.
+    const stop = seen.findIndex(r => r.url.pathname.endsWith('/stop'));
+    const timeline = seen.findIndex((r, i) => i > stop && r.url.pathname === '/:/timeline');
+    expect(timeline).toBeGreaterThan(stop);
+    expect([seen[timeline]!.url.searchParams.get('session'), seen[timeline]!.url.searchParams.get('time'), seen[timeline]!.url.searchParams.get('state')]).toEqual([plan.sessionId, '50000', 'playing']);
+    // Back to the stream: decided again, from the same request, in a transcode session of its own.
+    const again = await adapter.switchPath(plan.sessionId, switchTo('plex-hls', 55, 'l3', 2));
+    expect(decisions(seen)).toHaveLength(2);
+    const asked = Object.fromEntries(decisions(seen)[1]!.url.searchParams);
+    expect(asked).toEqual({ ...Object.fromEntries(decisions(seen)[0]!.url.searchParams), session: `${plan.sessionId}-2` });
+    expect(Object.fromEntries(new URL(again.paths.find(p => p.id === 'plex-hls')!.url!).searchParams)).toEqual(asked);
+    // The stream now playing is the one a stop, or leaving it again, ends; the first is not stopped again.
+    await adapter.switchPath(plan.sessionId, switchTo('original', 60, 'l4', 3));
+    await settle();
+    expect(stops()).toEqual([plan.sessionId, `${plan.sessionId}-2`]);
+    await adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: 4, seekGeneration: 0, idempotencyKey: 'l5' });
+    expect(stops()).toEqual([plan.sessionId, `${plan.sessionId}-2`, plan.sessionId]);
+  });
+
+  test('a burned subtitle chosen on the file after the stream was left restarts the stream without stopping it again', async () => {
+    const seen = route();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'b' } as never);
+    await adapter.switchPath(plan.sessionId, switchTo('plex-hls', 5, 'b1', 0));
+    await adapter.switchPath(plan.sessionId, switchTo('original', 9, 'b2', 1));
+    await settle();
+    const moved = await adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '32', sourceGeneration: 2, seekGeneration: 0, idempotencyKey: 'b3' });
+    await settle();
+    expect([moved.selectedPathId, new URL(moved.paths.find(p => p.id === 'plex-hls')!.url!).searchParams.get('session')]).toEqual(['plex-hls', `${plan.sessionId}-3`]);
+    expect(seen.filter(r => r.url.pathname.endsWith('/stop')).map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId]);
+  });
+
+  test('a switch that stays on the stream, or one from the file to the file, stops nothing', async () => {
+    const seen = route();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'n' } as never);
+    await adapter.switchPath(plan.sessionId, switchTo('original', 5, 'n1', 0));
+    await adapter.switchPath(plan.sessionId, switchTo('plex-hls', 6, 'n2', 1));
+    await adapter.switchPath(plan.sessionId, switchTo('plex-hls', 7, 'n3', 2));
+    await settle();
+    expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(false);
+  });
+
+  test('a stop of the stream left that fails, or never answers, does not hold or fail the switch', async () => {
+    for (const stop of [() => new Response('', { status: 503 }), () => new Promise<Response>(() => {})]) {
+      const seen = routeFetch({ 'GET /library/metadata/3': { MediaContainer: { Metadata: [mp4] } }, 'GET /video/:/transcode/universal/decision': decision,
+        'GET /video/:/transcode/universal/stop': stop as never, 'POST /:/timeline': {} });
+      const adapter = plex();
+      const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'f' } as never);
+      await adapter.switchPath(plan.sessionId, switchTo('plex-hls', 5, 'f1', 0));
+      const within = <T>(command: Promise<T>) => Promise.race([command, new Promise<never>((_, no) => setTimeout(() => no(new Error('held by the stop')), 200))]);
+      expect((await within(adapter.switchPath(plan.sessionId, switchTo('original', 6, 'f2', 1)))).selectedPathId).toBe('original');
+      expect((await within(adapter.command(plan.sessionId, { kind: 'pause', sourceGeneration: 2, seekGeneration: 0, idempotencyKey: 'f3' }))).state).toBe('paused');
+      await settle();
+      expect(seen.filter(r => r.url.pathname.endsWith('/stop')).map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId]);
+    }
   });
 
   test('a refused stream fails the switch to it, not the start, and leaves the session as it was', async () => {
