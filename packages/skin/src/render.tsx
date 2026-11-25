@@ -1764,9 +1764,14 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
       </Frame>
     );
   }
+  // Renderer 20: inline runs, each a nested text with its own rows over the line's.
+  const spans = node.spans?.filter(span => holds(span.when, ctx, env)).map((span, i) => {
+    const rows = filled(span.style, ctx, env, false);
+    return <Text key={i} style={textStyle({ ...text.rows, ...rows }, measure(viewport, text.fontSize)).style}>{fill(span.text, ctx, env)}</Text>;
+  });
   return (
     <Line style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)} {...presentation}>
-      {value}
+      {value}{spans}
     </Line>
   );
 }

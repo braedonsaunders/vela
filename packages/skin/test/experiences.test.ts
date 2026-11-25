@@ -394,3 +394,33 @@ describe('renderer 20 pipes and env', () => {
     expect(Number(draw('{env.now}'))).toBeGreaterThan(0);
   });
 });
+
+describe('inline spans, or: and string:', () => {
+  test('a text draws its spans after it, each with its own rows, when they hold', () => {
+    const node = resolveScreenDocument(builtIn({ type: 'text', text: '', spans: [
+      { text: '{env.viewer}', style: { 'font-weight': '700', color: '$ui.ink' } },
+      { text: ' · {s:music.liked}' },
+      { text: ' hidden', when: [{ test: 'src.no' }] },
+    ] }), at()).tree as Extract<RNode, { kind: 'text' }>;
+    expect(node.spans!.length).toBe(3);
+    expect(fill(node.spans![0]!.style['font-weight'], root(), env)).toBe('700');
+    expect(fill(node.spans![1]!.text, root(), env)).toBe(' · Liked Songs');
+  });
+  test('or: gives a literal for an empty value; string: reads <prefix>.<value>', () => {
+    const draw = (text: string, sources: Record<string, unknown> = {}) => textOf(resolveScreenDocument(builtIn({ type: 'text', text }), at()).tree, root(sources));
+    expect(draw('{src.p|or:month}')).toBe('month');
+    expect(draw('{src.p|or:month}', { p: 'year' })).toBe('year');
+    expect(draw('{src.p|or:month|string:music.rewind.period}')).toBe('This month');
+    expect(draw('{s:music.rewind.subtitle|with:period=src.p~or:week~string:music.rewind.period~lower}')).toContain('this week');
+    expect(draw('{src.p|string:music.rewind.period}', { p: '../x' })).toBe('');
+  });
+});
+
+describe('totalLabel', () => {
+  test('count and rounded running time, as the music pages label a collection', () => {
+    const draw = (sources: Record<string, unknown>) => textOf(resolveScreenDocument(builtIn({ type: 'text', text: '{src.list|totalLabel}' }), at()).tree, root(sources));
+    expect(draw({ list: { items: [{ durationSeconds: 200 }, { durationSeconds: 220 }] } })).toBe('2 songs, 7 min');
+    expect(draw({ list: [{ durationSeconds: 60 }] })).toBe('1 song, 1 min');
+    expect(draw({ list: [] })).toBe('0 songs');
+  });
+});

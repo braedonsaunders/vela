@@ -177,6 +177,10 @@ export function holeValue(body: string, scope: HoleScope): Value {
       value = (c, e) => fillT(!['', 'false', '0'].includes(text(before(c, e), reader(c))) ? a : b, c, e);
       continue;
     }
+    if (name === 'string') {
+      value = stringPipe(value, spec.slice(7).trim(), rest[at + 1]?.startsWith('with:') ? withArgs(rest[++at]!.slice(5), scope) : undefined, scope);
+      continue;
+    }
     if (name === 'plural') {
       value = pluralPipe(value, spec.slice(7).trim(), rest[at + 1]?.startsWith('with:') ? withArgs(rest[++at]!.slice(5), scope) : {}, scope);
       continue;
@@ -198,6 +202,22 @@ export function holeValue(body: string, scope: HoleScope): Value {
     value = (c, e) => { const s = text(before(c, e), reader(c)); return s ? spec + s : ''; };
   }
   return value;
+}
+
+/** Renderer 20, `{<path>|string:<prefix>}`: the string `<prefix>.<value>` (an enum's label:
+ * `{state.period|or:month|string:music.rewind.period}`), from the document's strings and, in a built-in
+ * document, Vela's tables; '' when there is none. Its keys are known only once filled, so each is
+ * compiled the first time it is drawn. */
+function stringPipe(before: Value, prefix: string, args: Record<string, Arg> | undefined, scope: HoleScope): Value {
+  if (!prefix) throw new Error('string: names a key prefix');
+  const compiled = new Map<string, Template>();
+  return (c, e) => {
+    const key = text(before(c, e), reader(c));
+    if (!/^[\w-]{1,64}$/.test(key)) return '';
+    let t = compiled.get(key);
+    if (t === undefined) { t = stringTemplate(`${prefix}.${key}`, scope, args); compiled.set(key, t); }
+    return fillT(t, c, e);
+  };
 }
 
 const PLURAL_FORMS = ['zero', 'one', 'two', 'few', 'many', 'other'] as const;

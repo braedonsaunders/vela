@@ -9,7 +9,7 @@
 import { Platform } from 'react-native';
 import type { Vela as Store } from '@vela/core';
 import { albumOrder, childrenKey } from '@vela/core';
-import { openNowPlaying, type NowPlayingPanel } from '@vela/skin/src/widgets/music/hub';
+import { openNowPlaying, type NowPlayingPanel } from '@vela/skin/src/blocks/listen/hub';
 import { config } from './data/config';
 
 export interface ParityAudio { titleId: string; index: number; seconds: number; open?: NowPlayingPanel | true }
