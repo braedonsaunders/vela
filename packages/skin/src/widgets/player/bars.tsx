@@ -283,7 +283,7 @@ function Controls({
         return qualityMenuRows({
           look, view, plan: state.plan, blocked, send, switchVersion: state.switchVersion,
           pendingVersionId: state.pendingVersionId, versionMessage: state.versionMessage,
-          pendingQualityId: state.pendingQualityId, info, onInfo: toggleInfo,
+          pendingQualityId: state.pendingQualityId, info, onInfo: toggleInfo, streaming: state.streaming,
         });
       case 'speed':
         return <SpeedMenu look={look} view={view} blocked={blocked} send={send} />;

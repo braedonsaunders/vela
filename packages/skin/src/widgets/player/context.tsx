@@ -2,7 +2,7 @@
 // view's latest snapshot, why a start failed, and the few things the chrome can ask for. The
 // chrome never sees media credentials, URLs or the server: it sends view commands and asks the
 // route to close or retry.
-import type { TrickplayFrame } from '@vela/core';
+import type { StreamingSettings, TrickplayFrame } from '@vela/core';
 import { createContext, useContext } from 'react';
 import type { Command, Failure, PlaybackPlan, Snapshot } from '@vela/player-api';
 
@@ -59,6 +59,9 @@ export interface PlayerChromeState {
   retry(): void;
   /** The scrub thumbnail (trickplay) for a position, once a session offers them and its sheet is here. */
   thumbnail?(seconds: number): TrickplayFrame | null;
+  /** This device's streaming cap on each network and whether the network is metered now; a change
+   * applies from the next start. */
+  streaming?: { settings: StreamingSettings; metered: boolean; set(next: Partial<StreamingSettings>): void };
 }
 
 export const PlayerChromeContext = createContext<PlayerChromeState | null>(null);

@@ -2,9 +2,9 @@
 // audio, quality (grouped by resolution, each by its bitrate and what it needs, with the info
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
 import { SubtitleSearch, SubtitleSearchEntry } from './subtitle-search';
-import { msg, number } from '@vela/core';
+import { msg, number, STREAMING_QUALITIES, type StreamingQuality, type StreamingSettings } from '@vela/core';
 import { useState, type ReactNode } from 'react';
-import type { CommandInput } from './context';
+import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, MenuSection, SegmentRow, VersionChoiceRow } from './menu';
 import { nextSubtitleOffset, type PlayerView, type QualityOption } from './present';
@@ -211,6 +211,7 @@ export function AudioMenu({ look, view, blocked, send }: Props) {
 
 interface QualityProps extends Props {
   plan: PlaybackPlan | null;
+  streaming?: PlayerChromeState['streaming'];
   pendingQualityId?: string;
   pendingVersionId?: string;
   versionMessage: string;
@@ -219,7 +220,7 @@ interface QualityProps extends Props {
   onInfo(): void;
 }
 
-export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion, pendingVersionId, versionMessage, info, onInfo, pendingQualityId }: QualityProps): ReactNode[] {
+export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion, pendingVersionId, versionMessage, info, onInfo, pendingQualityId, streaming }: QualityProps): ReactNode[] {
   const chosen = (option: QualityOption) =>
     option.aliases.includes(view.lockedQuality) || (!view.lockedQuality && !view.qualityAuto && option.aliases.includes(view.qualityId));
   const groups = versionMenuGroups(plan?.versions, view.qualities);
@@ -281,6 +282,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
     !view.qualities.length && !view.qualityAuto ? (
       <ChoiceRow key="current" look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
     ) : null,
+    ...(streaming ? [<MenuRule key="streaming-divider" look={look} />, <StreamingSettingsRows key="streaming" look={look} streaming={streaming} />] : []),
     <MenuRule key="info-divider" look={look} />,
     <ChoiceRow
       key="info"
@@ -293,6 +295,27 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       testID="player-info-toggle"
     />,
   ];
+}
+
+const STREAMING_LABELS: Record<StreamingQuality, string> = { original: 'player.streaming.original', '1080p': '1080p', '720p': '720p', '480p': '480p' };
+
+/** The streaming cap on each network: this device's setting, applied from the next start. A TV is
+ * never on mobile data, so it has one choice for every network. */
+function StreamingSettingsRows({ look, streaming }: { look: PlayerLook; streaming: NonNullable<PlayerChromeState['streaming']> }) {
+  const options = STREAMING_QUALITIES.map(value => ({ value, label: value === 'original' ? msg(STREAMING_LABELS[value]) : STREAMING_LABELS[value] }));
+  const pick = (network: keyof StreamingSettings) => (value: string) => {
+    if (value !== streaming.settings[network]) streaming.set({ [network]: value as StreamingQuality });
+  };
+  return (
+    <>
+      <MenuHeading look={look} text={msg('player.streaming')} />
+      <SegmentRow look={look} name={msg(look.tv ? 'player.streaming.every' : 'player.streaming.wifi')} enabled
+        current={streaming.settings.wifi} options={options} onPick={pick('wifi')} />
+      {look.tv ? null : <SegmentRow look={look} name={msg('player.streaming.mobile')} enabled
+        current={streaming.settings.mobile} options={options} onPick={pick('mobile')} />}
+      <MenuHeading look={look} text={msg(streaming.metered ? 'player.streaming.onMobile' : 'player.streaming.nextTitle')} />
+    </>
+  );
 }
 
 export function SpeedMenu({ look, view, blocked, send }: Props) {

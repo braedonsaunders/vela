@@ -63,6 +63,8 @@ export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFl
 export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, mediaCardKind, opensMediaPage, podcastOrder, shapeOf, videoParents, videoRole, MEDIA_PAGE_KINDS, MEDIA_PAGE_ROLES, type CardMedia, type CardShape, type MediaCredit, type MediaParent } from './media';
 export type { ChildrenModel, MediaFeatures } from './store/media';
 export { AUDIO_RATES, chapterEnd, preloadLead, type AudioEngine, type AudioEngineEvent, type AudioPreload, type AudioSound, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
+export { DEFAULT_STREAMING, STREAMING_LIMITS, STREAMING_QUALITIES, streamingSettings, type StreamingQuality, type StreamingSettings } from './streaming';
+export { storedPlayerSettings, type PlayerSettingsState, type StoredPlayerSettings } from './store/player-settings';
 export { autoplayNext, current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf } from './audio/cards';
 export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, recapLabels, recapStatCards, type DuplicateGroupModel, type DuplicateGroupsList, type HistoryRecapModel, type LikedList, type Lyrics as MusicLyrics, type PlaylistImportMatchModel, type PlaylistImportModel, type PlaylistImportUnmatchedModel, type RecapChartBucket, type RecapEntryModel, type RecapLabels, type RecentContext, type RecordingReleasesModel } from './store/music';

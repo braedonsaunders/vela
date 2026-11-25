@@ -8,7 +8,8 @@ import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
-import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
+import { withinStreamingCap } from '../../streaming';
+import { decidedQuality, decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
@@ -557,6 +558,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       (!media.videoCodec || original.videoDecoders.includes(media.videoCodec)) && (!media.audioCodec || original.audioDecoders.includes(decoderAudioCodec(media.audioCodec)));
     const nativeCompatible = r.client.containers.includes(media.container) && (!media.videoCodec || r.client.videoCodecs.includes(media.videoCodec)) && (!media.audioCodec || r.client.audioCodecs.includes(decoderAudioCodec(media.audioCodec)));
     const direct = (compatible || nativeCompatible) && !burnSubtitle && !stacked;
+    // Plex states a file's rate in kb/s. An original above the viewer's streaming cap is offered after
+    // Plex's stream, which starts; where nothing else can play it, the original still plays.
+    const capped = !withinStreamingCap({ bitrate: Number(media.bitrate) * 1000 || undefined, width: Number(media.width) || undefined, height: Number(media.height) || undefined }, r.client);
     if (!direct && r.allowTranscode === false) fail(burnSubtitle ? 'Selected Plex subtitle requires transcoding' : 'Original media is incompatible and transcoding is disabled', 'playback');
     const paths: V.PlaybackPath[] = [];
     if (direct) paths.push({ id: 'original', kind: 'direct', transport: 'file', mimeType: media.container === 'mp4' ? 'video/mp4' : media.container === 'webm' ? 'video/webm' : 'video/x-matroska',
@@ -569,8 +573,14 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`,
         subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
       for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
-      if (await this.decide(u, !!direct)) paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
-        sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, qualities: [], boundaries: [] });
+      const decided = await this.decide(u, !!direct);
+      if (decided) {
+        const quality = decidedQuality(decided);
+        const hls: V.PlaybackPath = { id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
+          sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, ...(quality ? { quality } : {}), qualities: [], boundaries: [] };
+        if (direct && capped) paths.unshift(hls);
+        else paths.push(hls);
+      }
     }
     if (!paths.length) fail('No compatible Plex playback path', 'playback');
     const plan: V.PlaybackPlan = { sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0,
@@ -637,11 +647,11 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
    * own clients do: Ether refuses a video start.m3u8 its client has not asked a decision for (400).
    * `optional`: another path can play, so a refused decision drops this one instead of the start.
    */
-  private async decide(start: URL, optional = false): Promise<boolean> {
+  private async decide(start: URL, optional = false): Promise<Node | null> {
     const decision = new URL('/video/:/transcode/universal/decision', this.origin);
     decision.search = start.search;
-    try { await this.request(decision.pathname, Object.fromEntries(decision.searchParams)); return true; }
-    catch (error) { if (optional) return false; throw error; }
+    try { return await this.request(decision.pathname, Object.fromEntries(decision.searchParams)) ?? {}; }
+    catch (error) { if (optional) return null; throw error; }
   }
   private async timeline(s: PlexSession, state: string) {
     if (s.plan.channelId) return;

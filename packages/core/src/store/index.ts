@@ -23,6 +23,7 @@ import { initialSearch, Search, TYPING_MS, type SearchState } from './search';
 import { Media, type ChildrenModel } from './media';
 import { Audio, initialAudio, type AudioState } from './audio';
 import { initialServers, Servers, type ServersState } from './servers';
+import { initialPlayerSettings, PlayerSettings, type PlayerSettingsState } from './player-settings';
 import { Session } from './session';
 import { idle, StateBox, type Loadable } from './state';
 
@@ -56,6 +57,8 @@ export interface VelaState {
   appearance: Loadable<AppearanceModel>;
   /** The trailer preview playing now. */
   previews: PreviewState;
+  /** This device's player settings: the streaming cap on each network. */
+  playerSettings: PlayerSettingsState;
 }
 
 export interface VelaOptions extends VelaPlatform {
@@ -95,6 +98,7 @@ export interface Vela {
   music: Music;
   media: Media;
   audio: Audio;
+  playerSettings: PlayerSettings;
 }
 
 const initialState: VelaState = {
@@ -118,6 +122,7 @@ const initialState: VelaState = {
   screens: initialScreens,
   appearance: idle(),
   previews: initialPreviews,
+  playerSettings: initialPlayerSettings,
 };
 
 /** Art widths come in steps, so a window resized by a few pixels reads the same images; never wider than 4K. */
@@ -192,6 +197,7 @@ export function createVela(options: VelaOptions): Vela {
     previews,
     media: new Media(box, session, width, () => void home.refreshProgress()),
     audio,
+    playerSettings: new PlayerSettings(box, session),
   };
 }
 

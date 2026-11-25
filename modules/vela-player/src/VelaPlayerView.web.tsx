@@ -134,3 +134,22 @@ export const claimPlayPause = (_onPress: () => void): (() => void) => () => {};
 export const pictureInPicture = (): boolean => false;
 
 export const sampleUIFrames = async (_enabled: boolean): Promise<Record<string, number> | undefined> => undefined;
+
+/** The browser's view of the network (the Network Information API, where the browser has it). */
+interface NetworkInformation extends EventTarget { type?: string; saveData?: boolean }
+const connection = (): NetworkInformation | undefined =>
+  typeof navigator === 'undefined' ? undefined : (navigator as Navigator & { connection?: NetworkInformation }).connection;
+
+/** Mobile data, or the viewer asked the browser to save data; unmetered where the browser does not say. */
+export const networkMetered = (): boolean => {
+  const network = connection();
+  return !!network && (network.type === 'cellular' || network.saveData === true);
+};
+
+export function onNetwork(listener: (metered: boolean) => void): () => void {
+  const network = connection();
+  if (!network?.addEventListener) return () => {};
+  const changed = () => listener(networkMetered());
+  network.addEventListener('change', changed);
+  return () => network.removeEventListener('change', changed);
+}

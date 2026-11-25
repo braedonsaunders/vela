@@ -27,5 +27,5 @@ Pod::Spec.new do |s|
     requirement: {kind: 'exactVersion', version: '7.70.0'}, products: ['AetherEngine'])
 
   s.frameworks = 'AVKit', 'AVFoundation', 'CoreAudio', 'AudioToolbox', 'CoreVideo', 'CoreFoundation',
-                 'CoreMedia', 'Metal', 'VideoToolbox', 'QuartzCore'
+                 'CoreMedia', 'Metal', 'VideoToolbox', 'QuartzCore', 'Network'
 end

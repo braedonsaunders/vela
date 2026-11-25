@@ -5,7 +5,7 @@
 import { forcedMute, quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { commandOrigin, msg, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
+import { commandOrigin, msg, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal, type StreamingSettings } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
@@ -41,6 +41,7 @@ export interface LiveSessionOwner {
 export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean): PlaybackSession {
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
+  const settings = useVelaState(state => state.playerSettings);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
@@ -265,6 +266,10 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
   };
 
+  const setStreaming = useCallback((next: Partial<StreamingSettings>) => vela.playerSettings.setStreaming(next), [vela]);
+  const streaming = useMemo(() => ({ settings: settings.streaming, metered: settings.metered, set: setStreaming }),
+    [settings.streaming, settings.metered, setStreaming]);
+
   const chromeTarget: ChromeTarget = target.kind === 'programme' ? { kind, id, channelId: target.channelId, ...(target.from ? { from: target.from } : {}) } : { kind, id };
   const owned = owner && !ownedPlan ? owner : undefined;
   return {
@@ -288,6 +293,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       refreshVersions,
       retry,
       thumbnail,
+      streaming,
     },
     view,
     stop,

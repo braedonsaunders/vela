@@ -74,3 +74,17 @@ export function partAt(parts: Node[], seconds: number): { index: number; offset:
   for (let i = 0; i < offsets.length; i++) if (seconds >= offsets[i]!) index = i;
   return { index, offset: offsets[index] ?? 0, inPart: Math.max(0, seconds - (offsets[index] ?? 0)) };
 }
+
+/**
+ * What Plex's stream will deliver, from its transcode decision: the output media it describes
+ * (copied or transcoded video, in kb/s). Without an output size there is no reliable target, and
+ * the stream stays out of the numbered qualities.
+ */
+export function decidedQuality(decision: Node): V.QualityTarget | undefined {
+  const media: Node | undefined = decision.Metadata?.[0]?.Media?.[0];
+  const width = Number(media?.width), height = Number(media?.height), bitrate = Number(media?.bitrate);
+  if (!media || !(width > 0) || !(height > 0)) return undefined;
+  const video = String(media.videoCodec ?? '').toLowerCase();
+  return { width, height, bitrate: bitrate > 0 ? bitrate * 1000 : 0,
+    ...(video === 'h264' || video === 'hevc' ? { codec: video } : video ? { videoCodec: video } : {}) };
+}
