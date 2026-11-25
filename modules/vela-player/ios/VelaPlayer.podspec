@@ -42,6 +42,7 @@ Pod::Spec.new do |s|
         appletvsimulator) target="tvos${TVOS_DEPLOYMENT_TARGET}-simulator" ;;
         *) echo "Unsupported Metal platform $PLATFORM_NAME" >&2; exit 1 ;;
       esac
+      mkdir -p "$DERIVED_FILE_DIR"
       air="$DERIVED_FILE_DIR/viz-shaders.air"
       xcrun --sdk "$PLATFORM_NAME" metal -target "air64-apple-$target" -std=metal3.0 -c "$SCRIPT_INPUT_FILE_0" -o "$air"
       xcrun --sdk "$PLATFORM_NAME" metallib "$air" -o "$SCRIPT_OUTPUT_FILE_0"
