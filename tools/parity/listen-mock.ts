@@ -16,5 +16,13 @@ const child = Bun.spawn(['bun', 'run', resolve(import.meta.dir, '../../mock-serv
   env: { ...process.env, ...LISTEN_MOCK_ENV, PORT: values.port!, ...(values['dev-origin'] ? { DEV_ORIGIN: values['dev-origin'] } : {}),
     VELA_MOCK_MEDIA_ROOT: resolve(values.media), VELA_MOCK_MUSIC_ROOT: resolve(values.music) },
 });
+// The mock music plugin's album note (a listen.album.panel slot surface) is new with the documents;
+// the parity runs compare today's pages, so it is hidden from viewers (the slot draws nothing).
+const base = `http://127.0.0.1:${values.port}`;
+for (let tries = 0; tries < 60; tries++) {
+  const answer = await fetch(`${base}/__admin/screens`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hide: ['music.albumNote'] }) }).catch(() => undefined);
+  if (answer?.ok) break;
+  await Bun.sleep(500);
+}
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { child.kill(); process.exit(0); });
 process.exitCode = await child.exited;

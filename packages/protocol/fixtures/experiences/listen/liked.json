@@ -37,7 +37,7 @@
      {
       "type": "wash",
       "props": {
-       "accent": "$ui.accent",
+       "accent": "",
        "height": "460"
       }
      },
@@ -67,11 +67,23 @@
          },
          "collectionHeader.byline": {
           "type": "text",
-          "text": "{src.me.name} \u00b7 {src.tracks.items|totalLabel}",
+          "text": "",
           "style": {
            "font-size": "15px",
            "color": "$ui.inkSecondary"
-          }
+          },
+          "spans": [
+           {
+            "text": "{src.me.name}",
+            "style": {
+             "font-weight": "700",
+             "color": "$ui.ink"
+            }
+           },
+           {
+            "text": " \u00b7 {src.tracks.items|totalLabel}"
+           }
+          ]
          }
         }
        },
