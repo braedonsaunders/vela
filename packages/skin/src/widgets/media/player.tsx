@@ -252,7 +252,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, hidden =
   const sleeping = audio.sleep.mode !== 'off';
   const sleepLeft = audio.sleep.mode === 'timer' ? Math.max(0, (audio.sleep.endsAt - Date.now()) / 1000) : 0;
   const after = upNext(audio.queue);
-  const launcherByTitle = Platform.OS === 'ios' && !Platform.isTV;
+  const launcherByTitle = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
   const launcher = onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
     nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={44} /> : null;
   const controls = (
