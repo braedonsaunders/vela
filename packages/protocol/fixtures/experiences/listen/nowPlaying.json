@@ -1,21 +1,61 @@
 {
-  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
-  "screen": "listen", "page": "nowPlaying", "version": "1",
-  "title": "{s:media.player.nowPlaying}", "presentation": "page",
-  "params": { "panel": { "type": "string" } },
-  "sources": { "now": { "from": "vela.nowPlaying" }, "visualizer": { "from": "vela.visualizer" } },
-  "tree": {
-    "type": "box", "style": { "flex": "1" },
-    "children": [
-      { "type": "nowPlaying", "props": { "panel": "{param.panel}" },
-        "partTemplates": {
-          "nowPlaying.background": {
-            "type": "visualizer", "mode": "background",
-            "when": [{ "test": "env.canVisualize" }, { "test": "src.visualizer.enabled" }],
-            "fallback": { "type": "box", "role": "presentation", "style": { "position": "absolute", "inset": "0" } }
-          },
-          "nowPlaying.panel": { "type": "slot", "slot": "plugin:listen.nowPlaying.panel", "context": { "title": "{src.now.item.$key}" } }
-        } }
-    ]
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "nowPlaying",
+ "version": "1",
+ "title": "{s:media.player.nowPlaying}",
+ "presentation": "page",
+ "params": {
+  "panel": {
+   "type": "string"
   }
+ },
+ "sources": {
+  "now": {
+   "from": "vela.nowPlaying"
+  },
+  "visualizer": {
+   "from": "vela.visualizer"
+  }
+ },
+ "tree": {
+  "type": "box",
+  "style": {
+   "flex": "1"
+  },
+  "children": [
+   {
+    "type": "nowPlaying",
+    "props": {
+     "panel": "{param.panel}"
+    },
+    "partTemplates": {
+     "nowPlaying.background": {
+      "type": "visualizer",
+      "mode": "background",
+      "when": [
+       {
+        "test": "env.canVisualize"
+       },
+       {
+        "test": "src.visualizer.enabled"
+       }
+      ],
+      "fallback": {
+       "type": "box",
+       "role": "presentation",
+       "style": {
+        "position": "absolute",
+        "inset": "0"
+       }
+      }
+     }
+    }
+   }
+  ]
+ }
 }

@@ -1,8 +1,32 @@
 {
-  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
-  "screen": "listen", "page": "search", "version": "1",
-  "title": "{s:music.search}", "presentation": "section",
-  "params": { "library": { "type": "string" }, "query": { "type": "string" } },
-  "sources": {},
-  "tree": { "type": "sections", "style": { "padding-bottom": "32px" }, "children": [{ "type": "listenSearch", "props": { "library": "{param.library}", "query": "{param.query}" } }] }
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "search",
+ "version": "1",
+ "title": "{s:music.search}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  },
+  "query": {
+   "type": "string"
+  }
+ },
+ "sources": {},
+ "tree": {
+  "type": "sections",
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "children": [
+   {
+    "type": "listenSearch"
+   }
+  ]
+ }
 }
