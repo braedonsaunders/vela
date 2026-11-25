@@ -3,7 +3,7 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, Versions } from '../capabilities';
+import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
@@ -96,7 +96,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions, TrickplaySheets {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions, TrickplaySheets, UnloadStop {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -104,6 +104,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private watchlistProbe?: Promise<boolean>;
   private liveConfig?: { dvr: string; grid: string; channels: string };
   private delegation?: Promise<string>;
+  /** The token the last authorised request carried, for a request that cannot wait for credentials (`unloadStop`). */
+  private lastToken?: string;
   constructor(private config: PlexConfig) {
     const u = new URL(config.origin);
     if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.pathname !== '/' || u.search || u.hash) throw new Error('Plex requires a server origin');
@@ -132,6 +134,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private async token(): Promise<string> {
     const tokens = await this.config.credentials.get();
     if (!tokens) fail('Sign in required', 'auth');
+    this.lastToken = tokens.accessToken;
     return tokens.accessToken;
   }
   /** Delegation lifetime is set by PMS; never persist it or infer an expiry. */
@@ -222,7 +225,33 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   }
   async revokeSession(_r: V.RevokeRequest): Promise<V.Ack> {
     for (const [id, s] of this.sessions) if (s.plan.state !== 'ended') await this.command(id, { kind: 'stop', ...s.plan, idempotencyKey: `revoke-${id}` });
-    this.sessions.clear(); this.rotateTransientToken(); await this.config.credentials.set(null); return ack;
+    this.sessions.clear(); this.rotateTransientToken(); this.lastToken = undefined; await this.config.credentials.set(null); return ack;
+  }
+  /**
+   * A page being unloaded stops a session as a stop command does: the timeline reports it stopped,
+   * its transcode is stopped, a live tune's subscription is ended. Built now, from the last token
+   * used, and the session ends here too, so a page brought back (the back/forward cache) reports
+   * nothing more for it. Every parameter, the token included, rides in the query: a header would
+   * need a CORS preflight, and a page going away cannot rely on one.
+   */
+  unloadStop(sessionId: string, _at: V.Generations): UnloadRequest[] {
+    const s = this.sessions.get(sessionId);
+    const token = this.lastToken;
+    if (!s || s.plan.state === 'ended' || !token) return [];
+    const { Accept: _, ...identity } = plexHeaders(this.device);
+    const url = (path: string, query: Record<string, unknown> = {}) => {
+      const u = new URL(path, this.origin);
+      for (const [key, value] of Object.entries({ ...query, ...identity, 'X-Plex-Token': token })) if (value !== undefined) u.searchParams.set(key, String(value));
+      return u.href;
+    };
+    const requests: UnloadRequest[] = [];
+    if (!s.plan.channelId) requests.push({ method: 'POST', url: url('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`,
+      time: Math.round(s.plan.positionSeconds * 1000), duration: s.metadata.duration, state: 'stopped', session: sessionId, hasMDE: 1,
+      identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': sessionId }) });
+    requests.push({ method: 'GET', url: url(`/${s.plan.media === 'audio' ? 'music' : 'video'}/:/transcode/universal/stop`, { session: s.transcodeId ?? sessionId }) });
+    if (s.plan.channelId && s.metadata.subscriptionId) requests.push({ method: 'DELETE', url: url(`/media/subscriptions/${enc(s.metadata.subscriptionId)}`) });
+    s.plan.state = 'ended';
+    return requests;
   }
   private artwork(n: Node): V.ArtworkRef[] {
     const image = (type: string) => (n.Image || []).find((i: Node) => i.type === type)?.url;

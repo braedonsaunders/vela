@@ -29,6 +29,8 @@ import type {
   TrackChanges,
   TrackCommand,
   TrailerPreviews,
+  UnloadRequest,
+  UnloadStop,
   Versions,
   WebCodeSignIn,
 } from '../capabilities';
@@ -58,7 +60,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  Multiview, TileReplan, SubtitleSearch, PluginScreens, HistoryRecap, PlaylistImports, LibraryDuplicates {
+  Multiview, TileReplan, SubtitleSearch, PluginScreens, HistoryRecap, PlaylistImports, LibraryDuplicates, UnloadStop {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -693,6 +695,13 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   endMultiview(groupId: string, request: V.Mutation) {
     return this.http.request<unknown>('DELETE', `/multiview/${segment(groupId)}`, request);
+  }
+
+  /** A stop command for a page being unloaded, sent with the last request's credentials. */
+  unloadStop(sessionId: string, at: V.Generations): UnloadRequest[] {
+    const request = this.http.unloadRequest(`/sessions/${segment(sessionId)}/commands`, {
+      kind: 'stop', ...at, idempotencyKey: `unload-${sessionId}-${at.sourceGeneration}-${at.seekGeneration}` });
+    return request ? [request] : [];
   }
 
   private sessionCommand(sessionId: string, command: V.SessionCommand) {
