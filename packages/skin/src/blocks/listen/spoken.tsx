@@ -7,16 +7,16 @@ import { Platform, Text, View } from 'react-native';
 import { clock, currentInQueue, durationLabel, localeContext, msg, number, plural, podcastOrder, type Card, type DetailModel, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
-import { NO_RING } from '../common/controls';
-import { alpha, Cover, Progress, useMediaLook } from '../media/parts';
-import { MediaGlyph } from '../media/icons';
-import { placeOf, useMusic } from '../../blocks/listen/app';
-import { useChildren, useLibraryRows, useTitle } from '../../blocks/listen/data';
-import { creditLines, listColumns, listenFrom, listenedFraction, roleLabel } from '../../blocks/listen/listening';
-import { musicTV } from '../../blocks/listen/layout';
+import { NO_RING } from '../../widgets/common/controls';
+import { alpha, Cover, Progress, useMediaLook } from '../../widgets/media/parts';
+import { MediaGlyph } from '../../widgets/media/icons';
+import { placeOf, useMusic } from './app';
+import { useChildren, useLibraryRows, useTitle } from './data';
+import { creditLines, listColumns, listenFrom, listenedFraction, roleLabel } from './listening';
+import { musicTV } from './layout';
 import { ActionBar, coverSize, Genres, greeting, Header, MoreButton, MusicHome, MusicTitle, pad, usePlayingFrom } from './pages';
-import { Chip, FocusGroup, FocusScope, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash, type MenuOpen } from '../../blocks/listen/parts';
-import { Meter } from '../../blocks/listen/track-table';
+import { Chip, FocusGroup, FocusScope, Heart, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash, type MenuOpen } from './parts';
+import { Meter } from './track-table';
 
 const web = Platform.OS === 'web';
 const EMPTY: Card[] = [];
@@ -54,8 +54,9 @@ export function ListeningTitle({ id }: { id: string }) {
   const card = detail?.value?.title[0];
   const media = card?.media;
   if (!card || !media || media.class === 'music') return <MusicTitle id={id} />;
-  if (media.role === 'audiobook' || (media.role === 'book' && media.audio)) return <AudiobookView card={card} detail={detail!.value!} />;
-  if (media.role === 'show' || media.class === 'podcast') return <ShowView card={card} />;
+  const mode = spokenMode(card);
+  if (mode === 'audiobook') return <AudiobookView card={card} />;
+  if (mode === 'show') return <ShowView card={card} />;
   return <CollectionView card={card} />;
 }
 
@@ -89,7 +90,7 @@ function SpokenShelf({ row }: { row: Row }) {
 }
 
 /** Continue listening: a card per title under way, its progress and what is left; Play resumes. */
-function ContinueListening({ row }: { row: Row }) {
+export function ContinueListening({ row }: { row: Pick<Row, 'name' | 'items'> }) {
   const m = useMediaLook();
   const tv = musicTV();
   const columns = tv ? 3 : m.width >= 1200 ? 3 : m.width >= 700 ? 2 : 1;
@@ -138,7 +139,7 @@ function ResumeCard({ card, width }: { card: Card; width: string }) {
 // ——— Credits ——————————————————————————————————————————————————————————————————————
 
 /** "by Ione Ashcombe · Narrated by Beatrix Thornfield", or "Hosted by …". */
-function Credits({ card, size = 15 }: { card: Card; size?: number }) {
+export function Credits({ card, size = 15 }: { card: Card; size?: number }) {
   const m = useMediaLook();
   const lines = creditLines(card);
   if (!lines.length) return null;
@@ -197,13 +198,23 @@ function StartOver({ onPress }: { onPress(): void }) {
 
 // ——— Audiobook ————————————————————————————————————————————————————————————————————
 
-export function AudiobookView({ card, detail }: { card: Card; detail: DetailModel }) {
+/** What a spoken-word title page is: an audiobook, a podcast show (or a lone episode), or any other container. */
+export type SpokenMode = 'audiobook' | 'show' | 'collection';
+export function spokenMode(card: Pick<Card, 'media'>): SpokenMode {
+  const media = card.media;
+  if (media?.role === 'audiobook' || (media?.role === 'book' && media.audio)) return 'audiobook';
+  if (media?.role === 'show' || media?.class === 'podcast') return 'show';
+  return 'collection';
+}
+
+/** An audiobook's reads: its parts or chapters, where the viewer is through the whole book, and how to listen. */
+function useAudiobook(card: Card) {
   const app = useMusic();
-  const m = useMediaLook();
   const store = useVela();
+  const detail = useTitle(card.id)?.value;
   const children = useChildren(card.media?.childCount ? card.id : undefined);
   const parts = useMemo(() => (children?.value?.items ?? EMPTY).filter(part => part.media?.audio).sort((a, b) => (a.media?.index ?? 0) - (b.media?.index ?? 0)), [children?.value]);
-  const chapters = detail.chapters ?? [];
+  const chapters = detail?.chapters ?? [];
   const now = useVelaState(s => currentInQueue(s.audio.queue)?.id);
   const livePosition = useVelaState(s => s.audio.positionSeconds);
   const playing = usePlayingFrom(card.id);
@@ -221,33 +232,169 @@ export function AudiobookView({ card, detail }: { card: Card; detail: DetailMode
     : app.play(parts.length ? parts : [card], 0, source, false, 0);
   const counted = parts.length ? msg(`media.count.parts.${plural(parts.length)}`, { count: number(parts.length) })
     : chapters.length ? msg(`media.count.chapters.${plural(chapters.length)}`, { count: number(chapters.length) }) : '';
+  return { parts, chapters, position, total, resumable, chapter, canListen, listen, counted, playing, source };
+}
+
+/** A show's reads: its episodes newest first (a lone episode is its own list), and where to start. */
+function useShow(card: Card) {
+  const store = useVela();
+  const show = card.media?.role === 'show';
+  const children = useChildren(show ? card.id : undefined);
+  const episodes = useMemo(() => (show ? podcastOrder((children?.value?.items ?? EMPTY).filter(e => e.media?.audio)) : [card]), [show, children?.value, card]);
+  const start = listenFrom(card, episodes);
+  const count = show ? (episodes.length || card.media?.childCount || 0) : 0;
+  return { show, episodes, start, first: start.items[0], count, canListen: store.media.features().audio, loading: children?.load === 'loading' };
+}
+
+function useCollection(card: Card) {
+  const children = useChildren(card.id);
+  const items = children?.value?.items ?? EMPTY;
+  return { items, playable: items.filter(item => item.media?.audio) };
+}
+
+export function AudiobookView({ card }: { card: Card; detail?: DetailModel }) {
+  const m = useMediaLook();
   return (
     <View testID="spoken-audiobook">
       <Wash accent={card.accent} image={card.poster} />
       <View style={{ paddingHorizontal: pad(m) }}>
         <Header eyebrow={msg(roleLabel(card))} title={card.name} cover={<Cover uri={card.poster} shape="square" size={coverSize(m)} title={card.name} byline={card.media?.byline} accent={card.accent} lift={2} />}>
           <Credits card={card} />
-          <Facts items={[card.yearLabel, total ? durationLabel(total) : '', counted, card.genres[0] ?? '']} />
-          {resumable && total ? <Underway fraction={Math.min(1, position / total)} label={[msg('media.ui.left', { time: durationLabel(Math.max(0, total - position)) }), chapter?.name].filter(Boolean).join(' · ')} /> : null}
-          {card.played ? <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', color: '$ui.inkQuiet' })}>{msg('media.ui.finished')}</Text> : null}
+          <SpokenFacts card={card} />
+          <SpokenProgress card={card} />
         </Header>
-        <ActionBar>
-          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : canListen ? listen('resume') : undefined)} testID="music-play" opensPage
-            label={playing ? msg('media.player.pause') : resumable ? msg('media.ui.resume') : msg('media.ui.listen')} />
-          {resumable ? <StartOver onPress={() => listen('start')} /> : null}
-          <Heart card={card} size={44} iconSize={26} />
-          <MoreButton card={card} />
-        </ActionBar>
-        {!canListen ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotListen')}</Text> : null}
-        {parts.length ? (
-          <ItemList role="part" items={parts} source={source} />
-        ) : chapters.length ? (
-          <ChapterList card={card} chapters={chapters} position={position} source={source} />
-        ) : null}
-        <About card={card} />
+        <SpokenPlay card={card} />
+        <SpokenItems card={card} />
+        <SpokenAbout card={card} />
       </View>
     </View>
   );
+}
+
+/** The facts under a spoken title's credits: year, length, parts or chapters and genre for a book;
+ * the episode count and genre for a show; year and count for a collection. */
+export function SpokenFacts({ card }: { card: Card }) {
+  const mode = spokenMode(card);
+  return mode === 'audiobook' ? <AudiobookFacts card={card} /> : mode === 'show' ? <ShowFacts card={card} />
+    : <Facts items={[card.yearLabel, card.media?.childCount ? msg(`media.count.titles.${plural(card.media.childCount)}`, { count: number(card.media.childCount) }) : '']} />;
+}
+function AudiobookFacts({ card }: { card: Card }) {
+  const { total, counted } = useAudiobook(card);
+  return <Facts items={[card.yearLabel, total ? durationLabel(total) : '', counted, card.genres[0] ?? '']} />;
+}
+function ShowFacts({ card }: { card: Card }) {
+  const { count } = useShow(card);
+  return <Facts items={[count ? msg(`media.count.episodes.${plural(count)}`, { count: number(count) }) : '', card.genres[0] ?? '']} />;
+}
+
+/** An audiobook under way: the bar and what is left (with the chapter); Finished once played. */
+export function SpokenProgress({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const { resumable, total, position, chapter } = useAudiobook(card);
+  return (
+    <>
+      {resumable && total ? <Underway fraction={Math.min(1, position / total)} label={[msg('media.ui.left', { time: durationLabel(Math.max(0, total - position)) }), chapter?.name].filter(Boolean).join(' · ')} /> : null}
+      {card.played ? <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', color: '$ui.inkQuiet' })}>{msg('media.ui.finished')}</Text> : null}
+    </>
+  );
+}
+
+/** A spoken title's action bar: listen or resume (and Start over), or play the show's next
+ * episode, the heart and the menu; a line under it when this device cannot play it. */
+export function SpokenPlay({ card }: { card: Card }) {
+  const mode = spokenMode(card);
+  return mode === 'audiobook' ? <AudiobookPlay card={card} /> : mode === 'show' ? <ShowPlay card={card} /> : <CollectionPlay card={card} />;
+}
+function AudiobookPlay({ card }: { card: Card }) {
+  const app = useMusic();
+  const m = useMediaLook();
+  const { playing, canListen, listen, resumable } = useAudiobook(card);
+  return (
+    <>
+      <ActionBar>
+        <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : canListen ? listen('resume') : undefined)} testID="music-play" opensPage
+          label={playing ? msg('media.player.pause') : resumable ? msg('media.ui.resume') : msg('media.ui.listen')} />
+        {resumable ? <StartOver onPress={() => listen('start')} /> : null}
+        <Heart card={card} size={44} iconSize={26} />
+        <MoreButton card={card} />
+      </ActionBar>
+      {!canListen ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotListen')}</Text> : null}
+    </>
+  );
+}
+function ShowPlay({ card }: { card: Card }) {
+  const app = useMusic();
+  const m = useMediaLook();
+  const { start, first, canListen } = useShow(card);
+  const playing = usePlayingFrom(card.id);
+  const source = { id: card.id, name: card.name, kind: 'title' as const };
+  return (
+    <>
+      <ActionBar>
+        <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : canListen && first ? app.play(start.items, 0, source, false, start.positionSeconds) : undefined)} testID="music-play" opensPage
+          label={playing ? msg('media.player.pause') : first && underway(first) ? `${msg('media.ui.resume')} ${first.name}` : first ? `${msg('media.ui.play')} ${first.name}` : msg('media.ui.play')} />
+        <Heart card={card} size={44} iconSize={26} />
+        <MoreButton card={card} />
+      </ActionBar>
+      {!canListen ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotPlayPodcast')}</Text> : null}
+    </>
+  );
+}
+function CollectionPlay({ card }: { card: Card }) {
+  const app = useMusic();
+  const { playable } = useCollection(card);
+  const playing = usePlayingFrom(card.id);
+  const source = { id: card.id, name: card.name, kind: 'title' as const };
+  return (
+    <ActionBar>
+      {playable.length ? <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(playable, 0, source))} testID="music-play" opensPage /> : null}
+      <Heart card={card} size={44} iconSize={26} />
+      <MoreButton card={card} />
+    </ActionBar>
+  );
+}
+
+/** A spoken title's list: a book's parts or chapters; a show's summary, its episodes with the
+ * All / New chips; a collection's items when all of them play. */
+export function SpokenItems({ card }: { card: Card }) {
+  const mode = spokenMode(card);
+  return mode === 'audiobook' ? <AudiobookItems card={card} /> : mode === 'show' ? <ShowItems card={card} /> : <CollectionItems card={card} />;
+}
+function AudiobookItems({ card }: { card: Card }) {
+  const { parts, chapters, position, source } = useAudiobook(card);
+  return parts.length ? <ItemList role="part" items={parts} source={source} />
+    : chapters.length ? <ChapterList card={card} chapters={chapters} position={position} source={source} /> : null;
+}
+function ShowItems({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const { show, episodes, loading } = useShow(card);
+  const source = { id: card.id, name: card.name, kind: 'title' as const };
+  const [filter, setFilter] = useState<'all' | 'unplayed'>('all');
+  const shown = filter === 'unplayed' ? episodes.filter(e => !e.played) : episodes;
+  return (
+    <>
+      {card.summary ? <Text numberOfLines={3} style={[m.text({ 'font-size': '15px', 'line-height': '1.55', color: '$ui.inkSecondary' }), { maxWidth: 860, marginBottom: 18 }]}>{card.summary}</Text> : null}
+      {show ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginRight: 12 }]}>{msg('media.ui.episodes')}</Text>
+          <Chip label={msg('listening.allEpisodes')} on={filter === 'all'} onPress={() => setFilter('all')} />
+          <Chip label={msg('listening.new')} on={filter === 'unplayed'} onPress={() => setFilter('unplayed')} />
+        </View>
+      ) : null}
+      <ItemList role="episode" items={shown} source={source} />
+      {show && loading && !episodes.length ? <View style={{ height: 240 }} /> : null}
+    </>
+  );
+}
+function CollectionItems({ card }: { card: Card }) {
+  const { items, playable } = useCollection(card);
+  const source = { id: card.id, name: card.name, kind: 'title' as const };
+  return playable.length === items.length && items.length ? <ItemList role="part" items={items} source={source} /> : null;
+}
+
+/** About: the summary and the facts table (a show's summary sits above its episodes instead). */
+export function SpokenAbout({ card }: { card: Card }) {
+  return <About card={spokenMode(card) === 'show' ? { ...card, summary: '' } : card} />;
 }
 
 /** An audiobook's chapters: the one under way marked (with a meter while it plays), the ones
@@ -279,46 +426,18 @@ function ChapterList({ card, chapters, position, source }: { card: Card; chapter
 // ——— Podcast show ——————————————————————————————————————————————————————————————————
 
 export function ShowView({ card }: { card: Card }) {
-  const app = useMusic();
   const m = useMediaLook();
-  const store = useVela();
-  const show = card.media?.role === 'show';
-  const children = useChildren(show ? card.id : undefined);
-  const episodes = useMemo(() => (show ? podcastOrder((children?.value?.items ?? EMPTY).filter(e => e.media?.audio)) : [card]), [show, children?.value, card]);
-  const playing = usePlayingFrom(card.id);
-  const source = { id: card.id, name: card.name, kind: 'title' as const };
-  const start = listenFrom(card, episodes);
-  const first = start.items[0];
-  const canListen = store.media.features().audio;
-  const count = show ? (episodes.length || card.media?.childCount || 0) : 0;
-  const [filter, setFilter] = useState<'all' | 'unplayed'>('all');
-  const shown = filter === 'unplayed' ? episodes.filter(e => !e.played) : episodes;
   return (
     <View testID="spoken-show">
       <Wash accent={card.accent} image={card.poster} />
       <View style={{ paddingHorizontal: pad(m) }}>
         <Header eyebrow={msg(roleLabel(card))} title={card.name} cover={<Cover uri={card.poster} shape="square" size={coverSize(m)} title={card.name} byline={card.media?.byline} accent={card.accent} lift={2} />}>
           <Credits card={card} />
-          <Facts items={[count ? msg(`media.count.episodes.${plural(count)}`, { count: number(count) }) : '', card.genres[0] ?? '']} />
+          <SpokenFacts card={card} />
         </Header>
-        <ActionBar>
-          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : canListen && first ? app.play(start.items, 0, source, false, start.positionSeconds) : undefined)} testID="music-play" opensPage
-            label={playing ? msg('media.player.pause') : first && underway(first) ? `${msg('media.ui.resume')} ${first.name}` : first ? `${msg('media.ui.play')} ${first.name}` : msg('media.ui.play')} />
-          <Heart card={card} size={44} iconSize={26} />
-          <MoreButton card={card} />
-        </ActionBar>
-        {!canListen ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotPlayPodcast')}</Text> : null}
-        {card.summary ? <Text numberOfLines={3} style={[m.text({ 'font-size': '15px', 'line-height': '1.55', color: '$ui.inkSecondary' }), { maxWidth: 860, marginBottom: 18 }]}>{card.summary}</Text> : null}
-        {show ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginRight: 12 }]}>{msg('media.ui.episodes')}</Text>
-            <Chip label={msg('listening.allEpisodes')} on={filter === 'all'} onPress={() => setFilter('all')} />
-            <Chip label={msg('listening.new')} on={filter === 'unplayed'} onPress={() => setFilter('unplayed')} />
-          </View>
-        ) : null}
-        <ItemList role="episode" items={shown} source={source} />
-        {show && children?.load === 'loading' && !episodes.length ? <View style={{ height: 240 }} /> : null}
-        <About card={{ ...card, summary: '' }} />
+        <SpokenPlay card={card} />
+        <SpokenItems card={card} />
+        <SpokenAbout card={card} />
       </View>
     </View>
   );
@@ -327,27 +446,18 @@ export function ShowView({ card }: { card: Card }) {
 // ——— Any other container (a series of audiobooks, a plugin's own level) ————————————————
 
 export function CollectionView({ card }: { card: Card }) {
-  const app = useMusic();
   const m = useMediaLook();
-  const children = useChildren(card.id);
-  const items = children?.value?.items ?? EMPTY;
-  const playable = items.filter(item => item.media?.audio);
-  const playing = usePlayingFrom(card.id);
-  const source = { id: card.id, name: card.name, kind: 'title' as const };
+  const { items, playable } = useCollection(card);
   return (
     <View testID="spoken-collection">
       <Wash accent={card.accent} image={card.poster} />
       <View style={{ paddingHorizontal: pad(m) }}>
         <Header eyebrow={msg(roleLabel(card))} title={card.name} cover={<Cover uri={card.poster} shape="square" size={coverSize(m)} title={card.name} accent={card.accent} lift={2} />}>
           <Credits card={card} />
-          <Facts items={[card.yearLabel, card.media?.childCount ? msg(`media.count.titles.${plural(card.media.childCount)}`, { count: number(card.media.childCount) }) : '']} />
+          <SpokenFacts card={card} />
         </Header>
-        <ActionBar>
-          {playable.length ? <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(playable, 0, source))} testID="music-play" opensPage /> : null}
-          <Heart card={card} size={44} iconSize={26} />
-          <MoreButton card={card} />
-        </ActionBar>
-        {playable.length === items.length && items.length ? <ItemList role="part" items={items} source={source} /> : null}
+        <SpokenPlay card={card} />
+        <SpokenItems card={card} />
       </View>
       {playable.length !== items.length && items.length ? <View style={{ paddingHorizontal: 16 }}><Shelf title="">{items.map(item => <MusicTile key={item.id} card={item} size={168} />)}</Shelf></View> : null}
       <View style={{ paddingHorizontal: pad(m) }}><About card={card} /></View>

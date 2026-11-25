@@ -1,4 +1,4 @@
-// The audio app's search results (widgets/music/search-results.ts): grouped by what the library
+// The audio app's search results (blocks/listen/search-results.ts): grouped by what the library
 // holds, kept to the library's own class when the server could not scope the search, and the
 // library's recent searches.
 import { expect, test } from 'bun:test';
@@ -8,9 +8,9 @@ import type { Card } from '@vela/core';
 import { listeningWords } from '../src/blocks/listen/listening';
 import {
   albumsTab, booksBy, creditedPeople, forgetSearch, listeningResults, nameMatches, readRecent, rememberSearch, RECENT_LIMIT, scopedItems, seeAllAlbums, topResult,
-} from '../src/widgets/music/search-results';
+} from '../src/blocks/listen/search-results';
 import { parsePlace, placeParam } from '../src/blocks/listen/place';
-import { nearEnd } from '../src/widgets/music/scroll-end';
+import { nearEnd } from '../src/blocks/listen/scroll-end';
 
 const catalogue = JSON.parse(readFileSync(join(import.meta.dir, '../../core/src/i18n/strings/en.json'), 'utf8')) as Record<string, string>;
 

@@ -7,7 +7,7 @@ import { useMediaLook } from '../media/parts';
 import { ImportCover, PlaylistImportBlock, usePlaylistImport } from '../../blocks/import';
 import { importSubtitle } from '../../blocks/import-copy';
 import { useMusic } from '../../blocks/listen/app';
-import { coverSize, Header, Mosaic, pad } from './pages';
+import { coverSize, Header, Mosaic, pad } from '../../blocks/listen/pages';
 import { Wash } from '../../blocks/listen/parts';
 
 export { ImportCover };
