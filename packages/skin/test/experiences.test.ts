@@ -325,7 +325,7 @@ describe('slots', () => {
 });
 
 describe('checking a skin\'s overrides', () => {
-  const pages = (experience: string) => (experience === 'listen' ? { album: builtIn({ type: 'text', text: 'album' }), shell: builtIn({ type: 'box' }, { page: 'shell' }) } : {});
+  const pages = (experience: string): Record<string, ScreenDocument> => (experience === 'listen' ? { album: builtIn({ type: 'text', text: 'album' }), shell: builtIn({ type: 'box' }, { page: 'shell' }) } : {});
   test('a sound override passes', () => {
     expect(checkExperienceOverrides({ experiences: { listen: { pages: { album: { type: 'text', text: '{src.album.name}' } }, shell: { tv: { type: 'box' } } } } }, pages)).toEqual([]);
   });
@@ -340,5 +340,40 @@ describe('checking a skin\'s overrides', () => {
     expect(errors).toContain('read/index: read has no built-in page index');
     expect(errors).toContain('Not An Id/: Not An Id is not an experience id');
     expect(errors.some(e => e.startsWith('listen/album: Unknown template missing'))).toBe(true);
+  });
+});
+
+describe('the shell\'s children slot', () => {
+  test('outside a template it is the host\'s slot (the page draws there); inside one, the use\'s children', () => {
+    const shell = builtIn({ type: 'box', children: [{ type: 'slot', slot: 'children' }, { type: 'use', template: 'frame' }] }, {
+      page: 'shell', templates: { frame: { type: 'box', children: [{ type: 'slot', slot: 'children' }] } },
+    });
+    const [slot, frame] = children(resolveScreenDocument(shell, at()).tree);
+    expect(slot!.kind).toBe('slot');
+    expect((slot as Extract<RNode, { kind: 'slot' }>).slot).toBe('children');
+    expect(children(frame!)).toEqual([]);
+  });
+});
+
+describe('words in built-in documents', () => {
+  const words = (text: string, sources: Record<string, unknown> = {}, owned = true) => {
+    const doc = owned ? builtIn({ type: 'text', text }) : plugin({ type: 'text', text }, { strings: { 'n.one': '{arg.count} goal', 'n.other': '{arg.count} goals' } });
+    return textOf(resolveScreenDocument(doc, at()).tree, root(sources));
+  };
+  test('{s:key} falls back to Vela\'s locale tables for owner vela, with: fills their placeholders', () => {
+    expect(words('{s:music.liked}')).toBe('Liked Songs');
+    expect(words('{s:no.such.key}')).toBe('');
+    expect(words('{s:music.moreBy|with:name=src.a.name}', { a: { name: 'Nina' } })).toBe('More by Nina');
+    expect(words('{s:music.liked}', {}, false)).toBe('');
+  });
+  test('the document\'s own strings win over the tables', () => {
+    const doc = builtIn({ type: 'text', text: '{s:music.liked}' }, { strings: { 'music.liked': 'Hearts' } });
+    expect(textOf(resolveScreenDocument(doc, at()).tree)).toBe('Hearts');
+  });
+  test('plural: picks the form for the number and fills {count}', () => {
+    expect(words('{src.a.n|plural:media.count.tracks}', { a: { n: 1 } })).toBe('1 song');
+    expect(words('{src.a.n|plural:media.count.tracks}', { a: { n: 12 } })).toBe('12 songs');
+    expect(words('{src.a.n|plural:n}', { a: { n: 2 } }, false)).toBe('2 goals');
+    expect(words('{src.a.n|plural:n}', { a: { n: 1 } }, false)).toBe('1 goal');
   });
 });

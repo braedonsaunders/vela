@@ -496,10 +496,11 @@ function pressOf(press: NonNullable<BoxNode['press']>, r: Context): RPress {
   };
 }
 
-/** A box's children; a `children` slot inside a template draws the `use`'s children there. */
+/** A box's children; a `children` slot inside a template draws the `use`'s children there. Outside
+ * any template (renderer 20: an experience's shell) it is the host's slot, where the page draws. */
 function screenChildren(children: Node[], depth: number, r: Context): RNode[] {
-  return children.flatMap(child => child.type === 'slot' && child.slot === 'children'
-    ? r.screen!.slot ?? []
+  return children.flatMap(child => child.type === 'slot' && child.slot === 'children' && r.screen!.slot
+    ? r.screen!.slot
     : [convert(child, depth + 1, r)]);
 }
 
@@ -761,7 +762,8 @@ function useScreen(node: UseNode, depth: number, r: Context): RNode {
   const saved = { scope: screen.scope, slot: screen.slot };
   const inherited = Object.fromEntries(Object.entries(saved.scope.args).map(([name, arg]) => [`^${name}`, arg]));
   screen.scope = { ...saved.scope, args: { ...inherited, ...args } };
-  screen.slot = slot;
+  // Inside a template its `children` slot is the use's children (none: nothing), never the host's.
+  screen.slot = slot ?? [];
   try {
     const drawn = convert(merged, depth, r);
     // vela:panel takes focus on TV only when asked (`focusable`), which data may decide.
