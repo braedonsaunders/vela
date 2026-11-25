@@ -3,61 +3,11 @@ import Metal
 import QuartzCore
 import UIKit
 
-final class VisualizerAvailability {
-    static let shared = VisualizerAvailability()
-    static let changed = Notification.Name("VelaVisualizerAvailability")
-    private let lock = NSLock()
-    private var prepared: Set<ObjectIdentifier> = []
-    private var fullscreenRequest: Double?
-    private var supported = true, withinBudget = true
-
-    var trackSupported: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return supported && withinBudget
-    }
-
-    var canOpen: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return supported && withinBudget && !prepared.isEmpty
-    }
-
-    func beginFullscreen() {
-        lock.lock()
-        fullscreenRequest = CACurrentMediaTime()
-        lock.unlock()
-    }
-
-    func takeFullscreenStart() -> Double {
-        lock.lock()
-        defer { fullscreenRequest = nil; lock.unlock() }
-        return fullscreenRequest ?? CACurrentMediaTime()
-    }
-
-    func prepared(_ session: AnyObject, _ value: Bool) {
-        lock.lock()
-        let before = prepared.isEmpty
-        if value { prepared.insert(ObjectIdentifier(session)) } else { prepared.remove(ObjectIdentifier(session)) }
-        let changed = before != prepared.isEmpty
-        lock.unlock()
-        if changed { NotificationCenter.default.post(name: Self.changed, object: nil) }
-    }
-
-    func disableForBudget() {
-        lock.lock()
-        withinBudget = false
-        lock.unlock()
-        NotificationCenter.default.post(name: Self.changed, object: nil)
-    }
-
-    func update(_ value: Bool) {
-        lock.lock()
-        let changed = value != supported
-        supported = value
-        lock.unlock()
-        if changed { NotificationCenter.default.post(name: Self.changed, object: nil) }
-    }
+extension VisualizerAvailability {
+    static let shared = VisualizerAvailability(inactiveNotifications: [
+        UIApplication.willResignActiveNotification,
+        UIApplication.didEnterBackgroundNotification,
+    ])
 }
 
 public final class VelaVisualizerModule: Module {

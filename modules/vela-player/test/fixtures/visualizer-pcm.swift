@@ -3,6 +3,22 @@ import Foundation
 
 @main struct Probe {
     static func main() {
+        let resign = Notification.Name("TestWillResignActive"), background = Notification.Name("TestDidEnterBackground")
+        let availability = VisualizerAvailability(inactiveNotifications: [resign, background])
+        precondition(availability.takeFullscreenStart() == nil)
+        availability.beginFullscreen()
+        let session = NSObject()
+        availability.prepared(session, true)
+        availability.prepared(session, false) // Normal foreground reparenting preserves the user action.
+        precondition(availability.takeFullscreenStart() != nil && availability.takeFullscreenStart() == nil)
+        for event in [resign, background] {
+            availability.beginFullscreen()
+            NotificationCenter.default.post(name: event, object: nil)
+            precondition(availability.takeFullscreenStart() == nil)
+            availability.beginFullscreen()
+            precondition(availability.takeFullscreenStart() != nil)
+        }
+
         var budget = VisualizerBudget()
         for _ in 0..<500 { precondition(budget.measure(milliseconds: 16, fps: 60) == .keep) }
         var reductions = 0, failed = false

@@ -3,11 +3,15 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-(process.platform === 'darwin' ? test : test.skip)('Apple visualizer reads the heard window across queue boundaries and sums concurrent lanes', async () => {
+(process.platform === 'darwin' ? test : test.skip)('Apple visualizer tracks active fullscreen requests and reads the heard PCM window across lanes and queue boundaries', async () => {
   const scratch = await mkdtemp(join(homedir(), '.scratch/tmp/vela-visualizer-pcm-'));
   try {
     const compile = Bun.spawn(['xcrun', 'swiftc', '-module-cache-path', join(scratch, 'modules'),
-      join(import.meta.dir, '../ios/Visualizer/VisualizerBudget.swift'), join(import.meta.dir, '../ios/Visualizer/VizDSP.swift'), join(import.meta.dir, '../ios/Visualizer/VisualizerPCM.swift'), join(import.meta.dir, 'fixtures/visualizer-pcm.swift'),
+      join(import.meta.dir, '../ios/Visualizer/VisualizerAvailability.swift'),
+      join(import.meta.dir, '../ios/Visualizer/VisualizerBudget.swift'),
+      join(import.meta.dir, '../ios/Visualizer/VizDSP.swift'),
+      join(import.meta.dir, '../ios/Visualizer/VisualizerPCM.swift'),
+      join(import.meta.dir, 'fixtures/visualizer-pcm.swift'),
       '-o', join(scratch, 'probe')], {
       env: { ...process.env, DEVELOPER_DIR: '/Applications/Xcode.app/Contents/Developer' }, stdout: 'pipe', stderr: 'pipe',
     });
