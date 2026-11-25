@@ -10,7 +10,7 @@ import { createContext, createElement, useContext, useEffect, useRef, type React
 import { Platform } from 'react-native';
 import { useHost } from './host';
 import { holdBack } from './menu-key';
-import { restoreRouteFocus } from './route-focus-policy';
+import { restoreRouteFocus, returnFocusTarget } from './route-focus-policy';
 import { viewerPressedSince } from './route-focus';
 
 /** A press button that can take focus: a DOM element on the web, a native view on TV. */
@@ -130,13 +130,6 @@ export function leaveButton(target: Focusable): void {
   });
 }
 
-/** The pressed button if it is still drawn, else a drawn button that does the same. */
-function drawn(pressed: Pressed): Focusable | undefined {
-  if (mounted.has(pressed.target)) return pressed.target;
-  for (const [target, does] of mounted) if (does === pressed.does) return target;
-  return undefined;
-}
-
 /** When focus is asked back again after the first frame (ms after the route comes back). */
 const RETURN_RETRY_MS = [150, 400];
 
@@ -159,7 +152,7 @@ export function useReturnFocus(focused: boolean): void {
     const returned = Date.now();
     const apply = () => {
       if (viewerPressedSince(returned)) return;
-      const target = drawn(pressed);
+      const target = returnFocusTarget(pressed, mounted);
       if (target) focusOn(target);
     };
     const frame = requestAnimationFrame(apply);

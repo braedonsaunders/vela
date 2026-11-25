@@ -37,7 +37,7 @@ async function advance(ms: number): Promise<void> {
 
 const DURATION = 200;
 
-function harness(options: { gapless?: boolean; duration?: number; buffered?: () => number; queued?: boolean; handover?: number; loudness?: Record<string, Loudness> } = {}) {
+function harness(options: { gapless?: boolean; rejectEnd?: boolean; duration?: number; buffered?: () => number; queued?: boolean; handover?: number; loudness?: Record<string, Loudness> } = {}) {
   const gapless = options.gapless ?? true;
   const duration = options.duration ?? DURATION;
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
@@ -68,7 +68,8 @@ function harness(options: { gapless?: boolean; duration?: number; buffered?: () 
       // A report takes a moment to land; the wire records when it has.
       await new Promise(resolve => setTimeout(resolve, 40));
       wire.push(`${observation.state} ${sessionId}`);
-      return { ok: true };
+      if (options.rejectEnd && observation.state === 'ended') throw new Error('End report failed');
+      return { accepted: true };
     },
     detail: async (id: string) => ({ title: { id, watch: { positionSeconds: 0 } } }),
   };
@@ -222,7 +223,7 @@ test('the next item is planned twenty seconds before the end and played straight
   expect(at(h).phase).toBe('playing');
   expect(h.box.get().playback.sessionId).toBe('s2');
   expect(h.starts).toEqual(['t1', 't2']);
-  expect(h.stops).toEqual(['s1']);
+  expect(h.stops).toEqual([]);
   // One end report for the finished item, at its end; nothing for it afterwards.
   const s1 = h.reports.filter(r => r.sessionId === 's1');
   expect(s1.filter(r => r.state === 'ended')).toEqual([{ sessionId: 's1', state: 'ended', position: DURATION }]);
@@ -239,7 +240,7 @@ test('a whole album plays through with one plan request per track and no reloads
   await h.play(DURATION * 3 + 5);
   expect(h.starts).toEqual(['t1', 't2', 't3']);
   expect(h.loads).toEqual(['/media/s1', 'advanced:/media/s2', 'advanced:/media/s3']);
-  expect(h.stops).toEqual(['s1', 's2', 's3']);
+  expect(h.stops).toEqual(['s3']);
   for (const id of ['s1', 's2', 's3']) expect(h.reports.filter(r => r.sessionId === id && r.state === 'ended')).toHaveLength(1);
   expect(at(h).phase).toBe('ended');
 });
@@ -314,7 +315,7 @@ test('repeat-one loops the item seamlessly on a new session', async () => {
   expect(h.starts).toEqual(['t1', 't1']);
   expect(h.loads).toEqual(['/media/s1', 'advanced:/media/s2']);
   expect(at(h).queue?.at).toBe(0);
-  expect(h.stops).toEqual(['s1']);
+  expect(h.stops).toEqual([]);
 });
 
 test('turning repeat-one on near the end swaps the prepared item for the same one', async () => {
@@ -390,7 +391,7 @@ test('an engine without gapless playback still starts the next item on its prepa
   await h.play(DURATION + 1);
   expect(h.starts).toEqual(['t1', 't2']);
   expect(h.loads).toEqual(['/media/s1', '/media/s2']);
-  expect(h.stops).toEqual(['s1']);
+  expect(h.stops).toEqual([]);
   expect(h.reports.filter(r => r.sessionId === 's1' && r.state === 'ended')).toHaveLength(1);
   expect(at(h).queue?.at).toBe(1);
 });
@@ -440,14 +441,24 @@ test('a server with queued sessions gets the next plan as queued, twenty seconds
   expect(plain.requests.every(r => r.queued === undefined)).toBe(true);
 });
 
-test("the finished item's session has its end report before it is stopped", async () => {
+test("an accepted end report retires the finished session without a second stop", async () => {
   const h = harness({ queued: true });
   h.audio.play({ items: tracks('t1', 't2'), index: 0 });
   await settle();
   await h.play(DURATION + 1);
   const s1 = h.wire.filter(line => / s1$/.test(line));
-  expect(s1.slice(-2)).toEqual(['ended s1', 'stop s1']);
+  expect(s1.at(-1)).toBe('ended s1');
+  expect(h.stops).toEqual([]);
   expect(h.wire).toContain('playing s2');
+});
+
+test('a failed end report still releases the outgoing session on handover', async () => {
+  const h = harness({ queued: true, rejectEnd: true });
+  h.audio.play({ items: tracks('t1', 't2'), index: 0 });
+  await settle();
+  await h.play(DURATION + 1);
+  expect(h.wire.filter(line => line.endsWith(' s1')).slice(-2)).toEqual(['ended s1', 'stop s1']);
+  expect(h.box.get().playback.sessionId).toBe('s2');
 });
 
 // Sound (docs/sound.md): levelling, the EQ and AutoMix's crossfade reach the engine.
@@ -518,7 +529,7 @@ test('AutoMix without the handover crossfades only when the outgoing item is all
   expect(whole.held()?.crossfade).toEqual({ seconds: 7, at: 192 });
   await whole.play(8);
   expect(whole.reports.filter(r => r.sessionId === 's1').at(-1)).toMatchObject({ state: 'ended', position: DURATION });
-  expect(whole.stops).toContain('s1');
+  expect(whole.stops).not.toContain('s1');
 });
 
 test('an album played in order stays gapless with AutoMix on', async () => {

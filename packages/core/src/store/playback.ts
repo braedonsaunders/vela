@@ -149,7 +149,7 @@ export class Playback {
   private versionsTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** The last progress report in flight, so a stop is followed by a read of what it recorded. */
-  private reporting: Promise<unknown> = Promise.resolve();
+  private reporting: Promise<V.Ack | undefined> = Promise.resolve(undefined);
 
   /** The last position the player reported for the current session. */
   private lastPosition: LastPosition | undefined;
@@ -750,9 +750,9 @@ export class Playback {
 
   /**
    * Make a prepared plan the playing one (the engine moved on to it, or the viewer skipped to it).
-   * The session that was playing stops exactly as `stop` stops it, after its last report, and the
-   * prepared one is followed from here on. `finishAfterMs`: a crossfade, where the old session still
-   * plays out for that long (within the server's handover) before it stops.
+   * An accepted end report retires the old audio session. A skip or an unreported end still
+   * needs an explicit stop. For a crossfade, `finishAfterMs` lets the old session play out
+   * within the server's handover before that stop.
    */
   adopt(target: PlaybackTarget, plan: V.PlaybackPlan, options: { finishAfterMs?: number } = {}): void {
     const previous = this.box.get().playback;
@@ -769,7 +769,7 @@ export class Playback {
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     void this.session.ready().then(connection => { if (this.run === run) this.followSession(run, connection, plan.sessionId); }, () => undefined);
     if (old && old.state !== 'ended' && old.sessionId !== plan.sessionId) {
-      const finish = () => void this.finish(old, previous.target, previous.phase, last, reported);
+      const finish = () => void this.finish(old, previous.target, previous.phase, last, reported, true);
       if (options.finishAfterMs && options.finishAfterMs > 0) setTimeout(finish, options.finishAfterMs);
       else finish();
     }
@@ -831,17 +831,20 @@ export class Playback {
   }
 
   /** Release a session that played, then publish the resume state the server kept for it. */
-  private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<unknown>): Promise<void> {
+  private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<V.Ack | undefined>, handedOver = false): Promise<void> {
     let confirmedPosition: number | undefined;
     try {
-      await reported;
+      const ack = await reported;
       const connection = await this.session.ready();
-      await connection.adapter.command(plan.sessionId, {
-        kind: 'stop',
-        sourceGeneration: plan.sourceGeneration,
-        seekGeneration: plan.seekGeneration,
-        idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
-      });
+      const endedOnHandover = handedOver && last?.ended && ack?.accepted;
+      if (!endedOnHandover) {
+        await connection.adapter.command(plan.sessionId, {
+          kind: 'stop',
+          sourceGeneration: plan.sourceGeneration,
+          seekGeneration: plan.seekGeneration,
+          idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
+        });
+      }
       const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
       if (titleId && plan.purpose !== 'preview') {
         // Some servers return the raw session cursor even though their resume policy drops
