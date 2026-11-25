@@ -36,6 +36,9 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
   private var windowStart = 0L
   private var opened = 0L
   private var openingScene = ""
+  private var openingFullscreen = false
+  private var ticket = 0L
+  private var prepared = false
   private var measuredScene = ""
   private var renderer: VisualizerRenderer? = null
   private var lifecycle: Lifecycle? = null
@@ -79,15 +82,27 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
   }
 
   fun refresh() {
-    if (active && sceneId.isNotEmpty() && openingScene != sceneId) {
-      openingScene = sceneId
-      opened = SystemClock.uptimeMillis()
+    if (active && sceneId.isNotEmpty() && (openingScene != sceneId || openingFullscreen != fullscreen)) {
+      beginPresentation()
     } else if (!active) {
       openingScene = ""
       opened = 0
     }
     dirty = true
     schedule()
+  }
+
+  private fun beginPresentation() {
+    openingScene = sceneId
+    openingFullscreen = fullscreen
+    ticket++
+    opened = SystemClock.uptimeMillis()
+  }
+
+  private fun setPrepared(ready: Boolean) {
+    if (ready == prepared) return
+    prepared = ready
+    VisualizerNative.prepared(ready)
   }
 
   private fun visible() = isAttachedToWindow && onscreen && active && sceneId.isNotEmpty() &&
@@ -105,6 +120,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     if (scheduled) Choreographer.getInstance().removeFrameCallback(displayTick)
     scheduled = false
     observe(false)
+    setPrepared(false)
     if (started) {
       renderer?.suspendRendering()
       openingScene = ""
@@ -120,8 +136,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     observe(!still && AudioPlayback.visualizerPlaying)
     if ((!observing && !dirty) || scheduled || submitted) return
     if (openingScene != sceneId) {
-      openingScene = sceneId
-      opened = SystemClock.uptimeMillis()
+      beginPresentation()
     }
     scheduled = true
     Choreographer.getInstance().postFrameCallback(displayTick)
@@ -175,7 +190,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     val at = SystemClock.uptimeMillis()
     submitted = true
     dirty = false
-    host.draw(w, h, sceneId, artworkTint, accent, if (observing) AudioPlayback.visualizerDecks() else emptyList()) { success ->
+    host.draw(w, h, sceneId, artworkTint, accent, ticket, if (observing) AudioPlayback.visualizerDecks() else emptyList()) { success ->
       submitted = false
       if (!success) {
         unavailable()
@@ -197,8 +212,10 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
   override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = refresh()
   override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
     val host = renderer ?: return
-    if (opened > 0 && host.firstScene == openingScene && surface.timestamp >= host.firstPresentationNs) {
-      Log.i("VelaVisualizer", "firstFrame scene=$openingScene elapsedMs=${SystemClock.uptimeMillis() - opened}")
+    if (opened > 0 && host.presentedTicket == ticket && surface.timestamp >= host.firstPresentationNs) {
+      val metric = if (fullscreen) "firstFrame" else "backdropFrame"
+      Log.i("VelaVisualizer", "$metric scene=$openingScene elapsedMs=${SystemClock.uptimeMillis() - opened}")
+      setPrepared(true)
       opened = -1
     }
   }

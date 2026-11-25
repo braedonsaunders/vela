@@ -16,6 +16,16 @@ internal object VisualizerNative {
   @Volatile private var deviceSupported: Boolean? = null
   @Volatile private var rendererFailed = false
   private var probing = false
+  @Volatile private var preparedViews = 0
+  val canOpen get() = !rendererFailed && preparedViews > 0 && AudioPlayback.visualizerPcm
+
+  /** Main thread. Withdraw entry when its prepared backdrop leaves the hierarchy. */
+  fun prepared(ready: Boolean) {
+    val before = preparedViews
+    preparedViews += if (ready) 1 else -1
+    if ((before == 0) != (preparedViews == 0)) AudioPlayback.onVisualizerAvailability?.invoke()
+  }
+
 
   fun supported(context: Context): Boolean {
     if (rendererFailed) return false

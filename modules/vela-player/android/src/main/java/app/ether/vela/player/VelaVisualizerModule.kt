@@ -15,6 +15,7 @@ class VelaVisualizerModule : Module() {
     Function("canVisualize") {
       AudioPlayback.visualizerPcm && appContext.reactContext?.let { VisualizerNative.supported(it) } == true
     }
+    Function("canOpenVisualizer") { VisualizerNative.canOpen }
     View(VelaVisualizerView::class) {
       Events("onUnavailable")
       Prop("sceneId") { view: VelaVisualizerView, sceneId: String? -> view.sceneId = sceneId.orEmpty() }

@@ -24,7 +24,7 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
   private var handle = 0L
   @Volatile var firstPresentationNs = 0L
     private set
-  @Volatile var firstScene = ""
+  @Volatile var presentedTicket = -1L
     private set
   private var currentId = ""
   private var loggedDecks = 0
@@ -60,7 +60,7 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
     if (handle != 0L) check(VisualizerNative.resize(handle, w, h))
   }
 
-  fun draw(w: Int, h: Int, id: String, artwork: String, accent: String, decks: List<VisualizerDeck>, done: (Boolean) -> Unit) {
+  fun draw(w: Int, h: Int, id: String, artwork: String, accent: String, presentationTicket: Long, decks: List<VisualizerDeck>, done: (Boolean) -> Unit) {
     val ticket = generation
     gl.post {
       if (ticket != generation) return@post
@@ -93,10 +93,10 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
         val drawStart = if (first) SystemClock.uptimeMillis() else 0L
         check(VisualizerNative.frame(handle, pcm))
         val submittedAt = if (first) SystemClock.uptimeMillis() else 0L
-        if (first) {
+        if (first || presentedTicket != presentationTicket) {
           val stamp = System.nanoTime()
           firstPresentationNs = if (EGLExt.eglPresentationTimeANDROID(display, target, stamp)) stamp else 0L
-          firstScene = id
+          presentedTicket = presentationTicket
         }
         check(EGL14.eglSwapBuffers(display, target))
         if (first) Log.i("VelaVisualizer", "firstSwap scene=$id eglMs=${eglReady-start} engineAndPcmMs=${drawStart-eglReady} drawMs=${submittedAt-drawStart} swapMs=${SystemClock.uptimeMillis()-submittedAt}")
@@ -130,7 +130,7 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
   }
 
   fun suspendRendering() {
-    firstScene = ""
+    presentedTicket = -1L
     generation++
     gl.post { release() }
   }
