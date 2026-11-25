@@ -305,6 +305,11 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           waitingLabel={waitingLabel(view)}
           retrying={failed ? null : state.retrying ?? null}
           onRetry={state.retry}
+          useOriginal={state.startFailure?.streamingCap && state.streaming ? () => {
+            const streaming = state.streaming!;
+            streaming.set({ [streaming.metered ? 'mobile' : 'wifi']: 'original' });
+            state.retry();
+          } : undefined}
           onClose={state.close}
           zap={live.live && live.canZap ? live.zap : undefined}
           dial={failed && live.canZap ? <LiveDial channelId={live.channelId} small={look.small} still={look.still} /> : null}

@@ -8,6 +8,7 @@ import { isLiveTarget } from './target';
 export function startFailureOf(refusal: Pick<StartRefusal, 'message' | 'errorClass'> & { code?: string }, target: ChromeTarget | undefined): StartFailure {
   const capacity = refusal.errorClass === 'capacity';
   const reason = refusal.message.trim();
+  if (refusal.code === 'plex_streaming_cap') return { capacity, message: reason, streamingCap: true };
   // A programme from the archive: the catch-up refusals have the viewer's own words (spec C6).
   if (target?.kind === 'programme') return { capacity, message: catchUpErrorMessage(refusal.code) || reason || msg('catchUp.unavailable') };
   if (!isLiveTarget(target)) return { capacity, message: reason || msg('ui.playbackCouldnTBeStarted') };

@@ -28,6 +28,7 @@ interface Props {
   /** A refused start being asked again: shown in words under the spinner. */
   retrying?: { seconds: number; message: string } | null;
   onRetry(): void;
+  useOriginal?: () => void;
   onClose(): void;
   /** On a channel: channel up (-1) and down (+1) from the failure card. */
   zap?: (step: -1 | 1) => void;
@@ -35,11 +36,11 @@ interface Props {
   dial?: ReactNode;
 }
 
-export function Status({ look, failed, waiting, waitingLabel, retrying, onRetry, onClose, zap, dial }: Props) {
+export function Status({ look, failed, waiting, waitingLabel, retrying, onRetry, useOriginal, onClose, zap, dial }: Props) {
   if (failed) {
     return (
       <View style={{ alignItems: 'center', gap: look.size(16) }} pointerEvents="box-none">
-        <FailureCard look={look} failed={failed} onRetry={onRetry} onClose={onClose} zap={zap} />
+        <FailureCard look={look} failed={failed} onRetry={onRetry} useOriginal={useOriginal} onClose={onClose} zap={zap} />
         {dial}
       </View>
     );
@@ -64,12 +65,14 @@ function FailureCard({
   look,
   failed,
   onRetry,
+  useOriginal,
   onClose,
   zap,
 }: {
   look: PlayerLook;
   failed: Failed;
   onRetry(): void;
+  useOriginal?: () => void;
   onClose(): void;
   zap?: (step: -1 | 1) => void;
 }) {
@@ -110,6 +113,7 @@ function FailureCard({
         }}
       >
         <Pill look={look} label={msg('ui.tryAgain')} primary preferred onPress={onRetry} testID="player-retry" />
+        {useOriginal ? <Pill look={look} label={msg('player.streaming.useOriginal')} onPress={useOriginal} testID="player-use-original" /> : null}
         <Pill look={look} label={msg('ui.closePlayer')} onPress={onClose} testID="player-failure-close" />
       </View>
       {zap ? (

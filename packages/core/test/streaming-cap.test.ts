@@ -91,11 +91,14 @@ describe('Plex and the cap', () => {
     expect(asked.get('videoResolution')).toBe('1280x720');
   });
 
-  test('a capped original still plays where Plex\'s stream cannot', async () => {
-    const plan = await start(cappedClient({ ...apple, hls: false }, streamingLimit(DEFAULT_STREAMING, true))).plan;
-    expect(plan.paths.map(p => p.id)).toEqual(['original']);
-    const refused = await start(cappedClient(apple, streamingLimit(DEFAULT_STREAMING, true)), new Response('', { status: 400 })).plan;
-    expect(refused.paths.map(p => p.id)).toEqual(['original']);
+  test('an unavailable conversion cannot silently start an over-cap original', async () => {
+    const client = cappedClient(apple, streamingLimit(DEFAULT_STREAMING, true));
+    await expect(start({ ...client, hls: false }).plan).rejects.toThrow('quality cap');
+    await expect(start(client, new Response('', { status: 400 })).plan).rejects.toThrow('quality cap');
+    await expect(start(client, { MediaContainer: { generalDecisionCode: 2000 } }).plan).rejects.toThrow('quality cap');
+    const overCap = { MediaContainer: { Metadata: [{ Media: [{ width: 1280, height: 720, bitrate: 8000 }] }] } };
+    await expect(start(client, overCap).plan).rejects.toThrow('quality cap');
+    expect((await start(apple, new Response('', { status: 400 })).plan).selectedPathId).toBe('original');
   });
 
   test('a decision without an output size gives no numbered quality', () => {

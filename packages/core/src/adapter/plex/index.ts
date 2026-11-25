@@ -610,8 +610,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       (!media.videoCodec || original.videoDecoders.includes(media.videoCodec)) && (!media.audioCodec || original.audioDecoders.includes(decoderAudioCodec(media.audioCodec)));
     const nativeCompatible = r.client.containers.includes(media.container) && (!media.videoCodec || r.client.videoCodecs.includes(media.videoCodec)) && (!media.audioCodec || r.client.audioCodecs.includes(decoderAudioCodec(media.audioCodec)));
     const direct = (compatible || nativeCompatible) && !burnSubtitle && !stacked;
-    // Plex states a file's rate in kb/s. An original above the viewer's streaming cap is offered after
-    // Plex's stream, which starts; where nothing else can play it, the original still plays.
+    // Plex states a file's rate in kb/s. An over-cap original requires an explicit switch.
     const capped = !withinStreamingCap({ bitrate: Number(media.bitrate) * 1000 || undefined, width: Number(media.width) || undefined, height: Number(media.height) || undefined }, r.client);
     if (!direct && r.allowTranscode === false) fail(burnSubtitle ? 'Selected Plex subtitle requires transcoding' : 'Original media is incompatible and transcoding is disabled', 'playback');
     const paths: V.PlaybackPath[] = [];
@@ -626,13 +625,18 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
       for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
       const decided = await this.decide(u, !!direct);
-      if (decided) {
-        const quality = decidedQuality(decided);
+      const quality = decided && decidedQuality(decided);
+      if (decided && !(Number(decided.generalDecisionCode) >= 2000) && withinStreamingCap(quality ?? {}, r.client)) {
         const hls: V.PlaybackPath = { id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
           sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, ...(quality ? { quality } : {}), qualities: [], boundaries: [] };
         if (direct && capped) paths.unshift(hls);
         else paths.push(hls);
       }
+    }
+    if (capped && !paths.some(path => path.id === 'plex-hls')) {
+      throw new VelaError({ class: 'playback', code: 'plex_streaming_cap',
+        message: 'Plex cannot stream this title within the selected quality cap. Choosing Original removes the cap for this network type.',
+        retry: { allowed: false } }, 400);
     }
     if (!paths.length) fail('No compatible Plex playback path', 'playback');
     const hls = paths.find(p => p.id === 'plex-hls');

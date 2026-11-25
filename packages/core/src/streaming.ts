@@ -1,7 +1,7 @@
 // The viewer's streaming quality cap: one choice for an unmetered network (Wi-Fi, Ethernet) and one
 // for a metered one (mobile data, a personal hotspot, Low Data Mode). The cap is declared to every
 // server as the client's maxBitrate, maxWidth and maxHeight, so each honours it where it can: Plex
-// keeps an original above it out of the plan, Jellyfin caps its streaming bitrate.
+// starts a stream within the cap, Jellyfin caps its streaming bitrate.
 import type { ClientCapabilities } from './wire';
 
 export type StreamingQuality = 'original' | '1080p' | '720p' | '480p';

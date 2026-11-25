@@ -305,8 +305,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
 
 const STREAMING_LABELS: Record<StreamingQuality, string> = { original: 'player.streaming.original', '1080p': '1080p', '720p': '720p', '480p': '480p' };
 
-/** The streaming cap on each network: this device's setting, applied from the next start. A TV is
- * never on mobile data, so it has one choice for every network. */
+/** The streaming cap for each network type, applied from the next start. */
 function StreamingSettingsRows({ look, streaming }: { look: PlayerLook; streaming: NonNullable<PlayerChromeState['streaming']> }) {
   const options = STREAMING_QUALITIES.map(value => ({ value, label: value === 'original' ? msg(STREAMING_LABELS[value]) : STREAMING_LABELS[value] }));
   const pick = (network: keyof StreamingSettings) => (value: string) => {
@@ -315,10 +314,10 @@ function StreamingSettingsRows({ look, streaming }: { look: PlayerLook; streamin
   return (
     <>
       <MenuHeading look={look} text={msg('player.streaming')} />
-      <SegmentRow look={look} name={msg(look.tv ? 'player.streaming.every' : 'player.streaming.wifi')} enabled
+      <SegmentRow look={look} name={msg(look.tv ? 'player.streaming.unmetered' : 'player.streaming.wifi')} enabled
         current={streaming.settings.wifi} options={options} onPick={pick('wifi')} />
-      {look.tv ? null : <SegmentRow look={look} name={msg('player.streaming.mobile')} enabled
-        current={streaming.settings.mobile} options={options} onPick={pick('mobile')} />}
+      <SegmentRow look={look} name={msg(look.tv ? 'player.streaming.metered' : 'player.streaming.mobile')} enabled
+        current={streaming.settings.mobile} options={options} onPick={pick('mobile')} />
       <MenuHeading look={look} text={msg(streaming.metered ? 'player.streaming.onMobile' : 'player.streaming.nextTitle')} />
     </>
   );
