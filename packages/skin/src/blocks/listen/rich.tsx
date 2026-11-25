@@ -118,7 +118,9 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
 
 function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?: (ctx: Ctx) => ReactNode }) {
   const read = ctx.screen?.record ?? (() => undefined);
-  const { tracks, entryIds } = tableTracks(props.value('tracks'), props.value('entryIds'), read);
+  const all = tableTracks(props.value('tracks'), props.value('entryIds'), read);
+  const limit = props.num('limit', 0, 5000);
+  const { tracks, entryIds } = limit ? { tracks: all.tracks.slice(0, limit), entryIds: all.entryIds.slice(0, limit) } : all;
   const playlistId = props.text('playlist');
   const sourceId = props.text('sourceId');
   const options: TrackListOptions = {

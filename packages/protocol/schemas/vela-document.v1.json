@@ -3561,6 +3561,13 @@
           "templates": [],
           "tv": "One focus row per shelf."
         },
+        "importSubtitle": {
+          "doc": "The import page's line under its title: the import's description, else what can be imported from (the advertised sources).",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "No focus."
+        },
         "listenSearch": {
           "doc": "The audio app's search page, whole (field, recent searches, results by kind).",
           "parts": [],
@@ -3612,10 +3619,23 @@
               "doc": "A line beside the heading.",
               "type": "template"
             },
+            "exclude": {
+              "doc": "A title id left out (an album's More by leaves the album out).",
+              "type": "template"
+            },
             "items": {
               "doc": "The titles: a list source or a list of item: records.",
               "required": true,
               "type": "value"
+            },
+            "limit": {
+              "default": "0",
+              "doc": "At most this many tiles; 0 is all.",
+              "type": "number"
+            },
+            "role": {
+              "doc": "Keep only titles of this role (artist, album).",
+              "type": "template"
             },
             "subtitle": {
               "default": "none",
@@ -3829,6 +3849,27 @@
           "templates": [],
           "tv": "As the Rewind page."
         },
+        "recentSearches": {
+          "doc": "This library's recent searches (or the intro) while the field is empty; nothing once something is typed.",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "Rows are focus targets."
+        },
+        "searchField": {
+          "doc": "The audio app's search field: focused as the page opens, Escape clears it, Vela's or the system's keyboard on a TV. Its query is the store's, shared with recentSearches and searchResults.",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "One focus target that opens the keyboard; the clear button beside it."
+        },
+        "searchResults": {
+          "doc": "The results for what is typed, grouped by what the library holds (top result, songs, albums, artists, people, playlists), with loading, failed and empty states; nothing while the field is empty.",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "As the page."
+        },
         "spokenAbout": {
           "doc": "About: the summary and the facts table (a show's summary is in spokenItems).",
           "parts": [],
@@ -4007,6 +4048,11 @@
               "default": "true",
               "doc": "Draw the column header (never on a phone).",
               "type": "boolean"
+            },
+            "limit": {
+              "default": "0",
+              "doc": "At most this many rows (Popular's 5, or 10 after See more); 0 is all.",
+              "type": "number"
             },
             "playlist": {
               "doc": "The playlist id when the tracks are its entries.",
@@ -4398,6 +4444,7 @@
             "eq",
             "genres",
             "homeShelves",
+            "importSubtitle",
             "listenSearch",
             "lyrics",
             "musicShelf",
@@ -4407,6 +4454,9 @@
             "quickTiles",
             "rail",
             "recap",
+            "recentSearches",
+            "searchField",
+            "searchResults",
             "spokenAbout",
             "spokenCredits",
             "spokenFacts",
