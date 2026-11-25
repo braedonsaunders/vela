@@ -86,7 +86,7 @@ export const LISTEN_VIEWS: ListenView[] = [
   { name: 'album-discs', description: 'A two-disc album (disc headings)', place: 'title:album-northern-almanac', ready: 'music-tracklist' },
   { name: 'album-liked', description: 'A liked album (filled heart)', place: 'title:album-glasshouse-weather', ready: 'music-tracklist' },
   { name: 'playlist', description: 'A music playlist page (Evening Drive)', place: 'playlist:playlist-evening-drive', ready: 'music-tracklist' },
-  { name: 'playlist-video', description: 'A playlist of videos only (no songs to list)', place: 'playlist:playlist-weekend', ready: 'music-tracklist', only: ['web-1440', 'web-390'] },
+  { name: 'playlist-video', description: 'A playlist of videos only (no songs to list)', place: 'playlist:playlist-weekend', ready: 'music-main', only: ['web-1440', 'web-390'] },
   { name: 'albums', description: 'Every album matching "a" (Search\'s Albums See all)', place: 'albums:a', ready: 'music-albums' },
   { name: 'rewind', description: 'Rewind: listening recap, stats and chart', place: 'rewind', ready: 'music-rewind-page' },
   { name: 'import', description: 'Playlist Import: the form', place: 'import', ready: 'music-import-page' },
