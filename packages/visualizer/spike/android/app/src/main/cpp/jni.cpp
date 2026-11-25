@@ -8,6 +8,10 @@
 
 extern "C" {
 
+// Ours, so the loader does not find a dependency's instead: dlsym(JNI_OnLoad) on this library also searches its
+// NEEDED libraries, and libhermesvm.so / libfbjni.so's own JNI_OnLoad looks for React Native's Java classes.
+JNIEXPORT jint JNI_OnLoad(JavaVM*, void*) { return JNI_VERSION_1_6; }
+
 // ExoPlayer's playback thread: n mono samples starting at media frame `frame`.
 JNIEXPORT void JNICALL Java_app_vela_vizspike_Native_tapWrite(JNIEnv* env, jclass, jfloatArray mono, jint n, jlong frame, jint rate) {
   auto* p = static_cast<float*>(env->GetPrimitiveArrayCritical(mono, nullptr));
