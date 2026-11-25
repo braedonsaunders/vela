@@ -1269,11 +1269,18 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       ? { onLayout: (e: LayoutChangeEvent) => noteTopBar(e.nativeEvent.layout.height, style.position === 'absolute') }
       : {};
     const Frame = (guide ? AGuide : frameFor(node)) as typeof AView;
+    // A box around a TV button always draws as a view of its own. Left to React Native's view
+    // flattening, a box whose only paint is its focus look (a cast member's ring) became a view
+    // when focused and went back to nothing when blurred, moving the button between native parents
+    // each time: Android dropped focus as it moved, the row's focus guide gave it back, and focus
+    // flickered on and off about 25 times a second for as long as it rested there (#60).
+    const focusFrame = !web && Platform.isTV && !!(press || stop);
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
         {...barLayout} {...swipe} {...hoverProps}
         {...(web && hero ? { onMouseEnter: () => host.setFlag('hero-interacting', true), onMouseLeave: () => host.setFlag('hero-interacting', false) } : {})}
-        {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}>
+        {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}
+        {...(focusFrame ? { collapsable: false } : {})}>
         {layers}
         {content}
         {button}
