@@ -74,3 +74,25 @@ export function partAt(parts: Node[], seconds: number): { index: number; offset:
   for (let i = 0; i < offsets.length; i++) if (seconds >= offsets[i]!) index = i;
   return { index, offset: offsets[index] ?? 0, inPart: Math.max(0, seconds - (offsets[index] ?? 0)) };
 }
+
+/** Sidecar subtitle codecs Plex serves as text, converted to WebVTT on request (`format=vtt`). */
+const TEXT_SIDECARS = ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'];
+export const isTextSidecar = (codec: unknown) => TEXT_SIDECARS.includes(String(codec ?? '').toLowerCase());
+
+/**
+ * How a text sidecar (a stream with a `key`, at `url`: its credential-free address) reaches the
+ * player. ASS and SSA come as the file itself (`{key}.ass`, in UTF-8) when the player names the
+ * codec among its subtitle formats, so its styles and positions survive; anything else, and ASS
+ * for a player that does not draw it, is converted to WebVTT by the server.
+ */
+export function plexSidecar(url: URL, codec: unknown, subtitleFormats: readonly string[]): { url: string; format: 'ass' | 'webvtt' } {
+  const u = new URL(url.href);
+  const name = String(codec ?? '').toLowerCase();
+  if ((name === 'ass' || name === 'ssa') && subtitleFormats.includes(name)) {
+    if (!/\.[a-z0-9]+$/i.test(u.pathname)) u.pathname += '.ass';
+    u.searchParams.set('encoding', 'utf-8');
+    return { url: u.href, format: 'ass' };
+  }
+  u.searchParams.set('format', 'vtt');
+  return { url: u.href, format: 'webvtt' };
+}

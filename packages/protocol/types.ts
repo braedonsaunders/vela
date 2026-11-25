@@ -274,7 +274,9 @@ export interface Interaction { receiptToken: string; kind: 'visible' | 'selected
   /** Visible means actually in the visible viewport; never merely prefetched. */
   visibleMilliseconds?: number; sessionId?: ID }
 export interface InteractionsRequest extends Mutation { interactions: Interaction[] }
-export type SubtitleDelivery = { kind: 'external'; format: 'webvtt' | 'webvtt-window'; url: string } |
+/** External `ass`: the authored ASS/SSA file itself (styles, positions, effects), offered only to a
+ * client whose `subtitleFormats` names the track's codec; otherwise the same track is WebVTT. */
+export type SubtitleDelivery = { kind: 'external'; format: 'webvtt' | 'webvtt-window' | 'ass'; url: string } |
   { kind: 'embedded' } | { kind: 'burn-in' };
 export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
   channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string;

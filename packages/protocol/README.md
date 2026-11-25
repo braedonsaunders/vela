@@ -113,8 +113,8 @@ slot. `0` means no connection-slot wait. An absent header means the wait is
 unknown; clients must preserve that conservative unknown state rather than treat
 absence as zero.
 
-Subtitle `Track.delivery` optionally describes an external `webvtt` or
-`webvtt-window` URL, an `embedded` source track, or `burn-in` delivery. Omission
+Subtitle `Track.delivery` optionally describes an external `webvtt`,
+`webvtt-window` or `ass` URL, an `embedded` source track, or `burn-in` delivery. Omission
 makes no delivery claim. `Track.streamIndex` remains the full source stream index;
 embedded/burn-in PGS retains codec `pgs`, while converted external text may report
 `webvtt`. The existing `Track.url` remains available for external VTT. Windowed VTT
@@ -122,6 +122,13 @@ uses `from_ms` in absolute title milliseconds; cue timestamps also remain absolu
 title time, including after seeking. These resources use the same broker grants
 and policy checks as other media. This field does not change quality codec
 readiness, audio selection or client capability declarations.
+
+External `ass` is an ASS or SSA sidecar delivered as the authored file, so its
+styles, positions, fonts and effects survive (the client draws it with libass or
+its own SSA renderer). Offer it only when the track's codec is `ass` or `ssa` and
+the client's `subtitleFormats` names that codec; otherwise deliver the same
+track as `webvtt`. The track keeps codec `ass`/`ssa` and carries no `Track.url`
+(which stays WebVTT-only for older readers).
 
 ### Theme music
 

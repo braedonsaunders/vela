@@ -8,7 +8,7 @@ import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
-import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
+import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, partAt, partOffsets, plexAudioMime, plexProjection, plexSidecar } from './media';
 import { bifFrameAt, bifFrames, bifHeader, bifInterval, bifOffer, bifTableRange, BIF_HEADER_BYTES, jpegSize, type BifFrame } from './bif';
 export * from './auth';
 
@@ -24,6 +24,8 @@ interface PlexSession {
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
+  /** What the player declared at the start: a subtitle added later is delivered in a format it draws. */
+  client?: V.ClientCapabilities;
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
    * transcode request each part is played through. */
   stack?: { parts: Node[]; index: number; query: Record<string, string> };
@@ -517,8 +519,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const part = (n.Media || []).flatMap((m: Node) => m.Part || []).find((p: Node) => String(p.id) === String(s.part.id));
     for (const t of part?.Stream || []) {
       if (Number(t.streamType) !== 3 || !t.key || s.plan.subtitleTracks.some(p => p.id === String(t.id))) continue;
-      const url = new URL(this.mediaURL(t.key)); url.searchParams.set('format', 'vtt');
-      s.plan.subtitleTracks.push({ id: String(t.id), kind: 'subtitle', name: t.displayTitle || t.language || 'Subtitle', language: t.languageCode || 'und', codec: 'webvtt', delivery: { kind: 'external', format: 'webvtt', url: url.href } });
+      const sidecar = plexSidecar(new URL(this.mediaURL(t.key)), t.codec, s.client?.subtitleFormats ?? []);
+      s.plan.subtitleTracks.push({ id: String(t.id), kind: 'subtitle', name: t.displayTitle || t.language || 'Subtitle', language: t.languageCode || 'und',
+        codec: sidecar.format === 'ass' ? String(t.codec).toLowerCase() : 'webvtt', delivery: { kind: 'external', format: sidecar.format, url: sidecar.url } });
     }
     s.plan.revision++;
     return structuredClone(s.plan);
@@ -541,14 +544,12 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const sessionId = `vela-${randomId()}`;
     const streams: Node[] = part.Stream || [];
     const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => {
-      const textSidecar = !!s.key && ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'].includes(s.codec);
-      const external = textSidecar ? new URL(this.mediaURL(s.key)) : undefined;
-      if (external) external.searchParams.set('format', 'vtt');
+      const external = !!s.key && isTextSidecar(s.codec) ? plexSidecar(new URL(this.mediaURL(s.key)), s.codec, r.client.subtitleFormats ?? []) : undefined;
       return { id: String(s.id), streamIndex: s.index,
         kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
         default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
         ...(type === 3 ? external
-          ? { url: external.href, delivery: { kind: 'external' as const, format: 'webvtt' as const, url: external.href } }
+          ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
           : { delivery: s.key ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
     });
     const audioTracks = tracks(2), subtitleTracks = tracks(3);
@@ -584,7 +585,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       paths, selectedPathId: paths[0].id, audioTracks, subtitleTracks, selectedAudioTrackId: audio, selectedSubtitleTrackId: subtitle, chapters: this.chapters(n),
       fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' } };
     const hls = paths.find(p => p.id === 'plex-hls');
-    this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]),
+    this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]), client: r.client,
       ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}) });
     return structuredClone(plan);
   }

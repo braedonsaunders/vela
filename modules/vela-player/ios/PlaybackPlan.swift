@@ -107,6 +107,8 @@ struct VelaPlanTrack: Decodable {
     struct Delivery: Decodable {
         let kind: String
         let url: String?
+        /// External only: "webvtt", "webvtt-window", or "ass" (the authored ASS/SSA file).
+        let format: String?
     }
 
     let id: String
@@ -128,6 +130,11 @@ struct VelaPlanTrack: Decodable {
         isExternal ? (delivery?.url ?? url) : nil
     }
 
+    /// The engine's format hint for an external file whose URL may not name it ("ass"); nil lets it sniff.
+    var externalFormatHint: String? {
+        isExternal && delivery?.format == "ass" ? "ass" : nil
+    }
+
     /// The model.ts Track a snapshot carries.
     var snapshot: [String: Any] {
         var out: [String: Any] = ["id": id, "label": name]
@@ -140,6 +147,7 @@ struct VelaPlanTrack: Decodable {
         if let delivery {
             var value: [String: Any] = ["kind": delivery.kind]
             value["url"] = delivery.url
+            value["format"] = delivery.format
             out["delivery"] = value
         }
         return out
