@@ -32,6 +32,8 @@ export interface GaplessPlayer {
   url(): string;
   /** 'unsupported': this track cannot be opened or decoded here (before any of it played). */
   subscribe(listener: (event: GaplessEvent) => void): () => void;
+  /** Mixed tracks after levelling, fades and EQ, before the listener’s master volume. */
+  mixedOutput(): AudioNode | null;
   /** The node the player's output leaves through (for a measurement tap). */
   output(): AudioNode | null;
 }

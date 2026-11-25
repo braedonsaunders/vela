@@ -1,9 +1,9 @@
 {
   "platforms": ["apple", "android"],
   "apple": {
-    "modules": ["VelaPlayerModule"]
+    "modules": ["VelaPlayerModule", "VelaVisualizerModule"]
   },
   "android": {
-    "modules": ["app.ether.vela.player.VelaPlayerModule"]
+    "modules": ["app.ether.vela.player.VelaPlayerModule", "app.ether.vela.player.VelaVisualizerModule"]
   }
 }

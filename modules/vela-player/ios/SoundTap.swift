@@ -137,6 +137,8 @@ private struct SoundChain {
 /// blocks still to come with the next item's clock, so the outgoing item's last samples arrive with
 /// negative times and the next item's first sample is time 0. The next item's gain applies from there.
 final class SoundTapContext: @unchecked Sendable {
+    let visualizerFeed = VisualizerPCMFeed()
+    private var visualizerFrames = 0 // Render callback only.
     enum Fade: Equatable {
         case none
         /// cos(π/2·x) from `start` (item seconds) over `seconds`, then silence.
@@ -212,6 +214,7 @@ final class SoundTapContext: @unchecked Sendable {
 
     /// A new item from the start (a load, or a crossfade's incoming item).
     func start(id: Int, gain: Double) {
+        visualizerFeed.reset()
         write {
             current = ItemSound(id: id, gain: Self.clamp(gain))
             next = nil
@@ -238,7 +241,10 @@ final class SoundTapContext: @unchecked Sendable {
     }
 
     /// A seek: the clock jumps, and a move to the next item that has not been reached is undone.
-    func seeked() { write { resets &+= 1 } }
+    func seeked() {
+        visualizerFeed.reset()
+        write { resets &+= 1 }
+    }
 
     // MARK: Render thread
 
@@ -248,6 +254,7 @@ final class SoundTapContext: @unchecked Sendable {
         interleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
         supported = format.mFormatID == kAudioFormatLinearPCM && format.mFormatFlags & kAudioFormatFlagIsFloat != 0
             && format.mBitsPerChannel == 32 && channels > 0 && channels <= maxChannels
+        visualizerFeed.setFormatSupported(supported)
         if !supported { print("[vela-sound] tap format unsupported id=\(format.mFormatID) flags=\(format.mFormatFlags) bits=\(format.mBitsPerChannel) channels=\(channels)") }
         glideLength = max(1, Int(sampleRate * glideSeconds))
         envelope?.deallocate()
@@ -340,6 +347,8 @@ final class SoundTapContext: @unchecked Sendable {
 
     fileprivate func process(_ list: UnsafeMutablePointer<AudioBufferList>, frames: Int, range: CMTimeRange, flags: MTAudioProcessingTapFlags) {
         guard frames > 0 else { return }
+        let streamOffset = visualizerFrames
+        visualizerFrames &+= frames
         let buffers = UnsafeMutableAudioBufferListPointer(list)
         let valid = range.start.isNumeric
         let startTime = valid ? range.start.seconds : nextTime
@@ -354,6 +363,7 @@ final class SoundTapContext: @unchecked Sendable {
                 glideLeft = 0
                 started = false
             }
+            let oldID = playing.id, oldAdvance = localAdvances, oldReset = localResets
             refresh(waiting: !started)
             if !started {
                 gain = playing.gain
@@ -406,6 +416,11 @@ final class SoundTapContext: @unchecked Sendable {
                 }
             }
             glideLeft = max(0, glide - frames)
+            let atBlockBoundary = split < 0 && oldAdvance != localAdvances && oldReset == localResets &&
+                oldID != playing.id && abs(startTime) <= 1 / sampleRate
+            visualizerFeed.append(buffers, frames: frames, channels: channels, interleaved: interleaved,
+                                  rate: sampleRate, start: startTime, id: atBlockBoundary ? oldID : item,
+                                  split: atBlockBoundary ? 0 : split, nextID: playing.id, streamOffset: streamOffset)
         }
         lastStart = label
         #if DEBUG
@@ -468,6 +483,8 @@ final class SoundLane {
         #endif
         return state != nil
     }
+
+    func hasNoTap(_ item: AVPlayerItem) -> Bool { items[ObjectIdentifier(item)] == false }
 
     func forget(_ item: AVPlayerItem) { items[ObjectIdentifier(item)] = nil }
 

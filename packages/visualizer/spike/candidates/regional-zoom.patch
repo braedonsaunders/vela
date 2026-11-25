@@ -1,0 +1,14 @@
+--- a/packages/visualizer/framework/33_contour.js
++++ b/packages/visualizer/framework/33_contour.js
+@@ -167,9 +167,9 @@
+   inputs:['spec','kickL','pulse','travel'],post:{bloom:.38,thr:.83,grain:.035,vig:.4},
+   init(){this.p=program(VS,FS_MAP);this.map=worldMapTexture();this.hydro=hydroTexture();this.text=textAtlas(CITIES.map(c=>c[0]),8,176,28,'italic 600 20px Georgia, serif');this.places=new Float32Array(56);this.opacity=new Map();},
+   draw(F,out){
+-    const progress=F.travel*.020, i=Math.floor(progress)%(TOUR.length-1), f=progress%1, ease=f*f*(3-2*f);
++    const progress=F.travel*.005, i=Math.floor(progress)%(TOUR.length-1), f=progress%1, ease=f*f*(3-2*f);
+     const start=TOUR[i],end=TOUR[i+1],cx=start[0]+(end[0]-start[0])*ease,cy=start[1]+(end[1]-start[1])*ease;
+-    const span=14+8*Math.sin(Math.PI*f)**2, lat=Math.max(.45,Math.cos(cy*Math.PI/180)), aspect=T.sw/T.sh;
++    const span=3.5+2*Math.sin(Math.PI*f)**2, lat=Math.max(.45,Math.cos(cy*Math.PI/180)), aspect=T.sw/T.sh;
+     const near=[];
+     for(let n=0;n<CITIES.length;n++){
+       const [,lon,y]=CITIES[n],dx=((lon-cx+900)%360)-180,dy=y-cy,x=dx*lat/span;

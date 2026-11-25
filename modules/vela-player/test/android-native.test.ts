@@ -28,7 +28,7 @@ const scratchRoot = existsSync(join(homedir(), '.scratch/tmp')) ? join(homedir()
   const scratch = await mkdtemp(join(scratchRoot, 'vela-android-formats-'));
   const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');
   try {
-    const sources = ['DisplayModes', 'AvFormats', 'SubtitleLook', 'DolbyVision', 'AssSample', 'MatroskaAttachments', 'OutputPreferences', 'PictureInPictureShape'].map(f => join(source, f + '.kt'));
+    const sources = ['DisplayModes', 'AvFormats', 'SubtitleLook', 'DolbyVision', 'AssSample', 'MatroskaAttachments', 'OutputPreferences', 'PictureInPictureShape', 'VisualizerAudio', 'VisualizerTier'].map(f => join(source, f + '.kt'));
     const probe = join(import.meta.dir, 'fixtures/android/FormatProbe.kt');
     const compile = Bun.spawn([compiler!, ...sources, probe, '-include-runtime', '-d', join(scratch, 'formats.jar')], { stdout: 'pipe', stderr: 'pipe' });
     const output = await new Response(compile.stderr).text();
@@ -54,5 +54,18 @@ const doviHost = process.env.VELA_DOVI_HOST_DIR, doviAssets = process.env.VELA_D
     const run = Bun.spawn(['java', `-Djava.library.path=${doviHost}`, '-cp', [join(scratch, 'dovi.jar'), runtime].filter(Boolean).join(':'),
       'app.ether.vela.player.DoviProbeKt', doviAssets!], { stdout: 'pipe', stderr: 'pipe' });
     expect(await run.exited, await new Response(run.stderr).text()).toBe(0);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+}, 60_000);
+
+const cxx = Bun.which('c++');
+(cxx ? test : test.skip)('Android visualizer short FFT is Blackman-windowed dB from the last 1024 heard samples', async () => {
+  const scratch = await mkdtemp(join(scratchRoot, 'vela-android-spectrum-'));
+  try {
+    const native = join(import.meta.dir, '../android/visualizer');
+    const exe = join(scratch, process.platform === 'win32' ? 'spectrum.exe' : 'spectrum');
+    const compile = Bun.spawn([cxx!, '-std=c++17', '-I', native, join(native, 'analyser.cpp'),
+      join(import.meta.dir, 'fixtures/android/VisualizerSpectrum.cpp'), '-o', exe], { stderr: 'pipe' });
+    expect(await compile.exited, await new Response(compile.stderr).text()).toBe(0);
+    expect(await Bun.spawn([exe]).exited).toBe(0);
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }, 60_000);

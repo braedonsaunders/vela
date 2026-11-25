@@ -27,7 +27,15 @@ requestedAbis.each { abi ->
   }
 }
 
+def visualizerAssets = tasks.register('copyVisualizerAssets', Sync) {
+  from('../ios/VisualizerAssets/viz-native.js')
+  into(layout.buildDirectory.dir('generated/visualizerAssets/vela-visualizer'))
+}
+tasks.named('preBuild').configure { dependsOn(visualizerAssets) }
+
 android {
+  buildFeatures { prefab true }
+  sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/visualizerAssets').get().asFile)
   namespace 'app.ether.vela.player'
   defaultConfig {
     versionCode 1
@@ -47,6 +55,8 @@ android {
   sourceSets.main.java.srcDirs += [new File(ffmpegDir, 'java')]
 }
 dependencies {
+  implementation 'com.facebook.react:react-android'
+  implementation 'com.facebook.react:hermes-android'
   compileOnly 'org.checkerframework:checker-qual:3.13.0'
   implementation "androidx.media3:media3-exoplayer:${media3Version}"
   implementation "androidx.media3:media3-exoplayer-hls:${media3Version}"

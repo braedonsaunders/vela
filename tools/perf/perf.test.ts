@@ -171,3 +171,9 @@ describe('tools/perf/record-push reader isolation audit', () => {
     expect(audit.isolatesToReadersOnly).toBe(true);
   });
 });
+
+test('a gated visualizer with no presentation evidence cannot pass the TV budget', async () => {
+  const { visualizerPerf } = await import('./visualizer');
+  const result = visualizerPerf('', '', '');
+  expect(result).toMatchObject({ measured: false, pass: false, focusP95Ms: null, uiMaxMs: null });
+});

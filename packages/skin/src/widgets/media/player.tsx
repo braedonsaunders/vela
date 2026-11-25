@@ -207,7 +207,9 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
 function rateLabel(rate: number): string { return `${number(rate, { maximumFractionDigits: 2, minimumFractionDigits: rate % 1 ? 1 : 1 })}×`; }
 
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel?: 'queue' | 'lyrics' | 'sound' }) {
+export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, hidden = false }: {
+  onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; hidden?: boolean;
+}) {
   const host = useHost();
   const m = useMediaLook();
   const store = useVela();
@@ -227,7 +229,7 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   useEffect(() => { if (opening) setList(opening === 'sound' ? 'sound' : opening === 'lyrics' && music ? 'lyrics' : 'queue'); }, [opening, music]);
   // Space plays and pauses; Escape closes (web).
   useEffect(() => {
-    if (!web || typeof window === 'undefined') return;
+    if (hidden || !web || typeof window === 'undefined') return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (event.defaultPrevented || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
@@ -236,26 +238,34 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose, store]);
-  if (!item || !audio.queue) return null;
+  }, [onClose, store, hidden]);
+  if (!item || !audio.queue || hidden) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
   const sideBySide = nowPlayingSideBySide(m.width, m.height);
   const coverSize = sideBySide ? Math.min(480, m.height - 360, (m.width - m.gutter * 2) * 0.42) : Math.min(m.width - m.gutter * 2 - 24, m.height * 0.42, 420);
   const tint = item.accent || m.ui.accent;
+  // Keep text legible on the lighter frames of the paper and water scenes.
+  const washTop = onOpenVisualizer ? alpha(m.ui.page, 0.58) : alpha(tint, 0.3);
   const parentId = item.media?.parent?.id;
   const chapterIndex = [...audio.chapters].reverse().find(c => c.startSeconds <= audio.positionSeconds);
   const chapterAt = chapterIndex ? audio.chapters.indexOf(chapterIndex) : -1;
   const sleeping = audio.sleep.mode !== 'off';
   const sleepLeft = audio.sleep.mode === 'timer' ? Math.max(0, (audio.sleep.endsAt - Date.now()) / 1000) : 0;
   const after = upNext(audio.queue);
+  const launcherByTitle = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
+  const launcher = onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
+    nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={44} /> : null;
   const controls = (
     <Guide {...guided} style={{ gap: 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
-      <View style={{ gap: 6 }}>
-        <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
-        {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
-          onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
-          style={m.text({ 'font-size': '17px', color: '$ui.inkSecondary' })} /> : null}
-        {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {launcherByTitle ? launcher : null}
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
+          {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
+            onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
+            style={m.text({ 'font-size': '17px', color: '$ui.inkSecondary' })} /> : null}
+          {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
+        </View>
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
       {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text></Arrive> : null}
@@ -315,12 +325,12 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   );
   const top = Math.max(14, host.viewport.insets.top + 10);
   return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: onOpenVisualizer ? 'transparent' : m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' }}>
         {/* Native image blur (expo-image on Android and iOS) stops far short of 90: the cover's own
             lettering showed through behind the title and transport. There the wash is the colour alone. */}
-        {item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
-        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.3)} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` })]} />
+        {!onOpenVisualizer && item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
+        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${washTop} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` })]} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }}>
         <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
@@ -334,7 +344,7 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
             {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
           </View>
         </Pressable>
-        <View style={{ width: 42 }} />
+        {!launcherByTitle && launcher ? launcher : <View style={{ width: 42 }} />}
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: 18, paddingBottom: 48, minHeight: '100%' as never }}>
         {sideBySide ? (

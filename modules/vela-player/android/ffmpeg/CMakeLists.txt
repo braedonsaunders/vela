@@ -6,3 +6,4 @@ include_directories(BEFORE "${VELA_MEDIA3_DIR}/jni/ffmpeg/android-libs/${ANDROID
 add_subdirectory("${VELA_MEDIA3_DIR}/jni" "${CMAKE_CURRENT_BINARY_DIR}/media3")
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../dovi" "${CMAKE_CURRENT_BINARY_DIR}/dovi")
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../ass" "${CMAKE_CURRENT_BINARY_DIR}/ass")
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../visualizer" "${CMAKE_CURRENT_BINARY_DIR}/visualizer")

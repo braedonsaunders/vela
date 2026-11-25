@@ -1,7 +1,7 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
-import { Fragment, useCallback, useEffect, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, TVFocusGuideView, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,9 +9,16 @@ import { HostContext } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/widgets/media';
 import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '@vela/skin/src/widgets/media/player';
 import { MOTION, Presence } from '@vela/skin/src/presence';
+import { resolveUi } from '@vela/skin/src/resolve/ui';
+import { focusElement } from '@vela/skin/src/escape';
+import { RoundButton } from '@vela/skin/src/widgets/media/parts';
+import { useCanOpenVisualizer, useCanVisualize } from '../visualizer/availability';
+import { Visualizer } from '../visualizer/visualizer';
+import { beginVisualizerFullscreen } from '../visualizer/stage';
+import { inVisualizerHistory, popVisualizerHistory, pushVisualizerHistory } from '../visualizer/page-history';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
-import { soundSettings, type Vela as Store } from '@vela/core';
+import { currentInQueue, msg, soundSettings, type Vela as Store } from '@vela/core';
 import { useVela } from '../vela';
 import { preferences } from '../data/preferences';
 import { audioDiagnostics, createAudioEngine, syncMediaSession, type AppAudioEngine, type MediaSessionControls } from './audio-engine';
@@ -96,9 +103,12 @@ export function AudioDock() {
   const pathname = usePathname();
   const host = vela.host('home', '');
   const insets = useSafeAreaInsets();
+  const ui = host?.doc.document.ui;
+  const pageColor = useMemo(() => resolveUi(ui).page, [ui]);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [panel, setPanel] = useState<NowPlayingPanel | undefined>(undefined);
-  useEffect(() => onOpenNowPlaying(next => { setPanel(next); setOpen(true); }), []);
+  useEffect(() => onOpenNowPlaying(next => { setPanel(next); setExpanded(false); setOpen(true); }), []);
   useEffect(() => attachAudioEngine(store), [store]);
   // Development checks read what the audio did (docs/sound.md): the store's audio and the engine's last crossfade.
   useEffect(() => {
@@ -120,16 +130,65 @@ export function AudioDock() {
   useEffect(() => { if (audio.error) console.warn(`Vela audio: ${audio.error}`); }, [audio.error]);
   useEffect(() => { if (!audio.queue) setOpen(false); }, [audio.queue]);
   const close = useCallback(() => setOpen(false), []);
-  // Back (Menu on tvOS) closes Now Playing before it reaches the page beneath.
-  useEffect(() => (audio.queue && open ? holdBack(() => { setOpen(false); return true; }) : undefined), [audio.queue, open]);
   const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/')), []);
   const actions = useMediaPageActions(undefined, back, useMediaPlayerActions(), useReaderActions(undefined));
   // Video and the reader own the screen; the sign-in pages have nothing to play.
-  const covered = pathname.startsWith('/watch') || pathname.startsWith('/read') || pathname.startsWith('/sign-in') || pathname.startsWith('/connect');
+  const covered = pathname.startsWith('/watch') || pathname.startsWith('/read') || pathname === '/multiview' || pathname.startsWith('/sign-in') || pathname.startsWith('/connect');
   // The audio app draws its own now-playing bar along the bottom; the floating one stands aside.
   const musicLibrary = useVelaState(state => state.libraries.value?.some(library => library.experience === 'listen' && pathname === `/library/${library.id}`));
   const inMusicShell = !!musicLibrary && !musicTV() && wideMusic(host?.viewport.width ?? 0, host?.viewport.height ?? 0);
   const playing = !!audio.queue && !covered;
+  const visuals = useCanVisualize(playing && open && currentInQueue(audio.queue)?.media?.class === 'music');
+  const readyToOpen = useCanOpenVisualizer(visuals);
+  const fullscreen = visuals && expanded;
+  useEffect(() => {
+    if (visuals || !expanded) return;
+    setExpanded(false);
+    if (Platform.OS === 'web') popVisualizerHistory(window.history);
+  }, [visuals, expanded]);
+  const openVisualizer = useCallback(() => {
+    beginVisualizerFullscreen();
+    if (Platform.OS === 'web') pushVisualizerHistory(window.history);
+    setExpanded(true);
+  }, []);
+  const leaveVisualizer = useCallback(() => {
+    if (Platform.OS === 'web') popVisualizerHistory(window.history);
+    setExpanded(false);
+    if (Platform.isTV || Platform.OS === 'web') requestAnimationFrame(() => focusElement('now-playing-visualizer'));
+  }, []);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !visuals) return;
+    const restore = () => {
+      if (inVisualizerHistory(window.history)) setExpanded(true);
+      else if (expanded) leaveVisualizer();
+    };
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, [visuals, expanded, leaveVisualizer]);
+  useEffect(() => playing && open ? holdBack(() => {
+    if (fullscreen) leaveVisualizer(); else close();
+    return true;
+  }) : undefined, [playing, open, fullscreen, leaveVisualizer, close]);
+  useEffect(() => {
+    if (!fullscreen || Platform.OS !== 'web') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        leaveVisualizer();
+      } else if (event.key === 'Tab') {
+        const page = document.querySelector('[data-testid="visualizer-page"]');
+        const buttons = page?.querySelectorAll<HTMLElement>('[role="button"], [role="radio"]');
+        const first = buttons?.[0], last = buttons?.[buttons.length - 1];
+        if (first && last && ((event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last))) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [fullscreen, leaveVisualizer]);
   if (!host) return null;
   const bottom = Math.max(14, insets.bottom + 10);
   const still = host.env.still;
@@ -142,7 +201,13 @@ export function AudioDock() {
   const nowPlaying = (
     <Presence shown={playing && open} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
       <TVFocusTrap open={playing && open}>
-        <NowPlaying onClose={close} panel={panel} />
+        <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
+          {visuals ? <Visualizer mode={fullscreen ? 'fullscreen' : 'background'} /> : null}
+          <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={readyToOpen ? openVisualizer : undefined} />
+          {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
+            <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
+          </View> : null}
+        </View>
       </TVFocusTrap>
     </Presence>
   );
