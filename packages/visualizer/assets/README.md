@@ -37,3 +37,24 @@ python3 packages/visualizer/tools/contour-atlas.py \
   --output packages/visualizer/assets/round-six \
   --font-file "/System/Library/Fonts/Supplemental/Georgia Bold Italic.ttf"
 ```
+
+## Close-up town labels
+
+The close-up candidate keeps the first 523 city labels in source order and adds
+155 regional place names. A single 1760 × 1904 R8 atlas holds 678 labels in
+10 columns of 176 × 28 cells. The last row contains eight names and two empty
+cells. The compressed asset is 434,222 bytes. The build unpacks its 3,351,040
+texels before encoding the native scene bundle.
+
+To reproduce the atlas, set `CLOSE_UP_FRAMEWORK` to the directory containing
+the candidate's unmodified scene parts and run:
+
+```sh
+python3 packages/visualizer/tools/contour-atlas.py \
+  --framework "$CLOSE_UP_FRAMEWORK" \
+  --output packages/visualizer/assets/close-up --gzip \
+  --font-file "/System/Library/Fonts/Supplemental/Georgia Bold Italic.ttf"
+```
+
+The manifest records the SHA-256 of the uncompressed R8 bytes,
+`9128f8fb5bc75258558c8ca790bd431ccdd712123579b96e3e80f714071c1d36`.
