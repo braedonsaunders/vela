@@ -21,7 +21,7 @@ import {
 import { Byline, Heart, IconButton, LikedCover, MusicTile, PlayFab, Shelf, Wash } from './parts';
 import { cardOf, cardsOf, dedupeAlbums, shelfSubtitle } from './props';
 import type { Props } from './rich';
-import { ListeningSearch } from './search';
+import { ListeningSearch, RecentSearches, SearchField, SearchResults } from './search';
 import { ContinueListening, Credits, ListeningHome, ListeningTitle, SpokenAbout, SpokenFacts, SpokenItems, SpokenPlay, SpokenProgress } from './spoken';
 import { PageEnd } from './paging';
 import { FocusGroup, FocusScope } from './parts';
@@ -31,7 +31,7 @@ import { Cover } from '../../widgets/media/parts';
 
 export const PAGE_BLOCKS = ['wash', 'collectionHeader', 'cover', 'actionBar', 'byline', 'musicShelf', 'quickTiles', 'homeShelves', 'genres',
   'artistHero', 'artistLiked', 'discography', 'listenSearch', 'spokenHome', 'spokenTitle', 'albumsGrid',
-  'tileGrid', 'continueListening', 'spokenCredits', 'spokenFacts', 'spokenProgress', 'spokenPlay', 'spokenItems', 'spokenAbout'] as const;
+  'searchField', 'recentSearches', 'searchResults', 'tileGrid', 'continueListening', 'spokenCredits', 'spokenFacts', 'spokenProgress', 'spokenPlay', 'spokenItems', 'spokenAbout'] as const;
 export type PageBlockName = (typeof PAGE_BLOCKS)[number];
 
 export function isPageBlock(name: string): name is PageBlockName {
@@ -57,6 +57,9 @@ export function PageBlock({ name, props, read, template, press }: { name: PageBl
     case 'spokenHome': return <ListeningHome />;
     case 'spokenTitle': return <ListeningTitle id={props.text('id')} />;
     case 'albumsGrid': return <MusicAlbums query={props.text('query')} />;
+    case 'searchField': return <SearchField />;
+    case 'recentSearches': return <RecentSearches />;
+    case 'searchResults': return <SearchResults />;
     case 'tileGrid': return <TileGridBlock props={props} read={read} press={press} />;
     case 'continueListening': return <ContinueBlock props={props} read={read} />;
     case 'spokenCredits': return <WithCard props={props} read={read}>{card => <Credits card={card} />}</WithCard>;

@@ -293,6 +293,9 @@ export const RICH_BLOCKS = {
   spokenPlay: { doc: 'A spoken title\'s action bar: listen or resume (and Start over), or play the show\'s next episode, the heart and the menu, with a line when this device cannot play it.', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'One focus row; play takes focus first.' },
   spokenItems: { doc: 'A spoken title\'s list: a book\'s parts or chapters; a show\'s summary and episodes with the All / New chips; a collection\'s items when they all play.', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'Rows are single focus targets.' },
   spokenAbout: { doc: 'About: the summary and the facts table (a show\'s summary is in spokenItems).', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'No focus.' },
+  searchField: { doc: 'The audio app\'s search field: focused as the page opens, Escape clears it, Vela\'s or the system\'s keyboard on a TV. Its query is the store\'s, shared with recentSearches and searchResults.', props: {}, parts: [], templates: [], tv: 'One focus target that opens the keyboard; the clear button beside it.' },
+  recentSearches: { doc: 'This library\'s recent searches (or the intro) while the field is empty; nothing once something is typed.', props: {}, parts: [], templates: [], tv: 'Rows are focus targets.' },
+  searchResults: { doc: 'The results for what is typed, grouped by what the library holds (top result, songs, albums, artists, people, playlists), with loading, failed and empty states; nothing while the field is empty.', props: {}, parts: [], templates: [], tv: 'As the page.' },
 } as const satisfies Record<string, RichBlockSpec>;
 
 export type RichBlockName = keyof typeof RICH_BLOCKS;
