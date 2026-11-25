@@ -38,11 +38,16 @@ export function plexMediaHeaders(device: PlexDevice): Record<string, string> {
   const { 'X-Plex-Device': _device, ...headers } = plexHeaders(device);
   return headers;
 }
+/** plex.tv no longer accepts the account token it was sent: only linking Plex again mends it. */
+export class PlexAccountRefused extends Error {
+  constructor() { super('Plex no longer accepts this sign-in. Link Plex again.'); this.name = 'PlexAccountRefused'; }
+}
 async function cloud<T>(path: string, device: PlexDevice, method = 'GET', accountToken?: string, refused?: string): Promise<T> {
   const url = new URL(path, 'https://plex.tv');
   if (url.origin !== 'https://plex.tv' || !url.pathname.startsWith('/api/v2/')) throw new Error('Invalid Plex account endpoint');
   const response = await fetch(url.href, { method, cache: 'no-store', redirect: 'error', credentials: 'omit',
     headers: { ...plexHeaders(device), ...(accountToken ? { 'X-Plex-Token': accountToken } : {}) } });
+  if (!response.ok && response.status === 401 && accountToken && !refused) throw new PlexAccountRefused();
   if (!response.ok) throw new Error(response.status === 429 ? 'Too many Plex sign-in attempts. Wait before trying again.'
     : refused && [401, 403, 422].includes(response.status) ? refused : 'Plex is temporarily unavailable. Wait before trying again.');
   return response.json() as Promise<T>;

@@ -503,7 +503,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
         {shownPlaylistTarget ? <AddToPlaylist key={shownPlaylistTarget.titleId} {...shownPlaylistTarget} open={!!playlistTarget} close={closeAddToPlaylist} /> : null}
         {state.auth.plexSwitching && overlayHost ? <HostContext.Provider value={overlayHost}>
           <PlexProfileDialog profiles={state.auth.plex?.profiles ?? []} currentProfileId={state.auth.viewerId} error={state.auth.error}
-            onChoose={(id, pin) => store.auth.choosePlexProfile(id, pin)} onRestart={() => store.auth.startPlexProfileSwitch()} onClose={() => store.auth.cancelPlex()} />
+            onChoose={(id, pin) => store.auth.choosePlexProfile(id, pin)} onRestart={() => store.auth.startPlexProfileSwitch()} onClose={() => store.auth.cancelPlex()}
+            onRelink={state.auth.plexRelink ? () => { store.auth.cancelPlex(); router.push({ pathname: '/connect', params: { plex: '1' } }); } : undefined} />
         </HostContext.Provider> : null}
       </LaunchGate>
     </VelaContext.Provider>

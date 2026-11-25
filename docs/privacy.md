@@ -7,8 +7,9 @@ of its own and no Vela-operated service.
 services, and the developer receives no data from the app.
 
 **What stays on your device.** The servers you add, their sign-in sessions (in the system
-keychain), your profile choice and playback and display preferences. Removing a server or the app
-removes them.
+keychain), your profile choice and playback and display preferences. For a Plex server linked
+directly, the sign-in kept beside it includes your Plex account's, used only to switch Plex Home
+profiles. Removing a server, signing out of it or removing the app removes them.
 
 **What goes to your servers.** Vela talks only to the servers you add, and to the addresses those
 servers give it for artwork and media. Those servers receive what any of their clients sends: your

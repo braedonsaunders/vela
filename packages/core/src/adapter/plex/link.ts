@@ -2,14 +2,14 @@ import { probeEther } from '../probe';
 import { exchangePlexAccount } from '../ether/plex';
 import type { Device, Tokens } from '../../wire';
 import { createPlexPin, pollPlexPin, discoverPlexServers, plexAccount, plexHeaders, plexHomeUsers, switchPlexHomeUser, type PlexDevice, type PlexHomeUser, type PlexResource } from './auth';
+import { plexProfileChoices, plexServerTokens, plexViewer, type PlexProfileChoice } from './home';
 import { timeoutSignal } from '../../protocol/timeout';
 
 /** A discovered server as the viewer chooses it: names and connection kinds only. */
 export type PlexConnectionKind = 'relay' | 'secure-direct' | 'secure' | 'local' | 'remote';
 export interface PlexChoice { id: string; name: string; owned: boolean; connection: PlexConnectionKind; recommended: boolean }
 export type PlexLinkState = 'waiting' | 'profiles' | 'linked' | 'expired' | 'failed';
-/** A Plex Home member to sign in as, for the picker. */
-export interface PlexProfileChoice { id: string; name: string; protected: boolean; avatarUrl?: string; restricted?: boolean }
+export type { PlexProfileChoice };
 
 const secure = (uri: string) => uri.startsWith('https://');
 const direct = (uri: string) => { try { return new URL(uri).hostname.endsWith('.plex.direct'); } catch { return false; } };
@@ -17,8 +17,10 @@ const kind = (c: PlexResource['connections'][number]): PlexConnectionKind =>
   c.relay ? 'relay' : secure(c.uri) ? (direct(c.uri) ? 'secure-direct' : 'secure') : c.local ? 'local' : 'remote';
 
 /**
- * plex.tv PIN linking (plex.tv/link) and server discovery. The account token lives only here,
- * in memory, for the duration of one link; only the chosen server's own token is ever stored.
+ * plex.tv PIN linking (plex.tv/link) and server discovery. The account token lives here, in memory,
+ * for the duration of one link. A directly linked Plex server stores its own token, and the account
+ * token beside it only so the device can switch Plex Home members later (never sent to the server);
+ * an Ether server exchanges the account token for its own session and keeps neither.
  */
 export class PlexLink {
   private pin?: { id: number; code: string; expiresAt: string };
@@ -62,8 +64,7 @@ export class PlexLink {
   /** The Home's members, while the viewer chooses one. */
   profiles(code: string): PlexProfileChoice[] {
     if (!this.home || this.pin?.code !== code) return [];
-    return this.home.users.map(u => ({ id: u.uuid, name: u.title || u.username || 'Plex user', protected: !!u.protected,
-      ...(u.thumb && /^https:\/\//.test(u.thumb) ? { avatarUrl: u.thumb } : {}), ...(u.restricted ? { restricted: true } : {}) }));
+    return plexProfileChoices(this.home.users);
   }
   /** Sign in as one member of the Home (with their PIN if they keep one): their servers, their token. */
   async chooseProfile(code: string, id: string, pin?: string): Promise<PlexLinkState> {
@@ -82,7 +83,7 @@ export class PlexLink {
     const [resources, account] = await Promise.all([discoverPlexServers(this.device, token), plexAccount(this.device, token)]);
     if (this.pin !== pin) return;
     this.resources = resources.filter(r => r.accessToken && r.clientIdentifier && r.connections.length);
-    this.account = { token, viewer: { id: account.uuid || String(account.id), name: account.friendlyName || account.title || account.username, policyRevision: 'plex' } };
+    this.account = { token, viewer: plexViewer(account) };
   }
   /** Refresh the newly linked account's view: plex.tv can lag the PIN approval. */
   async refreshServers(code: string): Promise<void> {
@@ -114,7 +115,7 @@ export class PlexLink {
    * The chosen server's first connection that proves it is that server: its own `/identity`
    * must name the resource's machine identifier, read with redirects refused.
    */
-  async choose(code: string, id: string, pageSecure: boolean, signIn: { device: Device; idempotencyKey: string }): Promise<{ kind: 'ether' | 'plex'; name: string; origin: string; origins: string[]; tokens: Tokens | null; note?: string }> {
+  async choose(code: string, id: string, pageSecure: boolean, signIn: { device: Device; idempotencyKey: string }): Promise<{ kind: 'ether' | 'plex'; name: string; origin: string; origins: string[]; tokens: Tokens | null; accountToken?: string; note?: string }> {
     const resource = this.resources.find(r => r.clientIdentifier === id);
     const account = this.account;
     if (!account || this.pin?.code !== code || !resource) throw new Error('Link Plex again to choose a server');
@@ -140,12 +141,12 @@ export class PlexLink {
       }
       const tokens: Tokens = ether
         ? await exchangePlexAccount(origin, account.token, signIn.device, exchangeKey)
-        : { accessToken: resource.accessToken, refreshToken: '', expiresAt: '9999-12-31T23:59:59Z', viewer: account.viewer };
+        : plexServerTokens(resource.accessToken, account.viewer);
       if (this.account !== account || this.pin?.code !== code) throw new Error('Link Plex again to choose a server');
       this.cancel();
       // Every address this server publishes, so a record added by one of them is recognised as this server.
       const origins = resource.connections.flatMap(c => { try { return [new URL(c.uri).origin]; } catch { return []; } });
-      return { kind: ether ? 'ether' : 'plex', name: ether?.name || resource.name || 'Plex', origin, origins, tokens };
+      return { kind: ether ? 'ether' : 'plex', name: ether?.name || resource.name || 'Plex', origin, origins, tokens, ...(ether ? {} : { accountToken: account.token }) };
     }
     throw new Error('This Plex server could not be reached from here');
   }

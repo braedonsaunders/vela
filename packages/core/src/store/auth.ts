@@ -1,7 +1,8 @@
 // Signing in to the selected server: its sign-in options, password and Quick Connect sign-in,
 // the web's sign-in link (a one-time code redeemed at start), the hand-off to the server's
 // secure origin, and sign-out. Quick Connect polling runs here, at the server's interval.
-import { createPlexPin, plexAuthUrl, pollPlexPin } from '../adapter/plex/auth';
+import { createPlexPin, plexAuthUrl, pollPlexPin, PlexAccountRefused } from '../adapter/plex/auth';
+import { plexServerProfiles, switchPlexServerProfile } from '../adapter/plex/home';
 import { beginPlexHomeSignIn, exchangePlexAccount, selectPlexHomeProfile } from '../adapter/ether/plex';
 import type * as V from '../wire';
 import type { Connection } from '../adapter/connection';
@@ -10,7 +11,7 @@ import { hasEventStream, hasPasswordSignIn, hasQuickConnectSignIn, hasWebCodeSig
 import { VelaError } from '../adapter/errors';
 import { EtherAdapter } from '../adapter/ether';
 import { refusesSession, serverWait } from '../adapter/ether/transport';
-import type { ServerKind } from '../session/servers';
+import { ServerCredentials, type ServerKind } from '../session/servers';
 import { msg, time } from '../i18n';
 import type { VelaPlatform } from './platform';
 import type { Session } from './session';
@@ -56,6 +57,8 @@ export interface AuthState {
   plexAvailable: boolean;
   plexHomeAvailable: boolean;
   plexSwitching: boolean;
+  /** A directly linked Plex server's account was refused by plex.tv: switching needs Plex linked again. */
+  plexRelink: boolean;
   plex: null | { code: string; linkUrl: string; state: 'waiting' | 'expired' | 'failed' | 'profiles'; choices: never[]; profiles: V.PlexHomeProfile[] };
   quickAvailable: boolean;
   /** The server's HTTPS origin this http: page may hand its session to; '' when none. */
@@ -82,7 +85,7 @@ export const initialAuth: AuthState = {
   serverVersion: '',
   viewer: '', viewerId: '',
   passwordAvailable: false,
-  plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plex: null,
+  plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plexRelink: false, plex: null,
   quickAvailable: false,
   secureOrigin: '',
   error: '',
@@ -94,6 +97,9 @@ export const initialAuth: AuthState = {
   quick: null,
 };
 
+/** How long a directly linked Plex server's profile choice stays open (Ether's selections expire on its own clock). */
+const DIRECT_SELECTION_MS = 10 * 60_000;
+
 /** A server without session events has its snapshot read this often while something plays. */
 const SNAPSHOT_POLL_SECONDS = 5;
 
@@ -101,7 +107,11 @@ export class Auth {
   private plexGeneration = 0;
   private plexTimer?: ReturnType<typeof setTimeout>;
   private plexAuthorization?: { navigate(url: string): void; close(): void };
-  private plexSelection?: { token: string; expiresAt: string; serverId: string; switching: boolean };
+  /** An open profile choice: Ether's selection token, or for a directly linked Plex server the
+   * account that lists and switches its Home and the server's machine identifier. */
+  private plexSelection?: { token: string; expiresAt: string; serverId: string; switching: boolean; direct?: { accountToken: string; machine: string } };
+  /** Whether each directly linked Plex server's account is in a Plex Home, by server and account. */
+  private readonly plexHomes = new Map<string, boolean | Promise<boolean>>();
   private starting: Promise<void> | undefined;
   private retrying: Promise<void> | undefined;
   private linkError = '';
@@ -288,7 +298,7 @@ export class Auth {
     this.cancelReconnect();
     this.patch({
       phase: 'signed-out', serverId: '', serverKind: '', serverName: '', serverVersion: '', viewer: '', viewerId: '',
-      passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plex: null, secureOrigin: '', error: '',
+      passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, plexSwitching: false, plexRelink: false, plex: null, secureOrigin: '', error: '',
       revision: this.session.epoch, quick: null,
     });
   }
@@ -348,7 +358,7 @@ export class Auth {
       ? secureOriginFor(this.platform, capabilities.secureOrigins) : '';
     return {
       plexAvailable: connection.record.kind === 'ether' && capabilities.plexAccountSignIn === true,
-      plexHomeAvailable: connection.record.kind === 'ether' && capabilities.plexHomeProfiles === true,
+      plexHomeAvailable: connection.record.kind === 'ether' ? capabilities.plexHomeProfiles === true : await this.directPlexHome(connection),
       passwordAvailable: capabilities.features.passwordSignIn.available,
       quickAvailable: capabilities.features.quickConnect.available,
       secureOrigin: secure,
@@ -365,7 +375,45 @@ export class Auth {
     this.plexAuthorization?.close();
     this.plexAuthorization = undefined;
     this.plexSelection = undefined;
-    this.patch({ plex: null, plexSwitching: false, ...(active ? { error: '' } : {}) });
+    this.patch({ plex: null, plexSwitching: false, plexRelink: false, ...(active ? { error: '' } : {}) });
+  }
+
+  /** The plex.tv account a directly linked Plex server switches Home members with. A server linked
+   * before the account was kept falls back to its own token, which is the account's on an owned server. */
+  private async plexAccountToken(connection: Connection): Promise<string> {
+    if (connection.record.kind !== 'plex' || !(connection.credentials instanceof ServerCredentials)) return '';
+    return await connection.credentials.plexAccount() ?? (await connection.credentials.get())?.accessToken ?? '';
+  }
+
+  /**
+   * Whether a directly linked Plex server offers Switch profile: its account is in a Plex Home with
+   * someone else to switch to. plex.tv is asked once per account, off the refresh's path; the answer
+   * is shown when it comes. A kept account plex.tv refuses still offers it, to explain and relink.
+   */
+  private async directPlexHome(connection: Connection): Promise<boolean> {
+    const token = await this.plexAccountToken(connection);
+    if (!token) return false;
+    const key = `${connection.record.id}\n${token}`;
+    const known = this.plexHomes.get(key);
+    if (typeof known === 'boolean') return known;
+    if (!known) {
+      const kept = connection.credentials instanceof ServerCredentials && await connection.credentials.plexAccount() === token;
+      const asking = plexServerProfiles(this.session.device, token).then(profiles => profiles.length > 0, error => {
+        if (error instanceof PlexAccountRefused) return kept;
+        // plex.tv did not answer: ask again with the next refresh.
+        this.plexHomes.delete(key);
+        return false;
+      });
+      this.plexHomes.set(key, asking);
+      void asking.then(offered => {
+        if (this.plexHomes.get(key) === asking) this.plexHomes.set(key, offered);
+        const auth = this.box.get().auth;
+        if (auth.serverId === connection.record.id && auth.plexHomeAvailable !== offered && this.session.selected() === connection) {
+          this.patch({ plexHomeAvailable: offered });
+        }
+      }).catch(() => {});
+    }
+    return false;
   }
 
   /** Open a fresh profile challenge for the currently signed-in Plex account. */
@@ -376,16 +424,27 @@ export class Auth {
     const epoch = this.session.epoch;
     this.patch({ plexSwitching: true, error: '', plex: { code: '', linkUrl: '', state: 'waiting', choices: [], profiles: [] } });
     try {
-      if (this.box.get().auth.phase !== 'signed-in' || !this.box.get().auth.plexHomeAvailable || !(connection.adapter instanceof EtherAdapter)) {
+      if (this.box.get().auth.phase !== 'signed-in' || !this.box.get().auth.plexHomeAvailable) {
         throw new Error('Plex Home profile switching is not offered by this server.');
       }
+      if (connection.record.kind === 'plex') {
+        const accountToken = await this.plexAccountToken(connection);
+        const [profiles, capabilities] = await Promise.all([plexServerProfiles(this.session.device, accountToken), capabilitiesOf(connection.adapter)]);
+        if (generation !== this.plexGeneration || epoch !== this.session.epoch || connection !== this.session.selected()) return;
+        if (!profiles.length) throw new Error('This Plex account is not in a Plex Home.');
+        this.plexSelection = { token: '', expiresAt: new Date(Date.now() + DIRECT_SELECTION_MS).toISOString(), serverId: connection.record.id,
+          switching: true, direct: { accountToken, machine: capabilities.server.id } };
+        this.patch({ error: '', plexSwitching: true, plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles } });
+        return;
+      }
+      if (!(connection.adapter instanceof EtherAdapter)) throw new Error('Plex Home profile switching is not offered by this server.');
       const answer = await connection.adapter.startPlexProfileSwitch({ device: this.session.device, idempotencyKey: this.session.key() });
       if (generation !== this.plexGeneration || epoch !== this.session.epoch || connection !== this.session.selected()) return;
       this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id, switching: true };
       this.patch({ error: '', plexSwitching: true, plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
     } catch (error) {
       if (generation === this.plexGeneration && epoch === this.session.epoch) {
-        this.patch({ plexSwitching: true, error: this.profileSwitchMessage(error), plex: null });
+        this.patch({ plexSwitching: true, plexRelink: error instanceof PlexAccountRefused, error: this.profileSwitchMessage(error), plex: null });
       }
     }
   }
@@ -467,7 +526,13 @@ export class Auth {
         selectionToken: selection.token, profileId, pin: pin || undefined,
         device: this.session.device, idempotencyKey: this.session.key(),
       };
-      if (selection.switching) {
+      if (selection.direct) {
+        const switched = await switchPlexServerProfile(this.session.device, selection.direct.accountToken, profileId, pin || undefined, selection.direct.machine, connection.record.origin);
+        if (this.plexSelection !== selection || connection !== this.session.selected()) return;
+        await connection.credentials.set(switched.tokens);
+        // The member's own account switches next time (a member's server token cannot).
+        if (connection.credentials instanceof ServerCredentials) await connection.credentials.setPlexAccount(switched.accountToken);
+      } else if (selection.switching) {
         if (!(connection.adapter instanceof EtherAdapter)) throw new Error('Plex Home profile switching is not offered by this server.');
         await connection.adapter.completePlexProfileSwitch(request);
       } else {
@@ -479,8 +544,10 @@ export class Auth {
     } catch (error) {
       const ended = error instanceof VelaError && (error.detail.code === 'selection_consumed' || error.detail.code === 'selection_expired');
       if (ended) this.plexSelection = undefined;
+      const refused = error instanceof PlexAccountRefused;
+      if (refused) this.plexSelection = undefined;
       this.patch({ error: selection.switching ? this.profileSwitchMessage(error) : message(error, 'Could not select this Plex profile. Try again.'),
-        plex: ended ? null : this.box.get().auth.plex });
+        plex: ended || refused ? null : this.box.get().auth.plex, ...(refused ? { plexRelink: true } : {}) });
     }
   }
 

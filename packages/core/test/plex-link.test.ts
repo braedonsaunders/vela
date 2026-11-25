@@ -23,7 +23,9 @@ async function linked(options: { ether?: boolean; advertised?: boolean; identity
 const signIn = { device, idempotencyKey: 'exchange-key' };
 test('Ether exchanges the account token and returns only Vela credentials', async () => {
   const { link, seen } = await linked();
-  expect(await link.choose('123', 'machine', true, signIn)).toMatchObject({ kind: 'ether', tokens: tokens('vela-secret') });
+  const chosen = await link.choose('123', 'machine', true, signIn);
+  expect(chosen).toMatchObject({ kind: 'ether', tokens: tokens('vela-secret') });
+  expect(chosen.accountToken).toBeUndefined();
   const request = seen.find(r => r.url.pathname === '/vela/v0/auth/plex')!;
   expect(request.body).toEqual({ plexToken: 'account-secret', ...signIn });
   expect(request.headers.has('X-Plex-Token')).toBe(false);
@@ -31,7 +33,9 @@ test('Ether exchanges the account token and returns only Vela credentials', asyn
 });
 test('ordinary PMS keeps its resource token and never exchanges the account token', async () => {
   const { link, seen } = await linked({ ether: false });
-  expect(await link.choose('123', 'machine', true, signIn)).toMatchObject({ kind: 'plex', tokens: { accessToken: 'resource-secret' } });
+  const chosen = await link.choose('123', 'machine', true, signIn);
+  // The account token comes back apart from the server's session, kept only to switch Plex Home members.
+  expect(chosen).toMatchObject({ kind: 'plex', tokens: { accessToken: 'resource-secret' }, accountToken: 'account-secret' });
   expect(seen.some(r => r.method === 'POST' && r.url.origin === origin)).toBe(false);
 });
 test('an identity mismatch never receives a Plex account token', async () => {
