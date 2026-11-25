@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { AUDIO_RATES, currentInQueue, type Vela as VelaStore } from '@vela/core';
 import type { MusicApp } from '@vela/skin/src/widgets/music';
-import { listeningWords } from '@vela/skin/src/widgets/music/listening';
+import { listeningWords } from '@vela/skin/src/blocks/listen/listening';
 
 function typing(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;

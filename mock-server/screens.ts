@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type * as V from '../packages/protocol/types';
+import { mediaChildren, mediaTitle } from '../packages/protocol/fixtures/media';
 import { entityKey, sportsEnabled, sportsGate, sportsModel, sportsNow, type SportsSim } from './sports';
 
 type Fail = (cls: V.ProtocolError['class'], code: string, message: string, extra?: Partial<V.ProtocolError>, status?: number) => never;
@@ -45,6 +46,9 @@ const SURFACES: SurfaceSpec[] = [
     setting: { id: 'ticker', label: 'Scores ticker', default: false } } },
   { id: 'sports.alert', file: 'sports/surfaces/alert.json', contribution: { presentation: 'toast', when: { alert: { plugin: 'sports' } }, ttl: 12 } },
   { id: 'sports.tonight', file: 'sports/surfaces/tonight.json', contribution: { presentation: 'homeRow' } },
+  // The mock music plugin's album panel: a slot surface (listen.album.panel) reading a vela.* source
+  // with its context hole beside its own route's p:note record.
+  { id: 'music.albumNote', file: 'music/surfaces/album-note.json', contribution: { presentation: 'slot', slot: 'listen.album.panel' } },
 ];
 
 interface Compiled { document: V.ScreenDocument; hash: string; mtime: number; draft?: boolean }
@@ -56,7 +60,7 @@ function served(file: string): Partial<V.ScreenDocument> {
   const page = PAGES.find(p => p.file === file);
   if (page) return { screen: page.screen, page: page.page, presentation: page.page === 'index' ? 'section' : 'page' };
   const surface = SURFACES.find(spec => spec.file === file);
-  return surface ? { screen: surface.id, page: 'main', presentation: surface.contribution.presentation } : {};
+  return surface ? { screen: surface.id, page: 'main', presentation: surface.contribution.presentation, ...(surface.contribution.slot ? { slot: surface.contribution.slot } : {}) } : {};
 }
 
 /** A fixture with `deps` added to each source (its {param.x} holes), hashed; read again when the file changes. */
@@ -515,6 +519,22 @@ const STORIES: Record<string, { id: string; title: string; section: string }[]> 
 
 const PLUGINS: Record<string, Plugin> = {
   sports: { pluginID: 'sports', version: '2.0.0', feeds: ['sports'], hosts: [], routes: {}, actions: {} },
+  music: {
+    pluginID: 'org.example.music', version: '1.0.0', feeds: [], hosts: [], actions: {},
+    routes: {
+      // A liner note for an album (the slot's title context, `item:<id>`), as a p:note record.
+      albumNote: args => {
+        const id = (args.title ?? '').replace(/^item:/, '');
+        const album = mediaTitle(id);
+        if (!album || album.media?.role !== 'album') return { value: { note: null } };
+        const tracks = mediaChildren(id, 'track').length;
+        return {
+          value: { note: { $record: { type: 'note', id } } },
+          records: [{ type: 'note', id, value: { text: `${album.name}: ${tracks} tracks, recorded live to tape over one long weekend.` } }],
+        };
+      },
+    },
+  },
   news: {
     pluginID: 'org.example.news', version: '1.0.0', feeds: [], hosts: ['images.news.example'],
     routes: {
@@ -742,6 +762,8 @@ function resolve(target: Target, values: Record<string, string>, viewerId: strin
   for (const name of names) {
     const spec = specs[name];
     if (!spec) continue;
+    // Vela's own sources are the client's: no value and no error here.
+    if (typeof spec.from === 'string' && spec.from.startsWith('vela.')) continue;
     try {
       const forced = forcedTimeouts.get(name) ?? 0;
       if (forced > 0) { forcedTimeouts.set(name, forced - 1); throw new SourceFailure('timeout'); }

@@ -3,7 +3,7 @@
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
-import type { CardMenuAnchor, CardMenuOpenMode } from '../card-context-menu';
+import type { CardMenuAnchor, CardMenuOpenMode } from '../../widgets/card-context-menu';
 import type { Focusable } from '../../escape';
 import { placeParam } from './place';
 import { useFocusedTVKeys } from '../../tv-keys';
@@ -11,10 +11,10 @@ import { musicTV } from './layout';
 import { msg, type Card } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { useHost } from '../../host';
-import { NO_RING, Glyph, useInteraction } from '../common/controls';
-import { alpha, Cover, useMediaLook } from '../media/parts';
-import { MediaGlyph } from '../media/icons';
-import { placeOf, useMusic } from './context';
+import { NO_RING, Glyph, useInteraction } from '../../widgets/common/controls';
+import { alpha, Cover, useMediaLook } from '../../widgets/media/parts';
+import { MediaGlyph } from '../../widgets/media/icons';
+import { placeOf, useMusic } from './app';
 import { listenedFraction } from './listening';
 import { SYMBOLS } from '../../icons';
 
@@ -328,6 +328,34 @@ export function Byline({ card, facts }: { card: Card; facts: string[] }) {
         </Pressable>
       ) : null}
       {facts.filter(Boolean).map(fact => <Text key={fact} style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>· {fact}</Text>)}
+    </View>
+  );
+}
+
+export function playlistCard(p: { id: string; name: string; poster: string; itemCount: number }): Card {
+  return { id: p.id, kind: 'playlist', name: p.name, poster: p.poster, backdrop: '', accent: '', receipt: '', yearLabel: '', summary: '', genres: [], durationSeconds: 0, progressSeconds: 0, played: false } as unknown as Card;
+}
+
+export function Chip({ label, on, onPress }: { label: string; on: boolean; onPress(): void }) {
+  const m = useMediaLook();
+  const { state, handlers } = useInteraction();
+  const lit = state.hover || state.focus;
+  return (
+    <Pressable {...handlers} onPress={onPress} accessibilityRole="radio" accessibilityState={{ checked: on }}
+      style={[NO_RING, { height: 32, paddingHorizontal: 14, borderRadius: 16, justifyContent: 'center', backgroundColor: on ? m.ui.ink : lit ? m.ui.controlHover : m.ui.control,
+        // A hairline keeps an unchosen chip visible where the control tone is the surface's own (a light document's white).
+        borderWidth: 1, borderColor: on ? m.ui.ink : m.ui.glassEdge }, transition('background-color', 120)]}>
+      <Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: on ? m.ui.inkInverse : m.ui.ink })}>{label}</Text>
+    </Pressable>
+  );
+}
+
+export function LikedCover({ size }: { size: number }) {
+  const m = useMediaLook();
+  return (
+    <View style={[{ width: size, height: size, borderRadius: size > 100 ? 6 : 4, alignItems: 'center', justifyContent: 'center' },
+      m.box({ 'background-image': `linear-gradient(140deg, ${m.ui.accent} 0%, ${alpha(m.ui.accent, 0.55)} 45%, #3b2a6b 100%)`, ...(size > 100 ? { 'box-shadow': '0px 22px 48px -16px rgba(0,0,0,0.7)' } : {}) })]}>
+      <Glyph symbol="heart-fill" size={size * 0.38} color="#ffffff" />
     </View>
   );
 }

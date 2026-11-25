@@ -10,7 +10,9 @@ import { mediaTitleTree } from './resolve/media-title';
 // inlined, viewport variants applied for the current width class, tokens substituted, client
 // and document strings filled, templates and conditions compiled to accessors. Done once per
 // document, viewport width and locale; drawing never re-parses a document.
-import type { Action, BoxNode, Condition, Node, PerClass, SkinDocument, Style, TabsNode, UseNode } from '../../protocol/skin';
+import type { Action, BoxNode, Condition, Node, PartLayers, PartStyle, PerClass, Platform, PlayerNode, RichNode, SkinDocument, SlotNode, Style, TabsNode, UseNode, VisualizerNode } from '../../protocol/skin';
+import { slotSpec } from '../../protocol/experiences';
+import { RICH_BLOCKS, type RichBlockName, type RichBlockSpec } from '../../protocol/rich-blocks';
 import { SCREEN_LIMITS } from '../../protocol/screen';
 import { kitDefaults } from './screen/kit';
 import { velaBase } from './resolve/base';
@@ -26,9 +28,8 @@ import type { Items } from './screen/items';
 import { fold, halfPoints, lineHeightPoints, pointsToPx, screenStyleRow } from './resolve/screen-style';
 import { takesDirectionalFocus } from './focus-stop-policy';
 
-/** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
- * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
-export const RENDERER_VERSION = 19;
+import { RENDERER_VERSION } from './resolve/version';
+export { RENDERER_VERSION };
 
 /** The renderer 19 blocks (docs/plugin-screens.md: Building blocks), drawn by ./blocks. */
 export const BLOCK_KINDS = ['sections', 'shelf', 'grid', 'tabs', 'table', 'lineGraph', 'player', 'paramInput', 'titleCard', 'marquee'] as const;
@@ -103,7 +104,9 @@ export type RNode = Common & (
   | { kind: 'image'; src: Template; alt?: Template; fade: boolean; /** Screens: drawn until the image loads, and instead of an empty, refused or failed one. */ fallback?: RNode }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
   | { kind: 'repeat'; over: string; limit: number; implicitLimit?: boolean; item: RNode; /** Screens: a data collection (screen/items.ts). */ items?: Items }
-  | { kind: 'slot'; slot: 'children' | 'searchField'; inner?: CssT }
+  | { kind: 'slot'; slot: SlotNode['slot']; inner?: CssT;
+    /** A plugin slot (`plugin:<slot id>`): the context its surfaces read, and at most this many of them. */
+    context?: Record<string, Template>; limit?: number }
   | { kind: 'widget'; widget: string; params: Record<string, string> }
   // Renderer 19 blocks (docs/plugin-screens.md), drawn by ./blocks. Per-class values are already
   // picked for the viewport; `Value`s read raw data (record references followed).
@@ -120,7 +123,14 @@ export type RNode = Common & (
   | { kind: 'player'; channel: Template }
   | { kind: 'paramInput'; param: string; placeholder?: Template }
   | { kind: 'titleCard'; item: Template }
+  // Renderer 20: a rich native block (rich-blocks.ts), drawn by its engine. Props are compiled
+  // arguments (a single hole keeps its raw value); parts and part templates are already merged
+  // (the document's, the node's, then the skin's) and picked for the viewport.
+  | { kind: 'rich'; block: RichBlockName; props: Record<string, Arg>; parts: Record<string, RPart>; templates: Record<string, RNode>; fallback?: RNode }
 );
+
+/** A rich block's part, resolved: its style for this viewport and its interaction layers. */
+export interface RPart { style: CssT; hover?: CssT; focus?: CssT; active?: CssT }
 
 export type RouteName = 'home' | 'title' | 'person' | 'search' | 'collection' | 'library' | 'live' | 'watch' | 'auth'
   /** A plugin screen (Sports), drawn natively inside the shell. */
@@ -166,6 +176,10 @@ export interface ScreenMode {
   scale: number;
   /** The points lengths round to (0.5, or 1 for a host drawing in the player look). */
   step?: number;
+  /** Renderer 20: rich-block part styles and part templates, the document's and the skin's (whose win
+   * over a block's own). */
+  parts?: { doc: Record<string, PartStyle>; skin: Record<string, PartStyle> };
+  partTemplates?: { doc: Record<string, Node>; skin: Record<string, Node> };
 }
 
 export interface Context {
@@ -175,6 +189,10 @@ export interface Context {
   width: number;
   /** The viewport is a TV: `tv` variants apply (after `small`, `wide` and breakpoints). */
   tv?: boolean;
+  /** Renderer 20: a foldable held partly open (`fold` variants apply after `tv`), and the platform
+   * (`platforms` variants apply last). */
+  fold?: boolean;
+  platform?: Platform;
   count: number;
   unsupported: Set<string>;
   screen?: ScreenMode;
@@ -319,8 +337,9 @@ function variant(node: Node & { below?: Record<string, Style>; above?: Record<st
     ...marks.filter(m => !m.below && m.px <= r.width).sort((a, b) => a.px - b.px),
     ...marks.filter(m => m.below && m.px > r.width).sort((a, b) => b.px - a.px),
   ];
-  // A TV is a class of its own (renderer 19): its variant applies last.
-  return Object.assign({}, base, ...applied.map(m => m.style), r.tv && node.tv ? node.tv : {});
+  // A TV is a class of its own (renderer 19); then a partly open foldable and the platform (renderer 20).
+  return Object.assign({}, base, ...applied.map(m => m.style), r.tv && node.tv ? node.tv : {}, r.fold && node.fold ? node.fold : {},
+    r.platform && node.platforms?.[r.platform] ? node.platforms[r.platform] : {});
 }
 
 /** A node's states, at most 16 (docs/skin-schema.md): more is refused, never silently cut. */
@@ -423,7 +442,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
       return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000,
         ...(node.limit === undefined ? { implicitLimit: true } : {}), item: convert(node.item, depth + 1, r) };
     }
-    case 'slot': return { ...common, kind: 'slot', slot: node.slot, inner: node.inner && css(node.inner, r) };
+    case 'slot': return slotNode(node, common, r);
     case 'widget': {
       // Parameters are text: client and document strings are filled now; holes (`{value}`, bindings) stay for the widget.
       const params = Object.fromEntries(Object.entries(node.params ?? {}).map(([k, v]) => [k, strings(v, r)]));
@@ -433,9 +452,9 @@ function convert(node: Node, depth: number, r: Context): RNode {
     }
     default:
       if (r.screen) return blockNode(node, common, depth, r);
-      // Blocks read a screen's data: a skin document has none, so they draw nothing there.
+      // Blocks read a screen's data: a skin document has none, so they draw nothing there (or their fallback).
       r.unsupported.add(`block ${(node as { type: string }).type}`);
-      return { ...common, kind: 'box', children: [], controlStates: false };
+      return { ...common, kind: 'box', children: fallbackOf(node, depth, r), controlStates: false };
   }
 }
 
@@ -477,10 +496,11 @@ function pressOf(press: NonNullable<BoxNode['press']>, r: Context): RPress {
   };
 }
 
-/** A box's children; a `children` slot inside a template draws the `use`'s children there. */
+/** A box's children; a `children` slot inside a template draws the `use`'s children there. Outside
+ * any template (renderer 20: an experience's shell) it is the host's slot, where the page draws. */
 function screenChildren(children: Node[], depth: number, r: Context): RNode[] {
-  return children.flatMap(child => child.type === 'slot' && child.slot === 'children'
-    ? r.screen!.slot ?? []
+  return children.flatMap(child => child.type === 'slot' && child.slot === 'children' && r.screen!.slot
+    ? r.screen!.slot
     : [convert(child, depth + 1, r)]);
 }
 
@@ -570,14 +590,121 @@ function blockNode(node: Node, common: Common, depth: number, r: Context): RNode
     case 'lineGraph': return { ...common, kind: 'lineGraph', series: pathField(node.series, r.screen!.scope),
       ...(node.sides ? { sides: pathField(node.sides, r.screen!.scope) } : {}), subject: compile(node.subject, r), live: compile(node.live, r),
       height: lengthField(perClass(node.height, r), r) };
-    case 'player': return { ...common, kind: 'player', channel: compile(node.channel, r)! };
+    case 'player':
+      // Without a channel (renderer 20) the player is the rich playback block.
+      if (node.channel === undefined) return richNode(node, common, depth, r);
+      return { ...common, kind: 'player', channel: compile(node.channel, r)!, ...blockFallback(node, depth, r) };
     case 'paramInput': return { ...common, kind: 'paramInput', param: node.param, placeholder: compile(node.placeholder, r) };
     case 'titleCard': return { ...common, kind: 'titleCard', item: compile(node.item, r)! };
     default:
-      // An unknown block inside an accepted document draws nothing (docs/plugin-screens.md: Versioning).
-      r.screen!.warnings.add(`Unknown node type ${(node as { type: string }).type}: drawn as nothing`);
-      return { ...common, kind: 'box', children: [], controlStates: false };
+      if ((node as { type: string }).type in RICH_BLOCKS) return richNode(node as RichNode, common, depth, r);
+      // An unknown block inside an accepted document draws its fallback, or nothing (docs/plugin-screens.md: Versioning).
+      r.screen!.warnings.add(`Unknown node type ${(node as { type: string }).type}: drawn as ${(node as { fallback?: Node }).fallback ? 'its fallback' : 'nothing'}`);
+      return { ...common, kind: 'box', children: fallbackOf(node, depth, r), controlStates: false };
   }
+}
+
+/** A block's `fallback` (renderer 20), resolved, as a box's children. */
+function fallbackOf(node: Node, depth: number, r: Context): RNode[] {
+  const fallback = (node as { fallback?: Node }).fallback;
+  return fallback && typeof fallback === 'object' ? [convert(fallback, depth + 1, r)] : [];
+}
+
+/** A known block's `fallback`, for the block to draw where it cannot run. */
+function blockFallback(node: Node, depth: number, r: Context): { fallback?: RNode } {
+  const [fallback] = fallbackOf(node, depth, r);
+  return fallback ? { fallback } : {};
+}
+
+/** A slot: a foundation slot, or (renderer 20) a published plugin slot with its context compiled. */
+function slotNode(node: SlotNode, common: Common, r: Context): RNode {
+  const inner = node.inner && css(node.inner, r);
+  if (node.slot === 'children' || node.slot === 'searchField') return { ...common, kind: 'slot', slot: node.slot, inner };
+  const id = String(node.slot).replace(/^plugin:/, '');
+  const spec = String(node.slot).startsWith('plugin:') ? slotSpec(id) : undefined;
+  const warn = (text: string) => (r.screen ? r.screen.warnings.add(text) : r.unsupported.add(text));
+  if (!spec) {
+    warn(`Unknown slot ${String(node.slot)}: drawn as nothing`);
+    return { ...common, kind: 'box', children: [], controlStates: false };
+  }
+  const names = new Set(spec.context.map(c => c.name));
+  const context: Record<string, Template> = {};
+  for (const [name, value] of Object.entries(node.context ?? {})) {
+    if (names.has(name)) context[name] = compile(value, r)!;
+    else warn(`Slot ${id} has no context ${name}`);
+  }
+  const cap = spec.cap.perSlot;
+  const limit = node.limit === undefined ? cap : Math.max(0, Math.min(node.limit, cap ?? node.limit));
+  return { ...common, kind: 'slot', slot: node.slot, inner, context, ...(limit !== undefined ? { limit } : {}) };
+}
+
+const LAYER_KEYS = new Set(['style', 'small', 'wide', 'tv', 'fold', 'platforms', 'hover', 'focus', 'active']);
+
+/** A part style as layers (a bare style is the `style` layer). */
+function partLayers(part: PartStyle | undefined): PartLayers {
+  if (!part || typeof part !== 'object') return {};
+  return Object.keys(part).some(k => LAYER_KEYS.has(k)) ? part as PartLayers : { style: part as Style };
+}
+
+/** Part styles merged, later ones over earlier ones, layer by layer. */
+function mergeParts(list: (PartStyle | undefined)[]): PartLayers {
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const layers of list.map(partLayers)) {
+    for (const [key, value] of Object.entries(layers)) {
+      if (!value) continue;
+      if (key === 'platforms') {
+        const platforms = (out.platforms ??= {}) as Record<string, Style>;
+        for (const [p, style] of Object.entries(value as Record<string, Style>)) platforms[p] = { ...platforms[p], ...style };
+      } else out[key] = { ...out[key], ...(value as Style) };
+    }
+  }
+  return out as PartLayers;
+}
+
+/** A rich block (rich-blocks.ts): props compiled, parts and part templates merged and resolved. */
+function richNode(node: RichNode | VisualizerNode | PlayerNode, common: Common, depth: number, r: Context): RNode {
+  const screen = r.screen!;
+  const block = node.type as RichBlockName;
+  const spec: RichBlockSpec = RICH_BLOCKS[block];
+  const warn = (text: string) => screen.warnings.add(`${block}: ${text}`);
+  const raw: Record<string, string> = { ...node.props };
+  if (node.type === 'visualizer') {
+    raw.mode = node.mode;
+    if (node.sceneId !== undefined) raw.sceneId = node.sceneId;
+  }
+  const props: Record<string, Arg> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    const prop = spec.props[name];
+    if (!prop) { warn(`no prop ${name}`); continue; }
+    if (typeof value !== 'string') { warn(`prop ${name} is not text`); continue; }
+    if (prop.type === 'enum' && !value.includes('{') && !prop.values?.includes(value)) { warn(`prop ${name} is not one of ${prop.values?.join(', ')}`); continue; }
+    props[name] = makeArg(value, screen.scope);
+  }
+  const fallback = blockFallback(node, depth, r);
+  const missing = Object.entries(spec.props).filter(([name, prop]) => prop.required && !props[name]).map(([name]) => name);
+  if (missing.length) {
+    warn(`needs ${missing.join(', ')}: drawn as its fallback`);
+    return { ...common, kind: 'box', children: fallback.fallback ? [fallback.fallback] : [], controlStates: false };
+  }
+  const published = new Set(spec.parts);
+  for (const name of Object.keys(node.parts ?? {})) if (!published.has(name)) warn(`no part ${name}`);
+  const parts: Record<string, RPart> = {};
+  for (const name of spec.parts) {
+    const sources = [screen.parts?.doc[name], node.parts?.[name], screen.parts?.skin[name]];
+    if (sources.every(s => s === undefined)) continue;
+    const layers = mergeParts(sources);
+    const style = variant({ type: 'box', ...layers } as Node, r, layers.style);
+    parts[name] = { style: css(style, r), ...(layers.hover ? { hover: css(layers.hover, r) } : {}),
+      ...(layers.focus ? { focus: css(layers.focus, r) } : {}), ...(layers.active ? { active: css(layers.active, r) } : {}) };
+  }
+  const templated = new Set(spec.templates);
+  for (const name of Object.keys(node.partTemplates ?? {})) if (!templated.has(name)) warn(`part ${name} takes no template`);
+  const templates: Record<string, RNode> = {};
+  for (const name of spec.templates) {
+    const template = screen.partTemplates?.skin[name] ?? node.partTemplates?.[name] ?? screen.partTemplates?.doc[name];
+    if (template) templates[name] = withAlias(r, 'item', () => withAlias(r, 'part', () => convert(template, depth + 1, r)));
+  }
+  return { ...common, kind: 'rich', block, props, parts, templates, ...fallback };
 }
 
 /** Tabs: the options' value, label and count per item, and the chip each is drawn with. */
@@ -635,7 +762,8 @@ function useScreen(node: UseNode, depth: number, r: Context): RNode {
   const saved = { scope: screen.scope, slot: screen.slot };
   const inherited = Object.fromEntries(Object.entries(saved.scope.args).map(([name, arg]) => [`^${name}`, arg]));
   screen.scope = { ...saved.scope, args: { ...inherited, ...args } };
-  screen.slot = slot;
+  // Inside a template its `children` slot is the use's children (none: nothing), never the host's.
+  screen.slot = slot ?? [];
   try {
     const drawn = convert(merged, depth, r);
     // vela:panel takes focus on TV only when asked (`focusable`), which data may decide.

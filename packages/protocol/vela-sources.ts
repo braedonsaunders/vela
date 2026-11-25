@@ -58,7 +58,7 @@ export const VELA_SOURCES = {
   'vela.library': {
     args: {
       id: id('The library.'),
-      sort: id('A sort the library offers (name, added, year, …).', false),
+      sort: id('A sort the library offers (title, added, year, …).', false),
       direction: { type: 'enum', enum: ['asc', 'desc'] },
       kind: id('A kind filter.', false),
       genre: id('A genre filter.', false),
@@ -66,24 +66,29 @@ export const VELA_SOURCES = {
       favorite: { type: 'bool' },
       year: { type: 'int' },
       q: id('Search within the library.', false),
+      tab: id('One of the library\'s tabs (its album view, say).', false),
+      limit: { type: 'int', doc: 'Titles per page (1 to 100; the server\'s default when absent).' },
     },
     doc: 'A library listing, paged: ListValue.',
   },
   'vela.favorites': {
-    args: { role: id('track, album, artist, …'), class: id('A media class (music, audiobook, podcast).', false) },
+    args: { role: id('track, album, artist, …'), class: id('A media class (music, audiobook, podcast).', false), library: id("Where the server keeps no liked lists or Favorites playlist (Jellyfin, Plex): the library whose favourite filter lists them.", false) },
     doc: "The viewer's likes of one role, newest first, paged: ListValue.",
   },
   'vela.playlists': { args: {}, doc: "The viewer's playlists as `item:` records of kind playlist: ListValue." },
   'vela.playlist': { args: { id: id('The playlist.') }, doc: 'One playlist and its entries: PlaylistValue.' },
   'vela.recent': { args: {}, doc: 'What the viewer last played from: RecentValue.' },
   'vela.search': {
-    args: { q: id('The query; empty answers no items.'), kind: id('A result kind (track, album, artist, playlist, …).', false), library: id('Search within one library.', false) },
-    doc: 'Search results, paged: ListValue.',
+    args: { q: id('The query; empty answers no items.', false), kind: id('A result kind the server offers (searchKinds).', false), library: id('Search within one library (its media class when the server cannot scope).', false) },
+    doc: "Search results, paged: SearchValue (the audio app's search).",
   },
+  'vela.musicHome': { args: { library: id('The music library.') }, doc: "The music app's Home: MusicHomeValue (quick tiles, Vela's own recent shelves, the library's rows)." },
+  'vela.libraryInfo': { args: { id: id('The library.') }, doc: 'What a library holds and what the server offers for it: LibraryInfoValue.' },
+  'vela.viewer': { args: {}, doc: 'The signed-in viewer: ViewerValue.' },
   'vela.queue': { args: {}, live: true, doc: 'The audio queue: a reference to the `queue:current` record (QueueRecord).' },
   'vela.nowPlaying': { args: {}, live: true, doc: 'What plays now: a reference to `nowPlaying:current` (NowPlayingRecord), pushed about once a second while a page reads it.' },
   'vela.lyrics': { args: { id: id('The track.'), translate: id('A language to translate into, when the server offers it.', false) }, doc: 'LyricsValue.' },
-  'vela.guide': { args: { window: id('hours ahead (default 3).', false) }, doc: 'The Live TV guide window: GuideValue.' },
+  'vela.guide': { args: { day: { type: 'int', doc: 'Days from today (0 when absent; the guide reaches a week ahead).' } }, doc: 'One day of the Live TV guide: GuideValue, channels as `channel:` records.' },
   'vela.readingProgress': { args: { id: id('The readable title.') }, doc: 'ReadingProgressValue.' },
   'vela.recap': {
     args: { period: { type: 'enum', required: true, enum: ['week', 'month', 'year', 'all'] }, at: id('An anchor date (YYYY-MM-DD).', false), library: id('One library.', false) },
@@ -170,6 +175,54 @@ export interface RowValue {
 }
 export interface RowsValue { rows: RowValue[] }
 
+/** One quick tile on music Home: an item, Liked Songs (with its track count) or Rewind. */
+export type MusicQuickTile = { kind: 'item'; item: RecordRef } | { kind: 'liked'; total: number } | { kind: 'rewind' };
+
+/** `vela.musicHome`: what today's music Home draws, decided here so the document only lays it out. */
+export interface MusicHomeValue {
+  /** At most 8: Liked Songs, Rewind, what was played from most recently, the playlists, then Jump back in; each item once. */
+  quick: MusicQuickTile[];
+  /** Vela's own Recently played shelf (empty when the library's rows carry their own). */
+  recent: RecordRef[];
+  /** An older server's Jump back in row. */
+  jump: RecordRef[];
+  /** The library's rows drawn as shelves, in page order. `songs`: every item is a track, kept one per album
+   *  (a `tracks` layout row keeps every track and is drawn as a track list). */
+  shelves: (RowValue & { songs: boolean })[];
+  /** The first quick item's accent, for the page's wash ('' when none). */
+  accent: string;
+}
+
+/** `vela.libraryInfo`: a library and the music features the server offers (pages branch on these). */
+export interface LibraryInfoValue {
+  id: string;
+  name: string;
+  kind: string;
+  /** The library's media class ('video' for servers without classes). */
+  media: string;
+  /** How it opens: watch, listen, read, gallery, live (or an id this app does not know). */
+  experience: string;
+  /** What the listen experience draws it as: music, audiobook, podcast, or audio (mixed). */
+  listening: 'music' | 'audiobook' | 'podcast' | 'audio';
+  /** The library's tabs (its album view, say), as the server declares them. */
+  tabs: { id: string; label: string; kind: string; level?: string }[];
+  features: {
+    /** Likes listed by role (else the Favorites playlist). */
+    likedByRole: boolean;
+    playlists: boolean;
+    recent: boolean;
+    lyrics: boolean;
+    recap: boolean;
+    recapPeriods: string[];
+    playlistImport: boolean;
+    duplicates: boolean;
+    loudness: boolean;
+  };
+}
+
+/** `vela.viewer`. */
+export interface ViewerValue { id: string; name: string; avatar: string }
+
 export interface PlaylistValue extends ListValue {
   playlist: RecordRef;
   /** Parallel to `items`: each entry's id (one track may be listed twice). */
@@ -214,9 +267,19 @@ export interface NowPlayingRecord {
   sleep: { mode: string; endsAt: number };
 }
 
+/** One lyrics line; word timing, translation and romanisation when the server sends them. */
+export interface LyricsLine {
+  startMs: number;
+  endMs?: number;
+  text: string;
+  words?: { startMs: number; endMs?: number; text: string }[];
+  translation?: string;
+  romanised?: string;
+}
+
 export interface LyricsValue {
   /** Synced lines (startMs) or plain lines (startMs -1). */
-  lines: { startMs: number; text: string }[];
+  lines: LyricsLine[];
   synced: boolean;
   plain: string;
   instrumental: boolean;
@@ -225,7 +288,29 @@ export interface LyricsValue {
   none: boolean;
 }
 
-export interface GuideValue { channels: RecordRef[]; from: string; to: string }
+/** `vela.search`: the server's ranked list, with the best match and the list by role. */
+export interface SearchValue extends ListValue {
+  q: string;
+  /** The list is a description match (no title was named). */
+  byDescription: boolean;
+  /** An exact name match (containers first), else the server's first. */
+  top: RecordRef | null;
+  /** `items` by media role (track, album, artist, playlist, audiobook, …), in the server's order. */
+  groups: Record<string, RecordRef[]>;
+}
+
+/** `vela.guide`: a `channel:` record holds the channel, what it airs now and next, and the day's programmes. */
+export interface GuideValue {
+  channels: RecordRef[];
+  day: number;
+  dayLabel: string;
+  /** Minutes from the day's timeline start to now, and the timeline's length. */
+  nowMinute: number;
+  minutes: number;
+  days: { offset: number; label: string; date: string }[];
+  /** The owner's named Guides (tabs). */
+  guides: { id: string; name: string }[];
+}
 
 export interface ReadingProgressValue { fraction: number; locator: string; label: string }
 

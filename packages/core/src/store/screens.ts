@@ -11,6 +11,8 @@ import { backoffMs } from '../live/events';
 import { eagerSources, isLazy, sourcesToReread } from '../screens/deps';
 import { changedParams, cleanParams, pageKey, sameTarget, serverContext, type PageRequest, type ScreenTarget } from '../screens/keys';
 import { linkHrefs, recordRefs, RecordStore, sameJSON, setPath } from '../screens/records';
+import { LocalSources, type LocalServer, type LocalStores } from '../screens/local';
+import type { LocalScope } from '../screens/local-records';
 import { chooseTopics, connectionKey, emptyQuery, readScreenMessage, streamQuery, type ScreenStreamQuery } from '../screens/stream';
 import type { ScreenPageState } from '../screens/types';
 import type { Session } from './session';
@@ -80,7 +82,12 @@ interface Entry {
   /** Timed-out sources being read again: attempts so far, and the pending timers. */
   timeouts: Map<string, number>;
   retryTimers: Set<ReturnType<typeof setTimeout>>;
+  /** Live `vela.*` sources this page follows while shown (source name -> stop following). */
+  live: Map<string, () => void>;
 }
+
+/** A built-in page document's href: `vela:<experience>/<page>` (bundled, never fetched). */
+export const isBuiltInHref = (href: string) => href.startsWith('vela:');
 
 export class Screens {
   readonly records = new RecordStore();
@@ -97,6 +104,10 @@ export class Screens {
   /** Set when Ether refused the stream with a plain 400: no reconnecting until a page opens. */
   private refused: string | undefined;
   private gcQueued = false;
+  /** Vela's own sources and actions (`vela.*`), answered on the device. */
+  private local: LocalSources | undefined;
+  /** The bundled built-in documents, by `vela:` href. */
+  private builtIns: ((href: string) => V.ScreenDocument | undefined) | undefined;
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -109,6 +120,45 @@ export class Screens {
     private readonly timeoutRetryMs: readonly number[] = TIMEOUT_RETRY_MS,
   ) {
     session.onReset(() => this.reset());
+  }
+
+  // Vela's own pages
+
+  /** Answer `vela.*` sources and actions through these stores (createVela attaches the app's). */
+  attachLocal(stores: LocalStores, server: LocalServer): LocalSources {
+    this.local = new LocalSources(stores, server, this.records, keys => this.localChanged(keys));
+    return this.local;
+  }
+
+  /** The `vela.*` answerer, for the app's glue (the visualizer setting). */
+  localSources(): LocalSources | undefined { return this.local; }
+
+  /** The bundled built-in documents (`vela:<experience>/<page>`), looked up instead of fetched. */
+  provideDocuments(lookup: ((href: string) => V.ScreenDocument | undefined) | undefined): void {
+    this.builtIns = lookup;
+    // A built-in page opened before the lookup arrived reads now.
+    if (!lookup) return;
+    for (const [key, entry] of this.entries) {
+      if (!isBuiltInHref(entry.request.href) || this.box.get().screens.documents[entry.request.href]?.load === 'ready') continue;
+      if (!this.builtIn(entry.request.href)) continue;
+      this.setPage(key, page => ({ ...page, load: 'loading' }));
+      void this.read(key);
+      if (entry.opened) this.bindLive(key, entry);
+    }
+  }
+
+  /** A built-in document into `documents` at once (it is bundled), or false when there is none. */
+  private builtIn(href: string): boolean {
+    if (!isBuiltInHref(href)) return false;
+    if (this.box.get().screens.documents[href]?.load === 'ready') return true;
+    const document = this.builtIns?.(href);
+    const problem = document ? documentProblem(document, this.rendererVersion) : 'This page is not part of this app.';
+    if (problem) {
+      this.set('documents', documents => ({ ...documents, [href]: failed(new Error(problem)) }));
+      return false;
+    }
+    this.set('documents', documents => ({ ...documents, [href]: ready(document!) }));
+    return true;
   }
 
   // Availability
@@ -149,6 +199,7 @@ export class Screens {
   loadDocument(href: string): Promise<void> {
     const known = this.box.get().screens.documents[href];
     if (known?.load === 'ready') return Promise.resolve();
+    if (isBuiltInHref(href)) { this.builtIn(href); return Promise.resolve(); }
     const pending = this.documentReads.get(href);
     if (pending) return pending;
     const read = this.readDocument(href).finally(() => this.documentReads.delete(href));
@@ -166,8 +217,14 @@ export class Screens {
       const problem = documentProblem(document, this.rendererVersion);
       if (problem) throw new Error(problem);
       this.set('documents', documents => ({ ...documents, [href]: ready(document) }));
-      // Pages opened before their document arrived start their refresh now.
-      for (const [key, entry] of this.entries) if (entry.request.href === href && entry.opened) this.startRefresh(key, entry);
+      // Pages opened before their document arrived start their refresh now, and read the `vela.*`
+      // sources Ether skipped (it answers them with nothing).
+      for (const [key, entry] of this.entries) {
+        if (entry.request.href !== href) continue;
+        if (entry.opened) this.startRefresh(key, entry);
+        const locals = eagerSources(document, entry.lazy).filter(name => LocalSources.isLocal(document.sources[name]));
+        if (locals.length) void this.readLocal(key, entry, locals);
+      }
     } catch (error) {
       if (previewExpired(error)) this.expirePreview();
       if (epoch === this.session.epoch) this.set('documents', documents => ({ ...documents, [href]: failed(error, previous) }));
@@ -259,13 +316,14 @@ export class Screens {
   open(request: PageRequest, from?: string): PageHandle {
     // A page opened (or its params changed): a refused stream may be tried again.
     this.refused = undefined;
+    if (isBuiltInHref(request.href)) this.builtIn(request.href);
     const params = cleanParams(request.params);
     const key = pageKey(request.target, params, request.context);
     let entry = this.entries.get(key);
     const now = Date.now();
     if (!entry) {
       entry = { request: { target: request.target, href: request.href, params, ...(request.context ? { context: request.context } : {}) },
-        opened: 0, shownAt: 0, hiddenOrder: 0, hiddenAt: 0, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timeouts: new Map(), retryTimers: new Set() };
+        opened: 0, shownAt: 0, hiddenOrder: 0, hiddenAt: 0, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timeouts: new Map(), retryTimers: new Set(), live: new Map() };
       this.entries.set(key, entry);
       const seed = from && from !== key ? this.entries.get(from) : undefined;
       const seeded = seed && sameTarget(seed.request.target, request.target) && this.page(from!)?.load === 'ready';
@@ -280,6 +338,7 @@ export class Screens {
     entry.shownAt = ++this.order;
     entry.hiddenAt = 0;
     void this.loadDocument(request.href);
+    this.bindLive(key, entry);
     this.startRefresh(key, entry);
     this.schedule();
     let released = false;
@@ -321,6 +380,8 @@ export class Screens {
     entry.hiddenAt = Date.now();
     entry.hiddenOrder = ++this.order;
     if (entry.timer) { clearInterval(entry.timer); entry.timer = undefined; }
+    // A hidden page stops following its live sources (a re-show follows them again).
+    this.unbindLive(entry);
     this.evict();
     this.schedule();
   }
@@ -382,17 +443,125 @@ export class Screens {
   }
 
   /**
-   * One data read: the named sources, or every one that is not lazy. Sources being read keep their
+   * One data read: the named sources, or every one that is not lazy. `vela.*` sources are answered
+   * on the device; the rest go to Ether (never for a built-in page). Sources being read keep their
    * value with `pending`; an answer overtaken by a later read of the same source is dropped.
    */
   private async read(key: string, sources?: readonly string[]): Promise<void> {
+    const entry = this.entries.get(key);
+    if (!entry) return;
+    const document = this.documentOf(entry);
+    const builtIn = isBuiltInHref(entry.request.href);
+    if (builtIn && !document) {
+      // No such built-in page in this app: nothing to read.
+      const problem = this.box.get().screens.documents[entry.request.href]?.error || 'This page is not part of this app.';
+      this.setPage(key, page => ({ ...page, pending: {}, load: 'failed', error: problem, failure: 'not_found' }));
+      return;
+    }
+    if (!document) return this.readRemote(key, sources);
+    const wanted = sources ? [...new Set(sources)] : eagerSources(document, entry.lazy);
+    const local = wanted.filter(name => builtIn || LocalSources.isLocal(document.sources[name]));
+    const remote = wanted.filter(name => !local.includes(name));
+    // A built-in page with nothing to read now (a shell, or only lazy sources) is ready at once.
+    if (builtIn && !local.length) {
+      if (this.page(key)?.load !== 'ready') this.setPage(key, page => ({ ...page, load: 'ready' }));
+      return;
+    }
+    const reads: Promise<void>[] = [];
+    if (local.length) reads.push(this.readLocal(key, entry, local));
+    // A whole read stays whole for Ether (it skips `vela.*` sources), unless every source is local.
+    if (sources ? remote.length : remote.length || (!local.length && !builtIn)) reads.push(this.readRemote(key, sources ? remote : undefined));
+    await Promise.all(reads);
+  }
+
+  /** Whether a page's source is answered on the device. */
+  private isLocalSource(entry: Entry, name: string): boolean {
+    return isBuiltInHref(entry.request.href) || LocalSources.isLocal(this.documentOf(entry)?.sources?.[name]);
+  }
+
+  /** The page's params and a surface's context, which a `vela.*` source's holes read. */
+  private localScope(entry: Entry): LocalScope {
+    const context = serverContext(entry.request.context);
+    // A param left out reads its declared default (Ether applies them for its own sources).
+    const defaults: Record<string, string> = {};
+    for (const [name, spec] of Object.entries(this.documentOf(entry)?.params ?? {})) if (typeof spec?.default === 'string' && spec.default !== '') defaults[name] = spec.default;
+    return { params: { ...defaults, ...entry.request.params }, ...(Object.keys(context).length ? { context } : {}) };
+  }
+
+  /** `vela.*` sources answered on the device, each as soon as it is known. `again`: answered anew from
+   * what the stores hold now (a store moved), without asking the server or showing it pending. */
+  private async readLocal(key: string, entry: Entry, names: readonly string[], again = false): Promise<void> {
+    const document = this.documentOf(entry);
+    if (!document || !names.length) return;
+    const epoch = this.session.epoch;
+    const seq = ++this.seq;
+    for (const name of names) entry.seq.set(name, seq);
+    const held = this.page(key)?.sources ?? {};
+    if (!again) this.setPage(key, page => ({ ...page, pending: { ...page.pending, ...Object.fromEntries(names.map(name => [name, true])) } }));
+    const current = (name: string) => (entry.seq.get(name) ?? 0) <= seq;
+    // A page with no Ether source is ready with its first local answer; one with some waits for Ether's.
+    const onlyLocal = isBuiltInHref(entry.request.href) || Object.entries(document.sources).every(([, spec]) => spec?.lazy || LocalSources.isLocal(spec));
+    const scope = this.localScope(entry);
+    await Promise.all(names.map(async name => {
+      const spec = document.sources[name];
+      const answer = this.local && spec && LocalSources.isLocal(spec)
+        ? await this.local.read(spec, scope, !again && name in held)
+        : { error: 'unsupported' as const };
+      if (epoch !== this.session.epoch || this.entries.get(key) !== entry || !current(name)) return;
+      // The records first, then the value reaching them, then tracking: one turn, nothing released between.
+      if ('value' in answer) this.local?.write(answer.records);
+      this.setPage(key, page => {
+        const pending = { ...page.pending };
+        delete pending[name];
+        if ('error' in answer) return { ...page, pending, errors: { ...page.errors, [name]: answer.error }, ...(onlyLocal ? { load: 'ready' as const } : {}) };
+        const { [name]: _gone, ...errors } = page.errors;
+        const sources = sameJSON(page.sources[name], answer.value) ? page.sources : { ...page.sources, [name]: answer.value };
+        return { ...page, pending, errors, sources, ...(onlyLocal ? { load: 'ready' as const } : {}) };
+      });
+      this.track(key);
+    }));
+    if (entry.opened && this.entries.get(key) === entry) this.bindLive(key, entry);
+  }
+
+  /** Follow the page's live `vela.*` sources (the queue, Now Playing), and the stores behind the
+   * others it holds, while it is shown. */
+  private bindLive(key: string, entry: Entry): void {
+    const document = this.documentOf(entry);
+    if (!this.local || !document || !entry.opened) return;
+    const page = this.page(key);
+    for (const [name, spec] of Object.entries(document.sources)) {
+      if (entry.live.has(name) || !LocalSources.isLocal(spec)) continue;
+      if (LocalSources.isLive(spec)) {
+        if (spec.lazy && !entry.lazy.has(name) && !(page && name in page.sources)) continue;
+        entry.live.set(name, this.local.bind(spec.from));
+        continue;
+      }
+      // A source the page holds follows the store it reads: a playlist reordered, a like, a title read
+      // again elsewhere answer it anew.
+      if (!page || !(name in page.sources)) continue;
+      entry.live.set(name, this.local.watch(spec, this.localScope(entry), () => { void this.readLocal(key, entry, [name], true); }));
+    }
+  }
+
+  private unbindLive(entry: Entry): void {
+    for (const stop of entry.live.values()) stop();
+    entry.live.clear();
+  }
+
+  /** Records core wrote on its own (a live source moved): the pages reaching them keep them. */
+  private localChanged(keys: readonly string[]): void {
+    for (const [key, entry] of this.entries) if (keys.some(changed => entry.refs.has(changed))) this.track(key);
+  }
+
+  /** Ether's half of a read. */
+  private async readRemote(key: string, sources?: readonly string[]): Promise<void> {
     const entry = this.entries.get(key);
     if (!entry) return;
     // Ether reads at most 16 sources at once.
     if (sources && sources.length > MAX_SOURCES) {
       const names = [...new Set(sources)];
       const reads: Promise<void>[] = [];
-      for (let at = 0; at < names.length; at += MAX_SOURCES) reads.push(this.read(key, names.slice(at, at + MAX_SOURCES)));
+      for (let at = 0; at < names.length; at += MAX_SOURCES) reads.push(this.readRemote(key, names.slice(at, at + MAX_SOURCES)));
       await Promise.all(reads);
       return;
     }
@@ -400,11 +569,11 @@ export class Screens {
     const seq = ++this.seq;
     const named = sources ? [...new Set(sources)] : undefined;
     if (named) for (const name of named) entry.seq.set(name, seq); else entry.whole = seq;
-    const marked = named ?? Object.keys(this.page(key)?.sources ?? {}).filter(name => !isLazy(this.documentOf(entry), name));
+    const marked = named ?? Object.keys(this.page(key)?.sources ?? {}).filter(name => !isLazy(this.documentOf(entry), name) && !this.isLocalSource(entry, name));
     if (marked.length) this.setPage(key, page => ({ ...page, pending: { ...page.pending, ...Object.fromEntries(marked.map(name => [name, true])) } }));
     // An answer for a source is current unless a later read asked for it (by name, or as a whole
     // read covering every source that is not lazy).
-    const current = (name: string) => Math.max(entry.seq.get(name) ?? 0, isLazy(this.documentOf(entry), name) ? 0 : entry.whole) <= seq;
+    const current = (name: string) => Math.max(entry.seq.get(name) ?? 0, isLazy(this.documentOf(entry), name) || this.isLocalSource(entry, name) ? 0 : entry.whole) <= seq;
     try {
       const data = await (await this.api()).screenData(entry.request.target, {
         ...(named ? { sources: named } : {}), params: entry.request.params, context: serverContext(entry.request.context), tz: localeContext().timeZone,
@@ -524,6 +693,24 @@ export class Screens {
     const control = call.control ? busyKey(key, call.control) : '';
     if (control) this.set('busy', busy => ({ ...busy, [control]: true }));
     const undo = call.optimistic ? this.patch(key, call.optimistic) : undefined;
+    if (call.name.startsWith('vela.')) {
+      // Vela's own action, answered on the device with the same answer shape.
+      try {
+        if (!this.local) throw new Error('This action is not available here');
+        const document = this.documentOf(entry);
+        const result = await this.local.action(call.name, call.args ?? {}, { specs: document?.sources ?? {}, values: page.sources, scope: this.localScope(entry) });
+        undo?.();
+        if (epoch !== this.session.epoch) return result.answer;
+        this.local.write(result.records);
+        this.apply(key, result.answer);
+        return result.answer;
+      } catch (error) {
+        undo?.();
+        throw error;
+      } finally {
+        if (control) this.set('busy', busy => { const { [control]: _gone, ...rest } = busy; return rest; });
+      }
+    }
     try {
       const target = entry.request.target;
       const context = serverContext(entry.request.context);
@@ -763,7 +950,9 @@ export class Screens {
     for (const entry of this.entries.values()) {
       if (entry.timer) clearInterval(entry.timer);
       for (const timer of entry.retryTimers) clearTimeout(timer);
+      this.unbindLive(entry);
     }
+    this.local?.reset();
     const open = [...this.entries].filter(([, entry]) => entry.opened > 0);
     this.entries.clear();
     this.documentReads.clear();
@@ -771,10 +960,12 @@ export class Screens {
     const preview = this.box.get().screens.preview;
     this.box.update('screens', () => ({ ...initialScreens, preview }));
     for (const [key, entry] of open) {
-      const fresh: Entry = { ...entry, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timer: undefined, timeouts: new Map(), retryTimers: new Set() };
+      const fresh: Entry = { ...entry, seq: new Map(), whole: 0, lazy: new Set(), revs: new Map(), refs: new Set(), timer: undefined, timeouts: new Map(), retryTimers: new Set(), live: new Map() };
       this.entries.set(key, fresh);
+      if (isBuiltInHref(entry.request.href)) this.builtIn(entry.request.href);
       this.fresh(key, fresh);
       void this.loadDocument(entry.request.href);
+      this.bindLive(key, fresh);
     }
     this.schedule();
   }

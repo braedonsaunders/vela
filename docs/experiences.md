@@ -118,23 +118,38 @@ Two document kinds share one resolver, one renderer, one `RENDERER_VERSION` and 
 ### Sources for Vela's own pages
 
 Built-in documents read sources, as plugin documents do. Core answers them locally through the
-active server adapter:
+active server adapter (`packages/core/src/screens/local.ts`; the list, arguments and value shapes are
+`packages/protocol/vela-sources.ts`). "Yes" means the source answers; "no" means it answers
+`unsupported`, so the document hides that part. Ether's music parts answer only where the server
+advertises them (in parentheses). The Jellyfin and Plex columns are proven by routed-fetch tests
+(`packages/core/test/local-sources-native.test.ts`) and match what today's music app shows there.
 
-| Source (`from`) | Answers with |
-| --- | --- |
-| `vela.title` (`id`) | The title record |
-| `vela.children` (`id`, `role`) | Children, paged |
-| `vela.rows` (`placement`, `titleId`, `libraryId`) | Rows |
-| `vela.library` (`id`, sort, filters) | The library listing |
-| `vela.favorites` (`role`, `class`) | Liked items |
-| `vela.playlists` | Playlists |
-| `vela.recent` | Recent contexts |
-| `vela.search` | Search results |
-| `vela.queue` | The live queue record |
-| `vela.nowPlaying` | The live record, updated every second when bound |
-| `vela.lyrics` (`id`) | Lyrics |
-| `vela.guide` | The guide window |
-| `vela.readingProgress` (`id`) | Reading progress |
+| Source (`from`) | Answers with | Ether | Jellyfin / Emby | Plex |
+| --- | --- | --- | --- | --- |
+| `vela.title` (`id`) | The title: its `item:` record and what a detail read adds | yes | yes | yes |
+| `vela.children` (`id`, `role`) | Children, paged | yes | yes | yes |
+| `vela.rows` (`placement`, `titleId`, `libraryId`, `tab`) | Rows: Home's, a title's related ones, a library's (its home tab by default) | yes | yes | yes |
+| `vela.library` (`id`, sort, filters, `tab`, `limit`) | The library listing, paged | yes | yes | yes |
+| `vela.favorites` (`role`, `class`, `library`) | Liked items | yes (role lists, else the Favorites playlist) | yes, with `library`: the library's favourite filter on the role's tab | no (Plex keeps no favourites) |
+| `vela.playlists`, `vela.playlist` (`id`) | The viewer's playlists; one playlist and its entries | yes (playlists) | no | no |
+| `vela.recent` | Recent play contexts | yes (play contexts) | no | no |
+| `vela.search` (`q`, `kind`, `library`) | The audio app's search: the list, the top match, the list by role | yes | yes | yes |
+| `vela.musicHome` (`library`) | Music Home: quick tiles, Vela's own recent shelves, the library's rows | yes | yes (rows and search only: no tiles without likes, playlists or recent) | yes (as Jellyfin) |
+| `vela.libraryInfo` (`id`), `vela.viewer` | What a library holds and the music features offered; the viewer | yes | yes | yes |
+| `vela.queue`, `vela.nowPlaying` | The live queue record; the live record, updated about once a second while bound | yes (on the device) | yes | yes |
+| `vela.lyrics` (`id`, `translate`) | Lyrics, with word timing, translation and romanisation when sent | yes (lyrics) | no | no |
+| `vela.guide` (`day`) | A day of the Live TV guide as `channel:` records | yes (Live TV) | yes (a tuner) | yes (a DVR) |
+| `vela.readingProgress` (`id`) | Reading progress | yes (reading) | yes (books) | no |
+| `vela.recap` (`period`, `at`, `library`) | A listening recap (Rewind) | yes (history recap) | no | no |
+| `vela.duplicates` (`libraryId`), `vela.recording` (`id`) | Duplicate recordings; a recording's releases | yes (duplicates) | no | no |
+| `vela.import` | The playlist import in progress (`import:` record) | yes (playlist import) | no (the record stays idle; the action refuses) | no |
+| `vela.visualizer` | The viewer's visualizer setting on this device | yes (on the device) | yes | yes |
+
+Actions answer the same way: `vela.play`, `vela.playNext`, `vela.addToQueue` and `vela.startRadio`
+play through the audio store on every server (radio adds the server's continuation where it has
+one). `vela.like` is the server's favourite: Ether and Jellyfin keep it, Plex refuses it.
+`vela.lyrics` `translate` is not sent yet: no adapter and no wire route takes a language, so lyrics
+come in the language the server has.
 
 These are the same `{$record}` model with the same revisions: `item:`, `channel:`, plus local
 `queue:` and `nowPlaying:` records that never leave the device. The source list is versioned with
@@ -171,6 +186,22 @@ these sources, so existing skin documents keep working unchanged.
   with the same rules. Slots carry the same bounds as surfaces: box, focus, clipping, at most N
   per slot, and an owner-set order.
 
+### The language as built (renderer 20)
+
+[skin-schema.md § Renderer 20](skin-schema.md#renderer-20) is the reference. In short:
+
+- Built-in pages: `owner: "vela"`, `experience`; address `vela:<experience>/<page>`, screen
+  `vela.<experience>`; bundled from `packages/protocol/fixtures/experiences/<experience>/`.
+  A shell is the page `shell`, with `forms: {small, wide, tv, fold}`.
+- Skin overrides: `experiences.<id>.{pages, templates, parts, shell}`, merged at resolve time.
+- Variants: `platforms` (node style overlay; page whole tree) and `forms` (page whole tree).
+- Rich blocks: `{type, props, parts, partTemplates, fallback}` against
+  `packages/protocol/rich-blocks.ts`; `fallback` is generic on every block.
+- Slots: `{type: "slot", slot: "plugin:<id>", context}` in pages; surfaces with presentation
+  `slot` and `slot: <id>`; the list is `$defs.Slots`. Slot contexts: a title's slots give
+  `title` (`item:`) and `titleKind` (picks by `when.titleKind`, never sent); the player
+  overlays give the player context.
+
 ## 3. Author tools
 
 - **Live preview:**
@@ -188,7 +219,7 @@ these sources, so existing skin documents keep working unchanged.
     budgets.
   - It produces a JSON report for Studio and CI, plus readable output.
   - Ether runs the same checks at install against the vendored schema.
-- **Versioned schema:** `vela-document.v1.json` (today `plugin-screen.v1.json`) is generated from
+- **Versioned schema:** `vela-document.v1.json` (formerly `plugin-screen.v1.json`; renderer 20) is generated from
   the TypeScript types, with a digest beside `RENDERER_VERSION`. Changes within version 1 are
   additive; anything else is a new major version. Docs are generated from the schema's comments.
 - **TV performance budgets:**

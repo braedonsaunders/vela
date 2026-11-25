@@ -1,7 +1,7 @@
 // What every music view asks of the app shell: where to go, what to play, and the menu for a card.
 import { createContext, useContext } from 'react';
 import type { Card } from '@vela/core';
-import type { CardMenuAnchor, CardMenuOpenMode } from '../card-context-menu';
+import type { CardMenuAnchor, CardMenuOpenMode } from '../../widgets/card-context-menu';
 import type { Focusable } from '../../escape';
 import type { Listening } from './listening';
 import type { MusicPlace } from './place';

@@ -31,7 +31,15 @@ import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { parityAudioSpec, startParityAudio } from './parity';
 import { setQuietPlayback } from '@vela/skin/src/quiet-playback';
-import { PreviewBadge, previewReturnPath, startPreview, usePreviewReload } from './screen-preview';
+import {
+  MultiFramePreviewHost,
+  PreviewBadge,
+  previewHostUrl,
+  previewReturnPath,
+  startPreview,
+  usePreviewReload,
+  usePreviewSkinDocument,
+} from './screen-preview';
 
 // A lab or development build (a pinned server on a device, start routes, or __DEV__) never starts
 // playback with sound: it may open a channel or multiview on launch on a shared TV.
@@ -47,6 +55,8 @@ import { useLast } from '@vela/skin/src/presence';
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
+import { wireLocalSources } from './local-sources';
+import { useCanVisualize } from './visualizer/availability';
 import { useMediaAccess } from './media-access';
 import { useLiveController } from './live';
 import { useMultiviewController } from './multiview';
@@ -124,6 +134,8 @@ function runtimeStore(): NonNullable<typeof runtime> {
   if (!runtime) {
     const boot = platform();
     runtime = { boot, store: createVela({ ...boot, rendererVersion: RENDERER_VERSION }) };
+    // Vela's own pages: bundled documents and the device settings their vela.* sources read.
+    wireLocalSources(runtime.store);
     // A closed or reloaded tab, or a page navigated away, stops its playback at the server.
     if (Platform.OS === 'web' && typeof window !== 'undefined') stopSessionsOnPageHide(window, runtime.store.playback);
   }
@@ -150,6 +162,14 @@ export function VelaProvider({ children }: { children: ReactNode }) {
     });
   }, [store]);
   usePreviewReload(store);
+  const hostPreviewUrl = previewHostUrl();
+  if (Platform.OS === 'web' && hostPreviewUrl) {
+    return (
+      <StoreProvider vela={store}>
+        <MultiFramePreviewHost previewUrl={hostPreviewUrl} />
+      </StoreProvider>
+    );
+  }
   return (
     <StoreProvider vela={store}>
       <AppProvider store={store} consoleUrl={consoleUrl}>{children}</AppProvider>
@@ -348,18 +368,25 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     }));
     return () => { cancelled = true; };
   }, [installed, appearance, origin, store]);
+  const previewSkin = usePreviewSkinDocument();
   const selectedId = chosenSkin(documents.map(d => d.id), choice, appearance);
   const selectedIndex = documents.findIndex(d => d.id === selectedId);
-  const raw = documents[selectedIndex]!;
+  const raw = previewSkin ?? documents[selectedIndex]!;
   const packMark = appearance?.packs.find(pack => pack.id === raw.id)?.wordmark;
   const branding = useMemo(() => packMark ? { ...appearance?.branding, wordmark: { url: packMark, width: 240, height: 60 } } : appearance?.branding, [packMark, appearance?.branding]);
+  const lastGoodSkin = useRef<ResolvedDocument | null>(null);
   const resolved = useMemo(() => {
     try {
-      return { doc: resolveDocument(raw, width, 'en', branding), error: null };
+      const doc = resolveDocument(raw, width, 'en', branding);
+      lastGoodSkin.current = doc;
+      return { doc, error: null };
     } catch (error) {
+      if (previewSkin && lastGoodSkin.current) {
+        return { doc: lastGoodSkin.current, error: null };
+      }
       return { doc: null, error: String(error) };
     }
-  }, [raw, width, branding]);
+  }, [raw, width, branding, previewSkin]);
 
   useEffect(() => {
     setFontsReady(false);
@@ -438,6 +465,9 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [searching, store]);
 
   const readEnvironment = useMemo(createEnvironmentReader, [state.auth.revision]);
+  // env.canVisualize: the shipped visualizer's own check for this device (it turns false if the
+  // renderer fails here), which the visualizer block reads.
+  const visualizes = useCanVisualize(true);
   // A pointer over (or focus on) a section's destination reads its first page ahead.
   const prefetch = useCallback<NonNullable<SkinHost['prefetch']>>((action, arg) => {
     if (action === 'library' && arg && !screenOf(arg)) void prefetchLibrary(store, arg).catch(() => {});
@@ -456,6 +486,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       skinCount: documents.length,
       skinName: resolved.doc.name,
       app: ABOUT_APP,
+      canVisualize: visualizes,
     });
     const key = `${route}:${entry}:${library ?? ''}`;
     const routeViewport = route === 'watch' ? viewport : contentViewport;
@@ -490,7 +521,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     };
     hosts.current.set(key, { inputs, host: result, libraries: state.libraries.value });
     return result;
-  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore, prefetch]);
+  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore, prefetch, visualizes]);
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(

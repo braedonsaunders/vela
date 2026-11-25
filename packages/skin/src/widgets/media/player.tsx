@@ -14,11 +14,12 @@ import { useMediaActions } from './context';
 import { MediaGlyph } from './icons';
 import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './parts';
 import { Arrive, MOTION, Presence, useLast } from '../../presence';
-import { LyricsPanel } from '../music/lyrics';
+import { LyricsPanel } from '../../blocks/listen/lyrics';
 import { SoundBlock, SoundSection } from '../../blocks/sound';
-import { musicTV } from '../music/layout';
+import { musicTV } from '../../blocks/listen/layout';
 import { nowPlayingSideBySide } from './window-layout';
 import { listForItem, toggleSound, type NowPlayingList } from './now-playing-list';
+import { usePart } from '../../blocks/listen/look';
 
 const web = Platform.OS === 'web';
 /** A TV's focus engine moves by geometry: Now Playing's column and transport row are focus guides, so
@@ -48,6 +49,10 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
   const open = useInteraction();
   const [preview, setPreview] = useState<number | null>(null);
   const seek = useCallback((seconds: number) => store.audio.seek(seconds), [store]);
+  // A document's parts (the `player` block); none in the dock's own mini player.
+  const rootPart = usePart('player.root').box;
+  const titlePart = usePart('player.title').text;
+  const bylinePart = usePart('player.byline').text;
   if (!item) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
   const fraction = audio.durationSeconds > 0 ? Math.min(1, audio.positionSeconds / audio.durationSeconds) : 0;
@@ -55,7 +60,7 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
   const width = Math.min(m.width - m.gutter * 2 + 16, 820);
   const shell = m.look.layer({ 'background-color': '$ui.popover', 'backdrop-filter': 'blur(24px) saturate(1.3)', 'box-shadow': '0px 18px 48px -12px rgba(0, 0, 0, 0.6), 0px 0px 0px 1px $ui.glassEdge' });
   return (
-    <View style={[shell.style, { position: 'absolute', bottom, left: (m.width - width) / 2, width, borderRadius: Math.min(22, Number(m.ui.radiusPanel) || 18), overflow: 'hidden' }]}
+    <View style={[shell.style, { position: 'absolute', bottom, left: (m.width - width) / 2, width, borderRadius: Math.min(22, Number(m.ui.radiusPanel) || 18), overflow: 'hidden' }, rootPart]}
       testID="mini-player" accessibilityRole="toolbar" accessibilityLabel={msg('media.player.nowPlaying')}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8, paddingRight: 10 }}>
         <Pressable {...open.handlers} onPress={onOpen} testID="mini-player-open" accessibilityRole="button" accessibilityLabel={`${msg('media.player.open')}: ${item.name}`}
@@ -63,8 +68,8 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
             backgroundColor: open.state.hover || open.state.focus ? m.ui.control : 'transparent' }]}>
           <Cover uri={item.poster} shape={item.shape === 'book' ? 'book' : 'square'} size={item.shape === 'book' ? 34 : 46} title={item.name} accent={item.accent} lift={0.4} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={1} style={m.text({ 'font-size': '15px', 'font-weight': '650' })}>{item.name}</Text>
-            <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>
+            <Text numberOfLines={1} style={[m.text({ 'font-size': '15px', 'font-weight': '650' }), titlePart]}>{item.name}</Text>
+            <Text numberOfLines={1} style={[m.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), bylinePart]}>
               {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? msg('media.player.failed') : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
             </Text>
           </View>
@@ -213,8 +218,11 @@ function rateLabel(rate: number): string { return `${number(rate, { maximumFract
 export interface VisualizerSwitch { on: boolean; onToggle(on: boolean): void }
 
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false }: {
+export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false, background }: {
   onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; visualizer?: VisualizerSwitch; hidden?: boolean;
+  /** The `nowPlaying` block's background (its nowPlaying.background template: a visualizer), drawn
+   *  over the artwork's wash and under the tint, taking no focus. */
+  background?: ReactNode;
 }) {
   const host = useHost();
   const m = useMediaLook();
@@ -229,6 +237,14 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const source = useInteraction();
   const shownPanel = useLast(panel || undefined);
   const [list, setList] = useState<NowPlayingList>(opening === 'lyrics' || opening === 'sound' ? opening : 'queue');
+  // A document's parts (the nowPlaying block); none in the dock's own Now Playing.
+  const headerPart = usePart('nowPlaying.header');
+  const stagePart = usePart('nowPlaying.stage');
+  const artworkPart = usePart('nowPlaying.artwork');
+  const titlePart = usePart('nowPlaying.title');
+  const bylinePart = usePart('nowPlaying.byline');
+  const tintPart = usePart('nowPlaying.tint');
+  const tabsPart = usePart('nowPlaying.tabs');
   const book = spoken(item);
   const music = item?.media?.class === 'music' && store.music.lyricsAvailable;
   const offered = { chapters: !!book && audio.chapters.length > 0, lyrics: !!music };
@@ -296,10 +312,10 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         {launcherByTitle ? launcher : null}
         <View style={{ flex: 1, gap: 6 }}>
-          <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
+          <Text numberOfLines={2} accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' }), titlePart.text]} testID="now-playing-title">{item.name}</Text>
           {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
             onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
-            style={m.text({ 'font-size': '17px', color: '$ui.inkSecondary' })} /> : null}
+            style={{ ...m.text({ 'font-size': '17px', color: '$ui.inkSecondary' }), ...bylinePart.text }} /> : null}
           {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
         </View>
       </View>
@@ -356,7 +372,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
       trailing={card.media?.clockLabel} onPress={() => store.audio.jump(audio.queue!.items.indexOf(card))} testID={`now-playing-next-${card.id}`} />)
     : [<Text key="none" style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet', padding: '12px 14px' })}>{msg('media.player.nothingNext')}</Text>];
   const tabs = (
-    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }} accessibilityRole="tablist">
+    <View style={[{ flexDirection: 'row', gap: 8, marginBottom: 10 }, tabsPart.box]} accessibilityRole="tablist">
       <Chip label={msg('media.player.upNext')} selected={list === 'queue'} onPress={() => setList('queue')} testID="now-playing-queue-tab" />
       {audio.chapters.length ? <Chip label={msg('media.player.chapters')} selected={list === 'chapters'} onPress={() => setList('chapters')} testID="now-playing-chapters-tab" /> : null}
       {music ? <Chip label={msg('music.lyrics')} selected={list === 'lyrics'} onPress={() => setList('lyrics')} testID="now-playing-lyrics-tab" /> : null}
@@ -370,9 +386,10 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         {/* Native image blur (expo-image on Android and iOS) stops far short of 90: the cover's own
             lettering showed through behind the title and transport. There the wash is the colour alone. */}
         {!onOpenVisualizer && item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
-        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${washTop} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` })]} />
+        {background ? <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>{background}</View> : null}
+        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${washTop} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` }), tintPart.box]} />
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }}>
+      <View style={[{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }, headerPart.box]}>
         <View style={{ width: headerSide, alignItems: 'flex-start' }}>
           <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
         </View>
@@ -391,11 +408,11 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
           {launcherByTitle ? null : launcher}
         </View>
       </View>
-      <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: PAGE_TOP, paddingBottom: 48, minHeight: '100%' as never }}>
+      <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={[{ paddingHorizontal: m.gutter, paddingTop: PAGE_TOP, paddingBottom: 48, minHeight: '100%' as never }, stagePart.box]}>
         {sideBySide ? (
           <View style={{ flexDirection: 'row', gap: 56, alignItems: 'flex-start', maxWidth: 1280, width: '100%', alignSelf: 'center' } as ViewStyle}>
             <View style={{ flex: 1, gap: 34, alignItems: 'center' }}>
-              <Artwork item={item} size={coverSize} playing={playing} />
+              <Artwork item={item} size={coverSize} playing={playing} style={artworkPart.box} />
               {controls}
             </View>
             <View style={{ flex: 1, maxWidth: 520, paddingTop: 8 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
@@ -409,7 +426,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
           </View>
         ) : (
           <View style={{ gap: 28, alignItems: 'center' }}>
-            <Artwork item={item} size={coverSize} playing={playing} />
+            <Artwork item={item} size={coverSize} playing={playing} style={artworkPart.box} />
             {controls}
             <View style={{ width: '100%', maxWidth: 560 }} onLayout={e => { listTop.current = e.nativeEvent.layout.y + PAGE_TOP - 12; reveal(); }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
           </View>
@@ -419,13 +436,13 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   );
 }
 
-function Artwork({ item, size, playing }: { item: Card; size: number; playing: boolean }): ReactNode {
+function Artwork({ item, size, playing, style }: { item: Card; size: number; playing: boolean; style?: ViewStyle }): ReactNode {
   const m = useMediaLook();
   const book = item.shape === 'book';
   const width = book ? Math.round(size / 1.5) : size;
   // The cover eases back a little while paused, as a record settles.
   return (
-    <View style={[{ transform: [{ scale: playing || m.look.still ? 1 : 0.94 }] }, web ? ({ transitionProperty: 'transform', transitionDuration: '420ms', transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)' } as ViewStyle) : {}]}>
+    <View style={[{ transform: [{ scale: playing || m.look.still ? 1 : 0.94 }] }, web ? ({ transitionProperty: 'transform', transitionDuration: '420ms', transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)' } as ViewStyle) : {}, style]}>
       <Cover uri={item.poster} shape={book ? 'book' : 'square'} size={width} title={item.name} byline={item.media?.byline} accent={item.accent} lift={2.2} />
     </View>
   );

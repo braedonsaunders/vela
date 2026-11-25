@@ -5,11 +5,11 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Card } from '@vela/core';
-import { listeningWords } from '../src/widgets/music/listening';
+import { listeningWords } from '../src/blocks/listen/listening';
 import {
   albumsTab, booksBy, creditedPeople, forgetSearch, listeningResults, nameMatches, readRecent, rememberSearch, RECENT_LIMIT, scopedItems, seeAllAlbums, topResult,
 } from '../src/widgets/music/search-results';
-import { parsePlace, placeParam } from '../src/widgets/music/place';
+import { parsePlace, placeParam } from '../src/blocks/listen/place';
 import { nearEnd } from '../src/widgets/music/scroll-end';
 
 const catalogue = JSON.parse(readFileSync(join(import.meta.dir, '../../core/src/i18n/strings/en.json'), 'utf8')) as Record<string, string>;

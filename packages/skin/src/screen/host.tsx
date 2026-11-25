@@ -16,7 +16,8 @@ import { tvPixelScale } from '../tv-pixel-scale';
 import type { ScreenPress, SkinHost } from '../host';
 import { fill, type RNode } from '../resolve';
 import { focusElement } from '../escape';
-import { resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
+import { formFactor, resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
+import { devicePlatform, foldOpen } from './platform';
 import { resolveUi } from '../resolve/ui';
 import { SkinNodeFor, SkinRoot, SkinRoute } from '../render';
 import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, samePageWithoutRev, useBlockLook, type ScreenBlockRuntime } from '../blocks';
@@ -65,6 +66,8 @@ export interface ScreenViewProps {
   /** Surfaces: nothing is drawn until the first read answers, and nothing when it fails or the
    *  document is refused (a surface that cannot draw is left out, never a skeleton or an error). */
   quiet?: boolean;
+  /** Renderer 20, a page in an experience's shell: its key, under which its `sections` keep their scroll. */
+  scrollKey?: string;
 }
 
 const BOOL = /^(true|false)$/;
@@ -84,6 +87,9 @@ function without(args: Record<string, string>, ...names: string[]): Record<strin
 function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolved?: ResolvedScreen; problem: string } {
   const { width, height } = host.viewport;
   const ui = host.doc.document.ui;
+  // A built-in page takes the active skin's overrides of its experience (and its tokens and strings).
+  const skin = host.doc.document;
+  const fold = foldOpen(host.viewport);
   // The last document of this page that resolved: a newer one that cannot be drawn (a Studio draft
   // with an error) leaves it on screen instead of the failure.
   const lastGood = useRef<{ id: string; resolved: ResolvedScreen } | null>(null);
@@ -92,7 +98,8 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
     const id = `${doc.screen}/${doc.page}`;
     try {
       const scale = host.viewport.pxScale ?? (Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX);
-      const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale, ...(host.viewport.pxStep ? { step: host.viewport.pxStep } : {}) }, 'en', resolveUi(ui));
+      const resolved = resolveScreenDocument(doc, { width, height, tv: Platform.isTV, platform: devicePlatform(), fold, scale, ...(host.viewport.pxStep ? { step: host.viewport.pxStep } : {}) },
+        'en', resolveUi(ui), { skin });
       if (resolved.warnings.length) console.warn(`${id}: ${resolved.warnings.join('; ')}`);
       lastGood.current = { id, resolved };
       return { resolved, problem: '' };
@@ -104,10 +111,10 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
       }
       return { problem };
     }
-  }, [doc, width, height, ui, host.viewport.pxScale, host.viewport.pxStep]);
+  }, [doc, width, height, ui, skin, fold, host.viewport.pxScale, host.viewport.pxStep]);
 }
 
-export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false }: ScreenViewProps) {
+export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false, scrollKey }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
   const previewExpired = useVelaState(state => state.screens.preview?.expired === true);
@@ -234,9 +241,12 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
 
   const screenHost = useMemo<SkinHost>(() => ({
     ...host,
-    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true, isTV: Platform.isTV },
+    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true, isTV: Platform.isTV, platform: devicePlatform(),
+      form: formFactor({ width: host.viewport.width, height: host.viewport.height, tv: Platform.isTV, fold: foldOpen(host.viewport) }),
+      fold: foldOpen(host.viewport) ? host.viewport.fold!.posture as 'book' | 'tabletop' : '' },
     screenPress: press,
   }), [host, actions.multiview, press]);
+  // env.canVisualize is the app's to say (host.env.canVisualize): false where it does not say.
   const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
   const runtime = useMemo<ScreenBlockRuntime>(() => createScreenBlockRuntime(
     (node, at) => <SkinNodeFor node={node as RNode} ctx={at} />,
@@ -244,8 +254,9 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
       requestNeeds: sources => { if (pageKey) void vela.screens.need(pageKey, sources); },
       pageTitle: title,
       presentation: doc?.presentation === 'page' ? 'page' : 'section',
+      ...(scrollKey ? { scrollKey } : {}),
     },
-  ), [pageKey, vela, title, doc?.presentation]);
+  ), [pageKey, vela, title, doc?.presentation, scrollKey]);
 
   // The element the document names first (focus.initial) takes focus once the page draws; without
   // it (a final game has no Watch button) route focus gives the first control or reading stop.

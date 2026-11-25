@@ -11,13 +11,13 @@ import { FocusPressable as Pressable } from '../../focus';
 import { useHost } from '../../host';
 import { NO_RING, Glyph, useInteraction } from '../common/controls';
 import { alpha, Cover, useMediaLook, type MediaLook } from '../media/parts';
-import { placeOf, useMusic } from './context';
-import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
+import { placeOf, useMusic } from '../../blocks/listen/app';
+import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from '../../blocks/listen/data';
 type FacetValue = { id: string; label: string; count: number };
-import { Byline, FocusGroup, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
-import { listeningWords } from './listening';
-import { TrackList } from './tracks';
-import { compactMusic, musicTV } from './layout';
+import { Chip, LikedCover, playlistCard, Byline, FocusGroup, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from '../../blocks/listen/parts';
+import { listeningWords } from '../../blocks/listen/listening';
+import { TrackList } from '../../blocks/listen/track-table';
+import { compactMusic, musicTV } from '../../blocks/listen/layout';
 import { RewindCover } from './rewind';
 import { musicHomeRows } from './home-rows';
 export { compactMusic };
@@ -151,9 +151,6 @@ function dedupeAlbums(items: Card[]): Card[] {
   return items.filter(item => { const album = item.media?.parent?.id ?? item.id; if (seen.has(album)) return false; seen.add(album); return true; });
 }
 
-export function playlistCard(p: { id: string; name: string; poster: string; itemCount: number }): Card {
-  return { id: p.id, kind: 'playlist', name: p.name, poster: p.poster, backdrop: '', accent: '', receipt: '', yearLabel: '', summary: '', genres: [], durationSeconds: 0, progressSeconds: 0, played: false } as unknown as Card;
-}
 
 /** How many quick tiles fit a row of the page's measured width. */
 const QuickColumns = createContext(2);
@@ -392,19 +389,6 @@ function FollowButton({ on, onPress }: { on: boolean; onPress(): void }) {
   );
 }
 
-export function Chip({ label, on, onPress }: { label: string; on: boolean; onPress(): void }) {
-  const m = useMediaLook();
-  const { state, handlers } = useInteraction();
-  const lit = state.hover || state.focus;
-  return (
-    <Pressable {...handlers} onPress={onPress} accessibilityRole="radio" accessibilityState={{ checked: on }}
-      style={[NO_RING, { height: 32, paddingHorizontal: 14, borderRadius: 16, justifyContent: 'center', backgroundColor: on ? m.ui.ink : lit ? m.ui.controlHover : m.ui.control,
-        // A hairline keeps an unchosen chip visible where the control tone is the surface's own (a light document's white).
-        borderWidth: 1, borderColor: on ? m.ui.ink : m.ui.glassEdge }, transition('background-color', 120)]}>
-      <Text style={m.text({ 'font-size': '13px', 'font-weight': '650', color: on ? m.ui.inkInverse : m.ui.ink })}>{label}</Text>
-    </Pressable>
-  );
-}
 
 // ——— Playlists and Liked Songs ————————————————————————————————————————————————————
 
@@ -426,15 +410,6 @@ export function Mosaic({ tracks, size, poster }: { tracks: Card[]; size: number;
   );
 }
 
-export function LikedCover({ size }: { size: number }) {
-  const m = useMediaLook();
-  return (
-    <View style={[{ width: size, height: size, borderRadius: size > 100 ? 6 : 4, alignItems: 'center', justifyContent: 'center' },
-      m.box({ 'background-image': `linear-gradient(140deg, ${m.ui.accent} 0%, ${alpha(m.ui.accent, 0.55)} 45%, #3b2a6b 100%)`, ...(size > 100 ? { 'box-shadow': '0px 22px 48px -16px rgba(0,0,0,0.7)' } : {}) })]}>
-      <Glyph symbol="heart-fill" size={size * 0.38} color="#ffffff" />
-    </View>
-  );
-}
 
 export function MusicPlaylist({ id }: { id: string }) {
   const app = useMusic();

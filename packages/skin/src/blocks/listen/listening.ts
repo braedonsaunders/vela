@@ -119,26 +119,8 @@ export function listColumns(role: 'track' | 'chapter' | 'part' | 'episode', from
   }
 }
 
-/** Where listening to a container starts: an album from its first track; a book in parts in the part
- * under way (else the first unheard); a show at the episode under way, else its newest unheard.
- * `positionSeconds` is the resume point in `items[index]` (the server resumes a leaf on its own). */
-export function listenFrom(container: Pick<Card, 'media'>, children: Card[]): { items: Card[]; index: number; positionSeconds?: number } {
-  const playable = children.filter(child => child.media?.audio);
-  const underway = (card: Card) => card.progressSeconds > 0 && !card.played;
-  if (container.media?.class === 'podcast' && container.media.role === 'show') {
-    const newest = [...playable].sort((a, b) => (b.airDate || '').localeCompare(a.airDate || '') || (b.media?.index ?? 0) - (a.media?.index ?? 0));
-    const pick = newest.find(underway) ?? newest.find(card => !card.played) ?? newest[0];
-    return pick ? { items: [pick], index: 0, ...(underway(pick) ? { positionSeconds: pick.progressSeconds } : {}) } : { items: [], index: 0 };
-  }
-  if (container.media?.role === 'audiobook') {
-    const parts = [...playable].sort((a, b) => (a.media?.index ?? 0) - (b.media?.index ?? 0));
-    let index = parts.findIndex(underway);
-    if (index < 0) index = Math.max(0, parts.findIndex(part => !part.played));
-    const part = parts[index];
-    return { items: parts, index, ...(part && underway(part) ? { positionSeconds: part.progressSeconds } : {}) };
-  }
-  return { items: playable, index: 0 };
-}
+/** Where listening to a container starts: core's (audio/cards), so documents' vela.play resumes the same way. */
+export { listenFrom } from '@vela/core';
 
 /** How far through a spoken-word title the viewer is, 0..1; 0 for music, which never resumes. */
 export function listenedFraction(card: Pick<Card, 'media' | 'progressSeconds' | 'durationSeconds' | 'played'>): number {
