@@ -9,6 +9,7 @@ import type { Focusable } from '../../escape';
 import { isFocusVisible } from '../../focus-visible';
 import { PlayerIcon, type PlayerIconName } from './icons';
 import type { PlayerLook } from './look';
+import { PLAYER_BUTTON_WIDTH } from './phone-layout';
 import { useFocusClaim } from '../common/focus-claim';
 
 interface Props {
@@ -52,7 +53,7 @@ export function ChromeButton({
   const claim = useFocusClaim(preferred);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
-  const box = look.size(size ?? (primary ? 52 : 44));
+  const box = look.size(size ?? (primary ? 52 : PLAYER_BUTTON_WIDTH));
   const face = compact && !look.tv ? look.size(32) : box;
   const filled = primary || (look.tv && focus);
   const wash = selected || hover ? look.controlHover : 'transparent';

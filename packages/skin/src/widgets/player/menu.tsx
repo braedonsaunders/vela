@@ -4,10 +4,11 @@ import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
 import { Children, Fragment, isValidElement, useEffect, useState, type ReactNode, type RefObject, type ComponentRef } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, type TextStyle } from 'react-native';
-import { PlayerIcon } from './icons';
+import { PlayerIcon, type PlayerIconName } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';
 import { useHost } from '../../host';
+import { watchWidth } from './fold-layout';
 import { useFocusClaim } from '../common/focus-claim';
 
 /** Keeps focus inside on TV; a plain view elsewhere (react-native-web has no focus guide). */
@@ -72,7 +73,7 @@ export function MenuPanel({
       testID="player-menu"
       style={{
         position: 'absolute',
-        right: native && anchor ? Math.max(0, viewport.width - anchor.left - anchor.width) : 0,
+        right: native && anchor ? Math.max(0, watchWidth(viewport) - anchor.left - anchor.width) : 0,
         bottom: native && anchor ? Math.max(0, viewport.height - anchor.top) : '100%',
         marginBottom: look.size(12),
         left: !wide && !native && look.small ? 0 : undefined,
@@ -119,6 +120,23 @@ export function MenuPanel({
       {panel}
     </View>
   </Modal>;
+}
+
+export function MenuAction({ look, icon, label, disabled, onPress, testID }: {
+  look: PlayerLook;
+  icon: PlayerIconName;
+  label: string;
+  disabled?: boolean;
+  onPress(): void;
+  testID?: string;
+}) {
+  return (
+    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} testID={testID}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44, paddingHorizontal: 12, opacity: disabled ? 0.35 : 1 }}>
+      <PlayerIcon name={icon} size={20} color={look.ink} />
+      <Text style={[look.text(14), { flex: 1 }]}>{label}</Text>
+    </Pressable>
+  );
 }
 
 interface Choice {
