@@ -21,6 +21,11 @@ function replace(source: string, from: string, to: string): string {
   if (!source.includes(from)) throw new Error('Framework changed near ' + from);
   return source.replace(from, () => to);
 }
+// Interpolate the desktop compiler variant into a GLSL string, retaining the authors' original
+// shader text on constrained displays and in the 30 FPS background.
+function desktopShader(source: string, authored: string, desktop: string, condition = 'desktopLoops'): string {
+  return replace(source, authored, '${' + condition + ' ? ' + JSON.stringify(desktop) + ' : ' + JSON.stringify(authored) + '}');
+}
 for (const name of parts) {
   let code = readFileSync(join(scenes, name), 'utf8');
   if (name === '10_audio.js') {
@@ -37,6 +42,9 @@ for (const name of parts) {
     const start = code.indexOf('const HDR =');
     if (start < 0) throw new Error('WebGL framework header changed');
     code = code.slice(start);
+    code = replace(code, 'const LIB = `', "const desktopLoops = !stage.constrained && (stage.sceneId === 'sea' || stage.sceneId === 'aurora');\nconst LIB = `${desktopLoops ? 'uniform ivec2 uNoisePulseCounts;' : ''}");
+    code = desktopShader(code, 'i < 8; i++){ float a = uPulse', 'i < uNoisePulseCounts.y; i++){ float a = uPulse');
+    code = desktopShader(code, 'i < 4; i++){ s += a*noise', 'i < uNoisePulseCounts.x; i++){ s += a*noise', "desktopLoops && stage.sceneId === 'sea'");
     const compiler = code.indexOf('function compile('), post = code.indexOf('const POST =');
     if (compiler < 0 || post <= compiler) throw new Error('WebGL program setup changed');
     code = code.slice(0, compiler) + 'const program = webPrograms(gl);\n' + code.slice(post);
@@ -53,6 +61,23 @@ const SAMPLES = Array.from(colorSamples).find(n => n <= (stage.constrained ? 2 :
     }
   }
   if (name === '25_helpers.js') code = replace(code, 'n = o.iters || 18', 'n = stage.constrained ? 10 : (o.iters || 18)');
+  // ANGLE can unroll and inline the nested noise functions into hundreds of milliseconds of
+  // cold shader compilation. Supply the author's exact counts as uniforms to keep the loops.
+  if (name === '34_sea.js') {
+    code = desktopShader(code, 'const vec3 WV[7]', 'uniform ivec2 uSeaLayers;\nconst vec3 WV[7]');
+    code = desktopShader(code, 'i < 7; i++', 'i < uSeaLayers.x; i++');
+    code = desktopShader(code, 'i < 3; i++', 'i < uSeaLayers.y; i++');
+    code = replace(code, 'F.set(u); setCam(u, c);', 'F.set(u); setCam(u, c); if (desktopLoops) gl.uniform2i(u.uSeaLayers, 7, 3);');
+  }
+  if (name === '53_aurora.js') {
+    code = desktopShader(code, 'uniform float uYaw;', 'uniform float uYaw; uniform ivec3 uAuroraLayers;');
+    code = desktopShader(code, 's < 14; s++', 's < uAuroraLayers.x; s++');
+    code = desktopShader(code, 'i < 4; i++', 'i < uAuroraLayers.y; i++');
+    code = desktopShader(code, 'col = (sky(qm, .5)*.6+sky(qm+vec2(0.,.03), .5)*.25+sky(qm+vec2(0.,.07), .5)*.15);',
+      'const vec3 offsets=vec3(0.,.03,.07), weights=vec3(.6,.25,.15); col=vec3(0.);\n    for (int i=0; i<uAuroraLayers.z; i++) col+=sky(qm+vec2(0.,offsets[i]),.5)*weights[i];');
+    code = replace(code, 'gl.uniform2f(u.uRes, lo.w, lo.h);', 'if (desktopLoops) gl.uniform3i(u.uAuroraLayers, 14, 4, 3); gl.uniform2f(u.uRes, lo.w, lo.h);');
+    code = replace(code, 'gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t);', 'if (desktopLoops) gl.uniform3i(u.uAuroraLayers, 14, 4, 3); gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t);');
+  }
   if (name === '50_silk.js') code = replace(code, 'SILK_W = 2048, SILK_H = 1024', 'SILK_W = stage.constrained ? 512 : 2048, SILK_H = stage.constrained ? 256 : 1024');
   if (name === '60_watercolour.js') code = replace(code, 'WC_W = 960, WC_H = 600', 'WC_W = stage.constrained ? 480 : 960, WC_H = stage.constrained ? 300 : 600');
   if (name === '61_ink.js' || name === '62_incense.js') {
@@ -62,6 +87,7 @@ const SAMPLES = Array.from(colorSamples).find(n => n <= (stage.constrained ? 2 :
   }
   if (code.includes("scene({ id: 'wheat'")) code = replace(code, 'WHEAT_N = 72000', 'WHEAT_N = stage.constrained ? 18000 : 72000');
   if (name === '90_engine.js') {
+    code = replace(code, 'gl.uniform1f(u.uTime, time);', 'if (desktopLoops) gl.uniform2i(u.uNoisePulseCounts, 4, 8);\n      gl.uniform1f(u.uTime, time);');
     code = replace(code, "addEventListener('resize', resize); resize();", 'resize();');
     code = replace(code, "QS.has('perf')", 'stage.measure');
   }

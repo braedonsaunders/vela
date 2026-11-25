@@ -177,7 +177,8 @@ out vec2 uv; void main(){ vec2 q = P[gl_VertexID]; uv = q*.5+.5; gl_Position = v
 const HEAD = `#version 300 es
 precision highp float; precision highp int; precision highp sampler2D;
 `;
-const LIB = `
+const desktopLoops = !stage.constrained && (stage.sceneId === 'sea' || stage.sceneId === 'aurora');
+const LIB = `${desktopLoops ? 'uniform ivec2 uNoisePulseCounts;' : ''}
 uniform float uTime, uBass, uMid, uHigh, uLevel, uBassS, uMidS, uHighS, uLevelS, uKick, uKickL, uSnare;
 uniform float uDyn, uDrop, uAccent, uSlowHead; uniform sampler2D uSlow;
 uniform vec3 uHit, uHitS, uBandE;   // low, mid, high: uHit jumps on an onset (light), uHitS is eased (form), uBandE is the level now
@@ -196,7 +197,7 @@ float hist(float f, float age){ return texture(uHist, vec2(clamp(f,.004,.996), u
 // A band of light (or lift) that leaves on each kick, travelling at 'speed' and 'width' wide, and fades in and
 // out over 'life' seconds (keep life under 3 s). Eight can be out at once, so none ever has to snap back.
 float ring(float x, float speed, float width, float life){ float s = 0.;
-  for (int i = 0; i < 8; i++){ float a = uPulse[i], d = (x-a*speed)/width;
+  for (int i = 0; ${desktopLoops ? "i < uNoisePulseCounts.y; i++){ float a = uPulse" : "i < 8; i++){ float a = uPulse"}[i], d = (x-a*speed)/width;
     s += smoothstep(0.,.14,a)*(1.-smoothstep(life*.45,life,a))*exp(-d*d); }
   return s; }
 float hash(vec3 p){ p = fract(p*.3183099+.1); p *= 17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
@@ -207,7 +208,7 @@ vec3 hash3(vec3 p){ p = vec3(dot(p,vec3(127.1,311.7,74.7)), dot(p,vec3(269.5,183
 float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.-2.*f);
   return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x), mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x), f.y),
              mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x), mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x), f.y), f.z); }
-float fbm(vec3 p){ float a = .5, s = 0.; for (int i = 0; i < 4; i++){ s += a*noise(p); p = p*2.03+vec3(1.7,9.2,3.1); a *= .5; } return s; }
+float fbm(vec3 p){ float a = .5, s = 0.; for (int i = 0; ${desktopLoops && stage.sceneId === 'sea' ? "i < uNoisePulseCounts.x; i++){ s += a*noise" : "i < 4; i++){ s += a*noise"}(p); p = p*2.03+vec3(1.7,9.2,3.1); a *= .5; } return s; }
 // Palettes are cosine ramps a + b·cos(2π(c·t + d)); two are bound so a palette change can cross-fade.
 vec3 palOf(vec3 p[4], float t){ return p[0]+p[1]*cos(TAU*(p[2]*t+p[3])); }
 vec3 pal(float t){ t += uHue; vec3 c = palOf(uPA, t); return uPalMix > 0. ? mix(c, palOf(uPB, t), uPalMix) : c; }
@@ -1115,12 +1116,12 @@ scene({id:'contour',name:'Neon Cartography',from:'Neon',kind:'field',group:'refi
 // The surface is a grid projected from the camera onto the water plane, so it always reaches the horizon and
 // spends its vertices evenly on screen. Seven trochoidal swells move it; six finer wind waves shade it.
 const SEA_FN = `
-const vec3 WV[7] = vec3[7](vec3(.05,61.,0.), vec3(-.32,37.,1.7), vec3(.41,23.,4.1), vec3(-.12,14.3,2.3), vec3(.63,8.9,5.2), vec3(-.55,5.7,.9), vec3(.22,3.6,3.3));
+${desktopLoops ? "uniform ivec2 uSeaLayers;\nconst vec3 WV[7]" : "const vec3 WV[7]"} = vec3[7](vec3(.05,61.,0.), vec3(-.32,37.,1.7), vec3(.41,23.,4.1), vec3(-.12,14.3,2.3), vec3(.63,8.9,5.2), vec3(-.55,5.7,.9), vec3(.22,3.6,3.3));
 // displacement of the point at rest p; nrm takes the surface normal; px is the size of a pixel on the water,
 // so waves too fine to draw are left out of the shading instead of shimmering
 vec3 swell(vec2 p, float S, float px, out vec3 nrm){
   vec3 d = vec3(0.), n = vec3(0.,1.,0.); float warp = noise(vec3(p*.013, uTime*.03))*5.;
-  for (int i = 0; i < 7; i++){
+  for (int i = 0; ${desktopLoops ? "i < uSeaLayers.x; i++" : "i < 7; i++"}){
     float lam = WV[i].y, k = TAU/lam, w = sqrt(9.8*k)*.8; vec2 D = vec2(sin(WV[i].x), -cos(WV[i].x));     // they come toward you
     float grp = .55+.9*noise(vec3(p*(.9/lam)+WV[i].z*7., uTime*.04+WV[i].z));                          // waves travel in groups
     float a = pow(lam, .72)*.021*S*grp, ph = k*dot(D,p)-w*uTime+WV[i].z+warp*(.3+.1*float(i)), c = cos(ph), s = sin(ph);
@@ -1186,7 +1187,7 @@ void main(){
   vec3 nrm; swell(vP, vS, px, nrm);
   // wind ripples: three layers of drifting noise, laid on the moving surface itself so they neither stretch nor repeat
   vec2 wp = vW.xz; float chop = .5+1.3*uHighS, near = 1.-smoothstep(4., 60., dist); vec2 g = vec2(0.); float fm = 0.;
-  for (int i = 0; i < 3; i++){ float fi = float(i), sc2 = .55*pow(2.6, fi), e = .12/sc2, keep = 1.-smoothstep(.15,.45,px*sc2*2.);
+  for (int i = 0; ${desktopLoops ? "i < uSeaLayers.y; i++" : "i < 3; i++"}){ float fi = float(i), sc2 = .55*pow(2.6, fi), e = .12/sc2, keep = 1.-smoothstep(.15,.45,px*sc2*2.);
     vec3 q = vec3(wp*sc2+vec2(fi*7.3, -uTime*(.5+.35*fi)), uTime*(.25+.2*fi)+fi*3.);
     float n0 = noise(q), nx = noise(q+vec3(e*sc2,0.,0.)), nz = noise(q+vec3(0.,e*sc2,0.));
     g += vec2(nx-n0, nz-n0)/e*(.05/sqrt(sc2))*chop*keep; fm += n0*keep/(1.+fi); }
@@ -1219,7 +1220,7 @@ scene({ id: 'sea', name: 'Mercury Tide', from: 'Fable', kind: 'terrain', group: 
     const t = F.time;
     const eye = [Math.sin(t * 0.04) * 0.6, 3.6 + Math.sin(t * 0.06) * 0.12, 0];                 // a steady camera: the sea moves, the view does not
     const c = camera(eye, [Math.sin(t * 0.03) * 0.8, eye[1] - 4.6, 60], 0.95, Math.sin(t * 0.035) * 0.008, 0.5, 9000);
-    const set = u => { F.set(u); setCam(u, c); };
+    const set = u => { F.set(u); setCam(u, c); if (desktopLoops) gl.uniform2i(u.uSeaLayers, 7, 3); };
     beginMS(); quad(this.sky, set);
     gl.enable(gl.DEPTH_TEST); mesh(this.surf, grid(256), set); endMS(out);
   } });
@@ -1812,7 +1813,7 @@ scene({ id: 'tunnel', name: 'Hyperspace', from: 'Claude', kind: 'field', group: 
 // The curtains are marched at half resolution; the stars, the mountains, the pines on the near shore and the
 // lake are drawn at full resolution over that, and the lake mirrors the curtains by reading the same texture.
 const AUR_CAM = `
-uniform float uYaw;
+${desktopLoops ? "uniform float uYaw; uniform ivec3 uAuroraLayers;" : "uniform float uYaw;"}
 vec2 scr(){ return (gl_FragCoord.xy*2.-uRes)/uRes.y; }
 vec3 dirOf(vec2 q){ vec3 rd = normalize(vec3(q.x, q.y+.46, 1.55)); rd.xz = rot(uYaw)*rd.xz; return rd; }`;
 // Three curtains hang across the sky, one behind another: the near one is the bass, the middle one the mids,
@@ -1829,7 +1830,7 @@ void main(){
     vec2 hd = normalize(rd.xz); float tanEl = rd.y/length(rd.xz);
     float jit = fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(.06711056,.00583715))));
     for (int ci = 0; ci < 3; ci++){ float fi = float(ci), z0 = 7.+fi*5.5, r0 = (z0-3.6)/hd.y, dr = 7.2/hd.y/14.;
-      for (int s = 0; s < 14; s++){
+      for (int s = 0; ${desktopLoops ? "s < uAuroraLayers.x; s++" : "s < 14; s++"}){
         float rho = r0+(float(s)+jit)*dr; vec2 p = hd*rho; float alt = rho*tanEl;
         float dz = p.y-curtZ(fi, p.x), dens = exp(-dz*dz/.2);
         if (dens < .004 || alt > 11.) continue;
@@ -1850,7 +1851,7 @@ void main(){
 const FS_AUR_UP = FSH + AUR_CAM + `
 out vec4 o; uniform sampler2D uLo;
 float skyline(float az){ float x = az*2.6+11., h = 0., a = .55;
-  for (int i = 0; i < 4; i++){ h += a*(1.-abs(2.*noise(vec3(x, 3.7, float(i)))-1.)); x *= 2.1; a *= .5; }
+  for (int i = 0; ${desktopLoops ? "i < uAuroraLayers.y; i++" : "i < 4; i++"}){ h += a*(1.-abs(2.*noise(vec3(x, 3.7, float(i)))-1.)); x *= 2.1; a *= .5; }
   return .012+.085*h*h; }
 float pines(float az, float el){                       // the near shore: black conifers either side, the middle left open
   float m = smoothstep(.22,.6,abs(az)), x = az*14., cov = 0.;
@@ -1875,7 +1876,7 @@ void main(){
     float t = .35/(-rd.y); vec2 g = rd.xz*t;
     float rip = (noise(vec3(g*vec2(3.,9.), uTime*.35))-.5)+(noise(vec3(g*vec2(9.,26.)+4., uTime*.6))-.5)*.5;
     vec2 qm = vec2(q.x+rip*.012, -q.y-.92+rip*.04*(.4+uHigh)+.004);
-    col = (sky(qm, .5)*.6+sky(qm+vec2(0.,.03), .5)*.25+sky(qm+vec2(0.,.07), .5)*.15);      // reflections draw out into streaks
+    ${desktopLoops ? "const vec3 offsets=vec3(0.,.03,.07), weights=vec3(.6,.25,.15); col=vec3(0.);\n    for (int i=0; i<uAuroraLayers.z; i++) col+=sky(qm+vec2(0.,offsets[i]),.5)*weights[i];" : "col = (sky(qm, .5)*.6+sky(qm+vec2(0.,.03), .5)*.25+sky(qm+vec2(0.,.07), .5)*.15);"}      // reflections draw out into streaks
     col *= (.5+.5*pow(1.-clamp(-rd.y*3.,0.,1.), 3.))*vec3(.86,.94,1.); col += vec3(.0006,.001,.002);
   }
   col += neon(.05)*.012*exp(-abs(rd.y)*60.)*(.5+uLevelS);                     // mist along the far shore
@@ -1891,8 +1892,8 @@ scene({ id: 'aurora', name: 'Aurora', from: 'Claude', kind: 'field', group: 'ref
   init() { this.p = program(VS, FS_AUR); this.up = program(VS, FS_AUR_UP); },
   draw(F, out) {
     const lo = RTs('auroraLo', 2), yaw = Math.sin(F.time * 0.045) * 0.22;
-    draw(this.p, lo, lo.w, lo.h, u => { F.set(u); gl.uniform2f(u.uRes, lo.w, lo.h); gl.uniform1f(u.uYaw, yaw); });
-    draw(this.up, out, T.sw, T.sh, u => { F.set(u); gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t); gl.uniform1i(u.uLo, 3); });
+    draw(this.p, lo, lo.w, lo.h, u => { F.set(u); if (desktopLoops) gl.uniform3i(u.uAuroraLayers, 14, 4, 3); gl.uniform2f(u.uRes, lo.w, lo.h); gl.uniform1f(u.uYaw, yaw); });
+    draw(this.up, out, T.sw, T.sh, u => { F.set(u); if (desktopLoops) gl.uniform3i(u.uAuroraLayers, 14, 4, 3); gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t); gl.uniform1i(u.uLo, 3); });
   } });
 }
 
@@ -2585,6 +2586,7 @@ function drawScene(S, sl, dt) {
   const pa = PALETTES[palX.from < 0 ? S.pal || 0 : palX.from].v, pb = PALETTES[palX.to < 0 ? S.pal || 0 : palX.to].v;
   const F = { time, dt, travel, A, focus: 10, px: T.sh / 900,
     set(u) {
+      if (desktopLoops) gl.uniform2i(u.uNoisePulseCounts, 4, 8);
       gl.uniform1f(u.uTime, time); gl.uniform1f(u.uBass, A.bass); gl.uniform1f(u.uMid, A.mid); gl.uniform1f(u.uHigh, A.high); gl.uniform1f(u.uLevel, A.level);
       gl.uniform1f(u.uBassS, A.bassS); gl.uniform1f(u.uMidS, A.midS); gl.uniform1f(u.uHighS, A.highS); gl.uniform1f(u.uLevelS, A.levelS);
       gl.uniform1f(u.uKick, A.kick); gl.uniform1f(u.uKickL, A.kickL); gl.uniform1f(u.uSnare, A.snare); gl.uniform1f(u.uDyn, A.dyn); gl.uniform1f(u.uDrop, A.drop); gl.uniform1f(u.uAccent, A.accent); gl.uniform3fv(u.uHit, A.hitFast); gl.uniform3fv(u.uHitS, A.hitSlow); gl.uniform3fv(u.uBandE, A.hitLvl); gl.uniform1f(u.uSlowHead, slowU); gl.uniform1fv(u.uPulse, A.pulse);
