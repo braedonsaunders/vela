@@ -1,5 +1,6 @@
 // Generated from packages/visualizer/scenes by tools/build-web.ts.
 import { frameBudget } from './frame-budget';
+import { webPrograms } from './programs';
 export function createRenderer(canvas, gl, stage) {
 let innerWidth = stage.width, innerHeight = stage.height;
 const renderModes = () => {};
@@ -322,15 +323,7 @@ void main(){
   o = vec4(c*uFade, 1.);
 }`;
 
-function compile(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(s); const m = /0:(\d+)/.exec(log); const ln = m ? +m[1] : 0;
-    throw new Error('shader: ' + log + '\n' + src.split('\n').slice(Math.max(0, ln - 3), ln + 2).join('\n')); } return s; }
-function program(vs, fs) { const p = gl.createProgram(); gl.attachShader(p, compile(gl.VERTEX_SHADER, vs)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(p));
-  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
-  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, info.name); }
-  return { p, u: new Proxy(u, { get: (o, k) => (k in o ? o[k] : null) }) }; }
-
+const program = webPrograms(gl);
 const POST = { dof: program(VS, FS_DOF), mix: program(VS, FS_MIX), copy: program(VS, FS_COPY), trail: program(VS, FS_TRAIL),
   pre: program(VS, FS_PRE), down: program(VS, FS_DOWN), up: program(VS, FS_UP), final: program(VS, FS_FINAL) };
 const vao = gl.createVertexArray(); gl.bindVertexArray(vao);

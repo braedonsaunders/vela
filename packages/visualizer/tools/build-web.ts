@@ -11,6 +11,7 @@ const parts = readdirSync(scenes).filter(name => /^\d\d_.*\.js$/.test(name) && n
 const output = [
   '// Generated from packages/visualizer/scenes by tools/build-web.ts.',
   "import { frameBudget } from './frame-budget';",
+  "import { webPrograms } from './programs';",
   'export function createRenderer(canvas, gl, stage) {',
   'let innerWidth = stage.width, innerHeight = stage.height;',
   'const renderModes = () => {};',
@@ -36,6 +37,9 @@ for (const name of parts) {
     const start = code.indexOf('const HDR =');
     if (start < 0) throw new Error('WebGL framework header changed');
     code = code.slice(start);
+    const compiler = code.indexOf('function compile('), post = code.indexOf('const POST =');
+    if (compiler < 0 || post <= compiler) throw new Error('WebGL program setup changed');
+    code = code.slice(0, compiler) + 'const program = webPrograms(gl);\n' + code.slice(post);
     code = replace(code, 'DPR = Math.min(window.devicePixelRatio || 1, 2);', 'DPR = 1;');
     // Query the selected format, since MAX_SAMPLES alone can exceed its supported sample count.
     code = replace(code, 'const SAMPLES = Math.min(4, gl.getParameter(gl.MAX_SAMPLES));',
