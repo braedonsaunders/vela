@@ -6,7 +6,10 @@
 // page keeps its scroll by its key. The active skin's overrides of the experience apply to both
 // (resolveScreenDocument). The app shows this only where the experience has a shell.
 import { useCallback, useMemo, type MutableRefObject, type ReactNode } from 'react';
+import { View } from 'react-native';
 import type { SkinHost } from '../host';
+import { headerInsetOf } from '../resolve/inherit';
+import { useMediaLook } from '../widgets/media/parts';
 import { builtinDocument, builtinHref, builtinScreenId } from '../resolve/builtin';
 import { ScreenView, type ScreenAppActions, type ScreenDestination, type ScreenStateHandle } from './host';
 import { HOME_PLACE, placeKey, type ExperiencePlace } from './experience-route';
@@ -63,6 +66,14 @@ export function ExperienceView({ experience, libraryId, place: asked, go, host, 
   );
   // The shell draws the page where its document puts the `children` slot.
   const shellHost = useMemo<SkinHost>(() => ({ ...host, children: page }), [host, page]);
+  // The shell starts below the skin's navigation, wherever the skin draws it (overlay or in flow): the
+  // inset is the host's, so every experience's shell gets it; the shell document adds its own space.
+  const m = useMediaLook();
+  const inset = host.doc.document.traits?.headerInset ?? headerInsetOf(host.doc.document.slots?.shell);
   if (!hasExperience(experience)) return <>{missing}</>;
-  return <ScreenView target={shellTarget} href={builtinHref(experience, 'shell')} params={shellParams} host={shellHost} active={active} actions={pageActions} route={false} handle={shell} />;
+  return (
+    <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': m.small ? inset.small : inset.wide })]} testID="experience-shell">
+      <ScreenView target={shellTarget} href={builtinHref(experience, 'shell')} params={shellParams} host={shellHost} active={active} actions={pageActions} route={false} handle={shell} />
+    </View>
+  );
 }

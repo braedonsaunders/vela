@@ -1,11 +1,108 @@
 {
-  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
-  "screen": "listen", "page": "duplicates", "version": "1",
-  "title": "{s:music.duplicates}", "presentation": "section",
-  "params": { "library": { "type": "string" } },
-  "sources": {},
-  "tree": {
-    "type": "sections", "style": { "padding-bottom": "32px" },
-    "children": [{ "type": "duplicates", "props": { "library": "{param.library}", "page": "true" } }]
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "duplicates",
+ "version": "1",
+ "title": "{s:music.duplicates.title}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
   }
+ },
+ "sources": {
+  "duplicates": {
+   "from": "vela.duplicates",
+   "libraryId": "{param.library}"
+  }
+ },
+ "tree": {
+  "type": "sections",
+  "testId": "music-duplicates-page",
+  "children": [
+   {
+    "type": "box",
+    "children": [
+     {
+      "type": "wash",
+      "props": {
+       "height": "420",
+       "accent": "{src.duplicates.groups.0.items.0.accent}",
+       "image": "{src.duplicates.groups.0.items.0.poster}"
+      }
+     },
+     {
+      "type": "box",
+      "style": {
+       "padding-left": "28px",
+       "padding-right": "28px",
+       "padding-bottom": "48px"
+      },
+      "small": {
+       "padding-left": "16px",
+       "padding-right": "16px"
+      },
+      "children": [
+       {
+        "type": "collectionHeader",
+        "props": {
+         "eyebrow": "{s:music.duplicates.eyebrow}",
+         "title": "{s:music.duplicates.title}"
+        },
+        "partTemplates": {
+         "collectionHeader.cover": {
+          "type": "cover",
+          "props": {
+           "kind": "duplicates"
+          }
+         },
+         "collectionHeader.byline": {
+          "type": "box",
+          "style": {
+           "gap": "8px"
+          },
+          "children": [
+           {
+            "type": "text",
+            "text": "{s:music.duplicates.subtitle}",
+            "style": {
+             "font-size": "15px",
+             "color": "$ui.inkSecondary",
+             "max-width": "680px"
+            }
+           },
+           {
+            "type": "text",
+            "when": [
+             {
+              "test": "src.duplicates.groups.length"
+             }
+            ],
+            "text": "{src.duplicates.groups.length|plural:music.duplicates.groupCount}",
+            "style": {
+             "font-size": "14px",
+             "font-weight": "700",
+             "color": "$ui.ink"
+            }
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "duplicates",
+        "props": {
+         "libraryId": "{param.library}"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
 }
