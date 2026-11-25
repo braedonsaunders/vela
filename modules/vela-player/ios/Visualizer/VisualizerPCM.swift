@@ -38,12 +38,12 @@ final class VisualizerPCMFeed {
 
     /// The sound callback never waits on a reader or changes the supplied audio.
     func append(_ buffers: UnsafeMutableAudioBufferListPointer, frames: Int, channels: Int, interleaved: Bool,
-                rate: Double, start: Double, id: Int, split: Int, nextID: Int) {
+                rate: Double, start: Double, id: Int, split: Int, nextID: Int, streamOffset: Int? = nil) {
         guard lock.try() else { return }
         let buffer = subscription
         lock.unlock()
         buffer?.append(buffers, frames: frames, channels: channels, interleaved: interleaved,
-                       rate: rate, start: start, id: id, split: split, nextID: nextID)
+                       rate: rate, start: start, id: id, split: split, nextID: nextID, streamOffset: streamOffset)
     }
 }
 
@@ -66,6 +66,7 @@ final class VisualizerPCMBuffer {
     private var samples = [Float](repeating: 0, count: mask + 1)
     private var blocks = [Block](repeating: Block(), count: 512)
     private var written = 0, blockCount = 0
+    private var lastStreamEnd: Int?
     private var boundary: (old: Int, new: Int, offset: Int, shift: Double)?
 
 
@@ -76,10 +77,15 @@ final class VisualizerPCMBuffer {
     }
 
     func append(_ buffers: UnsafeMutableAudioBufferListPointer, frames: Int, channels: Int, interleaved: Bool,
-                rate: Double, start: Double, id: Int, split: Int, nextID: Int) {
+                rate: Double, start: Double, id: Int, split: Int, nextID: Int, streamOffset: Int? = nil) {
         guard frames > 0, frames <= Self.mask, channels > 0, rate.isFinite, rate > 0, start.isFinite,
               lock.try() else { return }
         defer { lock.unlock() }
+        // A busy reader can drop a tap block. Preserve its duration without filling
+        // the gap from stale samples, including AVQueuePlayer's relabelled tail.
+        let skipped = max(0, (streamOffset ?? 0) - (lastStreamEnd ?? streamOffset ?? 0))
+        lastStreamEnd = streamOffset.map { $0 + frames }
+        written += skipped
         let mask = Self.mask
         for i in 0..<frames { samples[(written + i) & mask] = 0 }
         let weight = 1 / Float(channels)
@@ -96,7 +102,7 @@ final class VisualizerPCMBuffer {
         if start < 0, blockCount > 0 {
             let previous = blocks[(blockCount - 1) % blocks.count]
             // AVQueuePlayer relabels the old item's tail relative to the next item's start.
-            if previous.id == id { initial = previous.seconds + Double(previous.length) / previous.rate }
+            if previous.id == id { initial = previous.seconds + Double(previous.length + skipped) / previous.rate }
         }
         if split != 0 { record(id, written, split < 0 ? frames : split, initial, rate) }
         if split >= 0 {

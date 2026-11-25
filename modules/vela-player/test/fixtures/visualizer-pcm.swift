@@ -27,13 +27,13 @@ import Foundation
         let rate = 48_000.0
         let feed = VisualizerPCMFeed(), first = feed.subscribe()
         precondition(first === feed.subscribe())
-        func sendStereo(_ data: inout [Float], _ id: Int, _ start: Double, split: Int = -1, next: Int = 0) {
+        func sendStereo(_ data: inout [Float], _ id: Int, _ start: Double, split: Int = -1, next: Int = 0, streamOffset: Int? = nil) {
             data.withUnsafeMutableBytes { source in
                 var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2,
                     mDataByteSize: UInt32(source.count), mData: source.baseAddress))
                 withUnsafeMutablePointer(to: &list) { ptr in
                     feed.append(UnsafeMutableAudioBufferListPointer(ptr), frames: source.count / 8, channels: 2,
-                                interleaved: true, rate: rate, start: start, id: id, split: split, nextID: next)
+                                interleaved: true, rate: rate, start: start, id: id, split: split, nextID: next, streamOffset: streamOffset)
                 }
             }
         }
@@ -67,6 +67,11 @@ import Foundation
         sendStereo(&next, 20, -2 / rate, split: 2, next: 21)
         let across = read(21, 2 / rate, 4096)
         precondition(across.prefix(4092).allSatisfy { $0 == 0.25 } && Array(across.suffix(4)) == [9,11,13,15])
+        // If a busy reader dropped a callback, those samples stay silent at their own
+        // locations even when the next callback is relabelled against the incoming item.
+        sendStereo(&pairs, 30, 0, streamOffset: 100)
+        sendStereo(&next, 30, -2 / rate, split: 2, next: 31, streamOffset: 106)
+        precondition(read(31, 2 / rate, 8) == [5,7,0,0,9,11,13,15])
         feed.reset()
         precondition(feed.subscribe() !== first)
         precondition(read(12, 2 + 4 / rate, 4) == [0,0,0,0]) // Backwards seek invalidates prior history.

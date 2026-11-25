@@ -138,6 +138,7 @@ private struct SoundChain {
 /// negative times and the next item's first sample is time 0. The next item's gain applies from there.
 final class SoundTapContext: @unchecked Sendable {
     let visualizerFeed = VisualizerPCMFeed()
+    private var visualizerFrames = 0 // Render callback only.
     enum Fade: Equatable {
         case none
         /// cos(π/2·x) from `start` (item seconds) over `seconds`, then silence.
@@ -346,6 +347,8 @@ final class SoundTapContext: @unchecked Sendable {
 
     fileprivate func process(_ list: UnsafeMutablePointer<AudioBufferList>, frames: Int, range: CMTimeRange, flags: MTAudioProcessingTapFlags) {
         guard frames > 0 else { return }
+        let streamOffset = visualizerFrames
+        visualizerFrames &+= frames
         let buffers = UnsafeMutableAudioBufferListPointer(list)
         let valid = range.start.isNumeric
         let startTime = valid ? range.start.seconds : nextTime
@@ -417,7 +420,7 @@ final class SoundTapContext: @unchecked Sendable {
                 oldID != playing.id && abs(startTime) <= 1 / sampleRate
             visualizerFeed.append(buffers, frames: frames, channels: channels, interleaved: interleaved,
                                   rate: sampleRate, start: startTime, id: atBlockBoundary ? oldID : item,
-                                  split: atBlockBoundary ? 0 : split, nextID: playing.id)
+                                  split: atBlockBoundary ? 0 : split, nextID: playing.id, streamOffset: streamOffset)
         }
         lastStart = label
         #if DEBUG
