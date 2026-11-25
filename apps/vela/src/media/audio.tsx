@@ -28,6 +28,12 @@ import { useMediaPageActions } from './actions';
 import { musicTV, onOpenNowPlaying, wideMusic, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
 import { useMediaPlayerActions } from './player-actions';
 import { useReaderActions } from './reader-actions';
+import { config } from '../data/config';
+import { useAppScreenActions } from '../screen-actions';
+import { ScreenView } from '@vela/skin/src/screen/host';
+import { hasExperience } from '@vela/skin/src/screen/experience';
+import { builtinHref } from '@vela/skin/src/resolve/builtin';
+import { ListenDockContext, type ListenDock } from '@vela/skin/src/blocks/listen/dock';
 
 const fill = StyleSheet.absoluteFill;
 const dockStrip = { position: 'absolute', left: 0, right: 0, bottom: 0 } as const;
@@ -97,6 +103,9 @@ function followMediaSession(store: Store): () => void {
     syncMediaSession(audio, controls);
   });
 }
+
+const NOW_PLAYING_TARGET = { kind: 'screen' as const, id: 'vela.listen', page: 'nowPlaying' };
+const VISUALIZER_TARGET = { kind: 'screen' as const, id: 'vela.listen', page: 'visualizer' };
 
 export function AudioDock() {
   const vela = useVela();
@@ -200,6 +209,16 @@ export function AudioDock() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [fullscreen, leaveVisualizer]);
+  // Until the hard cut, builds that ask for the listen documents draw Now Playing and the
+  // full-screen visualizer from them (vela:listen/nowPlaying and vela:listen/visualizer); the dock
+  // still opens, closes and leads them.
+  const documents = config.listen === 'documents' && hasExperience('listen');
+  const dock = useMemo<ListenDock>(() => ({ close, openVisualizer: readyToOpen ? openVisualizer : undefined, visualizer: visualizerSwitch, hidden: fullscreen }),
+    [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen]);
+  const noBack = useCallback(() => undefined, []);
+  const noParams = useCallback(() => undefined, []);
+  const screenActions = useAppScreenActions({ host: host ?? null, back: noBack, setParams: noParams });
+  const nowPlayingParams = useMemo<Record<string, string>>(() => (panel ? { panel } : {} as Record<string, string>), [panel]);
   if (!host) return null;
   const bottom = Math.max(14, insets.bottom + 10);
   const still = host.env.still;
@@ -213,8 +232,16 @@ export function AudioDock() {
     <Presence shown={playing && open} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
       <TVFocusTrap open={playing && open}>
         <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
-          {plan.stage ? <Visualizer mode={plan.stage} /> : null}
-          <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={readyToOpen ? openVisualizer : undefined} visualizer={visualizerSwitch} />
+          {documents ? (
+            <ListenDockContext.Provider value={dock}>
+              <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={host} active={playing && open}
+                actions={screenActions} route={false} quiet />
+              {fullscreen ? <View style={fill}><ScreenView target={VISUALIZER_TARGET} href={builtinHref('listen', 'visualizer')} host={host} active actions={screenActions} route={false} quiet /></View> : null}
+            </ListenDockContext.Provider>
+          ) : <>
+            {plan.stage ? <Visualizer mode={plan.stage} /> : null}
+            <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={readyToOpen ? openVisualizer : undefined} visualizer={visualizerSwitch} />
+          </>}
           {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
             <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
           </View> : null}

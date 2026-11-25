@@ -202,6 +202,7 @@ export const RICH_BLOCKS = {
       poster: { type: 'template', doc: 'mosaic: the playlist\'s own artwork, drawn instead when present.' },
       size: { type: 'number', default: '0', doc: 'px; 0 is the page cover\'s size for the window.' },
       lift: { type: 'number', default: '2', doc: 'Its shadow.' },
+      byline: flag('Letter the byline on the drawn cover too (spoken word\'s pages).', 'false'),
     },
     parts: [], templates: [], tv: 'No focus.',
   },
@@ -302,6 +303,7 @@ export const RICH_BLOCKS = {
   recentSearches: { doc: 'This library\'s recent searches (or the intro) while the field is empty; nothing once something is typed.', props: {}, parts: [], templates: [], tv: 'Rows are focus targets.' },
   searchResults: { doc: 'The results for what is typed, grouped by what the library holds (top result, songs, albums, artists, people, playlists), with loading, failed and empty states; nothing while the field is empty.', props: {}, parts: [], templates: [], tv: 'As the page.' },
   importSubtitle: { doc: 'The import page\'s line under its title: the import\'s description, else what can be imported from (the advertised sources).', props: {}, parts: [], templates: [], tv: 'No focus.' },
+  spokenCollectionShelf: { doc: 'A collection whose items do not all play: them as a shelf of tiles (else nothing).', props: { item: { type: 'value', required: true, doc: 'The collection.' } }, parts: [], templates: [], tv: 'One focus row.' },
 } as const satisfies Record<string, RichBlockSpec>;
 
 export type RichBlockName = keyof typeof RICH_BLOCKS;

@@ -1,13 +1,37 @@
 {
-  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
-  "screen": "listen", "page": "visualizer", "version": "1",
-  "title": "{s:visualizer.title}", "presentation": "page",
-  "sources": { "visualizer": { "from": "vela.visualizer" } },
-  "tree": {
-    "type": "box", "style": { "flex": "1", "background-color": "$ui.page" },
-    "children": [
-      { "type": "visualizer", "mode": "fullscreen", "sceneId": "{src.visualizer.scene}",
-        "fallback": { "type": "box", "style": { "flex": "1" } } }
-    ]
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "visualizer",
+ "version": "1",
+ "title": "{s:visualizer.title}",
+ "presentation": "page",
+ "sources": {
+  "visualizer": {
+   "from": "vela.visualizer"
   }
+ },
+ "tree": {
+  "type": "box",
+  "style": {
+   "flex": "1",
+   "background-color": "$ui.page"
+  },
+  "children": [
+   {
+    "type": "visualizer",
+    "mode": "fullscreen",
+    "sceneId": "{src.visualizer.scene}",
+    "fallback": {
+     "type": "box",
+     "style": {
+      "flex": "1"
+     }
+    }
+   }
+  ]
+ }
 }

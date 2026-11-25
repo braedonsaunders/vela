@@ -266,7 +266,8 @@
       }
      ]
     }
-   ]
+   ],
+   "testId": "music-main"
   },
   "artist": {
    "type": "sections",
@@ -504,7 +505,8 @@
       }
      ]
     }
-   ]
+   ],
+   "testId": "music-main"
   }
  },
  "tree": {
