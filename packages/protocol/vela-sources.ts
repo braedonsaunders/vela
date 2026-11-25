@@ -58,7 +58,7 @@ export const VELA_SOURCES = {
   'vela.library': {
     args: {
       id: id('The library.'),
-      sort: id('A sort the library offers (name, added, year, …).', false),
+      sort: id('A sort the library offers (title, added, year, …).', false),
       direction: { type: 'enum', enum: ['asc', 'desc'] },
       kind: id('A kind filter.', false),
       genre: id('A genre filter.', false),
@@ -66,6 +66,8 @@ export const VELA_SOURCES = {
       favorite: { type: 'bool' },
       year: { type: 'int' },
       q: id('Search within the library.', false),
+      tab: id('One of the library\'s tabs (its album view, say).', false),
+      limit: { type: 'int', doc: 'Titles per page (1 to 100; the server\'s default when absent).' },
     },
     doc: 'A library listing, paged: ListValue.',
   },

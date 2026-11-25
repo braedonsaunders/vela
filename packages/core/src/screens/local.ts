@@ -242,6 +242,8 @@ export class LocalSources {
 
   private async features(): Promise<{ adapter: object; features: V.ServerCapabilities['features'] | undefined }> {
     const { adapter } = await this.server.ready();
+    // The server's features arrive with the bootstrap (Home's read): a page opened first waits for it.
+    if (!this.server.features()) await this.stores.home.ensure().catch(() => undefined);
     return { adapter, features: this.server.features() };
   }
 
@@ -318,9 +320,21 @@ export class LocalSources {
       }
       case 'vela.favorites': {
         await this.features();
-        if (!stores.music.likedAvailable) return unsupported();
         const role = args.role!;
-        await stores.music.liked(role, extraPages > 0 && !fresh, fresh);
+        const cls = args.class;
+        if (!stores.music.likedAvailable) {
+          // Servers before role lists: the viewer's marked Favorites playlist, by role.
+          if (!stores.playlists.available) return unsupported();
+          if (stores.getState().playlists.list.load !== 'ready') await stores.playlists.load();
+          const favorites = stores.getState().playlists.list.value?.find(item => item.name === 'Favorites');
+          if (!favorites) return cardList([], false, 0);
+          await stores.playlists.open(favorites.id, false, fresh);
+          const loaded = stores.getState().collections[favorites.id];
+          if (!loaded?.value) return { error: loadableError(loaded) };
+          const items = loaded.value.items.filter(card => card.media?.role === role && (!cls || card.media?.class === cls));
+          return cardList(items, false, items.length);
+        }
+        await stores.music.liked(role, false, fresh);
         // A page asked for more than the store holds: read on.
         let loaded = stores.getState().music.liked[role];
         for (let pages = Math.ceil((loaded?.value?.items.length ?? 0) / 100); loaded?.value?.more && pages < 1 + extraPages; pages++) {
@@ -328,7 +342,6 @@ export class LocalSources {
           loaded = stores.getState().music.liked[role];
         }
         if (!loaded?.value) return { error: loadableError(loaded) };
-        const cls = args.class;
         const items = cls ? loaded.value.items.filter(card => card.media?.class === cls) : loaded.value.items;
         return cardList(items, loaded.value.more, cls ? undefined : loaded.value.total);
       }
@@ -659,6 +672,8 @@ export function libraryQuery(args: Record<string, string>): LibraryQuery {
     ...(favorite === true ? { favorite } : {}),
     ...(year ? { year } : {}),
     ...(args.q ? { query: args.q } : {}),
+    ...(args.tab ? { tab: args.tab } : {}),
+    ...(intArg(args.limit) ? { limit: Math.min(100, Math.max(1, intArg(args.limit)!)) } : {}),
   };
 }
 
