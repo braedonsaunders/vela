@@ -46,6 +46,17 @@ function count(n: unknown, key: 'childCount' | 'index' | 'disc' = 'childCount') 
 
 /** Plex names DTS audio `dca` (DTS-HD MA `dca-ma`); the protocol's FFmpeg-style codec token for it is `dts`. */
 export const decoderAudioCodec = (codec: string) => codec === 'dca' || codec === 'dca-ma' ? 'dts' : codec;
+/**
+ * The audio a file plays: the track asked for, else the one Plex selected, else the file's default,
+ * else its first. Its Plex stream id, and its decoder codec: the file's summary `audioCodec` (one
+ * track's) stands in when that track states no codec or there is no audio stream; undefined when neither does.
+ */
+export function playingAudio(streams: Node[], summary: unknown, requestedId?: string): { id?: string; codec?: string } {
+  const audio = streams.filter(s => Number(s.streamType) === 2);
+  const track = (requestedId ? audio.find(s => String(s.id) === requestedId) : undefined) ?? audio.find(s => s.selected) ?? audio.find(s => s.default) ?? audio[0];
+  const codec = track?.codec || summary;
+  return { ...(track?.id != null ? { id: String(track.id) } : {}), ...(codec ? { codec: decoderAudioCodec(String(codec)) } : {}) };
+}
 
 /** A file's id among its title's media, as a start's `versionId` (or `mediaSourceId`) names it. */
 export const mediaId = (media: Node, index: number) => String(media.id ?? index);
