@@ -139,8 +139,12 @@ function BylineBlock({ props, read }: { props: Props; read: RecordReader }) {
 }
 
 function MusicShelfBlock({ props, read }: { props: Props; read: RecordReader }) {
-  const raw = cardsOf(props.value('items'), read);
-  const items = props.bool('dedupeAlbums') ? dedupeAlbums(raw) : raw;
+  const exclude = props.text('exclude');
+  const role = props.text('role');
+  const limit = props.num('limit', 0, 500);
+  const raw = cardsOf(props.value('items'), read).filter(card => card.id !== exclude && (!role || card.media?.role === role));
+  const deduped = props.bool('dedupeAlbums') ? dedupeAlbums(raw) : raw;
+  const items = limit ? deduped.slice(0, limit) : deduped;
   const size = props.num('tileSize', 80, 400) || 176;
   const subtitle = props.enum('subtitle', ['none', 'year', 'byline', 'release', 'playlist'] as const);
   if (!items.length) return null;

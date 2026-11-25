@@ -3612,10 +3612,23 @@
               "doc": "A line beside the heading.",
               "type": "template"
             },
+            "exclude": {
+              "doc": "A title id left out (an album's More by leaves the album out).",
+              "type": "template"
+            },
             "items": {
               "doc": "The titles: a list source or a list of item: records.",
               "required": true,
               "type": "value"
+            },
+            "limit": {
+              "default": "0",
+              "doc": "At most this many tiles; 0 is all.",
+              "type": "number"
+            },
+            "role": {
+              "doc": "Keep only titles of this role (artist, album).",
+              "type": "template"
             },
             "subtitle": {
               "default": "none",
@@ -4028,6 +4041,11 @@
               "default": "true",
               "doc": "Draw the column header (never on a phone).",
               "type": "boolean"
+            },
+            "limit": {
+              "default": "0",
+              "doc": "At most this many rows (Popular's 5, or 10 after See more); 0 is all.",
+              "type": "number"
             },
             "playlist": {
               "doc": "The playlist id when the tracks are its entries.",
