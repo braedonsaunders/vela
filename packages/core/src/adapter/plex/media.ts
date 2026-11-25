@@ -3,6 +3,7 @@
 // Pure functions over Plex's own metadata shapes.
 import type * as V from '../../wire';
 import { photoFacts } from '../jellyfin/media';
+import { skipMarkers } from '../../protocol/markers';
 
 type Node = Record<string, any>;
 
@@ -125,4 +126,38 @@ export function decidedQuality(decision: Node): V.QualityTarget | undefined {
   const video = String(media.videoCodec ?? '').toLowerCase();
   return { width, height, bitrate: bitrate > 0 ? bitrate * 1000 : 0,
     ...(video === 'h264' || video === 'hevc' ? { codec: video } : video ? { videoCodec: video } : {}) };
+}
+
+/** Sidecar subtitle codecs Plex serves as text, converted to WebVTT on request (`format=vtt`). */
+const TEXT_SIDECARS = ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'];
+export const isTextSidecar = (codec: unknown) => TEXT_SIDECARS.includes(String(codec ?? '').toLowerCase());
+
+/**
+ * How a text sidecar (a stream with a `key`, at `url`: its credential-free address) reaches the
+ * player. ASS and SSA come as the file itself (`{key}.ass`, in UTF-8) when the player names the
+ * codec among its subtitle formats, so its styles and positions survive; anything else, and ASS
+ * for a player that does not draw it, is converted to WebVTT by the server.
+ */
+export function plexSidecar(url: URL, codec: unknown, subtitleFormats: readonly string[]): { url: string; format: 'ass' | 'webvtt' } {
+  const u = new URL(url.href);
+  const name = String(codec ?? '').toLowerCase();
+  if ((name === 'ass' || name === 'ssa') && subtitleFormats.includes(name)) {
+    if (!/\.[a-z0-9]+$/i.test(u.pathname)) u.pathname += '.ass';
+    u.searchParams.set('encoding', 'utf-8');
+    return { url: u.href, format: 'ass' };
+  }
+  u.searchParams.set('format', 'vtt');
+  return { url: u.href, format: 'webvtt' };
+}
+
+/**
+ * A title's intro and credits markers (`includeMarkers=1`: `Marker` ranges in milliseconds) as the
+ * plan carries them; Plex flags the tail credits `final`. Undefined when it has none.
+ */
+export function plexMarkers(n: Node): V.SkipMarker[] | undefined {
+  const flag = (value: unknown) => value === true || value === 1 || value === '1' || value === 'true';
+  const ranges = (Array.isArray(n.Marker) ? n.Marker : []).flatMap((m: Node): V.SkipMarker[] => m.type === 'intro' || m.type === 'credits'
+    ? [{ kind: m.type, startSeconds: Number(m.startTimeOffset) / 1000, endSeconds: Number(m.endTimeOffset) / 1000, ...(flag(m.final) ? { final: true } : {}) }]
+    : []);
+  return skipMarkers(ranges, Number(n.duration) > 0 ? Number(n.duration) / 1000 : undefined);
 }

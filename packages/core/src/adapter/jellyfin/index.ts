@@ -7,7 +7,7 @@ import type { ClientDeclaration, LibraryRecommendations, LiveTv, PasswordSignIn,
 import { VelaError } from '../errors';
 import { seriesOrder } from '../series';
 import type { Item, Result, User, Auth, Info, MediaSource } from './types';
-import { audioMime, DIRECT_AUDIO, foldAudiobooks, isAudioItem, readingFormat, readingMime, shelfOf, titleProjection, type MediaHint, type Shelf } from './media';
+import { audioMime, DIRECT_AUDIO, foldAudiobooks, isAudioItem, jellyfinMarkers, readingFormat, readingMime, shelfOf, titleProjection, type MediaHint, type MediaSegment, type Shelf } from './media';
 import { jellyfinTrickplay } from '../../protocol/trickplay';
 /** The wire offer, without the media source it was read for. */
 const offerOf = ({ sourceId: _source, ...offer }: V.TrickplayMetadata & { sourceId: string }): V.TrickplayMetadata => offer;
@@ -869,6 +869,9 @@ export class JellyfinAdapter
         const id = r.titleId ?? r.extraId ?? r.channelId!;
         const item = await this.request<Item>('GET', `${await this.userPath()}/Items/${e(id)}`);
         const audio = isAudioItem(item) && !r.channelId;
+        // Intro and outro segments (Jellyfin 10.10+), read beside the playback answer; none from an older server.
+        const segments = audio || r.channelId || r.extraId ? Promise.resolve(undefined)
+            : this.request<{ Items?: MediaSegment[] }>('GET', `MediaSegments/${e(id)}?includeSegmentTypes=Intro&includeSegmentTypes=Outro`).then(answer => answer.Items, () => undefined);
         const position = r.positionSeconds ?? seconds(item.UserData?.PlaybackPositionTicks) ?? 0;
         const info = await this.request<{
             PlaySessionId?: string;
@@ -947,8 +950,9 @@ export class JellyfinAdapter
             };
         });
         const trickplay = r.channelId ? null : jellyfinTrickplay(item.Trickplay, source.Id);
+        const markers = jellyfinMarkers(await segments, seconds(source.RunTimeTicks ?? item.RunTimeTicks));
         const plan: V.PlaybackPlan = {
-            sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0, ...(audio ? { media: 'audio' as const } : {}), ...(trickplay ? { trickplay: offerOf(trickplay) } : {}), ...(r.channelId ? {
+            sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0, ...(audio ? { media: 'audio' as const } : {}), ...(trickplay ? { trickplay: offerOf(trickplay) } : {}), ...(markers ? { markers } : {}), ...(r.channelId ? {
                 channelId: id
             } : r.extraId ? {
                 extraId: id

@@ -348,6 +348,9 @@ function Controls({
       ) : null}
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
+      {/* An episode's next one, at any time, and after it ends (where it takes TV focus). */}
+      {timeline && state.nextEpisode ? <ChromeButton look={look} icon="next" label={msg('player.nextEpisodeNamed', { name: state.nextEpisode.label })}
+        preferred={Platform.isTV && visible && view.ended} testID="player-next-episode" onPress={state.nextEpisode.play} /> : null}
       {/* On a channel: the programme on air from its start (its start is in the archive); in Start over, back to its beginning. */}
       {!timeline && live.archive === 'startOver' && live.window ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(live.window!.start)} /> : null}

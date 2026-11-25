@@ -13,7 +13,7 @@ test('a seamless recording measures no gap at any join, wherever it starts', () 
   const measured = measureJoins(recording, reference);
   expect(measured.map(join => Math.round(join.gapSamples) + 0)).toEqual([0, 0, 0]);
   expect(measured.every(join => join.silenceMs < 0.5)).toBe(true);
-});
+}, 60_000); // Synthesises and measures audio; slow on a loaded machine.
 
 test('inserted silence and lost samples are measured to the sample', () => {
   const pieces = [reference.subarray(0, joins[0]), reference.subarray(joins[0], joins[1]), new Float32Array(37),
@@ -26,4 +26,4 @@ test('inserted silence and lost samples are measured to the sample', () => {
   expect(measured[1]!.silenceMs).toBeGreaterThan(0.8);
   // A cut mid-signal is a click: far above the (here perfect) signal match around it.
   expect(measured[2]!.peakResidualDb).toBeGreaterThan(measured[2]!.baselineResidualDb + 40);
-});
+}, 60_000); // Synthesises and measures audio; slow on a loaded machine.

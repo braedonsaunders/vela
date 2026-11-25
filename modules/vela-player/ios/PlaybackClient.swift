@@ -198,7 +198,9 @@ final class PlaybackClient {
             Task { @MainActor in await engine.seekToLiveEdge(offsetSeconds: offset) }
         case "sub-add":
             guard args.count > 1, let url = URL(string: args[1]), let engine else { return }
-            let track = engine.addExternalSubtitleTrack(ExternalSubtitleTrack(url: url))
+            // The plan's format, for a URL that does not name it (an ASS sidecar draws through libass).
+            let hint = args.count > 3 && !args[3].isEmpty ? args[3] : nil
+            let track = engine.addExternalSubtitleTrack(ExternalSubtitleTrack(url: url, formatHint: hint))
             engine.selectSubtitleTrack(index: track.id)
         default: break
         }

@@ -278,7 +278,9 @@ export interface Interaction { receiptToken: string; kind: 'visible' | 'selected
   /** Visible means actually in the visible viewport; never merely prefetched. */
   visibleMilliseconds?: number; sessionId?: ID }
 export interface InteractionsRequest extends Mutation { interactions: Interaction[] }
-export type SubtitleDelivery = { kind: 'external'; format: 'webvtt' | 'webvtt-window'; url: string } |
+/** External `ass`: the authored ASS/SSA file itself (styles, positions, effects), offered only to a
+ * client whose `subtitleFormats` names the track's codec; otherwise the same track is WebVTT. */
+export type SubtitleDelivery = { kind: 'external'; format: 'webvtt' | 'webvtt-window' | 'ass'; url: string } |
   { kind: 'embedded' } | { kind: 'burn-in' };
 export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
   channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string;
@@ -356,6 +358,9 @@ export interface TrickplayMetadata {
   /** Monotonic within the plan's sourceGeneration; changes when published sheets change. */
   revision: number;
 }
+/** A stretch of a title the viewer may skip, on the plan's timeline: the opening titles, or credits.
+ * `final` (credits only): the last credits, running to the end of the title. */
+export interface SkipMarker { kind: 'intro' | 'credits'; startSeconds: number; endSeconds: number; final?: boolean }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; libraryId?: ID; liveItemId?: ID; title?: string; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   /** Audio-only plans say so; omitted: 'video'. */ media?: 'video' | 'audio';
@@ -364,6 +369,8 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
   /** Also carried by SessionSnapshot.plan and full plan events. */
   trickplay?: TrickplayMetadata;
+  /** Intro and credits ranges, sorted by start; never empty (omitted when unknown). */
+  markers?: SkipMarker[];
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };

@@ -9,7 +9,7 @@ import { msg, type PlaybackTarget } from '@vela/core';
 import { pictureInPicture, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
 import { useLiveContext, useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
-import { backFromNavigation, useBackHeld, usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
+import { backFromNavigation, episodeLabel, useBackHeld, useNextEpisode, usePlaybackSession, WatchSurface, type NextEpisode } from '@vela/skin/src/widgets/player';
 import { startPosition } from '../../src/play-action';
 import { useVela } from '../../src/vela';
 
@@ -71,6 +71,14 @@ export default function Watch() {
 
   // Media authorization belongs to the signed-in session (src/media-access.ts), not to a watch.
 
+  // An episode's next one: the chrome offers it (and on the final credits, in place of Skip
+  // credits). Starting it keeps this route, so the session in hand stops before the next begins.
+  const next = useNextEpisode(target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
+  const nextEpisode = useMemo<NextEpisode | null>(() => next ? {
+    label: episodeLabel(next),
+    play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined }),
+  } : null, [next]);
+
   const { stop } = session;
   const close = useCallback(() => {
     stop();
@@ -92,7 +100,7 @@ export default function Watch() {
   const metadata = { title, ...(poster ? { artworkUrl: poster } : {}) };
   if (!skin) return <View style={styles.stage} />;
   return (
-    <WatchSurface host={skin} state={{ ...session.chrome, title, close, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
+    <WatchSurface host={skin} state={{ ...session.chrome, title, close, nextEpisode, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
       {session.view.plan ? (
         <View pointerEvents={Platform.OS === 'android' ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
           <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />

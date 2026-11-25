@@ -3,6 +3,7 @@
 // formats Vela plays and reads directly. Pure functions over the servers' own item shapes.
 import type * as V from '../../wire';
 import type { Item } from './types';
+import { skipMarkers } from '../../protocol/markers';
 
 /** What a library (a user view) holds, by its CollectionType. */
 export type Shelf = 'movies' | 'shows' | 'live' | 'music' | 'books' | 'audiobooks' | 'photos' | 'musicvideos' | 'playlists' | 'boxsets' | 'mixed';
@@ -137,4 +138,20 @@ export function foldAudiobooks(items: Item[], emby: boolean): ({ item: Item } | 
     else if (!placed.has(k)) { placed.add(k); out.push({ group: k, parts }); }
   }
   return out;
+}
+
+/** One of Jellyfin's media segments (`/MediaSegments/{itemId}`, Jellyfin 10.10+), times in ticks. */
+export interface MediaSegment { Type?: string; StartTicks?: number; EndTicks?: number }
+
+/**
+ * An item's intro and outro segments as the plan's skip markers: Intro is the intro, Outro the
+ * credits (the last one, ending at the end of the title, is the tail credits). Recaps, previews
+ * and commercials are not offered. Undefined when there are none.
+ */
+export function jellyfinMarkers(segments: readonly MediaSegment[] | undefined, durationSeconds: number | undefined): V.SkipMarker[] | undefined {
+  const ranges = (segments ?? []).flatMap((s): V.SkipMarker[] => {
+    const kind = s.Type === 'Intro' ? 'intro' : s.Type === 'Outro' ? 'credits' : undefined;
+    return kind && typeof s.StartTicks === 'number' && typeof s.EndTicks === 'number' ? [{ kind, startSeconds: s.StartTicks / 10_000_000, endSeconds: s.EndTicks / 10_000_000 }] : [];
+  });
+  return skipMarkers(ranges, durationSeconds);
 }

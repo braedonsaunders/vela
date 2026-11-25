@@ -3,13 +3,14 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, Versions } from '../capabilities';
+import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, Versions } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 import { withinStreamingCap } from '../../streaming';
-import { decidedQuality, decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, mediaId, partAt, partOffsets, plexAudioMime, plexProjection, plexVersion } from './media';
+import { decidedQuality, decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, mediaId, partAt, partOffsets, plexAudioMime, plexMarkers, plexProjection, plexSidecar, plexVersion } from './media';
+import { bifFrameAt, bifFrames, bifHeader, bifInterval, bifOffer, bifTableRange, BIF_HEADER_BYTES, jpegSize, type BifFrame } from './bif';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
@@ -26,12 +27,23 @@ interface PlexSession {
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
+  /** A title that started without intro or credits markers: when they were last asked for, and how often. */
+  markers?: { at: number; asked: number; reading: boolean };
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
    * transcode request each part is played through. */
   stack?: { parts: Node[]; index: number; query: Record<string, string> };
-  /** What a video start declared, so a version switch can choose that file's paths the same way. */
+  /** The part's scrub thumbnail index as last read (`trickplayOffer`): its frames, the size of one,
+   * the offer made of it, and the whole file when the server would not answer a byte range. */
+  thumbnails?: { frames: BifFrame[]; offer: V.TrickplayMetadata; whole?: Uint8Array };
+  /** What a video start declared, so a version switch (and a subtitle added later) is chosen the same way. */
   request?: Pick<V.PlaybackRequest, 'client' | 'allowTranscode'>;
 }
+/** A title's markers missing at the start are asked for again this often, this many times (Ether
+ * knows them once the session's source is probed). */
+const MARKERS_AGAIN_MS = 30_000;
+const MARKERS_ASKS = 6;
+/** A thumbnail index larger than this is not read whole (a server that ignores byte ranges). */
+const MAX_INDEX_BYTES = 50 * 1024 * 1024;
 export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string; /** The name the server was added under (plex.tv's resource name). */ name?: string }
 const ack: V.Ack = { accepted: true };
 const no = (reason: string): V.Feature => ({ available: false, reason });
@@ -68,7 +80,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions, TrickplaySheets {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -413,7 +425,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return { collection: { id, kind: kind === 'playlist' ? 'playlist' : 'collection', name: n.title || '', summary: n.summary, artwork: this.artwork(n) }, ...page(this.nodes(children).map(n => this.entry(n)), start, children.totalSize) };
   }
   private async metadata(id: string): Promise<Node> {
-    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1, includeOnDeck: 1 });
+    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1, includeOnDeck: 1, includeMarkers: 1 });
     const n = this.nodes(c)[0]; if (!n) fail('Plex title not found', 'not-found');
     if (n.librarySectionID !== undefined && !this.sections.has(String(n.librarySectionID))) await this.libraries({}).catch(() => undefined);
     return n;
@@ -520,8 +532,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const part = (n.Media || []).flatMap((m: Node) => m.Part || []).find((p: Node) => String(p.id) === String(s.part.id));
     for (const t of part?.Stream || []) {
       if (Number(t.streamType) !== 3 || !t.key || s.plan.subtitleTracks.some(p => p.id === String(t.id))) continue;
-      const url = new URL(this.mediaURL(t.key)); url.searchParams.set('format', 'vtt');
-      s.plan.subtitleTracks.push({ id: String(t.id), kind: 'subtitle', name: t.displayTitle || t.language || 'Subtitle', language: t.languageCode || 'und', codec: 'webvtt', delivery: { kind: 'external', format: 'webvtt', url: url.href } });
+      const sidecar = plexSidecar(new URL(this.mediaURL(t.key)), t.codec, s.request?.client.subtitleFormats ?? []);
+      s.plan.subtitleTracks.push({ id: String(t.id), kind: 'subtitle', name: t.displayTitle || t.language || 'Subtitle', language: t.languageCode || 'und',
+        codec: sidecar.format === 'ass' ? String(t.codec).toLowerCase() : 'webvtt', delivery: { kind: 'external', format: sidecar.format, url: sidecar.url } });
     }
     s.plan.revision++;
     return structuredClone(s.plan);
@@ -552,12 +565,14 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const sessionId = `vela-${randomId()}`;
     const source = await this.videoSource(r, id, n, media, start, sessionId);
     const versions = r.titleId ? this.versions(n) : [];
+    const markers = r.extraId ? undefined : plexMarkers(n);
     const plan: V.PlaybackPlan = { sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0,
-      ...(r.extraId ? { extraId: id } : { titleId: id }), state: 'ready', positionSeconds: start, durationSeconds: duration, ...source.plan, chapters: this.chapters(n),
+      ...(r.extraId ? { extraId: id } : { titleId: id }), ...(markers ? { markers } : {}), state: 'ready', positionSeconds: start, durationSeconds: duration, ...source.plan, chapters: this.chapters(n),
       fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' },
       ...(versions.length ? { selectedVersionId: mediaId(media, n.Media.indexOf(media)), versions } : {}) };
     this.sessions.set(sessionId, { plan, part: source.part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]),
-      request: { client: r.client, allowTranscode: r.allowTranscode }, ...(source.stack ? { stack: source.stack } : {}) });
+      request: { client: r.client, allowTranscode: r.allowTranscode }, ...(source.stack ? { stack: source.stack } : {}),
+      ...(markers || r.extraId ? {} : { markers: { at: Date.now(), asked: 0, reading: false } }) });
     return structuredClone(plan);
   }
   /**
@@ -575,14 +590,12 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (stacked && (r.allowTranscode === false || !(r.client.hls || r.client.mse))) fail('This title is in several parts, which play through the server\'s stream', 'playback');
     const streams: Node[] = part.Stream || [];
     const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => {
-      const textSidecar = !!s.key && ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'].includes(s.codec);
-      const external = textSidecar ? new URL(this.mediaURL(s.key)) : undefined;
-      if (external) external.searchParams.set('format', 'vtt');
+      const external = !!s.key && isTextSidecar(s.codec) ? plexSidecar(new URL(this.mediaURL(s.key)), s.codec, r.client.subtitleFormats ?? []) : undefined;
       return { id: String(s.id), streamIndex: s.index,
         kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
         default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
         ...(type === 3 ? external
-          ? { url: external.href, delivery: { kind: 'external' as const, format: 'webvtt' as const, url: external.href } }
+          ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
           : { delivery: s.key ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
     });
     const audioTracks = tracks(2), subtitleTracks = tracks(3);
@@ -646,6 +659,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       s.part = source.part;
       s.transcodeId = transcodeId;
       s.streamed = false;
+      // Scrub thumbnails are the file's own (its part's index); markers are the title's and stay.
+      delete s.thumbnails;
       if (source.stack) s.stack = source.stack; else delete s.stack;
       // Tracks belong to the file: the new one starts on its own defaults.
       s.plan = { ...s.plan, ...source.plan, positionSeconds: at, durationSeconds: duration, selectedVersionId: r.versionId, sourceGeneration: s.plan.sourceGeneration + 1 };
@@ -851,6 +866,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
 
   async sessionSnapshot(id: string): Promise<V.SessionSnapshot> {
     const s = this.session(id);
+    this.askMarkers(s);
     return {
       cursor: String(s.plan.revision),
       revision: s.plan.revision,
@@ -858,6 +874,102 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       publishedRanges: [],
       lastObservationSequence: s.sequence < 0 ? undefined : s.sequence,
     };
+  }
+
+  /**
+   * The playing part's scrub thumbnails, from its media index (a BIF file at
+   * `/library/parts/{id}/indexes/sd`), read after playback starts rather than delaying the plan.
+   * Each re-read takes the index's current table (Ether's grows while the session streams). Null
+   * for a live channel, audio, a multi-part title (one index per part), or a part without an index.
+   */
+  async trickplayOffer(sessionId: string): Promise<V.TrickplayMetadata | null> {
+    const s = this.session(sessionId);
+    if (s.plan.channelId || s.plan.media === 'audio' || s.stack || s.part.id == null) return null;
+    // An index read whole came from a server without byte ranges: a finished file, not read again.
+    if (s.thumbnails?.whole) return structuredClone(s.thumbnails.offer);
+    const path = `/library/parts/${enc(String(s.part.id))}/indexes/sd`;
+    const head = await this.indexBytes(path, 0, BIF_HEADER_BYTES);
+    if (!head) return null;
+    const whole = head.whole ? head.bytes : undefined;
+    const header = bifHeader(head.bytes);
+    if (!header) return null;
+    const range = bifTableRange(header);
+    const table = whole ? whole.subarray(range.start, range.end) : (await this.indexBytes(path, range.start, range.end))?.bytes;
+    const frames = table && bifFrames(header, table);
+    if (!frames?.length) return null;
+    const held = s.thumbnails;
+    let size = held && { width: held.offer.width, height: held.offer.height };
+    if (!size) {
+      const first = frames[0]!;
+      const image = whole ? whole.subarray(first.start, first.end) : (await this.indexBytes(path, first.start, first.end))?.bytes;
+      size = (image && jpegSize(image)) ?? this.thumbnailSize(s);
+    }
+    // The same table is the same offer; a grown one is a new revision of it.
+    const last = frames[frames.length - 1]!;
+    const changed = !held || held.frames.length !== frames.length || held.frames[held.frames.length - 1]!.atMs !== last.atMs || bifInterval(held.frames) !== bifInterval(frames);
+    const offer = bifOffer(frames, size, s.plan.durationSeconds ? Math.round(s.plan.durationSeconds * 1000) : undefined, changed ? (held?.offer.revision ?? 0) + 1 : held!.offer.revision);
+    if (!offer) return null;
+    s.thumbnails = { frames, offer, ...(whole ? { whole } : {}) };
+    return structuredClone(offer);
+  }
+
+  /** One slot's thumbnail (the offer's sheets are single images), read by its byte range. */
+  async trickplaySheet(sessionId: string, offer: V.TrickplayMetadata, index: number, etag?: string, signal?: AbortSignal): Promise<TrickplaySheet | null> {
+    const s = this.session(sessionId);
+    const held = s.thumbnails;
+    if (!held || offer.cols !== 1 || offer.rows !== 1) return null;
+    const frame = bifFrameAt(held.frames, offer.intervalMs, index);
+    if (!frame) return null;
+    // A slot shows the same image until the index gives it a nearer one.
+    const tag = `"bif-${frame.atMs}"`;
+    if (etag === tag) return 'unchanged';
+    const bytes = held.whole ? held.whole.slice(frame.start, frame.end)
+      : (await this.indexBytes(`/library/parts/${enc(String(s.part.id))}/indexes/sd`, frame.start, frame.end, signal))?.bytes;
+    // Not an image: the index was rewritten since its table was read; the next offer read has the new one.
+    if (!bytes || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+    return { bytes, mimeType: 'image/jpeg', etag: tag };
+  }
+
+  /** A thumbnail's size when its image cannot be measured: 320 wide, in the video's shape. */
+  private thumbnailSize(s: PlexSession): { width: number; height: number } {
+    const media = s.metadata.Media?.find((m: Node) => (m.Part || []).some((p: Node) => p.id === s.part.id)) ?? s.metadata.Media?.[0];
+    const aspect = Number(media?.width) > 0 && Number(media?.height) > 0 ? Number(media.width) / Number(media.height) : 16 / 9;
+    return { width: 320, height: Math.round(320 / aspect) };
+  }
+
+  /**
+   * Bytes `[from, to)` of a media index, with this server's token; null when there is none (404).
+   * A server that ignores the range answers with the whole file (`whole`), read only when small enough.
+   */
+  private async indexBytes(path: string, from: number, to: number, signal?: AbortSignal): Promise<{ bytes: Uint8Array; whole: boolean } | null> {
+    const response = await fetch(this.mediaTarget(path).href, { signal, redirect: 'error', credentials: 'omit',
+      headers: { ...plexHeaders(this.device), Accept: '*/*', 'X-Plex-Token': await this.token(), Range: `bytes=${from}-${to - 1}` } });
+    if (response.status === 404) return null;
+    if (response.status === 401) this.rotateTransientToken();
+    if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : 'source', code: 'plex_http', message: `Plex request failed (${response.status})`, retry: { allowed: false } }, response.status);
+    if (response.status === 206) return { bytes: new Uint8Array(await response.arrayBuffer()), whole: false };
+    if (Number(response.headers.get('content-length')) > MAX_INDEX_BYTES) { await response.body?.cancel(); return null; }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.length > MAX_INDEX_BYTES ? null : { bytes, whole: true };
+  }
+
+  /**
+   * A title that started without markers asks for them again now and then, in the background, while
+   * its session is followed: a server may know them only once the session's source is probed. The
+   * plan carries them from the next snapshot on.
+   */
+  private askMarkers(s: PlexSession): void {
+    const state = s.markers;
+    if (!state || state.reading || s.plan.state === 'ended' || state.asked >= MARKERS_ASKS || Date.now() - state.at < MARKERS_AGAIN_MS) return;
+    state.reading = true;
+    state.asked++;
+    void this.metadata(String(s.metadata.ratingKey)).then(n => {
+      const markers = plexMarkers(n);
+      if (!markers || s.plan.state === 'ended') return;
+      s.plan.markers = markers;
+      s.plan.revision++;
+      s.markers = undefined;
+    }).catch(() => undefined).finally(() => { if (s.markers === state) { state.reading = false; state.at = Date.now(); } });
   }
 
   private async requireLive() {
