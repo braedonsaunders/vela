@@ -66,6 +66,8 @@ export interface ScreenViewProps {
   /** Surfaces: nothing is drawn until the first read answers, and nothing when it fails or the
    *  document is refused (a surface that cannot draw is left out, never a skeleton or an error). */
   quiet?: boolean;
+  /** Renderer 20, a page in an experience's shell: its key, under which its `sections` keep their scroll. */
+  scrollKey?: string;
 }
 
 const BOOL = /^(true|false)$/;
@@ -112,7 +114,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
   }, [doc, width, height, ui, skin, fold, host.viewport.pxScale, host.viewport.pxStep]);
 }
 
-export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false }: ScreenViewProps) {
+export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false, scrollKey }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
   const previewExpired = useVelaState(state => state.screens.preview?.expired === true);
@@ -252,8 +254,9 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
       requestNeeds: sources => { if (pageKey) void vela.screens.need(pageKey, sources); },
       pageTitle: title,
       presentation: doc?.presentation === 'page' ? 'page' : 'section',
+      ...(scrollKey ? { scrollKey } : {}),
     },
-  ), [pageKey, vela, title, doc?.presentation]);
+  ), [pageKey, vela, title, doc?.presentation, scrollKey]);
 
   // The element the document names first (focus.initial) takes focus once the page draws; without
   // it (a final game has no Watch button) route focus gives the first control or reading stop.
