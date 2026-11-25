@@ -60,7 +60,7 @@ const SAMPLES = Array.from(colorSamples).find(n => n <= (stage.constrained ? 2 :
       code = replace(code, '  return ' + result + ';', "  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('Unsupported visualizer framebuffer');\n  return " + result + ';');
     }
   }
-  if (name === '25_helpers.js') code = replace(code, 'n = o.iters || 18', 'n = stage.constrained ? 10 : (o.iters || 18)');
+  if (name === '25_helpers.js') code = replace(code, 'n = o.iters || 18', "n = stage.constrained && stage.sceneId === 'incense' ? 10 : (o.iters || 18)");
   // ANGLE can unroll and inline the nested noise functions into hundreds of milliseconds of
   // cold shader compilation. Supply the author's exact counts as uniforms to keep the loops.
   if (name === '34_sea.js') {
@@ -79,11 +79,9 @@ const SAMPLES = Array.from(colorSamples).find(n => n <= (stage.constrained ? 2 :
     code = replace(code, 'gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t);', 'if (desktopLoops) gl.uniform3i(u.uAuroraLayers, 14, 4, 3); gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t);');
   }
   if (name === '50_silk.js') code = replace(code, 'SILK_W = 2048, SILK_H = 1024', 'SILK_W = stage.constrained ? 512 : 2048, SILK_H = stage.constrained ? 256 : 1024');
-  if (name === '60_watercolour.js') code = replace(code, 'WC_W = 960, WC_H = 600', 'WC_W = stage.constrained ? 480 : 960, WC_H = stage.constrained ? 300 : 600');
-  if (name === '61_ink.js' || name === '62_incense.js') {
-    const prefix = name === '61_ink.js' ? 'INK' : 'SMK';
+  if (name === '62_incense.js') {
     for (const [suffix, value] of [['W', 256], ['H', 160], ['DW', 1024], ['DH', 640]] as const)
-      code = replace(code, prefix + '_' + suffix + ' = ' + value, prefix + '_' + suffix + ' = stage.constrained ? ' + value / 2 + ' : ' + value);
+      code = replace(code, 'SMK_' + suffix + ' = ' + value, 'SMK_' + suffix + ' = stage.constrained ? ' + value / 2 + ' : ' + value);
   }
   if (code.includes("scene({ id: 'wheat'")) code = replace(code, 'WHEAT_N = 72000', 'WHEAT_N = stage.constrained ? 18000 : 72000');
   if (name === '90_engine.js') {

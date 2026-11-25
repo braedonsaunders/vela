@@ -477,7 +477,7 @@ function scene(def) { def.post = Object.assign({}, POST_DEFAULT, def.post); SCEN
 
 // 25_helpers.js
 
-// ───────────── Shared helpers for scenes: reduced-resolution targets, a 2D fluid solver, a text atlas ─────────────
+// ───────────── Shared helpers for scenes: reduced-resolution targets and a 2D fluid solver ─────────────
 // A scene-owned target at 1/div of the render size, rebuilt with the rest when the size changes. Soft volumes
 // (nebula, aurora) are marched at half size and enlarged; that is a 4× saving and the right first cut on phones.
 function RTs(name, div) { return T.pool[name] || (T.pool[name] = target(Math.max(2, Math.ceil(T.sw / div)), Math.max(2, Math.ceil(T.sh / div)))); }
@@ -522,7 +522,7 @@ function Fluid(w, h, dw, dh) {
   Object.assign(this, { w, h, dw, dh, v: [mk(w, h), mk(w, h)], p: [mk(w, h), mk(w, h)], aux: mk(w, h), d: [mk(dw, dh), mk(dw, dh)] });
 }
 Fluid.prototype.step = function (dt, o) {
-  const { w, h, dw, dh, v, p, aux, d } = this, tx = [1 / w, 1 / h], asp = w / h;
+  const { w, h, dw, dh, v, p, aux, d } = this, tx = [1 / w, 1 / h], asp = o.asp || w / h;   // o.asp: the aspect of the screen area the grid is stretched over
   const pass = (prog, dst, W, H, set) => draw(prog, dst, W, H, set);
   dt = Math.min(dt, 1 / 30);
   // velocity: carry itself along, take the scene's forces, keep its curls alive, then make it divergence-free
@@ -535,7 +535,7 @@ Fluid.prototype.step = function (dt, o) {
     cur = 1;
   }
   pass(FLUID.div, aux, w, h, u => { bindTex(4, v[cur].t); gl.uniform1i(u.uVel, 4); gl.uniform2fv(u.uTx, tx); });
-  for (let i = 0, n = stage.constrained ? 10 : (o.iters || 18); i < n; i++) {
+  for (let i = 0, n = stage.constrained && stage.sceneId === 'incense' ? 10 : (o.iters || 18); i < n; i++) {
     pass(FLUID.jacobi, p[1], w, h, u => { bindTex(4, p[0].t); gl.uniform1i(u.uPrs, 4); bindTex(5, aux.t); gl.uniform1i(u.uDiv, 5); gl.uniform2fv(u.uTx, tx); gl.uniform1f(u.uKeep, i ? 1 : 0.8); });
     [p[0], p[1]] = [p[1], p[0]];
   }
@@ -545,22 +545,6 @@ Fluid.prototype.step = function (dt, o) {
   pass(FLUID.advect, d[1], dw, dh, u => { bindTex(4, v[0].t); gl.uniform1i(u.uVel, 4); bindTex(5, d[0].t); gl.uniform1i(u.uSrc, 5); gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uKeep, 1); gl.uniform1f(u.uAsp, asp); gl.uniform1f(u.uWall, 0); });
   pass(o.dye, d[0], dw, dh, u => { o.set(u); bindTex(4, v[0].t); gl.uniform1i(u.uVel, 4); bindTex(5, d[1].t); gl.uniform1i(u.uDye, 5); gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uAsp, asp); });
 };
-
-// Words as a texture: `labels` drawn in a grid of cells with the platform's text renderer. A port replaces
-// this one function with its own text rasteriser (Core Text, Skia paragraph) and keeps the same atlas layout.
-function textAtlas(labels, cols, cw, ch, font) {
-  const rows = Math.ceil(labels.length / cols), c = document.createElement('canvas'); c.width = cols * cw; c.height = rows * ch;
-  const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
-  x.fillStyle = '#fff'; x.font = font; x.textBaseline = 'middle'; x.textAlign = 'left';
-  try { x.letterSpacing = '3px'; } catch (e) {}
-  labels.forEach((s, i) => x.fillText(s, (i % cols) * cw + 6, ((i / cols) | 0) * ch + ch / 2 + 1, cw - 12));
-  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return { t, cols, rows, n: labels.length };
-}
 
 // Calls fn(slot) for every kick pulse that has started since the last call (scenes use it to give each
 // pulse a place of its own: where a drop lands, where a ripple starts).
@@ -1548,6 +1532,244 @@ scene({ id: 'aurora', name: 'Aurora', from: 'Claude', kind: 'field', group: 'ref
   } });
 }
 
+// 60_watercolour.js
+
+// ═════════════════════════ Organic scenes ═════════════════════════
+// ───────────────────────── Watercolour: wet paint blooming and bleeding on cold-pressed paper ─────────────────────────
+{
+// A small simulation on a 960×600 sheet: three pigments and the wetness of the paper. Wet paint drifts and
+// spreads; where a new drop lands it pushes the wash outward; pigment fades slowly so the sheet keeps renewing.
+// The picture is paper seen through the paint (pigments subtract light), with the pigment gathered at the
+// edges of each wash and settled into the tooth of the paper, the way real watercolour dries.
+const WC_W = 960, WC_H = 600;
+const WC_PAINT = `
+vec3 paintOf(float k){ k = mod(k, 3.); return clamp(vec3(max(1.-abs(k), 1.-abs(k-3.)), 1.-abs(k-1.), 1.-abs(k-2.)), 0., 1.); }`;
+// Three kinds of mark, one for each part of the music:
+//   washes   low frequencies (every kick): big, pale, wet, with no edge to speak of; they bleed and merge
+//   strokes  mids (every note that starts): a loaded brush drawn quickly across the sheet, bristle-streaked,
+//            running dry toward its end; its colour comes from the pitch of the note
+//   dots     highs: single dots on the hats, a flicked splatter on the snares
+const FS_WC_SIM = HEAD + LIB + WC_PAINT + `
+in vec2 uv; out vec4 o;
+uniform sampler2D uState; uniform float uDt; uniform float uWashAge[8]; uniform vec4 uDropP[8], uSpl[4], uStk[6], uStk2[6], uDot[8];
+uniform float uAsp; const float DUR = .5;
+float psi(vec2 p){ return noise(vec3(p*3.2, uTime*.05)); }
+float land(float a){ return exp(-a*12.)*3.6; }           // paint leaves the brush over a moment, never all at once
+void main(){
+  vec2 p = uv*vec2(uAsp, 1.), tx = 1./vec2(${WC_W}., ${WC_H}.); const float e = .02;
+  // wet paint wanders: a slow, divergence-free drift; each fresh wash pushes outward from where it lands
+  vec2 v = vec2(psi(p+vec2(0.,e))-psi(p-vec2(0.,e)), psi(p-vec2(e,0.))-psi(p+vec2(e,0.)))/(2.*e)*.011*(.5+uMidS);
+  for (int i = 0; i < 8; i++){ float a = uWashAge[i]; if (a > 1.2) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.); float R = uDropP[i].z;
+    v += d/(length(d)+1e-4)*exp(-dot(d,d)/(R*R*1.6))*smoothstep(0.,.1,a)*(1.-smoothstep(.2,1.,a))*.09; }
+  float wet0 = texture(uState, uv).a;
+  vec2 src = uv-v/vec2(uAsp, 1.)*uDt*(.25+wet0);
+  vec4 s = texture(uState, src);
+  vec4 av = (texture(uState, src+vec2(tx.x*1.5,0.))+texture(uState, src-vec2(tx.x*1.5,0.))+texture(uState, src+vec2(0.,tx.y*1.5))+texture(uState, src-vec2(0.,tx.y*1.5)))*.25;
+  float k = clamp(s.a*uDt*24., 0., .6); s.rgb = mix(s.rgb, av.rgb, k); s.a = mix(s.a, av.a, k*.6);      // wet-in-wet: paint spreads where the paper is wet
+  // washes
+  for (int i = 0; i < 8; i++){ float a = uWashAge[i]; if (a > .7) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.); float r = length(d);
+    float R=uDropP[i].z*(1.+.62*uBandE.x), seed=uDropP[i].w;
+    float theta=atan(d.y,d.x), petal=.5+.5*sin(theta*9.+seed+1.5*sin(theta*3.+seed));
+    float jag=.66+.25*petal+.22*noise(vec3(d*22.,seed));
+    float rr=r/max(.001,R*jag);
+    float reach=.55+.60*(1.-exp(-a*23.)), crown=exp(-pow((rr-reach)/.13,2.));
+    float wet=(1.-smoothstep(reach*.48,reach,rr));
+    float hit=(1.-exp(-a*30.))*exp(-a*10.)*.75*(wet*1.4+crown*.95)*(1.+.7*uBassS);   // the wash soaks in over a tenth of a second; it does not appear in one frame
+    vec3 centre=paintOf(seed), fringe=paintOf(seed+.85+petal*.42);
+    vec3 pigment=mix(centre,fringe,smoothstep(.13,.99,rr))*(.82+.37*petal);
+    // Replace some previous pigment where the drop pushes a wet layer aside.
+    s.rgb=mix(s.rgb,pigment*(.55+.75*uDropP[i].z/.26),clamp(hit*uDt*23.,0.,.8));   // a pale wash; only the biggest are strong
+    vec2 fleckGrid=d/(R+.0001)*13., cell=floor(fleckGrid);
+    vec2 offset=fract(fleckGrid)-vec2(hash2(cell+seed),hash2(cell+seed+3.));
+    float spatter=exp(-dot(offset,offset)*31.)*step(.72,hash2(cell+seed+9.))*smoothstep(.50,.9,rr)*(1.-smoothstep(1.,1.7,rr));
+    s.rgb+=fringe*spatter*exp(-a*23.)*uDt*27.;
+    s.a=max(s.a,wet*.72);
+  }
+  // strokes: a loaded brush drawn quickly across the sheet for each mid onset. The brush lays paint along the
+  // whole stretch it moved this frame, so a slow frame still leaves one connected mark; its bristles show
+  // more and more as it runs dry, and it is pressed hardest in the middle of the stroke.
+  for (int i = 0; i < 6; i++){ float a = uStk[i].w; if (a > DUR+uDt) continue;
+    float u1 = clamp(a/DUR, 0., 1.), u0 = clamp((a-uDt)/DUR, 0., 1.), e1 = 1.-(1.-u1)*(1.-u1), e0 = 1.-(1.-u0)*(1.-u0);
+    float ang = uStk[i].z, L = uStk2[i].x, cv = uStk2[i].z, w = uStk2[i].y*(.55+.45*sin(PI*min(u1*1.15, 1.)));
+    vec2 dir = vec2(cos(ang), sin(ang)), per = vec2(-dir.y, dir.x), o0 = uStk[i].xy*vec2(uAsp, 1.);
+    vec2 h0 = o0+L*(e0*dir+cv*e0*e0*per), h1 = o0+L*(e1*dir+cv*e1*e1*per), sg = h1-h0; float sl = length(sg); if (sl < 1e-6) continue;
+    vec2 tg = sg/sl, nm = vec2(-tg.y, tg.x), d = p-h0; float al = dot(d, tg), ac = dot(d, nm)/w, dd = abs(ac);
+    if (dd > 1.1 || al < 0. || al > sl) continue;                             // only the stretch covered this frame, with square ends, so successive frames never overlap
+    float load = 1.-.8*u1, bris = smoothstep(.62-.5*load, .78-.5*load, noise(vec3(ac*4.5+ang*9., ang*31., e1*L*5.))*.6+noise(vec3(ac*13., ang*7., e1*L*9.))*.4+.25*load);
+    float foot = smoothstep(1., .8, dd);
+    s.rgb += paintOf(uStk2[i].w)*foot*bris*(.5+.5*load)*1.1; s.a = max(s.a, foot*.18); }
+  // dots (hats) and splatter (snares)
+  for (int i = 0; i < 8; i++){ float a = uDot[i].w; if (a > .4) continue; float dd = length((uv-uDot[i].xy)*vec2(uAsp, 1.))/uDot[i].z;
+    s.rgb += (paintOf(float(i)*1.3)*.6+.5)*smoothstep(1., .7, dd)*land(a)*uDt*9.; s.a = max(s.a, smoothstep(1.3, .8, dd)*.3*smoothstep(0.,.1,a)); }
+  for (int j = 0; j < 4; j++){ float a = uSpl[j].w; if (a > .5) continue; vec2 q = (uv-uSpl[j].xy)*vec2(uAsp, 1.)/.03, c = floor(q); float sd = uSpl[j].z;
+    float h = hash2(c+sd*17.), keep = step(.74, h)*smoothstep(8., 1., length(c)+3.*hash2(c+sd*5.));
+    float dd = length(q-c-.12-.76*vec2(hash2(c+sd), hash2(c+sd+3.)));
+    s.rgb += paintOf(sd*3.+h)*smoothstep(.12+.3*h, .04, dd)*keep*land(a)*uDt*7.; s.a = max(s.a, smoothstep(.5, .1, dd)*keep*.5*smoothstep(0.,.1,a)); }
+  s.a = max(s.a-uDt*.13, 0.);                                              // the paper dries
+  s.rgb = min(s.rgb*exp(-uDt*(.026+.02*(1.-uDyn))*(1.+2.2*s.a)), vec3(3.));   // wet washes thin out sooner than dry strokes, which stay                             // and old paint fades, so the sheet keeps renewing
+  o = s;
+}`;
+const FS_WC = FSH + COVER + `
+out vec4 o; uniform sampler2D uState;
+float tooth(vec2 p){ return noise(vec3(p*150., 1.))*.45+noise(vec3(p*64., 5.))*.35+noise(vec3(p*vec2(22., 300.), 9.))*.2; }
+void main(){
+  vec2 uv = gl_FragCoord.xy/uRes, p = uv*vec2(uRes.x/uRes.y, 1.), e = 1.5/vec2(${WC_W}., ${WC_H}.);   // the sheet is the screen, whatever its shape
+  vec4 s = texture(uState, uv);
+  vec3 gx = texture(uState, uv+vec2(e.x,0.)).rgb-texture(uState, uv-vec2(e.x,0.)).rgb, gy = texture(uState, uv+vec2(0.,e.y)).rgb-texture(uState, uv-vec2(0.,e.y)).rgb;
+  float th = tooth(p), dens = dot(s.rgb, vec3(1.)), edge = length(vec2(dot(gx, vec3(1.)), dot(gy, vec3(1.))));
+  vec3 pig = s.rgb*(1.+(.5-th)*.6*(1.-.6*s.a)) + s.rgb/max(dens, 1e-3)*edge*2.6*(1.-.5*s.a);   // settled in the hollows, gathered at the edges
+  // three paints; what they do not absorb is what you see
+  vec3 c0 = mix(vec3(.1,.24,.7), neon(.0), .1), c1 = mix(vec3(.82,.13,.27), neon(.33), .1), c2 = mix(vec3(.96,.66,.14), neon(.66), .1);
+  vec3 T = exp(-(pig.r*-log(max(c0, .04))+pig.g*-log(max(c1, .04))+pig.b*-log(max(c2, .04)))*.85);
+  vec3 paper = vec3(.93,.905,.85)*(.9+.14*th)*(1.-.07*s.a);
+  paper *= .97+.03*noise(vec3(p*vec2(3., 60.), 3.));                         // faint laid lines
+  vec2 q = gl_FragCoord.xy/uRes-.5;
+  o = vec4(paper*T*(1.02-.5*dot(q,q)), 1.);
+}`;
+scene({ id: 'wash', name: 'Watercolour', from: 'Organic', kind: 'paint', group: 'organic', pal: 0, hue: () => 0,
+  about: 'Wet paint on cold-pressed paper, with a brush for each part of the music: big soft washes on the low end, quick bristled strokes for every note (coloured by its pitch), dots and splatter for the hats and snares',
+  inputs: ['midS', 'bassS', 'pulse', 'notes, hats, snares (onsets)', 'noteBand', 'noteAmp', 'hatAmp'],
+  cost: 'Light: one 960×600 simulation pass and one full-screen pass. Phones: a 640×400 sheet.',
+  post: { bloom: 0.08, thr: 1.6, exp: 1.0, ca: 0.15, vig: 0.35, grain: 0.03, pulse: 0 },
+  init() { this.sim = program(VS, FS_WC_SIM); this.show = program(VS, FS_WC);
+    this.a = simTarget(WC_W, WC_H); this.b = simTarget(WC_W, WC_H);
+    this.drops = new Float32Array(32); this.spl = new Float32Array(16).fill(9); this.stk = new Float32Array(24).fill(9); this.stk2 = new Float32Array(24); this.dot = new Float32Array(32).fill(9);
+    this.washAge = new Float32Array(8).fill(9); this.washSlot=0; this.si = 0; this.ki = 0; this.di = 0;
+    this.h0=A.hit[0].n; this.h1=A.hit[1].n; this.h2=A.hit[2].n; },
+  draw(F, out) {
+    const t = F.time, r = Math.random, D = this.drops, S = this.spl, K = this.stk, K2 = this.stk2, O = this.dot;
+    // the hand wanders the sheet slowly; strokes and dots fall near it, so the picture has a centre that moves
+    const hand = [0.5 + 0.34 * Math.sin(t * 0.13 + Math.sin(t * 0.07) * 2), 0.5 + 0.3 * Math.sin(t * 0.17 + 1.3 + Math.cos(t * 0.05) * 2)];
+    for (let j = 0; j < 4; j++) S[j * 4 + 3] += F.dt;
+    for (let j = 0; j < 6; j++) K[j * 4 + 3] += F.dt;
+    for (let j = 0; j < 8; j++) O[j * 4 + 3] += F.dt;
+    for(let j=0;j<8;j++) this.washAge[j]+=F.dt;
+    const H=A.hit;
+    if(this.h0!==H[0].n && t-(this.washAt||0)>.3){                        // at most three washes a second, so the paper has time to dry between them
+      this.h0=H[0].n; this.washAt=t;
+      // a wash for each low hit, sized by how hard it was and how full the low end is: from a small bloom to a quarter of the sheet
+      const i=this.washSlot++ % 8, strength=H[0].amp*(.35+.65*A.dyn);
+      D.set([.1+r()*.8,.1+r()*.8,.045+.12*strength+.035*A.hitLvl[0],(this.washSlot*.89)%3],i*4);
+      this.washAge[i]=0;
+    }
+    if (this.h1!==H[1].n) { this.h1=H[1].n; const j = this.ki++ % 6, len = 0.06 + 0.42 * r() ** 2 + 0.16 * H[1].amp;
+      K.set([hand[0] + (r() - 0.5) * 0.5, hand[1] + (r() - 0.5) * 0.52, r() * 6.283, 0], j * 4); K2.set([len, 0.008 + 0.016 * H[1].amp + 0.005 * r(), (r() - 0.5) * (r() < 0.35 ? 1.6 : 0.5), A.noteBand * 9 + this.ki * 0.23], j * 4); }
+    if (this.h2!==H[2].n) {
+      this.h2=H[2].n;
+      const angle=r()*6.283, cx=.1+.8*r(), cy=.1+.8*r(), count=3+Math.round(4*H[2].amp+3*A.hitLvl[2]);
+      for(let j=0;j<count;j++){
+        const dist=(j-2)*.029;
+        O.set([cx+dist*Math.cos(angle),cy+dist*Math.sin(angle)+.012*(r()-.5),.008+.014*H[2].amp+.005*r(),0],(this.di++ & 7)*4);
+      }
+    }
+    if(H[2].fast>.72 && H[2].since<F.dt*1.5) S.set([hand[0]+(r()-.5)*.5,hand[1]+(r()-.5)*.5,r(),0],(this.si++&3)*4);
+    draw(this.sim, this.b, WC_W, WC_H, u => { F.set(u); bindTex(3, this.a.t); gl.uniform1i(u.uState, 3); gl.uniform1f(u.uDt, Math.min(F.dt, 1 / 30));
+      gl.uniform1f(u.uAsp, T.sw / T.sh); gl.uniform1fv(u.uWashAge,this.washAge); gl.uniform4fv(u.uDropP, D); gl.uniform4fv(u.uSpl, S); gl.uniform4fv(u.uStk, K); gl.uniform4fv(u.uStk2, K2); gl.uniform4fv(u.uDot, O); });
+    [this.a, this.b] = [this.b, this.a];
+    draw(this.show, out, T.sw, T.sh, u => { F.set(u); bindTex(3, this.a.t); gl.uniform1i(u.uState, 3); });
+  } });
+}
+
+// 61_ink.js
+
+// ───────────────────────── Ink in Water: ink entering a lit tank from every side, unfurling and lingering ─────────────────────────
+{
+const INK_W = 256, INK_H = 160, INK_DW = 1024, INK_DH = 640;
+// Each kick lets ink in somewhere new: dropped from above, pushed in from a side wall, rising from the floor,
+// or bled into the middle. uDropP is where and which ink; uDropV is the push it arrives with and how it spreads.
+const INK_COMMON = `
+in vec2 uv; out vec4 o; uniform sampler2D uVel, uDye; uniform float uDt, uAsp; uniform float uJetAge[8]; uniform vec4 uDropP[8], uDropV[8];
+float land(float a){ return (1.-exp(-a*45.))*exp(-a*11.)*1.25; }     // the jet opens within two frames instead of in one, then tails off
+vec3 inkOf(float k){ k = mod(k, 3.); return clamp(vec3(max(1.-abs(k), 1.-abs(k-3.)), 1.-abs(k-1.), 1.-abs(k-2.)), 0., 1.); }`;
+const FS_INK_FORCE = HEAD + LIB + INK_COMMON + `
+void main(){
+  vec2 v = texture(uVel, uv).xy; vec3 ink = texture(uDye, uv).rgb;
+  v.y += (ink.r*.16-ink.b*.14)*uDt; v.x += (.5-uv.x)*ink.g*.2*uDt;            // the low ink rises from the floor, the high ink sinks from the surface, the mid ink is drawn in from the walls
+  for (int i = 0; i < 8; i++){ float a = uJetAge[i]; if (a > .3) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.); float g = exp(-dot(d,d)/.0045);
+    v += (uDropV[i].xy+uDropV[i].z*d/(length(d)+.02))*g*land(a)*uDt*(15.+16.*uDropV[i].w); }
+  vec2 p = uv*vec2(uAsp, 1.); float t = uTime*.07;
+  v += vec2(cos(p.y*2.3+t)+.5*cos(p.y*5.1-t*1.7), sin(p.x*1.9-t*1.3)+.5*sin(p.x*4.3+t*2.1))*uDt*.01*(.3+1.2*uMidS);   // the mids stir the tank, gently
+  o = vec4(v, 0., 1.);
+}`;
+const FS_INK_DYE = HEAD + LIB + INK_COMMON + `
+void main(){
+  vec3 dye = texture(uDye, uv).rgb*exp(-uDt*.045);                           // it thins out only over a minute, so colours build up in layers
+  // each band also seeps in steadily from its own side for as long as it sounds: lows from the floor, mids from the walls, highs from the surface
+  float nx = noise(vec3(uv.x*9., uTime*.15, 1.)), ny = noise(vec3(uv.y*9., uTime*.15, 5.));
+  dye.r += uBandE.x*uBandE.x*exp(-uv.y*uv.y/.006)*smoothstep(.3,.8,nx)*uDt*.5;
+  dye.g += uBandE.y*uBandE.y*(exp(-uv.x*uv.x/.004)+exp(-(1.-uv.x)*(1.-uv.x)/.004))*smoothstep(.3,.8,ny)*uDt*.45;
+  dye.b += uBandE.z*uBandE.z*exp(-(1.-uv.y)*(1.-uv.y)/.006)*smoothstep(.34,.84,nx)*uDt*1.3;
+  for (int i = 0; i < 8; i++){ float a = uJetAge[i]; if (a > .3) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.);
+    vec2 dir=normalize(uDropV[i].xy), per=vec2(-dir.y,dir.x);
+    float along=dot(d,dir), across=dot(d,per);
+    float tendril=sin(along*75.+uDropP[i].z)*.010;
+    float w=.013+.02*uDropV[i].w;
+    float plume=exp(-pow(along/.095,2.)-pow((across-tendril)/w,2.));
+    plume+=.72*exp(-pow((along-.035)/.075,2.)-pow((across+tendril*2.)/(w*.72),2.));
+    dye+=inkOf(uDropP[i].w)*plume*land(a)*uDt*(15.+17.*uDropV[i].w); }
+  o = vec4(min(dye, vec3(1.25)), 1.);
+}`;
+const FS_INK = FSH + COVER + `
+out vec4 o; uniform sampler2D uDye; uniform float uJetAge[8]; uniform vec4 uDropP[8], uDropV[8]; const vec2 TX = 1./vec2(${INK_DW}., ${INK_DH}.);
+void main(){
+  vec2 sc = gl_FragCoord.xy/uRes, uv = sc, q = sc-.5;                        // the tank is the screen, whatever its shape
+  vec3 dye = texture(uDye, uv).rgb;
+  vec3 gx = texture(uDye, uv+vec2(TX.x*2.,0.)).rgb-texture(uDye, uv-vec2(TX.x*2.,0.)).rgb, gy = texture(uDye, uv+vec2(0.,TX.y*2.)).rgb-texture(uDye, uv-vec2(0.,TX.y*2.)).rgb;
+  vec2 g = vec2(dot(gx, vec3(1.)), dot(gy, vec3(1.)));
+  // a tank lit from behind: soft, slightly cool light, brighter in the middle
+  vec3 bg = mix(vec3(.74,.79,.84), vec3(.93,.94,.95), exp(-dot(q,q)*2.6))*(.82+.1*uLevelS);
+  bg *= 1.+.05*sin(uv.y*40.+uTime+noise(vec3(uv*6., uTime*.2))*6.)*smoothstep(.75, 1., uv.y);       // light playing just under the surface
+  vec3 c0 = mix(vec3(.04,.12,.5), neon(.0), .08), c1 = mix(vec3(.78,.05,.3), neon(.33), .08), c2 = mix(vec3(.98,.5,.04), neon(.66), .08);   // lows indigo, mids crimson, highs amber
+  vec3 T = exp(-(dye.r*-log(max(c0, .03))+dye.g*-log(max(c1, .03))+dye.b*-log(max(c2, .03)))*1.1);
+  // Narrow bands pick out existing filaments, leaving the pale water undisturbed.
+  float pitch=clamp(.10+.78*uv.y+.06*sin(uv.x*16.),0.,1.);
+  float edge=clamp(length(g)*2.+dot(dye,vec3(.08)),0.,1.);
+  float lift=clamp(spec(pitch)-specS(pitch),0.,.55);
+  vec3 col=bg*T+edge*lift*mix(vec3(.22,.36,.64),vec3(.53,.13,.24),uv.y)*.35;
+  // The fluid needs a few frames to carry new pigment away from a nozzle. Show the first curl at the
+  // nozzle immediately, then hand it off to the advected dye. Each band has a separate side and colour,
+  // so isolated low/mid/high attacks make three genuinely different change images.
+  for(int i=0;i<8;i++){
+    float a=uJetAge[i]; if(a>.48) continue;
+    vec2 d=(uv-uDropP[i].xy)*vec2(1.6,1.), dir=normalize(uDropV[i].xy), per=vec2(-dir.y,dir.x);
+    float along=dot(d,dir), across=dot(d,per), grow=smoothstep(-.018,.105,along)*(1.-smoothstep(.105,.34,along));
+    float curl=sin(along*48.+uDropP[i].z)*(.012+.018*smoothstep(0.,.18,a));
+    float ribbon=exp(-pow((across-curl)/(.018+.038*a),2.))*grow;
+    float mouth=exp(-dot(d,d)/(.0018+.012*a*a));
+    float familyBoost=uDropP[i].w>1.5?1.38:1.;
+    float fresh=(ribbon*.72+mouth)*exp(-a*6.2)*(1.15+.85*uDropV[i].w)*familyBoost;
+    vec3 ic=uDropP[i].w<.5?vec3(.035,.12,.76):(uDropP[i].w<1.5?vec3(.92,.035,.28):vec3(1.,.48,.025));
+    col=mix(col,ic*.42,clamp(fresh*.72,0.,.84)); col+=ic*fresh*.16;
+  }
+  // each ink lights up, wherever it has spread, when its own band is struck
+  vec3 have=dye/(1.+dye);
+  vec3 hg=uHit*.45+uHitS*.55;                                                 // mostly the eased envelope: a glow, not a flash
+  col+=(vec3(.1,.3,.95)*have.r*hg.x+vec3(.95,.15,.4)*have.g*hg.y+vec3(1.,.7,.15)*have.b*hg.z)*.2;
+  col *= 1.+clamp(dot(g, vec2(.5, .8))*.35, -.25, .3);                       // the plumes have body: lit on one side, shaded on the other
+  col *= 1.-smoothstep(.985, 1., uv.y)*.25;                                  // the waterline
+  o = vec4(col*(1.-.55*dot(q,q)), 1.);
+}`;
+scene({ id: 'ink', name: 'Ink in Water', from: 'Organic', kind: 'fluid', group: 'organic', pal: 0, hue: () => 0,
+  about: 'A lit tank where each part of the music has its own ink and its own side: low hits push indigo up from the floor, mids bring crimson in from the walls, highs drop amber from the surface, and each band seeps in for as long as it sounds, so the tank fills and the colours layer',
+  inputs: ['hit (low, mid, high: n, amp)', 'bandE', 'spec', 'specS', 'midS', 'levelS'],
+  cost: 'Moderate: a 256×160 fluid solve (18 pressure iterations) and a 1024×640 dye field. Phones: 128×80 with 10 iterations and a 512×320 dye field.',
+  post: { bloom: 0.06, thr: 1.6, exp: 1.0, ca: 0.15, vig: 0.3, grain: 0.02, pulse: 0 },
+  init() { this.force = program(VS, FS_INK_FORCE); this.dye = program(VS, FS_INK_DYE); this.show = program(VS, FS_INK);
+    this.fluid = new Fluid(INK_W, INK_H, INK_DW, INK_DH); this.P = new Float32Array(32); this.V = new Float32Array(32); this.last = new Float32Array(8).fill(9); this.n = 0; this.age = new Float32Array(8).fill(9); this.sn = A.snares; this.nn = A.notes; this.noteAt = -1; this.beat=A.beat; this.h0 = A.hit[0].n; this.h1 = A.hit[1].n; this.h2 = A.hit[2].n; this.side = false; },
+  draw(F, out) {
+    // Each band has its own ink and its own side of the tank, so you can read the music by colour and place:
+    // low hits push indigo up from the floor, mid hits bring crimson in from a wall, high hits drop amber from the surface.
+    for (let j = 0; j < 8; j++) this.age[j] += F.dt;
+    const r = Math.random, jet = (x, y, dx, dy, dye, strength) => { const i = this.n++ % 8; this.age[i] = 0; this.P.set([x, y, this.n * 2.4, dye], i * 4); this.V.set([dx, dy, 0.12, strength], i * 4); };
+    const H = A.hit;
+    if (H[0].n !== this.h0) { this.h0 = H[0].n; jet(0.12 + r() * 0.76, 0.07, (r() - 0.5) * 0.5, 1.1, 0, 0.35 + 0.65 * H[0].amp); }
+    if (H[1].n !== this.h1) { this.h1 = H[1].n; const left = (this.side = !this.side); jet(left ? 0.09 : 0.91, 0.2 + r() * 0.6, left ? 1 : -1, (r() - 0.5) * 0.5, 1, 0.5 + 0.5 * H[1].amp); }
+    if (H[2].n !== this.h2) { this.h2 = H[2].n; jet(0.1 + r() * 0.8, 0.94, (r() - 0.5) * 0.3, -0.9, 2, 0.7 + 0.3 * H[2].amp); }
+    this.fluid.step(F.dt, { force: this.force, dye: this.dye, set: u => { F.set(u); gl.uniform1fv(u.uJetAge, this.age); gl.uniform4fv(u.uDropP, this.P); gl.uniform4fv(u.uDropV, this.V); }, asp: T.sw / T.sh, keepV: 0.984, vort: 6, iters: 18, wall: 0.03 });
+    draw(this.show, out, T.sw, T.sh, u => { F.set(u); bindTex(3, this.fluid.d[0].t); gl.uniform1i(u.uDye, 3); gl.uniform1fv(u.uJetAge, this.age); gl.uniform4fv(u.uDropP, this.P); gl.uniform4fv(u.uDropV, this.V); });
+  } });
+}
+
 // 62_incense.js
 
 // ───────────────────────── Incense: three sticks, three smokes, one for each part of the music ─────────────────────────
@@ -1709,6 +1931,299 @@ scene({ id: 'leaves', name: 'Falling Leaves', from: 'Organic', kind: 'nature', g
     beginMS(); quad(this.bg, set);
     gl.enable(gl.DEPTH_TEST); gl.useProgram(this.leaf.p); set(this.leaf.u); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, LEAF_N);
     endMS(out);
+  } });
+}
+
+// 64_forest.js
+
+// ───────────────────────── Deep Forest: tall trees in backlight, wind running through the canopy with the music ─────────────────────────
+{
+// Real geometry, drawn with 4× MSAA and depth of field: 72 trunks (tapered, flared at the root, leaning),
+// three limbs on each, 10,000 foliage cards gathered into crowns and understory, shafts of sun standing
+// between the trunks, and pollen. The wind is the low end: each low onset sends a gust back through the wood.
+// Every crown listens to a band of its own and glows with it; the shafts are bands too; highs set the leaves
+// trembling and the pollen sparkling.
+const FOR_TREES = 72, FOR_CARDS = 130, FOR_FERNS = 1400, FOR_SHAFTS = 24, FOR_POLLEN = 2600;
+const FOREST_FN = `
+const vec3 FSUN = vec3(.3145, .6093, .7279);               // toward the sun: ahead, above, a little to the right
+vec3 fsunC(){ return mix(vec3(1.,.86,.55), neon(.1), .08)*(.7+.35*uDyn+.3*uBassS+.1*uHitS.x); }
+vec3 fogC(vec3 v){ float s = pow(max(dot(v, FSUN), 0.), 3.); return mix(vec3(.016,.03,.024), vec3(.3,.38,.22), .08+.92*s)*(.55+.35*uDyn)+fsunC()*s*s*.4; }
+// tree i: where it stands, how thick, how tall, how it leans
+void tree(float i, out vec3 base, out float rad, out float ht, out vec2 lean){
+  uint id = uint(i)*7u+11u; float h1 = hashu(id), h2 = hashu(id+1u), h3 = hashu(id+2u), h4 = hashu(id+3u), h5 = hashu(id+4u);
+  float z = 3.+pow(h1, 1.25)*66., side = h2 < .5 ? -1. : 1.;
+  base = vec3(side*(1.8+pow(h3, 1.4)*(7.+z*.22))+sin(z*.13)*1.2, 0., z);        // either side of a path that winds a little
+  rad = .2+.42*h4*h4+.12*step(.9, h5); ht = 15.+11.*h5+rad*8.;
+  lean = (vec2(hashu(id+5u), hashu(id+6u))-.5)*1.8; }
+vec3 trunkAt(vec3 base, vec2 lean, float y, float ht){ float t = y/ht; return base+vec3(lean.x*t*t, y, lean.y*t*t); }
+// the wind at p: a steady breath with the low end, and each beat's gust running back through the wood (four seconds, front to back)
+float gustAt(vec3 p){ return .2+.95*hist(.03+.05*noise(vec3(p.x*.1, 0., 2.)), clamp((p.z-2.)/75., 0., 1.))+.3*uBassS; }`;
+const VS_TRUNK = VSP + FOREST_FN + `
+out vec3 vW, vN; out vec2 vBark; out float vDepth;
+void main(){
+  vec3 base; float rad, ht; vec2 lean; tree(float(gl_InstanceID), base, rad, ht, lean);
+  int q = gl_VertexID/6, k = gl_VertexID%6; ivec2 c = ivec2(q%10+((k == 1 || k == 2 || k == 4) ? 1 : 0), q/10+((k == 2 || k == 4 || k == 5) ? 1 : 0));
+  float t = float(c.y)/9., y = (t*t*.9+t*.1)*ht, a = float(c.x)/10.*TAU;                          // rings crowd toward the root
+  float r = rad*(1.-.55*t)*(1.+.9*exp(-y*1.6)*(1.+.35*sin(a*3.+base.x*5.)))*(1.+.06*sin(a*2.+y*.7));   // taper, root flare, a little out of round
+  vec3 ctr = trunkAt(base, lean, y, ht); ctr.xz += vec2(.75, .3)*gustAt(base)*t*t*.22;
+  vN = vec3(cos(a), 0., sin(a)); vW = ctr+vN*r; vBark = vec2(a*rad*5.+base.x, y);
+  gl_Position = uVP*vec4(vW,1.); vDepth = gl_Position.w;
+}`;
+const VS_LIMB = VSP + FOREST_FN + `
+out vec3 vW, vN; out vec2 vBark; out float vDepth;
+void main(){
+  float ti = float(gl_InstanceID/3); uint id = uint(gl_InstanceID)*4u+101u; float h1 = hashu(id), h2 = hashu(id+1u), h3 = hashu(id+2u);
+  vec3 base; float rad, ht; vec2 lean; tree(ti, base, rad, ht, lean);
+  int q = gl_VertexID/6, k = gl_VertexID%6; ivec2 c = ivec2(q%6+((k == 1 || k == 2 || k == 4) ? 1 : 0), q/6+((k == 2 || k == 4 || k == 5) ? 1 : 0));
+  float t = float(c.y)/4., a = float(c.x)/6.*TAU, y0 = ht*(.42+.3*h1), az = h2*TAU, len = 3.+4.*h3+rad*5.;
+  vec3 ax = normalize(vec3(cos(az), .55+.3*h3, sin(az))), s0 = trunkAt(base, lean, y0, ht);
+  vec3 ctr = s0+ax*len*t+vec3(0., -.6*t*t, 0.); ctr.xz += vec2(.75, .3)*gustAt(base)*(y0/ht)*(y0/ht)*.22+vec2(.75,.3)*gustAt(ctr)*t*.12;
+  vec3 u = normalize(cross(ax, vec3(0., 1., .01))), w = cross(ax, u); vN = u*cos(a)+w*sin(a);
+  vW = ctr+vN*rad*.34*(1.-.75*t); vBark = vec2(a*rad*2.+h1*9., t*len);
+  gl_Position = uVP*vec4(vW,1.); vDepth = gl_Position.w;
+}`;
+const FS_BARK = FSH + FOREST_FN + `
+in vec3 vW, vN; in vec2 vBark; in float vDepth; out vec4 o;
+void main(){
+  float b = noise(vec3(vBark.x*1.3, vBark.y*.3, 1.))*.6+noise(vec3(vBark.x*4.1, vBark.y*1.1, 5.))*.4, ridge = smoothstep(.36,.62,b);   // long furrows
+  vec3 n = normalize(vN), v = normalize(uEye-vW), sc = fsunC();
+  float fine = noise(vec3(vBark*vec2(11., 2.6), 2.)), crack = smoothstep(.5, .3, b)*smoothstep(.35, .6, noise(vec3(vBark.x*2.6, vBark.y*.5, 8.)));
+  vec3 bark = mix(vec3(.012,.01,.008), vec3(.3,.21,.13), ridge)*(.45+.9*fine)*(1.-.7*crack);
+  float moss = smoothstep(.5,.75, noise(vec3(vW.x*.8, vW.y*.45, vW.z*.8)))*smoothstep(5., .3, vW.y);
+  bark = mix(bark, vec3(.06,.13,.03)*(.5+.9*ridge), moss*.85);
+  float lit = max(dot(n, FSUN), 0.), rim = pow(1.-max(dot(n, v), 0.), 3.)*smoothstep(-.6, .5, dot(n, FSUN));      // the sun is behind them: it catches their edges
+  vec3 col = bark*(vec3(.05,.085,.06)+sc*lit*1.5)*(.55+.6*ridge)+sc*(bark*6.+.04)*rim*(.5+.5*ridge);
+  col *= .5+.5*smoothstep(0., 2.5, vW.y);
+  float dist = length(vW-uEye); col = mix(col, fogC(-v), 1.-exp(-dist*.022));
+  o = vec4(col, vDepth);
+}`;
+// Foliage: each card is a spray of small pointed leaves. uMode 0: gathered into the crowns; 1: ferns and seedlings on the floor.
+const VS_FOLIAGE = VSP + FOREST_FN + `
+uniform float uMode; out vec2 vUV; out vec3 vW; out vec4 vI; out float vDepth;
+void main(){
+  uint id = uint(gl_InstanceID)*6u+3u; float h1 = hashu(id), h2 = hashu(id+1u), h3 = hashu(id+2u), h4 = hashu(id+3u), h5 = hashu(id+4u), h6 = hashu(id+5u);
+  vec3 ctr; float sz, lit, inner, band, wsc;
+  if (uMode < .5){
+    float ti = float(gl_InstanceID/${FOR_CARDS}); vec3 base; float rad, ht; vec2 lean; tree(ti, base, rad, ht, lean);
+    float cr = 3.+rad*6., low = step(.7, h5), yc = mix(ht*(.55+.4*h4), ht*(.22+.3*h4), low), cz = h2*2.-1., sr = sqrt(1.-cz*cz);
+    vec3 dirc = vec3(cos(h1*TAU)*sr, cz*.75+.12, sin(h1*TAU)*sr); inner = mix(pow(h3, .45), .5+.4*h3, low);   // most of them out in the shell of the crown
+    ctr = trunkAt(base, lean, yc, ht)+dirc*cr*inner*vec3(1., .6, 1.);
+    sz = 1.3+1.3*h6; lit = smoothstep(-.5, .8, dot(normalize(dirc), FSUN)); band = fract(ti*.618+.07); wsc = .5+yc/ht;
+  } else {
+    float z = 2.+pow(h1, 1.4)*40., side = h2 < .5 ? -1. : 1.;
+    ctr = vec3(side*(1.+h3*h3*(6.+z*.2))+sin(z*.13)*1.2, .25+.5*h4, z); inner = .6+.4*h4;
+    sz = .55+.75*h6; lit = .05+.5*h5*h5; band = h5; wsc = .35;
+  }
+  float g = gustAt(ctr), sway = g*(.1+.1*h4)*wsc;
+  ctr.xz += vec2(.75, .3)*sway+vec2(sin(uTime*1.7+h1*40.), cos(uTime*1.3+h2*40.))*.02*(1.+4.*uBandE.z+3.*uHitS.z); ctr.y -= sway*.22;
+  float a1 = h1*TAU+sin(uTime*(1.6+2.*h4)+h2*30.)*.16*(.4+g+2.*uHitS.z), a2 = h6*TAU;                      // the cards tremble; the highs set them off
+  vec3 u = normalize(vec3(cos(a1), .35*sin(a2*3.), sin(a1))), up = normalize(vec3(sin(a2)*.7, 1., cos(a2)*.7)), w = normalize(cross(u, up));
+  vec2 q = vec2(float(gl_VertexID == 1 || gl_VertexID == 2 || gl_VertexID == 4), float(gl_VertexID == 2 || gl_VertexID == 4 || gl_VertexID == 5));
+  sz *= smoothstep(2.2, 5.5, length(ctr-uEye));                                 // nothing hangs right in front of the lens
+  vW = ctr+(u*(q.x-.5)+w*(q.y-.5))*sz; vUV = q; vI = vec4(h3*31.+h5*7., lit, inner, band);
+  gl_Position = uVP*vec4(vW,1.); vDepth = gl_Position.w;
+}`;
+const FS_FOLIAGE = FSH + FOREST_FN + `
+in vec2 vUV; in vec3 vW; in vec4 vI; in float vDepth; out vec4 o;
+void main(){
+  vec2 g = vUV*5., c = floor(g); float m = 0., tone = 0.;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec2 cc = c+vec2(float(i), float(j)); if (cc.x < 0. || cc.x > 4. || cc.y < 0. || cc.y > 4.) continue;
+    float h = hash2(cc+vI.x); vec2 l = rot(h*TAU)*(g-cc-.5-(vec2(hash2(cc+vI.x+3.), hash2(cc+vI.x+5.))-.5)*.55);
+    float leaf = length(vec2(l.x*2.6, l.y))-.47+.3*abs(l.y);                                              // a pointed oval
+    if (leaf < 0. && h > .3){ m = 1.; tone = h+.35*smoothstep(.0, .06, abs(l.x)); } }
+  if (m < .5) discard;
+  vec3 v = normalize(vW-uEye), sc = fsunC(); float toSun = pow(max(dot(v, FSUN), 0.), 2.), bandv = spec(.04+vI.w*.78), bs = specS(.04+vI.w*.78);
+  vec3 dark = mix(vec3(.006,.02,.008), vec3(.05,.13,.03), vI.y)*(.35+.8*vI.z)*(.6+.6*tone);            // leaf seen by reflected light
+  vec3 glowc = mix(vec3(.3,.55,.07), vec3(.8,.78,.18), tone*.6)*sc*(.06+1.3*toSun)*(.15+.85*vI.z)*vI.y;        // and by the sun coming through it
+  vec3 col = dark*(.8+.6*uMidS)+glowc*(.3+1.6*bs*bs+.45*max(bandv-bs, 0.)+.3*uHitS.y*vI.y);           // each crown glows with its own band
+  float dist = length(vW-uEye); col = mix(col, fogC(v), 1.-exp(-dist*.022));
+  o = vec4(col, vDepth);
+}`;
+const FS_FOREST_BG = FSH + FOREST_FN + `
+out vec4 o;
+void main(){ vec3 rd = viewRay(); vec3 col = fogC(rd); float depth = 200.;
+  col += fsunC()*exp(-acos(clamp(dot(rd, FSUN), -1., 1.))*3.2)*.5;                                          // the bright gap where the sun is
+  if (rd.y < -.002){ float t = -uEye.y/rd.y; vec3 p = uEye+rd*t; depth = t;
+    float litter = noise(vec3(p.xz*3.1, 1.))*.5+noise(vec3(p.xz*11., 4.))*.3+noise(vec3(p.xz*.6, 7.))*.2;
+    float path = exp(-pow((p.x-sin(p.z*.13)*1.2)/1.1, 2.));
+    vec3 g = mix(mix(vec3(.03,.045,.018), vec3(.09,.075,.035), litter), vec3(.13,.105,.06), path*.7)*(.6+.6*litter);
+    // sun flecks that fall through the canopy and move with it
+    float fl = smoothstep(.56,.72, noise(vec3(p.xz*.45+vec2(.75,.3)*gustAt(p)*.5, uTime*.05)))*smoothstep(.3,.7, noise(vec3(p.xz*1.6, 3.+uTime*.07)));
+    g += fsunC()*g*fl*(4.+7.*spec(.1+.6*fract(p.z*.07)));
+    col = mix(g*(.6+.5*uDyn), fogC(rd), 1.-exp(-t*.022)); }
+  o = vec4(col, depth); }`;
+// Shafts of sun standing between the trunks: thin sheets along the light, each one a band.
+const VS_SHAFT = VSP + FOREST_FN + `
+out vec3 vS; out float vBand;
+void main(){ uint id = uint(gl_InstanceID)*4u+77u; float h1 = hashu(id), h2 = hashu(id+1u), h3 = hashu(id+2u), h4 = hashu(id+3u);
+  vec3 foot = vec3((h1-.5)*(9.+18.*h2), 0., 5.+h2*42.);
+  vec2 q = vec2(float(gl_VertexID == 1 || gl_VertexID == 2 || gl_VertexID == 4), float(gl_VertexID == 2 || gl_VertexID == 4 || gl_VertexID == 5));
+  vec3 side = normalize(cross(FSUN, foot-uEye)), p = foot+FSUN*(q.y*24./FSUN.y)+side*(q.x-.5)*(.9+1.6*h3);
+  vS = vec3(q, length(foot-uEye)); vBand = h4; gl_Position = uVP*vec4(p, 1.); }`;
+const FS_SHAFT = FSH + FOREST_FN + `
+in vec3 vS; in float vBand; out vec4 o;
+void main(){ float x = vS.x*2.-1., prof = exp(-x*x*3.5)*smoothstep(0., .08, vS.y)*smoothstep(1., .55, vS.y);
+  float dust = .55+.45*noise(vec3(vS.x*7.+vBand*30., vS.y*3.-uTime*.08, vBand*9.));
+  float b = spec(.05+vBand*.8), bs = specS(.05+vBand*.8);
+  o = vec4(fsunC()*prof*dust*(.035+.55*bs*bs+.25*max(b-bs, 0.)+.08*uHitS.x)*exp(-vS.z*.018), 0.); }`;
+const VS_POLLEN = VSP + FOREST_FN + `
+uniform float uDpr, uFocus, uWindT; out vec3 vCol;
+void main(){ uint id = uint(gl_VertexID)*4u+9u; float h1 = hashu(id), h2 = hashu(id+1u), h3 = hashu(id+2u), h4 = hashu(id+3u);
+  vec3 p = vec3(mod(h1*26.+uWindT*(.4+.5*h4), 26.)-13., .3+h2*9.+.3*sin(uTime*(.3+h4)+h3*20.), 1.+h3*30.);
+  gl_Position = uVP*vec4(p, 1.); float d = max(gl_Position.w, .05), size = max(1.5, abs(d-uFocus)/d*8.)*uDpr; gl_PointSize = min(size, 26.);
+  float edge = smoothstep(0., 2., 13.-abs(p.x)), tw = spec(.6+.38*h4);
+  vCol = fsunC()*(.5+1.5*step(.9, h4))*(.12+2.6*tw*tw+.4*uHit.z+.9*uHitS.z)*edge*(2./(size*size))*(.6+.4*sin(uTime*(1.+h1*3.)+h2*40.))*exp(-d*.03); }`;
+scene({ id: 'forest', name: 'Deep Forest', from: 'Organic', kind: 'nature', group: 'organic', pal: 3, hue: () => 0,
+  about: 'Tall trees in backlight: each low onset sends a gust back through the wood, every crown glows with a band of its own, the shafts of sun between the trunks are bands too, and the highs set the leaves trembling and the pollen sparkling',
+  inputs: ['hist', 'spec', 'specS', 'bandE', 'hit', 'hitS', 'dyn'],
+  cost: 'Moderate: about 110k triangles with alpha-tested foliage under 4× MSAA, plus depth of field. Phones: half the foliage cards and no depth of field.',
+  post: { dof: { ap: 5, max: 9 }, bloom: 0.5, thr: 0.95, knee: 0.7, spread: 0.72, exp: 1.05, ca: 0.3, vig: 0.75, pulse: 0.2 },
+  init() { this.bg = program(VS, FS_FOREST_BG); this.trunk = program(VS_TRUNK, FS_BARK); this.limb = program(VS_LIMB, FS_BARK); this.fol = program(VS_FOLIAGE, FS_FOLIAGE);
+    this.shaft = program(VS_SHAFT, FS_SHAFT); this.pollen = program(VS_POLLEN, FS_POINT); this.windT = 0; },
+  draw(F, out) {
+    const t = F.time; this.windT += F.dt * (0.3 + 1.2 * A.hitLvl[0] + 0.8 * A.hitSlow[0]);
+    const eye = [Math.sin(t * 0.045) * 0.6, 1.75 + Math.sin(t * 0.03) * 0.08, Math.sin(t * 0.027) * 0.8];        // a slow, small drift; the wood does the moving
+    const c = camera(eye, [eye[0] * 0.3 + Math.sin(t * 0.02) * 0.6, 6.2, 16], 1.02, 0, 0.1, 400), focus = 11;
+    const set = u => { F.set(u); setCam(u, c); }, inst = (prog, verts, n, extra) => { gl.useProgram(prog.p); set(prog.u); extra && extra(prog.u); gl.drawArraysInstanced(gl.TRIANGLES, 0, verts, n); };
+    F.focus = focus;
+    beginMS(); quad(this.bg, set);
+    gl.enable(gl.DEPTH_TEST);
+    inst(this.trunk, 540, FOR_TREES); inst(this.limb, 144, FOR_TREES * 3);
+    inst(this.fol, 6, FOR_TREES * FOR_CARDS, u => gl.uniform1f(u.uMode, 0)); inst(this.fol, 6, FOR_FERNS, u => gl.uniform1f(u.uMode, 1));
+    gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.colorMask(true, true, true, false);   // light is added; the depth kept in alpha is left alone
+    inst(this.shaft, 6, FOR_SHAFTS);
+    points(this.pollen, FOR_POLLEN, u => { set(u); gl.uniform1f(u.uDpr, F.px); gl.uniform1f(u.uFocus, focus); gl.uniform1f(u.uWindT, this.windT % 100000); });
+    endMS(out);
+  } });
+}
+
+// 65_shallows.js
+
+// ───────────────────────── Shallows: sunlight through moving water onto sand and stones ─────────────────────────
+{
+// One full-screen pass. The water surface is a sum of small waves plus the rings left by falling drops: a big
+// drop on every kick, a middling one on every snare, and a small one for each note (placed across the pool by
+// its pitch). A drop falls, strikes, throws up a bead that falls back and rings again. The
+// light pattern on the bed is the focusing of the sun by that surface (how much a patch of light is squeezed
+// or spread, from the second derivatives of the surface), slightly different for red, green and blue.
+const FS_SHALLOWS = FSH + `
+out vec4 o; uniform vec4 uDr[14];                              // each drop: x, z, size, age in seconds
+float voice(float band){
+  float fast=spec(band), slow=specS(band);
+  return clamp(.25*fast+.3*slow+1.6*max(0.,fast-slow),0.,1.);      // the band's level, with a moderate lift on its attacks
+}
+const float FALL = .022, BACK = .5;                             // it strikes within one or two frames; the bead it throws up lands BACK after that
+vec2 wgrad(vec2 p){                                           // the slope of the water surface at p
+  vec2 g = vec2(0.); float warp = noise(vec3(p*.35, uTime*.12))*5., amp = .10+.22*uBassS;
+  for (int i = 0; i < 9; i++){ float fi = float(i), ang = fi*2.399+.6, k = 1.7*pow(1.32, fi); vec2 D = vec2(cos(ang), sin(ang));
+    float e=i<3?uBandE.x:(i<6?uBandE.y:uBandE.z);
+    g += D*(.012+.026*amp+.052*e)*cos(k*dot(D,p)-sqrt(k*4.)*uTime*.62+warp*(.6+.2*fi)+fi*1.7); }
+  for (int i = 0; i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w-FALL, life = .44+.84*sz; if (sz <= 0. || a < 0. || a > life+BACK) continue;
+    vec2 d = p-uDr[i].xy; float r = length(d)+1e-3, x = r-a*1.5, k = 22.-8.*sz;                          // bigger drops make broader, longer-lived rings
+    float w = cos(x*k)*smoothstep(0.,.09,a)*(1.-smoothstep(life*.5, life, a))*exp(-x*x*(9.-4.*sz));
+    float a2 = a-BACK, x2 = r-a2*1.5; if (a2 > 0.) w += .2*cos(x2*k)*smoothstep(0.,.12,a2)*(1.-smoothstep(life*.3, life*.7, a2))*exp(-x2*x2*9.);
+    g += d/r*w*(.2+.5*sz)/(1.+r*.7); }
+  return g; }
+float petal(vec2 p, out vec3 pc){                              // a few petals riding the surface
+  vec2 q = p+vec2(uTime*.05, uTime*.02), c = floor(q/1.7); float h = hash2(c+3.); pc = mix(vec3(1.,.82,.86), vec3(1.,.95,.8), hash2(c+9.));
+  if (h < .62) return 0.;
+  vec2 l = rot(h*20.+uTime*.1*(h-.8))*(q-(c+.3+.4*vec2(hash2(c+5.), hash2(c+7.)))*1.7);
+  return smoothstep(.0, -.012, length(l*vec2(1., 1.9))-.07-.04*h); }
+// The pool has a shore. Across the drift of the camera the bed slopes away: dry sand at your feet, a
+// waterline that laps in and out with the bass, clear shallows, then deep water.
+const vec2 SN = vec2(-.385, .923), SD = vec2(.923, .385);        // away from the shore, and along it
+float shoreAt(vec2 p){ float al = dot(p, SD); return -1.75+.45*noise(vec3(al*.35, 3., 1.))+.18*sin(al*1.3)-.16*uBassS-.05*sin(uTime*.6+al); }
+float depthAt(vec2 p){ float s = dot(p, SN)-shoreAt(p); return clamp(s*.36*(.8+.5*noise(vec3(p*.22, 2.)))+.12*(noise(vec3(p*.7, 5.))-.5)*smoothstep(0., 1., s), -.4, 2.6); }
+// stones: where, how big, how tall. xy: offset from the nearest stone in units of its radius; z: its height; w: its seed (0 = none here)
+vec4 stoneAt(vec2 pf){ vec2 sg = pf*1.25, sc = floor(sg); vec4 best = vec4(9., 9., 0., 0.);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec2 cc = sc+vec2(float(i), float(j)); float h = hash2(cc+.7); if (h < .56) continue;
+    vec2 ctr = cc+.25+.5*vec2(hash2(cc+1.3), hash2(cc+2.9)), d = (sg-ctr)*vec2(1., .8+.5*hash2(cc+4.)); float r = .15+.34*(h-.56)*2.2;
+    if (length(d)/r < length(best.xy)) best = vec4(d/r, r*.55, h); }
+  return best; }
+void main(){
+  vec3 rd = viewRay(); const vec3 SUNL = vec3(.28, .51, .81);                 // the moon, low over the far water
+  float ts = -uEye.y/rd.y; vec3 Ps = uEye+rd*ts; vec2 ps = Ps.xz;
+  float d0 = depthAt(ps), wet = smoothstep(0., .25, d0);
+  vec2 gs = wgrad(ps)*smoothstep(.0, .35, d0); vec3 n = normalize(vec3(-gs.x, 1., -gs.y));
+  vec3 rr = refract(rd, n, 1./1.33);
+  float path = max(d0, 0.)/max(-rr.y, .25); vec2 pf = ps+rr.xz*path;          // the point on the bed that you see: deeper water shifts it further
+  float depth = max(depthAt(pf), 0.); path = depth/max(-rr.y, .25); pf = ps+rr.xz*path;
+  // the bed: rippled sand and stones of different sizes, some standing clear of the water near the shore
+  float rip = sin(pf.x*7.+noise(vec3(pf*1.1, 4.))*5.+pf.y*1.5);
+  vec3 sand = vec3(.62,.56,.46)*(.8+.1*rip+.16*noise(vec3(pf*42., 1.)))*(.85+.3*noise(vec3(pf*.7, 6.)));
+  vec4 st = stoneAt(pf); float dd = length(st.xy), stone = st.w > 0. ? smoothstep(1., .9, dd) : 0., rim = dd*dd*stone;
+  vec3 sn = normalize(vec3(-st.xy, sqrt(max(1.-dd*dd, 0.))+.2));
+  float shade = mix(mix(.6, 1., smoothstep(1., 1.6, length(st.xy-vec2(.1,-.12)))), .45+.75*clamp(dot(sn, normalize(vec3(.3,.5,.8))), 0., 1.), stone);
+  vec3 stc = mix(vec3(.36,.36,.38), vec3(.5,.42,.34), fract(st.w*7.3))*(.65+.55*noise(vec3(pf*68., st.w)));
+  vec3 bed = mix(sand, stc, stone)*shade;
+  float proud = stone*smoothstep(-.02, .03, st.z*sqrt(max(1.-dd*dd, 0.))-depth);    // this much of the stone stands above the water
+  // moonlight focused on the bed by the surface: strong in the shallows, fading with depth; it swells with the low end
+  const float e = .02; vec2 g0 = wgrad(pf), gx = wgrad(pf+vec2(e,0.)), gy = wgrad(pf+vec2(0.,e));
+  float hxx = (gx.x-g0.x)/e, hxy = (gx.y-g0.y)/e, hyy = (gy.y-g0.y)/e, c = min(depth, 1.2)*.8;
+  vec3 cc3 = c*vec3(.94, 1., 1.07), det = (1.-cc3*hxx)*(1.-cc3*hyy)-cc3*cc3*hxy*hxy;
+  vec3 caus = mix(vec3(1.), min(1./(abs(det)+.14), vec3(4.)), wet);
+  vec3 pc; float pshadow = petal(pf-SUNL.xz*depth*.5, pc);
+  vec3 hg = uHit*.3+uHitS*.7;                                                 // mostly the eased onset: light that swells, never flashes
+  vec3 sun = vec3(.3,.42,.66)*(.55+.9*uBassS+.6*uHitS.x);                      // the whole bed's light follows the slow envelopes only
+  vec3 col = bed*vec3(.03,.042,.075)+bed*sun*caus*.16*(1.-.6*pshadow);
+  // lights under the stones. Each has its own colour and its own narrow band, so they come up one by one with
+  // the notes; low, mid and high onsets strike the turquoise, violet and amber ones, strongest near the newest drop.
+  vec2 cell = floor(pf/2.8); vec3 lanterns = vec3(0.), haze = vec3(0.);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){
+    vec2 lc = cell+vec2(float(i), float(j)); float seed = hash2(lc+9.);
+    vec2 pos = (lc+.2+.6*vec2(hash2(lc+2.), hash2(lc+4.)))*2.8, delta = pf-pos; float r2 = dot(delta, delta);
+    vec3 lamp = seed < .4 ? vec3(.02,.85,.72) : (seed < .72 ? vec3(.34,.2,.98) : vec3(1.,.42,.09));
+    float local = voice(.04+.91*fract(seed*7.31)), strike = seed < .4 ? hg.x : (seed < .72 ? hg.y : hg.z);
+    float ph = .5+.5*sin(seed*40.+dot(pos, vec2(.7,.4)));                      // the strike reaches them unevenly
+    float power = .05+2.6*local+1.7*strike*(.35+.65*ph);
+    lanterns += lamp*exp(-r2*(1.6+.7*seed))*power; haze += lamp*exp(-r2*.55)*power; }
+  col += lanterns*(.2+.6*caus)*(.36+stone*.58+rim*.99)*(.35+.78*shade)*(.83+.22*noise(vec3(pf*55., 2.)));
+  // the water itself: it takes red first, then green, and holds a little of the coloured light as haze
+  vec3 dry = bed*(vec3(.05,.065,.1)+sun*.2)+lanterns*.25*(.4+rim);
+  float len = path+depth;
+  col *= exp(-vec3(.75,.24,.13)*len);
+  col += vec3(.004,.02,.035)*(1.-exp(-len*.8))+haze*.045*(1.-exp(-len*1.4));
+  // the surface: you see through it at your feet and it turns to a mirror toward the far side
+  vec3 rf = reflect(rd, n); float cosv = max(dot(n, -rd), 0.), fr = .02+.98*pow(1.-cosv, 5.);
+  vec3 sky = vec3(.012,.024,.055)+vec3(.1,.16,.3)*pow(max(rf.y, 0.), .6)*.5+vec3(.5,.62,.9)*exp(-acos(clamp(dot(rf, SUNL), -1., 1.))*7.)*.5;
+  col = mix(col, sky, fr*wet);
+  col += vec3(.64,.8,1.)*pow(max(dot(rf, SUNL), 0.), 220.)*(1.5+1.6*hg.z)*wet;                  // the moon's glitter on the ripples; the highs sharpen it
+  // stones standing proud, the dry beach, and the lapping edge between
+  col = mix(col, dry, max(proud, 1.-smoothstep(-.02, .02, d0)));
+  float edge = exp(-abs(d0)*38.)*(.5+.5*noise(vec3(ps*9., uTime*.5)));
+  col += vec3(.4,.5,.62)*edge*(.35+.8*uBassS)+vec3(.02,.03,.05)*smoothstep(.3, 0., abs(d0))*smoothstep(-.3, 0., d0);
+  float pm = petal(ps+gs*.3, pc)*wet;
+  col = mix(col, pc*(vec3(.12,.14,.19)+lanterns*.3), pm);
+  // the drops themselves: a streak coming down, then the bead thrown back up
+  for (int i = 0; i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w; if (a > FALL+BACK || sz <= 0.) continue;
+    float up = a < FALL ? (1.-a/FALL)*1.5 : sz*.42*4.*((a-FALL)/BACK)*(1.-(a-FALL)/BACK), rad = (a < FALL ? .028 : .02)*(.5+.8*sz), sy = a < FALL ? 4. : 1.2;
+    vec3 C = vec3(uDr[i].x, up+rad, uDr[i].y), oc = (uEye-C)*vec3(1., 1./sy, 1.), dd = normalize(rd*vec3(1., 1./sy, 1.));
+    float b = dot(oc, dd), h = b*b-dot(oc, oc)+rad*rad;
+    if (h > 0.){ vec3 nn = normalize((oc+dd*(-b-sqrt(h)))*vec3(1., 1./sy, 1.)); float e = 1.-max(dot(nn, -rd), 0.);
+      vec3 dc = mix(vec3(.5,.66,.82), vec3(.95,.98,1.), smoothstep(-.2,.8,nn.y))*(.21+.36*e)+lanterns*.35+sun*pow(max(dot(reflect(rd, nn), SUNL), 0.), 40.)*3.;
+      col = mix(col, dc, smoothstep(0., rad*rad*.4, h)*.9); }
+    float ai = a-FALL; if (ai > 0. && ai < .25){ float rr = length(ps-uDr[i].xy);                           // the crown at the moment it strikes
+      col += sun*exp(-pow((rr-ai*.9)/.02, 2.))*smoothstep(0., .06, ai)*(1.-ai/.25)*sz*1.2; } }
+  o = vec4(col, ts+path);
+}`;
+scene({ id: 'shallows', name: 'Shallows', from: 'Organic', kind: 'nature', group: 'organic', pal: 0, hue: () => 0,
+  about: 'A moonlit pool seen from its shore: the bed slopes from dry sand through clear shallows into deep water, with stones at every depth, some standing clear. Drops fall on the onsets and ring; lights under the stones come up one by one with their own bands and are struck by lows, mids and highs; the moon-caustics swell with the bass',
+  inputs: ['spec', 'specS', 'hit (low, mid, high: n, amp, fast)', 'bandE', 'bassS'],
+  cost: 'Moderate: four surface-slope evaluations a pixel (about 70 trig calls). Phones: five waves instead of nine, at reduced resolution.',
+  post: { dof: { ap: 4, max: 5 }, bloom: 0.35, thr: 1.1, knee: 0.6, exp: 1.0, ca: 0.3, vig: 0.6, pulse: 0.2 },
+  init() { this.p = program(VS, FS_SHALLOWS); this.dr = new Float32Array(56); this.di = 0; this.last = new Float32Array(8).fill(9);
+    this.h0=A.hit[0].n; this.h1=A.hit[1].n; this.h2=A.hit[2].n; },
+  draw(F, out) {
+    const t = F.time, drift = [t * 0.12, t * 0.05], tgt = [drift[0], 0, drift[1] + 1.2];
+    const D = this.dr, r = Math.random, drop = (x, z, size) => { D.set([tgt[0] + x, tgt[2] + z, size, 0], (this.di++ % 14) * 4); };
+    for (let i = 0; i < 14; i++) D[i * 4 + 3] += F.dt;
+    const H=A.hit;
+    if(this.h0!==H[0].n){ this.h0=H[0].n; drop((r()-.5)*7.6,-.6+r()*5.2,.66+.32*H[0].amp); }
+    if(this.h1!==H[1].n){ this.h1=H[1].n; drop((r()-.5)*8.4,-.8+r()*5.8,.38+.24*H[1].amp); }
+    if(this.h2!==H[2].n){ this.h2=H[2].n; drop((r()-.5)*9.2,-1.+r()*6.2,.19+.17*H[2].amp); }
+    const eye = [drift[0] + Math.sin(t * 0.06) * 0.4, 2.35, drift[1] - 3.0];              // standing at the water's edge, looking out and down
+    const c = camera(eye, tgt, 0.8, Math.sin(t * 0.05) * 0.012, 0.1, 60); F.focus = Math.hypot(...sub(eye, tgt)) + 0.5;
+    draw(this.p, out, T.sw, T.sh, u => { F.set(u); setCam(u, c); gl.uniform4fv(u.uDr, D); });
   } });
 }
 
