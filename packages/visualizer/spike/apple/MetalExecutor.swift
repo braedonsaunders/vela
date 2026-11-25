@@ -117,7 +117,9 @@ final class MetalExecutor {
                     if p == GL.TEXTURE_MIN_FILTER { t.minF = v } else if p == GL.TEXTURE_MAG_FILTER { t.magF = v } else if p == GL.TEXTURE_WRAP_S { t.wrapS = v } else if p == GL.TEXTURE_WRAP_T { t.wrapT = v }
                     t.sampler = nil }
                 k += 3
-            case 6: k += 1   // TEX_MIPMAP: only the text atlas uses mips (not in the spike scenes)
+            case 6: // TEX_MIPMAP tex
+                if let texture = textures[I[k]] { generateMipmaps(texture) }
+                k += 1
             case 7: fbs[I[k]] = FB(); k += 1
             case 8: fbs[I[k]] = nil; k += 1
             case 9: if let fb = fbs[I[k]] { if I[k + 1] == GL.DEPTH_ATTACHMENT { fb.depth = .tex(I[k + 2]) } else { fb.color = .tex(I[k + 2]) } }; k += 3
@@ -306,6 +308,33 @@ final class MetalExecutor {
     }
 
     // MARK: uniforms and uploads
+    private func generateMipmaps(_ texture: Tex) {
+        guard let base = texture.mtl, base.width > 1 || base.height > 1 else { return }
+        endEncoder()
+        let blit = cmd!.makeBlitCommandEncoder()!
+        defer { blit.endEncoding() }
+        if base.mipmapLevelCount > 1 {
+            blit.generateMipmaps(for: base)
+            return
+        }
+
+        // Most targets never need mips. Promote on demand, keeping level zero and
+        // earlier writes in GPU command order, including a preceding render pass.
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: base.pixelFormat,
+            width: base.width, height: base.height, mipmapped: true)
+        descriptor.usage = base.usage
+        descriptor.storageMode = base.storageMode
+        guard let chain = device.makeTexture(descriptor: descriptor) else {
+            NSLog("viz: could not allocate mip chain for \(base.width) × \(base.height) texture")
+            return
+        }
+        blit.copy(from: base, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(),
+                  sourceSize: MTLSize(width: base.width, height: base.height, depth: 1),
+                  to: chain, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin())
+        blit.generateMipmaps(for: chain)
+        texture.mtl = chain
+    }
+
     private func write(_ data: inout [UInt8], _ m: Member, kind: Int32, comps: Int, count: Int, raw: UnsafeMutableRawPointer, at k: Int) {
         let n = min(count, m.count)
         data.withUnsafeMutableBytes { dst in
