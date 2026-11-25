@@ -1,31 +1,54 @@
-// Precompute the candidate's integer raster using the very same scan converter as the
-// browser. Keep its GL upload and its sampling parameters verbatim in the native bundle.
-export function bakeCountryMap(sceneSource: string): string {
-  const factory = sceneSource.indexOf('function worldMapTexture()');
-  if (factory < 0) return sceneSource;
-  const raster = sceneSource.indexOf('const alphabet =', factory);
-  const upload = sceneSource.indexOf('const t=gl.createTexture()', factory);
-  if (raster < 0 || upload <= raster) throw new Error('Unexpected worldMapTexture layout');
+// Run the authoring texture factories at build time. Capture both the texels and
+// the upload/sampler calls, so native hosts need neither a GIS rasterizer nor
+// per-candidate assumptions about filtering, wrapping or the number of channels.
+const { GLC } = require('../runtime/glrec.js');
 
-  let pixels: Uint8Array | undefined;
+export function bakeCountryMap(sceneSource: string): string {
+  const names = ['worldMapTexture', 'hydroTexture'].filter(name => sceneSource.includes('function ' + name + '('));
+  if (!names.length) return sceneSource;
+
+  // Scene parts are standalone blocks. Take references to their local factories
+  // without initializing the scene, compiling a shader, or changing its source.
+  const blockEnd = sceneSource.lastIndexOf('}');
+  const capture = sceneSource.slice(0, blockEnd) + 'return [' + names.join(',') + '];}';
+  const statements: string[] = [];
+  let uploaded = false;
   const gl = {
-    createTexture() { return {}; }, bindTexture() {}, texParameteri() {},
-    texImage2D(_target: number, _level: number, _format: number, width: number, height: number,
-      _border: number, _channels: number, _type: number, data: Uint8Array) {
-      if (pixels || data.length !== width * height) throw new Error('Expected a single R8 country map');
-      pixels = data;
+    ...GLC,
+    createTexture() { return 't'; },
+    bindTexture(target: number, texture: string) {
+      if (texture !== 't') throw new Error('Unexpected cartography texture binding');
+      statements.push('gl.bindTexture(' + target + ', t);');
+    },
+    texImage2D(target: number, level: number, format: number, width: number, height: number,
+      border: number, channels: number, type: number, data: Uint8Array) {
+      const n = channels === GLC.RED ? 1 : channels === GLC.RG ? 2 : 0;
+      if (uploaded || !n || type !== GLC.UNSIGNED_BYTE || data.length !== width * height * n) {
+        throw new Error('Expected a single R8 or RG8 cartography texture');
+      }
+      uploaded = true;
+      const args = [target, level, format, width, height, border, channels, type].join(', ');
+      statements.push('const bytes = (' + decodeCountryRuns.toString() + ')(' +
+        JSON.stringify(encodeCountryRuns(data)) + ', ' + data.length + ');');
+      statements.push('gl.texImage2D(' + args + ', bytes);');
+    },
+    texParameteri(target: number, param: number, value: number) {
+      statements.push('gl.texParameteri(' + [target, param, value].join(', ') + ');');
     },
   };
-  new Function('gl', 'VS', 'FSH', 'program', 'scene', 'textAtlas', sceneSource)(
-    gl, '', '', () => ({}), (scene: {init(): void}) => scene.init(), () => ({}));
-  if (!pixels) throw new Error('Cartography did not upload its country map');
-
-  // A country extends across consecutive pixels of a scanline. Each six-digit
-  // hexadecimal record stores a 16-bit run length and one unsigned country ID.
-  const runs = encodeCountryRuns(pixels);
-  return sceneSource.slice(0, raster) +
-    'const ids = (' + decodeCountryRuns.toString() + ')(' + JSON.stringify(runs) + ', width * height);\n  ' +
-    sceneSource.slice(upload);
+  const factories: Function[] = new Function('gl', 'VS', 'FSH', 'scene', capture)(gl, '', '', () => {});
+  let nativeSource = sceneSource;
+  for (const factory of factories) {
+    statements.length = 0;
+    uploaded = false;
+    factory();
+    const original = factory.toString();
+    if (!uploaded || !nativeSource.includes(original)) throw new Error('Unable to bake ' + factory.name);
+    const replacement = 'function ' + factory.name + '() {\n  const t = gl.createTexture();\n  ' +
+      statements.join('\n  ') + '\n  return t;\n}';
+    nativeSource = nativeSource.replace(original, () => replacement);
+  }
+  return nativeSource;
 }
 
 export function encodeCountryRuns(pixels: Uint8Array): string {
