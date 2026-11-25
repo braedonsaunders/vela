@@ -4,7 +4,7 @@
 // key for key. A template calls only the accessors it names.
 import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
-import { duration, msg, videoRoleLabel } from '@vela/core';
+import { drawnAs, duration, msg, videoRoleLabel } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
 import { aboutLabel, aboutLine, type About } from './about';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
@@ -475,7 +475,8 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'card.contextParts': return at(c.card?.contextParts ?? [], contextPart => ({ contextPart }));
     case 'home.rows': {
       const rows = e.home?.rows ?? [];
-      const keys = identityKeys(rows.map(row => row.id));
+      // A row re-read with a new id draws as it was (drawnAs): only what changed in it draws again.
+      const keys = identityKeys(rows.map(drawnAs));
       return at(rows, (row, i) => ({ row, key: `row:${keys[i]}` }));
     }
     case 'row.items': {
