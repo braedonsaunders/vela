@@ -194,6 +194,9 @@ public final class VelaPlayerModule: Module {
             Prop("tile") { (view: VelaPlayerView, tile: Int?) in
                 view.setTile(tile)
             }
+            Prop("videoFill") { (view: VelaPlayerView, fill: Bool?) in
+                view.setVideoFill(fill ?? false)
+            }
             Prop("metadata") { (view: VelaPlayerView, metadata: [String: Any]?) in
                 view.setMetadata(metadata)
             }

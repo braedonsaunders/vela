@@ -92,7 +92,7 @@ export default function Watch() {
   const metadata = { title, ...(poster ? { artworkUrl: poster } : {}) };
   if (!skin) return <View style={styles.stage} />;
   return (
-    <WatchSurface host={skin} state={{ ...session.chrome, title, close }}>
+    <WatchSurface host={skin} state={{ ...session.chrome, title, close, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
       {session.view.plan ? (
         <View pointerEvents={Platform.OS === 'android' ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
           <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />

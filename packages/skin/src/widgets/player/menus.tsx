@@ -2,7 +2,8 @@
 // audio, quality (grouped by resolution, each by its bitrate and what it needs, with the info
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
 import { SubtitleSearch, SubtitleSearchEntry } from './subtitle-search';
-import { msg, number, STREAMING_QUALITIES, type StreamingQuality, type StreamingSettings } from '@vela/core';
+import { clock, msg, number, sleepLeftMs, STREAMING_QUALITIES, type StreamingQuality, type StreamingSettings } from '@vela/core';
+import { useEffect } from 'react';
 import { useState, type ReactNode } from 'react';
 import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
@@ -11,7 +12,7 @@ import { nextSubtitleOffset, type PlayerView, type QualityOption } from './prese
 import type { PlaybackPlan } from '@vela/player-api';
 import { versionAvailability, versionMenuChips, versionMenuGroups } from '../versions';
 
-export type MenuName = 'subtitles' | 'audio' | 'quality' | 'speed';
+export type MenuName = 'subtitles' | 'audio' | 'quality' | 'speed' | 'sleep';
 
 interface Props {
   look: PlayerLook;
@@ -314,6 +315,34 @@ function StreamingSettingsRows({ look, streaming }: { look: PlayerLook; streamin
       {look.tv ? null : <SegmentRow look={look} name={msg('player.streaming.mobile')} enabled
         current={streaming.settings.mobile} options={options} onPick={pick('mobile')} />}
       <MenuHeading look={look} text={msg(streaming.metered ? 'player.streaming.onMobile' : 'player.streaming.nextTitle')} />
+    </>
+  );
+}
+
+const SLEEP_MINUTES = [15, 30, 60];
+
+/** The sleep timer: off, after some minutes, or at the end of what plays. The running timer shows what is left. */
+export function SleepMenu({ look, sleep, episode }: { look: PlayerLook; sleep: NonNullable<PlayerChromeState['sleep']>; episode: boolean }) {
+  const { value } = sleep;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (value.mode !== 'timer') return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [value.mode]);
+  const left = clock(Math.ceil(sleepLeftMs(value, now) / 1000));
+  const minutes = value.mode === 'timer' ? value.minutes : 0;
+  return (
+    <>
+      <ChoiceRow look={look} name={msg('player.sleep.off')} selected={value.mode === 'off'} enabled onChoose={() => sleep.set('off')} testID="player-sleep-off" />
+      {SLEEP_MINUTES.map(count => (
+        <ChoiceRow key={count} look={look} name={msg('player.sleep.minutes', { count: number(count) })}
+          detail={value.mode === 'timer' && minutes === count ? msg('player.sleep.in', { time: left }) : ''}
+          selected={value.mode === 'timer' && minutes === count} enabled onChoose={() => sleep.set('timer', count)} testID={`player-sleep-${count}`} />
+      ))}
+      <ChoiceRow look={look} name={msg(episode ? 'player.sleep.episode' : 'player.sleep.title')}
+        detail={value.mode === 'item' ? msg('player.sleep.atEnd') : ''}
+        selected={value.mode === 'item'} enabled onChoose={() => sleep.set('item')} testID="player-sleep-end" />
     </>
   );
 }

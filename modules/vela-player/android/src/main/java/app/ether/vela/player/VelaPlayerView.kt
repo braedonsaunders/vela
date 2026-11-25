@@ -169,6 +169,14 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     pendingTile = value
   }
 
+  /** The viewer fills the screen with a full watch's picture (cropping) instead of fitting it. */
+  fun setVideoFill(value: Boolean) {
+    if (videoFill == value) return
+    videoFill = value
+    content.requestLayout(); requestLayout()
+  }
+  private var videoFill = false
+
   /** What the system's media session shows for this player (full watch only). */
   fun setMetadata(value: Map<String, Any?>?) = controller.setMetadata(value)
 
@@ -270,18 +278,24 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     if (videoRatio != ratio) { videoRatio = ratio; content.requestLayout(); requestLayout() }
   }
 
-  /** Letterboxes the video, and the subtitle layers over it, in the picture's `width`×`height`. */
+  /** Letterboxes the video (or, filling, covers the picture and crops), and lays the subtitle layers over
+   * the part of it that shows, in the picture's `width`×`height`. */
   private fun placeVideo(width: Int, height: Int) {
     if (!previewMode && videoRatio > 0 && width > 0 && height > 0) {
-      val videoWidth = minOf(width, (height * videoRatio).toInt())
-      val videoHeight = minOf(height, (width / videoRatio).toInt())
+      val fill = videoFill && pendingTile == null && !pendingAmbient && pipStage == null
+      val videoWidth = if (fill) maxOf(width, (height * videoRatio).toInt()) else minOf(width, (height * videoRatio).toInt())
+      val videoHeight = if (fill) maxOf(height, (width / videoRatio).toInt()) else minOf(height, (width / videoRatio).toInt())
       val x = (width - videoWidth) / 2
       val y = (height - videoHeight) / 2
       video.layout(x, y, x + videoWidth, y + videoHeight)
-      subtitleLayer.measure(MeasureSpec.makeMeasureSpec(videoWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(videoHeight, MeasureSpec.EXACTLY))
-      subtitleLayer.layout(x, y, x + videoWidth, y + videoHeight)
-      assLayer.measure(MeasureSpec.makeMeasureSpec(videoWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(videoHeight, MeasureSpec.EXACTLY))
-      assLayer.layout(x, y, x + videoWidth, y + videoHeight)
+      val shownX = maxOf(0, x)
+      val shownY = maxOf(0, y)
+      val shownWidth = minOf(width, videoWidth)
+      val shownHeight = minOf(height, videoHeight)
+      subtitleLayer.measure(MeasureSpec.makeMeasureSpec(shownWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(shownHeight, MeasureSpec.EXACTLY))
+      subtitleLayer.layout(shownX, shownY, shownX + shownWidth, shownY + shownHeight)
+      assLayer.measure(MeasureSpec.makeMeasureSpec(shownWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(shownHeight, MeasureSpec.EXACTLY))
+      assLayer.layout(shownX, shownY, shownX + shownWidth, shownY + shownHeight)
     } else {
       subtitleLayer.layout(0, 0, width, height)
       assLayer.layout(0, 0, width, height)

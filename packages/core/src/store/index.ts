@@ -57,7 +57,7 @@ export interface VelaState {
   appearance: Loadable<AppearanceModel>;
   /** The trailer preview playing now. */
   previews: PreviewState;
-  /** This device's player settings: the streaming cap on each network. */
+  /** This device's player settings: the streaming cap on each network, and the picture's fit. */
   playerSettings: PlayerSettingsState;
 }
 

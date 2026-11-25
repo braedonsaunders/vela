@@ -5,7 +5,7 @@
 import { forcedMute, quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { commandOrigin, msg, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal, type StreamingSettings } from '@vela/core';
+import { AWAKE, commandOrigin, msg, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
@@ -35,6 +35,9 @@ export interface LiveSessionOwner {
   retry(): void;
   updatePlan(plan: PlaybackPlan): void;
 }
+
+/** Phones and tablets choose whether the picture fits the screen or fills it; TVs and the web fit. */
+const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
 
 /** `shownAway`: whether the player's picture stays on screen while the app is in the background (Android's
  * picture-in-picture window), read as the app leaves the foreground; the watch then goes on. */
@@ -142,6 +145,24 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     setCommand({ ...input, id: nextId.current } as Command);
   }, []);
 
+  // The sleep timer (core sleep.ts, as spoken audio has it): an ordinary pause after some minutes, or at
+  // the end of what plays, which also holds back anything that would start after it. Each watch starts awake.
+  const [sleep, setSleepState] = useState<Sleep>(AWAKE);
+  const sleepRef = useRef(sleep);
+  sleepRef.current = sleep;
+  useEffect(() => setSleepState(AWAKE), [kind, id]);
+  const setSleep = useCallback((mode: SleepMode, minutes = 0) => setSleepState(sleepFrom(mode, minutes, Date.now(), position.current)), []);
+  const sleepNow = useCallback(() => {
+    setSleepState(AWAKE);
+    if (!paused.current) send({ type: 'pause' });
+  }, [send]);
+  // A timer runs out between position reports too.
+  useEffect(() => {
+    if (sleep.mode !== 'timer') return;
+    const timer = setTimeout(sleepNow, Math.max(0, sleep.endsAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [sleep, sleepNow]);
+
   // An engine failure it can recover from is retried in place; anything else starts over where it stopped.
   const retry = useCallback(() => {
     if (failure?.recoverable && playback.plan) {
@@ -217,11 +238,16 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
     command,
+    videoFill: PICTURE_CHOICE && settings.picture === 'fill',
     onSnapshot: next => {
       setSnapshot(next);
       if (belongs(next, plan)) {
         position.current = next.position;
         paused.current = next.state === 'paused';
+        const asleep = sleepRef.current;
+        // The end came first: an end-of-item sleep has done its work (nothing follows), a timer has none left.
+        if (asleep.mode !== 'off' && next.state === 'ended') setSleepState(AWAKE);
+        else if (next.state === 'playing' && sleepDue(asleep, Date.now(), next.position, plan?.chapters)) sleepNow();
       }
       if (next.failure === null) setFailure(null);
       if (next.state !== 'failed') ownerRef.current?.snapshot(next);
@@ -269,6 +295,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const setStreaming = useCallback((next: Partial<StreamingSettings>) => vela.playerSettings.setStreaming(next), [vela]);
   const streaming = useMemo(() => ({ settings: settings.streaming, metered: settings.metered, set: setStreaming }),
     [settings.streaming, settings.metered, setStreaming]);
+  const sleepTimer = useMemo(() => ({ value: sleep, set: setSleep }), [sleep, setSleep]);
+  const setPicture = useCallback((fill: boolean) => vela.playerSettings.setPicture(fill ? 'fill' : 'fit'), [vela]);
+  const picture = useMemo(() => (PICTURE_CHOICE ? { fill: settings.picture === 'fill', set: setPicture } : undefined), [settings.picture, setPicture]);
 
   const chromeTarget: ChromeTarget = target.kind === 'programme' ? { kind, id, channelId: target.channelId, ...(target.from ? { from: target.from } : {}) } : { kind, id };
   const owned = owner && !ownedPlan ? owner : undefined;
@@ -294,6 +323,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       retry,
       thumbnail,
       streaming,
+      sleep: sleepTimer,
+      picture,
     },
     view,
     stop,

@@ -18,13 +18,14 @@ export function usePlayerSettings(store: Vela): void {
     return onNetwork(metered => store.playerSettings.setMetered(metered));
   }, [store]);
   const streaming = useVelaState(state => state.playerSettings.streaming);
+  const picture = useVelaState(state => state.playerSettings.picture);
   const saved = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const value = JSON.stringify({ streaming });
+    const value = JSON.stringify({ streaming, picture });
     // The first value is the one just read (or the defaults): nothing to write yet.
     if (saved.current === undefined) { saved.current = value; return; }
     if (saved.current === value) return;
     saved.current = value;
     try { preferences.set(PLAYER_SETTINGS, value); } catch { /* Kept for this run only. */ }
-  }, [streaming]);
+  }, [streaming, picture]);
 }

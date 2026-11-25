@@ -15,7 +15,7 @@ import type { CommandInput, PlayerChromeState } from './context';
 import type { OverlaySwitch } from '../../surfaces/player';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
-import { AudioMenu, qualityMenuRows, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
+import { AudioMenu, qualityMenuRows, SleepMenu, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
 import type { PlayerView } from './present';
 import { Scrubber } from './scrubber';
 import { Volume } from './volume';
@@ -268,6 +268,7 @@ function Controls({
     audio: msg('ui.audio'),
     quality: msg('ui.quality'),
     speed: msg('player.speed'),
+    sleep: msg('player.sleep'),
     chapters: msg('ui.chapters'),
   };
   const menu = opened === 'chapters' && Platform.OS === 'web' ? null : opened;
@@ -287,6 +288,8 @@ function Controls({
         });
       case 'speed':
         return <SpeedMenu look={look} view={view} blocked={blocked} send={send} />;
+      case 'sleep':
+        return state.sleep ? <SleepMenu look={look} sleep={state.sleep} episode={!!state.episode} /> : null;
     }
   };
   // Phones put the screening controls on a line of their own when the transport leaves no room.
@@ -425,7 +428,29 @@ function Controls({
               testID="player-chapters-button"
               onPress={() => toggle('chapters')}
             />
+            {state.sleep ? (
+              <ChromeButton
+                look={look}
+                icon="moon"
+                compact
+                label={names.sleep}
+                selected={opened === 'sleep' || state.sleep.value.mode !== 'off'}
+                testID="player-sleep-button"
+                onPress={() => toggle('sleep')}
+              />
+            ) : null}
           </>
+        ) : null}
+        {state.picture ? (
+          <ChromeButton
+            look={look}
+            icon={state.picture.fill ? 'pictureFill' : 'pictureFit'}
+            compact
+            label={msg(state.picture.fill ? 'player.picture.fit' : 'player.picture.fill')}
+            selected={state.picture.fill}
+            testID="player-picture-button"
+            onPress={() => state.picture?.set(!state.picture.fill)}
+          />
         ) : null}
         {view.pip ? (
           <ChromeButton

@@ -12,6 +12,7 @@ import type { Playback, PlaybackTarget } from './playback';
 import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
+import { AWAKE, holdsNext, sleepDue, sleepFrom, type Sleep, type SleepMode } from '../sleep';
 
 export type AudioEngineEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration' | 'advanced';
 
@@ -52,7 +53,7 @@ export interface AudioEngine {
 }
 
 export type AudioPhase = 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
-export type SleepMode = 'off' | 'timer' | 'chapter' | 'item';
+export { chapterEnd, type SleepMode } from '../sleep';
 
 export interface AudioState {
   queue: AudioQueue | null;
@@ -61,7 +62,7 @@ export interface AudioState {
   durationSeconds: number;
   rate: number;
   /** The sleep timer: until a time (ms since the epoch), the end of the chapter or of the item. */
-  sleep: { mode: SleepMode; endsAt: number };
+  sleep: Sleep;
   chapters: V.Chapter[];
   error: string;
   /** No engine on this platform yet (native audio is device work). */
@@ -280,9 +281,7 @@ export class Audio {
 
   /** Sleep after `minutes`, at the end of the chapter or item, or never ('off'). */
   setSleep(mode: SleepMode, minutes = 0): void {
-    // A chapter sleep remembers where it was set, so it ends with that chapter rather than the next.
-    const endsAt = mode === 'timer' ? Date.now() + minutes * 60_000 : mode === 'chapter' ? this.state.positionSeconds : 0;
-    this.patch({ sleep: { mode, endsAt } });
+    this.patch({ sleep: sleepFrom(mode, minutes, Date.now(), this.state.positionSeconds) });
     this.lookAhead();
   }
 
@@ -478,8 +477,7 @@ export class Audio {
    * ends there or the sleep timer stops at the item's end. */
   private upcoming(): Card | undefined {
     const queue = this.state.queue;
-    const sleep = this.state.sleep.mode;
-    if (!queue || sleep === 'item' || sleep === 'chapter') return undefined;
+    if (!queue || holdsNext(this.state.sleep)) return undefined;
     const after = next(queue, true);
     return after ? current(after) : undefined;
   }
@@ -679,26 +677,21 @@ export class Audio {
     this.playback.snapshot({ sessionId: this.sessionId, live: null, position, state: this.state.phase === 'paused' ? 'paused' : 'playing' });
     if (now - this.lastPatch >= 250) { this.lastPatch = now; this.patch({ positionSeconds: position }); }
     if (now - this.lastObservation >= OBSERVE_EVERY_MS) this.observe('playing');
-    const sleep = this.state.sleep;
-    if (sleep.mode === 'timer' && now >= sleep.endsAt) this.sleepNow();
-    if (sleep.mode === 'chapter') {
-      const end = chapterEnd(this.state.chapters, sleep.endsAt);
-      if (end !== undefined && position >= end - 0.3) this.sleepNow();
-    }
+    if (sleepDue(this.state.sleep, now, position, this.state.chapters)) this.sleepNow();
     this.lookAhead(position);
   }
 
   private sleepNow(): void {
-    this.patch({ sleep: { mode: 'off', endsAt: 0 } });
+    this.patch({ sleep: AWAKE });
     this.pause();
   }
 
   private ended(): void {
     this.observe('ended');
     this.held('ended');
-    if (this.state.sleep.mode === 'item' || this.state.sleep.mode === 'chapter') {
+    if (holdsNext(this.state.sleep)) {
       // Asleep on the next item: its session starts when the viewer resumes.
-      this.patch({ sleep: { mode: 'off', endsAt: 0 }, phase: 'paused' });
+      this.patch({ sleep: AWAKE, phase: 'paused' });
       const after = this.state.queue && next(this.state.queue, true);
       if (after) this.patch({ queue: after, positionSeconds: 0, chapters: [] });
       this.halt();
@@ -762,12 +755,4 @@ export class Audio {
 function planURL(plan: V.PlaybackPlan): string | undefined {
   const path = plan.paths.find(p => p.id === plan.selectedPathId) ?? plan.paths[0];
   return path && 'url' in path && path.url ? path.url : undefined;
-}
-
-/** Where the chapter playing at `position` ends: its end, else the next chapter's start. */
-export function chapterEnd(chapters: V.Chapter[], position: number): number | undefined {
-  const sorted = [...chapters].sort((a, b) => a.startSeconds - b.startSeconds);
-  const index = sorted.findLastIndex(c => c.startSeconds <= position);
-  if (index < 0) return sorted[0]?.startSeconds;
-  return sorted[index]!.endSeconds ?? sorted[index + 1]?.startSeconds;
 }

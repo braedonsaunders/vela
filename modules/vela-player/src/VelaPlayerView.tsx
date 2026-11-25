@@ -53,6 +53,7 @@ interface NativeViewProps {
   command?: Command;
   ambient?: boolean;
   tile?: number;
+  videoFill?: boolean;
   serverError?: Failure | null;
   onSnapshot?: (event: NativeSyntheticEvent<Snapshot>) => void;
   onError?: (event: NativeSyntheticEvent<Failure>) => void;
@@ -209,6 +210,7 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     command: sent.current,
     ambient: props.ambient,
     tile: props.tile,
+    videoFill: props.videoFill === true,
     serverError: props.serverError ? { ...props.serverError, message: redactMediaError(props.serverError.message) } : null,
     onSnapshot: forward(props.onSnapshot),
     onError: forward<Failure>(error => props.onError?.({ ...error, message: redactMediaError(error.message) })),

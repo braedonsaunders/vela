@@ -2,7 +2,7 @@
 // view's latest snapshot, why a start failed, and the few things the chrome can ask for. The
 // chrome never sees media credentials, URLs or the server: it sends view commands and asks the
 // route to close or retry.
-import type { StreamingSettings, TrickplayFrame } from '@vela/core';
+import type { Sleep, SleepMode, StreamingSettings, TrickplayFrame } from '@vela/core';
 import { createContext, useContext } from 'react';
 import type { Command, Failure, PlaybackPlan, Snapshot } from '@vela/player-api';
 
@@ -62,6 +62,12 @@ export interface PlayerChromeState {
   /** This device's streaming cap on each network and whether the network is metered now; a change
    * applies from the next start. */
   streaming?: { settings: StreamingSettings; metered: boolean; set(next: Partial<StreamingSettings>): void };
+  /** The watch's sleep timer: pause after some minutes, or at the end of what is playing. */
+  sleep?: { value: Sleep; set(mode: SleepMode, minutes?: number): void };
+  /** What is playing is an episode (its sleep choice names the episode). */
+  episode?: boolean;
+  /** A phone's or tablet's picture fits the screen or fills it (this device's setting); absent elsewhere. */
+  picture?: { fill: boolean; set(fill: boolean): void };
 }
 
 export const PlayerChromeContext = createContext<PlayerChromeState | null>(null);

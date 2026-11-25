@@ -49,6 +49,7 @@ final class PlaybackSession {
     private var ambient = false
     /// One tile of a multiview grid (`tile`): audible only by a mute command, never the system's media owner.
     private var tile: Int?
+    private var videoFill = false
     private var hasMuteCommand = false
     private var loggedOutput = false
     private var refreshAsked = ""
@@ -140,6 +141,12 @@ final class PlaybackSession {
     func setAmbient(_ value: Bool) {
         ambient = value
         report.waitForFrame = value
+    }
+
+    /// The viewer fills the screen with a full-screen watch's picture (cropping) instead of fitting it.
+    func setVideoFill(_ value: Bool) {
+        videoFill = value
+        if !ambient, tile == nil { player?.setAspectFill(value) }
     }
 
     func setTile(_ value: Int?) {
@@ -339,7 +346,7 @@ final class PlaybackSession {
         }
         sidecar.forget()
         let client = PlaybackClient(rendering: host.makeRendering(retainPausedPicture: ambient), preview: ambient, paused: !wantsPlay,
-                                    muted: hasMuteCommand || tile != nil ? report.muted : ambient,
+                                    muted: hasMuteCommand || tile != nil ? report.muted : ambient, aspectFill: videoFill && !ambient && tile == nil,
                                     isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient, tile: tile)
         player = client
         client.set("volume", double: report.volume * 100)

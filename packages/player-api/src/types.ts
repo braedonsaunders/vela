@@ -77,6 +77,10 @@ export interface VelaPlayerProps {
   metadata?: PlayerMetadata;
   /** A failure the server reported for this session; the view stops and reports it as its own state. */
   serverError?: Failure | null;
+  /** A full-screen watch's picture fills the view, cropping what falls outside, instead of fitting it
+   * with bars; it changes while playing. Captions keep to the part that shows. Ambient views, previews
+   * and tiles ignore it; so do implementations without the choice (the web). */
+  videoFill?: boolean;
   /** Emit position/state throughout playback, including buffering and pause. The shared host
    * watches progress for session recovery; paused/ended states disable its stall deadline. */
   onSnapshot?: (snapshot: Snapshot) => void;

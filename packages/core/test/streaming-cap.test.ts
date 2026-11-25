@@ -28,7 +28,7 @@ describe('streaming settings', () => {
   test('stored settings are read defensively', () => {
     expect(streamingSettings({ wifi: '1080p', mobile: 'huge' })).toEqual({ wifi: '1080p', mobile: '720p' });
     expect(streamingSettings('garbage')).toEqual(DEFAULT_STREAMING);
-    expect(storedPlayerSettings({ streaming: { mobile: '480p' } })).toEqual({ streaming: { wifi: 'original', mobile: '480p' } });
+    expect(storedPlayerSettings({ picture: 'stretch', streaming: { mobile: '480p' } })).toEqual({ picture: 'fit', streaming: { wifi: 'original', mobile: '480p' } });
   });
 
   test('the cap only ever lowers what the device declared', () => {
