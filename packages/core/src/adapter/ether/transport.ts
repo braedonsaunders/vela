@@ -13,7 +13,11 @@ export interface RequestOptions {
   cacheable?: boolean;
   /** On web, retain this ETag answer across a full reload in this tab. */
   persistent?: boolean;
-  /** Replace cached grants without sending an old ETag. */
+  /**
+   * Read past every cache: no ETag of ours, and none the platform's HTTP stack keeps (the browser
+   * cache; OkHttp's on Android, which otherwise revalidates on its own and turns the server's 304
+   * into the old body). The answer still replaces a cacheable entry.
+   */
   fresh?: boolean;
   /** Refresh and resend once on 401 (default true). */
   retryAuth?: boolean;
@@ -78,10 +82,11 @@ export class EtherTransport {
     const cached = cacheable && !fresh ? this.cache.get(key) ?? (persistent ? persistentRead(key) : undefined) : undefined;
     if (cached && !this.cache.has(key)) this.cache.set(key, cached);
     const send = (token: Token, useCache = true) => {
-      const headers: Record<string, string> = { ...options.headers };
+      const headers: Record<string, string> = fresh ? uncached(options.headers) : { ...options.headers };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (cached && useCache) headers['If-None-Match'] = cached.etag;
       const init: RequestInit = { method, signal, headers };
+      if (fresh) init.cache = 'no-store';
       if (body !== undefined) init.body = JSON.stringify(body);
       return this.fetchBound(`/vela/v0${path}`, init, token);
     };
@@ -287,6 +292,18 @@ export class EtherTransport {
       return `${url.pathname.slice('/vela/v0'.length)}${url.search}`;
     } catch { return undefined; }
   }
+}
+
+/**
+ * Request headers that keep every HTTP cache between us and the server out of a fresh read. The
+ * browser honours `cache: 'no-store'`; expo/fetch (the native global fetch) drops that option, so
+ * the platform cache (OkHttp's on Android, URLCache on Apple) is told by header: no stored answer
+ * used or revalidated (no-cache), none kept (no-store), and Pragma for HTTP/1.0 caches. No
+ * validator of the caller's survives.
+ */
+function uncached(headers: Record<string, string> = {}): Record<string, string> {
+  const kept = Object.fromEntries(Object.entries(headers).filter(([name]) => !/^(if-none-match|if-modified-since|if-match|if-unmodified-since|if-range|cache-control|pragma)$/i.test(name)));
+  return { ...kept, 'Cache-Control': 'no-cache, no-store', Pragma: 'no-cache' };
 }
 
 /** Whether a 401 is Ether refusing the preview token (problem code preview_expired). */

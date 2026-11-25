@@ -26,17 +26,23 @@ class Feed {
   stale: 404 | 409 = 409;
   /** Bootstrap reads still to refuse with 409 bootstrap_changed (Ether rebuilding its feed). */
   changing = 0;
-  id(key: string) { return `${key}@${this.snapshot}`; }
-  row(shelf: Feed['shelves'][number], from = 0, limit = 20): WireRow {
+  /**
+   * Bootstrap reads that still answer the previous snapshot's body (Ether 0.3.21's two-minute
+   * bootstrap response cache, honest 304s included) while /rows already refuses its ids.
+   */
+  lagging = 0;
+  id(key: string, snapshot = this.snapshot) { return `${key}@${snapshot}`; }
+  row(shelf: Feed['shelves'][number], from = 0, limit = 20, snapshot = this.snapshot): WireRow {
     const items = shelf.titles.slice(from, from + limit);
     const more = from + limit < shelf.titles.length;
-    return { id: this.id(shelf.key), ...(this.keys ? { key: shelf.key } : {}), name: shelf.name, purpose: shelf.purpose, receiptToken: '',
-      continuation: more ? 'more' : 'exhausted', ...(more ? { nextCursor: `${this.id(shelf.key)}|${from + limit}` } : {}),
+    const id = this.id(shelf.key, snapshot);
+    return { id, ...(this.keys ? { key: shelf.key } : {}), name: shelf.name, purpose: shelf.purpose, receiptToken: '',
+      continuation: more ? 'more' : 'exhausted', ...(more ? { nextCursor: `${id}|${from + limit}` } : {}),
       items: items.map(value => ({ id: `${shelf.key}:${value.id}`, kind: 'title' as const, title: value as never, receiptToken: '' })) };
   }
-  bootstrap(): Bootstrap {
+  bootstrap(snapshot = this.snapshot): Bootstrap {
     return { viewer: { id: 'v', name: 'Viewer' }, heroes: [], defaultSkinId: 'cinematic', capabilities: { skins: [], features: {} },
-      rows: this.shelves.filter(shelf => shelf.titles.length).map(shelf => this.row(shelf)) } as unknown as Bootstrap;
+      rows: this.shelves.filter(shelf => shelf.titles.length).map(shelf => this.row(shelf, 0, 20, snapshot)) } as unknown as Bootstrap;
   }
   /** Playback recomputes the feed: every row gets a new id. */
   played() { this.snapshot++; }
@@ -46,6 +52,10 @@ class Feed {
       if (this.changing > 0) {
         this.changing--;
         throw new VelaError({ class: 'conflict', code: 'bootstrap_changed', message: 'Home changed while loading', retry: { allowed: true, afterSeconds: 1, maxAttempts: 3 } } as never, 409);
+      }
+      if (this.lagging > 0) {
+        this.lagging--;
+        return this.bootstrap(this.snapshot - 1);
       }
       return this.bootstrap();
     },
@@ -58,16 +68,20 @@ class Feed {
       }
       return this.row(shelf, cursor ? Number(cursor.split('|')[1]) : 0, limit);
     },
-    rows: async () => ({ items: [], continuation: 'exhausted' as const }),
+    rows: async (_query: unknown, fresh?: boolean) => {
+      this.calls.push(`rows${fresh ? ' fresh' : ''}`);
+      return { items: [], continuation: 'exhausted' as const };
+    },
   };
 }
 
-function harness(feed: Feed) {
+function harness(feed: Feed, onWait: (ms: number) => void = () => {}) {
   const box = new StateBox({ home: initialHome, libraries: idle(), rows: {} } as unknown as VelaState);
   const session = { epoch: 0, onReset() {}, negotiate: async () => {}, ready: async () => ({ adapter: feed.adapter, images: async () => undefined }), check() {} };
   const home = new Home(box, session as unknown as Session, () => 640, 7_000, 1, 0, async () => {});
-  const rows = new Rows(box, session as unknown as Session, () => 640, row => home.resolveRow(row));
-  return { box, home, rows, ids: () => box.get().home.value!.rows.map(row => row.id), names: () => box.get().home.value!.rows.map(row => row.name) };
+  const waits: number[] = [];
+  const rows = new Rows(box, session as unknown as Session, () => 640, row => home.resolveRow(row), async ms => { waits.push(ms); onWait(ms); });
+  return { box, home, rows, waits, ids: () => box.get().home.value!.rows.map(row => row.id), names: () => box.get().home.value!.rows.map(row => row.name) };
 }
 
 const films = (prefix: string, count: number) => Array.from({ length: count }, (_, index) => title(`${prefix}-${index}`));
@@ -251,4 +265,103 @@ test('a re-resolve the server keeps refusing ends in the error after its allowed
   await rows.load('popular@1', true);
   expect(feed.calls).toEqual(['row popular@1 popular@1|20', 'bootstrap', 'bootstrap', 'bootstrap']);
   expect(box.get().rows['popular@1']!.load).toBe('failed');
+});
+
+// Ether 0.3.21 kept serving a bootstrap body (its own two-minute response cache) that still listed
+// row ids /rows had already expired: a fresh, uncached read can bring back the very id that just
+// answered 409. The page stays loading and reads Home again on a backoff until the server lists
+// a new id; Try again never sends the expired id again.
+for (const stale of [409, 404] as const) {
+  test(`a See all whose fresh Home still lists the expired id keeps loading and reads Home again until a new id appears (${stale})`, async () => {
+    const feed = new Feed();
+    feed.stale = stale;
+    feed.shelves = [{ key: 'new', name: 'New & Noteworthy', purpose: 'recommendation', titles: films('new', 70) }];
+    const states: string[] = [];
+    const { box, home, rows, waits } = harness(feed, () => states.push(box.get().rows['new@1']!.load));
+    await home.ensure();
+    rows.seed(box.get().home.value!.rows[0]!);
+    feed.played();
+    feed.lagging = 2;
+    feed.calls = [];
+    await rows.load('new@1', true);
+    expect(feed.calls).toEqual(['row new@1 new@1|20', 'bootstrap', 'bootstrap', 'bootstrap', 'row new@2']);
+    expect(waits).toEqual([3_000, 10_000]);
+    // Loading through every wait, never the error.
+    expect(states).toEqual(['loading', 'loading']);
+    expect(box.get().rows['new@1']!.load).toBe('ready');
+    expect(box.get().rows['new@1']!.value!.items).toHaveLength(60);
+    // Home adopted the new id as soon as the server listed it.
+    expect(box.get().home.value!.rows[0]!.id).toBe('new@2');
+  });
+}
+
+test('a server that keeps listing the expired id for about two minutes ends in the error; Try again re-resolves and never resends the expired id', async () => {
+  const feed = new Feed();
+  feed.shelves = [{ key: 'new', name: 'New & Noteworthy', purpose: 'recommendation', titles: films('new', 70) }];
+  const { box, home, rows, waits } = harness(feed);
+  await home.ensure();
+  rows.seed(box.get().home.value!.rows[0]!);
+  feed.played();
+  feed.lagging = 100;
+  feed.calls = [];
+  await rows.load('new@1', true);
+  expect(waits).toEqual([3_000, 10_000, 30_000, 60_000]);
+  expect(feed.calls).toEqual(['row new@1 new@1|20', 'bootstrap', 'bootstrap', 'bootstrap', 'bootstrap', 'bootstrap']);
+  const failure = box.get().rows['new@1']!;
+  expect(failure.load).toBe('failed');
+  expect(failure.value!.items).toHaveLength(20);
+
+  // Try again while the server still lists it: Home read afresh again, the expired id not sent.
+  feed.calls = [];
+  waits.length = 0;
+  await rows.load('new@1', true);
+  expect(feed.calls.filter(call => call.startsWith('row '))).toEqual([]);
+  expect(feed.calls.every(call => call === 'bootstrap')).toBe(true);
+  expect(box.get().rows['new@1']!.load).toBe('failed');
+
+  // Try again once the server lists the new id: one fresh read, then the new id.
+  feed.lagging = 0;
+  feed.calls = [];
+  waits.length = 0;
+  await rows.load('new@1', true);
+  expect(feed.calls).toEqual(['bootstrap', 'row new@2']);
+  expect(waits).toEqual([]);
+  expect(box.get().rows['new@1']!.load).toBe('ready');
+  expect(box.get().rows['new@1']!.value!.items).toHaveLength(60);
+});
+
+test('a page whose first read failed on an expired id re-resolves on Try again even after Home dropped that id', async () => {
+  const feed = new Feed();
+  feed.shelves = [{ key: 'new', name: 'New & Noteworthy', purpose: 'recommendation', titles: films('new', 30) },
+    { key: 'top', name: 'Top 10 Today', purpose: 'recommendation', titles: films('top', 10) }];
+  const { box, home, rows } = harness(feed);
+  await home.ensure();
+  feed.played();
+  feed.lagging = 100;
+  // Opened by its link: nothing shown yet, the row known from Home as drawn.
+  await rows.load('new@1');
+  expect(box.get().rows['new@1']!.load).toBe('failed');
+  // Home read afresh elsewhere (a playback stop) once the server listed the new ids.
+  feed.lagging = 0;
+  await home.refreshProgress();
+  expect(box.get().home.value!.rows.map(row => row.id)).toEqual(['new@2', 'top@2']);
+  feed.calls = [];
+  await rows.load('new@1');
+  expect(feed.calls).toEqual(['bootstrap', 'row new@2']);
+  expect(box.get().rows['new@1']!.load).toBe('ready');
+});
+
+test('Home read afresh reads its further pages of rows past every cache', async () => {
+  const feed = new Feed();
+  feed.shelves = [{ key: 'new', name: 'New & Noteworthy', purpose: 'recommendation', titles: films('new', 30) }];
+  const { box, home } = harness(feed);
+  await home.ensure();
+  // Home shows more rows than the fresh first page lists, and the server has more pages.
+  box.update('home', state => ({ ...state, value: { ...state.value!, nextCursor: 'page-2', rows: [...state.value!.rows, { ...state.value!.rows[0]!, id: 'other@1', name: 'Other' }] } }));
+  const bootstrap = feed.bootstrap;
+  feed.bootstrap = (snapshot?: number) => ({ ...bootstrap.call(feed, snapshot), nextCursor: 'page-2' }) as Bootstrap;
+  feed.played();
+  feed.calls = [];
+  await home.refreshProgress();
+  expect(feed.calls).toEqual(['bootstrap', 'rows fresh']);
 });

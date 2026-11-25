@@ -44,6 +44,8 @@ import { etherSubtitleLanguages, etherSubtitleSearch, SUBTITLE_PREPARE_LIMIT_MS,
 
 const CACHED = { cacheable: true };
 const BOOTSTRAP_CACHED = { cacheable: true, persistent: true };
+/** Past every cache, ours and the platform's (RequestOptions.fresh). */
+const FRESH = { fresh: true };
 const PUBLIC = { auth: false };
 const PUBLIC_CACHED = { auth: false, cacheable: true };
 
@@ -115,7 +117,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     let cursor: string | undefined;
     for (let n = 0; n < 100; n++) {
       const page = this.declaredLibraries.get(id)?.tabs
-        ? await this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/libraries/${segment(id)}/rows${query({ tab, cursor, limit: 100 })}`, undefined, { ...(fresh ? {} : CACHED), headers: this.screenHeaders })
+        ? await this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/libraries/${segment(id)}/rows${query({ tab, cursor, limit: 100 })}`, undefined, { ...(fresh ? FRESH : CACHED), headers: this.screenHeaders })
         : await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 }, fresh);
       result.push(...page.items);
       if (page.continuation !== 'more') return result;
@@ -292,7 +294,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     } catch (error) {
       const expired = error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
       if (!expired) throw error;
-      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { signal, headers: this.screenHeaders });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...FRESH, signal, headers: this.screenHeaders });
       if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
       return answer;
     }
@@ -300,7 +302,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   /** Rows lists may hold plugin surface rows, which Ether sends only to a client that says its renderer. */
   rows(rowsQuery: V.RowsQuery, fresh = false) {
-    return this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/rows${query(rowsQuery)}`, undefined, { ...(fresh ? {} : CACHED), headers: this.screenHeaders });
+    return this.http.request<V.Page<V.Row | V.SurfaceRow>>('GET', `/rows${query(rowsQuery)}`, undefined, { ...(fresh ? FRESH : CACHED), headers: this.screenHeaders });
   }
 
   row(id: string, cursor?: string, limit?: number) {
@@ -324,13 +326,13 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     const path = `/libraries/${segment(id)}/items${libraryBrowseQuery(browse)}`;
     let contents: V.LibraryContents;
     try {
-      contents = await this.http.request<V.LibraryContents>('GET', path, undefined, fresh ? undefined : CACHED);
+      contents = await this.http.request<V.LibraryContents>('GET', path, undefined, fresh ? FRESH : CACHED);
     } catch (error) {
       const expired = browse.cursor && error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
       if (!expired || snapshot) throw error;
       // Standalone page readers can restart here. Snapshot readers restart the entire sequence.
       const { cursor: _cursor, ...first } = browse;
-      contents = await this.http.request<V.LibraryContents>('GET', `/libraries/${segment(id)}/items${libraryBrowseQuery(first)}`);
+      contents = await this.http.request<V.LibraryContents>('GET', `/libraries/${segment(id)}/items${libraryBrowseQuery(first)}`, undefined, FRESH);
     }
     return { ...contents, library: { ...this.declaredLibraries.get(id), ...contents.library } };
   }
@@ -655,7 +657,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   async screenDocument(href: string, signal?: AbortSignal, fresh = false): Promise<V.ScreenDocument> {
     const path = this.http.boundPath(href);
     if (!path) throw new VelaError({ class: 'request', code: 'invalid_document_href', message: 'A screen document must come from this server.', retry: { allowed: false } }, 400);
-    return this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: !this.screenPreview() && !fresh, signal, headers: this.screenHeaders });
+    return this.http.request<V.ScreenDocument>('GET', path, undefined, { cacheable: !this.screenPreview() && !fresh, fresh, signal, headers: this.screenHeaders });
   }
 
   screenData(target: ScreenTarget, read: ScreenDataRead, signal?: AbortSignal): Promise<V.ScreenData> {
