@@ -54,6 +54,7 @@ import { useLast } from '@vela/skin/src/presence';
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
+import { wireLocalSources } from './local-sources';
 import { useMediaAccess } from './media-access';
 import { useLiveController } from './live';
 import { useMultiviewController } from './multiview';
@@ -131,6 +132,8 @@ function runtimeStore(): NonNullable<typeof runtime> {
   if (!runtime) {
     const boot = platform();
     runtime = { boot, store: createVela({ ...boot, rendererVersion: RENDERER_VERSION }) };
+    // Vela's own pages: bundled documents and the device settings their vela.* sources read.
+    wireLocalSources(runtime.store);
     // A closed or reloaded tab, or a page navigated away, stops its playback at the server.
     if (Platform.OS === 'web' && typeof window !== 'undefined') stopSessionsOnPageHide(window, runtime.store.playback);
   }

@@ -1,22 +1,23 @@
-// The now-playing bar along the bottom of the audio app: what is playing (cover, title, artist or
+// The `bar` block's engine. The now-playing bar along the bottom of the audio app: what is playing (cover, title, artist or
 // chapter, the heart), the transport and the seek bar, and on the right lyrics, the queue, volume
 // and full screen. Spoken word (an audiobook, a podcast episode) trades shuffle, previous, next and
 // repeat for speed, 15/30 s skips and the sleep timer. Space, arrows and the media keys work
-// through the keyboard map (keys.ts).
+// through the keyboard map (keys.ts). A document styles its parts (bar.*).
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import { AUDIO_RATES, clock, currentInQueue, durationLabel, msg, number } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
-import { NO_RING } from '../common/controls';
-import { Cover, useMediaLook } from '../media/parts';
-import { barVolumeSlider } from '../media/window-layout';
-import { MediaGlyph } from '../media/icons';
-import { placeOf, useMusic } from './context';
+import { NO_RING } from '../../widgets/common/controls';
+import { Cover, useMediaLook } from '../../widgets/media/parts';
+import { barVolumeSlider } from '../../widgets/media/window-layout';
+import { MediaGlyph } from '../../widgets/media/icons';
+import { placeOf, useMusic } from './app';
 import { isSpoken, listeningWords } from './listening';
 import { Heart, IconButton, menuHandlers, transition } from './parts';
 import { openNowPlaying } from './hub';
-import { Chip } from './pages';
+import { Chip } from './parts';
+import { usePart } from './look';
 
 export const NOW_PLAYING_BAR_HEIGHT = 84;
 const web = Platform.OS === 'web';
@@ -42,29 +43,34 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
   // What is playing has its card's menu too (Remove from Liked Songs, Go to album): a right-click
   // or a long press on its cover or its title.
   const menu = item ? menuHandlers(point => app.menu({ card: item, anchor: { kind: 'point', point }, mode: 'pointer' })) : {};
+  const cover = usePart('bar.cover');
+  const transport = usePart('bar.transport');
+  const toggle = usePart('bar.toggle');
+  const time = usePart('bar.time').text;
+  const actions = usePart('bar.actions');
   return (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 }} testID="now-playing-bar" accessibilityRole="toolbar" accessibilityLabel={msg('media.player.nowPlaying')}>
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         {item ? (
           <>
-            <Pressable {...menu} onPress={() => openNowPlaying()} accessibilityRole="button" accessibilityLabel={msg('media.player.open')} style={NO_RING} testID="bar-cover">
+            <Pressable {...menu} onPress={() => openNowPlaying()} accessibilityRole="button" accessibilityLabel={msg('media.player.open')} style={[NO_RING, cover.box]} testID="bar-cover">
               <Cover uri={item.poster} shape="square" size={58} title={item.name} accent={item.accent} lift={0.5} />
             </Pressable>
             <View style={{ minWidth: 0, flexShrink: 1 }}>
               {spoken ? <>
                 {/* A book or episode opens its page; the line under it is the chapter, else the book or show it is from. */}
-                <Link label={item.name} strong onPress={() => app.go(placeOf(item))} menu={menu} testID="bar-title" />
-                <Link label={chapter?.name || container?.name || item.media?.byline || ''} onPress={() => app.go(placeOf(item))} testID="bar-subtitle" />
+                <Link label={item.name} strong onPress={() => app.go(placeOf(item))} menu={menu} testID="bar-title" part="bar.title" />
+                <Link label={chapter?.name || container?.name || item.media?.byline || ''} onPress={() => app.go(placeOf(item))} testID="bar-subtitle" part="bar.subtitle" />
               </> : <>
-                <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} menu={menu} testID="bar-title" />
-                <Link label={item.media?.byline ?? ''} onPress={() => artist && app.go({ kind: 'title', id: artist.id })} testID="bar-subtitle" />
+                <Link label={item.name} strong onPress={() => album && app.go({ kind: 'title', id: album.id })} menu={menu} testID="bar-title" part="bar.title" />
+                <Link label={item.media?.byline ?? ''} onPress={() => artist && app.go({ kind: 'title', id: artist.id })} testID="bar-subtitle" part="bar.subtitle" />
               </>}
             </View>
             <Heart card={item} size={34} iconSize={18} />
           </>
         ) : null}
       </View>
-      <View style={{ flex: 1.3, maxWidth: 720, alignItems: 'center', gap: 4 }}>
+      <View style={[{ flex: 1.3, maxWidth: 720, alignItems: 'center', gap: 4 }, transport.box]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           {spoken ? <>
             <RateButton rate={audio.rate} active={audio.rate !== 1 || panel === 'speed'} onPress={() => onPanel(panel === 'speed' ? '' : 'speed')} />
@@ -74,7 +80,7 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
             <Transport icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} />
           </>}
           <Pressable onPress={() => store.audio.toggle()} disabled={!item} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')} testID="bar-toggle"
-            style={[NO_RING, { width: 40, height: 40, borderRadius: 20, backgroundColor: m.ui.ink, alignItems: 'center', justifyContent: 'center', opacity: item ? 1 : 0.5 }]}>
+            style={[NO_RING, { width: 40, height: 40, borderRadius: 20, backgroundColor: m.ui.ink, alignItems: 'center', justifyContent: 'center', opacity: item ? 1 : 0.5 }, toggle.box]}>
             <MediaGlyph name={playing ? 'pause' : 'play'} size={18} color={m.ui.inkInverse} />
           </Pressable>
           {spoken ? <>
@@ -86,12 +92,12 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
           </>}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch' }}>
-          <Text style={[m.text({ 'font-size': '12px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), { width: 40, textAlign: 'right' }]}>{clock(audio.positionSeconds)}</Text>
-          <Slider value={audio.durationSeconds > 0 ? audio.positionSeconds / audio.durationSeconds : 0} onChange={f => store.audio.seek(f * audio.durationSeconds)} label={msg('media.player.seek')} testID="bar-seek" />
-          <Text style={[m.text({ 'font-size': '12px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), { width: 40 }]}>{clock(audio.durationSeconds)}</Text>
+          <Text style={[m.text({ 'font-size': '12px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), { width: 40, textAlign: 'right' }, time]}>{clock(audio.positionSeconds)}</Text>
+          <Slider value={audio.durationSeconds > 0 ? audio.positionSeconds / audio.durationSeconds : 0} onChange={f => store.audio.seek(f * audio.durationSeconds)} label={msg('media.player.seek')} testID="bar-seek" part="bar.scrubber" />
+          <Text style={[m.text({ 'font-size': '12px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), { width: 40 }, time]}>{clock(audio.durationSeconds)}</Text>
         </View>
       </View>
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+      <View style={[{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }, actions.box]}>
         {spoken ? (audio.chapters.length ? <IconButton symbol="chapters" label={msg('media.player.chapters')} onPress={() => openNowPlaying()} size={34} iconSize={18} testID="bar-chapters" /> : null)
           : store.music.lyricsAvailable ? <IconButton symbol="lyrics" label={msg('music.lyrics')} onPress={() => openNowPlaying('lyrics')} size={34} iconSize={18} testID="bar-lyrics" /> : null}
         {onSound ? <IconButton symbol="sound" label={msg('music.sound')} onPress={onSound} active={soundOpen} size={34} iconSize={18} testID="bar-sound" /> : null}
@@ -128,13 +134,14 @@ export function BarPanelView({ panel, onClose }: { panel: BarPanel; onClose(): v
   const m = useMediaLook();
   const store = useVela();
   const audio = useVelaState(s => s.audio);
+  const part = usePart('bar.panel');
   if (!panel) return null;
   const sleeping = audio.sleep.mode !== 'off';
   const pick = (then: () => void) => () => { then(); onClose(); };
   return (
     <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: NOW_PLAYING_BAR_HEIGHT + 10, alignItems: 'center' }}>
       <View testID={`bar-panel-${panel}`} accessibilityRole="radiogroup" accessibilityLabel={panel === 'speed' ? msg('media.player.speed') : msg('media.player.sleep')}
-        style={[{ maxWidth: 560, padding: 14, borderRadius: 16, gap: 10 }, m.box({ 'background-color': '$ui.popover', border: '1px solid $ui.glassEdge', 'box-shadow': '0px 18px 48px -12px rgba(0,0,0,0.6)' })]}>
+        style={[{ maxWidth: 560, padding: 14, borderRadius: 16, gap: 10 }, m.box({ 'background-color': '$ui.popover', border: '1px solid $ui.glassEdge', 'box-shadow': '0px 18px 48px -12px rgba(0,0,0,0.6)' }), part.box]}>
         <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', color: '$ui.inkSecondary' })}>{panel === 'speed' ? msg('media.player.speed') : msg('media.player.sleep')}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {panel === 'speed'
@@ -160,18 +167,19 @@ function Transport({ icon, label, onPress }: { icon: string; label: string; onPr
   );
 }
 
-function Link({ label, strong = false, onPress, menu, testID }: { label: string; strong?: boolean; onPress(): void; menu?: object; testID?: string }) {
+function Link({ label, strong = false, onPress, menu, testID, part: name }: { label: string; strong?: boolean; onPress(): void; menu?: object; testID?: string; part?: string }) {
   const m = useMediaLook();
   const [hover, setHover] = useState(false);
+  const part = usePart(name ?? [], { hover });
   return (
     <Pressable {...menu} onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link" style={NO_RING} testID={testID}>
-      <Text numberOfLines={1} style={m.text({ 'font-size': strong ? '15px' : '13px', 'font-weight': strong ? '650' : '450', color: strong ? '$ui.ink' : '$ui.inkQuiet', 'text-decoration-line': hover ? 'underline' : 'none' })}>{label}</Text>
+      <Text numberOfLines={1} style={[m.text({ 'font-size': strong ? '15px' : '13px', 'font-weight': strong ? '650' : '450', color: strong ? '$ui.ink' : '$ui.inkQuiet', 'text-decoration-line': hover ? 'underline' : 'none' }), part.text]}>{label}</Text>
     </Pressable>
   );
 }
 
 /** A thin bar that thickens on hover; press or drag to set (0..1). Arrow keys step 5%. */
-export function Slider({ value, onChange, label, testID }: { value: number; onChange(fraction: number): void; label: string; testID?: string }) {
+export function Slider({ value, onChange, label, testID, part: name }: { value: number; onChange(fraction: number): void; label: string; testID?: string; part?: string }) {
   const m = useMediaLook();
   const ref = useRef<ComponentRef<typeof View>>(null);
   const bounds = useRef({ x: 0, width: 1 });
@@ -182,6 +190,9 @@ export function Slider({ value, onChange, label, testID }: { value: number; onCh
   const at = (pageX: number) => Math.min(1, Math.max(0, (pageX - bounds.current.x) / Math.max(1, bounds.current.width)));
   const measure = (then: () => void) => ref.current?.measureInWindow((x: number, _y: number, width: number) => { bounds.current = { x, width }; then(); });
   const lit = hover || drag !== null;
+  // A document's scrubber part styles the track: its background the groove, its colour the fill.
+  const part = usePart(name ?? [], { hover: lit });
+  const fill = part.text?.color as string | undefined;
   useEffect(() => undefined, []);
   return (
     <View ref={ref} testID={testID} accessible focusable accessibilityRole="adjustable" accessibilityLabel={label} accessibilityValue={{ min: 0, max: 100, now: Math.round(shown * 100) }}
@@ -197,8 +208,8 @@ export function Slider({ value, onChange, label, testID }: { value: number; onCh
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); onChange(Math.min(1, Math.max(0, value + (e.key === 'ArrowLeft' ? -0.05 : 0.05)))); }
       } } as object : {})}
       style={[NO_RING, { flex: 1, height: 16, justifyContent: 'center' }, web ? ({ cursor: 'pointer' } as ViewStyle) : {}]}>
-      <View style={{ height: 4, borderRadius: 2, backgroundColor: m.ui.track, overflow: 'hidden' }}>
-        <View style={[{ width: `${shown * 100}%`, height: '100%', backgroundColor: lit ? m.ui.accent : m.ui.ink }, transition('background-color', 120)]} />
+      <View style={[{ height: 4, borderRadius: 2, backgroundColor: m.ui.track, overflow: 'hidden' }, part.box]}>
+        <View style={[{ width: `${shown * 100}%`, height: '100%', backgroundColor: fill ?? (lit ? m.ui.accent : m.ui.ink) }, transition('background-color', 120)]} />
       </View>
       <View pointerEvents="none" style={[{ position: 'absolute', left: `${shown * 100}%`, marginLeft: -6, width: 12, height: 12, borderRadius: 6, backgroundColor: m.ui.ink, opacity: lit ? 1 : 0 } as ViewStyle, transition('opacity', 120)]} />
     </View>

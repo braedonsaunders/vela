@@ -14,9 +14,9 @@ import { useMediaActions } from './context';
 import { MediaGlyph } from './icons';
 import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './parts';
 import { Arrive, MOTION, Presence, useLast } from '../../presence';
-import { LyricsPanel } from '../music/lyrics';
+import { LyricsPanel } from '../../blocks/listen/lyrics';
 import { SoundBlock, SoundSection } from '../../blocks/sound';
-import { musicTV } from '../music/layout';
+import { musicTV } from '../../blocks/listen/layout';
 import { nowPlayingSideBySide } from './window-layout';
 import { listForItem, toggleSound, type NowPlayingList } from './now-playing-list';
 

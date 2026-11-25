@@ -6,10 +6,10 @@ import { msg } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { DismissScope } from '../../escape';
-import { SheetModal } from '../common/sheet-modal';
-import { NO_RING } from '../common/controls';
-import { alpha, useMediaLook } from '../media/parts';
-import { useMusic } from './context';
+import { SheetModal } from '../../widgets/common/sheet-modal';
+import { NO_RING } from '../../widgets/common/controls';
+import { alpha, useMediaLook } from '../../widgets/media/parts';
+import { useMusic } from './app';
 import { compactMusic } from './layout';
 import { transition } from './parts';
 

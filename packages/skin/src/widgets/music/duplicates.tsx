@@ -4,9 +4,9 @@ import { Text, View } from 'react-native';
 import { msg, number, plural } from '@vela/core';
 import { useMediaLook } from '../media/parts';
 import { DuplicatesBlock, DuplicatesCover, useLibraryDuplicates } from '../../blocks/duplicates';
-import { useMusic } from './context';
+import { useMusic } from '../../blocks/listen/app';
 import { coverSize, Header, pad } from './pages';
-import { Wash } from './parts';
+import { Wash } from '../../blocks/listen/parts';
 
 export { DuplicatesCover };
 

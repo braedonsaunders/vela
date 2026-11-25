@@ -1,10 +1,10 @@
 // The audio app's words and controls follow the library's class and each title's role
-// (widgets/music/listening.ts): no music wording reaches an audiobook or a podcast.
+// (blocks/listen/listening.ts): no music wording reaches an audiobook or a podcast.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Card } from '@vela/core';
-import { creditLines, isSpoken, keyboardMap, listColumns, listenFrom, listenedFraction, listeningOf, listeningWords, roleLabel } from '../src/widgets/music/listening';
+import { creditLines, isSpoken, keyboardMap, listColumns, listenFrom, listenedFraction, listeningOf, listeningWords, roleLabel } from '../src/blocks/listen/listening';
 
 const catalogue = JSON.parse(readFileSync(join(import.meta.dir, '../../core/src/i18n/strings/en.json'), 'utf8')) as Record<string, string>;
 

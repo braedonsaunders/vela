@@ -160,7 +160,8 @@ export function createVela(options: VelaOptions): Vela {
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);
   const audio = new Audio(box, session, playback);
   audio.setContinuation(id => music.continuation(id));
-  return {
+  const screens = new Screens(box, session, options.rendererVersion);
+  const vela: Vela = {
     getState: box.get,
     subscribe: box.subscribe,
     async start() {
@@ -191,7 +192,7 @@ export function createVela(options: VelaOptions): Vela {
     musicSearch: new Search(box, session, width, TYPING_MS, 'musicSearch'),
     playback,
     live: new Live(box, session, playback),
-    screens: new Screens(box, session, options.rendererVersion),
+    screens,
     appearance,
     receipts: new Receipts(session),
     previews,
@@ -199,6 +200,9 @@ export function createVela(options: VelaOptions): Vela {
     audio,
     playerSettings: new PlayerSettings(box, session),
   };
+  // Vela's own pages read `vela.*` sources through these same stores and the active server.
+  screens.attachLocal(vela, { ready: () => session.ready(), features: () => session.features });
+  return vela;
 }
 
 export type { AppearanceModel, GuideModel };

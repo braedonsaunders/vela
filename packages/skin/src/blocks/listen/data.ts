@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { childrenKey, libraryHomeTab, libraryKey, type Card, type ChildrenModel, type CollectionModel, type DetailModel, type Loadable, type PlaylistModel, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 
-export { useHistoryRecap } from '../../blocks/recap';
-export { usePlaylistImport } from '../../blocks/import';
-export { useLibraryDuplicates, useTitleRecording } from '../../blocks/duplicates';
+export { useHistoryRecap } from '../recap';
+export { usePlaylistImport } from '../import';
+export { useLibraryDuplicates, useTitleRecording } from '../duplicates';
 
 export function useTitle(id: string | undefined): Loadable<DetailModel> | undefined {
   const store = useVela();
