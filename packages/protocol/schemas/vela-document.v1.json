@@ -3316,7 +3316,12 @@
         "duplicates": {
           "doc": "Duplicate recordings in a library and the preferred version of each (section-B duplicates block).",
           "parts": [],
-          "props": {},
+          "props": {
+            "libraryId": {
+              "doc": "The library; the experience's when absent.",
+              "type": "template"
+            }
+          },
           "templates": [],
           "tv": "Not offered on TV."
         },
@@ -3447,7 +3452,16 @@
         "playlistImport": {
           "doc": "The playlist import flow over the local import: record (section-B import block).",
           "parts": [],
-          "props": {},
+          "props": {
+            "libraryId": {
+              "doc": "The library; the experience's when absent.",
+              "type": "template"
+            },
+            "nameState": {
+              "doc": "A document state value holding the playlist name as edited, for the page's heading.",
+              "type": "template"
+            }
+          },
           "templates": [],
           "tv": "Not offered on TV."
         },
@@ -3510,13 +3524,15 @@
             },
             "mode": {
               "default": "auto",
-              "doc": "auto collapses below 1180 px and keeps the viewer's choice.",
+              "doc": "auto collapses below 1180 px and keeps the viewer's choice; embedded is Your Library as a page (a phone, a TV); icons is a TV's icon rail; chips is a phone's Home, Search, Your Library and Rewind chips.",
               "type": "enum",
               "values": [
                 "auto",
                 "expanded",
                 "collapsed",
-                "embedded"
+                "embedded",
+                "icons",
+                "chips"
               ]
             }
           },
@@ -3526,7 +3542,27 @@
         "recap": {
           "doc": "Rewind: the listening recap for a period with its charts (section-B recap block).",
           "parts": [],
-          "props": {},
+          "props": {
+            "libraryId": {
+              "doc": "The library; the experience's when absent.",
+              "type": "template"
+            },
+            "period": {
+              "default": "month",
+              "doc": "The period shown first.",
+              "type": "enum",
+              "values": [
+                "week",
+                "month",
+                "year",
+                "all"
+              ]
+            },
+            "periodState": {
+              "doc": "A document state value holding the chosen period (`open name=value`), so the page's heading can read it.",
+              "type": "template"
+            }
+          },
           "templates": [],
           "tv": "As the Rewind page."
         },
@@ -3606,6 +3642,7 @@
             }
           },
           "templateScope": {
+            "trackTable.empty": [],
             "trackTable.row": [
               "index",
               "number",
@@ -3616,7 +3653,8 @@
             ]
           },
           "templates": [
-            "trackTable.row"
+            "trackTable.row",
+            "trackTable.empty"
           ],
           "tv": "Each row is one focus target (select plays, a long select opens the menu); nothing inside a row takes focus. Rows draw with the page; a list longer than 200 rows draws its first 200 and the rest as the viewer nears the end."
         },

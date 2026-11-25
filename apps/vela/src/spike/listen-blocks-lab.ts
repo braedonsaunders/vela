@@ -26,10 +26,14 @@ export function labDocument(styled: boolean): ScreenDocument {
     },
     ...(parts ? { parts } : {}),
     tree: {
-      type: 'box', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'background-color': '$ui.page' },
+      type: 'box', style: { display: 'flex', 'flex-direction': 'column', flex: '1', height: '100%', 'background-color': '$ui.page' },
       children: [
         {
-          type: 'box', style: { flex: '1', 'overflow-y': 'auto', padding: '0px 28px 32px 28px' },
+          type: 'box', style: { display: 'flex', 'flex-direction': 'row', flex: '1', 'min-height': '0px' },
+          children: [
+        { type: 'box', style: { width: '316px', 'background-color': '$ui.raised', 'border-right': '1px solid $ui.glassEdge' }, children: [{ type: 'rail', props: { mode: 'expanded' } }] },
+        {
+          type: 'box', style: { flex: '1', 'min-width': '0px', 'overflow-y': 'auto', padding: '0px 28px 32px 28px' },
           children: [
             heading('{src.album.item.name}'),
             { type: 'trackTable', testId: 'lab-album', props: { tracks: '{src.tracks}', album: 'true', sourceId: '{param.album}', sourceName: '{src.album.item.name}', sourceKind: 'title', discs: 'true' } },
@@ -46,10 +50,12 @@ export function labDocument(styled: boolean): ScreenDocument {
               } } : undefined },
           ],
         },
+        { type: 'box', when: [{ test: 'state.queue' }], style: { width: '340px', 'background-color': '$ui.raised', 'border-left': '1px solid $ui.glassEdge' }, children: [{ type: 'queue', props: { closeFlag: 'queue' } }] },
+        { type: 'box', when: [{ test: 'state.sound' }], style: { width: '360px', 'background-color': '$ui.raised', 'border-left': '1px solid $ui.glassEdge' }, children: [{ type: 'eq', props: { closeFlag: 'sound' } }] },
+          ],
+        },
         { type: 'box', style: { height: '1px', 'background-color': '$ui.glassEdge' } },
         { type: 'bar', props: {} },
-        { type: 'text', when: [{ test: 'state.queue' }], text: 'Queue flag set', testId: 'lab-queue-flag', style: { color: '$ui.inkSecondary', padding: '4px 28px' } },
-        { type: 'text', when: [{ test: 'state.sound' }], text: 'Sound flag set', testId: 'lab-sound-flag', style: { color: '$ui.inkSecondary', padding: '4px 28px' } },
       ],
     },
   } as unknown as ScreenDocument;

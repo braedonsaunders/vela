@@ -14,7 +14,7 @@ import { listenedFraction, listeningWords } from './listening';
 import { useLibraryItems, useLibraryRows, useLiked, usePlaylists } from './data';
 import { musicTV } from './layout';
 import { samePlace, type MusicPlace } from './place';
-import { Chip, IconButton, LikedCover, playlistCard, Surface, transition } from './parts';
+import { Chip, FocusGroup, IconButton, LikedCover, playlistCard, Surface, transition } from './parts';
 
 type Filter = 'all' | 'playlists' | 'albums' | 'artists';
 
@@ -303,5 +303,42 @@ function LibraryRow({ place, card, title, subtitle, cover, rail, pinned = false 
         </>
       )}
     </Surface>
+  );
+}
+
+/** A TV's icon rail: Home, Search, Your Library, Rewind and, for music, Liked Songs. */
+export function RailIcons() {
+  const app = useMusic();
+  const store = useVela();
+  useVelaState(state => state.home.load);
+  const recapAvailable = store.music.recapAvailable;
+  const music = app.listening === 'music';
+  return (
+    <FocusGroup style={{ width: 96, paddingTop: 24, alignItems: 'center', gap: 10 }}>
+      <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail />
+      <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail />
+      <NavItem symbol="library" label={msg('music.yourLibrary')} place={{ kind: 'library' }} rail />
+      {recapAvailable ? <NavItem symbol="sparkles" label={msg('music.rewind')} place={{ kind: 'rewind' }} rail /> : null}
+      {music ? <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail /> : null}
+    </FocusGroup>
+  );
+}
+
+/** Phones and upright tablets: Home, Search and Your Library (plus Rewind when available) as chips. */
+export function RailChips() {
+  const app = useMusic();
+  const store = useVela();
+  useVelaState(state => state.home.load);
+  const recapAvailable = store.music.recapAvailable;
+  const tabs: { label: string; place: MusicPlace }[] = [
+    { label: msg('music.home'), place: { kind: 'home' } },
+    { label: msg('music.search'), place: { kind: 'search' } },
+    { label: msg('music.yourLibrary'), place: { kind: 'library' } },
+    ...(recapAvailable ? [{ label: msg('music.rewind'), place: { kind: 'rewind' as const } }] : []),
+  ];
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }} accessibilityRole="tablist">
+      {tabs.map(tab => <Chip key={tab.label} label={tab.label} on={samePlace(app.place, tab.place)} onPress={() => app.go(tab.place)} />)}
+    </ScrollView>
   );
 }

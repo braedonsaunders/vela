@@ -4,7 +4,9 @@
 // this file reads them in the block's context, publishes the parts and templates to the engine
 // below (look.tsx), and draws the engine. Engines keep their own data reads, focus and timing.
 import { useMemo, useState, type ReactNode } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
+import { currentInQueue, msg, withBand, type HistoryRecapPeriod } from '@vela/core';
+import { useVela, useVelaState } from '@vela/core/react';
 import { useHost, type ScreenPress } from '../../host';
 import { fill, type RNode } from '../../resolve';
 import type { Arg } from '../../screen/holes';
@@ -14,10 +16,19 @@ import type { Ctx, Env } from '../../vocabulary';
 import { useMediaLook } from '../../widgets/media/parts';
 import { useScreenBlockRuntime } from '../types';
 import { isRichBlock, type RichBlockName } from '../../../../protocol/rich-blocks';
+import { deref } from '../../screen/scope';
+import { DuplicatesBlock } from '../duplicates';
+import { PlaylistImportBlock } from '../import';
+import { RecapBlock } from '../recap';
+import { EqBlock, SoundBlock } from '../sound';
+import { placeOf, useMusic } from './app';
+import { LyricsPanel } from './lyrics';
+import { QueuePanel } from './queue';
+import { RailChips, RailIcons, Sidebar } from './rail';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
 import { ListenLookProvider, usePart, type ListenLook } from './look';
 import { fillParts } from './part-style';
-import { barPresses, parseBool, parseEnum, propDefault, tableTracks } from './props';
+import { asCard, barPresses, parseBool, parseEnum, parseNumber, propDefault, tableTracks } from './props';
 import { TrackList, type TrackListOptions } from './track-table';
 
 /** A rich block node as resolved (resolve.ts). */
@@ -29,6 +40,7 @@ export interface Props {
   value(name: string): unknown;
   text(name: string): string;
   bool(name: string): boolean;
+  num(name: string, min?: number, max?: number): number;
   enum<T extends string>(name: string, values: readonly T[]): T;
 }
 
@@ -49,6 +61,7 @@ export function readProps(block: RichBlockName, props: Record<string, Arg>, ctx:
       const raw = props[name] ? value(name) : undefined;
       return parseBool(raw, parseBool(propDefault(block, name), false));
     },
+    num: (name, min, max) => parseNumber(text(name), parseNumber(propDefault(block, name), 0), min, max),
     enum: (name, values) => parseEnum(text(name), values, parseEnum(propDefault(block, name), values, values[0]!)),
   };
 }
@@ -77,8 +90,15 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
   const props = readProps(node.block, node.props ?? {}, scoped, env);
   let drawn: ReactNode;
   switch (node.block) {
-    case 'trackTable': drawn = <TrackTableBlock props={props} ctx={scoped} />; break;
+    case 'trackTable': drawn = <TrackTableBlock props={props} ctx={scoped} empty={node.templates?.['trackTable.empty'] && runtime ? at => runtime.renderNode(node.templates['trackTable.empty'], at) : undefined} />; break;
     case 'bar': drawn = <BarBlock props={props} ctx={scoped} press={host.screenPress} />; break;
+    case 'queue': drawn = <QueuePanel onClose={closer(props.text('closeFlag'), host.screenPress)} options={{ header: props.bool('header'), limit: props.num('limit', 1, 200) }} />; break;
+    case 'lyrics': drawn = <LyricsBlock props={props} ctx={scoped} />; break;
+    case 'eq': drawn = <EqRichBlock props={props} press={host.screenPress} />; break;
+    case 'rail': drawn = <RailBlock props={props} ctx={scoped} press={host.screenPress} />; break;
+    case 'recap': drawn = <RecapRichBlock props={props} ctx={scoped} press={host.screenPress} />; break;
+    case 'playlistImport': drawn = <ImportRichBlock props={props} press={host.screenPress} />; break;
+    case 'duplicates': drawn = <DuplicatesRichBlock props={props} />; break;
     default: drawn = node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;
   }
   return <ListenLookProvider look={look}>{drawn}</ListenLookProvider>;
@@ -86,7 +106,7 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
 
 // ——— trackTable ————————————————————————————————————————————————————————————————————
 
-function TrackTableBlock({ props, ctx }: { props: Props; ctx: Ctx }) {
+function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?: (ctx: Ctx) => ReactNode }) {
   const read = ctx.screen?.record ?? (() => undefined);
   const { tracks, entryIds } = tableTracks(props.value('tracks'), props.value('entryIds'), read);
   const playlistId = props.text('playlist');
@@ -105,6 +125,7 @@ function TrackTableBlock({ props, ctx }: { props: Props; ctx: Ctx }) {
   const key = tracks.map(t => t.id).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stable = useMemo(() => tracks, [key]);
+  if (!stable.length && empty) return <>{empty(ctx)}</>;
   return <TrackList tracks={stable} options={options} />;
 }
 
@@ -127,5 +148,83 @@ function BarBlock({ props, ctx, press }: { props: Props; ctx: Ctx; press?(p: Scr
       <NowPlayingBar queueOpen={queueOpen} onQueue={() => send('queue')} soundOpen={soundOpen} onSound={props.bool('sound') ? () => send('sound') : undefined} panel={panel} onPanel={setPanel} />
       <BarPanelView panel={panel} onClose={() => setPanel('')} />
     </View>
+  );
+}
+
+/** A close button's press: clear the document flag that shows the block (none without a flag). */
+function closer(flag: string, press?: (p: ScreenPress) => void): (() => void) | undefined {
+  return flag && press ? () => press({ action: 'close', arg: flag, args: {}, control: `close-${flag}` }) : undefined;
+}
+
+// ——— lyrics ————————————————————————————————————————————————————————————————————————
+
+function LyricsBlock({ props, ctx }: { props: Props; ctx: Ctx }) {
+  const playing = useVelaState(s => currentInQueue(s.audio.queue));
+  const read = ctx.screen?.record ?? (() => undefined);
+  const named = asCard(deref(props.value('item'), read));
+  return <LyricsPanel card={named ?? playing} large={props.bool('large')} translate={props.bool('translate')} />;
+}
+
+// ——— eq ————————————————————————————————————————————————————————————————————————————
+
+function EqRichBlock({ props, press }: { props: Props; press?(p: ScreenPress): void }) {
+  const store = useVela();
+  const sound = useVelaState(s => s.audio.sound);
+  const tv = Platform.isTV;
+  if (props.bool('bands')) return <EqBlock tv={tv} bands={sound.eq.bands} on={sound.eq.on} onBand={(band, gain) => store.audio.setSound(withBand(sound, band, gain))} />;
+  return <SoundBlock onClose={closer(props.text('closeFlag'), press)} tv={tv} />;
+}
+
+// ——— rail ——————————————————————————————————————————————————————————————————————————
+
+function RailBlock({ props, ctx, press }: { props: Props; ctx: Ctx; press?(p: ScreenPress): void }) {
+  const m = useMediaLook();
+  const mode = props.enum('mode', ['auto', 'expanded', 'collapsed', 'embedded', 'icons', 'chips'] as const);
+  const flag = props.text('collapseFlag') || 'railCollapsed';
+  const collapsed = ctx.screen?.state[flag] === 'true';
+  const toggle = () => press?.({ action: 'toggle', arg: flag, args: {}, control: 'rail-collapse' });
+  if (mode === 'icons') return <RailIcons />;
+  if (mode === 'chips') return <RailChips />;
+  if (mode === 'embedded') return <Sidebar rail={false} onToggle={() => undefined} embedded />;
+  // auto: the viewer's collapse, and always a rail in a narrow window (the shell sizes it: 84 or 316).
+  const rail = mode === 'collapsed' || (mode === 'auto' && (collapsed || m.width < 1180));
+  return <Sidebar rail={rail} onToggle={toggle} />;
+}
+
+// ——— recap, playlist import, duplicates (the section-B blocks) ——————————————————————
+
+const PERIODS = ['week', 'month', 'year', 'all'] as const;
+
+function RecapRichBlock({ props, ctx, press }: { props: Props; ctx: Ctx; press?(p: ScreenPress): void }) {
+  const app = useMusic();
+  const periodState = props.text('periodState');
+  const chosen = periodState ? ctx.screen?.state[periodState] : '';
+  const period: HistoryRecapPeriod = parseEnum(chosen || props.text('period'), PERIODS, 'month');
+  return (
+    <RecapBlock libraryId={props.text('libraryId') || app.libraryId}
+      listening={app.listening === 'audiobook' || app.listening === 'podcast' ? app.listening : 'music'}
+      period={period}
+      onPeriodChange={next => { if (periodState) press?.({ action: 'open', arg: `${periodState}=${next}`, args: {}, control: 'recap-period' }); }}
+      onSelectCard={card => app.go(placeOf(card))}
+      onPlayCards={(cards, index) => app.play(cards, index, { id: 'rewind', name: msg('music.rewind.title') })} />
+  );
+}
+
+function ImportRichBlock({ props, press }: { props: Props; press?(p: ScreenPress): void }) {
+  const app = useMusic();
+  const nameState = props.text('nameState');
+  return (
+    <PlaylistImportBlock libraryId={props.text('libraryId') || app.libraryId || 'music'}
+      onNameChange={name => { if (nameState) press?.({ action: 'open', arg: `${nameState}=${name}`, args: {}, control: 'import-name' }); }}
+      onSaved={playlistId => app.go({ kind: 'playlist', id: playlistId })} />
+  );
+}
+
+function DuplicatesRichBlock({ props }: { props: Props }) {
+  const app = useMusic();
+  return (
+    <DuplicatesBlock libraryId={props.text('libraryId') || app.libraryId || 'music'}
+      onPlayRelease={(release, source) => app.play([release], 0, source)}
+      onOpenAlbum={albumId => app.go({ kind: 'title', id: albumId })} />
   );
 }

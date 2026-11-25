@@ -51,8 +51,8 @@ export const RICH_BLOCKS = {
       reorder: flag('Drag rows to reorder (a playlist the viewer owns; web pointer only). Needs playlist and entryIds.', 'false'),
     },
     parts: ['trackTable.header', 'trackTable.row', 'trackTable.activeRow', 'trackTable.number', 'trackTable.title', 'trackTable.artist', 'trackTable.album', 'trackTable.duration', 'trackTable.disc'],
-    templates: ['trackTable.row'],
-    templateScope: { 'trackTable.row': ['index', 'number', 'active', 'playing', 'disc', 'lit'] },
+    templates: ['trackTable.row', 'trackTable.empty'],
+    templateScope: { 'trackTable.row': ['index', 'number', 'active', 'playing', 'disc', 'lit'], 'trackTable.empty': [] },
     tv: 'Each row is one focus target (select plays, a long select opens the menu); nothing inside a row takes focus. Rows draw with the page; a list longer than 200 rows draws its first 200 and the rest as the viewer nears the end.',
   },
   bar: {
@@ -124,7 +124,7 @@ export const RICH_BLOCKS = {
   rail: {
     doc: 'Your Library: Home, Search and Rewind, the library heading with collapse, new playlist and the library tools, filters, and the playlists, liked albums and artists (spoken word: the books or shows under way). Collapsed it is an icon rail; embedded (a phone, a TV) a plain list.',
     props: {
-      mode: { type: 'enum', values: ['auto', 'expanded', 'collapsed', 'embedded'], default: 'auto', doc: 'auto collapses below 1180 px and keeps the viewer\'s choice.' },
+      mode: { type: 'enum', values: ['auto', 'expanded', 'collapsed', 'embedded', 'icons', 'chips'], default: 'auto', doc: 'auto collapses below 1180 px and keeps the viewer\'s choice; embedded is Your Library as a page (a phone, a TV); icons is a TV\'s icon rail; chips is a phone\'s Home, Search, Your Library and Rewind chips.' },
       collapseFlag: { type: 'template', default: 'railCollapsed', doc: 'The document state flag holding the viewer\'s collapse (the shell sizes the rail from it).' },
     },
     parts: ['rail.nav', 'rail.navItem', 'rail.activeNavItem', 'rail.heading', 'rail.filter', 'rail.row', 'rail.activeRow'],
@@ -143,21 +143,30 @@ export const RICH_BLOCKS = {
   },
   recap: {
     doc: 'Rewind: the listening recap for a period with its charts (section-B recap block).',
-    props: {},
+    props: {
+      libraryId: { type: 'template', doc: 'The library; the experience\'s when absent.' },
+      period: { type: 'enum', values: ['week', 'month', 'year', 'all'], default: 'month', doc: 'The period shown first.' },
+      periodState: { type: 'template', doc: 'A document state value holding the chosen period (`open name=value`), so the page\'s heading can read it.' },
+    },
     parts: [],
     templates: [],
     tv: 'As the Rewind page.',
   },
   playlistImport: {
     doc: 'The playlist import flow over the local import: record (section-B import block).',
-    props: {},
+    props: {
+      libraryId: { type: 'template', doc: 'The library; the experience\'s when absent.' },
+      nameState: { type: 'template', doc: 'A document state value holding the playlist name as edited, for the page\'s heading.' },
+    },
     parts: [],
     templates: [],
     tv: 'Not offered on TV.',
   },
   duplicates: {
     doc: 'Duplicate recordings in a library and the preferred version of each (section-B duplicates block).',
-    props: {},
+    props: {
+      libraryId: { type: 'template', doc: 'The library; the experience\'s when absent.' },
+    },
     parts: [],
     templates: [],
     tv: 'Not offered on TV.',
