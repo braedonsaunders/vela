@@ -12,7 +12,7 @@ import { MOTION, Presence } from '@vela/skin/src/presence';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { focusElement } from '@vela/skin/src/escape';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
-import { useCanVisualize } from '../visualizer/availability';
+import { useCanOpenVisualizer, useCanVisualize } from '../visualizer/availability';
 import { Visualizer } from '../visualizer/visualizer';
 import { inVisualizerHistory, popVisualizerHistory, pushVisualizerHistory } from '../visualizer/page-history';
 import { holdBack } from '@vela/skin/src/menu-key';
@@ -138,6 +138,7 @@ export function AudioDock() {
   const inMusicShell = !!musicLibrary && !musicTV() && wideMusic(host?.viewport.width ?? 0, host?.viewport.height ?? 0);
   const playing = !!audio.queue && !covered;
   const visuals = useCanVisualize(playing && open && currentInQueue(audio.queue)?.media?.class === 'music');
+  const readyToOpen = useCanOpenVisualizer(visuals);
   const fullscreen = visuals && expanded;
   useEffect(() => {
     if (visuals || !expanded) return;
@@ -200,7 +201,7 @@ export function AudioDock() {
       <TVFocusTrap open={playing && open}>
         <View style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
           {visuals ? <Visualizer mode={fullscreen ? 'fullscreen' : 'background'} /> : null}
-          <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={visuals ? openVisualizer : undefined} />
+          <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={readyToOpen ? openVisualizer : undefined} />
           {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
             <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
           </View> : null}

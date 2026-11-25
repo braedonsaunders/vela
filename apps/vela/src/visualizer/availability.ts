@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { canVisualize as platformSupports, subscribeVisualizerAvailability } from './stage';
+import { canOpenVisualizer, canVisualize as platformSupports, subscribeVisualizerAvailability } from './stage';
 
 let failed = false;
 const listeners = new Set<() => void>();
@@ -18,4 +18,9 @@ function subscribe(update: () => void) {
 }
 export function useCanVisualize(visible: boolean): boolean {
   return useSyncExternalStore(subscribe, () => visible && canVisualize(), () => false);
+}
+
+/** A capable device can prepare the visible background while Now Playing still shows artwork. */
+export function useCanOpenVisualizer(mounted: boolean): boolean {
+  return useSyncExternalStore(subscribe, () => mounted && !failed && canOpenVisualizer(), () => false);
 }
