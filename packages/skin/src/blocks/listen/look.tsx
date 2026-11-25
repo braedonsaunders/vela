@@ -42,7 +42,16 @@ export function usePart(names: string | readonly (string | false | undefined)[],
   const rows = partRows(parts, names, state, Platform.isTV);
   if (!hasRows(rows)) return EMPTY;
   const { box, text } = splitRows(rows);
-  return { box: hasRows(box) ? m.box(box) : undefined, text: hasRows(text) ? m.text(text) : undefined };
+  return { box: hasRows(box) ? m.box(box) : undefined, text: hasRows(text) ? partText(m.text(text), text) : undefined };
+}
+
+/** The look's text style fills in the skin's font and ink; a part sets only the rows it gives,
+ * so the engine's own colour (an active row's accent) stays unless the part changes it. */
+function partText(style: TextStyle, rows: Record<string, string>): TextStyle {
+  const out: Record<string, unknown> = { ...style };
+  if (!('color' in rows)) delete out.color;
+  if (!('font-family' in rows)) delete out.fontFamily;
+  return out as TextStyle;
 }
 
 /** A part's box look as a function of state, for styles computed from the state a control is in
