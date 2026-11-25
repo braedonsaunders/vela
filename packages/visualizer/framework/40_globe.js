@@ -23,12 +23,13 @@ void main(){
   vec2 ln = (1.-smoothstep(vec2(.25,.35), vec2(1.15,1.3), px))*(1.-smoothstep(.25,.8,fw));
   float amp = vV*vV;
   vec3 lc = vivid(.5+vF*.38+vUV.y*.22);
-  vec3 line = (lc*(ln.y*(.16+3.2*amp)+ln.x*(.05+.7*amp)) + (lc*.4+.6)*ln.x*ln.y*amp*4.)*(1.+.6*uKick);
+  float wv = ring(vUV.y, .55, .045, 1.9);                                  // each kick: a band of light travels from pole to pole
+  vec3 line = (lc*(ln.y*(.16+3.2*amp)+ln.x*(.05+.7*amp)) + (lc*.4+.6)*ln.x*ln.y*(amp*4.+wv*1.5))*(1.+.2*uKick+2.2*wv);
   vec3 n = normalize(vN), v = normalize(uEye-vW);
-  if (uBack > .5){ o = vec4(line*.1, 0.); return; }           // the far side, seen through the shell
+  if (uBack > .5){ o = vec4(line*.3, 0.); return; }           // the far side, seen through the shell
   float fr = pow(1.-abs(dot(n,v)), 2.5);
-  vec3 fill = vivid(.62)*.006 + lc*amp*.04 + vivid(.7)*fr*(.05+.2*uBass+.25*uKick);
-  o = vec4(fill+line, .84);
+  vec3 fill = vivid(.62)*.006 + lc*amp*.04 + vivid(.7)*fr*(.05+.2*uBass+.2*uKick) + (vivid(.12)*.6+.4)*(1.-fr)*(.012+.05*uBassS);   // glass, warmed from inside
+  o = vec4(fill+line, .6);
 }`;
 const FS_GLOBE_BG = FSH + `
 out vec4 o;
@@ -36,8 +37,23 @@ void main(){ vec3 rd = viewRay(); vec3 col = vec3(.002,.0025,.006) + vivid(.62)*
   col += stars(rd)*.8;
   float tca = -dot(uEye, rd), b = length(cross(uEye, rd));
   if (tca > 0.){ col += vivid(.6)*exp(-max(b-1.,0.)*5.)*(.08+.16*uBass+.12*uKick);
-    col += (vivid(.12)*.7+.3)*exp(-b*b*55.)*(.2+.7*uBass+1.6*uKick); }  // the core, glimpsed through the shell
+    col += (vivid(.12)*.7+.3)*exp(-b*b*55.)*(.3+.9*uBass+1.2*uKick);         // the core, seen through the shell
+    vec3 pc = uEye+rd*tca; float ang = atan(dot(pc, uCamU), dot(pc, uCamR));
+    float shaft = noise(vec3(ang*5., uTime*.12, 1.))*noise(vec3(ang*13., uTime*.09, 5.)), bandA = spec(.04+(.5+.5*sin(ang))*.7);
+    col += (vivid(.12)*.6+.4)*shaft*shaft*(.5+2.5*bandA*bandA)*exp(-max(b-.15, 0.)*1.5)*(.14+.5*uBassS); }   // its light, breaking out between the wires
   o = vec4(col, 1.); }`;
+// Three thin rings turn about the globe, like the rings of an armillary sphere: one each for bass, mids and
+// highs. Each carries a bead that runs round it as fast as its band is loud, and lights along its length with it.
+const VS_ARM = VSH + `
+uniform mat3 uTilt; uniform float uRad; out vec2 vP;
+void main(){ float a = aUV.x*TAU, r = uRad+(aUV.y-.5)*.1; vP = aUV; gl_Position = uVP*vec4(uTilt*vec3(cos(a)*r, 0., sin(a)*r), 1.); }`;
+const FS_ARM = FSH + `
+in vec2 vP; out vec4 o; uniform float uBand, uSat;
+void main(){ float fv = max(fwidth(vP.y), 1e-4), ln = 1.-smoothstep(.5,1.8,abs(vP.y-.5)/fv), fu = max(fwidth(vP.x*90.), 1e-4);
+  float tick = (1.-smoothstep(.1,.1+fu,abs(fract(vP.x*90.)-.5)))*step(abs(vP.y-.5), .32)*(1.-smoothstep(.3,.8,fu));
+  float s = spec(uBand+.2*abs(vP.x*2.-1.)), back = fract(uSat-vP.x), dd = min(back, 1.-back);
+  float bead = exp(-dd*dd*30000.)*exp(-pow((vP.y-.5)/.35, 2.)), tail = exp(-back*16.)*ln;
+  o = vec4(neon(.5+uBand*1.2)*(ln*(.12+1.1*s*s)+tick*(.05+.3*s))+(neon(.5+uBand*1.2)*.4+.6)*(bead*3.5+tail*1.4), 1.); }`;
 // A tilted ring of dust around the globe; every radius is a band.
 const VS_RING = VSP + `
 uniform float uDpr; out vec3 vCol;
@@ -54,11 +70,11 @@ void main(){
 }`;
 
 scene({ id: 'globe', name: 'Meridian', from: 'Fable', kind: 'sphere', group: 'refined', pal: 0,
-  about: 'A wire globe whose parallels are moments of the spectrum sliding from pole to pole, inside a ring of dust',
-  inputs: ['hist', 'specS', 'spec', 'bassS', 'bass', 'high', 'kick'],
+  about: 'A wire globe lit from within: its parallels are moments of the spectrum sliding from pole to pole, each kick sends a band of light across it, and three armillary rings carry beads that run as fast as bass, mids and highs are loud',
+  inputs: ['hist', 'specS', 'spec', 'bassS', 'midS', 'highS', 'bass', 'high', 'kick', 'pulse'],
   cost: 'Cheap. The globe is drawn twice (far side, then near side) and the ring is 90k points.',
-  post: { trail: 0.15, bloom: 0.5, thr: 0.6, ca: 0.4 },
-  init() { this.bg = program(VS, FS_GLOBE_BG); this.shell = program(VS_GLOBE, FS_GLOBE); this.ring = program(VS_RING, FS_POINT); },
+  post: { trail: 0.15, bloom: 0.5, thr: 0.6, ca: 0.4, pulse: 0.3 },
+  init() { this.bg = program(VS, FS_GLOBE_BG); this.shell = program(VS_GLOBE, FS_GLOBE); this.ring = program(VS_RING, FS_POINT); this.arm = program(VS_ARM, FS_ARM); this.sat = [0, 0.3, 0.6]; },
   draw(F, out) {
     const t = F.time, c = camera(orbit(t * 0.09, 0.5 + Math.sin(t * 0.07) * 0.16, 4.7), [0, -0.05, 0], 0.8, 0, 0.1, 60);
     const set = u => { F.set(u); setCam(u, c); }, g = grid(256);
@@ -68,6 +84,11 @@ scene({ id: 'globe', name: 'Meridian', from: 'Fable', kind: 'sphere', group: 're
     gl.cullFace(gl.BACK); gl.depthMask(true); mesh(this.shell, g, u => { set(u); gl.uniform1f(u.uBack, 0); });
     gl.disable(gl.CULL_FACE); gl.depthMask(false); gl.blendFunc(gl.ONE, gl.ONE);
     points(this.ring, 90000, u => { set(u); gl.uniform1f(u.uDpr, F.px); });
+    gl.depthMask(false);
+    [A.bassS, A.midS, A.highS].forEach((lv, i) => { this.sat[i] = (this.sat[i] + F.dt * (0.03 + 0.4 * lv * lv)) % 1;
+      const a = 0.5 + i * 1.1 + Math.sin(t * 0.05 + i * 2) * 0.35, b = i * 2.1 + t * 0.03 * (i - 1), ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+      mesh(this.arm, grid(128), u => { set(u); gl.uniformMatrix3fv(u.uTilt, false, [cb, sb, 0, -sb * ca, cb * ca, sa, sb * sa, -cb * sa, ca]);
+        gl.uniform1f(u.uRad, 1.52 + i * 0.13); gl.uniform1f(u.uBand, 0.03 + i * 0.27); gl.uniform1f(u.uSat, this.sat[i]); }); });
     endMS(out);
   } });
 }

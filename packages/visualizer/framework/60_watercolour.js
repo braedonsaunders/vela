@@ -39,7 +39,7 @@ void main(){
   for (int i = 0; i < 6; i++){ float a = uStk[i].w; if (a > DUR) continue; float u = a/DUR, ez = 1.-(1.-u)*(1.-u), ang = uStk[i].z, L = uStk2[i].x, w = uStk2[i].y, cv = uStk2[i].z;
     vec2 dir = vec2(cos(ang), sin(ang)), per = vec2(-dir.y, dir.x), head = uStk[i].xy*vec2(ASP, 1.)+L*(ez*dir+cv*ez*ez*per), tg = normalize(dir+2.*cv*ez*per), nm = vec2(-tg.y, tg.x);
     vec2 d = p-head; float al = dot(d, tg), ac = dot(d, nm)/w; if (abs(ac) > 1.2 || abs(al) > w) continue;
-    float load = 1.-.8*u, bris = smoothstep(.62-.5*load, .78-.5*load, noise(vec3(ac*4.5+ang*9., ang*31., ez*L*26.))*.6+noise(vec3(ac*13., ang*7., ez*L*70.))*.4+.25*load);   // the bristles show as the brush runs dry
+    float load = 1.-.8*u, bris = smoothstep(.62-.5*load, .78-.5*load, noise(vec3(ac*4.5+ang*9., ang*31., ez*L*5.))*.6+noise(vec3(ac*13., ang*7., ez*L*9.))*.4+.25*load);   // the bristles show as the brush runs dry
     float foot = smoothstep(1., .82, abs(ac))*smoothstep(w, w*.4, abs(al));
     s.rgb += paintOf(uStk2[i].w)*foot*bris*(.5+.5*load)*uDt*38.; s.a = max(s.a, foot*.2); }
   // dots (hats) and splatter (snares)
@@ -88,7 +88,7 @@ scene({ id: 'wash', name: 'Watercolour', from: 'Organic', kind: 'paint', group: 
     for (let j = 0; j < 8; j++) O[j * 4 + 3] += F.dt;
     newPulses(this.last, i => D.set([0.08 + r() * 0.84, 0.1 + r() * 0.8, 0.14 + 0.12 * A.bassS + 0.06 * r(), r() * 3], i * 4));
     if (A.notes !== this.nn) { this.nn = A.notes; const j = this.ki++ % 6, len = 0.1 + 0.2 * A.noteAmp + 0.08 * r();
-      K.set([hand[0] + (r() - 0.5) * 0.3, hand[1] + (r() - 0.5) * 0.36, r() * 6.283, 0], j * 4); K2.set([len, 0.007 + 0.014 * A.noteAmp + 0.005 * r(), (r() - 0.5) * 0.9, A.noteBand * 3.4 + r() * 0.4], j * 4); }
+      K.set([hand[0] + (r() - 0.5) * 0.3, hand[1] + (r() - 0.5) * 0.36, r() * 6.283, 0], j * 4); K2.set([len, 0.007 + 0.014 * A.noteAmp + 0.005 * r(), (r() - 0.5) * 0.9, A.noteBand * 9 + this.ki * 0.41], j * 4); }
     if (A.hats !== this.hn) { this.hn = A.hats; O.set([hand[0] + (r() - 0.5) * 0.5, hand[1] + (r() - 0.5) * 0.5, 0.003 + 0.006 * A.hatAmp + 0.002 * r(), 0], (this.di++ & 7) * 4); }
     if (A.snares !== this.sn) { this.sn = A.snares; S.set([hand[0] + (r() - 0.5) * 0.4, hand[1] + (r() - 0.5) * 0.4, r(), 0], (this.si++ & 3) * 4); }
     draw(this.sim, this.b, WC_W, WC_H, u => { F.set(u); bindTex(3, this.a.t); gl.uniform1i(u.uState, 3); gl.uniform1f(u.uDt, Math.min(F.dt, 1 / 30));

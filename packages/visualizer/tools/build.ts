@@ -24,6 +24,7 @@ const bundle = [
   `// Framework parts: ${parts.join(' ')}`,
   read(path.join(root, 'runtime/glrec.js')).replace(/^if \(typeof module.*$/m, ''),
   read(path.join(root, 'runtime/host-prelude.js')).replace(/^'use strict';/, ''),
+  read(path.join(root, 'runtime/analyse-split.js')).replace(/^if \(typeof module.*$/m, ''),
   ...parts.map(f => `// ── framework/${f}\n` + read(path.join(fw, f))),
   read(path.join(root, 'runtime/host-epilogue.js')),
 ].join('\n');
@@ -42,7 +43,7 @@ const declared = (src: string) => {
 let words = 0, flushes = 0;
 const host: any = {
   width: 1920, height: 1080, dpr: 1, sampleRate: 48000, now: () => performance.now(), log: (s: string) => console.log(s),
-  commandBuffer: new ArrayBuffer(4 << 20), freq: new Float32Array(2048).fill(-60), time: new Float32Array(4096),
+  commandBuffer: new ArrayBuffer(16 << 20), freq: new Float32Array(2048).fill(-60), time: new Float32Array(4096),
   link(id: number, vs: string, fsrc: string) {
     programs.push({ vs, fs: fsrc }); const seen = new Set<string>();
     const uniforms = [...declared(vs), ...declared(fsrc)].filter(x => !seen.has(x.name) && seen.add(x.name));

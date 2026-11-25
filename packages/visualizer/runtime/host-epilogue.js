@@ -10,6 +10,9 @@ function __audioFormat(rate) {
   for (let i = 0; i <= BANDS; i++) A.binOf[i] = Math.min(n - 1, Math.max(1, Math.round(28 * Math.pow(16000 / 28, i / BANDS) / ny * n)));
 }
 __audioFormat(__host.sampleRate || 48000);
+// No-JIT hosts reduce the spectrum natively (runtime/analyse-split.js): __host.bandDb (256 dB maxima) and
+// __host.wave (512 aligned samples) replace freq/time, and only the musical interpretation runs here.
+if (__host.bandDb) analyse = dt => vizInterpret(A, dt, __host.bandDb, __host.wave, -92, 74);
 var __warmAt = 0, __frameMs = 0, __frameN = 0;
 var __viz = {
   scenes: SCENES.map(s => ({ id: s.id, name: s.name, about: s.about || '', group: s.group || '' })),

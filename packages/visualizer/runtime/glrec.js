@@ -52,7 +52,7 @@ const SF = { BLEND: 1, DEPTH_TEST: 2, CULL: 4, A2C: 8, DEPTH_WRITE: 16 };
 
 function createRecordingGL(host, opts) {
   opts = opts || {};
-  const buf = host.commandBuffer || new ArrayBuffer(opts.capacityBytes || (4 << 20));
+  const buf = host.commandBuffer || new ArrayBuffer(opts.capacityBytes || (16 << 20));
   const I = new Int32Array(buf), F = new Float32Array(buf), B = new Uint8Array(buf), CAP = I.length - 64;
   let n = 1;
   const flush = () => { if (n > 1) { I[0] = n; host.flush(n); } n = 1; };
@@ -60,10 +60,10 @@ function createRecordingGL(host, opts) {
   const w = v => { I[n++] = v; };
   const wf = v => { F[n++] = v; };
   // Bytes are padded to whole words; a typed array of any kind is copied as bytes.
-  const bytes = src => {
-    const u8 = src instanceof Uint8Array ? src : new Uint8Array(src.buffer, src.byteOffset, src.byteLength);
-    const words = (u8.byteLength + 3) >> 2; room(words + 2); w(u8.byteLength); B.set(u8, n * 4); n += words;
-  };
+  // The caller reserves room for the whole command first (header + dataWords(src)), so a flush never splits one.
+  const u8of = src => src instanceof Uint8Array ? src : new Uint8Array(src.buffer, src.byteOffset, src.byteLength);
+  const dataWords = src => src ? 1 + ((src.byteLength + 3) >> 2) : 1;
+  const bytes = src => { const u8 = u8of(src), words = (u8.byteLength + 3) >> 2; w(u8.byteLength); B.set(u8, n * 4); n += words; };
 
   let nextId = 1; const id = () => nextId++;
   const obj = kind => ({ kind, id: id() });
@@ -112,11 +112,11 @@ function createRecordingGL(host, opts) {
         const img = host.canvasImage(e); room(8); w(OP.TEX_IMAGE_HOST); w(boundTex()); w(ifmt); w(img.width); w(img.height); w(img.id); w(flipY ? 1 : 0); w(0); return;
       }
       const width = a, height = b, fmt = d, type = e, data = f;
-      room(9); w(OP.TEX_IMAGE); w(boundTex()); w(ifmt); w(width); w(height); w(fmt); w(type); w(flipY ? 1 : 0);
+      room(8 + dataWords(data)); w(OP.TEX_IMAGE); w(boundTex()); w(ifmt); w(width); w(height); w(fmt); w(type); w(flipY ? 1 : 0);
       if (data) bytes(data); else w(0);
     },
     texSubImage2D(target, level, x, y, width, height, fmt, type, data) {
-      room(9); w(OP.TEX_SUB); w(boundTex()); w(x); w(y); w(width); w(height); w(fmt); w(type); bytes(data);
+      room(8 + dataWords(data)); w(OP.TEX_SUB); w(boundTex()); w(x); w(y); w(width); w(height); w(fmt); w(type); bytes(data);
     },
 
     // ── framebuffers and renderbuffers
@@ -141,7 +141,7 @@ function createRecordingGL(host, opts) {
     bindBuffer(target, b) { const v = b ? b.id : 0; if (target === GLC.ELEMENT_ARRAY_BUFFER) { if (vao) { room(3); w(OP.VAO_ELEMENTS); w(vao); w(v); vaos.get(vao).elements = v; } } else arrayBuf = v; },
     bufferData(target, data, usage) {
       const b = target === GLC.ELEMENT_ARRAY_BUFFER ? (vao ? vaos.get(vao).elements : 0) : arrayBuf;
-      room(4); w(OP.BUF_DATA); w(b); w(target === GLC.ELEMENT_ARRAY_BUFFER ? 1 : 0); bytes(data);
+      room(3 + dataWords(data)); w(OP.BUF_DATA); w(b); w(target === GLC.ELEMENT_ARRAY_BUFFER ? 1 : 0); bytes(data);
     },
     createVertexArray() { const v = obj('vao'); vaos.set(v.id, { elements: 0, attribs: new Map() }); room(2); w(OP.VAO_CREATE); w(v.id); return v; },
     deleteVertexArray() {},

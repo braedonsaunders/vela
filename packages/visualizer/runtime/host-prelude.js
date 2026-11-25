@@ -21,8 +21,9 @@ var setTimeout = (fn, ms) => { const id = __timerId++; __timers.push({ id, at: _
 var clearTimeout = id => { __timers = __timers.filter(t => t.id !== id); };
 var requestAnimationFrame = fn => { __raf = fn; return 1; };
 var addEventListener = () => {};
-var __gl = createRecordingGL(__host, {});
+// A host may hand over a real WebGL2 context instead (tools: the direct half of the record/replay comparison).
+var __gl = __host.directGL ? Object.assign(__host.directGL, { __endFrame() {}, __stats() { return {}; } }) : createRecordingGL(__host, {});
 var __canvas = { width: 0, height: 0, getContext: () => __gl, style: {} };
-__gl.canvas = __canvas;
+if (!__host.directGL) __gl.canvas = __canvas;
 var document = { hidden: false, getElementById: id => id === 'c' ? __canvas : null,
   createElement: () => { throw new Error('document.createElement is not available on a native host'); } };
