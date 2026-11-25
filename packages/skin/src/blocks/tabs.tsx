@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Platform, ScrollView, View, type ViewStyle } from 'react-native';
 import { measure, useHost } from '../host';
+import { selectEnv } from '../host-source';
 import { fill, type RNode, type RPress, type Template } from '../resolve';
 import { boxStyle } from '../translate';
 import type { Ctx, Env } from '../vocabulary';
@@ -124,7 +125,7 @@ export function TabsBlock({ node, ctx }: { node: TabsBlockNode; ctx: Ctx }) {
   const currentParamValue = paramName
     ? (screenScope?.page?.params?.[paramName] ?? '')
     : stateName
-      ? (screenScope?.state?.[stateName] ?? host.env.flags.find(f => f.startsWith(`${stateName}:`))?.slice(stateName.length + 1) ?? '')
+      ? (screenScope?.state?.[stateName] ?? selectEnv(host.env, 'flags', `state:${stateName}`, flags => flags.find(f => f.startsWith(`${stateName}:`))?.slice(stateName.length + 1)) ?? '')
       : '';
   const defaultValue = node.default ? fill(node.default as Template, ctx, host.env).trim() : '';
 

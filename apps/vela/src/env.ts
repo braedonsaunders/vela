@@ -7,6 +7,7 @@ import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
 import { screenDestinationId, withScreens } from './plugin-screens';
 import type { ViewState } from './view-state';
+import { sameDestinations, sameFields } from './env-identity';
 
 export interface EnvInput {
   state: VelaState;
@@ -99,6 +100,10 @@ export function createEnvironmentReader() {
       && previous.env.season === env.season) env.detail = previous.env.detail;
     if (previous?.search === state.search) env.search = previous.env.search;
     if (previous && previous.env.preview?.cardId === env.preview?.cardId && previous.env.preview?.heroId === env.preview?.heroId) env.preview = previous.env.preview;
+    // Values rebuilt on every read keep their identity while they say the same: nodes redraw when
+    // what they read changes (TrackedHost), and the shell's navigation reads the libraries.
+    if (previous && sameDestinations(previous.env.libraries, env.libraries)) env.libraries = previous.env.libraries;
+    if (previous && sameFields(previous.env.about, env.about)) env.about = previous.env.about;
     routes.set(key, { inputs, env, title, seasonTitle: state.titles[season], search: state.search });
     return env;
   };

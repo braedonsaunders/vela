@@ -1,4 +1,5 @@
 import { flagBinding } from './route-host';
+import { selectEnv } from './host-source';
 import { brandDocument } from './branding';
 import type { Branding } from '../../protocol/types';
 import { withRowLinks } from './resolve/row-links';
@@ -206,7 +207,8 @@ function compile(text: string | undefined, r: Context, urls = false): Template |
 function read(key: string): Accessor {
   if (key.startsWith('flag:')) {
     const flag = key.slice(5);
-    return flagBinding<Accessor>((_, e) => (e.flags.includes(flag) ? 'true' : 'false'), flag);
+    // A node redraws only when this flag goes up or down, not for every flag (selectEnv).
+    return flagBinding<Accessor>((_, e) => (selectEnv(e, 'flags', `flag:${flag}`, flags => flags.includes(flag)) ? 'true' : 'false'), flag);
   }
   const found = accessor(key);
   if (!found) throw new Error(`Unknown binding ${key}`);
