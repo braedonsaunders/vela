@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Visualizer: direct WebGL2 vs record → replay</title>
+<canvas id="cv" width="960" height="540"></canvas>
+<pre id="out"></pre>
+<script src="../../runtime/glrec.js"></script>
+<script src="../../runtime/replay-webgl.js"></script>
+<script>
+// Renders the same frames twice from the same seed and synthetic music: once with the real WebGL2 context handed
+// straight to the framework, once through glrec → command buffer → replayer. The pixels must match.
+self.VizGL = { OP, UK, SF, GLC };
+const qs = new URLSearchParams(location.search), FRAMES = +(qs.get('frames') || 150);
+async function run(mode, sceneId, bundle) {
+  const cv = document.getElementById('cv'), gl = cv.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+  gl.getExtension('EXT_color_buffer_float'); gl.getExtension('OES_texture_float_linear');
+  let seed = 12345; Math.random = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+  let clock = 0; const rep = mode === 'replay' ? createWebGLReplayer(gl) : null;
+  let words = 0, nf = 0, recMs = 0, runMs = 0;
+  const host = { width: 960, height: 540, dpr: 1, sampleRate: 48000, scene: sceneId, now: () => clock, log: s => console.log(s),
+    commandBuffer: new ArrayBuffer(16 << 20), bandDb: new Float32Array(256), wave: new Float32Array(512),
+    directGL: mode === 'direct' ? gl : null,
+    link: (id, vs, fs) => rep.link(id, vs, fs),
+    flush(n) { const t = performance.now(); rep.run(host.commandBuffer, n); runMs += performance.now() - t; words += n; nf++; },
+    canvasImage() { throw new Error('no text atlas in this check'); } };
+  const viz = new Function('__host', bundle + '\n;return __viz;')(host);
+  for (let f = 0; f < FRAMES; f++) {
+    const t = f / 60, beat = (t / 0.48) % 1, kick = Math.exp(-beat * 14);
+    for (let i = 0; i < 256; i++) host.bandDb[i] = -80 + 40 * Math.exp(-i / 40) + (i < 40 ? 30 * kick : 0) + 10 * Math.sin(i * 0.2 + t * 3);
+    for (let i = 0; i < 512; i++) host.wave[i] = 0.4 * Math.sin(i * 0.05 + t * 9) * (0.4 + kick);
+    clock = f * 1000 / 60; viz.frame(clock);
+  }
+  const px = new Uint8Array(960 * 540 * 4); gl.readPixels(0, 0, 960, 540, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  return { px, words: nf ? words / nf : 0, runMs: nf ? runMs / FRAMES : 0, stats: viz.stats() };
+}
+(async () => {
+  const bundle = await (await fetch(qs.get('bundle') || 'viz-native.js')).text();
+  const scenes = (qs.get('scenes') || 'tunnel,ink').split(','), rows = [];
+  for (const s of scenes) {
+    const a = await run('direct', s, bundle), b = await run('replay', s, bundle);
+    let diff = 0, maxd = 0, lit = 0;
+    for (let i = 0; i < a.px.length; i += 4) { const d = Math.abs(a.px[i] - b.px[i]) + Math.abs(a.px[i + 1] - b.px[i + 1]) + Math.abs(a.px[i + 2] - b.px[i + 2]); if (d) diff++; if (d > maxd) maxd = d; if (a.px[i] + a.px[i + 1] + a.px[i + 2] > 30) lit++; }
+    rows.push(`${s}: pixels differing ${diff} of ${a.px.length / 4}, max channel-sum diff ${maxd}, lit ${(100 * lit / (a.px.length / 4)).toFixed(0)}%, ${(b.words / 1024).toFixed(1)}k words/flush, replay ${b.runMs.toFixed(2)} ms/frame, broken ${JSON.stringify(b.stats.broken)}`);
+  }
+  document.getElementById('out').textContent = rows.join('\n'); document.title = 'DONE';
+})().catch(e => { document.getElementById('out').textContent = 'ERROR ' + (e.stack || e); document.title = 'DONE'; });
+</script>
