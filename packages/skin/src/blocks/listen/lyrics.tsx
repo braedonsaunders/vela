@@ -7,8 +7,8 @@ import { ScrollView, Text, View } from 'react-native';
 import { msg, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
-import { NO_RING } from '../common/controls';
-import { useMediaLook } from '../media/parts';
+import { NO_RING } from '../../widgets/common/controls';
+import { useMediaLook } from '../../widgets/media/parts';
 import { transition } from './parts';
 
 export interface Lyrics { synced: { startMs: number; text: string }[]; plain: string; source: string }
