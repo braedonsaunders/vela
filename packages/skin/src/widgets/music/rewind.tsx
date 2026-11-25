@@ -7,7 +7,7 @@ import { useVelaState } from '@vela/core/react';
 import { useMediaLook } from '../media/parts';
 import { RecapBlock, RewindCover, useHistoryRecap } from '../../blocks/recap';
 import { placeOf, useMusic } from '../../blocks/listen/app';
-import { coverSize, Header, pad } from './pages';
+import { coverSize, Header, pad } from '../../blocks/listen/pages';
 import { Wash } from '../../blocks/listen/parts';
 
 export { RewindCover };

@@ -5,13 +5,13 @@
 import { Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
-import { useMediaLook } from '../media/parts';
-import { useMusic } from '../../blocks/listen/app';
-import { useLibraryAlbums } from '../../blocks/listen/data';
-import { musicTV } from '../../blocks/listen/layout';
+import { useMediaLook } from '../../widgets/media/parts';
+import { useMusic } from './app';
+import { useLibraryAlbums } from './data';
+import { musicTV } from './layout';
 import { pad } from './pages';
 import { PageEnd } from './paging';
-import { FocusGroup, FocusScope, MusicTile } from '../../blocks/listen/parts';
+import { FocusGroup, FocusScope, MusicTile } from './parts';
 import { albumsTab } from './search-results';
 
 export function MusicAlbums({ query }: { query: string }) {
