@@ -1,11 +1,19 @@
 import { expect, test } from 'bun:test';
-import { opensAtTop, pinOpeningScroll, viewerScrollIntent } from '../src/opening-scroll';
+import { opensAtTop, opensWithFocus, pinOpeningScroll, viewerScrollIntent } from '../src/opening-scroll';
 
 test('title and plugin-screen details open at the top', () => {
   expect(opensAtTop('title')).toBe(true);
   expect(opensAtTop('screen')).toBe(true);
   expect(opensAtTop('home')).toBe(false);
   expect(opensAtTop('collection')).toBe(false);
+});
+
+test('a route opens with focus on a TV and on a web detail page, never on native touch', () => {
+  for (const route of ['home', 'title', 'screen', 'library']) expect(opensWithFocus(route, true, 'android')).toBe(true);
+  expect(opensWithFocus('title', false, 'web')).toBe(true);
+  expect(opensWithFocus('screen', false, 'web')).toBe(true);
+  expect(opensWithFocus('home', false, 'web')).toBe(false);
+  for (const os of ['android', 'ios']) for (const route of ['title', 'screen', 'home']) expect(opensWithFocus(route, false, os)).toBe(false);
 });
 
 test('opening scroll stays pinned only through focus settlement and before viewer input', () => {
