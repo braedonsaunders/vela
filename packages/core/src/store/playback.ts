@@ -20,6 +20,7 @@ import { commandFailure, staleGeneration, type CommandOrigin } from './command-f
 import { VelaError } from '../adapter/errors';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
 import { serverEnd } from './server-end';
+import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
@@ -894,6 +895,15 @@ export class Playback {
     if (this.versionsTimer) clearTimeout(this.versionsTimer);
     this.versionsTimer = undefined;
     this.versionsRead = undefined;
+  }
+
+  /**
+   * The episode after `episode` in its series, for the player's Next episode, or null when it is the
+   * last (or its series cannot be read). Read from the server's own title details, whatever its kind.
+   */
+  async nextEpisode(episode: EpisodeRef): Promise<V.Title | null> {
+    const connection = await this.session.ready();
+    return episodeAfter(episode, id => connection.adapter.detail(id));
   }
 
   /**

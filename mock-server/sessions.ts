@@ -52,6 +52,14 @@ export function publish(s: Session) {
     s.pendingCodecs?.timers.clear();
   }
 }
+/** Ether's example ranges for a 3000-second episode, scaled onto the fixture's 180 seconds. */
+export function episodeMarkers(): NonNullable<PlaybackPlan['markers']> {
+  return [
+    { kind: 'intro', startSeconds: 5, endSeconds: 25 },
+    { kind: 'credits', startSeconds: 140, endSeconds: 155 },
+    { kind: 'credits', startSeconds: 165, endSeconds: fixtureDurationSeconds, final: true },
+  ];
+}
 export async function createSession(owner: string, request: PlaybackRequest, pending?: { neverVerify: boolean; pathId: string }, versionData?: Pick<PlaybackPlan, 'selectedVersionId' | 'versions' | 'rememberedChoice'>): Promise<Session> {
   const id = crypto.randomUUID(), token = crypto.randomUUID(), base = `/sessions/media/${id}/${token}`;
   const available = await Bun.file(`${mediaRoot}/master.m3u8`).exists();
@@ -95,6 +103,9 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
       plan.selectedSubtitleTrackId = request.subtitleTrackId ?? (originalFixture.selectSubtitle ? originalFixture.subtitles[0].id : null);
     }
   }
+  // An episode's intro and credits, shaped as Ether sends them (an intro, credits broken by a scene, the
+  // final tail credits), placed inside the 180-second fixture.
+  if (request.titleId?.startsWith('episode-') && !originalFixture.name) plan.markers = episodeMarkers();
   // The fixture's scrub thumbnails, for on-demand plans of the fixture itself (not a format original).
   const trickplay = !request.channelId && !originalFixture.name && available ? await trickplayOffer() : null;
   if (trickplay) plan.trickplay = trickplay;

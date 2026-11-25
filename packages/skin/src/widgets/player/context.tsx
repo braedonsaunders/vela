@@ -33,6 +33,14 @@ export interface ChromeTarget {
   from?: 'start';
 }
 
+/** The episode after the one playing, which the chrome offers to start. */
+export interface NextEpisode {
+  /** Its name in the viewer's words ("S1 · E3 · Name"). */
+  label: string;
+  /** Leave this episode and start that one. */
+  play(): void;
+}
+
 export interface PlayerChromeState {
   /** The heading: the title, or "Season 1, Episode 2: Name". */
   title: string;
@@ -59,6 +67,8 @@ export interface PlayerChromeState {
   retry(): void;
   /** The scrub thumbnail (trickplay) for a position, once a session offers them and its sheet is here. */
   thumbnail?(seconds: number): TrickplayFrame | null;
+  /** An episode's next one, once known (null: none, or not an episode). */
+  nextEpisode?: NextEpisode | null;
 }
 
 export const PlayerChromeContext = createContext<PlayerChromeState | null>(null);

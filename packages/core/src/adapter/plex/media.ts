@@ -3,6 +3,7 @@
 // Pure functions over Plex's own metadata shapes.
 import type * as V from '../../wire';
 import { photoFacts } from '../jellyfin/media';
+import { skipMarkers } from '../../protocol/markers';
 
 type Node = Record<string, any>;
 
@@ -95,4 +96,16 @@ export function plexSidecar(url: URL, codec: unknown, subtitleFormats: readonly 
   }
   u.searchParams.set('format', 'vtt');
   return { url: u.href, format: 'webvtt' };
+}
+
+/**
+ * A title's intro and credits markers (`includeMarkers=1`: `Marker` ranges in milliseconds) as the
+ * plan carries them; Plex flags the tail credits `final`. Undefined when it has none.
+ */
+export function plexMarkers(n: Node): V.SkipMarker[] | undefined {
+  const flag = (value: unknown) => value === true || value === 1 || value === '1' || value === 'true';
+  const ranges = (Array.isArray(n.Marker) ? n.Marker : []).flatMap((m: Node): V.SkipMarker[] => m.type === 'intro' || m.type === 'credits'
+    ? [{ kind: m.type, startSeconds: Number(m.startTimeOffset) / 1000, endSeconds: Number(m.endTimeOffset) / 1000, ...(flag(m.final) ? { final: true } : {}) }]
+    : []);
+  return skipMarkers(ranges, Number(n.duration) > 0 ? Number(n.duration) / 1000 : undefined);
 }

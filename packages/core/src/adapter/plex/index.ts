@@ -8,7 +8,7 @@ import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
-import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, partAt, partOffsets, plexAudioMime, plexProjection, plexSidecar } from './media';
+import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, partAt, partOffsets, plexAudioMime, plexMarkers, plexProjection, plexSidecar } from './media';
 import { bifFrameAt, bifFrames, bifHeader, bifInterval, bifOffer, bifTableRange, BIF_HEADER_BYTES, jpegSize, type BifFrame } from './bif';
 export * from './auth';
 
@@ -26,6 +26,8 @@ interface PlexSession {
   mutations: Map<string, V.PlaybackPlan>;
   /** What the player declared at the start: a subtitle added later is delivered in a format it draws. */
   client?: V.ClientCapabilities;
+  /** A title that started without intro or credits markers: when they were last asked for, and how often. */
+  markers?: { at: number; asked: number; reading: boolean };
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
    * transcode request each part is played through. */
   stack?: { parts: Node[]; index: number; query: Record<string, string> };
@@ -33,6 +35,10 @@ interface PlexSession {
    * the offer made of it, and the whole file when the server would not answer a byte range. */
   thumbnails?: { frames: BifFrame[]; offer: V.TrickplayMetadata; whole?: Uint8Array };
 }
+/** A title's markers missing at the start are asked for again this often, this many times (Ether
+ * knows them once the session's source is probed). */
+const MARKERS_AGAIN_MS = 30_000;
+const MARKERS_ASKS = 6;
 /** A thumbnail index larger than this is not read whole (a server that ignores byte ranges). */
 const MAX_INDEX_BYTES = 50 * 1024 * 1024;
 export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string; /** The name the server was added under (plex.tv's resource name). */ name?: string }
@@ -412,7 +418,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return { collection: { id, kind: kind === 'playlist' ? 'playlist' : 'collection', name: n.title || '', summary: n.summary, artwork: this.artwork(n) }, ...page(this.nodes(children).map(n => this.entry(n)), start, children.totalSize) };
   }
   private async metadata(id: string): Promise<Node> {
-    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1, includeOnDeck: 1 });
+    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1, includeOnDeck: 1, includeMarkers: 1 });
     const n = this.nodes(c)[0]; if (!n) fail('Plex title not found', 'not-found');
     if (n.librarySectionID !== undefined && !this.sections.has(String(n.librarySectionID))) await this.libraries({}).catch(() => undefined);
     return n;
@@ -580,12 +586,14 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, qualities: [], boundaries: [] });
     }
     if (!paths.length) fail('No compatible Plex playback path', 'playback');
+    const markers = r.extraId ? undefined : plexMarkers(n);
     const plan: V.PlaybackPlan = { sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0,
-      ...(r.extraId ? { extraId: id } : { titleId: id }), state: 'ready', positionSeconds: start, durationSeconds: seconds(n.duration),
+      ...(r.extraId ? { extraId: id } : { titleId: id }), ...(markers ? { markers } : {}), state: 'ready', positionSeconds: start, durationSeconds: seconds(n.duration),
       paths, selectedPathId: paths[0].id, audioTracks, subtitleTracks, selectedAudioTrackId: audio, selectedSubtitleTrackId: subtitle, chapters: this.chapters(n),
       fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' } };
     const hls = paths.find(p => p.id === 'plex-hls');
     this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]), client: r.client,
+      ...(markers || r.extraId ? {} : { markers: { at: Date.now(), asked: 0, reading: false } }),
       ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}) });
     return structuredClone(plan);
   }
@@ -787,6 +795,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
 
   async sessionSnapshot(id: string): Promise<V.SessionSnapshot> {
     const s = this.session(id);
+    this.askMarkers(s);
     return {
       cursor: String(s.plan.revision),
       revision: s.plan.revision,
@@ -871,6 +880,25 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (Number(response.headers.get('content-length')) > MAX_INDEX_BYTES) { await response.body?.cancel(); return null; }
     const bytes = new Uint8Array(await response.arrayBuffer());
     return bytes.length > MAX_INDEX_BYTES ? null : { bytes, whole: true };
+  }
+
+  /**
+   * A title that started without markers asks for them again now and then, in the background, while
+   * its session is followed: a server may know them only once the session's source is probed. The
+   * plan carries them from the next snapshot on.
+   */
+  private askMarkers(s: PlexSession): void {
+    const state = s.markers;
+    if (!state || state.reading || s.plan.state === 'ended' || state.asked >= MARKERS_ASKS || Date.now() - state.at < MARKERS_AGAIN_MS) return;
+    state.reading = true;
+    state.asked++;
+    void this.metadata(String(s.metadata.ratingKey)).then(n => {
+      const markers = plexMarkers(n);
+      if (!markers || s.plan.state === 'ended') return;
+      s.plan.markers = markers;
+      s.plan.revision++;
+      s.markers = undefined;
+    }).catch(() => undefined).finally(() => { if (s.markers === state) { state.reading = false; state.at = Date.now(); } });
   }
 
   private async requireLive() {

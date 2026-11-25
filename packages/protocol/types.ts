@@ -354,6 +354,9 @@ export interface TrickplayMetadata {
   /** Monotonic within the plan's sourceGeneration; changes when published sheets change. */
   revision: number;
 }
+/** A stretch of a title the viewer may skip, on the plan's timeline: the opening titles, or credits.
+ * `final` (credits only): the last credits, running to the end of the title. */
+export interface SkipMarker { kind: 'intro' | 'credits'; startSeconds: number; endSeconds: number; final?: boolean }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; libraryId?: ID; liveItemId?: ID; title?: string; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   /** Audio-only plans say so; omitted: 'video'. */ media?: 'video' | 'audio';
@@ -362,6 +365,8 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
   /** Also carried by SessionSnapshot.plan and full plan events. */
   trickplay?: TrickplayMetadata;
+  /** Intro and credits ranges, sorted by start; never empty (omitted when unknown). */
+  markers?: SkipMarker[];
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };

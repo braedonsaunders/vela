@@ -428,6 +428,24 @@ it is ready answers the plan with the existing track selected.
 An offer the session was not shown is 404 `offer_not_found` (search again); an ended
 session is 409 `session_ended`.
 
+### Skip markers (intro and credits)
+
+`PlaybackPlan.markers?: {kind: 'intro' | 'credits', startSeconds, endSeconds,
+final?}[]` names the stretches of the title a viewer may skip: the opening titles
+and the credits. Times are plan-timeline seconds (a multi-part title's own
+timeline), sorted by start; `endSeconds` is after `startSeconds`. A title may have
+several credits ranges (a scene between them); `final` marks only the last one,
+the tail credits that run to the end of the title. The field is never an empty
+array: omission makes no claim (unknown, live, extras and audio-only plans omit
+it). It is carried by the playback answer, by a version switch's plan, and by
+snapshots and full plan events like the rest of the plan.
+
+While the position is inside a range the client offers Skip intro or Skip credits,
+which seeks to the range's end. On the `final` credits of an episode that has a next
+episode it offers Next episode instead, which starts that episode. The next episode
+is the client's own reading of the series (the episode's season, then the next
+season), not a server field; nothing starts it automatically.
+
 ### Scrub thumbnails (trickplay)
 
 `PlaybackPlan.trickplay?: {width, height, intervalMs, count, cols, rows,
