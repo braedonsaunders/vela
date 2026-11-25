@@ -58,6 +58,7 @@ import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocab
 import { itemKey, items } from './screen/items';
 import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
+import { RichBlock } from './blocks/listen/rich';
 import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
@@ -551,6 +552,8 @@ function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node:
     case 'sections': case 'shelf': case 'grid': case 'marquee': case 'tabs': case 'table':
     case 'lineGraph': case 'player': case 'paramInput': case 'titleCard':
       return <BlockView node={node} ctx={ctx} />;
+    // Rich blocks (docs/experiences.md): native engines with named parts (blocks/listen).
+    case 'rich': return <RichBlock node={node} ctx={ctx} />;
   }
 }
 
