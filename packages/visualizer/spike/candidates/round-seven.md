@@ -43,3 +43,23 @@ The [preserved authoring script](round-seven/map.py), originally `round7-work/ma
 | map.py | `77c22085d96ad0893921a4458255ae703c899a0381a8a8f2b0d018e9f3d5d374` |
 | river50.json | `f286e0ce978fde999ca2d7a78c764be08542e19b63cded52b05c12d5173ccc51` |
 | cities.json | `8e70756b39fae9bcdc1e332bfc510c024c5edd3a13203ffd20092ee37b61d978` |
+
+## Native verification
+
+The final 18-scene bundle used the same linker inputs on both executors. GLES linked all 57 program pairs. The M4 Pro compiled all 171 Metal stage variants and resolved their entry points. Both executors rendered the six changed scenes with decoded music and silent output. The Metal captures used 120 frames at 1920 × 1080 per scene. [Metal scene captures](round-seven-metal-sheet.jpg)
+
+| Map uniform | GL unit | Metal fragment texture slot | Uploaded data and sampler |
+| --- | ---: | ---: | --- |
+| uMap | 3 | 1 | 2880 × 1440 R8 country IDs, nearest |
+| uHydro | 5 | 2 | 1440 × 720 RG8 river coverage and settlement locations, linear |
+| uText | 4 | 3 | 1408 × 1848 R8 city labels, trilinear |
+
+The two geographic textures wrap in longitude and clamp in latitude. GLES uploads matched the authoring rasters byte for byte, including all 2,073,600 hydro bytes. The 523-city label atlas is shared with round six. In a Metal A/B at the same clock time and random seed, removing the river channel changed 107,401 screen pixels, removing settlement locations changed 74,717, and removing both changed 175,039. The affected pixels overlap.
+
+| Final artifact | Bytes | Gzip bytes |
+| --- | ---: | ---: |
+| Browser review page | 253,130 | 103,673 |
+| Native JS with all scenes and baked textures | 2,161,862 | 549,657 |
+| Metal shader and reflection table | 1,313,027 | 155,059 |
+
+Use the native packager's `--framework` argument to build from this candidate in an isolated checkout. The shader table size measures the spike's MSL source and reflection JSON. Device packages would also include host binaries.
