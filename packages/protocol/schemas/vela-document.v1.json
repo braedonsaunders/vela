@@ -9188,6 +9188,10 @@
         },
         "vela.playlist": {
           "args": {
+            "audio": {
+              "doc": "Only entries that play as audio (items, entryIds and total together).",
+              "type": "bool"
+            },
             "id": {
               "doc": "The playlist.",
               "required": true,
