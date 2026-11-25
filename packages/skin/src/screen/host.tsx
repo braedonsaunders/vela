@@ -5,7 +5,7 @@
 // here (SkinHost.screenPress) and become the fixed actions; what leaves the screen (opening a
 // page or a route, playback, links, confirmations, toasts) is the app's (ScreenAppActions).
 // Section routes, pages and W5's surface hosts all draw through ScreenView.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useScreenDocument, useScreenPage, useVela, useVelaState } from '@vela/core/react';
 import { msg, screenDocumentHref, type ScreenTarget } from '@vela/core';
@@ -68,6 +68,18 @@ export interface ScreenViewProps {
   quiet?: boolean;
   /** Renderer 20, a page in an experience's shell: its key, under which its `sections` keep their scroll. */
   scrollKey?: string;
+  /** Renderer 20: given the document's local state for app code (a keyboard shortcut opening the
+   * shell's queue panel), as a press of `toggle` or `open`/`close` would change it. */
+  handle?: MutableRefObject<ScreenStateHandle | null>;
+}
+
+/** The document's local state (`{state.*}`), driven from app code. */
+export interface ScreenStateHandle {
+  /** Flip a flag; `clear` flags close when it opens (Q: the queue, closing Sound). */
+  toggle(flag: string, options?: { clear?: string[] }): void;
+  set(flag: string, on: boolean): void;
+  /** Whether a flag is up now. */
+  isOn(flag: string): boolean;
 }
 
 const BOOL = /^(true|false)$/;
@@ -114,7 +126,7 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
   }, [doc, width, height, ui, skin, fold, host.viewport.pxScale, host.viewport.pxStep]);
 }
 
-export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false, scrollKey }: ScreenViewProps) {
+export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false, scrollKey, handle }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
   const previewExpired = useVelaState(state => state.screens.preview?.expired === true);
@@ -144,6 +156,20 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   // A section's loading and failure nodes start below a shell bar that floats over the page.
   const look = useBlockLook();
   const [state, setState] = useState<Record<string, string>>({});
+  const stateNow = useRef(state);
+  stateNow.current = state;
+  useEffect(() => {
+    if (!handle) return;
+    handle.current = {
+      toggle: (flag, options) => setState(s => {
+        const on = s[flag] !== 'true';
+        return { ...s, ...(on ? Object.fromEntries((options?.clear ?? []).map(name => [name, ''])) : {}), [flag]: on ? 'true' : '' };
+      }),
+      set: (flag, on) => setState(s => ({ ...s, [flag]: on ? 'true' : '' })),
+      isOn: flag => stateNow.current[flag] === 'true',
+    };
+    return () => { handle.current = null; };
+  }, [handle]);
   // A plugin action's answer may carry a line to show (at most 200 characters), for a few seconds.
   const [toast, setToast] = useState('');
   useEffect(() => {

@@ -1,0 +1,28 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "queue",
+ "version": "1",
+ "title": "{s:music.queue}",
+ "presentation": "page",
+ "sources": {
+  "queue": {
+   "from": "vela.queue"
+  }
+ },
+ "tree": {
+  "type": "box",
+  "style": {
+   "flex": "1"
+  },
+  "children": [
+   {
+    "type": "queue"
+   }
+  ]
+ }
+}

@@ -1,0 +1,148 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "liked",
+ "version": "1",
+ "title": "{s:music.liked}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "me": {
+   "from": "vela.viewer"
+  },
+  "tracks": {
+   "from": "vela.favorites",
+   "role": "track",
+   "class": "music",
+   "library": "{param.library}"
+  }
+ },
+ "tree": {
+  "type": "sections",
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "children": [
+   {
+    "type": "box",
+    "children": [
+     {
+      "type": "wash",
+      "props": {
+       "accent": "$ui.accent",
+       "height": "460"
+      }
+     },
+     {
+      "type": "box",
+      "style": {
+       "padding-left": "28px",
+       "padding-right": "28px"
+      },
+      "small": {
+       "padding-left": "16px",
+       "padding-right": "16px"
+      },
+      "children": [
+       {
+        "type": "collectionHeader",
+        "props": {
+         "eyebrow": "{s:music.playlist}",
+         "title": "{s:music.liked}"
+        },
+        "partTemplates": {
+         "collectionHeader.cover": {
+          "type": "cover",
+          "props": {
+           "kind": "liked"
+          }
+         },
+         "collectionHeader.byline": {
+          "type": "text",
+          "text": "{src.me.name} \u00b7 {src.tracks.items|totalLabel}",
+          "style": {
+           "font-size": "15px",
+           "color": "$ui.inkSecondary"
+          }
+         }
+        }
+       },
+       {
+        "type": "actionBar",
+        "props": {
+         "tracks": "{src.tracks.items}",
+         "sourceId": "track",
+         "sourceName": "{s:music.liked}",
+         "sourceKind": "favorites",
+         "buttons": "play,shuffle"
+        }
+       },
+       {
+        "type": "trackTable",
+        "props": {
+         "tracks": "{src.tracks.items}",
+         "covers": "true",
+         "album": "true",
+         "position": "true",
+         "sourceId": "track",
+         "sourceName": "{s:music.liked}",
+         "sourceKind": "favorites"
+        }
+       },
+       {
+        "type": "box",
+        "when": [
+         {
+          "test": "src.tracks.more"
+         }
+        ],
+        "testId": "music-liked-more",
+        "role": "button",
+        "press": {
+         "action": "plugin",
+         "args": {
+          "name": "vela.more",
+          "source": "tracks"
+         }
+        },
+        "style": {
+         "align-self": "center",
+         "padding-left": "18px",
+         "padding-right": "18px",
+         "padding-top": "12px",
+         "padding-bottom": "12px"
+        },
+        "children": [
+         {
+          "type": "text",
+          "text": "{s:music.seeMore}",
+          "style": {
+           "font-size": "14px",
+           "font-weight": "700",
+           "color": "$ui.inkSecondary"
+          }
+         }
+        ]
+       },
+       {
+        "type": "box",
+        "style": {
+         "height": "40px"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "testId": "music-main"
+ }
+}

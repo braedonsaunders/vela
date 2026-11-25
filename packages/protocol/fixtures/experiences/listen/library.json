@@ -1,0 +1,158 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "library",
+ "version": "1",
+ "title": "{s:music.yourLibrary}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "info": {
+   "from": "vela.libraryInfo",
+   "id": "{param.library}"
+  },
+  "home": {
+   "from": "vela.musicHome",
+   "library": "{param.library}",
+   "lazy": true
+  }
+ },
+ "tree": {
+  "type": "sections",
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "children": [
+   {
+    "type": "rail",
+    "props": {
+     "library": "{param.library}",
+     "mode": "embedded"
+    }
+   }
+  ],
+  "testId": "music-main"
+ },
+ "forms": {
+  "wide": {
+   "type": "box",
+   "style": {
+    "flex": "1"
+   },
+   "children": [
+    {
+     "type": "sections",
+     "needs": [
+      "home"
+     ],
+     "when": [
+      {
+       "test": "src.info.listening",
+       "is": "eq",
+       "value": "music"
+      }
+     ],
+     "style": {
+      "padding-bottom": "32px"
+     },
+     "children": [
+      {
+       "type": "box",
+       "children": [
+        {
+         "type": "wash",
+         "props": {
+          "accent": "{src.home.accent}",
+          "height": "360"
+         }
+        },
+        {
+         "type": "box",
+         "style": {
+          "padding-left": "20px",
+          "padding-right": "20px",
+          "padding-top": "28px"
+         },
+         "small": {
+          "padding-left": "16px",
+          "padding-right": "16px",
+          "padding-top": "16px"
+         },
+         "children": [
+          {
+           "type": "text",
+           "role": "heading",
+           "level": 1,
+           "text": "{env.now|greeting}",
+           "style": {
+            "font-family": "$ui.fontDisplay",
+            "font-size": "38px",
+            "color": "$ui.ink",
+            "letter-spacing": "-0.01em",
+            "margin-bottom": "20px"
+           },
+           "small": {
+            "font-size": "30px",
+            "margin-bottom": "14px"
+           }
+          },
+          {
+           "type": "quickTiles"
+          }
+         ]
+        },
+        {
+         "type": "box",
+         "style": {
+          "padding-left": "8px",
+          "padding-right": "8px"
+         },
+         "small": {
+          "padding-left": "4px",
+          "padding-right": "4px"
+         },
+         "children": [
+          {
+           "type": "homeShelves"
+          },
+          {
+           "type": "genres"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "testId": "music-main"
+    },
+    {
+     "type": "box",
+     "style": {
+      "flex": "1"
+     },
+     "when": [
+      {
+       "test": "src.info.listening",
+       "is": "ne",
+       "value": "music"
+      }
+     ],
+     "testId": "listen-home-spoken",
+     "children": [
+      {
+       "type": "spokenHome"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

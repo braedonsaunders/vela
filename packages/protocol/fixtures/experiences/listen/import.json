@@ -1,0 +1,33 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "import",
+ "version": "1",
+ "title": "{s:music.import}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {},
+ "tree": {
+  "type": "sections",
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "children": [
+   {
+    "type": "playlistImport",
+    "props": {
+     "libraryId": "{param.library}"
+    }
+   }
+  ],
+  "testId": "music-main"
+ }
+}
