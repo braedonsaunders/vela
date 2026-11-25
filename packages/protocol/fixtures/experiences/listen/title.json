@@ -265,7 +265,11 @@
      ]
     }
    ],
-   "testId": "music-main"
+   "testId": "music-main",
+   "tv": {
+    "padding-bottom": "48px",
+    "padding-right": "32px"
+   }
   },
   "artist": {
    "type": "sections",
@@ -504,7 +508,11 @@
      ]
     }
    ],
-   "testId": "music-main"
+   "testId": "music-main",
+   "tv": {
+    "padding-bottom": "48px",
+    "padding-right": "32px"
+   }
   }
  },
  "tree": {

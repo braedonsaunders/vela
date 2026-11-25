@@ -39,7 +39,11 @@
     }
    }
   ],
-  "testId": "music-main"
+  "testId": "music-main",
+  "tv": {
+   "padding-bottom": "48px",
+   "padding-right": "32px"
+  }
  },
  "forms": {
   "wide": {
@@ -131,7 +135,11 @@
        ]
       }
      ],
-     "testId": "music-main"
+     "testId": "music-main",
+     "tv": {
+      "padding-bottom": "48px",
+      "padding-right": "32px"
+     }
     },
     {
      "type": "box",
