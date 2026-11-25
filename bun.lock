@@ -16,6 +16,7 @@
         "@vela/player": "workspace:*",
         "@vela/search-native": "workspace:*",
         "@vela/skin": "workspace:*",
+        "@vela/top-shelf": "workspace:*",
         "expo": "~58.0.25",
         "expo-asset": "~58.0.21",
         "expo-blur": "~58.0.6",
@@ -96,6 +97,15 @@
         "expo": "*",
         "expo-modules-core": "*",
         "react": "*",
+        "react-native": "*",
+      },
+    },
+    "modules/vela-top-shelf": {
+      "name": "@vela/top-shelf",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "expo": "*",
+        "expo-modules-core": "*",
         "react-native": "*",
       },
     },
@@ -500,6 +510,8 @@
     "@vela/search-native": ["@vela/search-native@workspace:modules/vela-search"],
 
     "@vela/skin": ["@vela/skin@workspace:packages/skin"],
+
+    "@vela/top-shelf": ["@vela/top-shelf@workspace:modules/vela-top-shelf"],
 
     "@webgpu/types": ["@webgpu/types@0.1.71", "", {}, "sha512-mMy8/ODcKhab808co15eW+yN+HgXoQxRQHTiBV9Mrvl1r0ufnid7YOcI+gi4eUWSWl9ezD6TW2KXccrL8HCh2A=="],
 

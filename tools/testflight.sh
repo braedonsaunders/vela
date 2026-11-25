@@ -138,6 +138,11 @@ for platform in $platforms; do
   fi || { tail -20 "$build/$platform-prebuild.log"; echo "testflight: $platform prebuild failed; the log is $build/$platform-prebuild.log" >&2; exit 1; }
   plist=$root/apps/vela/ios/Vela/Info.plist
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" -c "Set :CFBundleVersion $number" "$plist"
+  # The Apple TV Top Shelf extension carries the app's version and build number (ITMS-90473).
+  extension_plist=$root/apps/vela/ios/VelaTopShelfExtension/VelaTopShelfExtension-Info.plist
+  if [ -f "$extension_plist" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" -c "Set :CFBundleVersion $number" "$extension_plist"
+  fi
   rm -rf "$archive"
   # shellcheck disable=SC2046
   if ! (cd "$root/apps/vela/ios" && locked xcodebuild -workspace Vela.xcworkspace -scheme Vela -configuration Release \

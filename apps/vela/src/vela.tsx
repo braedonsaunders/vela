@@ -59,6 +59,7 @@ import { useSearchAddress } from './use-search-address';
 import { pageTitle } from './page-title';
 import { prefetchLibrary, prefetchLibrariesWhenIdle } from './browse/prefetch';
 import { screenOf, screenPath } from './plugin-screens';
+import { useTopShelf } from './top-shelf';
 
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
@@ -173,6 +174,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   const live = useLiveController(store, signedIn ? auth.revision : null);
   const multiview = useMultiviewController(store, signedIn ? auth.revision : null, live);
   useSignedOutGate(auth.phase);
+  useTopShelf(auth, state.home);
 
   useEffect(() => {
     if (!signedIn) return;

@@ -66,7 +66,8 @@
       "./plugins/android-tv-keys",
       "./plugins/android-hardware-bitmaps",
       "./plugins/android-picture-in-picture",
-      "./plugins/apple-player"
+      "./plugins/apple-player",
+      "@vela/top-shelf"
     ]
   }
 }
