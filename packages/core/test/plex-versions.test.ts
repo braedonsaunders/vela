@@ -142,6 +142,28 @@ describe('Plex versions', () => {
     expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId, `${plan.sessionId}-3`]);
   });
 
+  test('a stream that copies the video is stopped by a version switch like a converted one', async () => {
+    const seen = routeFetch({ 'GET /library/metadata/5': { MediaContainer: { Metadata: [movie] } }, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': { MediaContainer: { Metadata: [{ Media: [{ selected: true, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', Part: [{ Stream: [{ streamType: 1, decision: 'copy' }] }] }] }] } } });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '5', client, idempotencyKey: 'x' } as never);
+    expect(plan.paths.map(p => [p.id, p.kind])).toEqual([['plex-hls', 'remux']]);
+    await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '52', idempotencyKey: 'x1', sourceGeneration: 0, seekGeneration: 0 });
+    expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId]);
+  });
+
+  test('a stream that copies the video, left for the file, is still stopped by a version switch', async () => {
+    const seen = routeFetch({ 'GET /library/metadata/5': { MediaContainer: { Metadata: [movie] } }, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': { MediaContainer: { Metadata: [{ Media: [{ selected: true, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', Part: [{ Stream: [{ streamType: 1, decision: 'copy' }] }] }] }] } } });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '5', client, idempotencyKey: 'y', versionId: '52' } as never);
+    const streamed = await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'plex-hls', atSeconds: 5, idempotencyKey: 'y1', sourceGeneration: 0, seekGeneration: 0 });
+    expect(streamed.paths.find(p => p.id === 'plex-hls')!.kind).toBe('remux');
+    await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'original', atSeconds: 9, idempotencyKey: 'y2', sourceGeneration: 1, seekGeneration: 0 });
+    await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '51', idempotencyKey: 'y3', sourceGeneration: 2, seekGeneration: 0 });
+    expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId]);
+  });
+
   test('a refused decision for the new file leaves the running stream and the session as they were', async () => {
     let refusing = false;
     const seen = route(u => refusing && u.searchParams.get('mediaIndex') === '0');

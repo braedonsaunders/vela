@@ -424,7 +424,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
   const duration = snapshot?.duration ?? plan?.durationSeconds ?? 0;
   const path = plan?.paths.find(p => p.id === (snapshot?.sourceId ?? plan.selectedPathId));
   const unnamed = plan && siblings(plan, path).find(p =>
-    p.id === 'plex-hls' && p.transport === 'hls' && p.kind === 'transcode' &&
+    p.id === 'plex-hls' && p.transport === 'hls' && (p.kind === 'transcode' || p.kind === 'remux') &&
     (p.readiness === 'ready' || p.readiness === 'on-demand') && !p.quality && !p.qualities.length &&
     !(p.id === path?.id && snapshot?.renditions?.some(q => q.width && q.height)));
   const state: Snapshot['state'] = snapshot?.seekTarget != null ? 'buffering' : (snapshot?.state ?? 'loading');

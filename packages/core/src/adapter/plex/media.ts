@@ -131,12 +131,62 @@ export function partAt(parts: Node[], seconds: number): { index: number; offset:
  * the stream stays out of the numbered qualities.
  */
 export function decidedQuality(decision: Node): V.QualityTarget | undefined {
-  const media: Node | undefined = decision.Metadata?.[0]?.Media?.[0];
+  const media = decidedMedia(decision);
   const width = Number(media?.width), height = Number(media?.height), bitrate = Number(media?.bitrate);
   if (!media || !(width > 0) || !(height > 0)) return undefined;
   const video = String(media.videoCodec ?? '').toLowerCase();
   return { width, height, bitrate: bitrate > 0 ? bitrate * 1000 : 0,
     ...(video === 'h264' || video === 'hevc' ? { codec: video } : video ? { videoCodec: video } : {}) };
+}
+
+const chosen = (n: Node) => n.selected === true || n.selected === 1 || n.selected === '1';
+/** The output a transcode decision selected: the media entry Plex marks selected, else its first. */
+export function decidedMedia(decision: Node): Node | undefined {
+  const media: Node[] = decision.Metadata?.[0]?.Media ?? [];
+  return media.find(chosen) ?? media[0];
+}
+/** The part of a decision's output that plays: the one marked selected, else the requested part, else its first. */
+const decidedPart = (media: Node | undefined, index = 0): Node | undefined => media?.Part?.find(chosen) ?? media?.Part?.[index] ?? media?.Part?.[0];
+/** Whether a decision copies the video of the requested part (a remux, while the audio may still be converted). */
+export function copiesVideo(decision: Node, index = 0): boolean {
+  const streams: Node[] = decidedPart(decidedMedia(decision), index)?.Stream ?? [];
+  return streams.find(s => Number(s.streamType) === 1)?.decision === 'copy';
+}
+/** Whether a decision refuses the stream: its general, transcode or MDE code at 2000 or more, as Plezy reads them. */
+export const refusesStream = (decision: Node) => ['generalDecisionCode', 'transcodeDecisionCode', 'mdeDecisionCode'].some(key => Number(decision[key]) >= 2000);
+/**
+ * The delivery profiles to ask Plex's HLS for, in order: fMP4 segments with the H.264/HEVC and
+ * AAC/AC-3/E-AC-3 the client declares for MP4, then, for a client whose HLS route takes MPEG-TS
+ * (native HLS, or the web player's packet route on a page that declares its WebGPU original-file
+ * engine; the MSE route takes fMP4 only), MPEG-TS with H.264 and AAC, each with the client's
+ * bitrate limit. They go in the query, as a player's media requests carry only a fixed set of
+ * headers. None for a client that can claim neither; its request stays as it was.
+ */
+export function plexStreamProfiles(client: V.ClientCapabilities): Record<string, string>[] {
+  const limit = client.maxBitrate ? `+add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=${Math.floor(client.maxBitrate / 1000)}&replace=true)` : '';
+  const profile = (container: string, video: string[], audio: string[]) => ({ 'X-Plex-Client-Profile-Name': 'Generic',
+    'X-Plex-Client-Profile-Extra': `add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=${container}&segmentContainer=${container}&videoCodec=${video.join(',')}&audioCodec=${audio.join(',')}&replace=true)${limit}`,
+    segmentContainer: container, directStreamAudio: '1' });
+  const video = ['h264', 'hevc'].filter(c => client.videoCodecs.includes(c)), audio = ['aac', 'ac3', 'eac3'].filter(c => client.audioCodecs.includes(c));
+  const packet = client.originalPlayback?.webgpu ? client.originalPlayback : undefined;
+  const ts = client.hls && client.videoCodecs.includes('h264') && client.audioCodecs.includes('aac') || !!packet && packet.videoDecoders.includes('h264') && packet.audioDecoders.includes('aac');
+  return [...(client.containers.includes('mp4') && video.length && audio.length ? [profile('mp4', video, audio)] : []), ...(ts ? [profile('mpegts', ['h264'], ['aac'])] : [])];
+}
+/**
+ * Whether a decision's selected output is in the container and codecs its request's video profile
+ * names, where both state them. They are read from the part that plays (its container, its video
+ * row and its selected audio row), and from the media summary only where the part states none: a
+ * server can name another source track there (Ether, the loudest).
+ */
+export function deliversProfile(decision: Node, query: Record<string, string>): boolean {
+  const media = decidedMedia(decision);
+  const target = /add-transcode-target\(type=videoProfile&([^)]*)\)/.exec(query['X-Plex-Client-Profile-Extra'] ?? '')?.[1];
+  if (!media || !target) return true;
+  const asked = new URLSearchParams(target);
+  const named = (key: string, stated: unknown) => !asked.get(key) || !stated || asked.get(key)!.split(',').includes(String(stated).toLowerCase());
+  const part = decidedPart(media, Number(query.partIndex) || 0), streams: Node[] = part?.Stream ?? [];
+  const audio = streams.find(s => Number(s.streamType) === 2 && chosen(s))?.codec ?? media.audioCodec;
+  return named('container', part?.container ?? media.container) && named('videoCodec', streams.find(s => Number(s.streamType) === 1)?.codec ?? media.videoCodec) && named('audioCodec', audio);
 }
 
 /** Sidecar subtitle codecs Plex serves as text, converted to WebVTT on request (`format=vtt`). */

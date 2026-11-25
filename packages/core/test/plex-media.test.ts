@@ -276,7 +276,8 @@ describe('Plex stream beside a playable original', () => {
       expect((await adapter.sessionSnapshot(plan.sessionId)).plan).toEqual(burned);
       expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(false);
       const steps = seen.filter(r => r.method === 'PUT' || r.url.pathname.endsWith('/decision')).map(r => r.method === 'PUT' ? r.url.searchParams.get('subtitleStreamID') : 'decision');
-      expect(steps).toEqual(['32', 'decision', '32', 'decision', '33', 'decision', '32']);
+      // A refused fMP4 request is asked once more as MPEG-TS.
+      expect(steps).toEqual(['32', 'decision', 'decision', '32', 'decision', '33', 'decision', 'decision', '32']);
     }
   });
 
@@ -305,6 +306,245 @@ describe('Plex stream beside a playable original', () => {
     // A stop of the old stream is not waited for: let one that was sent arrive before checking.
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(false);
+  });
+});
+
+describe('Plex stream profile', () => {
+  // A 1080p HEVC MKV with TrueHD, for an Apple-shaped client whose HLS carries H.264/HEVC and AAC/AC-3/E-AC-3
+  // in MP4 (and whose original-file engine is left out, so the server's stream is the way to play).
+  const movie = { ratingKey: '7', type: 'movie', title: 'Surround', duration: 60000, Media: [{ id: 7, container: 'mkv', videoCodec: 'hevc', audioCodec: 'truehd', width: 1920, height: 1080, duration: 60000,
+    Part: [{ id: 70, key: '/library/parts/70/1/file.mkv', duration: 60000, Stream: [{ id: 701, index: 0, streamType: 1, codec: 'hevc' }, { id: 702, index: 1, streamType: 2, codec: 'truehd', selected: true }, { id: 703, index: 2, streamType: 3, codec: 'pgs' }] }] }] };
+  const apple = { device: { id: 'd', name: 'd', platform: 'ios', appVersion: '1' }, containers: ['mp4'], videoCodecs: ['h264', 'hevc'], audioCodecs: ['aac', 'ac3', 'eac3'], subtitleFormats: [], hls: true } as never;
+  const web = { device: { id: 'd', name: 'd', platform: 'web', appVersion: '1' }, containers: ['mp4', 'webm', 'flac', 'm4a'], videoCodecs: ['h264'], audioCodecs: ['aac', 'flac', 'opus', 'mp3'], subtitleFormats: [], hls: false, mse: true } as never;
+  // Plex's answer: the output it selected (an unselected media entry first), and each stream's decision.
+  const output = (container: string, videoCodec: string, audioCodec: string, video = 'copy') => ({ MediaContainer: { generalDecisionCode: 1001, Metadata: [{ Media: [
+    { container: 'mkv', videoCodec: 'hevc', audioCodec: 'truehd', width: 1920, height: 1080 },
+    { selected: true, container, videoCodec, audioCodec, width: 1920, height: 1080, bitrate: 12000, Part: [{ decision: 'transcode', Stream: [{ streamType: 1, decision: video }, { streamType: 2, decision: 'transcode' }] }] }] }] } });
+  const route = (answer: (q: URLSearchParams) => unknown) => routeFetch({ 'GET /library/metadata/7': { MediaContainer: { Metadata: [movie] } },
+    'GET /video/:/transcode/universal/decision': (r: Seen) => answer(r.url.searchParams), 'GET /video/:/transcode/universal/stop': {}, 'PUT /library/parts/70': {}, 'POST /:/timeline': {} });
+  const decisions = (seen: Seen[]) => seen.filter(r => r.url.pathname === '/video/:/transcode/universal/decision').map(r => r.url.searchParams);
+  const fmp4 = (q: URLSearchParams) => q.get('segmentContainer') === 'mp4';
+
+  test('a client with HEVC in MP4 asks for fMP4 with HEVC and Dolby audio; copied video is a remux', async () => {
+    const seen = route(() => output('mp4', 'hevc', 'eac3'));
+    const plan = await plex().startPlayback({ titleId: '7', client: apple, idempotencyKey: 'f' } as never);
+    const stream = plan.paths.find(p => p.id === 'plex-hls')!;
+    const [asked] = decisions(seen);
+    expect(decisions(seen)).toHaveLength(1);
+    expect(Object.fromEntries(asked!)).toEqual(Object.fromEntries(new URL(stream.url!).searchParams));
+    expect(Object.fromEntries(asked!)).toMatchObject({ 'X-Plex-Client-Profile-Name': 'Generic', segmentContainer: 'mp4', directStreamAudio: '1',
+      'X-Plex-Client-Profile-Extra': 'add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mp4&segmentContainer=mp4&videoCodec=h264,hevc&audioCodec=aac,ac3,eac3&replace=true)',
+      // The viewer's ceilings are unchanged.
+      maxVideoBitrate: '20000', videoResolution: '1920x1080', session: plan.sessionId });
+    expect([stream.kind, stream.quality]).toEqual(['remux', { width: 1920, height: 1080, bitrate: 12_000_000, codec: 'hevc' }]);
+  });
+
+  test('a video encode stays a transcode', async () => {
+    route(() => output('mp4', 'h264', 'aac', 'transcode'));
+    const plan = await plex().startPlayback({ titleId: '7', client: apple, idempotencyKey: 't' } as never);
+    expect(plan.paths.find(p => p.id === 'plex-hls')!.kind).toBe('transcode');
+  });
+
+  test('a server that ignores or refuses fMP4 is asked once for MPEG-TS with H.264 and AAC, in a fresh session', async () => {
+    for (const ignored of [() => output('mpegts', 'hevc', 'eac3'), () => output('mp4', 'hevc', 'truehd'), () => new Response('', { status: 400 }), () => new Response('', { status: 500 }), () => ({ MediaContainer: { generalDecisionCode: 2000 } })]) {
+      const seen = route(q => fmp4(q) ? ignored() : output('mpegts', 'h264', 'aac', 'transcode'));
+      const adapter = plex();
+      const plan = await adapter.startPlayback({ titleId: '7', client: apple, idempotencyKey: 'i' } as never);
+      const asked = decisions(seen);
+      expect(asked.map(q => [q.get('segmentContainer'), q.get('session')])).toEqual([['mp4', plan.sessionId], ['mpegts', `${plan.sessionId}-ts`]]);
+      expect(asked[1]!.get('X-Plex-Client-Profile-Extra')).toBe('add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&segmentContainer=mpegts&videoCodec=h264&audioCodec=aac&replace=true)');
+      const stream = plan.paths.find(p => p.id === 'plex-hls')!;
+      expect(Object.fromEntries(new URL(stream.url!).searchParams)).toEqual(Object.fromEntries(asked[1]!));
+      // The discarded decision's session is not stopped; the stream that plays is the one a stop ends.
+      expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(false);
+      await adapter.command(plan.sessionId, { kind: 'stop', idempotencyKey: 'stop', sourceGeneration: 0, seekGeneration: 0 });
+      expect(seen.filter(r => r.url.pathname.endsWith('/stop')).map(r => r.url.searchParams.get('session'))).toEqual([`${plan.sessionId}-ts`]);
+    }
+  });
+
+  test('a fallback that also misses fails the start; an auth failure, a missing title, a gateway error and a transport failure are not retried', async () => {
+    const both = route(q => fmp4(q) ? output('mpegts', 'hevc', 'eac3') : output('mpegts', 'hevc', 'aac'));
+    await expect(plex().startPlayback({ titleId: '7', client: apple, idempotencyKey: 'm' } as never)).rejects.toThrow('No compatible Plex playback path');
+    expect(decisions(both)).toHaveLength(2);
+    for (const failure of [401, 404, 502, 0]) {
+      const once = route(() => { if (!failure) throw new TypeError('fetch failed'); return new Response('', { status: failure }); });
+      await expect(plex().startPlayback({ titleId: '7', client: apple, idempotencyKey: 'a' } as never)).rejects.toThrow(failure ? `Plex request failed (${failure})` : 'fetch failed');
+      expect(decisions(once)).toHaveLength(1);
+    }
+  });
+
+  test('a sparse answer is taken as asked; an H.264-only browser never asks for HEVC or its other audio, and a cap is a limitation', async () => {
+    const seen = route(() => ({ MediaContainer: {} }));
+    const plan = await plex().startPlayback({ titleId: '7', client: { ...(web as object), maxBitrate: 4_000_000 } as never, idempotencyKey: 'w' } as never);
+    expect(decisions(seen)).toHaveLength(1);
+    expect(plan.paths.find(p => p.id === 'plex-hls')!.kind).toBe('transcode');
+    const extra = decisions(seen)[0]!.get('X-Plex-Client-Profile-Extra')!;
+    expect(extra).toContain('&videoCodec=h264&audioCodec=aac&');
+    expect(extra).toEndWith('+add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=4000&replace=true)');
+  });
+
+  test('a deferred stream that falls back is the one a stop ends', async () => {
+    const seen = route(q => fmp4(q) ? output('mpegts', 'hevc', 'eac3') : output('mpegts', 'h264', 'aac', 'transcode'));
+    const engine = { ...(apple as object), originalPlayback: { version: 1, range: true, demuxContainers: ['mkv'], videoDecoders: ['hevc'], audioDecoders: ['truehd'], webgpu: false } } as never;
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '7', client: engine, idempotencyKey: 'd' } as never);
+    expect(decisions(seen)).toHaveLength(0);
+    const switched = await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'plex-hls', atSeconds: 5, idempotencyKey: 'd1', sourceGeneration: 0, seekGeneration: 0 });
+    expect(new URL(switched.paths.find(p => p.id === 'plex-hls')!.url!).searchParams.get('session')).toBe(`${plan.sessionId}-ts`);
+    await adapter.command(plan.sessionId, { kind: 'stop', idempotencyKey: 'd2', sourceGeneration: 1, seekGeneration: 0 });
+    expect(seen.filter(r => r.url.pathname.endsWith('/stop')).map(r => r.url.searchParams.get('session'))).toEqual([`${plan.sessionId}-ts`]);
+  });
+
+  test('a client that can claim neither profile keeps the request without one', async () => {
+    const seen = route(() => ({ MediaContainer: {} }));
+    const vp9 = { ...(web as object), containers: ['webm'], videoCodecs: ['vp9'], audioCodecs: ['opus'] } as never;
+    await plex().startPlayback({ titleId: '7', client: vp9, idempotencyKey: 'v' } as never);
+    expect(decisions(seen).map(q => [q.has('X-Plex-Client-Profile-Extra'), q.has('segmentContainer')])).toEqual([[false, false]]);
+  });
+
+  test('a track restart keeps the profile the stream was accepted with', async () => {
+    const seen = route(q => fmp4(q) ? output('mpegts', 'hevc', 'eac3') : output('mpegts', 'h264', 'aac', 'transcode'));
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '7', client: apple, idempotencyKey: 'r' } as never);
+    const next = await adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '703', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'r1' });
+    const asked = decisions(seen).slice(2);
+    expect(asked.map(q => [q.get('segmentContainer'), q.get('session'), q.get('subtitles')])).toEqual([['mpegts', `${plan.sessionId}-1`, 'burn']]);
+    expect(next.paths.find(p => p.id === 'plex-hls')!.kind).toBe('transcode');
+    // A stream accepted in fMP4 may still fall back once when its restart is refused there.
+    let burning = false;
+    const again = route(q => fmp4(q) && !burning ? output('mp4', 'hevc', 'eac3') : fmp4(q) ? { MediaContainer: { generalDecisionCode: 2000 } } : output('mpegts', 'h264', 'aac', 'transcode'));
+    const other = plex();
+    const fmp4Plan = await other.startPlayback({ titleId: '7', client: apple, idempotencyKey: 'r2' } as never);
+    burning = true;
+    await other.changeTracks(fmp4Plan.sessionId, { kind: 'tracks', subtitleTrackId: '703', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'r3' });
+    expect(decisions(again).slice(1).map(q => [q.get('segmentContainer'), q.get('session')])).toEqual([['mp4', `${fmp4Plan.sessionId}-1`], ['mpegts', `${fmp4Plan.sessionId}-1-ts`]]);
+  });
+
+  test('the selected output audio row of the selected part is checked, not the summary', async () => {
+    // As Ether answers a copied AAC commentary: the summary keeps the source's loudest track (TrueHD), and the part that plays is listed after another.
+    const seen = route(() => ({ MediaContainer: { generalDecisionCode: 1001, Metadata: [{ Media: [{ selected: true, container: 'mp4', videoCodec: 'hevc', audioCodec: 'truehd', width: 1920, height: 1080, Part: [
+      { Stream: [{ streamType: 1, codec: 'hevc', decision: 'transcode' }] },
+      { selected: true, Stream: [{ streamType: 1, codec: 'hevc', decision: 'copy' }, { streamType: 2, codec: 'aac', selected: true, decision: 'copy' }] }] }] }] } }));
+    const plan = await plex().startPlayback({ titleId: '7', client: apple, idempotencyKey: 'e' } as never);
+    expect(decisions(seen)).toHaveLength(1);
+    expect(plan.paths.find(p => p.id === 'plex-hls')!.kind).toBe('remux');
+  });
+
+  test('a browser on the MSE route, which takes only fMP4, is never asked MPEG-TS', async () => {
+    const seen = route(q => fmp4(q) ? { MediaContainer: { generalDecisionCode: 2000 } } : output('mpegts', 'h264', 'aac', 'transcode'));
+    await expect(plex().startPlayback({ titleId: '7', client: web, idempotencyKey: 'm' } as never)).rejects.toThrow('No compatible Plex playback path');
+    expect(decisions(seen).map(q => q.get('segmentContainer'))).toEqual(['mp4']);
+  });
+
+  test('a transcode or MDE decision code of 2000 or more refuses an answer that states no output; one above the cap tries the next profile', async () => {
+    const at = (container: string, bitrate: number) => ({ MediaContainer: { generalDecisionCode: 1001, Metadata: [{ Media: [{ selected: true, container, videoCodec: 'h264', audioCodec: 'aac', bitrate }] }] } });
+    for (const [refusal, client] of [[{ MediaContainer: { transcodeDecisionCode: 4005 } }, apple], [{ MediaContainer: { mdeDecisionCode: 2000 } }, apple], [at('mp4', 12000), { ...(apple as object), maxBitrate: 4_000_000 }]] as const) {
+      const seen = route(q => fmp4(q) ? refusal : at('mpegts', 3000));
+      const plan = await plex().startPlayback({ titleId: '7', client, idempotencyKey: 'k' } as never);
+      expect([decisions(seen).map(q => q.get('segmentContainer')), plan.paths.find(p => p.id === 'plex-hls')!.kind]).toEqual([['mp4', 'mpegts'], 'transcode']);
+    }
+  });
+
+  test('a stacked title whose next part is refused keeps the part that plays', async () => {
+    let refusing = false;
+    const seen = routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [twofold] } }, 'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': () => refusing ? { MediaContainer: { generalDecisionCode: 2000 } } : {} });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'p', positionSeconds: 0 } as never);
+    refusing = true;
+    await expect(adapter.command(plan.sessionId, { kind: 'seek', positionSeconds: 42, idempotencyKey: 'p1', sourceGeneration: 0, seekGeneration: 0 })).rejects.toBeInstanceOf(VelaError);
+    expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(false);
+    expect((await adapter.sessionSnapshot(plan.sessionId)).plan).toEqual(plan);
+  });
+
+  test('a secure page whose packet route plays HLS itself may still fall back to MPEG-TS', async () => {
+    const seen = route(q => fmp4(q) ? { MediaContainer: { generalDecisionCode: 2000 } } : output('mpegts', 'h264', 'aac', 'transcode'));
+    const packet = { ...(web as object), originalPlayback: { version: 1, range: true, demuxContainers: ['mkv', 'mp4'], videoDecoders: ['h264'], audioDecoders: ['aac'], webgpu: true } } as never;
+    const plan = await plex().startPlayback({ titleId: '7', client: packet, idempotencyKey: 'g' } as never);
+    expect([decisions(seen).map(q => q.get('segmentContainer')), plan.selectedPathId]).toEqual([['mp4', 'mpegts'], 'plex-hls']);
+  });
+
+  test('the playing part\'s container and output video row are checked, and its video decides a remux', async () => {
+    const at = (part: Record<string, unknown>, media: Record<string, unknown> = {}) => ({ MediaContainer: { Metadata: [{ Media: [{ selected: true, ...media, Part: [part] }] }] } });
+    for (const missed of [at({ container: 'mpegts' }), at({ Stream: [{ streamType: 1, codec: 'vc1' }] }, { videoCodec: 'hevc' })]) {
+      const seen = route(q => fmp4(q) ? missed : output('mpegts', 'h264', 'aac', 'transcode'));
+      await plex().startPlayback({ titleId: '7', client: apple, idempotencyKey: 'c' } as never);
+      expect(decisions(seen).map(q => q.get('segmentContainer'))).toEqual(['mp4', 'mpegts']);
+    }
+    // A stacked title's answer may list every part unmarked: the requested one is read.
+    routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [twofold] } }, 'POST /:/timeline': {}, 'GET /video/:/transcode/universal/decision': { MediaContainer: { Metadata: [{ Media: [{ Part: [
+      { Stream: [{ streamType: 1, decision: 'transcode' }] }, { Stream: [{ streamType: 1, decision: 'copy' }] }] }] }] } } });
+    const plan = await plex().startPlayback({ titleId: '1', client, idempotencyKey: 'c2', positionSeconds: 42 } as never);
+    expect(plan.paths.find(p => p.id === 'plex-hls')!.kind).toBe('remux');
+  });
+
+  test('a stacked part restart whose decision states no output size drops the previous part\'s quality', async () => {
+    routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [twofold] } }, 'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': (r: Seen) => r.url.searchParams.get('partIndex') === '0' ? { MediaContainer: { Metadata: [{ Media: [{ width: 1280, height: 720 }] }] } } : {} });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'q', positionSeconds: 0 } as never);
+    expect(plan.paths.find(p => p.id === 'plex-hls')!.quality).toMatchObject({ width: 1280, height: 720 });
+    await adapter.reportObservation(plan.sessionId, { sequence: 1, state: 'ended', positionSeconds: 30, sourceGeneration: 0, seekGeneration: 0 } as never);
+    const next = (await adapter.sessionSnapshot(plan.sessionId)).plan;
+    expect([next.sourceGeneration, next.paths.find(p => p.id === 'plex-hls')!.quality]).toEqual([1, undefined]);
+  });
+
+  test('a stacked audio change selects the new track on the part before its restart is decided', async () => {
+    const stacked = { ...twofold, Media: [{ ...twofold.Media[0]!, Part: twofold.Media[0]!.Part.map((p, i) => ({ ...p,
+      Stream: [{ id: 11 + 10 * i, index: 1, streamType: 2, codec: 'aac', selected: true }, { id: 12 + 10 * i, index: 2, streamType: 2, codec: 'aac' }] })) }] };
+    const seen = routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [stacked] } }, 'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': {}, 'PUT /library/parts/1': {} });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'sa', positionSeconds: 0 } as never);
+    await adapter.changeTracks(plan.sessionId, { kind: 'tracks', audioTrackId: '12', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'sa1' });
+    const steps = seen.filter(r => r.method === 'PUT' || r.url.pathname.endsWith('/decision')).map(r => r.method === 'PUT' ? `PUT ${r.url.searchParams.get('audioStreamID')}` : r.url.searchParams.get('session'));
+    expect(steps).toEqual([plan.sessionId, 'PUT 12', `${plan.sessionId}-1`]);
+  });
+
+  test('a stacked audio change whose restart is refused puts back the track selected before', async () => {
+    const stacked = { ...twofold, Media: [{ ...twofold.Media[0]!, Part: twofold.Media[0]!.Part.map((p, i) => ({ ...p,
+      Stream: [{ id: 11 + 10 * i, index: 1, streamType: 2, codec: 'aac', selected: true }, { id: 12 + 10 * i, index: 2, streamType: 2, codec: 'aac' }] })) }] };
+    let refusing = false;
+    const seen = routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [stacked] } }, 'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': () => refusing ? { MediaContainer: { generalDecisionCode: 2000 } } : {}, 'PUT /library/parts/1': {} });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'sr', positionSeconds: 0 } as never);
+    refusing = true;
+    await expect(adapter.changeTracks(plan.sessionId, { kind: 'tracks', audioTrackId: '12', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'sr1' })).rejects.toBeInstanceOf(VelaError);
+    expect(seen.filter(r => r.method === 'PUT').map(r => r.url.searchParams.get('audioStreamID'))).toEqual(['12', '11']);
+    expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(false);
+    expect((await adapter.sessionSnapshot(plan.sessionId)).plan).toEqual(plan);
+  });
+
+  test('a refused stacked restart on part two puts back no track: none was asked for that part', async () => {
+    const stacked = { ...twofold, Media: [{ ...twofold.Media[0]!, Part: twofold.Media[0]!.Part.map((p, i) => ({ ...p,
+      Stream: [{ id: 11 + 10 * i, index: 1, streamType: 2, codec: 'aac', selected: true }, { id: 12 + 10 * i, index: 2, streamType: 2, codec: 'aac' }] })) }] };
+    let refusing = false;
+    const seen = routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [stacked] } }, 'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': () => refusing ? { MediaContainer: { generalDecisionCode: 2000 } } : {}, 'PUT /library/parts/2': {} });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'sp', positionSeconds: 0 } as never);
+    const moved = await adapter.command(plan.sessionId, { kind: 'seek', positionSeconds: 42, idempotencyKey: 'sp1', sourceGeneration: 0, seekGeneration: 0 }) as typeof plan;
+    refusing = true;
+    await expect(adapter.changeTracks(plan.sessionId, { kind: 'tracks', audioTrackId: '12', sourceGeneration: moved.sourceGeneration, seekGeneration: moved.seekGeneration, idempotencyKey: 'sp2' })).rejects.toBeInstanceOf(VelaError);
+    expect(seen.filter(r => r.method === 'PUT').map(r => [r.url.pathname, r.url.searchParams.get('audioStreamID')])).toEqual([['/library/parts/2', '12']]);
+  });
+
+  test('after a change, a seek to the other part and back, a refused change puts back nothing the start read', async () => {
+    const stacked = { ...twofold, Media: [{ ...twofold.Media[0]!, Part: twofold.Media[0]!.Part.map((p, i) => ({ ...p,
+      Stream: [{ id: 11 + 10 * i, index: 1, streamType: 2, codec: 'aac', selected: true }, { id: 12 + 10 * i, index: 2, streamType: 2, codec: 'aac' }] })) }] };
+    let refusing = false;
+    const seen = routeFetch({ 'GET /library/metadata/1': { MediaContainer: { Metadata: [stacked] } }, 'POST /:/timeline': {}, 'GET /video/:/transcode/universal/stop': {},
+      'GET /video/:/transcode/universal/decision': () => refusing ? { MediaContainer: { generalDecisionCode: 2000 } } : {}, 'PUT /library/parts/1': {} });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'sb', positionSeconds: 0 } as never);
+    let now = await adapter.changeTracks(plan.sessionId, { kind: 'tracks', audioTrackId: '12', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'sb1' });
+    for (const [key, positionSeconds] of [['sb2', 42], ['sb3', 5]] as const) now = await adapter.command(plan.sessionId, { kind: 'seek', positionSeconds, idempotencyKey: key, sourceGeneration: now.sourceGeneration, seekGeneration: now.seekGeneration }) as typeof plan;
+    refusing = true;
+    await expect(adapter.changeTracks(plan.sessionId, { kind: 'tracks', audioTrackId: '11', sourceGeneration: now.sourceGeneration, seekGeneration: now.seekGeneration, idempotencyKey: 'sb4' })).rejects.toBeInstanceOf(VelaError);
+    // 12 was written to every part and is still selected: the 11 Plex marked at the start is not put back.
+    expect(seen.filter(r => r.method === 'PUT').map(r => r.url.searchParams.get('audioStreamID'))).toEqual(['12', '11']);
+    expect((await adapter.sessionSnapshot(plan.sessionId)).plan).toEqual(now);
   });
 });
 
@@ -449,7 +689,7 @@ describe('Plex selected audio', () => {
   test('a refused audio change puts back only an audio stream selected before', async () => {
     const n = movie('aac', aacFirst.map(({ selected: _, ...a }) => a));
     const seen = routeFetch({ 'GET /library/metadata/6': { MediaContainer: { Metadata: [n] } }, 'GET /video/:/transcode/universal/stop': {}, 'PUT /library/parts/60': {},
-      'GET /video/:/transcode/universal/decision': (q: Seen) => q.url.searchParams.get('session')!.endsWith('-1') ? { MediaContainer: { generalDecisionCode: 2000 } } : { MediaContainer: {} } });
+      'GET /video/:/transcode/universal/decision': (q: Seen) => /-1(-ts)?$/.test(q.url.searchParams.get('session')!) ? { MediaContainer: { generalDecisionCode: 2000 } } : { MediaContainer: {} } });
     const adapter = plex();
     const puts = () => seen.filter(r => r.method === 'PUT').map(r => r.url.searchParams.get('audioStreamID'));
     const refuse = (sessionId: string, key: string) => expect(adapter.changeTracks(sessionId, { kind: 'tracks', audioTrackId: '613', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: key })).rejects.toThrow();
@@ -524,7 +764,7 @@ describe('Plex selected audio', () => {
       const n = movie('aac', aacFirst);
       n.Media[0]!.Part[0]!.Stream.push({ id: 691, index: 4, streamType: 3, codec: 'pgs', key: '/library/streams/691' } as never, { id: 692, index: 5, streamType: 3, codec: 'srt' } as never);
       const seen = routeFetch({ 'GET /library/metadata/6': { MediaContainer: { Metadata: [n] } }, 'GET /video/:/transcode/universal/stop': {}, 'PUT /library/parts/60': {},
-        'GET /video/:/transcode/universal/decision': (q: Seen) => q.url.searchParams.get('session')!.endsWith('-1') ? refusal() : { MediaContainer: {} } });
+        'GET /video/:/transcode/universal/decision': (q: Seen) => /-1(-ts)?$/.test(q.url.searchParams.get('session')!) ? refusal() : { MediaContainer: {} } });
       const adapter = plex();
       const capped = { ...(appleClient() as object), maxBitrate: 4_000_000 } as never;
       const started = await adapter.startPlayback({ titleId: '6', client: capped, idempotencyKey: 'f' } as never);
