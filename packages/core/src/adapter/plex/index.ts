@@ -600,7 +600,10 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
         ...(type === 3 ? external
           ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
-          : { delivery: s.key ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
+          // A native-HLS-only web page cannot read subtitle packets from the original file. Mark
+          // its embedded tracks server-rendered so a later selection switches to Plex HLS and
+          // requests a burn instead of presenting an unusable local track.
+          : { delivery: s.key || !r.client.originalPlayback ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
     });
     const audioTracks = tracks(2), subtitleTracks = tracks(3);
     const audio = r.audioTrackId || audioTracks.find(t => t.default)?.id;

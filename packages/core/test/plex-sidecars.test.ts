@@ -42,7 +42,8 @@ describe('Plex sidecar delivery', () => {
   ];
   const movie = { ratingKey: '6', type: 'movie', title: 'Signs', duration: 60_000, Media: [{ id: 6, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac',
     Part: [{ id: 66, key: '/library/parts/66/file.mp4', Stream: streams }] }] };
-  const client = (subtitleFormats: string[]) => ({ device: { id: 'd', name: 'd', platform: 'ios', appVersion: '1' }, containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats, hls: true, mse: false }) as never;
+  const client = (subtitleFormats: string[], original = true) => ({ device: { id: 'd', name: 'd', platform: 'ios', appVersion: '1' }, containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats, hls: true, mse: false,
+    ...(original ? { originalPlayback: { version: 1, range: true, webgpu: false, demuxContainers: ['mp4'], videoDecoders: ['h264'], audioDecoders: ['aac'] } } : {}) }) as never;
   const adapter = () => new PlexAdapter({ origin: ORIGIN, credentials: new FakeCredentials(), clientIdentifier: 'c' });
 
   test('a player that draws ASS gets the ASS sidecar as ASS; SRT stays WebVTT, PGS burns in, embedded stays embedded', async () => {
@@ -61,6 +62,13 @@ describe('Plex sidecar delivery', () => {
     routeFetch({ 'GET /library/metadata/6': { MediaContainer: { Metadata: [movie] } } });
     const plan = await adapter().startPlayback({ titleId: '6', client: client(['webvtt']), idempotencyKey: 'b' } as never);
     expect(plan.subtitleTracks[0]).toMatchObject({ codec: 'ass', url: `${ORIGIN}/library/streams/31?format=vtt`, delivery: { kind: 'external', format: 'webvtt' } });
+  });
+
+  test('a native-HLS-only browser asks Plex to render embedded subtitles', async () => {
+    routeFetch({ 'GET /library/metadata/6': { MediaContainer: { Metadata: [movie] } } });
+    const plan = await adapter().startPlayback({ titleId: '6', client: client(['webvtt'], false), idempotencyKey: 'native-hls' } as never);
+    expect(plan.subtitleTracks.find(track => track.id === '34')?.delivery).toEqual({ kind: 'burn-in' });
+    expect(plan.subtitleTracks.find(track => track.id === '32')?.delivery).toMatchObject({ kind: 'external', format: 'webvtt' });
   });
 
   test('a subtitle added mid-session is delivered in a format the player declared at the start', async () => {

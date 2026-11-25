@@ -18,9 +18,14 @@ export interface NativeMediaReply {
   url: string;
   expiresAt: number;
 }
+/** The callable part of fetch; Bun 1.4 also adds a static `preconnect` helper to its global. */
+export type MediaFetch = (
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+) => ReturnType<typeof fetch>;
 export interface MediaRequestPolicy {
   allows(url: URL): boolean;
-  fetch: typeof fetch;
+  fetch: MediaFetch;
   /** A private copy for a dedicated demux worker, not a UI/telemetry DTO. */
   authorization(): MediaAuthorization | undefined;
 }
@@ -118,7 +123,7 @@ export function permittedMediaURL(input: string | URL, authorization?: MediaAuth
 /** This closure can be created inside a dedicated worker from its private DTO.
  * All redirects are refused, including same-origin redirects, so headers can
  * never escape the exact approved origin/base path. Assets use ordinary fetch. */
-export function authorizedMediaFetch(auth?: MediaAuthorization, lifetime?: AbortSignal): typeof fetch {
+export function authorizedMediaFetch(auth?: MediaAuthorization, lifetime?: AbortSignal): MediaFetch {
   return async (input, init) => {
     lifetime?.throwIfAborted();
     const url = permittedMediaURL(input instanceof Request ? input.url : String(input), auth);
@@ -198,7 +203,7 @@ export class MediaAccess implements BrowserMediaAccess {
       return false;
     }
   }
-  fetch: typeof fetch = (input, init) => authorizedMediaFetch(this.value, this.retired.signal)(input, init);
+  fetch: MediaFetch = (input, init) => authorizedMediaFetch(this.value, this.retired.signal)(input, init);
   nativeURL(url: string, signal: AbortSignal): Promise<string> {
     signal.throwIfAborted();
     this.retired.signal.throwIfAborted();
