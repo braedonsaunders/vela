@@ -23,6 +23,7 @@ export function retireMediaAuthorization(context: HostContext) {
   context.media.source = undefined;
   context.session.pendingSeek = undefined;
   context.session.pendingSwitch = undefined;
+  context.session.droppedSwitch = undefined;
   context.tracks.pendingTracks = undefined;
   context.playback.failure = null;
   context.playback.status = 'idle';
@@ -63,7 +64,7 @@ export async function loadSession(context: HostContext, session: PlaybackSession
     await seekRetainedOriginal(context, session, retained);
     return;
   }
-  const pending = context.session.pendingSwitch;
+  const pending = context.session.pendingSwitch ?? context.session.droppedSwitch;
   const handoff =
     pending &&
     pending.sessionId === session.id &&
@@ -78,6 +79,7 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   const position = handoff ? Math.max(pending.position, readPosition(context)) : (session.position ?? 0);
   const recovery = !!handoff && pending.recovery;
   context.session.pendingSwitch = undefined;
+  context.session.droppedSwitch = undefined;
   if (session.id !== context.session.current?.id) context.session.pendingSeek = undefined;
   else if (context.session.pendingSeek && session.seekGeneration !== context.session.controller.seek)
     context.session.pendingSeek = {
