@@ -63,3 +63,7 @@ The two geographic textures wrap in longitude and clamp in latitude. GLES upload
 | Metal shader and reflection table | 1,313,027 | 155,059 |
 
 Use the native packager's `--framework` argument to build from this candidate in an isolated checkout. The shader table size measures the spike's MSL source and reflection JSON. Device packages would also include host binaries.
+
+## Closer camera revision
+
+Apply [the camera patch](regional-zoom.patch) after the round-seven patch. The map's vertical span now varies from 3.5° at a tour stop to 5.5° in the middle of a leg, four times closer than the previous 14°–22° range. Tour progress advances at 0.005 per travel unit to keep landmarks moving across the closer view at the previous apparent speed. The resulting 253,131-byte standalone page has SHA-256 `635ca4b9ba1ad9ca9a0bd4372c210e7ccbb56fcdf15688e8fe263feacbe640d2`. Muted WebGL2 verification checked both endpoint and mid-leg spans using the actual shader uniforms.
