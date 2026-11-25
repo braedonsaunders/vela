@@ -202,7 +202,10 @@ describe('mock server: catalogue and live', () => {
     expect(old.key).toBe(old.id.slice(0, old.id.lastIndexOf('~')));
     expect((await get<V.Row>(`/rows/${encodeURIComponent(old.id)}`)).id).toBe(old.id);
     const title = feed(before).flatMap(row => row.items).find(item => item.kind === 'title')!;
+    expect((await fetch(`${mock.url}/__admin/faults`, { method: 'POST', body: JSON.stringify({ bootstrapStaleReads: 1 }) })).status).toBe(200);
     expect((await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: true }, authed(tokens))).status).toBe(200);
+    const staleBootstrap = feed(await get<V.Bootstrap>('/bootstrap'));
+    expect(staleBootstrap.find(row => row.key === old.key)?.id).toBe(old.id);
     const after = feed(await get<V.Bootstrap>('/bootstrap'));
     const fresh = after.find(row => row.key === old.key)!;
     expect(fresh.id).not.toBe(old.id);

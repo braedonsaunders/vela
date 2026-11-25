@@ -71,3 +71,60 @@ jobs:
       # ui/) are delivery artifacts built outside the repository.
       - name: Publish
         run: dotnet publish apps/vela-windows/Vela.Windows.csproj -c Release -r win-x64 --self-contained true
+
+  e2e-web:
+    name: e2e web gate (strict cache)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/ms-playwright
+          key: e2e-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: e2e-${{ runner.os }}-
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install mock server dependencies
+        run: bun install --frozen-lockfile
+        working-directory: mock-server
+
+      - name: Install pinned browsers
+        run: npx --no-install @e2e-dev/web install chromium webkit --with-deps
+
+      - name: Export Vela web
+        env:
+          # Deterministic suites use browser-native mock media. The proxy serves this test-only
+          # payload identity's empty capability declaration; release payloads are built elsewhere.
+          EXPO_PUBLIC_VELA_PLAYER_ASSETS: 0000000000000000000000000000000000000000000000000000000000000000
+        run: bun run export:web
+        working-directory: apps/vela
+
+      - name: Install ffmpeg (mock media generation)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Generate silent deterministic media
+        env:
+          VELA_MOCK_SILENT_MEDIA: 1
+          VELA_MOCK_MEDIA_ROOT: ${{ runner.temp }}/vela-media
+          VELA_MOCK_MUSIC_ROOT: ${{ runner.temp }}/vela-music
+        run: |
+          bun mock-server/scripts/make-media.ts
+          bun mock-server/scripts/make-gapless-media.ts
+
+      - name: Run e2e with committed recordings only
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_GC: 1
+          VELA_E2E_STATIC_ROOT: apps/vela/dist
+          VELA_MOCK_MEDIA_ROOT: ${{ runner.temp }}/vela-media
+          VELA_MOCK_MUSIC_ROOT: ${{ runner.temp }}/vela-music
+        run: VELA_E2E_BUN="$(command -v bun)" npx --no-install e2e run --strict-cache --config e2e.mock.config.ts --target mock-chromium,mock-webkit --workers 1 --retries 0
