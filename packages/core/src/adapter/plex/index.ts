@@ -50,6 +50,10 @@ const no = (reason: string): V.Feature => ({ available: false, reason });
 const yes: V.Feature = { available: true };
 const enc = encodeURIComponent;
 const seconds = (n: unknown) => Math.max(0, Number(n || 0) / 1000);
+/** Plex media rates are in kb/s. A decision can state a rate without giving output dimensions. */
+function fitsStreamingCap(media: Node | undefined, client: V.ClientCapabilities): boolean {
+  return withinStreamingCap({ bitrate: Number(media?.bitrate) * 1000, width: Number(media?.width), height: Number(media?.height) }, client);
+}
 /** A file's own length where Plex states it (a title's files can differ), else the title's. */
 const fileSeconds = (media: Node, n: Node) => seconds(media.duration ?? n.duration);
 /** A position kept inside a file of known length. */
@@ -611,7 +615,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const nativeCompatible = r.client.containers.includes(media.container) && (!media.videoCodec || r.client.videoCodecs.includes(media.videoCodec)) && (!media.audioCodec || r.client.audioCodecs.includes(decoderAudioCodec(media.audioCodec)));
     const direct = (compatible || nativeCompatible) && !burnSubtitle && !stacked;
     // Plex states a file's rate in kb/s. An over-cap original requires an explicit switch.
-    const capped = !withinStreamingCap({ bitrate: Number(media.bitrate) * 1000 || undefined, width: Number(media.width) || undefined, height: Number(media.height) || undefined }, r.client);
+    const capped = !fitsStreamingCap(media, r.client);
     if (!direct && r.allowTranscode === false) fail(burnSubtitle ? 'Selected Plex subtitle requires transcoding' : 'Original media is incompatible and transcoding is disabled', 'playback');
     const paths: V.PlaybackPath[] = [];
     if (direct) paths.push({ id: 'original', kind: 'direct', transport: 'file', mimeType: media.container === 'mp4' ? 'video/mp4' : media.container === 'webm' ? 'video/webm' : 'video/x-matroska',
@@ -625,8 +629,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
       for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
       const decided = await this.decide(u, !!direct);
-      const quality = decided && decidedQuality(decided);
-      if (decided && !(Number(decided.generalDecisionCode) >= 2000) && withinStreamingCap(quality ?? {}, r.client)) {
+      if (decided && !(Number(decided.generalDecisionCode) >= 2000) && fitsStreamingCap(decided.Metadata?.[0]?.Media?.[0], r.client)) {
+        const quality = decidedQuality(decided);
         const hls: V.PlaybackPath = { id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
           sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, ...(quality ? { quality } : {}), qualities: [], boundaries: [] };
         if (direct && capped) paths.unshift(hls);

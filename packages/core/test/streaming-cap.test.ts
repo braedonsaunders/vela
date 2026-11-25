@@ -98,6 +98,7 @@ describe('Plex and the cap', () => {
     await expect(start(client, { MediaContainer: { generalDecisionCode: 2000 } }).plan).rejects.toThrow('quality cap');
     const overCap = { MediaContainer: { Metadata: [{ Media: [{ width: 1280, height: 720, bitrate: 8000 }] }] } };
     await expect(start(client, overCap).plan).rejects.toThrow('quality cap');
+    await expect(start(client, { MediaContainer: { Metadata: [{ Media: [{ bitrate: 8000 }] }] } }).plan).rejects.toThrow('quality cap');
     expect((await start(apple, new Response('', { status: 400 })).plan).selectedPathId).toBe('original');
   });
 
