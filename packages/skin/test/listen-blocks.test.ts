@@ -6,7 +6,7 @@ import type { Card } from '@vela/core';
 import { RICH_BLOCKS, RICH_BLOCK_NAMES, isRichBlock } from '../../protocol/rich-blocks';
 import { fillParts, hasRows, partRows, splitRows } from '../src/blocks/listen/part-style';
 import {
-  asCard, barPresses, discGroups, listOf, nextRowCount, parseBool, parseEnum, parseNumber, playlistMove, propDefault, tableTracks, FIRST_ROWS, MORE_ROWS,
+  asCard, barPresses, discGroups, litWords, listOf, lyricLine, queueMove, nextRowCount, parseBool, parseEnum, parseNumber, playlistMove, propDefault, tableTracks, FIRST_ROWS, MORE_ROWS,
 } from '../src/blocks/listen/props';
 
 function track(id: string, disc = 0): Card {
@@ -122,4 +122,24 @@ test('the bar opens one side panel at a time', () => {
   expect(barPresses('queue', 'queue', 'sound', {})).toEqual([{ action: 'toggle', flag: 'queue' }]);
   expect(barPresses('queue', 'queue', 'sound', { sound: 'true' })).toEqual([{ action: 'close', flag: 'sound' }, { action: 'toggle', flag: 'queue' }]);
   expect(barPresses('sound', 'q', 's', { q: 'true' })).toEqual([{ action: 'close', flag: 'q' }, { action: 'toggle', flag: 's' }]);
+});
+
+test('queue moves stay among the upcoming items', () => {
+  expect(queueMove(5, 3, 2, 10)).toEqual({ from: 5, to: 3 });
+  expect(queueMove(5, 2, 2, 10)).toBeUndefined();
+  expect(queueMove(2, 5, 2, 10)).toBeUndefined();
+  expect(queueMove(4, 4, 2, 10)).toBeUndefined();
+  expect(queueMove(4, 10, 2, 10)).toBeUndefined();
+});
+
+test('lyrics light the line being sung and the words sung so far', () => {
+  const lines = [{ startMs: 1000 }, { startMs: 4000 }, { startMs: 9000 }];
+  expect(lyricLine(lines, 0)).toBe(-1);
+  expect(lyricLine(lines, 800)).toBe(0);
+  expect(lyricLine(lines, 5000)).toBe(1);
+  expect(lyricLine(lines, 60000)).toBe(2);
+  const words = [{ startMs: 4000 }, { startMs: 4400 }, { startMs: 5000 }];
+  expect(litWords(words, 3000)).toBe(0);
+  expect(litWords(words, 4200)).toBe(1);
+  expect(litWords(words, 5000)).toBe(3);
 });
