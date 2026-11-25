@@ -167,6 +167,32 @@ export class LocalSources {
     };
   }
 
+  /**
+   * Call `changed` whenever what a (not live) source reads in the stores moves and has settled: a
+   * playlist's entries after a move or removal, the liked lists after a like, a title read again.
+   */
+  watch(spec: SourceSpec, scope: LocalScope, changed: () => void): () => void {
+    if (!isVelaSource(spec.from)) return () => {};
+    const select = storeSlices(spec.from, sourceArgs(spec, scope));
+    if (!select) return () => {};
+    let seen = select(this.stores.getState());
+    return this.stores.subscribe(() => {
+      const now = select(this.stores.getState());
+      if (now.length === seen.length && now.every((slice, at) => slice === seen[at])) return;
+      seen = now;
+      // Only settled values: a read under way answers when it lands.
+      if (now.some(slice => (slice as Loadable<unknown> | undefined)?.load === 'loading')) return;
+      changed();
+    });
+  }
+
+  /** The server's libraries, read once (a failed read is tried again). */
+  private async libraries(): Promise<void> {
+    const state = this.stores.getState().libraries;
+    if (state.load === 'idle' || (state.load === 'failed' && !state.value)) await this.stores.home.libraries();
+    await settled(this.stores, () => this.stores.getState().libraries);
+  }
+
   /** Whether a live source is followed now (tests, diagnostics). */
   following(from: string): boolean { return this.live.has(from); }
 
@@ -305,7 +331,7 @@ export class LocalSources {
           if (!args.libraryId) return { error: 'invalid_request' };
           const { adapter } = await this.features();
           if (!hasLibraryRecommendations(adapter as never)) return unsupported();
-          await stores.home.libraries();
+          await this.libraries();
           const library = stores.getState().libraries.value?.find(item => item.id === args.libraryId);
           const rows = await stores.catalogue.libraryRecommendations(args.libraryId, (library?.kind ?? 'mixed') as V.Library['kind'], fresh, args.tab || libraryHomeTab(library?.tabs));
           if (!rows) return unsupported();
@@ -390,7 +416,7 @@ export class LocalSources {
       }
       case 'vela.musicHome': {
         await this.features();
-        await stores.home.libraries();
+        await this.libraries();
         const library = stores.getState().libraries.value?.find(item => item.id === args.library);
         if (!library) return { error: 'not_found' };
         const [rows] = await Promise.all([
@@ -416,7 +442,7 @@ export class LocalSources {
       }
       case 'vela.libraryInfo': {
         await this.features();
-        await stores.home.libraries();
+        await this.libraries();
         const loaded = await settled(stores, () => stores.getState().libraries);
         const library = loaded?.value?.find(item => item.id === args.id);
         if (!library) return { error: loaded?.value ? 'not_found' : loadableError(loaded) };
@@ -779,6 +805,28 @@ export function topMatch(items: readonly Card[], query: string): Card | undefine
   const rank = (card: Card) => { const at = TOP_ORDER.indexOf(card.kind === 'playlist' ? 'playlist' : card.media?.role ?? ''); return at < 0 ? TOP_ORDER.length : at; };
   const exact = items.filter(card => q && normalizeQuery(card.name) === q).sort((a, b) => rank(a) - rank(b));
   return exact[0] ?? items[0];
+}
+
+type StoreState = ReturnType<LocalStores['getState']>;
+
+/** The store slices a source's answer is made from (compared by identity), or undefined when it
+ * follows none (live sources follow on their own; search and guide are read on demand). */
+function storeSlices(from: VelaSourceName, args: Record<string, string>): ((state: StoreState) => unknown[]) | undefined {
+  const id = args.id ? itemId(args.id) : '';
+  switch (from) {
+    case 'vela.title': case 'vela.readingProgress': return state => [state.titles[id]];
+    case 'vela.children': return state => [state.children[childrenKey(id, args.role || undefined)], state.children[childrenKey(id)]];
+    case 'vela.playlist': return state => [state.collections[id]];
+    case 'vela.playlists': return state => [state.playlists.list];
+    case 'vela.favorites': return state => [state.music.liked[args.role ?? ''], state.playlists.list, state.collections];
+    case 'vela.recent': return state => [state.music.recent];
+    case 'vela.duplicates': return state => [state.music.duplicates[args.libraryId ?? '']];
+    case 'vela.recording': return state => [state.music.recordings[id]];
+    case 'vela.rows': return args.placement === 'home' ? state => [state.home.value] : args.placement === 'title' ? state => [state.related[itemId(args.titleId ?? '')]] : undefined;
+    case 'vela.musicHome': return state => [state.music.recent, state.playlists.list, state.music.liked.track];
+    case 'vela.libraryInfo': return state => [state.libraries];
+    default: return undefined;
+  }
 }
 
 /** The names of the page's sources reading any of `froms`. */

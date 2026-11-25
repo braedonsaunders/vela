@@ -9,7 +9,7 @@ import type { VelaPlatform } from '../src/store/platform';
 import type { ScreenDocument } from '../src/wire';
 import { launchMock, type RunningMock } from '../../../mock-server/test/launch';
 import { mediaChildren, mediaGroups } from '../../protocol/fixtures/media';
-import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue, GuideValue, MusicHomeValue } from '../../protocol/vela-sources';
+import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue, GuideValue, MusicHomeValue, PlaylistValue } from '../../protocol/vela-sources';
 import { MemoryStore } from './helpers';
 
 let mock: RunningMock;
@@ -218,5 +218,30 @@ test('music Home answers quick tiles and the library\'s shelves', async () => {
   expect(home.quick.length).toBeLessThanOrEqual(8);
   expect(home.shelves.length).toBeGreaterThan(0);
   for (const shelf of home.shelves) for (const item of shelf.items) expect(store.screens.records.get(item.$record)).toBeDefined();
+  handle.release();
+});
+
+test('a param left out reads its default; a playlist reordered in the store is answered anew', async () => {
+  await store.playlists.load();
+  let list = store.getState().playlists.list.value!.find(item => !item.smart && item.itemCount >= 2);
+  if (!list) {
+    const id = await store.playlists.create('G1 order test', tracks[0]!.id);
+    await store.playlists.setMembership(tracks[1]!.id, id!, true);
+    await store.playlists.load();
+    list = store.getState().playlists.list.value!.find(item => item.id === id)!;
+  }
+  const doc: ScreenDocument = { ...albumPage, page: 'playlist', params: { id: { type: 'string', default: list.id } }, sources: { list: { from: 'vela.playlist', id: '{param.id}' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/playlist' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'playlist' }, href: 'vela:listen/playlist' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors).toEqual({});
+  const before = (page().sources.list as PlaylistValue).entryIds;
+  expect(before.length).toBeGreaterThanOrEqual(2);
+  const last = before[before.length - 1]!;
+  await store.playlists.moveEntry(list.id, last, null);
+  await until(() => (page().sources.list as PlaylistValue).entryIds[0] === last);
+  expect(page().pending).toEqual({});
+  await store.playlists.moveEntry(list.id, last, before[before.length - 2]!);
   handle.release();
 });
