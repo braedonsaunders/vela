@@ -19,6 +19,7 @@ precision highp float; precision highp int; precision highp sampler2D;
 const LIB = `
 uniform float uTime, uBass, uMid, uHigh, uLevel, uBassS, uMidS, uHighS, uLevelS, uKick, uKickL, uSnare;
 uniform float uDyn, uDrop, uAccent, uSlowHead; uniform sampler2D uSlow;
+uniform vec3 uHit, uHitS, uBandE;   // low, mid, high: uHit jumps on an onset (light), uHitS is eased (form), uBandE is the level now
 // The slow history: x dyn, y accent, z slow bass, w slow level; age 0 is now, 1 is about 17 seconds ago.
 vec4 slowH(float age){ return texture(uSlow, vec2(uSlowHead-clamp(age,0.,1.)*${(508 / 512).toFixed(6)}, .5)); }
 uniform float uHue, uTravel, uHistHead, uTan, uAspect, uPalMix, uPx;

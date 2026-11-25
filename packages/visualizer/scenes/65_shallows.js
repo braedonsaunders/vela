@@ -12,11 +12,12 @@ float voice(float band){
   float fast=spec(band);
   return clamp(.45*fast+3.8*max(0.,fast-specS(band)),0.,1.);
 }
-const float FALL = .035, BACK = .5;                             // it strikes FALL after it is let go; the bead it throws up lands BACK after that
+const float FALL = .022, BACK = .5;                             // it strikes within one or two frames; the bead it throws up lands BACK after that
 vec2 wgrad(vec2 p){                                           // the slope of the water surface at p
-  vec2 g = vec2(0.); float warp = noise(vec3(p*.35, uTime*.12))*5., amp = .10+.34*uBassS;
+  vec2 g = vec2(0.); float warp = noise(vec3(p*.35, uTime*.12))*5., amp = .10+.22*uBassS;
   for (int i = 0; i < 9; i++){ float fi = float(i), ang = fi*2.399+.6, k = 1.7*pow(1.32, fi); vec2 D = vec2(cos(ang), sin(ang));
-    g += D*(.012+.033*amp+.077*voice(.035+fi*.111))*cos(k*dot(D,p)-sqrt(k*4.)*uTime*.62+warp*(.6+.2*fi)+fi*1.7); }
+    float e=i<3?uBandE.x:(i<6?uBandE.y:uBandE.z);
+    g += D*(.012+.026*amp+.052*e)*cos(k*dot(D,p)-sqrt(k*4.)*uTime*.62+warp*(.6+.2*fi)+fi*1.7); }
   for (int i = 0; i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w-FALL, life = .44+.84*sz; if (sz <= 0. || a < 0. || a > life+BACK) continue;
     vec2 d = p-uDr[i].xy; float r = length(d)+1e-3, x = r-a*1.5, k = 22.-8.*sz;                          // bigger drops make broader, longer-lived rings
     float w = cos(x*k)*smoothstep(0.,.035,a)*(1.-smoothstep(life*.5, life, a))*exp(-x*x*(9.-4.*sz));
@@ -61,15 +62,16 @@ void main(){
     vec2 pos=(c+.2+.6*vec2(hash2(c+2.),hash2(c+4.)))*2.8;
     vec2 delta=pf-pos; float r2=dot(delta,delta);
     vec3 lamp=seed<.4?vec3(.015,.83,.72):(seed<.72?vec3(.26,.16,.94):vec3(.95,.33,.085));
-    float local=voice(.04+.91*seed);
-    float strike=seed<.4?uKickL:(seed<.72?uMid:uSnare);
-    float light=exp(-r2*(1.6+.7*seed))*(.075+2.7*local+1.95*strike*strike);
+    float local=seed<.4?uBandE.x:(seed<.72?uBandE.y:uBandE.z);
+    float strike=seed<.4?uHitS.x:(seed<.72?uHitS.y:uHitS.z);
+    float light=exp(-r2*(1.6+.7*seed))*(.075+2.2*local+2.35*strike*strike);
     lanterns+=lamp*light;
   }
   col+=lanterns*(.14+.52*caus)*(.36+stone*.58+rim*.99)*(.35+.78*shade)*(.83+.22*noise(vec3(pf*55.,2.)));
   // Glints share the rock bed's coordinates, so sound picks out individual grains through the water.
   vec2 grit=pf*13., tile=floor(grit);
-  float pitch=hash2(tile+11.), energy=voice(.035+.92*pitch);
+  float pitch=hash2(tile+11.), energy=pitch<.34?uBandE.x:(pitch<.67?uBandE.y:uBandE.z);
+  float sparkle=pitch<.34?uHit.x:(pitch<.67?uHit.y:uHit.z); energy=max(energy,sparkle*.7);
   vec2 spark=fract(grit)-vec2(.2+.6*hash2(tile),.2+.6*hash2(tile+3.));
   float glint=exp(-dot(spark,spark)*mix(76.,18.,energy));
   col+=mix(vec3(.07,.65,.57),vec3(.69,.32,.91),pitch)*glint*energy*energy*(.4+rim+clamp(caus.g,0.,2.));
@@ -97,15 +99,16 @@ scene({ id: 'shallows', name: 'Shallows', from: 'Organic', kind: 'nature', group
   inputs: ['bassS', 'highS', 'levelS', 'high', 'kick', 'pulse', 'snares, notes (onsets)', 'dyn'],
   cost: 'Moderate: four surface-slope evaluations a pixel (about 70 trig calls). Phones: five waves instead of nine, at reduced resolution.',
   post: { dof: { ap: 4, max: 5 }, bloom: 0.35, thr: 1.1, knee: 0.6, exp: 1.0, ca: 0.3, vig: 0.6, pulse: 0.2 },
-  init() { this.p = program(VS, FS_SHALLOWS); this.dr = new Float32Array(56); this.di = 0; this.last = new Float32Array(8).fill(9); this.beat = A.beat; },
+  init() { this.p = program(VS, FS_SHALLOWS); this.dr = new Float32Array(56); this.di = 0; this.last = new Float32Array(8).fill(9);
+    this.h0=A.hit[0].n; this.h1=A.hit[1].n; this.h2=A.hit[2].n; },
   draw(F, out) {
     const t = F.time, drift = [t * 0.12, t * 0.05], tgt = [drift[0], 0, drift[1] + 1.2];
     const D = this.dr, r = Math.random, drop = (x, z, size) => { D.set([tgt[0] + x, tgt[2] + z, size, 0], (this.di++ % 14) * 4); };
     for (let i = 0; i < 14; i++) D[i * 4 + 3] += F.dt;
-    if(this.beat!==A.beat){
-      this.beat=A.beat;
-      drop((r()-.5)*2.8,(r()-.5)*1.9,.40+.48*Math.min(1,A.kickAmp/3));
-    }
+    const H=A.hit;
+    if(this.h0!==H[0].n){ this.h0=H[0].n; drop((r()-.5)*7.6,-.6+r()*5.2,.66+.32*H[0].amp); }
+    if(this.h1!==H[1].n){ this.h1=H[1].n; drop((r()-.5)*8.4,-.8+r()*5.8,.38+.24*H[1].amp); }
+    if(this.h2!==H[2].n){ this.h2=H[2].n; drop((r()-.5)*9.2,-1.+r()*6.2,.19+.17*H[2].amp); }
     const eye = [drift[0] + Math.sin(t * 0.06) * 0.5, 1.88, drift[1] - 2.9];
     const c = camera(eye, tgt, 0.76, Math.sin(t * 0.05) * 0.012, 0.1, 60); F.focus = Math.hypot(...sub(eye, tgt)) + 0.5;
     draw(this.p, out, T.sw, T.sh, u => { F.set(u); setCam(u, c); gl.uniform4fv(u.uDr, D); });

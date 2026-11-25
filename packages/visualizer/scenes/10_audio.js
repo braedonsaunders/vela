@@ -21,6 +21,11 @@
 //                                       and in the top octave (hatAmp). Scenes watch the counters to place their own events.
 //   slow history texture (512×1)        dyn, accent, slow bass and slow level over the last ≈17 s, for waves that should
 //                                       cross a scene at walking pace (gusts over a field)
+//   hit[0..2] (low, mid, high)          onsets found on a second, short FFT (1024 samples, no smoothing), so they are
+//                                       known within a frame or two of the sound. Each has n (a counter), amp (0..1, how
+//                                       hard against the recent hardest), fast (jumps on the onset, gone in ≈150 ms: for
+//                                       light), slow (eased, for form) and lvl (the band's level now). The threshold
+//                                       adapts to the material, so busy music does not fire it constantly.
 //   spectrum texture (256×1, RG)        R = fast bands, G = slow bands
 //   waterfall texture (128×256, R16F)   the spectrum's last ≈4 s as a ring buffer, read with a fractional head
 //   waveform texture (512×1)            trigger-aligned and averaged over ≈70 ms, so the trace stands still and
@@ -41,6 +46,8 @@ const A = {
   accent: 0, accentR: 0, accentA: 0, accents: 0, kickAmp: 1, kMean: 1, sinceAccent: 9,
   notes: 0, noteBand: 0.5, noteAmp: 0, nAvg: 0, sinceNote: 9, hats: 0, hatAmp: 0, hAvg: 0, sinceHat: 9, bassVS: 0, levelVS: 0,
   slowRow: new Float32Array(4), slowAcc: 0,
+  fast: null, fastF: null, hit: [0, 1, 2].map(() => ({ n: 0, amp: 0, imp: 0, fast: 0, slow: 0, slowA: 0, hold: 0, lvl: 0, prev: 0, mean: 0, dev: 0.3, peak: 0.8, top: 1, since: 9 })),
+  hitLin: new Float32Array(3), hitFast: new Float32Array(3), hitSlow: new Float32Array(3), hitLvl: new Float32Array(3),
   beat: 0, snares: 0, pulse: new Float32Array(8).fill(9), pulseAt: 0, sincePulse: 9, fluxAvg: 0, prevLow: 0, sfluxAvg: 0, agc: 1, agcPeak: 0.9,
 };
 for (let i = 0; i < BANDS; i++) A.bandHz[i] = 28 * Math.pow(16000 / 28, i / BANDS);   // log-spaced, 28 Hz – 16 kHz
@@ -53,7 +60,9 @@ function audioInit() {
   A.analyser.fftSize = 4096; A.analyser.smoothingTimeConstant = 0.55;
   A.analyser.minDecibels = -92; A.analyser.maxDecibels = -18;
   A.out = ctx.createGain(); A.out.gain.value = MUTED ? 0 : +vol.value;     // ?mute: the output stays at zero for the whole session
-  A.bus.connect(A.analyser); A.bus.connect(A.out); A.out.connect(ctx.destination);
+  A.fast = ctx.createAnalyser(); A.fast.fftSize = 1024; A.fast.smoothingTimeConstant = 0; A.fast.minDecibels = -100; A.fast.maxDecibels = -10;
+  A.fastF = new Float32Array(512);
+  A.bus.connect(A.analyser); A.bus.connect(A.fast); A.bus.connect(A.out); A.out.connect(ctx.destination);
   A.freq = new Float32Array(A.analyser.frequencyBinCount);
   A.time = new Float32Array(A.analyser.fftSize);
   const ny = ctx.sampleRate / 2, n = A.analyser.frequencyBinCount;
@@ -83,7 +92,7 @@ async function useMic() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     A.micSrc = A.ctx.createMediaStreamSource(stream);
-    A.micSrc.connect(A.analyser); // never to the speakers
+    A.micSrc.connect(A.analyser); A.micSrc.connect(A.fast); // never to the speakers
     A.source = 'mic'; setNow('Microphone', 'Live input'); markSource();
   } catch (e) { setNow('Microphone unavailable', String(e.message || e)); }
 }
@@ -165,8 +174,29 @@ function analyse(dt) {
   for (let i = 64; i < 1000; i++) if (tm[i - 1] < 0 && tm[i] >= 0 && tm[i + 3] > tm[i]) { z = i; break; }
   for (let i = 0; i < WAVE; i++) { const k = z + i * 6; const s = (tm[k] + tm[k + 1] + tm[k + 2]) / 3;
     A.wave[i] += (s - A.wave[i]) * wk; A.waveU8[i] = Math.max(0, Math.min(255, (A.wave[i] * 0.5 + 0.5) * 255)); }
+  analyseHits(dt);
   // One waterfall row: the medium bands, halved and lightly smoothed across frequency.
   for (let c = 0; c < HIST_W; c++) { const i = c * 2;
     A.histRow[c] = (A.bandsM[Math.max(0, i - 1)] + 2 * A.bandsM[i] + 2 * A.bandsM[i + 1] + A.bandsM[Math.min(BANDS - 1, i + 2)]) / 6; }
 }
 
+// Three-band onsets from the short FFT. Kept as one function so a native host can call exactly this after its
+// own long-FFT analysis. Reads A.fast (the 1024 analyser); writes A.hit[], A.hitFast, A.hitSlow, A.hitLvl.
+function analyseHits(dt) {
+  A.fast.getFloatFrequencyData(A.fastF);
+  const hz = A.ctx.sampleRate / 1024, top = A.fastF.length - 1, GAP = [0.24, 0.1, 0.06], SIGMA = [3, 2.4, 2.45], FLOOR = [0.3, 0.18, 0.22], EDGE = [[35, 150], [250, 2500], [5000, 14000]], lin = A.hitLin;
+  for (let k = 0; k < 3; k++) { let s = 0, n = 0;                       // all three band levels first, so each is compared with this frame's others
+    for (let b = Math.max(1, Math.round(EDGE[k][0] / hz)), e = Math.min(top, Math.round(EDGE[k][1] / hz)); b <= e; b++) { s += Math.pow(10, A.fastF[b] / 20); n++; }
+    lin[k] = n ? s / n : 0; }
+  const loud = Math.max(lin[0], lin[1], lin[2]);
+  for (let k = 0; k < 3; k++) { const H = A.hit[k];
+    const en = Math.log(1 + 400 * lin[k]), flux = Math.max(0, en - H.prev); H.prev = en; H.since += dt;
+    H.top = Math.max(en, H.top * Math.exp(-dt / 12), 1); H.lvl = env(H.lvl, Math.min(1, en / H.top), dt, 60, 9);
+    H.peak = Math.max(flux, H.peak * Math.exp(-dt / 6), 0.8);
+    if (flux > H.mean + SIGMA[k] * H.dev + FLOOR[k] && H.since > GAP[k] && lin[k] > 0.1 * loud) {   // a band fires on its own sound, not on another's leakage
+      H.n++; H.amp = Math.min(1, flux / H.peak); H.imp = Math.max(H.imp, 0.35 + 0.65 * H.amp); H.hold = 1; H.since = 0; }
+    H.dev += (Math.abs(flux - H.mean) - H.dev) * Math.min(1, dt * 1.2); H.mean += (flux - H.mean) * Math.min(1, dt * 1.2);
+    H.imp *= Math.exp(-dt * 9); H.fast = env(H.fast, H.imp, dt, 40, 40); H.hold *= Math.exp(-dt * 3.6);   // fast: half way up within a frame, never a step
+    H.slowA = env(H.slowA, Math.max(0, H.hold - 0.15) / 0.85 * 1.25 * (0.4 + 0.6 * H.amp), dt, 34, 34); H.slow = env(H.slow, H.slowA, dt, 34, 34);
+    A.hitFast[k] = H.fast; A.hitSlow[k] = H.slow; A.hitLvl[k] = H.lvl; }
+}

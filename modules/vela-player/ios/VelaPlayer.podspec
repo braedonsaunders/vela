@@ -24,6 +24,29 @@ Pod::Spec.new do |s|
     'VelaPlayerLicenses' => licenses,
     'VelaVisualizerAssets' => ['VisualizerAssets/viz-native.js', 'VisualizerAssets/apple-shaders.json']
   }
+  s.preserve_paths = 'VisualizerAssets/viz-shaders.metal'
+  # The app copies this resource bundle after the pod builds. Compile for its
+  # actual device or simulator SDK so no shader compiler runs on first open.
+  viz_bundle = '${PODS_CONFIGURATION_BUILD_DIR}/VelaPlayer/VelaVisualizerAssets.bundle'
+  s.script_phase = {
+    :name => 'Compile music visualizer shaders',
+    :execution_position => :before_compile,
+    :input_files => ['${PODS_TARGET_SRCROOT}/VisualizerAssets/viz-shaders.metal', viz_bundle + '/apple-shaders.json'],
+    :output_files => [viz_bundle + '/viz-shaders.metallib'],
+    :script => <<~'SH'
+      set -eu
+      case "$PLATFORM_NAME" in
+        iphoneos) target="ios${IPHONEOS_DEPLOYMENT_TARGET}" ;;
+        iphonesimulator) target="ios${IPHONEOS_DEPLOYMENT_TARGET}-simulator" ;;
+        appletvos) target="tvos${TVOS_DEPLOYMENT_TARGET}" ;;
+        appletvsimulator) target="tvos${TVOS_DEPLOYMENT_TARGET}-simulator" ;;
+        *) echo "Unsupported Metal platform $PLATFORM_NAME" >&2; exit 1 ;;
+      esac
+      air="$DERIVED_FILE_DIR/viz-shaders.air"
+      xcrun --sdk "$PLATFORM_NAME" metal -target "air64-apple-$target" -std=metal3.0 -c "$SCRIPT_INPUT_FILE_0" -o "$air"
+      xcrun --sdk "$PLATFORM_NAME" metallib "$air" -o "$SCRIPT_OUTPUT_FILE_0"
+    SH
+  }
 
   s.dependency 'ExpoModulesCore'
   spm_dependency(s, url: 'https://github.com/superuser404notfound/AetherEngine',

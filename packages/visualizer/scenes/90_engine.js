@@ -55,7 +55,7 @@ function drawScene(S, sl, dt) {
     set(u) {
       gl.uniform1f(u.uTime, time); gl.uniform1f(u.uBass, A.bass); gl.uniform1f(u.uMid, A.mid); gl.uniform1f(u.uHigh, A.high); gl.uniform1f(u.uLevel, A.level);
       gl.uniform1f(u.uBassS, A.bassS); gl.uniform1f(u.uMidS, A.midS); gl.uniform1f(u.uHighS, A.highS); gl.uniform1f(u.uLevelS, A.levelS);
-      gl.uniform1f(u.uKick, A.kick); gl.uniform1f(u.uKickL, A.kickL); gl.uniform1f(u.uSnare, A.snare); gl.uniform1f(u.uDyn, A.dyn); gl.uniform1f(u.uDrop, A.drop); gl.uniform1f(u.uAccent, A.accent); gl.uniform1f(u.uSlowHead, slowU); gl.uniform1fv(u.uPulse, A.pulse);
+      gl.uniform1f(u.uKick, A.kick); gl.uniform1f(u.uKickL, A.kickL); gl.uniform1f(u.uSnare, A.snare); gl.uniform1f(u.uDyn, A.dyn); gl.uniform1f(u.uDrop, A.drop); gl.uniform1f(u.uAccent, A.accent); gl.uniform3fv(u.uHit, A.hitFast); gl.uniform3fv(u.uHitS, A.hitSlow); gl.uniform3fv(u.uBandE, A.hitLvl); gl.uniform1f(u.uSlowHead, slowU); gl.uniform1fv(u.uPulse, A.pulse);
       gl.uniform1f(u.uHue, hue); gl.uniform1f(u.uTravel, travel); gl.uniform2f(u.uRes, T.sw, T.sh); gl.uniform1f(u.uHistHead, histU); gl.uniform1f(u.uPx, T.sh / 900);
       if (pm >= 1 || pa === pb) { gl.uniform3fv(u.uPA, pb); gl.uniform1f(u.uPalMix, 0); } else { gl.uniform3fv(u.uPA, pa); gl.uniform3fv(u.uPB, pb); gl.uniform1f(u.uPalMix, pm); }
       bindTex(0, specTex); gl.uniform1i(u.uSpec, 0); bindTex(1, waveTex); gl.uniform1i(u.uWave, 1); bindTex(2, histTex); gl.uniform1i(u.uHist, 2); bindTex(6, slowTex); gl.uniform1i(u.uSlow, 6);

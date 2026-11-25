@@ -33,13 +33,13 @@ void main(){
   float k = clamp(s.a*uDt*24., 0., .6); s.rgb = mix(s.rgb, av.rgb, k); s.a = mix(s.a, av.a, k*.6);      // wet-in-wet: paint spreads where the paper is wet
   // washes
   for (int i = 0; i < 8; i++){ float a = uWashAge[i]; if (a > .7) continue; vec2 d = (uv-uDropP[i].xy)*vec2(ASP, 1.); float r = length(d);
-    float R=uDropP[i].z, seed=uDropP[i].w;
+    float R=uDropP[i].z*(1.+.62*uBandE.x), seed=uDropP[i].w;
     float theta=atan(d.y,d.x), petal=.5+.5*sin(theta*9.+seed+1.5*sin(theta*3.+seed));
     float jag=.66+.25*petal+.22*noise(vec3(d*22.,seed));
     float rr=r/max(.001,R*jag);
     float reach=.55+.60*(1.-exp(-a*23.)), crown=exp(-pow((rr-reach)/.13,2.));
     float wet=(1.-smoothstep(reach*.48,reach,rr));
-    float hit=exp(-a*18.)*(wet*1.4+crown*.95);
+    float hit=exp(-a*18.)*(wet*1.4+crown*.95)*(1.+.7*uBandE.x);
     vec3 centre=paintOf(seed), fringe=paintOf(seed+.85+petal*.42);
     vec3 pigment=mix(centre,fringe,smoothstep(.13,.99,rr))*(.82+.37*petal);
     // Replace some previous pigment where the drop pushes a wet layer aside.
@@ -110,7 +110,8 @@ scene({ id: 'wash', name: 'Watercolour', from: 'Organic', kind: 'paint', group: 
   init() { this.sim = program(VS, FS_WC_SIM); this.show = program(VS, FS_WC);
     this.a = simTarget(WC_W, WC_H); this.b = simTarget(WC_W, WC_H);
     this.drops = new Float32Array(32); this.spl = new Float32Array(16).fill(9); this.stk = new Float32Array(24).fill(9); this.stk2 = new Float32Array(24); this.dot = new Float32Array(32).fill(9);
-    this.washAge = new Float32Array(8).fill(9); this.washSlot=0; this.beat=A.beat; this.sn = A.snares; this.nn = A.notes; this.hn = A.hats; this.si = 0; this.ki = 0; this.di = 0; },
+    this.washAge = new Float32Array(8).fill(9); this.washSlot=0; this.si = 0; this.ki = 0; this.di = 0;
+    this.h0=A.hit[0].n; this.h1=A.hit[1].n; this.h2=A.hit[2].n; },
   draw(F, out) {
     const t = F.time, r = Math.random, D = this.drops, S = this.spl, K = this.stk, K2 = this.stk2, O = this.dot;
     // the hand wanders the sheet slowly; strokes and dots fall near it, so the picture has a centre that moves
@@ -119,23 +120,27 @@ scene({ id: 'wash', name: 'Watercolour', from: 'Organic', kind: 'paint', group: 
     for (let j = 0; j < 6; j++) K[j * 4 + 3] += F.dt;
     for (let j = 0; j < 8; j++) O[j * 4 + 3] += F.dt;
     for(let j=0;j<8;j++) this.washAge[j]+=F.dt;
-    if(this.beat!==A.beat){
-      this.beat=A.beat;
-      const i=this.washSlot++ % 8, strength=Math.min(1,A.kickAmp/(1.35*Math.max(1,A.kMean)));
-      D.set([.23+r()*.54,.23+r()*.54,.105+.28*strength**3,(this.washSlot*.89)%3],i*4);
-      this.washAge[i]=0;
-    }
-    if (A.notes !== this.nn) { this.nn = A.notes; const j = this.ki++ % 6, len = 0.07 + 0.34 * r() ** 1.5 + 0.14 * A.noteAmp;
-      K.set([hand[0] + (r() - 0.5) * 0.46, hand[1] + (r() - 0.5) * 0.48, r() * 6.283, 0], j * 4); K2.set([len, 0.007 + 0.014 * A.noteAmp + 0.005 * r(), (r() - 0.5) * 2.2, A.noteBand * 9 + this.ki * 0.41], j * 4); }
-    if (A.hats !== this.hn) {
-      this.hn=A.hats;
-      const angle=r()*6.283, cx=.16+.68*r(), cy=.16+.68*r();
-      for(let j=0;j<5;j++){
-        const dist=(j-2)*.029;
-        O.set([cx+dist*Math.cos(angle),cy+dist*Math.sin(angle)+.009*r(),.006+.012*A.hatAmp+.004*r(),0],(this.di++ & 7)*4);
+    const H=A.hit;
+    if(this.h0!==H[0].n){
+      this.h0=H[0].n;
+      const count=A.levelS>.58?2:1;
+      for(let q=0;q<count;q++){
+        const i=this.washSlot++ % 8, strength=.35+.65*H[0].amp;
+        D.set([.13+r()*.74,.14+r()*.72,.15+.25*strength+.08*A.hitLvl[0],(this.washSlot*.89)%3],i*4);
+        this.washAge[i]=0;
       }
     }
-    if (A.snares !== this.sn) { this.sn = A.snares; S.set([hand[0] + (r() - 0.5) * 0.4, hand[1] + (r() - 0.5) * 0.4, r(), 0], (this.si++ & 3) * 4); }
+    if (this.h1!==H[1].n) { this.h1=H[1].n; const j = this.ki++ % 6, len = 0.16 + 0.34 * r() ** 1.5 + 0.18 * H[1].amp;
+      K.set([hand[0] + (r() - 0.5) * 0.5, hand[1] + (r() - 0.5) * 0.52, r() * 6.283, 0], j * 4); K2.set([len, 0.011 + 0.018 * H[1].amp + 0.006 * r(), (r() - 0.5) * 2.2, 3.1 + this.ki * 0.47], j * 4); }
+    if (this.h2!==H[2].n) {
+      this.h2=H[2].n;
+      const angle=r()*6.283, cx=.1+.8*r(), cy=.1+.8*r(), count=3+Math.round(4*H[2].amp+3*A.hitLvl[2]);
+      for(let j=0;j<count;j++){
+        const dist=(j-2)*.029;
+        O.set([cx+dist*Math.cos(angle),cy+dist*Math.sin(angle)+.012*(r()-.5),.008+.014*H[2].amp+.005*r(),0],(this.di++ & 7)*4);
+      }
+    }
+    if(H[2].fast>.72 && H[2].since<F.dt*1.5) S.set([hand[0]+(r()-.5)*.5,hand[1]+(r()-.5)*.5,r(),0],(this.si++&3)*4);
     draw(this.sim, this.b, WC_W, WC_H, u => { F.set(u); bindTex(3, this.a.t); gl.uniform1i(u.uState, 3); gl.uniform1f(u.uDt, Math.min(F.dt, 1 / 30));
       gl.uniform1fv(u.uWashAge,this.washAge); gl.uniform4fv(u.uDropP, D); gl.uniform4fv(u.uSpl, S); gl.uniform4fv(u.uStk, K); gl.uniform4fv(u.uStk2, K2); gl.uniform4fv(u.uDot, O); });
     [this.a, this.b] = [this.b, this.a];

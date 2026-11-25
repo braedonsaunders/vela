@@ -241,17 +241,46 @@ void main(){
   col*=.90+.13*fbm(vec3(m*.08,8.));
   col=mix(col,vec3(.12,.078,.045),clamp(border,0.,.76));
 
-  float voice = spec(fract(m.y*.036+m.x*.014));
+  // The music, feature by feature. Every country is hand-tinted and listens to a band of its own: its wash
+  // deepens while that band sounds and flares on an attack, so the sheet becomes a map of the spectrum.
+  float cband=fract(id*.618+.11), cS=specS(.03+cband*.82), cF=spec(.03+cband*.82);
+  vec3 tint=mix(neon(cband*.9+.05), vec3(.9,.75,.45), .3);
+  float cv=(cS*cS*.8+max(cF-cS,0.)*1.7)*land;
+  col=mix(col, col*mix(vec3(1.),tint*1.6,.8), clamp(cv*1.4,0.,.9)); col+=tint*cv*.12;
+  // Relief: the hills stand up out of the paper with the bass, and each height's form lines carry a band.
+  col*=1.+land*slope*(.05+.55*uBandE.x*uBandE.x);
+  float eb=spec(.05+fract(h*1.7)*.8);
+  col=mix(col,vec3(.2,.1,.04),contours*land*(.2+.6*eb));
+  col+=neon(.35+h*.4)*(contours*.55+minorContours*.14)*land*eb*eb;
+  // The sea darkens and its graticule glows as the low end fills; every kick sends waterlines out from the coasts.
+  float seaD=shorePx*720./uRes.y, tide=0.;
+  for(int i=0;i<8;i++){ float a=uPulse[i]; if(a>1.6) continue; float x=seaD-a*30.; tide+=exp(-x*x*.1)*smoothstep(0.,.05,a)*(1.-smoothstep(.7,1.5,a)); }
+  col=mix(col,col*vec3(.7,.92,1.08),(1.-land)*uBandE.x*.55);
+  col+=vec3(.15,.75,.8)*(1.-land)*(tide*.55*exp(-seaD*.02)+graticule*.25*uHit.x);
+  // Engraving detail: stipple that thickens on the slopes, and short wave strokes at sea. The highs glint in
+  // the stipple; the mids light the form lines.
+  vec2 sg=m*uRes.y/scale.y/5.; float stip=smoothstep(.36,.2,length(fract(sg)-.5-.2*(vec2(hash2(floor(sg)),hash2(floor(sg)+7.))-.5)))*step(.55-.4*abs(slope),hash2(floor(sg)+3.));
+  col*=1.-.2*stip*land;
+  float hb=spec(.6+.38*hash2(floor(sg)+11.));
+  col+=vec3(1.,.72,.32)*stip*land*(uHit.z*(.35+1.6*hb)+hb*hb*.5);
+  vec2 wv=vec2(m.x*uRes.y/scale.x/26., m.y*uRes.y/scale.y/7.); float wave=smoothstep(.2,.0,abs(fract(wv.y+.15*sin(wv.x*6.283))-.5))*step(.5,hash2(floor(vec2(wv.x,wv.y+.5))));
+  col*=1.-.16*wave*(1.-land);
+  col+=vec3(.2,.8,.85)*wave*(1.-land)*(uHit.z*.5+uBandE.z*uBandE.z*.35);
+  col+=neon(.35+h*.4)*(contours*.9+minorContours*.3)*land*uHit.y*.9;
+  float voice = spec(.2+.55*fract(m.y*.036+m.x*.014));
   float stroke = max(.80, uRes.y / 720.)*(1.04 + .18*voice);
   float bank = 1.-smoothstep(stroke+.15,stroke+1.2,lineDist);
   float river = 1.-smoothstep(max(0.,stroke-.55),stroke+.55,lineDist);
   col = mix(col,vec3(.80,.72,.51),bank*.67);
   col = mix(col,vec3(.025,.160,.215)+vec3(.025,.19,.21)*voice,river*.94);
+  float flow=.5+.5*sin(noise(vec3(m*1.3,2.))*30.-uTime*4.);                       // the mids run down the rivers
+  col+=vec3(.1,.75,.9)*river*(voice*voice*1.3+uHit.y*1.6*flow);
   vec2 minorGrid=abs(fract(m/2.+.5)-.5)*2./max(fwidth(m),vec2(.001));
   col*=1.-.065*(1.-smoothstep(.2,1.2,min(minorGrid.x,minorGrid.y)));
   float d=length(q), survey=ring(d*38.,7.,.8,1.9);
-  col+=vec3(.12,.65,.69)*coast*(.26+1.8*uKickL+survey);
-  col+=vec3(.98,.41,.12)*border*survey*.93+neon(.35+h*.4)*contours*spec(h)*.29;
+  col+=vec3(.12,.65,.69)*coast*(.26+1.7*uHit.x+.7*uBandE.x+survey);
+  float bph=noise(vec3(m*2.1,5.));                                                // mid attacks run along the borders, unevenly
+  col+=vec3(.98,.41,.12)*(border+.25*exp(-borderPx*.35))*(survey*.9+uHit.y*(.5+1.3*bph)+.3*uBandE.y);
   for(int i=0;i<14;i++){
     vec4 city=uPlaces[i]; if(city.w<.01) continue;
     vec2 off=q-city.xy/scale;
@@ -263,9 +292,9 @@ void main(){
     float rim = 1.-smoothstep(dotRadius+px*.3,dotRadius+px*1.4,r);
     col=mix(col,vec3(.91,.80,.57),rim*city.w);
     col=mix(col,major?vec3(.27,.097,.030):vec3(.285,.145,.068),dotInk*city.w);
-    float ringRadius = dotRadius+.002+.008*uKickL;
-    float ringLine = 1.-smoothstep(.0004,.0004+px,abs(r-ringRadius));
-    col+=city.w*(vec3(.28,.59,.54)*ringLine*uKickL+vec3(.35,.22,.08)*dotInk*band);
+    float ringRadius = dotRadius+.003+.03*(1.-uHit.z);
+    float ringLine = 1.-smoothstep(.0005,.0005+px*1.5,abs(r-ringRadius));
+    col+=city.w*(vec3(1.,.62,.2)*ringLine*uHit.z*(.5+1.5*band)+vec3(.9,.5,.15)*dotInk*(band*1.5+uHit.z)+vec3(1.,.6,.25)*exp(-r*r*9000.)*band*band*.6);
     vec2 labelSize=major ? vec2(.19,.034) : vec2(.163,.027);
     float width=uWidths[i]*labelSize.x, gap=dotRadius+.0015;
     bool alignLeft=city.x/scale.x+gap+width>uRes.x/uRes.y*.5-.008;
@@ -275,6 +304,7 @@ void main(){
       vec2 cell=vec2(mod(city.z,10.),${CITY_ROWS-1}.-floor(city.z/10.));
       float ink=texture(uText,(glyph+cell)/vec2(10.,${CITY_ROWS}.)).r;
       col=mix(col,mix(vec3(.94,.85,.61),major?vec3(.070,.035,.019):vec3(.135,.077,.035),land),ink*city.w);
+      col+=vec3(.95,.5,.15)*ink*city.w*band*(.35+.9*uHit.z);                       // its name glows with it
     }
   }
   vec2 heading=normalize(uHeading/scale+vec2(.00001,0.));
@@ -283,19 +313,23 @@ void main(){
   col=mix(col,vec3(.46,.085,.035),track*smoothstep(.2,.55,fract(forward*93.))*.83);
   float nib=1.-smoothstep(.0005,.0025,max(abs(crossTrack)-(.009-forward)*.45,max(forward-.012,-forward-.008)));
   col=mix(col,vec3(1.1,.54,.11),nib);
-  col+=vec3(.75,.25,.065)*exp(-abs(d-.018-.021*uKickL)*440.)*uKickL;
+  col+=vec3(.75,.25,.065)*exp(-abs(d-.018-.021*uHit.x)*440.)*uHit.x;
+  col*=.8+.3*uDyn;                                                             // the lamp turns up as the music fills out
   col*=1.-.30*min(1.,dot(q,q));
   o=vec4(col,1.);
 }`;
 const TOUR=[[2,48],[14,43],[31,31],[40,7],[73,20],[106,16],[132,35],[143,-27],[285,-12],[260,22],[279,43],[338,60],[362,48]];
 scene({id:'contour',name:'Neon Cartography',from:'Neon',kind:'field',group:'refined',pal:5,
-  about:'A traveling atlas of real borders and cities. Bass lights the coasts and sends a survey pulse across borders; pitched notes pick out individual cities.',
-  inputs:['spec','kickL','pulse','travel'],post:{bloom:.38,thr:.83,grain:.035,vig:.4},
+  about:'A travelling atlas of real coasts, borders, rivers and cities on old paper. Each country is tinted and deepens with a band of its own; the bass raises the relief and sends waterlines out from the coasts; mids run down the rivers and along the borders; highs ring the cities and light their names; the route wanders with the music.',
+  inputs:['spec','specS','hit (low, mid, high)','bandE','pulse','dyn','travel'],post:{bloom:.38,thr:.83,grain:.035,vig:.4},
   init(){this.p=program(VS,FS_MAP);this.map=worldMapTexture();this.hydro=hydroTexture();this.text=textAtlas(CITIES.map(c=>c[0]),10,176,28,'italic 600 20px Georgia, serif');this.places=new Float32Array(56);this.labelWidths=new Float32Array(14);
     this.widths=CITIES.map(([name])=>Math.min(1,(8+name.length*15)/176));this.opacity=new Map();},
   draw(F,out){
     const progress=Math.max(0,F.travel)*.005, i=Math.floor(progress)%(TOUR.length-1), f=progress%1, ease=f*f*(3-2*f);
-    const start=TOUR[i],end=TOUR[i+1],cx=start[0]+(end[0]-start[0])*ease,cy=start[1]+(end[1]-start[1])*ease;
+    const start=TOUR[i],end=TOUR[i+1];
+    const at=g=>{const e=g*g*(3-2*g),w=Math.sin(Math.PI*g)**2,px=-(end[1]-start[1]),py=end[0]-start[0],L=Math.hypot(px,py)||1,side=(Math.sin(g*9.4+i*2.1)*.55+Math.sin(g*23.+i)*.2)*w*Math.min(9,L*.22);
+      return [start[0]+(end[0]-start[0])*e+px/L*side,start[1]+(end[1]-start[1])*e+py/L*side];};   // it meanders: no leg is a straight line
+    const [cx,cy]=at(f),ahead=at(Math.min(1,f+.004)),back=at(Math.max(0,f-.004));
     const span=3.5+2*Math.sin(Math.PI*f)**2, lat=Math.max(.45,Math.cos(cy*Math.PI/180)), aspect=T.sw/T.sh;
     const near=[];
     for(let n=0;n<CITIES.length;n++){
@@ -308,6 +342,6 @@ scene({id:'contour',name:'Neon Cartography',from:'Neon',kind:'field',group:'refi
     const shown=new Map();
     near.forEach(({n,dx,dy},k)=>{const opacity=Math.min(1,(this.opacity.get(n)||0)+F.dt*3);shown.set(n,opacity);this.labelWidths[k]=this.widths[n];this.places.set([dx,dy,n,opacity],k*4);});
     this.opacity=shown;
-    draw(this.p,out,T.sw,T.sh,u=>{F.set(u);bindTex(3,this.map);gl.uniform1i(u.uMap,3);bindTex(5,this.hydro);gl.uniform1i(u.uHydro,5);bindTex(4,this.text.t);gl.uniform1i(u.uText,4);gl.uniform2f(u.uCentre,cx,cy);gl.uniform1f(u.uSpan,span);gl.uniform2f(u.uHeading,end[0]-start[0],end[1]-start[1]);gl.uniform1fv(u.uWidths,this.labelWidths);gl.uniform4fv(u.uPlaces,this.places);});
+    draw(this.p,out,T.sw,T.sh,u=>{F.set(u);bindTex(3,this.map);gl.uniform1i(u.uMap,3);bindTex(5,this.hydro);gl.uniform1i(u.uHydro,5);bindTex(4,this.text.t);gl.uniform1i(u.uText,4);gl.uniform2f(u.uCentre,cx,cy);gl.uniform1f(u.uSpan,span);gl.uniform2f(u.uHeading,ahead[0]-back[0],ahead[1]-back[1]);gl.uniform1fv(u.uWidths,this.labelWidths);gl.uniform4fv(u.uPlaces,this.places);});
   }});
 }
