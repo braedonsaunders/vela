@@ -43,7 +43,9 @@ const PATH = /^[$A-Za-z_][\w$-]*(\.[\w$^-]+)*$/;
 
 const ENV_KEYS = new Set(['small', 'wide', 'tv', 'isTV', 'still', 'canMultiview', 'canPlay', 'canRetry', 'error', 'range5', 'range6',
   // Renderer 20: a device capability, the platform, the form factor and a partly open foldable's posture.
-  'canVisualize', 'platform', 'form', 'fold']);
+  'canVisualize', 'platform', 'form', 'fold',
+  // Renderer 20: the viewer's name and the time now (epoch ms; {env.now|greeting}).
+  'viewer', 'now']);
 
 const fillT = (t: Template, c: Ctx, e: Env): string =>
   typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
@@ -90,6 +92,8 @@ export function pathValue(path: string, scope: HoleScope): Value {
           case 'platform': return e.platform ?? '';
           case 'form': return e.form ?? (e.tv ? 'tv' : e.small ? 'small' : 'wide');
           case 'fold': return e.fold ?? '';
+          case 'viewer': return e.viewer ?? '';
+          case 'now': return Date.now();
           // The first read's failure as the server or the network gave it (the failure node's message line).
           case 'error': return c.screen?.page.load === 'failed' ? c.screen.page.error ?? '' : '';
           case 'canRetry': return c.screen ? c.screen.page.load === 'failed' || Object.keys(c.screen.page.errors).length > 0 : false;
@@ -121,14 +125,15 @@ function bars(body: string): string[] {
   return body.split('|');
 }
 
-/** `with:a=path,b=path` as arguments compiled in the caller's scope. */
+/** `with:a=path,b=path` as arguments compiled in the caller's scope. A path may carry argument-less
+ * pipes after `~` (`with:date=src.recap.firstPlayAt~fullDate`, renderer 20). */
 function withArgs(spec: string, scope: HoleScope): Record<string, Arg> {
   const args: Record<string, Arg> = {};
   for (const pair of spec.split(',')) {
     const at = pair.indexOf('=');
     if (at <= 0) throw new Error(`with: takes name=path pairs (${spec})`);
-    const name = pair.slice(0, at).trim(), path = pair.slice(at + 1).trim();
-    const value = holeValue(path, scope);
+    const name = pair.slice(0, at).trim(), [path = '', ...pipes] = pair.slice(at + 1).trim().split('~');
+    const value = holeValue([path.trim(), ...pipes.map(p => p.trim())].join('|'), scope);
     args[name] = { template: { parts: [(c, e) => text(value(c, e), reader(c))] }, value, path };
   }
   return args;
@@ -172,6 +177,10 @@ export function holeValue(body: string, scope: HoleScope): Value {
       value = (c, e) => fillT(!['', 'false', '0'].includes(text(before(c, e), reader(c))) ? a : b, c, e);
       continue;
     }
+    if (name === 'string') {
+      value = stringPipe(value, spec.slice(7).trim(), rest[at + 1]?.startsWith('with:') ? withArgs(rest[++at]!.slice(5), scope) : undefined, scope);
+      continue;
+    }
     if (name === 'plural') {
       value = pluralPipe(value, spec.slice(7).trim(), rest[at + 1]?.startsWith('with:') ? withArgs(rest[++at]!.slice(5), scope) : {}, scope);
       continue;
@@ -193,6 +202,22 @@ export function holeValue(body: string, scope: HoleScope): Value {
     value = (c, e) => { const s = text(before(c, e), reader(c)); return s ? spec + s : ''; };
   }
   return value;
+}
+
+/** Renderer 20, `{<path>|string:<prefix>}`: the string `<prefix>.<value>` (an enum's label:
+ * `{state.period|or:month|string:music.rewind.period}`), from the document's strings and, in a built-in
+ * document, Vela's tables; '' when there is none. Its keys are known only once filled, so each is
+ * compiled the first time it is drawn. */
+function stringPipe(before: Value, prefix: string, args: Record<string, Arg> | undefined, scope: HoleScope): Value {
+  if (!prefix) throw new Error('string: names a key prefix');
+  const compiled = new Map<string, Template>();
+  return (c, e) => {
+    const key = text(before(c, e), reader(c));
+    if (!/^[\w-]{1,64}$/.test(key)) return '';
+    let t = compiled.get(key);
+    if (t === undefined) { t = stringTemplate(`${prefix}.${key}`, scope, args); compiled.set(key, t); }
+    return fillT(t, c, e);
+  };
 }
 
 const PLURAL_FORMS = ['zero', 'one', 'two', 'few', 'many', 'other'] as const;

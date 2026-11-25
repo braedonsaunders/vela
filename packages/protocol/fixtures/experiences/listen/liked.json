@@ -67,7 +67,7 @@
          },
          "collectionHeader.byline": {
           "type": "text",
-          "text": "{src.me.name} \u00b7 {src.tracks.total|plural:media.count.tracks}",
+          "text": "{src.me.name} \u00b7 {src.tracks.items|totalLabel}",
           "style": {
            "font-size": "15px",
            "color": "$ui.inkSecondary"

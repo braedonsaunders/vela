@@ -19,7 +19,7 @@
                   { "type": "box", "style": { "width": "24px", "height": "24px", "border-radius": "12px", "background-color": "$ui.accent", "align-items": "center", "justify-content": "center" }, "children": [
                     { "type": "text", "text": "{src.me.name|initials}", "style": { "font-size": "12px", "font-weight": "800", "color": "$ui.onAccent" } } ] },
                   { "type": "text", "text": "{src.me.name}", "style": { "font-size": "15px", "font-weight": "700", "color": "$ui.ink" } },
-                  { "type": "text", "text": "· {src.playlist.items.length|plural:media.count.tracks}", "style": { "font-size": "15px", "color": "$ui.inkSecondary" } }
+                  { "type": "text", "text": "· {src.playlist.items|totalLabel}", "style": { "font-size": "15px", "color": "$ui.inkSecondary" } }
                 ] }
               ] }
             } },

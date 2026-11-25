@@ -8107,6 +8107,13 @@
         "small": {
           "$ref": "#/$defs/Style"
         },
+        "spans": {
+          "description": "Renderer 20: runs drawn inline after `text`, in the same line box (a bold name inside a sentence),\neach with its own text rows (colour, font, size, weight, style, letter-spacing, text-transform).",
+          "items": {
+            "$ref": "#/$defs/TextSpan"
+          },
+          "type": "array"
+        },
         "stagger": {
           "additionalProperties": false,
           "properties": {
@@ -8190,6 +8197,28 @@
       "required": [
         "text",
         "type"
+      ],
+      "type": "object"
+    },
+    "TextSpan": {
+      "additionalProperties": false,
+      "description": "Renderer 20: an inline run of a text node.",
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "text": {
+          "type": "string"
+        },
+        "when": {
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
       ],
       "type": "object"
     },

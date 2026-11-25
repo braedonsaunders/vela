@@ -2,7 +2,7 @@
 // expressions: a hole is a path and a list of these. The client keeps only what depends on the
 // viewer's clock, locale or skin; every other fact arrives from Ether already derived. The rules
 // are those the built-in Sports screen used (startText, dayOffset, readableTeam).
-import { duration as durationText, localeContext, msg, number as numberText, time as clockText } from '@vela/core';
+import { duration as durationText, durationLabel, localeContext, msg, number as numberText, time as clockText } from '@vela/core';
 import { crest, hexColour, parseColour, readable, tint, withAlpha } from './colour';
 import { deref, text, type RecordReader } from './scope';
 
@@ -12,7 +12,9 @@ export type Pipe = (value: unknown, read: RecordReader) => unknown;
 /** The pipes a document may name, `name` or `name:<argument>`. `with:` and `then:` with string
  * keys are compiled by the hole compiler (holes.ts); `asOf:` reads the scope there too. */
 export const PIPE_NAMES = ['start', 'day', 'time', 'date', 'duration', 'number', 'percent', 'upper', 'initials', 'not', 'count',
-  'eq', 'lt', 'first', 'then', 'with', 'tint', 'readable', 'crest', 'alpha', 'asOf'] as const;
+  'eq', 'lt', 'first', 'then', 'with', 'tint', 'readable', 'crest', 'alpha', 'asOf',
+  // Renderer 20: a date with its year, lower case, a greeting for the time of day, and plural (holes.ts).
+  'fullDate', 'lower', 'greeting', 'plural', 'or', 'string', 'totalLabel'] as const;
 
 /** The clock pipes read (tests set it). */
 let now = () => Date.now();
@@ -113,6 +115,37 @@ function dateText(value: unknown): string {
   return Number.isFinite(at) ? new Date(at).toLocaleDateString(formatLocale, { month: 'short', day: 'numeric', timeZone }) : '';
 }
 
+/** A date with its year in the viewer's locale ("Apr 12, 2019"); '' when the value is not a date. */
+function fullDateText(value: unknown): string {
+  const only = dateOnly(value);
+  const { formatLocale, timeZone } = localeContext();
+  const options = { year: 'numeric', month: 'short', day: 'numeric' } as const;
+  if (only !== undefined) return new Date(only * 86_400_000).toLocaleDateString(formatLocale, { ...options, timeZone: 'UTC' });
+  const at = instant(value);
+  return Number.isFinite(at) ? new Date(at).toLocaleDateString(formatLocale, { ...options, timeZone }) : '';
+}
+
+/** "Good morning" and so on for the value's local hour (a time; now when it is not one), as the music app greets. */
+function greetingText(value: unknown): string {
+  const at = instant(value);
+  const hour = new Date(Number.isFinite(at) ? at : now()).getHours();
+  return msg(hour < 5 ? 'music.greeting.night' : hour < 12 ? 'music.greeting.morning' : hour < 18 ? 'music.greeting.afternoon' : 'music.greeting.evening');
+}
+
+/** A list's count and running time as the music pages label a collection: "8 songs, 7 min" (the
+ * count's plural in the viewer's locale, the time as core's durationLabel rounds it). The value is a
+ * list of items (records followed) or a list source ({items}). */
+export function totalLabel(value: unknown, read: RecordReader): string {
+  const v = deref(value, read);
+  const list = Array.isArray(v) ? v : v && typeof v === 'object' && Array.isArray((v as { items?: unknown }).items) ? (v as { items: unknown[] }).items : [];
+  const seconds = list.reduce((sum: number, item) => {
+    const d = deref(item, read) as { durationSeconds?: unknown } | undefined;
+    return sum + (typeof d?.durationSeconds === 'number' ? d.durationSeconds : 0);
+  }, 0);
+  const count = msg(`media.count.tracks.${list.length === 1 ? 'one' : 'other'}`, { count: numberText(list.length) });
+  return seconds ? `${count}, ${durationLabel(seconds)}` : count;
+}
+
 /** Up to two initials of a name, upper case. */
 export function initials(name: string): string {
   const words = name.trim().split(/[\s\-_.]+/).filter(Boolean);
@@ -152,6 +185,12 @@ export function pipe(spec: string, page: string): Pipe | undefined {
     case 'number': return (v, read) => { const n = numeric(v, read); return Number.isFinite(n) ? numberText(n) : ''; };
     case 'percent': return (v, read) => { const n = numeric(v, read); return Number.isFinite(n) ? String(Math.round(n * 10_000) / 100) : ''; };
     case 'upper': return (v, read) => text(v, read).toLocaleUpperCase();
+    case 'lower': return (v, read) => text(v, read).toLocaleLowerCase();
+    // The value, or the literal when the value is empty.
+    case 'or': return (v, read) => { const value = deref(v, read); return text(value, read) === '' ? arg : value; };
+    case 'fullDate': return (v, read) => fullDateText(deref(v, read));
+    case 'totalLabel': return (v, read) => totalLabel(v, read);
+    case 'greeting': return (v, read) => greetingText(deref(v, read));
     case 'initials': return (v, read) => initials(text(v, read));
     case 'not': return (v, read) => !truthy(text(v, read));
     case 'count': return (v, read) => { const list = deref(v, read); return Array.isArray(list) ? list.length : 0; };

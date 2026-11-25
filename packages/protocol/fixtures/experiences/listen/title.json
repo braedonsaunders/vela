@@ -15,7 +15,7 @@
       "type": "collectionHeader", "props": { "eyebrow": "{arg.eyebrow}", "title": "{src.title.item.name}" },
       "partTemplates": {
         "collectionHeader.cover": { "type": "cover", "props": { "kind": "square", "item": "{src.title.item}", "lift": "2" } },
-        "collectionHeader.byline": { "type": "byline", "props": { "item": "{src.title.item}", "facts": "{src.title.item.yearLabel}|{src.tracks.items.length|plural:media.count.tracks}" } }
+        "collectionHeader.byline": { "type": "byline", "props": { "item": "{src.title.item}", "facts": "{src.title.item.yearLabel}|{src.tracks.items|totalLabel}" } }
       }
     },
     "heading": { "type": "text", "role": "heading", "text": "{arg.text}", "style": { "font-family": "$ui.fontDisplay", "font-size": "26px", "color": "$ui.ink", "margin-bottom": "10px" } },
