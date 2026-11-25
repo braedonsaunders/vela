@@ -152,7 +152,7 @@ export function createAudioEngine(_authorize?: unknown): (AudioEngine & { dispos
   let playing = false;
   const syncOutput = () => {
     if (!url || active !== 'gapless') { publishMusicOutput('unavailable', null, false); return; }
-    const node = gapless?.output() ?? null;
+    const node = gapless?.mixedOutput() ?? null;
     publishMusicOutput(node ? 'ready' : 'opening', node, playing);
   };
   const fits = (candidate: string) => !!gapless && rate === 1 && !HLS.test(candidate);

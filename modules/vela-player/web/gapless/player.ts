@@ -510,6 +510,7 @@ export function createGaplessPlayer(): GaplessPlayer {
     error: () => failure,
     url: () => items[0]?.url ?? '',
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    mixedOutput: () => filters.at(-1) ?? null,
     output: () => gain,
   };
 }
