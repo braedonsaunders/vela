@@ -601,6 +601,8 @@
   "player.qualityReason.owner_policy": "Limited by the server owner",
   "player.qualityReason.decoder_profile_limit": "This device cannot play this quality",
   "player.qualityReason.other": "Not available",
+  "player.qualityReason.insecurePage": "This page can't play the original file; open Vela over https or in the app",
+  "player.qualityReason.browser": "This browser can't play this file; choose a converted quality or open Vela in the app",
   "player.auto": "Auto",
   "player.speed": "Speed",
   "player.skipIntro": "Skip intro",

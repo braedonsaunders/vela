@@ -120,3 +120,37 @@ test('Plex\'s stream with a decided output is a numbered choice while the origin
   expect(view.serverStream).toBeUndefined();
   expect(view.qualities.map(q => [q.id, q.resolution])).toEqual([['path:primary', 'Original'], ['path:plex-hls', '720p']]);
 });
+
+test('an original this page cannot play is shown unavailable with why; a converted choice stays open', () => {
+  const source = plan();
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', throughputHistory: [], capabilities: {},
+    unplayablePaths: [{ id: 'primary', reason: 'insecure-page' }] } as unknown as Snapshot;
+  const view = present(source, snapshot);
+  const original = view.qualities.find(q => q.original)!;
+  expect(original.id).toBe('path:primary');
+  expect(original.disabledReason).toContain('https');
+  expect(view.qualities.filter(q => !q.original).every(q => !q.disabledReason)).toBe(true);
+  const browser = present(source, { ...snapshot, unplayablePaths: [{ id: 'primary', reason: 'browser' }] } as Snapshot);
+  expect(browser.qualities.find(q => q.original)!.disabledReason).toContain('browser');
+  // An engine that says nothing (native players) leaves every row open.
+  expect(present(source, { ...snapshot, unplayablePaths: undefined } as Snapshot).qualities.every(q => !q.disabledReason)).toBe(true);
+});
+
+test('a playable original file is offered before one the page cannot play', () => {
+  const source = plan();
+  source.paths.splice(1, 0, { ...source.paths[0]!, id: 'mp4', mimeType: 'video/mp4', original: false } as never);
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', throughputHistory: [], capabilities: {},
+    unplayablePaths: [{ id: 'primary', reason: 'browser' }] } as unknown as Snapshot;
+  const original = present(source, snapshot).qualities.find(q => q.original)!;
+  expect(original.id).toBe('path:mp4');
+  expect(original.disabledReason).toBe('');
+});
+
+test('a converted path the page cannot play gives way to an HLS rendition of the same height', () => {
+  const source = plan();
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', throughputHistory: [], capabilities: {},
+    unplayablePaths: [{ id: 'convert-720', reason: 'browser' }] } as unknown as Snapshot;
+  const row = present(source, snapshot).qualities.find(q => q.resolution === '720p')!;
+  expect(row.id).toBe('hls-720');
+  expect(row.disabledReason).toBe('');
+});

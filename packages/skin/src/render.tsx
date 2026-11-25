@@ -2,7 +2,7 @@ import { ScreenActive } from './screen-active';
 import { pagerState, readsPager, reportPager, subscribePager } from './pager-book';
 export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
-import { LAZY_STILL_MS, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, type LazySample } from './lazy-items';
+import { LAZY_STILL_MS, gridDrawn, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, scrollAudience, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
 import { msg } from '@vela/core';
 import { restartAction, secondaryPlayAction } from './restart-action';
@@ -1001,9 +1001,11 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const metrics = pager ?? pagerMetrics.current;
       reportPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= width - 1 });
     } : undefined;
-    // Android TV: the route's offset, for keeping focused controls below the shell's bar.
-    const routeLayout = route ? use(RouteLayout) : null;
-    const rowScroll = horizontal && lazyRepeats ? rowScrolls : null;
+    // The route hears its own scroll and that of a vertical box scrolling inside it (a title or
+    // person modal's body), so its grids and lazily drawn rows draw ahead as either moves.
+    const audience = scrollAudience(!!route, horizontal, !!lazyRepeats);
+    const routeLayout = audience === 'route' ? use(RouteLayout) : null;
+    const rowScroll = audience === 'row' ? rowScrolls : null;
     const onScroll = route ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (routeReveal) offsetY.current = e.nativeEvent.contentOffset.y;
       noteScrolled(e.nativeEvent.contentOffset.y);
@@ -1011,6 +1013,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     } : rowScroll ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       onPagerScroll?.(e);
       rowScroll.scrolled();
+    } : routeLayout ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onPagerScroll?.(e);
+      routeLayout.scrolled();
     } : onPagerScroll;
     if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
     element = (
@@ -1492,15 +1497,17 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
       // A hidden scene (a retained section behind another) has no size: it draws nothing ahead.
       if (!w && !h) return;
       // One batch per drawn state, however many scroll events asked for it.
-      if (y < Dimensions.get('window').height * (1 + GRID_REACH)) setDrawn(count => count === at && count < total.current ? count + GRID_BATCH : count);
+      setDrawn(count => gridDrawn(count, at, total.current, y, Dimensions.get('window').height, GRID_REACH, GRID_BATCH));
     });
   }, []);
   const complete = drawn >= items.length;
+  // Checked after each draw and as the grid grows (Show more adds titles below the drawn ones,
+  // which would otherwise only lengthen the spacer).
   useEffect(() => {
     if (complete) return;
     const frame = requestAnimationFrame(ahead);
     return () => cancelAnimationFrame(frame);
-  }, [drawn, complete, ahead, rowHeight, width]);
+  }, [drawn, complete, ahead, rowHeight, width, items.length]);
   useEffect(() => (complete || !layout ? undefined : layout.onScroll(ahead)), [complete, layout, ahead]);
   useLayoutEffect(() => { if (items.length) layout?.grid(); }, [layout, items.length]);
   const gap = grid.gap;

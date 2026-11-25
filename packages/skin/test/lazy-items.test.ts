@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach } from '../src/lazy-items';
+import { gridDrawn, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, scrollAudience } from '../src/lazy-items';
 
 describe('lazily drawn rows and items', () => {
   test('a row\'s pitch is first its offset over the drawn count, then its movement per item', () => {
@@ -42,5 +42,28 @@ describe('drawing ahead while scrolling and while still', () => {
     expect(lazyBatch('y', 2, false)).toBe(1);
     expect(lazyBatch('x', 6, false)).toBe(3);
     expect(lazyBatch('x', 1, false)).toBe(1);
+  });
+
+  test('a grid draws one batch more while its spacer is within reach, from the count measured', () => {
+    expect(gridDrawn(24, 24, 50, 900, 1000, 1.5, 24)).toBe(48);
+    expect(gridDrawn(24, 24, 50, 2600, 1000, 1.5, 24)).toBe(24);
+    // Many scroll events measured the same count: only the first adds a batch.
+    expect(gridDrawn(48, 24, 50, 900, 1000, 1.5, 24)).toBe(48);
+    expect(gridDrawn(72, 72, 50, 900, 1000, 1.5, 24)).toBe(72);
+  });
+
+  test('a grid that grows (Show more: 50 titles to 100) draws on from where it stopped', () => {
+    // At 50 titles the grid drew 72 slots and was complete; at 100 the spacer is on screen again.
+    expect(gridDrawn(72, 72, 100, 400, 1000, 1.5, 24)).toBe(96);
+    expect(gridDrawn(96, 96, 100, 400, 1000, 1.5, 24)).toBe(120);
+    expect(gridDrawn(120, 120, 100, 400, 1000, 1.5, 24)).toBe(120);
+  });
+
+  test('a vertical box scrolling inside a route (a person or title modal\'s body) tells the route', () => {
+    expect(scrollAudience(true, false, false)).toBe('route');
+    expect(scrollAudience(false, false, false)).toBe('route');
+    expect(scrollAudience(false, false, true)).toBe('route');
+    expect(scrollAudience(false, true, true)).toBe('row');
+    expect(scrollAudience(false, true, false)).toBeNull();
   });
 });

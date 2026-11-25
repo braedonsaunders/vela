@@ -60,7 +60,7 @@ export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location
           p.timelineId === selected.timelineId &&
           (p.edition ?? '') === edition,
       )
-      .map((p) => ({ id: p.id, onDemand: true })),
+      .map((p) => ({ id: p.id, onDemand: true, delivery: p.transport, mime: p.mimeType, original: p.original })),
     sources: plan.paths
       .filter(
         (p): p is PlaybackPath & { readiness: 'ready'; url: string } =>

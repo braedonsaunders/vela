@@ -244,15 +244,26 @@ function siblings(plan: PlaybackPlan, current: Path | undefined): Path[] {
   );
 }
 
+/** Why the engine cannot play a path on this page (Snapshot.unplayablePaths), in the viewer's
+ * words: an original file over plain http (no WebCodecs), or a file the browser has no player for.
+ * Empty where it can, or where the engine does not say. */
+export function unplayableReason(pathId: string, snapshot: Snapshot | null): string {
+  const reason = snapshot?.unplayablePaths?.find(entry => entry.id === pathId)?.reason;
+  if (!reason) return '';
+  return msg(reason === 'insecure-page' ? 'player.qualityReason.insecurePage' : 'player.qualityReason.browser');
+}
+
 function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapshot: Snapshot | null): QualityOption[] {
   if (!plan) return [];
+  const unplayable = (p: Path) => !!unplayableReason(p.id, snapshot);
   const originals = plan.paths
     .filter(p => p.original || p.id === 'primary' || p.kind === 'direct' && p.transport === 'file')
     .filter(p => p.readiness === 'ready' || p.readiness === 'on-demand')
     .filter(p => !current || ((!p.sourceId || !current.sourceId || p.sourceId === current.sourceId)
       && (!p.timelineId || !current.timelineId || p.timelineId === current.timelineId)
       && (p.edition ?? '') === (current.edition ?? '')))
-    .sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id))
+    // The one playing, else one this page can play (a browser-friendly file before an MKV it cannot).
+    .sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id) || Number(unplayable(a)) - Number(unplayable(b)))
     .slice(0, 1)
     .map((p): QualityOption => {
       const facts = p.quality ?? videoInfo(p.originalVideo ?? {});
@@ -264,7 +275,7 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
         traits: [resolutionOf(facts), codecName(facts?.codec), rangeName(range)].filter(Boolean).join(' · '),
         rate: rate(p.quality?.bitrate),
         needs: '',
-        disabledReason: '',
+        disabledReason: p.id === current?.id ? '' : unplayableReason(p.id, snapshot),
         original: true,
       };
     });
@@ -302,7 +313,7 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
         traits: [codecName(p.quality!.codec), rangeName(p.quality!.dynamicRange)].filter(Boolean).join(' · '),
         rate: rate(p.quality!.bitrate),
         needs: needs(p.quality!.bitrate),
-        disabledReason: '',
+        disabledReason: unplayableReason(p.id, snapshot),
         original: false,
       }),
     );
@@ -313,7 +324,8 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
   for (const option of [...switchable, ...renditions]) {
     const existing = byResolution.get(option.resolution);
     const rendition = ladder.find(q => q.id === option.id);
-    if (!existing || (rendition && rendition.codecStatus !== 'pending')) byResolution.set(option.resolution, option);
+    if (!existing || (rendition && rendition.codecStatus !== 'pending') || (existing.disabledReason && !option.disabledReason))
+      byResolution.set(option.resolution, option);
   }
   for (const option of [...originals, ...renditions, ...switchable]) option.aliases = [option.id];
   for (const option of [...renditions, ...switchable]) {

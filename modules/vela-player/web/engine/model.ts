@@ -56,6 +56,10 @@ export interface Source {
 export interface OnDemandSource {
   id: string;
   onDemand: true;
+  /** The path's delivery and type, so a page can tell it cannot play one before asking for it. */
+  delivery?: Source['delivery'];
+  mime?: string;
+  original?: boolean;
 }
 export interface PlaybackSession {
   onDemandSources?: OnDemandSource[];
@@ -189,6 +193,9 @@ export interface Snapshot {
   audioTrackId: string | null;
   pendingAudioTrackId: string | null;
   subtitleTrackId: string | null;
+  /** The plan's paths this engine cannot play here, with why (an original file on a plain-http
+   * page, a file the browser has no player for); absent where the engine plays every path. */
+  unplayablePaths?: { id: string; reason: 'insecure-page' | 'browser' }[];
   failure: Failure | null;
 }
 export type EngineEvent =

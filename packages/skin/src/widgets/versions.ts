@@ -52,3 +52,22 @@ export function preparingRetry(code: string | undefined, retry: { afterSeconds?:
 export function versionMenuGroups<T>(versions: VersionItem[] | undefined, converted: T[]) {
   return { versions: versions ?? [], converted };
 }
+
+/** The play action's argument that starts `version` of a title: its id exactly as the server gave
+ * it, Auto included. An empty id would let the server's remembered choice decide instead, so
+ * choosing Auto started whatever was remembered. */
+export function versionPlayArg(titleId: string, version: VersionItem): string {
+  return `${titleId}||||${version.id}`;
+}
+
+/** The listed version the server says is playing (Auto when it names Auto's id), if any. */
+export function selectedVersion(versions: VersionItem[] | undefined, selectedVersionId: string | undefined): VersionItem | undefined {
+  return selectedVersionId ? versions?.find(version => version.id === selectedVersionId) : undefined;
+}
+
+/** The release the player's converted qualities come from, by name: '' for the current version
+ * (Auto, which is the first row and picks a release itself, or no named choice). */
+export function convertedFrom(versions: VersionItem[] | undefined, selectedVersionId: string | undefined): string {
+  const selected = selectedVersion(versions, selectedVersionId);
+  return selected && selected.id !== versions?.[0]?.id ? selected.label.split(' · ')[0]! : '';
+}
