@@ -16,6 +16,7 @@ class VelaVisualizerModule : Module() {
       AudioPlayback.visualizerPcm && appContext.reactContext?.let { VisualizerNative.supported(it) } == true
     }
     Function("canOpenVisualizer") { VisualizerNative.canOpen }
+    Function("beginFullscreen") { VisualizerNative.beginFullscreen() }
     View(VelaVisualizerView::class) {
       Events("onUnavailable")
       Prop("sceneId") { view: VelaVisualizerView, sceneId: String? -> view.sceneId = sceneId.orEmpty() }

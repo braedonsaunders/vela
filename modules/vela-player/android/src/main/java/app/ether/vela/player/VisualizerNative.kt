@@ -6,7 +6,9 @@ import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
+import java.util.concurrent.atomic.AtomicLong
 
 internal object VisualizerNative {
   private val available by lazy {
@@ -17,7 +19,11 @@ internal object VisualizerNative {
   @Volatile private var rendererFailed = false
   private var probing = false
   @Volatile private var preparedViews = 0
+  private val fullscreenAction = AtomicLong(0)
   val canOpen get() = !rendererFailed && preparedViews > 0 && AudioPlayback.visualizerPcm
+
+  fun beginFullscreen() { fullscreenAction.set(SystemClock.uptimeMillis()) }
+  fun takeFullscreenAction() = fullscreenAction.getAndSet(0)
 
   /** Main thread. Withdraw entry when its prepared backdrop leaves the hierarchy. */
   fun prepared(ready: Boolean) {
@@ -25,8 +31,6 @@ internal object VisualizerNative {
     preparedViews += if (ready) 1 else -1
     if ((before == 0) != (preparedViews == 0)) AudioPlayback.onVisualizerAvailability?.invoke()
   }
-
-
   fun supported(context: Context): Boolean {
     if (rendererFailed) return false
     deviceSupported?.let { return it }

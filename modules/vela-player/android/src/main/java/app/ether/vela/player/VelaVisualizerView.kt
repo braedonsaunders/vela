@@ -38,6 +38,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
   private var openingScene = ""
   private var openingFullscreen = false
   private var ticket = 0L
+  private var staticPresentRetries = 0
   private var prepared = false
   private var measuredScene = ""
   private var renderer: VisualizerRenderer? = null
@@ -96,6 +97,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     openingScene = sceneId
     openingFullscreen = fullscreen
     ticket++
+    staticPresentRetries = 0
     opened = SystemClock.uptimeMillis()
   }
 
@@ -203,7 +205,16 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
             scheduled = true
             Choreographer.getInstance().postFrameCallbackDelayed(displayTick, maxOf(0, period - (now - at) - 5))
           }
-        } else schedule()
+        } else {
+          // A newly attached TextureView may discard its first buffer while the
+          // consumer resizes. A paused scene needs a replacement buffer too.
+          if (opened > 0 && visible() && staticPresentRetries < 3) {
+            staticPresentRetries++
+            dirty = true
+            texture.invalidate()
+          }
+          schedule()
+        }
       }
     }
   }
@@ -214,7 +225,9 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     val host = renderer ?: return
     if (opened > 0 && host.presentedTicket == ticket && surface.timestamp >= host.firstPresentationNs) {
       val metric = if (fullscreen) "firstFrame" else "backdropFrame"
-      Log.i("VelaVisualizer", "$metric scene=$openingScene elapsedMs=${SystemClock.uptimeMillis() - opened}")
+      val action = if (fullscreen) VisualizerNative.takeFullscreenAction() else 0L
+      val start = if (action > 0) minOf(action, opened) else opened
+      Log.i("VelaVisualizer", "$metric scene=$openingScene elapsedMs=${SystemClock.uptimeMillis() - start}")
       setPrepared(true)
       opened = -1
     }
