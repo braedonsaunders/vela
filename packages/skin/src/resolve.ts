@@ -25,9 +25,8 @@ import type { Items } from './screen/items';
 import { fold, halfPoints, lineHeightPoints, pointsToPx, screenStyleRow } from './resolve/screen-style';
 import { takesDirectionalFocus } from './focus-stop-policy';
 
-/** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
- * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
-export const RENDERER_VERSION = 19;
+import { RENDERER_VERSION } from './resolve/version';
+export { RENDERER_VERSION };
 
 /** The renderer 19 blocks (docs/plugin-screens.md: Building blocks), drawn by ./blocks. */
 export const BLOCK_KINDS = ['sections', 'shelf', 'grid', 'tabs', 'table', 'lineGraph', 'player', 'paramInput', 'titleCard', 'marquee'] as const;
