@@ -21,12 +21,17 @@ import {
 import { Byline, Heart, IconButton, LikedCover, MusicTile, PlayFab, Shelf, Wash } from './parts';
 import { cardOf, cardsOf, dedupeAlbums, shelfSubtitle } from './props';
 import type { Props } from './rich';
-import { ListeningSearch } from './search';
-import { ListeningHome, ListeningTitle } from './spoken';
+import { ListeningSearch, RecentSearches, SearchField, SearchResults } from './search';
+import { ContinueListening, Credits, ListeningHome, ListeningTitle, SpokenAbout, SpokenFacts, SpokenItems, SpokenPlay, SpokenProgress } from './spoken';
+import { PageEnd } from './paging';
+import { FocusGroup, FocusScope } from './parts';
+import { musicTV } from './layout';
+import type { ScreenPress } from '../../host';
 import { Cover } from '../../widgets/media/parts';
 
 export const PAGE_BLOCKS = ['wash', 'collectionHeader', 'cover', 'actionBar', 'byline', 'musicShelf', 'quickTiles', 'homeShelves', 'genres',
-  'artistHero', 'artistLiked', 'discography', 'listenSearch', 'spokenHome', 'spokenTitle', 'albumsGrid'] as const;
+  'artistHero', 'artistLiked', 'discography', 'listenSearch', 'spokenHome', 'spokenTitle', 'albumsGrid',
+  'searchField', 'recentSearches', 'searchResults', 'tileGrid', 'continueListening', 'spokenCredits', 'spokenFacts', 'spokenProgress', 'spokenPlay', 'spokenItems', 'spokenAbout'] as const;
 export type PageBlockName = (typeof PAGE_BLOCKS)[number];
 
 export function isPageBlock(name: string): name is PageBlockName {
@@ -34,7 +39,7 @@ export function isPageBlock(name: string): name is PageBlockName {
 }
 
 /** Draw a page-level block; `template` draws one of the node's part templates (or nothing). */
-export function PageBlock({ name, props, read, template }: { name: PageBlockName; props: Props; read: RecordReader; template(part: string): ReactNode }) {
+export function PageBlock({ name, props, read, template, press }: { name: PageBlockName; props: Props; read: RecordReader; template(part: string): ReactNode; press?(p: ScreenPress): void }) {
   switch (name) {
     case 'wash': return <Wash accent={props.text('accent')} image={props.text('image') || undefined} height={props.num('height', 0, 2000) || 420} />;
     case 'collectionHeader': return <Header eyebrow={props.text('eyebrow')} title={props.text('title')} cover={template('collectionHeader.cover')}>{template('collectionHeader.byline')}</Header>;
@@ -52,6 +57,17 @@ export function PageBlock({ name, props, read, template }: { name: PageBlockName
     case 'spokenHome': return <ListeningHome />;
     case 'spokenTitle': return <ListeningTitle id={props.text('id')} />;
     case 'albumsGrid': return <MusicAlbums query={props.text('query')} />;
+    case 'searchField': return <SearchField />;
+    case 'recentSearches': return <RecentSearches />;
+    case 'searchResults': return <SearchResults />;
+    case 'tileGrid': return <TileGridBlock props={props} read={read} press={press} />;
+    case 'continueListening': return <ContinueBlock props={props} read={read} />;
+    case 'spokenCredits': return <WithCard props={props} read={read}>{card => <Credits card={card} />}</WithCard>;
+    case 'spokenFacts': return <WithCard props={props} read={read}>{card => <SpokenFacts card={card} />}</WithCard>;
+    case 'spokenProgress': return <WithCard props={props} read={read}>{card => <SpokenProgress card={card} />}</WithCard>;
+    case 'spokenPlay': return <WithCard props={props} read={read}>{card => <SpokenPlay card={card} />}</WithCard>;
+    case 'spokenItems': return <WithCard props={props} read={read}>{card => <SpokenItems card={card} />}</WithCard>;
+    case 'spokenAbout': return <WithCard props={props} read={read}>{card => <SpokenAbout card={card} />}</WithCard>;
   }
 }
 
@@ -133,4 +149,40 @@ function MusicShelfBlock({ props, read }: { props: Props; read: RecordReader }) 
       {items.map(card => <MusicTile key={card.id} card={card} size={size} subtitle={shelfSubtitle(card, subtitle)} />)}
     </Shelf>
   );
+}
+
+/** A wrapping grid of music tiles over a list source, reading its next page (vela.more) as the
+ * grid's end comes into reach; "Loading more…" and a retry at its end. The albums grid's tiles by
+ * default (200 on TV, 132 on a phone, else 168). */
+function TileGridBlock({ props, read, press }: { props: Props; read: RecordReader; press?(p: ScreenPress): void }) {
+  const m = useMediaLook();
+  const tv = musicTV();
+  const list = props.value('items');
+  const items = cardsOf(list, read);
+  const more = !!(list && typeof list === 'object' && (list as { more?: unknown }).more === true);
+  const source = props.text('source');
+  const size = props.num('tileSize', 0, 400) || (tv ? 200 : m.small ? 132 : 168);
+  const subtitle = props.enum('subtitle', ['yearByline', 'none', 'year', 'byline', 'release', 'playlist'] as const);
+  const loadMore = () => { if (source) press?.({ action: 'plugin', arg: '', args: { name: 'vela.more', source }, control: `more-${source}` }); };
+  return (
+    <>
+      <FocusScope.Provider value={`grid:${source}`}>
+        <FocusGroup style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: m.small ? -8 : -12 }}>
+          {items.map((card, index) => (
+            <MusicTile key={card.id} card={card} size={size} preferred={index === 0} testID={`music-albums-${card.id}`}
+              subtitle={subtitle === 'yearByline' ? [card.yearLabel, card.media?.byline].filter(Boolean).join(' · ') || undefined : shelfSubtitle(card, subtitle)} />
+          ))}
+        </FocusGroup>
+      </FocusScope.Provider>
+      <PageEnd more={more} loading={props.bool('pending')} failed={!!props.text('failed')} onMore={loadMore} testID="music-albums-end" />
+    </>
+  );
+}
+
+/** Continue listening over a row (a vela.rows row: {name, items}). */
+function ContinueBlock({ props, read }: { props: Props; read: RecordReader }) {
+  const raw = props.value('row');
+  const items = cardsOf(raw, read);
+  const name = raw && typeof raw === 'object' ? String((raw as { name?: unknown }).name ?? '') : '';
+  return items.length ? <ContinueListening row={{ name: props.text('title') || name, items }} /> : null;
 }

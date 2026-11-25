@@ -108,7 +108,7 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
     case 'visualizer': drawn = <VisualizerBlock mode={props.enum('mode', ['background', 'fullscreen'] as const)} sceneId={props.text('sceneId') || undefined}
       fallback={node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : undefined} />; break;
     default: drawn = isPageBlock(node.block)
-      ? <PageBlock name={node.block} props={props} read={scoped.screen?.record ?? (() => undefined)} template={part => look.template && look.templates?.has(part) ? look.template(part, undefined, {}, 0) : null} />
+      ? <PageBlock name={node.block} props={props} read={scoped.screen?.record ?? (() => undefined)} template={part => look.template && look.templates?.has(part) ? look.template(part, undefined, {}, 0) : null} press={host.screenPress} />
       : node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;
   }
   return <ListenLookProvider look={look}>{drawn}</ListenLookProvider>;

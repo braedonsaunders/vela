@@ -2,7 +2,7 @@
 // types (the store's musicSearch, kept to this library), grouped by what the library holds
 // (search-results.ts), and this library's recent searches while the field is empty. Wide, phone
 // and TV draw the same page; on a TV the field opens Vela's keyboard (Android TV) or the system's.
-import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Pressable as PlainPressable, Text, View, type TextStyle } from 'react-native';
 import { msg, number, plural, searchList, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -30,27 +30,53 @@ const SONGS_SHOWN = 4;
 let searchedLibrary = '';
 
 export function ListeningSearch() {
+  const m = useMediaLook();
+  return (
+    <View style={{ paddingHorizontal: pad(m), paddingTop: m.small ? 12 : 24, paddingBottom: 24 }} testID="music-search">
+      <SearchField />
+      <View style={{ marginTop: m.small ? 18 : 26 }}>
+        <SearchResults />
+        <RecentSearches />
+      </View>
+    </View>
+  );
+}
+
+/** The search kept to this library: the query as typed (the store's, so the field, the recent
+ * searches and the results agree wherever a page draws them), and how to change it. */
+export function useListenSearch(): { text: string; query: string; change(next: string): void } {
   const app = useMusic();
   const store = useVela();
-  const m = useMediaLook();
-  const words = listeningWords(app.listening);
-  const libraryName = useVelaState(state => state.libraries.value?.find(library => library.id === app.libraryId)?.name ?? '');
-  const search = useVelaState(state => state.musicSearch);
-  const [text, setText] = useState(() => (searchedLibrary === app.libraryId ? search.query : ''));
+  const typed = useVelaState(state => state.musicSearch.query);
+  const text = searchedLibrary === app.libraryId ? typed : '';
   useEffect(() => {
     if (searchedLibrary !== app.libraryId) { searchedLibrary = app.libraryId; store.musicSearch.clear(); }
     store.musicSearch.scopeTo(app.libraryId);
   }, [store, app.libraryId]);
-  const change = (next: string) => { setText(next); store.musicSearch.setQuery(next); };
-  const query = text.trim();
-  return (
-    <View style={{ paddingHorizontal: pad(m), paddingTop: m.small ? 12 : 24, paddingBottom: 24 }} testID="music-search">
-      <SearchBox value={text} onChange={change} placeholder={msg(words.searchPlaceholder)} onSubmit={() => app.noteSearch(text)} />
-      <View style={{ marginTop: m.small ? 18 : 26 }}>
-        {query ? <Results query={query} /> : <Recent onPick={change} intro={msg(words.searchIntro, { library: libraryName || msg('music.yourLibrary') })} />}
-      </View>
-    </View>
-  );
+  const change = useCallback((next: string) => store.musicSearch.setQuery(next), [store]);
+  return { text, query: text.trim(), change };
+}
+
+/** The search field (the `searchField` block). */
+export function SearchField() {
+  const app = useMusic();
+  const { text, change } = useListenSearch();
+  return <SearchBox value={text} onChange={change} placeholder={msg(listeningWords(app.listening).searchPlaceholder)} onSubmit={() => app.noteSearch(text)} />;
+}
+
+/** This library's recent searches, or the intro, while the field is empty (the `recentSearches` block). */
+export function RecentSearches() {
+  const app = useMusic();
+  const { query, change } = useListenSearch();
+  const libraryName = useVelaState(state => state.libraries.value?.find(library => library.id === app.libraryId)?.name ?? '');
+  if (query) return null;
+  return <Recent onPick={change} intro={msg(listeningWords(app.listening).searchIntro, { library: libraryName || msg('music.yourLibrary') })} />;
+}
+
+/** The results for what is typed, nothing while the field is empty (the `searchResults` block). */
+export function SearchResults() {
+  const { query } = useListenSearch();
+  return query ? <Results query={query} /> : null;
 }
 
 // ——— The field ———————————————————————————————————————————————————————————————————————

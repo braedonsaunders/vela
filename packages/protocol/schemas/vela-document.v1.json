@@ -3439,6 +3439,23 @@
           ],
           "tv": "No focus of its own; links in the byline template are focusable."
         },
+        "continueListening": {
+          "doc": "Continue listening: a card per title under way with its progress and what is left; Play resumes (select resumes on TV).",
+          "parts": [],
+          "props": {
+            "row": {
+              "doc": "A vela.rows row ({name, items}).",
+              "required": true,
+              "type": "value"
+            },
+            "title": {
+              "doc": "The heading; the row's name, else \"Continue listening\".",
+              "type": "template"
+            }
+          },
+          "templates": [],
+          "tv": "A focus grid."
+        },
         "cover": {
           "doc": "A cover: a title's artwork (square, round for artists, book), Liked Songs' heart, a playlist's mosaic, or Rewind's, import's or duplicates' covers.",
           "parts": [],
@@ -3812,12 +3829,111 @@
           "templates": [],
           "tv": "As the Rewind page."
         },
+        "recentSearches": {
+          "doc": "This library's recent searches (or the intro) while the field is empty; nothing once something is typed.",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "Rows are focus targets."
+        },
+        "searchField": {
+          "doc": "The audio app's search field: focused as the page opens, Escape clears it, Vela's or the system's keyboard on a TV. Its query is the store's, shared with recentSearches and searchResults.",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "One focus target that opens the keyboard; the clear button beside it."
+        },
+        "searchResults": {
+          "doc": "The results for what is typed, grouped by what the library holds (top result, songs, albums, artists, people, playlists), with loading, failed and empty states; nothing while the field is empty.",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "As the page."
+        },
+        "spokenAbout": {
+          "doc": "About: the summary and the facts table (a show's summary is in spokenItems).",
+          "parts": [],
+          "props": {
+            "item": {
+              "doc": "The title.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus."
+        },
+        "spokenCredits": {
+          "doc": "A spoken title's credits: by the author, narrated by, hosted by.",
+          "parts": [],
+          "props": {
+            "item": {
+              "doc": "The title.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus."
+        },
+        "spokenFacts": {
+          "doc": "The facts under the credits: year, length, parts or chapters and genre (a book); episodes and genre (a show); year and count (a collection).",
+          "parts": [],
+          "props": {
+            "item": {
+              "doc": "The title.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus."
+        },
         "spokenHome": {
           "doc": "Home for the library (music Home, or spoken word's Home for audiobooks and podcasts), whole.",
           "parts": [],
           "props": {},
           "templates": [],
           "tv": "As the page."
+        },
+        "spokenItems": {
+          "doc": "A spoken title's list: a book's parts or chapters; a show's summary and episodes with the All / New chips; a collection's items when they all play.",
+          "parts": [],
+          "props": {
+            "item": {
+              "doc": "The title.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "Rows are single focus targets."
+        },
+        "spokenPlay": {
+          "doc": "A spoken title's action bar: listen or resume (and Start over), or play the show's next episode, the heart and the menu, with a line when this device cannot play it.",
+          "parts": [],
+          "props": {
+            "item": {
+              "doc": "The title.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "One focus row; play takes focus first."
+        },
+        "spokenProgress": {
+          "doc": "An audiobook under way: the bar, what is left and the chapter; Finished once played.",
+          "parts": [],
+          "props": {
+            "item": {
+              "doc": "The audiobook.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus."
         },
         "spokenTitle": {
           "doc": "A title page in the audio app (an album or artist for music; a book, show or collection for spoken word), whole.",
@@ -3831,6 +3947,49 @@
           },
           "templates": [],
           "tv": "As the page."
+        },
+        "tileGrid": {
+          "doc": "A wrapping grid of music tiles over a list source, reading its next page (vela.more) as the end comes into reach, with \"Loading more…\" and a retry at its end.",
+          "parts": [],
+          "props": {
+            "failed": {
+              "doc": "The source's error, when its last read failed ({src.x.$error}).",
+              "type": "template"
+            },
+            "items": {
+              "doc": "The list source's value ({items, more}).",
+              "required": true,
+              "type": "value"
+            },
+            "pending": {
+              "doc": "Whether a page is being read ({src.x.$pending}).",
+              "type": "value"
+            },
+            "source": {
+              "doc": "The list source's name on this page, for vela.more.",
+              "type": "template"
+            },
+            "subtitle": {
+              "default": "yearByline",
+              "doc": "The line under each tile.",
+              "type": "enum",
+              "values": [
+                "yearByline",
+                "none",
+                "year",
+                "byline",
+                "release",
+                "playlist"
+              ]
+            },
+            "tileSize": {
+              "default": "0",
+              "doc": "px; 0 is 200 on TV, 132 on a phone, else 168.",
+              "type": "number"
+            }
+          },
+          "templates": [],
+          "tv": "A focus grid; the first tile takes focus as the page opens."
         },
         "trackTable": {
           "doc": "A tracklist: number (a play control on hover, a live meter on the track playing), cover, title with the explicit mark and artist, album, the heart, duration and the row menu. Double-click or Enter plays from a track (a tap on touch, select on TV); right-click or long-press opens the menu.",
@@ -4253,6 +4412,7 @@
             "bar",
             "byline",
             "collectionHeader",
+            "continueListening",
             "cover",
             "discography",
             "duplicates",
@@ -4268,8 +4428,18 @@
             "quickTiles",
             "rail",
             "recap",
+            "recentSearches",
+            "searchField",
+            "searchResults",
+            "spokenAbout",
+            "spokenCredits",
+            "spokenFacts",
             "spokenHome",
+            "spokenItems",
+            "spokenPlay",
+            "spokenProgress",
             "spokenTitle",
+            "tileGrid",
             "trackTable",
             "wash"
           ]
