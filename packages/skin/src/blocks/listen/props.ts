@@ -83,6 +83,38 @@ export function playlistMove(entryIds: readonly string[], from: number, to: numb
   return { entryId, afterEntryId: to === 0 ? null : rest[to - 1] ?? null };
 }
 
+/** A list with the item at `from` moved to `to`. */
+export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
+  const out = [...list];
+  if (from < 0 || from >= out.length || to < 0 || to >= out.length) return out;
+  const [item] = out.splice(from, 1) as [T];
+  out.splice(to, 0, item);
+  return out;
+}
+
+/** A queue move by play positions (store.audio.move): only upcoming items move, never the one
+ * playing or anything before it. Nothing when it would not move. */
+export function queueMove(from: number, to: number, at: number, length: number): { from: number; to: number } | undefined {
+  if (from === to || from <= at || to <= at || from >= length || to >= length) return undefined;
+  return { from, to };
+}
+
+/** The lyric line being sung at `ms` (a quarter second early, so a line lights as it starts): the
+ * last line starting at or before then, -1 before the first. */
+export function lyricLine(lines: readonly { startMs: number }[], ms: number): number {
+  const at = ms + 250;
+  let i = -1;
+  for (let n = 0; n < lines.length; n++) { if (lines[n]!.startMs <= at) i = n; else break; }
+  return i;
+}
+
+/** The words of a word-timed line lit at `ms`: every word that has started. */
+export function litWords(words: readonly { startMs: number }[], ms: number): number {
+  let lit = 0;
+  for (const word of words) { if (word.startMs <= ms + 120) lit++; else break; }
+  return lit;
+}
+
 /** Rows drawn with the first frame, and how many more each following frame adds. */
 export const FIRST_ROWS = 60;
 export const MORE_ROWS = 120;
