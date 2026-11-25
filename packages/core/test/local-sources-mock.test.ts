@@ -255,3 +255,21 @@ test("the library's album view answers unsupported where the library has none", 
   expect(page().errors.albums).toBe('unsupported');
   handle.release();
 });
+
+test("a source reading another's value waits for it, then reads with it ({src.…} holes)", async () => {
+  const doc: ScreenDocument = { ...albumPage, page: 'moreBy', params: { id: { type: 'string' } }, sources: {
+    title: { from: 'vela.title', id: '{param.id}' },
+    moreBy: { from: 'vela.children', id: '{src.title.item.media.parents.0.id}', role: 'album' },
+    broken: { from: 'vela.children', id: '{src.missing.item.id}' },
+  } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/moreBy' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'moreBy' }, href: 'vela:listen/moreBy', params: { id: album.id } });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && 'moreBy' in page().sources);
+  const artist = album.media!.parents!.find(parent => parent.role === 'artist')!.id;
+  const albums = mediaChildren(artist, 'album').map(item => `item:${item.id}`);
+  expect((page().sources.moreBy as ListValue).items.map(item => item.$record)).toEqual(albums);
+  // A hole reading a source the page does not have reads empty: a required id is refused.
+  expect(page().errors.broken).toBe('invalid_request');
+  handle.release();
+});

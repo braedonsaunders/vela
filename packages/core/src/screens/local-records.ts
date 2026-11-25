@@ -156,7 +156,39 @@ export function nowPlayingRecord(audio: NowPlayingInput): { value: P.NowPlayingR
 // Arguments
 
 /** Where a source's holes are filled from: the page's params and a surface's context. */
-export interface LocalScope { params: Record<string, string>; context?: Record<string, string> }
+export interface LocalScope {
+  params: Record<string, string>;
+  context?: Record<string, string>;
+  /** The page's other sources as held now, for `{src.<name>.<path>}` holes. */
+  sources?: Record<string, unknown>;
+  /** The record pool, which `{src.…}` paths follow through `{$record}` references. */
+  record?: (key: string) => unknown;
+}
+
+/** The sources a spec's `{src.<name>…}` holes read (it is answered after them, and again when they change). */
+export function sourceDependencies(spec: SourceSpec): string[] {
+  const { from: _from, lazy: _lazy, deps: _deps, ...args } = spec;
+  const found = new Set<string>();
+  for (const match of JSON.stringify(args).matchAll(/\{src\.([A-Za-z0-9_-]+)/g)) found.add(match[1]!);
+  return [...found].sort();
+}
+
+/** A value at `path` (dot segments, numeric indices, `length`) under `root`, following `{$record}`
+ * references through `record`; '' when absent or not text, a number or a boolean. */
+export function pathText(root: unknown, path: string, record?: (key: string) => unknown): string {
+  let at: unknown = root;
+  const follow = () => {
+    for (let hops = 0; hops < 8 && at && typeof at === 'object' && !Array.isArray(at) && typeof (at as RecordRef).$record === 'string' && Object.keys(at).length === 1; hops++) at = record?.((at as RecordRef).$record);
+  };
+  for (const segment of path.split('.').filter(Boolean)) {
+    follow();
+    if (Array.isArray(at)) at = segment === 'length' ? at.length : at[Number(segment)];
+    else if (at && typeof at === 'object') at = (at as Record<string, unknown>)[segment];
+    else return '';
+  }
+  follow();
+  return typeof at === 'string' ? at : typeof at === 'number' && Number.isFinite(at) ? String(at) : typeof at === 'boolean' ? String(at) : '';
+}
 
 /**
  * A source's arguments as strings, its `{param.x}` and `{context.x}` holes filled (an unknown hole
@@ -168,9 +200,14 @@ export function sourceArgs(spec: SourceSpec, scope: LocalScope): Record<string, 
   for (const [name, raw] of Object.entries(args)) {
     if (raw === undefined || raw === null) continue;
     const text = typeof raw === 'string' ? raw : typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : '';
-    // `{param.x}` and `{context.x}`, with `|or:<text>` for an empty or missing value.
-    out[name] = text.replace(/\{(param|context)\.([A-Za-z0-9_.-]+)(?:\|or:([^}]*))?\}/g, (_hole, kind: string, key: string, fallback?: string) =>
-      (kind === 'param' ? scope.params[key] : scope.context?.[key]) || (fallback ?? ''));
+    // `{param.x}`, `{context.x}` and `{src.<source>.<path>}`, with `|or:<text>` for an empty or missing value.
+    out[name] = text.replace(/\{(param|context|src)\.([A-Za-z0-9_.$-]+)(?:\|or:([^}]*))?\}/g, (_hole, kind: string, key: string, fallback?: string) => {
+      if (kind === 'src') {
+        const [source, ...path] = key.split('.');
+        return pathText(scope.sources?.[source!], path.join('.'), scope.record) || (fallback ?? '');
+      }
+      return (kind === 'param' ? scope.params[key] : scope.context?.[key]) || (fallback ?? '');
+    });
   }
   return out;
 }
