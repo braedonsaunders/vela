@@ -16,7 +16,7 @@ internal object VisualizerEgl {
     return checkNotNull(configs[0])
   }
 
-  fun context(display: EGLDisplay, config: EGLConfig?) =
+  fun createContext(display: EGLDisplay, config: EGLConfig?) =
     EGL14.eglCreateContext(display, config, EGL14.EGL_NO_CONTEXT,
       intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE), 0)
 
@@ -28,7 +28,7 @@ internal object VisualizerEgl {
     var context = EGL14.EGL_NO_CONTEXT
     try {
       val cfg = config(display, EGL14.EGL_PBUFFER_BIT)
-      context = context(display, cfg)
+      context = createContext(display, cfg)
       if (context == EGL14.EGL_NO_CONTEXT) return false
       target = EGL14.eglCreatePbufferSurface(display, cfg,
         intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE), 0)

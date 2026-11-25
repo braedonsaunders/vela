@@ -40,7 +40,7 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
       display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
       check(display != EGL14.EGL_NO_DISPLAY && EGL14.eglInitialize(display, null, 0, null, 0))
       config = VisualizerEgl.config(display, EGL14.EGL_WINDOW_BIT)
-      context = VisualizerEgl.context(display, config)
+      context = VisualizerEgl.createContext(display, config)
       check(context != EGL14.EGL_NO_CONTEXT)
     }
     if (w == width && h == height && target != EGL14.EGL_NO_SURFACE) return
@@ -66,10 +66,10 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
       if (ticket != generation) return@post
       val success = try {
         if (handle != 0L && currentId != id) release()
-        val start = SystemClock.uptimeMillis()
-        configure(w, h)
-        val eglReady = SystemClock.uptimeMillis()
         val first = handle == 0L
+        val start = if (first) SystemClock.uptimeMillis() else 0L
+        configure(w, h)
+        val eglReady = if (first) SystemClock.uptimeMillis() else 0L
         if (first) {
           handle = VisualizerNative.create(assets, w, h, id, artwork, accent)
           check(handle != 0L)
@@ -90,9 +90,9 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
           loggedDecks = decks.size
           Log.i("VelaVisualizer", "heardPcm scene=$id decks=$loggedDecks rate=${VisualizerAudio.RATE}")
         }
-        val drawStart = SystemClock.uptimeMillis()
+        val drawStart = if (first) SystemClock.uptimeMillis() else 0L
         check(VisualizerNative.frame(handle, pcm))
-        val submittedAt = SystemClock.uptimeMillis()
+        val submittedAt = if (first) SystemClock.uptimeMillis() else 0L
         if (first) {
           val stamp = System.nanoTime()
           firstPresentationNs = if (EGLExt.eglPresentationTimeANDROID(display, target, stamp)) stamp else 0L
