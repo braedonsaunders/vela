@@ -374,8 +374,8 @@ export const heroCopy: Node = {
 // cannot sit on the actions): one short segment per title, the one on show filling over the
 // rotation interval and held full while the hero waits; a resume title's segment takes the accent.
 // Beside them "2 / 6 · Continue watching", then previous, pause and next. Each segment is one node
-// whatever its state, so focus stays on it as the hero changes; the renderer gives the segments one
-// tab stop and moves among them with the arrow keys.
+// whatever its state. They remain pointer/touch shortcuts but never enter directional focus order;
+// keyboard and remote arrows change slides from the hero's action buttons.
 const segmentTrack = (color: string): Style => ({
   position: 'relative',
   width: 'calc(100% - 8px)',

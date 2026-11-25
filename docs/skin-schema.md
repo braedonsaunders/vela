@@ -61,3 +61,9 @@ A row in `home.rows`, `library.rows` or `detail.related` binds these keys beside
 The retired wire field `style` is not read. A plugin's surface row (a `homeRow` surface) sits in
 the list where the page put it, with no items; the renderer draws the surface's document in its
 place on Home and library pages (or nothing when this client may not draw it).
+
+Rows with a See all destination always end with a focusable See all card on every client. Row
+headings are pointer conveniences only and never enter keyboard, D-pad or remote focus order.
+Skins style the end card by overriding the inherited `velaSeeAll` template; its style, viewport
+variants, hover and focus layers are retained while Vela supplies the row-opening behavior and
+accessible label. It should use `align-self: stretch` so it matches the shelf's card height.

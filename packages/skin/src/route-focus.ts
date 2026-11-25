@@ -32,10 +32,10 @@ function listen(): void {
   });
 }
 
-/** The route's first focus, for SkinRoute to provide (TV only; null elsewhere). */
-export function useRouteFocus(): RouteFocus | null {
-  if (Platform.isTV) listen();
-  return useMemo(() => (Platform.isTV ? firstFocus() : null), []);
+/** The route's first focus for directional clients; native touch leaves focus to the viewer. */
+export function useRouteFocus(enabled = Platform.isTV): RouteFocus | null {
+  if (Platform.isTV && enabled) listen();
+  return useMemo(() => (enabled ? firstFocus() : null), [enabled]);
 }
 
 export function useRouteFocusContext(): RouteFocus | null {
@@ -84,7 +84,19 @@ function pressedSince(opened: number): boolean {
 }
 
 function move(target: Focusable): void {
-  if (target.requestTVFocus) target.requestTVFocus();
+  if (Platform.OS === 'web') {
+    // Browser focus normally scrolls the opening Resume/Play control toward the centre. Keep the
+    // detail artwork and title at the top while still placing keyboard focus on the action.
+    (target as Focusable & { focus?(options?: FocusOptions): void }).focus?.({ preventScroll: true });
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      const route = active?.closest('[role="dialog"], main');
+      if (!route) return;
+      for (const element of Array.from(route.querySelectorAll<HTMLElement>('*'))) {
+        if (element.scrollTop) element.scrollTop = 0;
+      }
+    });
+  } else if (target.requestTVFocus) target.requestTVFocus();
   else target.focus?.();
 }
 

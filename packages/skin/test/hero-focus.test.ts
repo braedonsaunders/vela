@@ -95,3 +95,13 @@ test('leaving Home with every hero button hands focus to nothing', () => {
   carry.remove('more');
   expect(carry.take()).toBeUndefined();
 });
+
+test('hero action edges are the first and last ranked buttons', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('resume', resume);
+  carry.add('more', moreInfo);
+  carry.add('restart', restart);
+  expect(carry.atEdge('resume', -1)).toBe(true);
+  expect(carry.atEdge('more', -1)).toBe(false);
+  expect(carry.atEdge('restart', 1)).toBe(true);
+});
