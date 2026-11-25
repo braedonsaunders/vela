@@ -253,6 +253,7 @@ export function feedRow(row: WireRow | SurfaceRow, images?: Images, artWidth = 2
   const card = known(CARDS, row.card), role = text(row.role), library = text(row.library), experience = known(EXPERIENCES, row.experience);
   return {
     id: row.id,
+    ...(typeof row.key === 'string' && row.key ? { key: row.key } : {}),
     name: row.name,
     purpose: row.purpose,
     receipt: row.receiptToken,
