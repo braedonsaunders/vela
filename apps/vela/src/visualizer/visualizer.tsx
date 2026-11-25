@@ -43,7 +43,7 @@ function SceneButton({ id, label, image, selected, onPress }: {
   const { state, handlers } = useInteraction();
   return (
     <FocusPressable {...handlers} testID={id} nativeID={id} ref={focusTarget(id)} accessibilityRole="radio"
-      accessibilityState={{ checked: selected }} onPress={onPress}
+      accessibilityState={{ checked: selected }} {...(Platform.OS === 'web' ? { 'aria-checked': selected } : {})} onPress={onPress}
       style={[{ borderRadius: 14, padding: 4, width: 138, justifyContent: 'center',
         borderWidth: 2, borderColor: state.focus ? look.ui.ink : 'transparent',
         backgroundColor: selected ? look.ui.accent : state.hover || state.focus ? look.ui.controlHover : look.ui.popover }, parts['visualizer.sceneChip'], selected && parts['visualizer.sceneChipActive']]}>
@@ -96,7 +96,7 @@ function ScenePicker({ id, choose }: { id: string; choose(id: string): void }) {
     <View pointerEvents="box-none" style={{ position: 'absolute', left: viewport.insets.left + 20, right: viewport.insets.right + 20,
       bottom: viewport.insets.bottom + 20, alignItems: 'flex-start', gap: 8 }}>
       {expanded ? (
-        <ScrollView nativeID="visualizer.scenePicker" testID="visualizer-picker" horizontal keyboardShouldPersistTaps="handled"
+        <ScrollView accessibilityRole="radiogroup" accessibilityLabel={msg('visualizer.scenes')} nativeID="visualizer.scenePicker" testID="visualizer-picker" horizontal keyboardShouldPersistTaps="handled"
           style={[{ maxWidth: '100%', borderRadius: 26, backgroundColor: look.ui.popover }, parts['visualizer.scenePicker']]} contentContainerStyle={{ gap: 6, padding: 6 }}>
           {scenes.map(scene => <SceneButton key={scene.id} id={'visualizer-scene-' + scene.id}
             label={scene.name} image={thumbnails[scene.id]!} selected={scene.id === id}
@@ -107,7 +107,7 @@ function ScenePicker({ id, choose }: { id: string; choose(id: string): void }) {
         onFocus={() => { handlers.onFocus(); stageFocused.current = true; }}
         onBlur={() => { handlers.onBlur(); stageFocused.current = false; }}
         accessibilityRole="button" accessibilityLabel={msg('visualizer.pick', { scene: selected.name })}
-        accessibilityState={{ expanded }} onPress={() => setExpanded(open => !open)}
+        accessibilityState={{ expanded }} {...(Platform.OS === 'web' ? { 'aria-expanded': expanded } : {})} onPress={() => setExpanded(open => !open)}
         style={{ borderRadius: 18, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 2,
           borderColor: state.focus ? look.ui.ink : 'transparent', backgroundColor: look.ui.popover }}>
         <Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '12px' })}>{msg('visualizer.scenes')}</Text>
