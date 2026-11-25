@@ -5,9 +5,9 @@ const root = path.resolve(import.meta.dir, '..');
 
 // Embed the atlas only for bundles that actually include the map. Omit long empty
 // spans so standalone Hermes/JSC bundles can load it without an image decoder.
-export function mapAtlasSource() {
-  const metadata = JSON.parse(fs.readFileSync(path.join(root, 'assets/contour-labels.json'), 'utf8'));
-  const pixels = fs.readFileSync(path.join(root, 'assets/contour-labels.r8'));
+export function mapAtlasSource(variant = '') {
+  const metadata = JSON.parse(fs.readFileSync(path.join(root, 'assets', variant, 'contour-labels.json'), 'utf8'));
+  const pixels = fs.readFileSync(path.join(root, 'assets', variant, 'contour-labels.r8'));
   if (pixels.length !== metadata.width * metadata.height ||
       new Bun.CryptoHasher('sha256').update(pixels).digest('hex') !== metadata.sha256) {
     throw new Error('Map atlas does not match its manifest');
