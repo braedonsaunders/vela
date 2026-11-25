@@ -109,7 +109,7 @@
               "children": [
                {
                 "type": "text",
-                "text": "{src.me.name|initials}",
+                "text": "{src.me.name|initial}",
                 "style": {
                  "font-size": "12px",
                  "font-weight": "800",
@@ -137,7 +137,10 @@
              }
             ]
            }
-          ]
+          ],
+          "small": {
+           "gap": "8px"
+          }
          }
         }
        },
