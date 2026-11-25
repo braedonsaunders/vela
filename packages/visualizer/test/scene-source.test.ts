@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import source from '../review.json';
 import scenes from '../scenes.json';
+import { metalLibrary } from '../tools/metal-library';
 
 test('the shipped scene sources reproduce the reviewed standalone page byte for byte', () => {
   const directory = join(import.meta.dir, '../scenes');
@@ -29,8 +30,10 @@ test('the packaged native bundle regenerates byte for byte and Metal covers ever
     expect(JSON.parse(read(scratch, 'scenes.json'))).toEqual(scenes);
     const pair = (entry: { vs: string; fs: string }) =>
       createHash('sha256').update(entry.vs).update('\0').update(entry.fs).digest('hex');
-    expect(JSON.parse(read(assets, 'apple-shaders.json')).map(pair).sort())
+    const metal = JSON.parse(read(assets, 'apple-shaders.json'));
+    expect(metal.map(pair).sort())
       .toEqual(JSON.parse(read(scratch, 'programs.json')).map(pair).sort());
+    expect(metalLibrary(metal) === read(assets, 'viz-shaders.metal')).toBe(true);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

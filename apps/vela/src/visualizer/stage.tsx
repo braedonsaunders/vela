@@ -5,6 +5,7 @@ import type { StageProps } from './stage-types';
 interface VisualizerModule {
   canVisualize(): boolean;
   canOpenVisualizer?(): boolean;
+  beginFullscreen?(): void;
   addListener?(name: 'onAvailabilityChange', changed: () => void): { remove(): void };
 }
 const native = requireOptionalNativeModule<VisualizerModule>('VelaVisualizer');
@@ -15,6 +16,7 @@ export function canVisualize(): boolean {
 export function canOpenVisualizer(): boolean {
   try { return native?.canOpenVisualizer?.() ?? canVisualize(); } catch { return false; }
 }
+export function beginVisualizerFullscreen() { native?.beginFullscreen?.(); }
 
 export function subscribeVisualizerAvailability(update: () => void) {
   const listener = native?.addListener?.('onAvailabilityChange', update);

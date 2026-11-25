@@ -14,6 +14,7 @@ import { focusElement } from '@vela/skin/src/escape';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
 import { useCanOpenVisualizer, useCanVisualize } from '../visualizer/availability';
 import { Visualizer } from '../visualizer/visualizer';
+import { beginVisualizerFullscreen } from '../visualizer/stage';
 import { inVisualizerHistory, popVisualizerHistory, pushVisualizerHistory } from '../visualizer/page-history';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
@@ -146,6 +147,7 @@ export function AudioDock() {
     if (Platform.OS === 'web') popVisualizerHistory(window.history);
   }, [visuals, expanded]);
   const openVisualizer = useCallback(() => {
+    beginVisualizerFullscreen();
     if (Platform.OS === 'web') pushVisualizerHistory(window.history);
     setExpanded(true);
   }, []);

@@ -14,7 +14,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -23,7 +23,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -32,12 +32,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -82,7 +82,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -91,7 +91,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -100,12 +100,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -212,7 +212,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -221,7 +221,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -230,12 +230,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -280,7 +280,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -289,7 +289,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -298,12 +298,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -378,7 +378,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -387,7 +387,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -396,12 +396,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -446,7 +446,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -455,7 +455,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -464,12 +464,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -539,7 +539,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -548,7 +548,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -557,12 +557,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -607,7 +607,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -616,7 +616,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -625,12 +625,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -741,7 +741,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -750,7 +750,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -759,12 +759,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -809,7 +809,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -818,7 +818,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -827,12 +827,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -928,7 +928,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -937,7 +937,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -946,12 +946,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -996,7 +996,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1005,7 +1005,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1014,12 +1014,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -1096,7 +1096,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1105,7 +1105,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1114,12 +1114,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -1164,7 +1164,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1173,7 +1173,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1182,12 +1182,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -1267,7 +1267,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1276,7 +1276,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1285,12 +1285,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -1335,7 +1335,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1344,7 +1344,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1353,12 +1353,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -1472,7 +1472,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1481,7 +1481,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1490,12 +1490,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -1540,7 +1540,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1549,7 +1549,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1558,12 +1558,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -1607,7 +1607,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -1616,7 +1616,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -1625,12 +1625,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -2136,7 +2136,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -2145,7 +2145,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -2154,12 +2154,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -2449,7 +2449,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -2458,7 +2458,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -2467,12 +2467,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -2517,7 +2517,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -2526,7 +2526,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -2535,12 +2535,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -2584,7 +2584,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -2593,7 +2593,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -2602,12 +2602,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -3191,7 +3191,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -3200,7 +3200,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -3209,12 +3209,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -3549,7 +3549,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -3558,7 +3558,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -3567,12 +3567,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -3617,7 +3617,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -3626,7 +3626,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -3635,12 +3635,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -3684,7 +3684,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -3693,7 +3693,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -3702,12 +3702,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -4264,7 +4264,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -4273,7 +4273,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -4282,12 +4282,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -4332,7 +4332,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -4341,7 +4341,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -4350,12 +4350,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -4399,7 +4399,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -4408,7 +4408,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -4417,12 +4417,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -4734,7 +4734,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -4743,7 +4743,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -4752,12 +4752,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -4935,7 +4935,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -4944,7 +4944,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -4953,12 +4953,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -5135,7 +5135,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -5144,7 +5144,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -5153,12 +5153,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -5567,7 +5567,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -5576,7 +5576,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -5585,12 +5585,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -5635,7 +5635,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -5644,7 +5644,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -5653,12 +5653,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -5852,7 +5852,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -5861,7 +5861,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -5870,12 +5870,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6053,7 +6053,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6062,7 +6062,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6071,12 +6071,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6253,7 +6253,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6262,7 +6262,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6271,12 +6271,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6461,7 +6461,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6470,7 +6470,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6479,12 +6479,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6529,7 +6529,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6538,7 +6538,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6547,12 +6547,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6596,7 +6596,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6605,7 +6605,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6614,12 +6614,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6756,7 +6756,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6765,7 +6765,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6774,12 +6774,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6824,7 +6824,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6833,7 +6833,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6842,12 +6842,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -6891,7 +6891,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -6900,7 +6900,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -6909,12 +6909,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -7138,7 +7138,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -7147,7 +7147,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -7156,12 +7156,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -7413,7 +7413,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -7422,7 +7422,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -7431,12 +7431,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -7687,7 +7687,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -7696,7 +7696,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -7705,12 +7705,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -8064,7 +8064,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -8073,7 +8073,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -8082,12 +8082,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -8411,7 +8411,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -8420,7 +8420,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -8429,12 +8429,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -9002,7 +9002,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -9011,7 +9011,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -9020,12 +9020,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -9216,7 +9216,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -9225,7 +9225,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -9234,12 +9234,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -9284,7 +9284,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -9293,7 +9293,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -9302,12 +9302,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -9351,7 +9351,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -9360,7 +9360,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -9369,12 +9369,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -9862,7 +9862,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -9871,7 +9871,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -9880,12 +9880,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -10313,7 +10313,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -10322,7 +10322,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -10331,12 +10331,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -10655,7 +10655,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -10664,7 +10664,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -10673,12 +10673,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -10886,7 +10886,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -10895,7 +10895,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -10904,12 +10904,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -10954,7 +10954,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -10963,7 +10963,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -10972,12 +10972,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -11191,7 +11191,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -11200,7 +11200,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -11209,12 +11209,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -11259,7 +11259,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -11268,7 +11268,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -11277,12 +11277,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -11326,7 +11326,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -11335,7 +11335,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -11344,12 +11344,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -11615,7 +11615,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -11624,7 +11624,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -11633,12 +11633,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -11683,7 +11683,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -11692,7 +11692,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -11701,12 +11701,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -11750,7 +11750,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -11759,7 +11759,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -11768,12 +11768,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -11985,7 +11985,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -11994,7 +11994,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -12003,12 +12003,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -12053,7 +12053,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -12062,7 +12062,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -12071,12 +12071,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -12260,7 +12260,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -12269,7 +12269,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -12278,12 +12278,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -12479,7 +12479,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -12488,7 +12488,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -12497,12 +12497,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -12729,7 +12729,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -12738,7 +12738,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -12747,12 +12747,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -12797,7 +12797,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -12806,7 +12806,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -12815,12 +12815,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -12864,7 +12864,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -12873,7 +12873,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -12882,12 +12882,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -13012,7 +13012,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -13021,7 +13021,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -13030,12 +13030,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -13080,7 +13080,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -13089,7 +13089,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -13098,12 +13098,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -13147,7 +13147,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -13156,7 +13156,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -13165,12 +13165,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -13378,7 +13378,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -13387,7 +13387,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -13396,12 +13396,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -13637,7 +13637,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -13646,7 +13646,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -13655,12 +13655,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -13922,7 +13922,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -13931,7 +13931,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -13940,12 +13940,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -13990,7 +13990,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -13999,7 +13999,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -14008,12 +14008,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -14057,7 +14057,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -14066,7 +14066,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -14075,12 +14075,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -14359,7 +14359,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -14368,7 +14368,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -14377,12 +14377,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -14427,7 +14427,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -14436,7 +14436,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -14445,12 +14445,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -14494,7 +14494,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -14503,7 +14503,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -14512,12 +14512,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -14853,7 +14853,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -14862,7 +14862,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -14871,12 +14871,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -14921,7 +14921,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -14930,7 +14930,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -14939,12 +14939,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -15309,7 +15309,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -15318,7 +15318,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -15327,12 +15327,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -15377,7 +15377,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -15386,7 +15386,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -15395,12 +15395,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -15444,7 +15444,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -15453,7 +15453,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -15462,12 +15462,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -15673,7 +15673,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -15682,7 +15682,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -15691,12 +15691,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -15741,7 +15741,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -15750,7 +15750,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -15759,12 +15759,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -15905,7 +15905,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -15914,7 +15914,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -15923,12 +15923,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -15973,7 +15973,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -15982,7 +15982,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -15991,12 +15991,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16194,7 +16194,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16203,7 +16203,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16212,12 +16212,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16262,7 +16262,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16271,7 +16271,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16280,12 +16280,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16329,7 +16329,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16338,7 +16338,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16347,12 +16347,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16601,7 +16601,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16610,7 +16610,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16619,12 +16619,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16669,7 +16669,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16678,7 +16678,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16687,12 +16687,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16780,7 +16780,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16789,7 +16789,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16798,12 +16798,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16848,7 +16848,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16857,7 +16857,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16866,12 +16866,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -16947,7 +16947,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -16956,7 +16956,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -16965,12 +16965,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17015,7 +17015,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17024,7 +17024,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17033,12 +17033,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17118,7 +17118,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17127,7 +17127,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17136,12 +17136,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17186,7 +17186,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17195,7 +17195,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17204,12 +17204,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17284,7 +17284,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17293,7 +17293,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17302,12 +17302,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17352,7 +17352,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17361,7 +17361,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17370,12 +17370,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17451,7 +17451,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17460,7 +17460,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17469,12 +17469,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17519,7 +17519,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17528,7 +17528,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17537,12 +17537,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17617,7 +17617,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17626,7 +17626,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17635,12 +17635,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17685,7 +17685,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17694,7 +17694,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17703,12 +17703,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17844,7 +17844,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17853,7 +17853,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17862,12 +17862,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -17912,7 +17912,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -17921,7 +17921,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -17930,12 +17930,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -18064,7 +18064,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -18073,7 +18073,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -18082,12 +18082,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -18132,7 +18132,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -18141,7 +18141,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -18150,12 +18150,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -18199,7 +18199,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -18208,7 +18208,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -18217,12 +18217,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -18412,7 +18412,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -18421,7 +18421,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -18430,12 +18430,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -18480,7 +18480,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -18489,7 +18489,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -18498,12 +18498,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -18547,7 +18547,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -18556,7 +18556,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -18565,12 +18565,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -19141,7 +19141,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -19150,7 +19150,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -19159,12 +19159,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -19379,7 +19379,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -19388,7 +19388,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -19397,12 +19397,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -19447,7 +19447,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -19456,7 +19456,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -19465,12 +19465,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -19869,7 +19869,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -19878,7 +19878,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -19887,12 +19887,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -19937,7 +19937,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -19946,7 +19946,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -19955,12 +19955,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];

@@ -11,6 +11,7 @@ export function canVisualize() {
   return typeof WebGL2RenderingContext !== 'undefined' && !gpuUnavailable && musicOutput().kind === 'ready';
 }
 export const canOpenVisualizer = canVisualize;
+export function beginVisualizerFullscreen() {}
 export function subscribeVisualizerAvailability(listener: () => void) {
   const unsubscribe = subscribeMusicOutput(listener);
   gpuListeners.add(listener);
