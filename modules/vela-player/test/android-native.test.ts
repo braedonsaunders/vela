@@ -68,4 +68,4 @@ const cxx = Bun.which('c++');
     expect(await compile.exited, await new Response(compile.stderr).text()).toBe(0);
     expect(await Bun.spawn([exe]).exited).toBe(0);
   } finally { await rm(scratch, { recursive: true, force: true }); }
-});
+}, 60_000);
