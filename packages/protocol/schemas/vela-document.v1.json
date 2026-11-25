@@ -8490,6 +8490,11 @@
               "required": false,
               "type": "string"
             },
+            "library": {
+              "doc": "Where the server keeps no liked lists or Favorites playlist (Jellyfin, Plex): the library whose favourite filter lists them.",
+              "required": false,
+              "type": "string"
+            },
             "role": {
               "doc": "track, album, artist, …",
               "required": true,

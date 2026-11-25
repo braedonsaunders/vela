@@ -72,7 +72,7 @@ export const VELA_SOURCES = {
     doc: 'A library listing, paged: ListValue.',
   },
   'vela.favorites': {
-    args: { role: id('track, album, artist, …'), class: id('A media class (music, audiobook, podcast).', false) },
+    args: { role: id('track, album, artist, …'), class: id('A media class (music, audiobook, podcast).', false), library: id("Where the server keeps no liked lists or Favorites playlist (Jellyfin, Plex): the library whose favourite filter lists them.", false) },
     doc: "The viewer's likes of one role, newest first, paged: ListValue.",
   },
   'vela.playlists': { args: {}, doc: "The viewer's playlists as `item:` records of kind playlist: ListValue." },
