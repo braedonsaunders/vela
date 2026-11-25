@@ -12,10 +12,11 @@ import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasLi
 import { VelaError } from '../adapter/errors';
 import { audioCardsOf, playStart, resumePoint } from '../audio/cards';
 import { msg } from '../i18n';
-import type { Card, PlaylistModel } from '../models';
+import type { Card, PlaylistModel, Row } from '../models';
+import { libraryHomeTab } from '../library-presentation';
 import { childrenKey } from '../plugin-levels';
 import { sameJSON, type RecordStore } from './records';
-import { boolArg, cardList, lyricsLine, cardOf, cardValue, intArg, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, ref, rowsValue, sourceArgs, textArg, type LocalAnswer, type LocalRecords, type LocalScope } from './local-records';
+import { boolArg, cardList, lyricsLine, musicHomeValue, cardOf, cardValue, intArg, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, ref, rowsValue, sourceArgs, textArg, type LocalAnswer, type LocalRecords, type LocalScope } from './local-records';
 import type { Vela } from '../store';
 import { normalizeQuery, searchList } from '../store/search-list';
 import type { RecordRef } from '../../../protocol/screen';
@@ -306,7 +307,7 @@ export class LocalSources {
           if (!hasLibraryRecommendations(adapter as never)) return unsupported();
           await stores.home.libraries();
           const library = stores.getState().libraries.value?.find(item => item.id === args.libraryId);
-          const rows = await stores.catalogue.libraryRecommendations(args.libraryId, (library?.kind ?? 'mixed') as V.Library['kind'], fresh, args.tab || undefined);
+          const rows = await stores.catalogue.libraryRecommendations(args.libraryId, (library?.kind ?? 'mixed') as V.Library['kind'], fresh, args.tab || libraryHomeTab(library?.tabs));
           if (!rows) return unsupported();
           return rowsValue(rows);
         }
@@ -386,6 +387,32 @@ export class LocalSources {
           return { kind: context.kind, item: ref(itemKey(context.card.id)), playedAt: context.playedAt };
         });
         return { value: { items }, records };
+      }
+      case 'vela.musicHome': {
+        await this.features();
+        await stores.home.libraries();
+        const library = stores.getState().libraries.value?.find(item => item.id === args.library);
+        if (!library) return { error: 'not_found' };
+        const [rows] = await Promise.all([
+          stores.catalogue.libraryRecommendations(library.id, library.kind as V.Library['kind'], fresh, libraryHomeTab(library.tabs)).catch(() => [] as Row[]),
+          stores.music.recentAvailable ? stores.music.recent(fresh) : undefined,
+          stores.playlists.available && (fresh || stores.getState().playlists.list.load !== 'ready') ? stores.playlists.load() : undefined,
+        ]);
+        const all = stores.getState().playlists.list.value ?? [];
+        const favorites = all.find(item => item.name === 'Favorites');
+        let likedTotal = 0;
+        if (stores.music.likedAvailable) {
+          await stores.music.liked('track', false, fresh);
+          likedTotal = stores.getState().music.liked.track?.value?.total ?? 0;
+        } else if (favorites) {
+          await stores.playlists.open(favorites.id, false, fresh);
+          likedTotal = (stores.getState().collections[favorites.id]?.value?.items ?? []).filter(card => card.media?.class === 'music' && card.media?.role === 'track').length;
+        }
+        return musicHomeValue({
+          rows: rows ?? [], recentAvailable: stores.music.recentAvailable, recent: stores.getState().music.recent.value ?? [],
+          playlists: all.filter(item => item !== favorites).map(playlistCard), favoritesPlaylist: !!favorites, likedTotal,
+          recapAvailable: stores.music.recapAvailable,
+        });
       }
       case 'vela.libraryInfo': {
         await this.features();

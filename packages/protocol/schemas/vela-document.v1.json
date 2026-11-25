@@ -8568,6 +8568,16 @@
           },
           "doc": "LyricsValue."
         },
+        "vela.musicHome": {
+          "args": {
+            "library": {
+              "doc": "The music library.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "The music app's Home: MusicHomeValue (quick tiles, Vela's own recent shelves, the library's rows)."
+        },
         "vela.nowPlaying": {
           "args": {},
           "doc": "What plays now: a reference to `nowPlaying:current` (NowPlayingRecord), pushed about once a second while a page reads it.",

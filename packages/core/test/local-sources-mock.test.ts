@@ -9,7 +9,7 @@ import type { VelaPlatform } from '../src/store/platform';
 import type { ScreenDocument } from '../src/wire';
 import { launchMock, type RunningMock } from '../../../mock-server/test/launch';
 import { mediaChildren, mediaGroups } from '../../protocol/fixtures/media';
-import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue, GuideValue } from '../../protocol/vela-sources';
+import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue, GuideValue, MusicHomeValue } from '../../protocol/vela-sources';
 import { MemoryStore } from './helpers';
 
 let mock: RunningMock;
@@ -203,5 +203,20 @@ test('library info and the viewer answer what pages branch on', async () => {
   expect(page().sources.lib).toMatchObject({ id: 'music', media: 'music', experience: 'listen', listening: 'music', features: { likedByRole: false, playlists: expect.any(Boolean), recap: expect.any(Boolean) } });
   expect((page().sources.me as { name: string }).name).toBe(store.getState().auth.viewer);
   expect((page().sources.me as { name: string }).name).not.toBe('');
+  handle.release();
+});
+
+test('music Home answers quick tiles and the library\'s shelves', async () => {
+  const doc: ScreenDocument = { ...albumPage, page: 'home', params: {}, sources: { home: { from: 'vela.musicHome', library: 'music' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/home' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'home' }, href: 'vela:listen/home' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors).toEqual({});
+  const home = page().sources.home as MusicHomeValue;
+  expect(home.quick.length).toBeGreaterThan(0);
+  expect(home.quick.length).toBeLessThanOrEqual(8);
+  expect(home.shelves.length).toBeGreaterThan(0);
+  for (const shelf of home.shelves) for (const item of shelf.items) expect(store.screens.records.get(item.$record)).toBeDefined();
   handle.release();
 });
