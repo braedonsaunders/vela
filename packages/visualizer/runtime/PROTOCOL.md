@@ -18,7 +18,7 @@ Installed as the global `__host` before `viz-native.js` (from `tools/build.ts`) 
 | `now()` | milliseconds, monotonic |
 | `width`, `height`, `dpr`, `sampleRate`, `scene?` | initial values; later changes go through `__viz.resize(w, h, dpr)` and `__viz.audioFormat(rate)` |
 | `log(s)` | |
-| `canvasImage(c)` | `{ id, width, height }` for a text atlas (only the Neon Cartography scene; not needed for the spike) |
+| `canvasImage(c)` | Reserved for opaque host images. The map label atlas uses the standard byte upload. |
 
 The script defines `__viz`: `frame(nowMs)`, `setScene(i | id)`, `setPalette(i)`, `resize(w, h, dpr)`,
 `audioFormat(rate)`, `scenes`, `stats()`.
@@ -83,6 +83,10 @@ Before each draw the facade sends `BIND_FB`/`VIEWPORT`/`STATE` if they changed a
 `RG8`/`UNSIGNED_BYTE`, `R8`/`UNSIGNED_BYTE`; renderbuffers `RGBA16F` and `DEPTH_COMPONENT24` with 4 samples.
 GLES 3.0 needs `EXT_color_buffer_float` (or `_half_float`) to render to float targets; RGBA32F is only ever sampled
 with NEAREST, so `OES_texture_float_linear` is not required. Metal converts `FLOAT` uploads into half-float textures.
+
+## Map labels
+
+The native bundle includes the fixed Contour label atlas only when it includes that scene. Its R8 bytes are in GL bottom-row-first order. TEX_IMAGE uploads level zero without flipping, TEX_MIPMAP generates the lower levels, and the sampler uses clamped coordinates with linear magnification and trilinear minification. The scene samples the red channel. See the [asset manifest and regeneration procedure](../assets/README.md).
 
 ## Coordinates (Metal)
 

@@ -2,6 +2,7 @@
 //   bun packages/visualizer/tools/build.ts [--scenes ink,tunnel] [--out dir]
 // dist/viz-native.js     glrec + host prelude + the framework (UI section left out) + host epilogue: one script for JSC/Hermes
 // dist/programs.json     every program the bundle links, captured by running it headless against a recording host
+import { mapAtlasSource } from './map-atlas';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -26,6 +27,7 @@ const bundle = [
   read(path.join(root, 'runtime/host-prelude.js')).replace(/^'use strict';/, ''),
   read(path.join(root, 'runtime/analyse-split.js')).replace(/^if \(typeof module.*$/m, ''),
   ...parts.map(f => `// ── framework/${f}\n` + read(path.join(fw, f))),
+  parts.includes('33_contour.js') ? mapAtlasSource() : '',
   read(path.join(root, 'runtime/host-epilogue.js')),
 ].join('\n');
 fs.mkdirSync(out, { recursive: true });
@@ -56,6 +58,8 @@ const run = new Function('__host', bundle + '\n;return __viz;');
 const viz = run(host);
 for (let i = 0; i < 200; i++) viz.frame(i * 16.7);          // warms every scene in the bundle
 for (let s = 0; s < viz.scenes.length; s++) { viz.setScene(s); for (let i = 0; i < 90; i++) viz.frame(3400 + s * 1600 + i * 16.7); }
+const broken = viz.stats().broken;
+if (broken.length) throw new Error('Native scene initialization failed: ' + broken.join(', '));
 const uniq = new Map(programs.map(p => [p.vs + '\u0000' + p.fs, p]));
 fs.writeFileSync(path.join(out, 'programs.json'), JSON.stringify([...uniq.values()]));
 console.log(`viz-native.js ${(bundle.length / 1024).toFixed(0)} KB, ${viz.scenes.length} scenes (${viz.scenes.map((s: any) => s.id).join(', ')}), ${uniq.size} programs, ${(words / flushes / 1024).toFixed(1)}k words per flush`);
