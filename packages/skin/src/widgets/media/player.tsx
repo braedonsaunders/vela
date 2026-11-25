@@ -252,14 +252,20 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, hidden =
   const sleeping = audio.sleep.mode !== 'off';
   const sleepLeft = audio.sleep.mode === 'timer' ? Math.max(0, (audio.sleep.endsAt - Date.now()) / 1000) : 0;
   const after = upNext(audio.queue);
+  const launcherByTitle = Platform.OS === 'ios' && !Platform.isTV;
+  const launcher = onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
+    nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={44} /> : null;
   const controls = (
     <Guide {...guided} style={{ gap: 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
-      <View style={{ gap: 6 }}>
-        <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
-        {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
-          onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
-          style={m.text({ 'font-size': '17px', color: '$ui.inkSecondary' })} /> : null}
-        {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {launcherByTitle ? launcher : null}
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
+          {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
+            onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
+            style={m.text({ 'font-size': '17px', color: '$ui.inkSecondary' })} /> : null}
+          {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
+        </View>
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
       {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text></Arrive> : null}
@@ -338,8 +344,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, hidden =
             {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
           </View>
         </Pressable>
-        {onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
-          nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={42} /> : <View style={{ width: 42 }} />}
+        {!launcherByTitle && launcher ? launcher : <View style={{ width: 42 }} />}
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: 18, paddingBottom: 48, minHeight: '100%' as never }}>
         {sideBySide ? (
