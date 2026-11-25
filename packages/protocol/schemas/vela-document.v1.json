@@ -8571,6 +8571,13 @@
               "required": false,
               "type": "string"
             },
+            "view": {
+              "doc": "A named view: `albums`, the library's searchable album view (with q; unsupported where the library has none).",
+              "enum": [
+                "albums"
+              ],
+              "type": "enum"
+            },
             "year": {
               "type": "int"
             }

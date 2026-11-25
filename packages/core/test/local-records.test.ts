@@ -76,6 +76,11 @@ describe('arguments', () => {
     expect(args).toEqual({ id: 'album-1', role: 'track', extra: 'item:t-', limit: '5' });
   });
 
+  test('|or: gives an empty or missing hole a default', () => {
+    expect(sourceArgs({ from: 'vela.recap', period: '{param.period|or:month}', at: '{param.at|or:}' }, { params: {} })).toEqual({ period: 'month', at: '' });
+    expect(sourceArgs({ from: 'vela.recap', period: '{param.period|or:month}' }, { params: { period: 'week' } })).toEqual({ period: 'week' });
+  });
+
   test('required arguments are checked; bools, lists and pairs are read', () => {
     expect(missingArgs(VELA_SOURCES['vela.children'], { id: '' })).toEqual(['id']);
     expect(missingArgs(VELA_ACTIONS['vela.like'], { item: 'item:a', on: false })).toEqual([]);

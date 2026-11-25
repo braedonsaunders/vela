@@ -340,7 +340,18 @@ export class LocalSources {
         return { error: 'invalid_request' };
       }
       case 'vela.library': {
-        const query = libraryQuery(args);
+        let query = libraryQuery(args);
+        if (args.view) {
+          // A named view of the library: `albums` is its searchable album view (Search's See all).
+          if (args.view !== 'albums') return { error: 'invalid_request' };
+          await this.libraries();
+          const tabs = stores.getState().libraries.value?.find(item => item.id === args.id)?.tabs;
+          const tab = tabs?.find(item => item.kind === 'view' && item.level === 'album' && item.search === true);
+          if (!tab) return unsupported();
+          // As the music app: a view is searched; without a query it lists nothing.
+          if (!args.q) return cardList([], false, 0);
+          query = { ...query, tab: tab.id };
+        }
         const pages = 1 + extraPages;
         await stores.catalogue.library(args.id!, query, pages);
         const loaded = stores.getState().library[libraryKey(args.id!, query)];
