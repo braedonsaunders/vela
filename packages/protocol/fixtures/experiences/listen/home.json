@@ -1,0 +1,29 @@
+{
+  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
+  "screen": "listen", "page": "home", "version": "1",
+  "title": "{s:music.home}", "presentation": "section",
+  "params": { "library": { "type": "string" } },
+  "sources": {
+    "info": { "from": "vela.libraryInfo", "id": "{param.library}" }
+  },
+  "tree": {
+    "type": "sections", "style": { "padding-bottom": "32px" },
+    "children": [
+      { "type": "box", "when": [{ "test": "src.info.listening", "is": "eq", "value": "music" }], "children": [
+        { "type": "wash", "props": { "accent": "first-quick", "height": "360", "library": "{param.library}" } },
+        { "type": "box", "style": { "padding-horizontal": "20px", "padding-top": "28px" }, "small": { "padding-horizontal": "16px", "padding-top": "16px" }, "children": [
+          { "type": "text", "role": "heading", "level": 1, "text": "{env.now|greeting}",
+            "style": { "font-family": "$ui.fontDisplay", "font-size": "38px", "color": "$ui.ink", "letter-spacing": "-0.01em", "margin-bottom": "20px" },
+            "small": { "font-size": "30px", "margin-bottom": "14px" } },
+          { "type": "quickTiles", "props": { "library": "{param.library}" } }
+        ] },
+        { "type": "box", "style": { "padding-horizontal": "8px" }, "small": { "padding-horizontal": "4px" }, "children": [
+          { "type": "musicHomeRows", "props": { "library": "{param.library}" } },
+          { "type": "slot", "slot": "plugin:home.rows" },
+          { "type": "genres", "props": { "library": "{param.library}" } }
+        ] }
+      ] },
+      { "type": "spokenHome", "when": [{ "test": "src.info.listening", "is": "ne", "value": "music" }], "props": { "library": "{param.library}" } }
+    ]
+  }
+}

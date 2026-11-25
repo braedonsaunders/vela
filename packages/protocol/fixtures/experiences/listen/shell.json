@@ -1,0 +1,60 @@
+{
+  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
+  "screen": "listen", "page": "shell", "version": "1",
+  "title": "{s:music.app}", "presentation": "section",
+  "params": { "library": { "type": "string" } },
+  "sources": {},
+  "tokens": { "hairline": "$ui.glassEdge", "barHeight": "84px", "miniDock": "62px" },
+  "forms": {
+    "wide": {
+      "type": "box", "testId": "music-shell",
+      "style": { "flex": "1", "flex-direction": "column", "padding-top": "6px" },
+      "children": [
+        { "type": "box", "style": { "height": "1px", "background-color": "$hairline" } },
+        { "type": "box", "style": { "flex": "1", "flex-direction": "row", "min-height": "0" },
+          "children": [
+            { "type": "box", "style": { "flex-direction": "row", "background-color": "$ui.raised" },
+              "children": [
+                { "type": "box", "style": { "flex": "1", "min-width": "0" },
+                  "children": [{ "type": "rail", "props": { "library": "{param.library}", "mode": "auto" } }] },
+                { "type": "box", "style": { "width": "1px", "background-color": "$hairline" } }
+              ] },
+            { "type": "box", "style": { "flex": "1", "min-width": "0", "overflow": "hidden" },
+              "children": [{ "type": "slot", "slot": "children", "style": { "flex": "1" } }] },
+            { "type": "box", "when": [{ "test": "flag:sound" }],
+              "style": { "width": "360px", "flex-direction": "row", "background-color": "$ui.raised" },
+              "children": [
+                { "type": "box", "style": { "width": "1px", "background-color": "$hairline" } },
+                { "type": "box", "style": { "flex": "1", "min-width": "0" }, "children": [{ "type": "eq", "props": { "mode": "panel", "closeFlag": "sound" } }] }
+              ] },
+            { "type": "box", "when": [{ "test": "flag:queue" }, { "test": "flag:sound", "not": true }],
+              "style": { "width": "340px", "flex-direction": "row", "background-color": "$ui.raised" },
+              "children": [
+                { "type": "box", "style": { "width": "1px", "background-color": "$hairline" } },
+                { "type": "box", "style": { "flex": "1", "min-width": "0" }, "children": [{ "type": "queue", "props": { "mode": "panel", "closeFlag": "queue" } }] }
+              ] }
+          ] },
+        { "type": "box", "style": { "height": "1px", "background-color": "$hairline" } },
+        { "type": "box", "style": { "height": "$barHeight", "background-color": "$ui.raised" },
+          "children": [{ "type": "bar", "props": { "position": "bottom", "queueFlag": "queue", "soundFlag": "sound" } }] }
+      ]
+    },
+    "small": {
+      "type": "box", "testId": "music-shell",
+      "style": { "flex": "1", "padding-top": "6px" },
+      "children": [
+        { "type": "listenChips", "props": { "library": "{param.library}" } },
+        { "type": "slot", "slot": "children", "style": { "flex": "1" } }
+      ]
+    },
+    "tv": {
+      "type": "box", "testId": "music-shell",
+      "style": { "flex": "1", "flex-direction": "row", "padding-top": "6px" },
+      "children": [
+        { "type": "rail", "props": { "library": "{param.library}", "mode": "tv" } },
+        { "type": "slot", "slot": "children", "style": { "flex": "1" } }
+      ]
+    }
+  },
+  "tree": { "type": "slot", "slot": "children", "style": { "flex": "1" } }
+}

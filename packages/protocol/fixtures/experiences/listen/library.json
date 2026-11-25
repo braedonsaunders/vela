@@ -1,0 +1,9 @@
+{
+  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
+  "screen": "listen", "page": "library", "version": "1",
+  "title": "{s:music.yourLibrary}", "presentation": "section",
+  "params": { "library": { "type": "string" } },
+  "sources": {},
+  "forms": { "wide": { "type": "use", "template": "home" } },
+  "tree": { "type": "sections", "style": { "padding-bottom": "32px" }, "children": [{ "type": "rail", "props": { "library": "{param.library}", "mode": "embedded" } }] }
+}
