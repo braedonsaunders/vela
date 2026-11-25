@@ -15,7 +15,7 @@ import { MediaGlyph } from './icons';
 import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './parts';
 import { Arrive, MOTION, Presence, useLast } from '../../presence';
 import { LyricsPanel } from '../music/lyrics';
-import { SoundBlock } from '../../blocks/sound';
+import { SoundBlock, SoundSection } from '../../blocks/sound';
 import { musicTV } from '../music/layout';
 import { nowPlayingSideBySide } from './window-layout';
 
@@ -206,9 +206,12 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
 
 function rateLabel(rate: number): string { return `${number(rate, { maximumFractionDigits: 2, minimumFractionDigits: rate % 1 ? 1 : 1 })}×`; }
 
+/** The visualizer's On/Off for this profile, offered where the device can draw one for this item. */
+export interface VisualizerSwitch { on: boolean; onToggle(on: boolean): void }
+
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, hidden = false }: {
-  onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; hidden?: boolean;
+export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false }: {
+  onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; visualizer?: VisualizerSwitch; hidden?: boolean;
 }) {
   const host = useHost();
   const m = useMediaLook();
@@ -309,7 +312,11 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, hidden =
       ) : null}
     </Guide>
   );
-  const listItems = list === 'sound' ? [<View key="sound" style={{ marginHorizontal: -18 }}><SoundBlock tv={musicTV()} /></View>] : list === 'lyrics' ? [<View key="lyrics" style={[{ height: Math.max(320, m.height - 220), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 9%, #000 86%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>] : list === 'chapters' ? (
+  const listItems = list === 'sound' ? [<View key="sound" style={{ marginHorizontal: -18 }}>
+    {/* The visualizer's switch heads the Sound tab, the one setting this device keeps per profile. */}
+    {visualizer ? <SoundSection title={msg('visualizer.setting')} hint={msg(visualizer.on ? 'visualizer.settingOnHint' : 'visualizer.settingOffHint')}
+      on={visualizer.on} onToggle={visualizer.onToggle} testID="now-playing-visualizer-setting" tv={musicTV()} /> : null}
+    <SoundBlock tv={musicTV()} /></View>] : list === 'lyrics' ? [<View key="lyrics" style={[{ height: Math.max(320, m.height - 220), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 9%, #000 86%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>] : list === 'chapters' ? (
     audio.chapters.map((c, i) => <ListRow key={c.id} number={number(i + 1)} title={c.name} trailing={clock(c.startSeconds)} current={chapterAt === i} playing={playing}
       dim={i < chapterAt} onPress={() => store.audio.seek(c.startSeconds)} testID={`now-playing-chapter-${i}`} />)
   ) : after.length ? after.map((card, i) => <ListRow key={`${card.id}-${i}`} number={number(i + 1)} title={card.name} subtitle={card.media?.byline}
