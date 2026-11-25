@@ -96,3 +96,26 @@ test('the visualizer setting is a device record, set by its action', async () =>
   expect(listeners.size).toBe(0);
   await expect(local.action('vela.like', { item: 'item:a' }, { specs: {}, values: {}, scope })).rejects.toThrow();
 });
+
+test("the album view reads the library's searchable album tab, 50 a page, and nothing without a query", async () => {
+  const asked: unknown[] = [];
+  const tabs = [{ id: 'albums-view', label: 'Albums', kind: 'view', level: 'album', search: true }];
+  const album = { id: 'al1', name: 'Northern Static', kind: 'season' } as Card;
+  let state = { libraries: { load: 'ready', value: [{ id: 'mu', name: 'Music', kind: 'mixed', tabs }] }, library: {} as Record<string, unknown> };
+  const stores = {
+    getState: () => state,
+    subscribe: () => () => undefined,
+    home: { libraries: async () => undefined },
+    catalogue: { library: async (id: string, query: Record<string, unknown>) => {
+      asked.push(query);
+      const { libraryKey } = await import('../src/store/catalogue');
+      state = { ...state, library: { ...state.library, [libraryKey(id, query)]: { load: 'ready', error: '', value: { items: [album], more: false } } } };
+    } },
+  } as unknown as LocalStores;
+  const local = new LocalSources(stores, { ready: async () => ({ adapter: {} }), features: () => ({}) as never }, new RecordStore());
+  const spec = { from: 'vela.library', id: 'mu', view: 'albums', q: '{param.query}', limit: '50' };
+  expect(await local.read(spec, { params: { query: 'north' } })).toMatchObject({ value: { items: [{ $record: 'item:al1' }] } });
+  expect(asked).toEqual([{ query: 'north', tab: 'albums-view', limit: 50 }]);
+  expect(await local.read(spec, { params: {} })).toMatchObject({ value: { items: [], more: false } });
+  expect(asked).toHaveLength(1);
+});
