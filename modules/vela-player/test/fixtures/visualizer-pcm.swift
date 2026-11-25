@@ -53,11 +53,22 @@ import Foundation
         sendStereo(&next, 11, -2 / rate, split: 2, next: 12)
         precondition(read(11, 6 / rate, 2) == [9,11])
         precondition(read(12, 2 / rate, 2) == [13,15])
+        precondition(read(12, 2 / rate, 6) == [5,7,9,11,13,15])
         var mix = read(11, 6 / rate, 2)
         mix.withUnsafeMutableBufferPointer { first.mix(id: 12, endingAt: 2 / rate, speed: 1, into: $0) }
         precondition(mix == [22,26])
         sendStereo(&pairs, 12, 2)
         sendStereo(&pairs, 12, 0)
+        precondition(read(12, 2 / rate, 4) == [0,0,1,3])
+        // A full 4096-sample FFT two samples into the incoming item. Fill the previous
+        // track's complete tail, including the part AVQueuePlayer labels with negative time.
+        var preceding = [Float](repeating: 0.25, count: 4096 * 2)
+        sendStereo(&preceding, 20, 1)
+        sendStereo(&next, 20, -2 / rate, split: 2, next: 21)
+        let across = read(21, 2 / rate, 4096)
+        precondition(across.prefix(4092).allSatisfy { $0 == 0.25 } && Array(across.suffix(4)) == [9,11,13,15])
+        feed.reset()
+        precondition(feed.subscribe() !== first)
         precondition(read(12, 2 + 4 / rate, 4) == [0,0,0,0]) // Backwards seek invalidates prior history.
     }
 }

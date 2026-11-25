@@ -213,6 +213,7 @@ final class SoundTapContext: @unchecked Sendable {
 
     /// A new item from the start (a load, or a crossfade's incoming item).
     func start(id: Int, gain: Double) {
+        visualizerFeed.reset()
         write {
             current = ItemSound(id: id, gain: Self.clamp(gain))
             next = nil
@@ -239,7 +240,10 @@ final class SoundTapContext: @unchecked Sendable {
     }
 
     /// A seek: the clock jumps, and a move to the next item that has not been reached is undone.
-    func seeked() { write { resets &+= 1 } }
+    func seeked() {
+        visualizerFeed.reset()
+        write { resets &+= 1 }
+    }
 
     // MARK: Render thread
 
@@ -356,6 +360,7 @@ final class SoundTapContext: @unchecked Sendable {
                 glideLeft = 0
                 started = false
             }
+            let oldID = playing.id, oldAdvance = localAdvances, oldReset = localResets
             refresh(waiting: !started)
             if !started {
                 gain = playing.gain
@@ -408,8 +413,11 @@ final class SoundTapContext: @unchecked Sendable {
                 }
             }
             glideLeft = max(0, glide - frames)
+            let atBlockBoundary = split < 0 && oldAdvance != localAdvances && oldReset == localResets &&
+                oldID != playing.id && abs(startTime) <= 1 / sampleRate
             visualizerFeed.append(buffers, frames: frames, channels: channels, interleaved: interleaved,
-                                  rate: sampleRate, start: startTime, id: item, split: split, nextID: playing.id)
+                                  rate: sampleRate, start: startTime, id: atBlockBoundary ? oldID : item,
+                                  split: atBlockBoundary ? 0 : split, nextID: playing.id)
         }
         lastStart = label
         #if DEBUG

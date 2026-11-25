@@ -7,6 +7,14 @@ final class VisualizerPCMFeed {
     private var supported: Bool?
     private weak var subscription: VisualizerPCMBuffer?
 
+    func reset() {
+        // Main-thread seek/load: a previously queued render may finish with its own history.
+        // Every subsequent subscription and tap write uses a fresh item timeline.
+        lock.lock()
+        subscription = nil
+        lock.unlock()
+    }
+
     func setFormatSupported(_ value: Bool) {
         lock.lock()
         supported = value
@@ -58,6 +66,8 @@ final class VisualizerPCMBuffer {
     private var samples = [Float](repeating: 0, count: mask + 1)
     private var blocks = [Block](repeating: Block(), count: 512)
     private var written = 0, blockCount = 0
+    private var boundary: (old: Int, new: Int, offset: Int, shift: Double)?
+
 
     var hasReceivedSamples: Bool {
         lock.lock()
@@ -89,7 +99,18 @@ final class VisualizerPCMBuffer {
             if previous.id == id { initial = previous.seconds + Double(previous.length) / previous.rate }
         }
         if split != 0 { record(id, written, split < 0 ? frames : split, initial, rate) }
-        if split >= 0 { record(nextID, written + split, frames - split, max(0, start + Double(split) / rate), rate) }
+        if split >= 0 {
+            let offset = written + split
+            let seconds = max(0, start + Double(split) / rate)
+            if blockCount > 0 {
+                let last = blocks[(blockCount - 1) % blocks.count]
+                if last.id == id, last.offset + last.length == offset, id != nextID {
+                    let oldEnd = last.seconds + Double(last.length) / last.rate
+                    boundary = (id, nextID, offset, seconds - oldEnd)
+                }
+            }
+            record(nextID, offset, frames - split, seconds, rate)
+        }
         written += frames
     }
 
@@ -98,6 +119,7 @@ final class VisualizerPCMBuffer {
         if blockCount > 0 {
             let last = blocks[(blockCount - 1) % blocks.count]
             if last.id == id && seconds + 2 / rate < last.seconds + Double(last.length) / last.rate {
+                boundary = nil
                 blockCount = 0 // Backwards seek. Discard samples from the previous visit.
             }
         }
@@ -113,14 +135,23 @@ final class VisualizerPCMBuffer {
         defer { lock.unlock() }
         for i in max(0, blockCount - blocks.count)..<blockCount {
             let block = blocks[i % blocks.count]
-            guard block.id == id, block.offset + block.length > written - samples.count else { continue }
-            let blockEnd = block.seconds + Double(block.length) / block.rate
-            guard blockEnd > start, block.seconds < end else { continue }
-            let first = max(0, Int(ceil((block.seconds - start) / step - 1e-7)))
+            guard block.offset + block.length > written - samples.count else { continue }
+            let seconds: Double
+            if block.id == id {
+                seconds = block.seconds
+            } else if let boundary, boundary.new == id, block.id == boundary.old,
+                      block.offset + block.length <= boundary.offset {
+                // Only an explicit queue boundary projects the preceding item's tail into
+                // the negative part of the new item's first FFT window.
+                seconds = block.seconds + boundary.shift
+            } else { continue }
+            let blockEnd = seconds + Double(block.length) / block.rate
+            guard blockEnd > start, seconds < end else { continue }
+            let first = max(0, Int(ceil((seconds - start) / step - 1e-7)))
             let limit = min(output.count, Int(ceil((blockEnd - start) / step - 1e-7)))
             guard first < limit else { continue }
             for j in first..<limit {
-                let source = min(block.length - 1, max(0, Int((start + Double(j) * step - block.seconds) * block.rate + 1e-7)))
+                let source = min(block.length - 1, max(0, Int((start + Double(j) * step - seconds) * block.rate + 1e-7)))
                 let index = block.offset + source
                 if index >= written - samples.count { output[j] += samples[index & Self.mask] }
             }
