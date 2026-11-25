@@ -2,13 +2,11 @@ import type { LiveEventRef, PlaybackPlan, SessionEvent, SessionSnapshot } from '
 import type { ServerAdapter } from '../adapter';
 import type { EventStream } from '../adapter/capabilities';
 import { withPlaying } from '../store/playing-release';
-
-/** The last cursor seen per session, so a reconnection resumes where the previous one stopped. */
-const cursors = new Map<string, string>();
+import { VelaError } from '../adapter/errors';
 
 /**
  * One connection to a playback session's events. It starts from a fresh authoritative snapshot,
- * then follows the stream from the last cursor seen (or the snapshot's). Every plan goes to
+ * then follows the stream from that snapshot's cursor. Every plan goes to
  * `onPlan` after `present` validates it for the server it came from. Resolves when the server
  * closes the stream; an unknown or malformed event rejects, so a retry starts with a new snapshot.
  * The live event on air (a live channel showing a game) goes to `onLiveEvent`, from the snapshot
@@ -27,8 +25,7 @@ export async function followSession(
   signal?.throwIfAborted();
   onPlan(present(withPlaying(snapshot.plan, snapshot)));
   if (snapshot.liveEvent !== undefined) onLiveEvent?.(liveEventRef(snapshot.liveEvent));
-  const cursor = cursors.get(sessionId) ?? snapshot.cursor;
-  await api.streamSession(sessionId, cursor, async event => {
+  await api.streamSession(sessionId, snapshot.cursor, async event => {
     if (event.event === 'liveEvent') {
       onLiveEvent?.(liveEventRef((JSON.parse(event.data) as { liveEvent?: unknown }).liveEvent));
       return;
@@ -52,20 +49,15 @@ export async function followSession(
         break;
       }
       case 'error':
-        throw new Error(value.error.message);
+        // The server's own answer, carried by the stream it answered (200) on.
+        throw new VelaError(value.error, 200);
       default:
         snapshot = await api.sessionSnapshot(sessionId);
         break;
     }
     revision = snapshot.revision;
-    cursors.set(sessionId, snapshot.cursor);
     onPlan(present(snapshot.plan));
   }, signal);
-}
-
-/** A session that has ended needs no resumption cursor. */
-export function forgetSession(sessionId: string): void {
-  cursors.delete(sessionId);
 }
 
 /** A wire `liveEvent` value: an `{id, feed}` reference, or null for none (malformed reads as none). */

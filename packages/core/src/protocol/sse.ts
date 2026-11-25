@@ -28,8 +28,13 @@ export async function readEvents(response: Response, onEvent: EventHandler, sign
       }
     }
     signal?.throwIfAborted();
+  } catch (error) {
+    // An event that could not be handled leaves the body locked: release the connection.
+    void reader.cancel().catch(() => {});
+    throw error;
   } finally {
     signal?.removeEventListener('abort', abort);
+    reader.releaseLock();
   }
 }
 

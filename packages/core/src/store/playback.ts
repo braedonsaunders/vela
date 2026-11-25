@@ -15,7 +15,7 @@ import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-r
 import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
-import { followSession, forgetSession } from '../protocol/events';
+import { followSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
 import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
 import { VelaError } from '../adapter/errors';
@@ -115,6 +115,15 @@ const STOPPED_REMEMBERED = 32;
 
 const MAX_PREPARATIONS = 30;
 const POLL_SECONDS = 5;
+/**
+ * A session's events stream that drops while its media plays on is followed again after these
+ * many seconds (together they span Ether's 15 s disconnect grace) before the session is restarted.
+ * A connection up for `REFOLLOW_HELD_SECONDS` from its first event starts them over.
+ */
+const REFOLLOW_SECONDS = [1, 2, 4, 4, 4];
+const REFOLLOW_HELD_SECONDS = 30;
+/** A reconnection whose snapshot read has not answered within this many seconds counts as failed. */
+const REFOLLOW_SNAPSHOT_SECONDS = 10;
 /** A plan offered with placeholder versions is read once more this long after it starts. */
 const COLD_VERSIONS_SECONDS = 4;
 /** A server that offers scrub thumbnails only once a session streams is asked again this often, while the viewer scrubs. */
@@ -439,27 +448,73 @@ export class Playback {
       void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(withPlaying(snapshot.plan, snapshot))); }).catch(() => undefined);
     };
     const loop = async () => {
+      let refollows = 0, connected = 0, lost = false;
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
         try {
           if (hasEventStream(adapter)) {
-            await followSession(adapter, present, sessionId, show, controller.signal, liveEvent => {
+            connected = 0;
+            const resumed = refollows > 0;
+            let plans = 0, deadline: ReturnType<typeof setTimeout> | undefined;
+            // Each connection has its own signal, so one given up on below cannot follow on later.
+            const attempt = new AbortController();
+            const abort = () => attempt.abort();
+            controller.signal.addEventListener('abort', abort, { once: true });
+            // The first plan is the snapshot read before connecting; the next is the stream's first event,
+            // from which the connection counts as up. Followed again after a drop, an end the player never
+            // reached in either of them means the server let the session go while its events were down
+            // (Ether's disconnect grace): it is restarted, not finished.
+            const onPlan = (plan: V.PlaybackPlan) => {
+              const index = plans++;
+              if (index === 0) clearTimeout(deadline);
+              if (index === 1) connected = Date.now();
+              if (resumed && index <= 1 && plan.state === 'ended' && !(this.lastPosition?.sessionId === sessionId && this.lastPosition.ended)) {
+                lost = true;
+                throw new Error('Session ended while its events were down');
+              }
+              show(plan);
+            };
+            const follow = followSession(adapter, present, sessionId, onPlan, attempt.signal, liveEvent => {
               if (this.run !== run || controller.signal.aborted) return;
               const current = this.box.get().playback.liveEvent;
               if (current?.id !== liveEvent?.id || current?.feed !== liveEvent?.feed) this.patch({ liveEvent });
             });
-            if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
-            break;
+            // A reconnection's snapshot read that never answers would otherwise leave a paused viewer waiting for ever.
+            const timeout = resumed ? new Promise<never>((_, reject) => {
+              deadline = setTimeout(() => reject(new Error('Session snapshot did not answer')), REFOLLOW_SNAPSHOT_SECONDS * 1000);
+            }) : undefined;
+            try {
+              await (timeout ? Promise.race([follow, timeout]) : follow);
+            } finally {
+              clearTimeout(deadline);
+              controller.signal.removeEventListener('abort', abort);
+              attempt.abort();
+            }
+            if (controller.signal.aborted || this.box.get().playback.phase !== 'playing') {
+              if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
+              break;
+            }
+            throw new Error('Session events ended');
           }
           const snapshot = await adapter.sessionSnapshot(sessionId);
           if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
           show(present(withPlaying(snapshot.plan, snapshot)));
           await delay(POLL_SECONDS * 1000, controller.signal);
-        } catch {
-          if (!controller.signal.aborted) this.recover(sessionId);
+        } catch (error) {
+          if (controller.signal.aborted) break;
+          // Only the events connection was lost (it ended, the network dropped it, the server was
+          // briefly unavailable): the media plays on, so the stream is followed again. A server's
+          // own answer (the session is gone, the request refused, an error event) restarts at once.
+          if (hasEventStream(adapter) && !lost && !serverAnswered(error)) {
+            if (connected && Date.now() - connected >= REFOLLOW_HELD_SECONDS * 1000) refollows = 0;
+            if (refollows < REFOLLOW_SECONDS.length) {
+              try { await delay(REFOLLOW_SECONDS[refollows++]! * 1000, controller.signal); } catch { break; }
+              continue;
+            }
+          }
+          this.recover(sessionId);
           break;
         }
       }
-      forgetSession(sessionId);
     };
     void loop();
   }
@@ -1140,6 +1195,11 @@ export class Playback {
 function watchOf(target: PlaybackTarget): string {
   return JSON.stringify([target.kind, target.id,
     target.kind === 'programme' ? [target.channelId, target.from ?? ''] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
+}
+
+/** An answer from the server itself (a 4xx refusal, a session that is gone, an error event), as opposed to a lost connection. */
+function serverAnswered(error: unknown): boolean {
+  return error instanceof VelaError && error.status < 500 && error.status !== 408 && error.status !== 429;
 }
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {
