@@ -246,6 +246,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       onChoose={() => { if (!chosen(option)) send({ type: 'quality', renditionId: option.id }); }}
     />;
   };
+  const serverStream = view.serverStream;
   const qualityRows = [
     ...(hasVersions ? originals.map(qualityRow) : []),
     view.qualityAuto ? (
@@ -259,10 +260,14 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       />
     ) : null,
     ...(hasVersions ? converted : groups.converted).map(qualityRow),
+    serverStream ? <ChoiceRow key={serverStream.choice} look={look} name={msg('player.quality.plexStream')}
+      selected={serverStream.selected} pending={pendingQualityId === serverStream.choice}
+      enabled={!blocked && !pendingQualityId && !pendingVersionId}
+      onChoose={() => { if (!serverStream.selected) send({ type: 'quality', renditionId: serverStream.choice }); }} /> : null,
   ];
   const convertedTitle = selectedVersion && selectedVersion.id !== groups.versions[0]?.id
     ? msg('player.quality.convertedFrom', { version: selectedVersion.label.split(' · ')[0]! }) : msg('player.quality.convertedFromCurrent');
-  const hasConversions = view.qualityAuto || converted.length > 0;
+  const hasConversions = view.qualityAuto || converted.length > 0 || !!serverStream;
   const showQuality = hasVersions && (hasConversions || originals.length > 0);
   return [
     hasVersions ? <MenuSection key="versions" look={look} title={msg('player.versions')}>
@@ -280,7 +285,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
     ...(showQuality ? [
       <MenuSection key="quality" look={look} title={hasConversions ? convertedTitle : msg('player.quality.title')}>{qualityRows}</MenuSection>,
     ] : qualityRows),
-    !view.qualities.length && !view.qualityAuto ? (
+    !view.qualities.length && !view.qualityAuto && !serverStream ? (
       <ChoiceRow key="current" look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
     ) : null,
     ...(streaming ? [<MenuRule key="streaming-divider" look={look} />, <StreamingSettingsRows key="streaming" look={look} streaming={streaming} />] : []),

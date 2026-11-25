@@ -33,12 +33,22 @@ test('a server limitation is disabled with its reason; it cannot override an ava
   expect(view.qualities.find(q => q.resolution === '720p')!.disabledReason).toBe('');
 });
 
-test('Plex/Jellyfin original-only and direct-with-fixed-HLS plans stay honest when they have no quality ladder', () => {
+test('an unnamed Plex stream can be selected separately from numbered qualities', () => {
   const source = plan();source.paths = source.paths.slice(0, 1);source.selectedPathId = 'primary';
   expect(present(source, null).qualities).toHaveLength(1);
+  expect(present(source, null).serverStream).toBeUndefined();
   // Plex gives both paths the part's id as their source and timeline.
   source.paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', readiness: 'ready', url: '', mimeType: 'application/vnd.apple.mpegurl', sourceId: 'file', timelineId: 'timeline', edition: '1080p release', qualities: [], boundaries: [] });
   expect(present(source, null).qualities).toHaveLength(1);
+  expect(present(source, null).serverStream).toEqual({ choice: 'path:plex-hls', selected: false });
+  source.selectedPathId = 'plex-hls';
+  expect(present(source, null).serverStream?.selected).toBe(true);
+  source.selectedPathId = 'primary';
+  source.paths[1]!.timelineId = 'other';
+  expect(present(source, null).serverStream).toBeUndefined();
+  source.paths[1]!.timelineId = 'timeline';
+  source.paths[1]!.readiness = 'unavailable';
+  expect(present(source, null).serverStream).toBeUndefined();
 });
 
 test('a probed Plex/Jellyfin HLS ladder can supply choices missing from the plan', () => {
@@ -107,5 +117,6 @@ test('Plex\'s stream with a decided output is a numbered choice while the origin
   source.paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', readiness: 'ready', url: '', mimeType: 'application/vnd.apple.mpegurl', sourceId: 'file', timelineId: 'timeline', edition: '1080p release',
     quality: { width: 1280, height: 720, bitrate: 3_800_000, codec: 'h264' }, qualities: [], boundaries: [] } as never);
   const view = present(source, null);
+  expect(view.serverStream).toBeUndefined();
   expect(view.qualities.map(q => [q.id, q.resolution])).toEqual([['path:primary', 'Original'], ['path:plex-hls', '720p']]);
 });

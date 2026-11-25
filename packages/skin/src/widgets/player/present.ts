@@ -92,6 +92,8 @@ export interface PlayerView {
   /** The subtitle delay in seconds (positive shows cues later); null where the engine has none. */
   subtitleOffset: number | null;
   qualities: QualityOption[];
+  /** A Plex stream offered without an output size or rendition ladder. */
+  serverStream?: { choice: string; selected: boolean };
   /** The engine picks the rendition itself unless one is locked. */
   qualityAuto: boolean;
   lockedQuality: string;
@@ -379,6 +381,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
   const position = snapshot?.seekTarget ?? snapshot?.position ?? plan?.positionSeconds ?? 0;
   const duration = snapshot?.duration ?? plan?.durationSeconds ?? 0;
   const path = plan?.paths.find(p => p.id === (snapshot?.sourceId ?? plan.selectedPathId));
+  const unnamed = plan && siblings(plan, path).find(p =>
+    p.id === 'plex-hls' && p.transport === 'hls' && p.kind === 'transcode' &&
+    (p.readiness === 'ready' || p.readiness === 'on-demand') && !p.quality && !p.qualities.length &&
+    !(p.id === path?.id && snapshot?.renditions?.some(q => q.width && q.height)));
   const state: Snapshot['state'] = snapshot?.seekTarget != null ? 'buffering' : (snapshot?.state ?? 'loading');
   const facts = stats(snapshot);
   const style = snapshot?.subtitleStyle;
@@ -424,6 +430,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
         : null,
     subtitleOffset: style && Number.isFinite(style.offsetSeconds) ? style.offsetSeconds : null,
     qualities: qualities(plan, path, snapshot),
+    serverStream: unnamed ? { choice: `path:${unnamed.id}`, selected: path?.id === unnamed.id } : undefined,
     qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
     lockedQuality: lockedQuality(snapshot, path),
     qualityId: snapshot?.renditions?.some(q => q.id === snapshot.renditionId) || path?.qualities.some(q => q.id === snapshot?.renditionId)

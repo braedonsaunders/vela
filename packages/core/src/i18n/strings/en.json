@@ -547,6 +547,7 @@
   "player.quality.automatic": "Automatic quality",
   "player.quality.convertedFrom": "Converted from {version}",
   "player.quality.convertedFromCurrent": "Converted from the current version",
+  "player.quality.plexStream": "Plex server stream",
   "player.quality.title": "Playback quality",
   "player.streaming": "Streaming quality",
   "player.streaming.wifi": "On Wi-Fi",
