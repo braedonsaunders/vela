@@ -152,10 +152,20 @@ for platform in $platforms; do
     echo "testflight: $platform archive failed; the log is $log" >&2
     exit 1
   fi
+  appdir=$archive/Products/Applications/Vela.app
+  # Upload validation refuses an arm64 extension whose Info.plist does not require arm64 ("Invalid
+  # Bundle ... must include the arm64 value for the UIRequiredDeviceCapabilities key"); a local export
+  # does not run that check, so make it here.
+  for extension in "$appdir"/PlugIns/*.appex; do
+    [ -d "$extension" ] || continue
+    if ! plutil -extract UIRequiredDeviceCapabilities json -o - "$extension/Info.plist" 2>/dev/null | grep -q '"arm64"'; then
+      echo "testflight: $(basename "$extension") does not list arm64 in UIRequiredDeviceCapabilities; App Store validation refuses it" >&2
+      exit 1
+    fi
+  done
   # FFmpegBuild 3.15.0's frameworks claim MinimumOSVersion 26.0 in their Info.plist although their
   # binaries target 16.0; App Store validation refuses a framework that claims more than the app
   # (ITMS-90208). Lower the claim to the app's and re-sign; the export signs everything again anyway.
-  appdir=$archive/Products/Applications/Vela.app
   minimum=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$appdir/Info.plist")
   identity=$(codesign -dvv "$appdir" 2>&1 | sed -n 's/^Authority=//p' | head -1)
   patched=0

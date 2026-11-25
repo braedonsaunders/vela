@@ -47,6 +47,10 @@ function infoPlist({ name, version, build, group }) {
 	<string>${xml(build)}</string>
 	<key>${GROUP_KEY}</key>
 	<string>${xml(group)}</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>
