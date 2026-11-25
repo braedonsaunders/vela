@@ -29,6 +29,7 @@ import { GuideRowDrawing, GuideSurface } from '@vela/guide-native';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
+import { parityAudioSpec, startParityAudio } from './parity';
 import { setQuietPlayback } from '@vela/skin/src/quiet-playback';
 import { PreviewBadge, previewReturnPath, startPreview, usePreviewReload } from './screen-preview';
 
@@ -189,6 +190,10 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   // first visit draws at once.
   const homeReady = signedIn && state.home.load === 'ready';
   useStartRoutes(homeReady);
+  useEffect(() => {
+    const spec = homeReady ? parityAudioSpec() : null;
+    if (spec) startParityAudio(store, spec);
+  }, [store, homeReady]);
   const libraryIds = (state.libraries.value ?? []).filter(library => library.kind !== 'live').map(library => library.id).join(',');
   useEffect(() => {
     if (!homeReady || !libraryIds) return;

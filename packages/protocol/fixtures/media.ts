@@ -208,7 +208,8 @@ const concertSpecs: Record<string, ConcertSpec[]> = {
   ],
 };
 
-const fixtureNow = Date.now();
+// VELA_MOCK_NOW pins the instant relative dates count from (parity captures on different days).
+const fixtureNow = Date.parse(process.env.VELA_MOCK_NOW ?? '') || Date.now();
 const artists: Title[] = [], albums: Title[] = [], tracks: Title[] = [], concerts: Title[] = [];
 const audioSources = new Map<string, AudioSource>();
 const childrenOf = new Map<string, Title[]>();

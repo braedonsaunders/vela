@@ -66,6 +66,11 @@ if (mediaEnabled) Object.assign(capabilities.features, {
 // Every library names how it opens (protocol README, Library experience): music, audiobooks and
 // podcasts listen, books read, photos are a gallery, Live TV is live, the rest watch.
 // VELA_MOCK_NO_EXPERIENCES=1 is a server without it (Vela chooses by media class).
+// VELA_MOCK_LIKED=<title id>,…: titles the viewer has already liked (parity captures of Liked Songs).
+for (const id of (process.env.VELA_MOCK_LIKED ?? '').split(',').filter(Boolean)) {
+  const title = mediaTitle(id);
+  if (title) title.watch = { ...(title.watch ?? { positionSeconds: 0, played: false, watchlisted: false }), favorite: true };
+}
 const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
 // Loudness levelling and AutoMix markers on music tracks; VELA_MOCK_NO_LOUDNESS=1 is an Ether without them.
 if (mediaEnabled && process.env.VELA_MOCK_NO_LOUDNESS !== '1') capabilities.features.loudness = { available: true, album: true, fades: true };
