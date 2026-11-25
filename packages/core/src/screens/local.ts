@@ -282,7 +282,7 @@ export class LocalSources {
       case 'vela.title': {
         const id = itemId(args.id!);
         await stores.catalogue.title(id, fresh);
-        const loaded = stores.getState().titles[id];
+        const loaded = await settled(stores, () => stores.getState().titles[id]);
         const detail = loaded?.value;
         const card = detail?.title[0];
         if (!detail || !card) return { error: loadableError(loaded) };
@@ -323,7 +323,7 @@ export class LocalSources {
           if (!args.titleId) return { error: 'invalid_request' };
           const id = itemId(args.titleId);
           await stores.catalogue.related(id);
-          const loaded = stores.getState().related[id];
+          const loaded = await settled(stores, () => stores.getState().related[id]);
           if (!loaded?.value) return { error: loadableError(loaded) };
           return rowsValue(loaded.value);
         }
@@ -352,20 +352,23 @@ export class LocalSources {
         const role = args.role!;
         const cls = args.class;
         if (!stores.music.likedAvailable) {
-          // Servers before role lists: the viewer's marked Favorites playlist, by role.
-          if (!stores.playlists.available) return unsupported();
-          if (stores.getState().playlists.list.load !== 'ready') await stores.playlists.load();
-          const favorites = stores.getState().playlists.list.value?.find(item => item.name === 'Favorites');
-          if (!favorites) return cardList([], false, 0);
+          // Servers before role lists: the viewer's marked Favorites playlist, by role; else (Jellyfin,
+          // Plex) the library's own favourite filter, on the tab listing that role.
+          if (stores.playlists.available && stores.getState().playlists.list.load !== 'ready') await stores.playlists.load();
+          const favorites = stores.playlists.available ? stores.getState().playlists.list.value?.find(item => item.name === 'Favorites') : undefined;
+          if (!favorites) {
+            if (args.library) return this.favoritesInLibrary(args.library, role, cls, extraPages);
+            return stores.playlists.available ? cardList([], false, 0) : unsupported();
+          }
           await stores.playlists.open(favorites.id, false, fresh);
-          const loaded = stores.getState().collections[favorites.id];
+          const loaded = await settled(stores, () => stores.getState().collections[favorites.id]);
           if (!loaded?.value) return { error: loadableError(loaded) };
           const items = loaded.value.items.filter(card => card.media?.role === role && (!cls || card.media?.class === cls));
           return cardList(items, false, items.length);
         }
         await stores.music.liked(role, false, fresh);
         // A page asked for more than the store holds: read on.
-        let loaded = stores.getState().music.liked[role];
+        let loaded = await settled(stores, () => stores.getState().music.liked[role]);
         for (let pages = Math.ceil((loaded?.value?.items.length ?? 0) / 100); loaded?.value?.more && pages < 1 + extraPages; pages++) {
           await stores.music.liked(role, true);
           loaded = stores.getState().music.liked[role];
@@ -387,7 +390,7 @@ export class LocalSources {
         if (!stores.playlists.available) return unsupported();
         const id = itemId(args.id!);
         await stores.playlists.open(id, false, fresh);
-        let loaded = stores.getState().collections[id];
+        let loaded = await settled(stores, () => stores.getState().collections[id]);
         for (let pages = 1; loaded?.value?.more && pages < 1 + extraPages; pages++) {
           await stores.playlists.open(id, true);
           loaded = stores.getState().collections[id];
@@ -491,7 +494,7 @@ export class LocalSources {
       case 'vela.readingProgress': {
         const id = itemId(args.id!);
         await stores.catalogue.title(id, fresh);
-        const loaded = stores.getState().titles[id];
+        const loaded = await settled(stores, () => stores.getState().titles[id]);
         const media = loaded?.value?.title[0]?.media;
         if (!loaded?.value) return { error: loadableError(loaded) };
         if (!media?.readingFormat) return unsupported();
@@ -525,7 +528,7 @@ export class LocalSources {
         if (!stores.music.duplicatesAvailable || !hasLibraryDuplicates(adapter as never)) return unsupported();
         const libraryId = args.libraryId!;
         await stores.music.duplicates(libraryId, false, fresh);
-        let loaded = stores.getState().music.duplicates[libraryId];
+        let loaded = await settled(stores, () => stores.getState().music.duplicates[libraryId]);
         for (let pages = 1; loaded?.value?.more && pages < 1 + extraPages; pages++) {
           await stores.music.duplicates(libraryId, true);
           loaded = stores.getState().music.duplicates[libraryId];
@@ -575,8 +578,8 @@ export class LocalSources {
         return { value: { ...value, q, byDescription: list.byDescription, top: top ? ref(itemKey(top.id)) : null, groups }, records };
       }
       case 'vela.guide': {
-        const { adapter } = await this.features();
-        if (!hasLiveTv(adapter as never)) return unsupported();
+        const { adapter, features } = await this.features();
+        if (!hasLiveTv(adapter as never) || features?.liveTV?.available !== true) return unsupported();
         const day = Math.max(0, Math.min(6, intArg(args.day) ?? 0));
         const held = stores.getState().live.guide[day];
         if (fresh || !held?.value || held.load === 'failed') await stores.live.guide(day);
@@ -591,6 +594,28 @@ export class LocalSources {
         };
       }
     }
+  }
+
+  /** A library's favourites of one role, through its favourite filter on the tab listing that role
+   * (Jellyfin's Songs, Albums and Artists); unsupported where the library has no such filter. */
+  private async favoritesInLibrary(libraryId: string, role: string, cls: string | undefined, extraPages: number): Promise<LocalAnswer> {
+    const { stores } = this;
+    await this.libraries();
+    const library = stores.getState().libraries.value?.find(item => item.id === libraryId);
+    if (!library) return { error: 'not_found' };
+    const tab = library.tabs?.find(item => item.level === role) ?? library.tabs?.find(item => item.id === `${role}s` && item.kind === 'library');
+    // The plain view says whether the library filters by favourite at all (Plex keeps none).
+    const plain: LibraryQuery = tab ? { tab: tab.id } : {};
+    if (!stores.getState().library[libraryKey(libraryId, plain)]?.value) await stores.catalogue.library(libraryId, plain);
+    const view = stores.getState().library[libraryKey(libraryId, plain)];
+    if (!view?.value) return { error: loadableError(view) };
+    if (!view.value.canFavorite) return unsupported();
+    const query: LibraryQuery = { ...plain, favorite: true };
+    await stores.catalogue.library(libraryId, query, 1 + extraPages);
+    const loaded = stores.getState().library[libraryKey(libraryId, query)];
+    if (!loaded?.value) return { error: loadableError(loaded) };
+    const items = loaded.value.items.filter(card => (card.media?.role ?? '') === role && (!cls || card.media?.class === cls));
+    return cardList(items, loaded.value.more);
   }
 
   /** The audio app's search once the list for `q` has answered (or another query took over: undefined). */
@@ -754,7 +779,7 @@ export class LocalSources {
     if (known) return known;
     const id = itemId(value);
     await this.stores.catalogue.title(id);
-    return this.stores.getState().titles[id]?.value?.title[0];
+    return (await settled(this.stores, () => this.stores.getState().titles[id]))?.value?.title[0];
   }
 
   /** What `vela.play {context}` plays through: a list source on the page, or a container item. */
