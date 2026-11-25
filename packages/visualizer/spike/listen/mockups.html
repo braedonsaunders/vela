@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Listen · Visualizer studies</title>
+<style>
+* { box-sizing:border-box }
+body { margin:0; background:#eeeae4; color:#25211d; font:16px/1.4 "Helvetica Neue",Arial,sans-serif }
+main { max-width:1050px; padding:clamp(20px,5vw,60px); margin:auto }
+h1,h2,p { margin:0 }
+h1 { font:clamp(36px,6vw,64px)/1.1 Georgia,serif; letter-spacing:-.045em }
+h2 { margin:32px 0 10px; font:normal 17px/1.4 Georgia,serif }
+section { color:white; overflow:hidden; position:relative; background:#141318 }
+.ink { background:linear-gradient(to top,#0d1018f5,transparent 83%),url(ink.jpg) center/cover }
+.tunnel { background:linear-gradient(to right,#080c16eb,transparent 95%),url(hyperspace.jpg) center/cover }
+.phone { width:min(300px,100%); height:474px; border-radius:28px; padding:26px; display:flex; flex-direction:column; justify-content:space-between }
+.top { display:flex; align-items:center; justify-content:space-between; gap:14px }
+.phone .top { background:#161722b8; border-radius:20px; padding:7px 12px; font-size:13px }
+.track { font:normal 32px/1.05 Georgia,serif; letter-spacing:-.035em }
+.artist { margin-top:5px; color:#e1dfe8 }
+.line { height:3px; background:linear-gradient(to right,white 36%,#ffffff60 36%); margin:22px 0 5px }
+.time { display:flex; justify-content:space-between; font:11px monospace }
+.transport { display:flex; justify-content:center; align-items:center; gap:28px; height:70px; font-size:20px }
+.controls { display:flex; align-items:center; flex-wrap:wrap; gap:7px }
+.chip { display:inline-block; padding:5px 9px; font-size:12px; border-radius:15px; border:1px solid #ffffff55; background:#14131dba }
+.on { color:#181320; background:#f5eafa }
+.wide { min-height:330px; display:grid; grid-template-columns:minmax(0,1fr) minmax(160px,32%) }
+.lyrics { padding:clamp(18px,4vw,44px); display:flex; flex-direction:column; justify-content:space-between }
+.verse { margin:25px 0; font:clamp(20px,3.5vw,40px)/1.14 Georgia,serif }
+.verse small { color:#c1beca; font-size:.64em }
+.picker { padding:20px; background:#100f15f2 }
+.picker strong { display:block; margin-bottom:16px }
+.card { display:flex; align-items:center; gap:10px; padding:7px; border-radius:8px; margin-bottom:8px; font-size:14px }
+.card img { width:42%; aspect-ratio:16/9; object-fit:cover; border-radius:4px }
+.chosen { background:#36313f; outline:2px solid #ded0ed }
+.tv { aspect-ratio:16/9; display:flex; align-items:flex-end; padding:5%; border-radius:4px }
+.tv .rail { background:#12121beb; width:100%; border-radius:12px; padding:clamp(10px,2vw,22px) }
+.tv .cards { display:flex; gap:12px; margin:12px 0 }
+.tv .card { width:42%; margin:0 }
+.hint { color:#d2cdd7; font-size:12px }
+@media(max-width:530px) { .wide { grid-template-columns:1fr } .picker .card { display:inline-flex; width:46%; vertical-align:middle } .tv { min-height:230px } .tv .card { width:50%; font-size:12px } }
+</style>
+<main>
+<h1>Listen / Visualizer</h1>
+<h2>Phone · Now Playing</h2>
+<section class="phone ink" aria-label="Now Playing with Ink in Water behind the transport">
+  <div class="top"><span>⌄</span><span>Now Playing</span><span>Expand ↗</span></div>
+  <div><p class="track">First light</p><p class="artist">North Pier</p>
+    <div class="line"></div><div class="time"><span>1:14</span><span>3:26</span></div>
+    <div class="transport"><span>◀</span><b>Ⅱ</b><span>▶</span></div>
+    <div class="controls"><span class="chip on">Visuals · On</span><span class="chip">Scenes</span><span class="chip">Lyrics</span></div>
+  </div>
+</section>
+<h2>Desktop &amp; wide tablet · Full screen with lyrics</h2>
+<section class="wide tunnel" aria-label="Fullscreen visualizer with lyrics and scenes panel">
+  <div class="lyrics"><div>‹ &nbsp; Now Playing</div>
+    <p class="verse"><small>Morning over the water</small><br>The first light finds us here<br><small>Before the boats wake up</small></p>
+    <div class="controls"><span class="chip">Ⅱ &nbsp; First light</span><span class="chip on">Lyrics · On</span></div>
+  </div>
+  <aside class="picker"><strong>Scenes</strong>
+    <div class="card chosen"><img src="hyperspace.jpg" alt=""><span>Hyperspace ✓</span></div>
+    <div class="card"><img src="ink.jpg" alt=""><span>Ink in Water</span></div>
+  </aside>
+</section>
+<h2>TV · Scene picker over the playing scene</h2>
+<section class="tv ink" aria-label="TV picker with Ink in Water focused">
+  <div class="rail"><strong>Scenes</strong><div class="cards">
+    <div class="card chosen"><img src="ink.jpg" alt=""><span>Ink in Water ✓</span></div>
+    <div class="card"><img src="hyperspace.jpg" alt=""><span>Hyperspace</span></div>
+  </div><p class="hint">Select to apply &nbsp; · &nbsp; Back to visualizer</p></div>
+</section>
+</main>
+</html>
