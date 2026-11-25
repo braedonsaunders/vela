@@ -112,8 +112,9 @@ function SectionsPlaceholder({ look }: { look: BlockLook }) {
   );
 }
 
-function collectNodeNeeds(node: unknown): string[] {
+function collectNodeNeeds(node: unknown, shown?: (node: unknown) => boolean): string[] {
   if (!node || typeof node !== 'object') return [];
+  if (shown && !shown(node)) return [];
   const n = node as BlockRNodeCommon & { children?: unknown[]; item?: unknown };
   const out = new Set<string>();
   if (Array.isArray(n.needs)) {
@@ -121,7 +122,7 @@ function collectNodeNeeds(node: unknown): string[] {
   }
   if (Array.isArray(n.children)) {
     for (const child of n.children) {
-      for (const s of collectNodeNeeds(child)) out.add(s);
+      for (const s of collectNodeNeeds(child, shown)) out.add(s);
     }
   }
   return [...out];
@@ -174,14 +175,17 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
     if (!runtime?.requestNeeds) return;
     const upcoming = visibleChildren.slice(0, Math.min(visibleChildren.length, mountedCount + 1));
     const needed = new Set<string>();
-    for (const child of node.children) {
+    // An experience page reads only what its shown branches need (music Home never reads the spoken
+    // shelves); a plugin page keeps reading every child's, as Sports was tuned against.
+    for (const child of embedded ? [] : node.children) {
       for (const s of collectNodeNeeds(child)) needed.add(s);
     }
+    const shown = embedded ? (n: unknown) => sectionWhenHolds(n, ctx, host.env) : undefined;
     for (const child of upcoming) {
-      for (const s of collectNodeNeeds(child)) needed.add(s);
+      for (const s of collectNodeNeeds(child, shown)) needed.add(s);
     }
     if (needed.size > 0) runtime.requestNeeds([...needed]);
-  }, [runtime, visibleChildren.length, mountedCount, node.children]);
+  }, [runtime, visibleChildren.length, mountedCount, node.children, embedded, ctx, host.env]);
 
   // A page in an experience's shell keeps its scroll by its key and is put back where it was once its
   // content is tall enough (a drag first leaves it where the viewer takes it).
