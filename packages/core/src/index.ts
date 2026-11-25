@@ -29,6 +29,7 @@ export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protoc
 export { skipAction, type SkipAction } from './protocol/markers';
 export type { EpisodeRef } from './adapter/series';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
+export { playingRelease, withPlaying } from './store/playing-release';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
 export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse, HistoryRecapPeriod, PlaylistImportFormat, ImportSource, PlaylistImportUnmatched } from './wire';

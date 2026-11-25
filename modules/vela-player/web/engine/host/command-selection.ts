@@ -5,6 +5,22 @@ import { candidateSources } from './quality';
 import { requestTracks, requestSwitch } from './authorizations';
 import { activateSource } from './media';
 import { executeCommand } from './commands';
+import { pageAbility } from './playability';
+import { pathUnplayable, refusedReason, unplayableMessage } from '../path-playability';
+import type { OnDemandSource, Source } from '../model';
+
+/** Why a switch to `pathId` cannot happen on this page, or null when it can. */
+function switchRefusal(context: HostContext, pathId: string, found: Source | OnDemandSource | undefined): string | null {
+  const page = pageAbility(context);
+  if (found) {
+    const reason = 'onDemand' in found ? pathUnplayable(found, page) : null;
+    return reason ? unplayableMessage(reason) : null;
+  }
+  // Offered by the session, but no player here takes it (candidateSources left it out).
+  const known = context.session.current?.sources.find((s) => s.id === pathId);
+  if (known) return unplayableMessage(refusedReason(known, page));
+  return 'This playback choice is no longer offered; reopen the menu and choose again';
+}
 export async function switchPathFromCommand(
   context: HostContext,
   command: Extract<
@@ -14,10 +30,15 @@ export async function switchPathFromCommand(
     }
   >,
 ) {
+  if (command.pathId === context.media.source?.id) return true;
   const source =
     candidateSources(context).find((s) => s.id === command.pathId) ??
     context.session.current?.onDemandSources?.find((s) => s.id === command.pathId);
-  if (!source || source.id === context.media.source?.id) return true;
+  // A switch that cannot happen says why: a path this page cannot play (Original quality over
+  // plain http) or one the session no longer offers. Accepting it did nothing the viewer could see.
+  const refusal = switchRefusal(context, command.pathId, source);
+  if (refusal) throw new Error(refusal);
+  if (!source) return true;
   if (context.session.current?.serverControlled) {
     // A local original-track choice must reach Ether before conversion;
     // otherwise a switch could silently restore the default audio/PGS.

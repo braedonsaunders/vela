@@ -1,6 +1,7 @@
 import type { LiveEventRef, PlaybackPlan, SessionEvent, SessionSnapshot } from '../wire';
 import type { ServerAdapter } from '../adapter';
 import type { EventStream } from '../adapter/capabilities';
+import { withPlaying } from '../store/playing-release';
 
 /** The last cursor seen per session, so a reconnection resumes where the previous one stopped. */
 const cursors = new Map<string, string>();
@@ -24,7 +25,7 @@ export async function followSession(
   let snapshot: SessionSnapshot = await api.sessionSnapshot(sessionId);
   let revision = snapshot.revision;
   signal?.throwIfAborted();
-  onPlan(present(snapshot.plan));
+  onPlan(present(withPlaying(snapshot.plan, snapshot)));
   if (snapshot.liveEvent !== undefined) onLiveEvent?.(liveEventRef(snapshot.liveEvent));
   const cursor = cursors.get(sessionId) ?? snapshot.cursor;
   await api.streamSession(sessionId, cursor, async event => {
@@ -39,10 +40,11 @@ export async function followSession(
     if (value.revision < revision) return;
     switch (value.type) {
       case 'snapshot':
-        snapshot = value.snapshot;
+        snapshot = { ...value.snapshot, plan: withPlaying(withPlaying(value.snapshot.plan, value.snapshot), value) };
         break;
       case 'plan':
-        snapshot = { ...snapshot, plan: value.plan, cursor: value.cursor, revision: value.revision };
+        // The playing release may ride on the event rather than its plan (a failover's new release).
+        snapshot = { ...snapshot, plan: withPlaying(value.plan, value), cursor: value.cursor, revision: value.revision };
         break;
       case 'ended': {
         const plan = { ...snapshot.plan, state: 'ended' as const, revision: value.revision };

@@ -19,6 +19,7 @@ import { randomId } from '../protocol/id';
 import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
 import { VelaError } from '../adapter/errors';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
+import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import type { Session } from './session';
@@ -378,7 +379,7 @@ export class Playback {
     const adapter = connection.adapter;
     this.followNow = hasEventStream(adapter) ? undefined : id => {
       if (id !== sessionId || this.run !== run || controller.signal.aborted) return;
-      void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(snapshot.plan)); }).catch(() => undefined);
+      void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(withPlaying(snapshot.plan, snapshot))); }).catch(() => undefined);
     };
     const loop = async () => {
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
@@ -394,7 +395,7 @@ export class Playback {
           }
           const snapshot = await adapter.sessionSnapshot(sessionId);
           if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
-          show(present(snapshot.plan));
+          show(present(withPlaying(snapshot.plan, snapshot)));
           await delay(POLL_SECONDS * 1000, controller.signal);
         } catch {
           if (!controller.signal.aborted) this.recover(sessionId);

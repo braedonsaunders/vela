@@ -354,6 +354,32 @@ describe('mock server: catalogue and live', () => {
     expect((await refused.json() as V.ErrorResponse).error).toMatchObject({ class: 'source', code: 'version_unavailable' });
   });
 
+  test.skipIf(!mediaGenerated)('the playing release rides on plans, snapshots and events, and a failover publishes a newer revision', async () => {
+    const versions = await get<V.TitleVersions>('/titles/title-1-3/versions');
+    const [auto, top, web] = versions.versions;
+    const start = (versionId: string) => post('/playback', {
+      titleId: versions.titleId, versionId, idempotencyKey: key(),
+      client: { device, protocolVersions: [0], containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: true, mse: true },
+    }, authed(tokens)).then(response => response.json() as Promise<V.PlaybackPlan>);
+    // Auto stays the choice; the top release, a row of its own, is what plays.
+    const plan = await start(auto!.id);
+    expect(plan.selectedVersionId).toBe(auto!.id);
+    expect(plan.playingVersionId).toBe(top!.id);
+    expect(plan.playingLabel).toBe(top!.label);
+    const snapshot = await get<V.SessionSnapshot>(`/sessions/${plan.sessionId}`);
+    expect(snapshot).toMatchObject({ playingVersionId: top!.id, playingLabel: top!.label });
+    const failed = await fetch(`${mock.url}/__admin/failover`, { method: 'POST' }).then(response => response.json()) as { sessionId: string; revision: number; playingVersionId: string }[];
+    const moved = failed.find(entry => entry.sessionId === plan.sessionId)!;
+    expect(moved.revision).toBeGreaterThan(plan.revision);
+    expect(moved.playingVersionId).toBe(web!.id);
+    const after = await get<V.SessionSnapshot>(`/sessions/${plan.sessionId}`);
+    expect(after.plan).toMatchObject({ selectedVersionId: auto!.id, playingVersionId: web!.id, playingLabel: web!.label });
+    expect(after.playingLabel).toBe(web!.label);
+    // Choosing the top release's own row plays exactly it.
+    const forced = await start(top!.id);
+    expect(forced).toMatchObject({ selectedVersionId: top!.id, playingVersionId: top!.id });
+  });
+
   test('bootstrap-only delay leaves independent library reads responsive', async () => {
     const delayed = await launchMock({ VELA_MOCK_BOOTSTRAP_DELAY_MS: '120' });
     try {

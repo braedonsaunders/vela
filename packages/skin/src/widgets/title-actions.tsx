@@ -10,7 +10,7 @@ import { Glyph } from './common/controls';
 import { SheetModal } from './common/sheet-modal';
 import { useLook } from './common/look';
 import type { TitleVersions, VersionItem } from '@vela/core';
-import { versionAvailability, versionBadge, versionChips } from './versions';
+import { versionAvailability, versionBadge, versionChips, versionPlayArg } from './versions';
 
 export function VersionsControl() {
   const vela = useVela();
@@ -29,9 +29,9 @@ export function VersionsControl() {
   if (!data?.versions.length) return null;
   const current = data.versions.find(version => version.id === data.selectedVersionId) ?? data.versions[0]!;
   const badge = versionBadge(current);
-  const play = (version: VersionItem, index: number) => {
+  const play = (version: VersionItem) => {
     setOpen(false);
-    host.dispatch('play', `${id}||||${index === 0 ? '' : version.id}`);
+    host.dispatch('play', versionPlayArg(id, version));
   };
   const automatic = async () => {
     if (busy) return;
@@ -48,7 +48,7 @@ export function VersionsControl() {
           <Text style={look.text({ 'font-size': '28px', 'font-weight': '700' })}>Versions</Text>
           <Text style={look.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>Choose the original you want to play. Converted quality options remain available in the player.</Text>
           {data.rememberedChoice?.scope === 'show' ? <Text style={look.text({ 'font-size': '15px', 'font-weight': '600' })}>Your choice for this show: {data.rememberedChoice.label}</Text> : null}
-          {data.versions.map((version, index) => <VersionRow key={version.id} version={version} selected={version.id === data.selectedVersionId} disabled={busy} run={() => play(version, index)} />)}
+          {data.versions.map(version => <VersionRow key={version.id} version={version} selected={version.id === data.selectedVersionId} disabled={busy} run={() => play(version)} />)}
           {data.rememberedChoice ? <VersionButton label="Use automatic" detail="Clear your remembered choice" run={() => void automatic()} disabled={busy} /> : null}
           {error ? <Text accessibilityRole="alert" style={look.text({ color: '$ui.live' })}>{error}</Text> : null}
           <VersionButton label="Close" run={() => setOpen(false)} disabled={busy} />
