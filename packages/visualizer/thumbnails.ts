@@ -15,6 +15,5 @@ export const thumbnails: Record<string, number> = {
   'ink': require('./thumbnails/ink.jpg'),
   'incense': require('./thumbnails/incense.jpg'),
   'leaves': require('./thumbnails/leaves.jpg'),
-  'forest': require('./thumbnails/forest.jpg'),
   'shallows': require('./thumbnails/shallows.jpg'),
 };
