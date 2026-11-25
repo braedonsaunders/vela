@@ -163,3 +163,14 @@ test('the guide answers a day of channels as channel records', async () => {
   expect(store.screens.records.get(guide.channels[0]!.$record)?.value).toMatchObject({ id: expect.any(String), name: expect.any(String) });
   handle.release();
 });
+
+test('a built-in page with nothing to read now (a shell) is ready at once', () => {
+  const shell: ScreenDocument = { ...albumPage, page: 'shell', params: {}, sources: { later: { from: 'vela.queue', lazy: true } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/shell' ? shell : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'shell' }, href: 'vela:listen/shell' });
+  expect(store.getState().screens.pages[handle.key]!.load).toBe('ready');
+  handle.release();
+  const none = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'shell2' }, href: 'vela:listen/shell2' });
+  expect(store.getState().screens.pages[none.key]!.load).toBe('failed');
+  none.release();
+});

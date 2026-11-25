@@ -462,6 +462,11 @@ export class Screens {
     const wanted = sources ? [...new Set(sources)] : eagerSources(document, entry.lazy);
     const local = wanted.filter(name => builtIn || LocalSources.isLocal(document.sources[name]));
     const remote = wanted.filter(name => !local.includes(name));
+    // A built-in page with nothing to read now (a shell, or only lazy sources) is ready at once.
+    if (builtIn && !local.length) {
+      if (this.page(key)?.load !== 'ready') this.setPage(key, page => ({ ...page, load: 'ready' }));
+      return;
+    }
     const reads: Promise<void>[] = [];
     if (local.length) reads.push(this.readLocal(key, entry, local));
     // A whole read stays whole for Ether (it skips `vela.*` sources), unless every source is local.
