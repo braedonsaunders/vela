@@ -70,12 +70,6 @@ final class VisualizerPCMBuffer {
     private var boundary: (old: Int, new: Int, offset: Int, shift: Double)?
 
 
-    var hasReceivedSamples: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return written > 0
-    }
-
     func append(_ buffers: UnsafeMutableAudioBufferListPointer, frames: Int, channels: Int, interleaved: Bool,
                 rate: Double, start: Double, id: Int, split: Int, nextID: Int, streamOffset: Int? = nil) {
         guard frames > 0, frames <= Self.mask, channels > 0, rate.isFinite, rate > 0, start.isFinite,

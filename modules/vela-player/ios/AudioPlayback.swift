@@ -91,15 +91,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         center.addObserver(self, selector: #selector(routeChanged(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
     }
 
-    private var missingVisualizerID: Int?
-    func markMissingVisualizerPCM(id: Int) {
-        guard id == loadID else { return }
-        missingVisualizerID = id
-        updateVisualizerAvailability()
-    }
-
     @discardableResult private func updateVisualizerAvailability() -> Bool {
-        let available = item.map { missingVisualizerID != loadID && !lane.hasNoTap($0) && !lane.context.visualizerFeed.unsupported } ?? true
+        let available = item.map { !lane.hasNoTap($0) && !lane.context.visualizerFeed.unsupported } ?? true
         VisualizerAvailability.shared.update(available)
         return available
     }
@@ -588,7 +581,6 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         itemNotifications.forEach { NotificationCenter.default.removeObserver($0) }
         itemNotifications = []
         item = nil
-        missingVisualizerID = nil
         updateVisualizerAvailability()
     }
 

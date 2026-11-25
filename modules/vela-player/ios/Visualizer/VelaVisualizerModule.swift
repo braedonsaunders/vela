@@ -7,12 +7,41 @@ final class VisualizerAvailability {
     static let shared = VisualizerAvailability()
     static let changed = Notification.Name("VelaVisualizerAvailability")
     private let lock = NSLock()
+    private var prepared: Set<ObjectIdentifier> = []
+    private var fullscreenRequest: Double?
     private var supported = true, withinBudget = true
 
     var trackSupported: Bool {
         lock.lock()
         defer { lock.unlock() }
         return supported && withinBudget
+    }
+
+    var canOpen: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return supported && withinBudget && !prepared.isEmpty
+    }
+
+    func beginFullscreen() {
+        lock.lock()
+        fullscreenRequest = CACurrentMediaTime()
+        lock.unlock()
+    }
+
+    func takeFullscreenStart() -> Double {
+        lock.lock()
+        defer { fullscreenRequest = nil; lock.unlock() }
+        return fullscreenRequest ?? CACurrentMediaTime()
+    }
+
+    func prepared(_ session: AnyObject, _ value: Bool) {
+        lock.lock()
+        let before = prepared.isEmpty
+        if value { prepared.insert(ObjectIdentifier(session)) } else { prepared.remove(ObjectIdentifier(session)) }
+        let changed = before != prepared.isEmpty
+        lock.unlock()
+        if changed { NotificationCenter.default.post(name: Self.changed, object: nil) }
     }
 
     func disableForBudget() {
@@ -49,6 +78,10 @@ public final class VelaVisualizerModule: Module {
         Function("canVisualize") {
             Self.hostSupported && VisualizerAvailability.shared.trackSupported
         }
+        Function("canOpenVisualizer") {
+            Self.hostSupported && VisualizerAvailability.shared.canOpen
+        }
+        Function("beginFullscreen") { VisualizerAvailability.shared.beginFullscreen() }
         View(VelaVisualizerView.self) {
             Events("onUnavailable")
             Prop("sceneId") { (view: VelaVisualizerView, value: String?) in view.sceneID = value ?? "" }
@@ -68,7 +101,9 @@ private final class VisualizerSurface: UIView {
 }
 
 private final class RenderSession {
-    var renderer: VisualizerRenderer?
+    let queue = DispatchQueue(label: "app.vela.visualizer", qos: .userInitiated)
+    var renderer: VisualizerRenderer? // render queue only
+    var presented = false // main queue only
     private let lock = NSLock()
     private var cancelled = false
     func cancel() { lock.lock(); cancelled = true; lock.unlock() }
@@ -81,12 +116,15 @@ private final class VelaVisualizerView: ExpoView {
     private var budget = VisualizerBudget()
     private var lastTint: [String] = []
     let onUnavailable = EventDispatcher()
-    private let surface = VisualizerSurface()
-    private let queue = DispatchQueue(label: "app.vela.visualizer", qos: .userInitiated)
+    private var surface = VisualizerSurface()
+    // Fabric can detach and immediately replace the native view when the overlay changes.
+    // Keep the already presented layer for this one transfer without scheduling more frames.
+    private static var parked: (scene: String, window: ObjectIdentifier, surface: VisualizerSurface, session: RenderSession, lanes: [VisualizerHeardLane])?
+    private var attachedWindow: ObjectIdentifier?
+    private var previousMode = "", enteredFullscreen: Double?
     private var session: RenderSession?, displayLink: CADisplayLink?
     private var runningScene = "", busy = false, drew = false
     private var failedScene: String?
-    private var pendingPCM: (id: Int, since: Double)?
     private var subscribed: [VisualizerHeardLane] = []
     private var framesStill: Bool { still || UIAccessibility.isReduceMotionEnabled }
 
@@ -105,10 +143,24 @@ private final class VelaVisualizerView: ExpoView {
         center.addObserver(self, selector: #selector(commit), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
     }
 
-    override func didMoveToWindow() { super.didMoveToWindow(); commit() }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil, active, UIApplication.shared.applicationState == .active,
+           let session, let attachedWindow, session.presented {
+            if let superseded = Self.parked, superseded.session !== session { Self.retire(superseded.session) }
+            Self.parked = (runningScene, attachedWindow, surface, session, subscribed)
+            self.session = nil
+            stop()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+                guard Self.parked?.session === session else { return }
+                Self.parked = nil
+                Self.retire(session)
+            }
+        } else { commit() }
+    }
     override func layoutSubviews() {
         super.layoutSubviews()
-        surface.frame = bounds
+        if surface.superview === self { surface.frame = bounds }
         commit()
     }
 
@@ -120,15 +172,39 @@ private final class VelaVisualizerView: ExpoView {
             return
         }
         guard failedScene != sceneID else { return }
+        attachedWindow = ObjectIdentifier(window)
         if sceneID != runningScene {
+            let changingSelection = session != nil && previousMode == mode
+            let liveLanes = subscribed
             stop()
+            subscribed = liveLanes
+            if changingSelection { previousMode = mode }
             runningScene = sceneID
             guard let device = MTLCreateSystemDefaultDevice(), VisualizerResources.available else {
                 unavailable(.resources)
                 return
             }
-            surface.metal.device = device
-            session = RenderSession()
+            if let prior = Self.parked, prior.scene == sceneID, prior.window == attachedWindow {
+                Self.parked = nil
+                if surface !== prior.surface { surface.removeFromSuperview(); surface = prior.surface }
+                addSubview(surface)
+                surface.frame = bounds
+                session = prior.session
+                subscribed = prior.lanes
+            } else {
+                if surface.superview !== self {
+                    surface = VisualizerSurface()
+                    surface.isUserInteractionEnabled = false
+                    addSubview(surface)
+                    surface.frame = bounds
+                }
+                surface.metal.device = device
+                session = RenderSession()
+            }
+        }
+        if previousMode != mode {
+            enteredFullscreen = mode == "fullscreen" ? VisualizerAvailability.shared.takeFullscreenStart() : nil
+            previousMode = mode
         }
         let cap = min(mode == "background" ? 1080 : 1920, budget.pixelCap)
         let scale = min(window.screen.scale, CGFloat(cap) / max(bounds.width, bounds.height))
@@ -158,20 +234,23 @@ private final class VelaVisualizerView: ExpoView {
         let tint = [artworkTint, accent]
         guard let lanes = AudioPlayback.shared.visualizerLanes() else { stop(); return }
         subscribed = lanes
-        if let lane = lanes.first, lane.speed > 0, !lane.buffer.hasReceivedSamples {
-            let now = CACurrentMediaTime()
-            if let waiting = pendingPCM, waiting.id == lane.id {
-                // Some streaming items accept an audio mix but never call its tap. Real silence
-                // still produces PCM blocks. Waiting/buffering and paused clocks don't count.
-                if now - waiting.since > 4 {
-                    AudioPlayback.shared.markMissingVisualizerPCM(id: lane.id)
-                    stop()
+        let needsPresentation = !session.presented || enteredFullscreen != nil
+        let completion: ((Bool) -> Void)? = needsPresentation ? { [weak self, weak session] success in
+            DispatchQueue.main.async { [weak self, weak session] in
+                guard let self, let session, self.session === session else { return }
+                guard success else { self.unavailable(.metal); return }
+                if let entered = self.enteredFullscreen, CACurrentMediaTime() - entered > 0.4 {
+                    VisualizerAvailability.shared.disableForBudget()
+                    self.unavailable(.budget)
                     return
                 }
-            } else { pendingPCM = (lane.id, now) }
-        } else { pendingPCM = nil }
+                self.enteredFullscreen = nil
+                session.presented = true
+                VisualizerAvailability.shared.prepared(session, true)
+            }
+        } : nil
         busy = true
-        queue.async { [weak self] in
+        session.queue.async { [weak self] in
             var frameCost = 0.0
             let failure: VisualizerError? = autoreleasepool {
                 do {
@@ -180,7 +259,7 @@ private final class VelaVisualizerView: ExpoView {
                         session.renderer = try VisualizerRenderer(device: device, layer: layer, scene: scene, size: size, tint: tint)
                     }
                     guard !session.isCancelled else { return nil }
-                    frameCost = try session.renderer?.draw(size: size, tint: tint, lanes: lanes) ?? 0
+                    frameCost = try session.renderer?.draw(size: size, tint: tint, lanes: lanes, onPresented: completion) ?? 0
                     return nil
                 } catch { return error as? VisualizerError ?? .engine }
             }
@@ -209,16 +288,22 @@ private final class VelaVisualizerView: ExpoView {
         onUnavailable(["reason": reason.rawValue])
     }
 
+    private static func retire(_ session: RenderSession) {
+        VisualizerAvailability.shared.prepared(session, false)
+        session.cancel()
+        session.queue.async { session.renderer = nil }
+    }
+
     @objc private func stop() {
         displayLink?.invalidate()
         displayLink = nil
         subscribed.removeAll()
         if let previous = session {
-            previous.cancel()
-            queue.async { previous.renderer = nil }
+            Self.retire(previous)
             session = nil
         }
-        pendingPCM = nil
+        previousMode = ""
+        enteredFullscreen = nil
         runningScene = ""
         budget = VisualizerBudget()
         drew = false

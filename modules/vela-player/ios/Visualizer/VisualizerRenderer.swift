@@ -49,7 +49,9 @@ final class VisualizerRenderer {
         self.size = size
         self.tint = tint
         context = c
-        executor = try MetalExecutor(device: device, table: table)
+        let libraryURL = VisualizerResources.bundle?.url(forResource: "viz-shaders", withExtension: "metallib")
+        let library = try libraryURL.map { try device.makeLibrary(URL: $0) }
+        executor = try MetalExecutor(device: device, table: table, library: library)
         executor.layer = layer
         let commandBytes = 16 << 20
         // JSC owns the backing memory and releases it with its typed arrays, even on partial setup failure.
@@ -115,7 +117,8 @@ final class VisualizerRenderer {
         self.resize = resize
     }
 
-    func draw(size newSize: CGSize, tint newTint: [String], lanes: [VisualizerHeardLane]) throws -> Double {
+    func draw(size newSize: CGSize, tint newTint: [String], lanes: [VisualizerHeardLane], onPresented: ((Bool) -> Void)? = nil) throws -> Double {
+        if let onPresented { executor.afterDrawable = onPresented }
         let started = CACurrentMediaTime()
         if tint != newTint {
             tint = newTint

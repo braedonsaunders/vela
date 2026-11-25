@@ -42,6 +42,8 @@ final class MetalExecutor {
 
     let device: MTLDevice
     let queue: MTLCommandQueue
+    private let compiledLibrary: MTLLibrary?
+    var afterDrawable: ((Bool) -> Void)?
     private let table: [String: ShaderTable.Entry]
     private var textures: [Int32: Tex] = [:], fbs: [Int32: FB] = [:], rbs: [Int32: RB] = [:], bufs: [Int32: MTLBuffer] = [:], vaos: [Int32: VAO] = [:]
     private var programs: [Int32: Program] = [:]
@@ -69,8 +71,9 @@ final class MetalExecutor {
         defer { completionLock.unlock() }
         return failed || gpuFailed
     }
-    init(device: MTLDevice, table: ShaderTable) throws {
+    init(device: MTLDevice, table: ShaderTable, library: MTLLibrary? = nil) throws {
         guard let queue = device.makeCommandQueue() else { throw NSError(domain: "MetalExecutor", code: 1) }
+        self.compiledLibrary = library
         self.device = device
         self.queue = queue
         self.table = table.entries
@@ -89,14 +92,16 @@ final class MetalExecutor {
         guard let e = table[vs + "\u{0}" + fs] else { return ["ok": false, "log": "program not in apple-shaders.json (rebuild the shader table)"] }
         do {
             func stage(_ s: ShaderTable.Stage) throws -> StageInfo {
-                let lib = try device.makeLibrary(source: s.msl, options: nil)
+                let lib = try compiledLibrary ?? device.makeLibrary(source: s.msl, options: nil)
+                let entry = compiledLibrary == nil ? s.entry : s.compiledEntry ?? s.entry
                 var m: [String: Member] = [:]
                 for x in s.members { m[x.name] = Member(offset: x.offset, count: x.count, arrayStride: x.arrayStride, matrixStride: x.matrixStride) }
-                return StageInfo(library: lib, entry: s.entry, ubo: s.ubo, uboSize: s.uboSize, members: m, textures: s.textures.map { ($0.name, $0.texture, $0.sampler) })
+                return StageInfo(library: lib, entry: entry, ubo: s.ubo, uboSize: s.uboSize, members: m, textures: s.textures.map { ($0.name, $0.texture, $0.sampler) })
             }
             let v = try stage(e.vs), f = try stage(e.fs)
-            let screenLib = try device.makeLibrary(source: e.vsScreenMsl, options: nil)
-            guard let screenFn = screenLib.makeFunction(name: e.vs.entry) else { throw NSError(domain: "viz", code: 1) }
+            let screenLib = try compiledLibrary ?? device.makeLibrary(source: e.vsScreen.msl, options: nil)
+            let screenEntry = compiledLibrary == nil ? e.vs.entry : e.vsScreen.compiledEntry ?? e.vs.entry + "_screen"
+            guard let screenFn = screenLib.makeFunction(name: screenEntry) else { throw NSError(domain: "viz", code: 1) }
             programs[id] = Program(vs: v, vsScreen: screenFn, fs: f, names: e.uniforms.map { $0.name })
             return ["ok": true, "log": "", "uniforms": e.uniforms.map { ["name": $0.name, "type": $0.type, "size": $0.size] }]
         } catch { return ["ok": false, "log": "\(error)"] }
@@ -204,7 +209,8 @@ final class MetalExecutor {
     private func endFrame() {
         endEncoder()
         guard let c = cmd else { return }
-        if let d = drawable { c.present(d) }
+        let completion = drawable == nil ? nil : afterDrawable
+        if let d = drawable { afterDrawable = nil; c.present(d) }
         c.addCompletedHandler { [weak self, inFlight] cb in
             let ms = (cb.gpuEndTime - cb.gpuStartTime) * 1000
             if let self {
@@ -213,6 +219,7 @@ final class MetalExecutor {
                 gpuFailed = gpuFailed || cb.status == .error
                 completionLock.unlock()
             }
+            completion?(cb.status == .completed)
             inFlight.signal()
         }
         c.commit(); cmd = nil; drawable = nil
