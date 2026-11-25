@@ -1,9 +1,11 @@
 import { useRef, useEffect } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type HostInstance } from 'react-native';
-import { canSeeAll } from '@vela/core';
+import { rowLinkAvailable } from '../row-link-available';
 import { useHost, useInheritedText, useWidgetInteraction, type WidgetProps } from '../host';
 import { notePress, trackButton } from '../escape';
 import { rowLinkTakesDirectionalFocus } from '../focus-stop-policy';
+import { moveWebRowFocus } from '../web-row-navigation';
+
 
 /** Shared by every document: shelves never fetch their continuation speculatively. */
 export function RowLink({ ctx, params }: WidgetProps) {
@@ -13,7 +15,7 @@ export function RowLink({ ctx, params }: WidgetProps) {
   const ref = useRef<HostInstance>(null);
   const row = ctx.row;
   const end = params.end === 'true';
-  const available = !!row && !!host.openRow && canSeeAll(row, ctx.rowVisibleCount ?? (params.limit ? Number(params.limit) : undefined));
+  const available = rowLinkAvailable(row, host.openRow, ctx.rowVisibleCount, params.limit);
   const does = `row:${row?.id}:${end ? 'end' : 'heading'}`;
   useEffect(() => available ? trackButton(ref.current, does) : undefined, [available, does]);
   if (!row) return null;
@@ -23,6 +25,14 @@ export function RowLink({ ctx, params }: WidgetProps) {
     {...(href ? { href } : {})}
     focusable={rowLinkTakesDirectionalFocus(end)}
     {...(Platform.OS === 'web' && !end ? { tabIndex: -1 } : {})}
+    {...(Platform.OS === 'web' && end ? {
+      // The end card is the row's last stop for the web's arrow keys, as it is for TV focus.
+      dataSet: { velaRowItem: 'end' },
+      onKeyDown: (event: { key?: string; nativeEvent?: { key?: string }; currentTarget: unknown; preventDefault(): void; stopPropagation(): void }) => {
+        const key = event.key ?? event.nativeEvent?.key ?? '';
+        if (moveWebRowFocus(event.currentTarget as HTMLElement, key)) { event.preventDefault(); event.stopPropagation(); }
+      },
+    } : {})}
     onFocus={() => interaction.report('focus', true)} onBlur={() => interaction.report('focus', false)}
     onHoverIn={() => interaction.report('hover', true)} onHoverOut={() => interaction.report('hover', false)}
     onPress={event => {

@@ -61,6 +61,7 @@ import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { moveWebRowFocus } from './web-row-navigation';
+import { rowLinkAvailable } from './row-link-available';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
 import { opensAtTop, pinOpeningScroll, viewerScrolledSince } from './opening-scroll';
 import { rowLinkTakesDirectionalFocus } from './focus-stop-policy';
@@ -1839,10 +1840,13 @@ function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: 
     },
   }), [group, routeFocus]);
   const { style, text, fx } = useLeafStyle(node, ctx, ui);
-  const { still } = useHost().env;
+  const host = useHost();
+  const { still } = host.env;
   const Part = WIDGETS[node.widget];
   const Frame = frameFor(node);
   if (fx.hidden || !Part) return null;
+  // A row's end card with nothing to open draws nothing, not an empty styled frame.
+  if (node.widget === 'rowLink' && node.params?.end === 'true' && !rowLinkAvailable(ctx.row, host.openRow, ctx.rowVisibleCount, node.params.limit)) return null;
   // A focused drop-down always shows it: in its document's focus look, else the shared ring (as a
   // press box without a look of its own), since the widget draws no focus of its own.
   const ring = ui.focus && RINGED_WIDGETS.has(node.widget) && !focusLook(node) ? focusStyle(style.transform, still) : undefined;
