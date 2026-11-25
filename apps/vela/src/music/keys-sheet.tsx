@@ -5,7 +5,7 @@ import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { DismissScope } from '@vela/skin/src/escape';
 import { SheetModal } from '@vela/skin/src/widgets/common/sheet-modal';
 import { useMediaLook } from '@vela/skin/src/widgets/media';
-import { keyboardMap, type Listening } from '@vela/skin/src/widgets/music/listening';
+import { keyboardMap, type Listening } from '@vela/skin/src/blocks/listen/listening';
 
 export function MusicKeysSheet({ open, close, listening }: { open: boolean; close(): void; listening: Listening }) {
   const m = useMediaLook();

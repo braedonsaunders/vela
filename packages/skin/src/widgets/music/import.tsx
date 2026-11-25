@@ -6,9 +6,9 @@ import { msg } from '@vela/core';
 import { useMediaLook } from '../media/parts';
 import { ImportCover, PlaylistImportBlock, usePlaylistImport } from '../../blocks/import';
 import { importSubtitle } from '../../blocks/import-copy';
-import { useMusic } from './context';
+import { useMusic } from '../../blocks/listen/app';
 import { coverSize, Header, Mosaic, pad } from './pages';
-import { Wash } from './parts';
+import { Wash } from '../../blocks/listen/parts';
 
 export { ImportCover };
 

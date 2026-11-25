@@ -8,7 +8,7 @@ import { msg } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, useInteraction } from '../common/controls';
 import { useMediaLook } from '../media/parts';
-import { musicTV } from './layout';
+import { musicTV } from '../../blocks/listen/layout';
 import { canResume, createScrollMemory, nearEnd, type ScrollMetrics } from './scroll-end';
 
 type Listener = (metrics: ScrollMetrics) => void;

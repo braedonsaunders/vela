@@ -5,10 +5,10 @@ import { Text, View, ScrollView } from 'react-native';
 import { autoplayNext, clock, currentInQueue, msg, queuedNext, sourceNext, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
-import { NO_RING } from '../common/controls';
-import { alpha, Cover, useMediaLook } from '../media/parts';
+import { NO_RING } from '../../widgets/common/controls';
+import { alpha, Cover, useMediaLook } from '../../widgets/media/parts';
 import { IconButton, Surface, transition } from './parts';
-import { Meter } from './tracks';
+import { Meter } from './track-table';
 
 export function QueuePanel({ onClose }: { onClose(): void }) {
   const m = useMediaLook();

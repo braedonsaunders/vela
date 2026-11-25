@@ -2,8 +2,8 @@
 // compact (phones, tablets upright: touch), or wide (Your Library beside the page: pointer and
 // keyboard, a landscape tablet, an unfolded iPhone Duo).
 import { Platform } from 'react-native';
-import type { MediaLook } from '../media/parts';
-import { wideMusic } from '../media/window-layout';
+import type { MediaLook } from '../../widgets/media/parts';
+import { wideMusic } from '../../widgets/media/window-layout';
 
 /** Previewing the TV form in a development web build: `?musictv=1` (kept for the tab; `?musictv=0`
  * ends it). Layout only. */

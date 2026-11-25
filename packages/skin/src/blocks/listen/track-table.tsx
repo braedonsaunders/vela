@@ -7,10 +7,10 @@ import { clock, msg, number, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { currentInQueue } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
-import { NO_RING, Glyph } from '../common/controls';
-import { alpha, Cover, useMediaLook } from '../media/parts';
-import { MediaGlyph } from '../media/icons';
-import { useMusic } from './context';
+import { NO_RING, Glyph } from '../../widgets/common/controls';
+import { alpha, Cover, useMediaLook } from '../../widgets/media/parts';
+import { MediaGlyph } from '../../widgets/media/icons';
+import { useMusic } from './app';
 import { FocusGroup, FocusScope, Heart, IconButton, Surface, transition, type MenuOpen } from './parts';
 import { musicTV } from './layout';
 
