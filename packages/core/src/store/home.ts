@@ -14,6 +14,7 @@ import type { Connection } from '../adapter/connection';
 import type { Session } from './session';
 import { failed, idle, loading, ready, type Load, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
+import { withReadRetry, type ReadRetryOptions } from './read-retry';
 
 export interface HomeRetry {
   allowed: boolean;
@@ -90,6 +91,8 @@ export class Home {
     private readonly slowDelayMs = HOME_SLOW_MS,
     private readonly reconcileDelayMs = RECONCILE_DELAY_MS,
     private readonly reconcileSpacingMs = RECONCILE_SPACING_MS,
+    /** Waits between attempts of a refused fresh read (ReadRetryOptions.sleep); injected by tests. */
+    private readonly retrySleep?: ReadRetryOptions['sleep'],
   ) {
     session.onReset(() => {
       if (this.timer) clearTimeout(this.timer);
@@ -332,7 +335,9 @@ export class Home {
    * further page that cannot be read ends the read there; its cursor is kept for the next page.
    */
   private async readFresh(connection: Connection, signal: AbortSignal): Promise<HomeModel> {
-    const bootstrap = await connection.adapter.home(true, signal);
+    // Ether answers 409 bootstrap_changed (retry allowed) while its feed is being rebuilt, which
+    // is exactly when a re-read happens: asked again on the server's terms before giving up.
+    const bootstrap = await withReadRetry(() => connection.adapter.home(true, signal), { signal, sleep: this.retrySleep });
     const images = await connection.images();
     let fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
     const shown = this.box.get().home.value?.rows.length ?? 0;

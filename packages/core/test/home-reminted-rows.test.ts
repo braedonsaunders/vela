@@ -24,6 +24,8 @@ class Feed {
   keys = false;
   /** 409 like Ether's release builds, or 404 like the lab build of the report. */
   stale: 404 | 409 = 409;
+  /** Bootstrap reads still to refuse with 409 bootstrap_changed (Ether rebuilding its feed). */
+  changing = 0;
   id(key: string) { return `${key}@${this.snapshot}`; }
   row(shelf: Feed['shelves'][number], from = 0, limit = 20): WireRow {
     const items = shelf.titles.slice(from, from + limit);
@@ -39,7 +41,14 @@ class Feed {
   /** Playback recomputes the feed: every row gets a new id. */
   played() { this.snapshot++; }
   readonly adapter = {
-    home: async () => { this.calls.push('bootstrap'); return this.bootstrap(); },
+    home: async () => {
+      this.calls.push('bootstrap');
+      if (this.changing > 0) {
+        this.changing--;
+        throw new VelaError({ class: 'conflict', code: 'bootstrap_changed', message: 'Home changed while loading', retry: { allowed: true, afterSeconds: 1, maxAttempts: 3 } } as never, 409);
+      }
+      return this.bootstrap();
+    },
     row: async (id: string, cursor?: string, limit = 20) => {
       this.calls.push(`row ${id}${cursor ? ` ${cursor}` : ''}`);
       const [key, snapshot] = id.split('@');
@@ -56,7 +65,7 @@ class Feed {
 function harness(feed: Feed) {
   const box = new StateBox({ home: initialHome, libraries: idle(), rows: {} } as unknown as VelaState);
   const session = { epoch: 0, onReset() {}, negotiate: async () => {}, ready: async () => ({ adapter: feed.adapter, images: async () => undefined }), check() {} };
-  const home = new Home(box, session as unknown as Session, () => 640, 7_000, 1, 0);
+  const home = new Home(box, session as unknown as Session, () => 640, 7_000, 1, 0, async () => {});
   const rows = new Rows(box, session as unknown as Session, () => 640, row => home.resolveRow(row));
   return { box, home, rows, ids: () => box.get().home.value!.rows.map(row => row.id), names: () => box.get().home.value!.rows.map(row => row.name) };
 }
@@ -213,4 +222,33 @@ test('a Home row paged past its first page keeps its cards after the re-read, pa
   expect(feed.calls).toEqual(['row new@2 new@2|60', 'bootstrap', 'row new@3 new@3|20', 'row new@3 new@3|40', 'row new@3 new@3|60']);
   expect(box.get().home.value!.rows.map(value => value.id)).toEqual(['continue@3', 'new@3']);
   expect(box.get().home.value!.rows[1]!.items).toHaveLength(70);
+});
+
+test('a See all whose re-resolve meets 409 bootstrap_changed reads Home again on the server\'s terms, not an error', async () => {
+  const feed = new Feed();
+  feed.shelves = [{ key: 'popular', name: 'Popular', purpose: 'recommendation', titles: films('pop', 30) }];
+  const { box, home, rows } = harness(feed);
+  await home.ensure();
+  rows.seed(box.get().home.value!.rows[0]!);
+  feed.played();
+  // The rc.9 lab: the old id answers 409 cursor_expired, then the re-read meets the feed mid-rebuild.
+  feed.changing = 2;
+  feed.calls = [];
+  await rows.load('popular@1', true);
+  expect(feed.calls).toEqual(['row popular@1 popular@1|20', 'bootstrap', 'bootstrap', 'bootstrap', 'row popular@2']);
+  expect(box.get().rows['popular@1']!.load).toBe('ready');
+});
+
+test('a re-resolve the server keeps refusing ends in the error after its allowed attempts, not a loop', async () => {
+  const feed = new Feed();
+  feed.shelves = [{ key: 'popular', name: 'Popular', purpose: 'recommendation', titles: films('pop', 30) }];
+  const { box, home, rows } = harness(feed);
+  await home.ensure();
+  rows.seed(box.get().home.value!.rows[0]!);
+  feed.played();
+  feed.changing = 10;
+  feed.calls = [];
+  await rows.load('popular@1', true);
+  expect(feed.calls).toEqual(['row popular@1 popular@1|20', 'bootstrap', 'bootstrap', 'bootstrap']);
+  expect(box.get().rows['popular@1']!.load).toBe('failed');
 });
