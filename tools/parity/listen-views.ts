@@ -116,7 +116,10 @@ export function listenPath(view: ListenView): string {
 }
 
 /** Views compared by review, with the reason (a one-line, written acceptance). */
-export const LISTEN_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [];
+export const LISTEN_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [
+  { viewports: /^tvos$/, views: ['now-playing', 'now-playing-lyrics', 'now-playing-sound'],
+    reason: 'Apple TV first focus: the document focuses Play (Now Playing\'s declared preferred TV focus); legacy\'s focus on Close was a timing accident of the dock\'s focus trap (lead decision)' },
+];
 
 export function listenReviewed(view: { name: string; review?: string }, viewport: string): string | undefined {
   return LISTEN_REVIEWED.find(r => r.viewports.test(viewport) && r.views.includes(view.name))?.reason ?? view.review;
