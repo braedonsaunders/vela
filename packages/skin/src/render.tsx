@@ -62,7 +62,7 @@ import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { moveWebRowFocus } from './web-row-navigation';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
-import { opensAtTop, pinOpeningScroll } from './opening-scroll';
+import { opensAtTop, pinOpeningScroll, viewerScrolledSince } from './opening-scroll';
 import { rowLinkTakesDirectionalFocus } from './focus-stop-policy';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
@@ -883,7 +883,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     opened.current = Date.now();
     openingMoved.current = false;
     const top = () => {
-      if (pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current))) {
+      if (pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current) || viewerScrolledSince(opened.current))) {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
         if (web && scrollRef.current) (scrollRef.current as unknown as HTMLElement).scrollTop = 0;
       }
@@ -1053,7 +1053,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     } : onPagerScroll;
     const onScroll = openingAtTop ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const pin = e.nativeEvent.contentOffset.y > 0
-        && pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current));
+        && pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current) || viewerScrolledSince(opened.current));
       if (pin) {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
         if (web) (e.currentTarget as unknown as HTMLElement).scrollTop = 0;
