@@ -73,11 +73,22 @@ describe('Plex and the cap', () => {
     return { seen, plan: plex().startPlayback({ titleId: '5', client, idempotencyKey: 'k' } as never) };
   };
 
-  test('uncapped, the original plays and Plex\'s stream is a numbered choice beside it', async () => {
-    const plan = await start(apple).plan;
+  test('uncapped, the original plays and Plex\'s stream is a choice beside it, numbered once decided', async () => {
+    const { seen, plan: started } = start(apple);
+    const plan = await started;
     expect(plan.paths.map(p => p.id)).toEqual(['original', 'plex-hls']);
     expect(plan.selectedPathId).toBe('original');
-    expect(plan.paths[1]!.quality).toEqual({ width: 1280, height: 720, bitrate: 3_800_000, codec: 'h264' });
+    // The stream is decided only when it is needed, so its output size is not known at the start.
+    expect([plan.paths[1]!.readiness, plan.paths[1]!.quality]).toEqual(['on-demand', undefined]);
+    expect(seen.some(r => r.url.pathname === '/video/:/transcode/universal/decision')).toBe(false);
+  });
+
+  test('switching to the stream asks its decision and numbers it from the output Plex states', async () => {
+    routeFetch({ 'GET /library/metadata/5': { MediaContainer: { Metadata: [movie] } }, 'GET /video/:/transcode/universal/decision': decision });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '5', client: apple, idempotencyKey: 'k' } as never);
+    const switched = await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'plex-hls', atSeconds: 5, idempotencyKey: 's', sourceGeneration: 0, seekGeneration: 0 });
+    expect(switched.paths[1]!.quality).toEqual({ width: 1280, height: 720, bitrate: 3_800_000, codec: 'h264' });
   });
 
   test('on mobile data an original above the cap gives way to Plex\'s stream, asked at the cap', async () => {

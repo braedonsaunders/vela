@@ -32,6 +32,9 @@ interface PlexSession {
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
    * transcode request each part is played through. */
   stack?: { parts: Node[]; index: number; query: Record<string, string> };
+  /** The server's stream offered beside an original that plays, not asked for yet: its transcode
+   * request, decided when the session first needs the stream. */
+  deferred?: Record<string, string>;
   /** The part's scrub thumbnail index as last read (`trickplayOffer`): its frames, the size of one,
    * the offer made of it, and the whole file when the server would not answer a byte range. */
   thumbnails?: { frames: BifFrame[]; offer: V.TrickplayMetadata; whole?: Uint8Array };
@@ -584,7 +587,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' },
       ...(versions.length ? { selectedVersionId: mediaId(media, n.Media.indexOf(media)), versions } : {}) };
     this.sessions.set(sessionId, { plan, part: source.part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]),
-      request: { client: r.client, allowTranscode: r.allowTranscode }, ...(source.stack ? { stack: source.stack } : {}), ...(source.partAudio ? { partAudio: source.partAudio } : {}),
+      request: { client: r.client, allowTranscode: r.allowTranscode }, ...(source.stack ? { stack: source.stack } : {}), ...(source.deferred ? { deferred: source.deferred } : {}),
+      ...(source.partAudio ? { partAudio: source.partAudio } : {}),
       ...(markers || r.extraId ? {} : { markers: { at: Date.now(), asked: 0, reading: false } }) });
     return structuredClone(plan);
   }
@@ -630,20 +634,22 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (direct) paths.push({ id: 'original', kind: 'direct', transport: 'file', mimeType: media.container === 'mp4' ? 'video/mp4' : media.container === 'webm' ? 'video/webm' : 'video/x-matroska',
       readiness: 'ready', url: this.mediaURL(part.key), original: true, range: true, byteLength: Number(part.size) || undefined, sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: 0,
       originalVideo: { codec: media.videoCodec, width: media.width, height: media.height }, qualities: [], boundaries: [] });
+    let deferred: Record<string, string> | undefined;
     if (r.allowTranscode !== false && (r.client.hls || r.client.mse)) {
-      const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
-      const query = { path: `/library/metadata/${id}`, mediaIndex: n.Media.indexOf(media), partIndex: stacked ? at.index : 0, protocol: 'hls', directPlay: 0, directStream: 1,
+      const query = Object.fromEntries(Object.entries({ path: `/library/metadata/${id}`, mediaIndex: n.Media.indexOf(media), partIndex: stacked ? at.index : 0, protocol: 'hls', directPlay: 0, directStream: 1,
         session: transcodeId, offset: stacked ? at.inPart : 0, fastSeek: 1, 'X-Plex-Client-Identifier': this.config.clientIdentifier,
         maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`,
-        subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
-      for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
-      const decided = await this.decide(u, !!direct);
-      if (decided && !(Number(decided.generalDecisionCode) >= 2000) && fitsStreamingCap(decided.Metadata?.[0]?.Media?.[0], r.client)) {
-        const quality = decidedQuality(decided);
-        const hls: V.PlaybackPath = { id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
-          sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, ...(quality ? { quality } : {}), qualities: [], boundaries: [] };
-        if (direct && capped) paths.unshift(hls);
-        else paths.push(hls);
+        subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 }).map(([key, value]) => [key, String(value)]));
+      const hls = { id: 'plex-hls', kind: 'transcode' as const, transport: 'hls' as const, mimeType: 'application/vnd.apple.mpegurl',
+        sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, qualities: [], boundaries: [] };
+      if (direct && !capped) {
+        // The original plays: the stream stays a choice, decided when a switch or a track first needs it.
+        paths.push({ ...hls, readiness: 'on-demand' });
+        deferred = query;
+      } else {
+        const stream = await this.serverStream(query, r.client, !!direct);
+        if (stream && direct) paths.unshift({ ...hls, readiness: 'ready', ...stream });
+        else if (stream) paths.push({ ...hls, readiness: 'ready', ...stream });
       }
     }
     if (capped && !paths.some(path => path.id === 'plex-hls')) {
@@ -656,7 +662,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     // The track admission judged (an inferred default or first one too) is the one the player opens. A stacked
     // title's parts have their own stream ids, so an inferred one stays out of its plan and its part restarts.
     return { part, partAudio: audio, plan: { paths, selectedPathId: paths[0]!.id, audioTracks, subtitleTracks, selectedAudioTrackId: stacked ? audio : audio ?? playing.id, selectedSubtitleTrackId: subtitle },
-      ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}) };
+      ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}), ...(deferred ? { deferred } : {}) };
   }
   /**
    * Another of the playing title's files, in the same session from the given position (else the
@@ -681,6 +687,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       // Scrub thumbnails are the file's own (its part's index); markers are the title's and stay.
       delete s.thumbnails;
       if (source.stack) s.stack = source.stack; else delete s.stack;
+      if (source.deferred) s.deferred = source.deferred; else delete s.deferred;
       // Nothing was written to the part: the start's selection may no longer be the part's, so its audio is not known.
       delete s.partAudio;
       // Tracks belong to the file: the new one starts on its own defaults.
@@ -739,7 +746,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   }
   /**
    * Ask for the playback decision for a video transcode URL before handing it to the player, as Plex's
-   * own clients do: Ether refuses a video start.m3u8 its client has not asked a decision for (400).
+   * own clients do: it says whether the server will stream it, and what it will deliver.
    * `optional`: another path can play, so a refused decision drops this one instead of the start.
    */
   private async decide(start: URL, optional = false): Promise<Node | null> {
@@ -747,6 +754,19 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     decision.search = start.search;
     try { return await this.request(decision.pathname, Object.fromEntries(decision.searchParams)) ?? {}; }
     catch (error) { if (optional) return null; throw error; }
+  }
+  /**
+   * The server's stream for a transcode request, once its decision allows it within the client's cap:
+   * its URL and, where the decision states the output size, its quality. Null when Plex will not
+   * stream it (and, `optional`, when it refuses the request).
+   */
+  private async serverStream(query: Record<string, string>, client: V.ClientCapabilities, optional = false): Promise<{ url: string; quality?: V.QualityTarget } | null> {
+    const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
+    for (const [key, value] of Object.entries(query)) u.searchParams.set(key, value);
+    const decided = await this.decide(u, optional);
+    if (!decided || Number(decided.generalDecisionCode) >= 2000 || !fitsStreamingCap(decided.Metadata?.[0]?.Media?.[0], client)) return null;
+    const quality = decidedQuality(decided);
+    return { url: u.href, ...(quality ? { quality } : {}) };
   }
   private async timeline(s: PlexSession, state: string) {
     if (s.plan.channelId) return;
@@ -818,7 +838,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
       const restart = path?.kind !== 'direct' || burn || !this.audible(s, audio);
       const hls = s.plan.paths.find(p => p.id === 'plex-hls');
-      if (restart && (!hls || !hls.url)) fail('Selected Plex tracks require an unavailable transcode');
+      if (restart && (!hls || !hls.url && !s.deferred)) fail('Selected Plex tracks require an unavailable transcode');
       const part = `/library/parts/${enc(String(s.part.id))}`;
       const select = () => this.request(part, { audioStreamID: r.audioTrackId, subtitleStreamID: r.subtitleTrackId === null ? 0 : r.subtitleTrackId, allParts: 1 }, 'PUT');
       if (restart && hls && s.stack) {
@@ -826,28 +846,31 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         const at = partAt(s.stack.parts, s.plan.positionSeconds);
         await this.playPart(s, at.index, at.inPart, { subtitleStreamID: subtitle ?? '0', subtitles: burn ? 'burn' : 'auto', ...(audio !== undefined ? { audioStreamID: audio } : {}) });
       } else if (restart && hls) {
-        const url = new URL(hls.url!);
         const transcodeId = `${id}-${s.plan.sourceGeneration + 1}`;
-        url.searchParams.set('session', transcodeId);
-        url.searchParams.set('offset', String(s.plan.positionSeconds));
-        url.searchParams.set('subtitleStreamID', subtitle ?? '0');
-        url.searchParams.set('subtitles', burn ? 'burn' : 'auto');
-        if (audio !== undefined) url.searchParams.set('audioStreamID', audio);
+        // The running stream's request, or the one deferred at the start.
+        const query = hls.url ? Object.fromEntries(new URL(hls.url).searchParams) : s.deferred!;
         // The replacement is decided before the running stream changes. Plex burns the part's subtitle rather than
         // the query's, and very likely takes the audio from the part too, so the whole new selection is written
         // first, once; when the stream is refused, what was selected before is put back (best-effort).
         if (r.audioTrackId !== undefined || r.subtitleTrackId !== undefined) await select();
-        try {
-          const decided = await this.decide(url);
-          if (Number(decided?.generalDecisionCode) >= 2000 || s.request && !fitsStreamingCap(decided?.Metadata?.[0]?.Media?.[0], s.request.client)) fail('Plex will not stream the selected tracks', 'playback');
-        } catch (error) { return this.unselect(s, r, part, error); }
-        const old = s.transcodeId ?? id;
-        s.plan.paths = s.plan.paths.map(p => p.id === hls.id ? { ...p, readiness: 'ready' as const, url: url.href, timelineOriginSeconds: s.plan.positionSeconds } : p);
+        const stream = await this.serverStream({ ...query, session: transcodeId, offset: String(s.plan.positionSeconds), subtitleStreamID: subtitle ?? '0', subtitles: burn ? 'burn' : 'auto',
+          ...(audio !== undefined ? { audioStreamID: audio } : {}) }, s.request!.client)
+          .then(accepted => accepted ?? fail('Plex will not stream the selected tracks', 'playback'))
+          .catch((error: unknown) => this.unselect(s, r, part, error));
+        // Only a stream that was started is stopped; a deferred one never was.
+        const old = hls.url ? s.transcodeId ?? id : undefined;
+        // A decision that states no output size leaves the stream unnumbered rather than at the old size.
+        s.plan.paths = s.plan.paths.map(p => {
+          if (p.id !== hls.id) return p;
+          const { quality: _, ...rest } = p;
+          return { ...rest, readiness: 'ready' as const, ...stream, timelineOriginSeconds: s.plan.positionSeconds };
+        });
         s.plan.selectedPathId = hls.id;
         s.plan.sourceGeneration++;
         s.transcodeId = transcodeId;
+        delete s.deferred;
         // The new stream is accepted, selected and published: the old one is retired best-effort, not waited for.
-        void this.stopTranscode(old).catch(() => undefined);
+        if (old) void this.stopTranscode(old).catch(() => undefined);
       } else await select();
       if (r.audioTrackId !== undefined) s.partAudio = r.audioTrackId;
       s.plan.selectedAudioTrackId = audio;
@@ -871,11 +894,18 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   }
   /** A plan offers the original file and the universal transcode; the session moves between them. */
   switchPath(id: string, r: SwitchCommand): Promise<V.PlaybackPlan> {
-    return this.mutate(id, r, s => {
+    return this.mutate(id, r, async s => {
       const path = s.plan.paths.find(p => p.id === r.pathId);
       if (!path) fail('Unknown Plex path');
       if (!Number.isFinite(r.atSeconds) || r.atSeconds < 0) fail('Invalid switch position');
       if (path.kind === 'direct' && !this.audible(s, s.plan.selectedAudioTrackId)) fail('The selected audio track cannot play from the original file', 'playback');
+      if (path.readiness === 'on-demand') {
+        // The stream deferred at the start, decided now from the start's own request (the whole file from zero).
+        const stream = s.deferred && s.request ? await this.serverStream(s.deferred, s.request.client) : null;
+        if (!stream) fail('Plex will not stream this title', 'playback');
+        s.plan.paths = s.plan.paths.map(p => p.id === path.id ? { ...p, readiness: 'ready' as const, ...stream } : p);
+        delete s.deferred;
+      }
       // Leaving the server's stream does not stop it: a version switch still does.
       if (s.plan.paths.find(p => p.id === s.plan.selectedPathId)?.kind === 'transcode') s.streamed = true;
       s.plan.selectedPathId = r.pathId;
