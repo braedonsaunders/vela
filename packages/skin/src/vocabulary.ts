@@ -6,6 +6,7 @@ import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
 import { drawnAs, duration, msg, videoRoleLabel } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
+import { selectEnv } from './host-source';
 import { aboutLabel, aboutLine, type About } from './about';
 import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
@@ -342,7 +343,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.tv': (_, e) => yes(e.tv),
   'env.still': (_, e) => yes(e.still),
   'env.searching': (_, e) => yes(e.query !== ''),
-  'env.searchFocused': (_, e) => yes(e.flags.includes('search-focused')),
+  'env.searchFocused': (_, e) => yes(selectEnv(e, 'flags', 'flag:search-focused', flags => flags.includes('search-focused'))),
   'env.canLive': (_, e) => yes(e.canLive),
   'env.canPlaylists': (_, e) => yes(e.canPlaylists),
   'env.canSwitchProfile': (_, e) => yes(e.canSwitchProfile),
@@ -352,7 +353,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   // As the app's rotation (hero-rotation.ts): a playing hero trailer holds the hero too.
   'env.rotating': (_, e) => (e.home ? yes(shouldRotateHero({ onHome: true, heroCount: e.home.hero.length, still: e.still,
     query: e.query, heroPreviewing: !!e.preview?.heroId, flags: e.flags })) : ''),
-  'env.heroPaused': (_, e) => yes(e.flags.includes('hero-paused')),
+  'env.heroPaused': (_, e) => yes(selectEnv(e, 'flags', 'flag:hero-paused', flags => flags.includes('hero-paused'))),
   /** The featured titles before and after the one on show, wrapping round (pickHero's argument). */
   'env.heroPrev': (_, e) => (e.home?.hero.length ? String((e.heroIndex - 1 + e.home.hero.length) % e.home.hero.length) : ''),
   'env.heroNext': (_, e) => (e.home?.hero.length ? String((e.heroIndex + 1) % e.home.hero.length) : ''),

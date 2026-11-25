@@ -24,8 +24,8 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Children, Fragment, memo, cloneElement, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Children, Fragment, memo, cloneElement, startTransition, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
+import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -37,6 +37,8 @@ import { focusStyle } from './focus-style';
 import { isFocusVisible } from './focus-visible';
 import { RouteFocusContext, useRouteFocus, useRouteFocusContext, viewerPressedSince } from './route-focus';
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
+import { useFocusedTVKeys } from './tv-keys';
+import { selectEnv } from './host-source';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { ExpandableSummary } from './summary';
 import { viewerAvatarFor } from './viewer-avatar';
@@ -86,9 +88,6 @@ function channelCard(channel: NonNullable<Ctx['ch']>): Card {
     facts: [channel.number, channel.name].filter(Boolean).join(' · '), logo: channel.logo,
   };
 }
-const useTVMenuEvent = typeof useTVEventHandler === 'function'
-  ? useTVEventHandler
-  : (_handler: (event: { eventType?: string }) => void) => undefined;
 const Host = HostContext;
 const Inherited = InheritedContext;
 const Group = GroupContext;
@@ -188,12 +187,15 @@ export function SkinRoot({ host, node, ctx = ROOT_CONTEXT }: { host: SkinHost; n
   );
 }
 
+/** The measuring copy's overflow: always none, and always the same list. */
+const NAV_MEASURING_OUT: string[] = [];
+
 /** The hidden copy of a navigation row (`fit: 'nav'`): a zero-height layer across its parent's box
  * (the room), in which every item and the More control lie side by side at natural width; it reports
  * which destinations do not fit. Nothing in it takes focus or is read out. */
 function NavFitMeasure({ node, ctx, report }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; report(out: string[]): void }) {
   const host = useHost();
-  const measuringHost = useMemo(() => ({ ...host, env: { ...host.env, navMeasuring: true, navOut: [] } }), [host]);
+  const measuringHost = useMemo(() => ({ ...host, env: { ...host.env, navMeasuring: true, navOut: NAV_MEASURING_OUT } }), [host]);
   const copy = useMemo(() => measureCopy(node), [node]);
   const room = useRef(0);
   const row = useRef(0);
@@ -219,11 +221,13 @@ function NavFitMeasure({ node, ctx, report }: { node: Extract<RNode, { kind: 'bo
       style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 0, overflow: 'hidden', opacity: 0 }}
       onLayout={event => { room.current = event.nativeEvent.layout.width; update(); }}>
       <View style={{ position: 'absolute', left: 0, top: 0, width: 10000, flexDirection: 'row', alignItems: 'flex-start' }}>
-        <Host.Provider value={measuringHost}>
+        {/* A tracked host: the copy's nodes draw again only for what they read, not for every flag
+            and turn of the hero (each change redrew the whole navigation's copy). */}
+        <TrackedHost host={measuringHost}>
           <Measuring.Provider value>
             <Box node={copy} ctx={ctx} measure={measure} />
           </Measuring.Provider>
-        </Host.Provider>
+        </TrackedHost>
       </View>
     </View>
   );
@@ -752,6 +756,47 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
 /** The one focus the hero's buttons hand on (there is one focus, and one hero on show). */
 const heroFocus = heroFocusCarry<Focusable>();
 
+/** Android TV: a press that turns the hero page must find focus already on the outermost button.
+ * The press reaches the app as its key comes up, after the key going down moved focus, and the
+ * focus report can arrive before or after it; so the press is judged once its focus report is in
+ * (HERO_EDGE_WAIT_MS), and a button that took focus within HERO_EDGE_SETTLED_MS of the press is
+ * where this press brought focus, not where it started (a longer hold is a long press). */
+const HERO_EDGE_WAIT_MS = 120;
+const HERO_EDGE_SETTLED_MS = 300;
+/** A press reaches every focused control that listens; it turns the page once. */
+const heroEdgePresses = new WeakSet<object>();
+
+/** A left or right press on a focused hero button turns to the next or previous title when the
+ * button is the outermost in that direction. On Android TV, by where the buttons stand on screen
+ * (rank orders focus hand-over, and Restart stands between Play and More info), and only for a
+ * press that started there. On tvOS, by rank. */
+function heroEdgePress(event: object, target: Focusable, direction: -1 | 1, turn: () => void): void {
+  if (Platform.OS !== 'android') {
+    if (heroFocus.atEdge(target, direction)) turn();
+    return;
+  }
+  if (heroEdgePresses.has(event)) return;
+  heroEdgePresses.add(event);
+  const pressedAt = Date.now();
+  setTimeout(() => {
+    const held = heroFocus.current();
+    if (!held || pressedAt - held.since < HERO_EDGE_SETTLED_MS) return;
+    const buttons = heroFocus.targets();
+    const xs = new Map<Focusable, number>();
+    let waiting = buttons.length;
+    const done = (button: Focusable, x?: number) => {
+      if (x !== undefined) xs.set(button, x);
+      if (--waiting > 0 || heroFocus.current()?.target !== held.target) return;
+      if (heroFocus.atEdge(held.target, direction, button => xs.get(button))) turn();
+    };
+    for (const button of buttons) {
+      const measurable = button as Focusable & { measureInWindow?(callback: (x: number) => void): void };
+      if (measurable.measureInWindow) measurable.measureInWindow(x => done(button, x));
+      else done(button);
+    }
+  }, HERO_EDGE_WAIT_MS);
+}
+
 function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; measure?: FitMeasure }) {
   const host = useHost();
   const measuring = useContext(Measuring);
@@ -827,13 +872,15 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     const y = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
     setCardMenu({ mode: 'pointer', anchor: { kind: 'point', point: { x, y } } });
   }, [cardPrimary?.action, cardPrimary?.arg]);
-  useTVMenuEvent(event => {
-    if (!Platform.isTV || !ui.focus) return;
+  // Only a focused hero button or card listens to the remote (one shared listener, tv-keys.ts).
+  useFocusedTVKeys(ui.focus && (heroAction || !!cardPrimary), event => {
     const direction = event.eventType === 'left' ? -1 : event.eventType === 'right' ? 1 : 0;
-    if (direction && heroAction && buttonRef.current && heroFocus.atEdge(buttonRef.current, direction as -1 | 1)) {
-      const count = env.home?.hero.length ?? 0;
-      const target = count > 1 ? (env.heroIndex + direction + count) % count : null;
-      if (target !== null) host.dispatch('pickHero', String(target));
+    if (direction && heroAction && buttonRef.current) {
+      heroEdgePress(event, buttonRef.current, direction as -1 | 1, () => {
+        const count = env.home?.hero.length ?? 0;
+        const target = count > 1 ? (env.heroIndex + direction + count) % count : null;
+        if (target !== null) host.dispatch('pickHero', String(target));
+      });
       return;
     }
     if (!cardPrimary) return;
@@ -1149,7 +1196,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       if (focus) requestAnimationFrame(() => focusElement(focus));
     });
     // A toggle opens what its flag names (a menu, a drawer): it says whether that is open.
-    const toggled = press?.action === 'toggle' && press.arg ? env.flags.includes(fill(press.arg, ctx, env)) : undefined;
+    const toggledFlag = press?.action === 'toggle' && press.arg ? fill(press.arg, ctx, env) : '';
+    const toggled = toggledFlag ? selectEnv(env, 'flags', `flag:${toggledFlag}`, flags => flags.includes(toggledFlag)) : undefined;
     const expanded = a11y.accessibilityState?.expanded ?? toggled;
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
@@ -1303,7 +1351,7 @@ function tvGuide(node: Extract<RNode, { kind: 'box' }>, env: Env, band: boolean)
   const region = node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
   if (!scope && !region) return undefined;
   // Flags are read only by a scope: a flag change redraws scopes, not every region.
-  const trap = scope && scopeOpen(node.escape!, env.flags);
+  const trap = scope && selectEnv(env, 'flags', `scope:${node.escape!.join(',')}`, flags => scopeOpen(node.escape!, flags));
   return { autoFocus: true, trapFocusUp: trap, trapFocusDown: trap, trapFocusLeft: trap, trapFocusRight: trap };
 }
 
@@ -1469,7 +1517,9 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
         }
         lazyStillDrawnAt = now;
       }
-      setCount(n => (n === at && n < total.current ? n + lazyBatch(axis, batch, moving) : n));
+      // A transition: drawing a batch of rows or cards yields to the remote, so a press made while
+      // it draws moves focus at once instead of waiting for every card of the batch.
+      startTransition(() => setCount(n => (n === at && n < total.current ? n + lazyBatch(axis, batch, moving) : n)));
     });
   }, [axis, batch]);
   const aheadRef = useRef(ahead);
@@ -1545,8 +1595,9 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
     spacer.current?.measureInWindow((_x, y, w, h) => {
       // A hidden scene (a retained section behind another) has no size: it draws nothing ahead.
       if (!w && !h) return;
-      // One batch per drawn state, however many scroll events asked for it.
-      setDrawn(count => gridDrawn(count, at, total.current, y, Dimensions.get('window').height, GRID_REACH, GRID_BATCH));
+      // One batch per drawn state, however many scroll events asked for it; a transition, so the
+      // remote's presses are not held while a batch of cards draws (as LazyRepeat).
+      startTransition(() => setDrawn(count => gridDrawn(count, at, total.current, y, Dimensions.get('window').height, GRID_REACH, GRID_BATCH)));
     });
   }, []);
   const complete = drawn >= items.length;
