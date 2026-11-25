@@ -54,11 +54,12 @@ function SceneButton({ id, label, image, selected, onPress }: {
   );
 }
 
-function ScenePicker({ id, choose }: { id: string; choose(id: string): void }) {
+function ScenePicker({ id, choose, expanded, setExpanded }: {
+  id: string; choose(id: string): void; expanded: boolean; setExpanded(open: boolean): void;
+}) {
   const look = useLook();
   const { viewport } = useHost();
   const parts = useContext(VisualizerPartsContext);
-  const [expanded, setExpanded] = useState(false);
   const stageFocused = useRef(false);
   const selected = scenes.find(scene => scene.id === id)!;
   const toggle = 'visualizer-picker-toggle';
@@ -107,7 +108,7 @@ function ScenePicker({ id, choose }: { id: string; choose(id: string): void }) {
         onFocus={() => { handlers.onFocus(); stageFocused.current = true; }}
         onBlur={() => { handlers.onBlur(); stageFocused.current = false; }}
         accessibilityRole="button" accessibilityLabel={msg('visualizer.pick', { scene: selected.name })}
-        accessibilityState={{ expanded }} {...(Platform.OS === 'web' ? { 'aria-expanded': expanded } : {})} onPress={() => setExpanded(open => !open)}
+        accessibilityState={{ expanded }} {...(Platform.OS === 'web' ? { 'aria-expanded': expanded } : {})} onPress={() => setExpanded(!expanded)}
         style={{ borderRadius: 18, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 2,
           borderColor: state.focus ? look.ui.ink : 'transparent', backgroundColor: look.ui.popover }}>
         <Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '12px' })}>{msg('visualizer.scenes')}</Text>
@@ -129,15 +130,20 @@ export function Visualizer({ mode, sceneId }: { mode: VisualizerMode; sceneId?: 
   const artworkTint = useVelaState(s => currentInQueue(s.audio.queue)?.accent);
   const look = useLook();
   const background = mode === 'background';
+  const [pickerOpen, setPickerOpen] = useState(false);
+  useEffect(() => { if (background) setPickerOpen(false); }, [background]);
+  // TV focus animations share the compositor with the scene. Keep the current
+  // image while the viewer browses previews, and resume as soon as they select.
+  const holdScene = Platform.isTV && !background && pickerOpen;
   if (!available) return null;
   return (
     <View testID={'visualizer-' + mode} pointerEvents={background ? 'none' : 'box-none'} focusable={false}
       accessibilityElementsHidden={background} importantForAccessibility={background ? 'no-hide-descendants' : 'auto'} style={StyleSheet.absoluteFill}>
       <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={StyleSheet.absoluteFill}>
-        <VisualizerStage sceneId={id} mode={mode} active={active} still={look.still || !playing} accent={paletteColor(look.ui.accent)}
+        <VisualizerStage sceneId={id} mode={mode} active={active} still={look.still || !playing || holdScene} accent={paletteColor(look.ui.accent)}
           artworkTint={paletteColor(artworkTint)} onUnavailable={reportUnavailable} />
       </View>
-      {!background ? <ScenePicker id={id} choose={choose} /> : null}
+      {!background ? <ScenePicker id={id} choose={choose} expanded={pickerOpen} setExpanded={setPickerOpen} /> : null}
     </View>
   );
 }
