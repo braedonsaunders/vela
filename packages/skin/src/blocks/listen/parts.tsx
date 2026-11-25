@@ -2,10 +2,11 @@
 // hover, shelves, the heart, the big play button, a byline whose names open their pages.
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type ComponentRef } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import type { CardMenuAnchor, CardMenuOpenMode } from '../../widgets/card-context-menu';
 import type { Focusable } from '../../escape';
 import { placeParam } from './place';
+import { useFocusedTVKeys } from '../../tv-keys';
 import { musicTV } from './layout';
 import { msg, type Card } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
@@ -28,10 +29,6 @@ export const transition = (properties: string, ms = 200): ViewStyle => (web ? ({
 /** How a card's menu was asked for and where it opens: at the pointer, under a finger, or beside
  * the focused card on a TV (long select or the remote's menu event, as Vela's cards do). */
 export type MenuOpen = (anchor: CardMenuAnchor, mode: CardMenuOpenMode, opener: Focusable | null) => void;
-
-const useTVMenuEvent: (handler: (event: { eventType: string }) => void) => void = typeof useTVEventHandler === 'function'
-  ? useTVEventHandler as never
-  : () => undefined;
 
 /** Right-click (web) or long-press opens a menu at the pointer (kept for plain pressables). */
 export function menuHandlers(open: (point: { x: number; y: number }) => void) {
@@ -78,8 +75,9 @@ export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, 
   const opener = () => ref.current as unknown as Focusable | null;
   const atCard = (mode: CardMenuOpenMode) => (ref.current as unknown as { measureInWindow?(cb: (x: number, y: number, w: number, h: number) => void): void } | null)
     ?.measureInWindow?.((x, y, w, h) => onMenu?.({ kind: 'card', rect: { left: x, top: y, right: x + w, bottom: y + h } }, mode, opener()));
-  useTVMenuEvent(event => {
-    if (!Platform.isTV || !focused.current || !onMenu) return;
+  // Only the focused tile listens to the remote (one shared listener, tv-keys.ts).
+  useFocusedTVKeys(state.focus && !!onMenu, event => {
+    if (!focused.current || !onMenu) return;
     // Android TV's Menu key opens the card's menu; tvOS's Menu is Back (it reaches here while a page
     // holds Back), so there only a long select does.
     if (event.eventType === 'longSelect' || (event.eventType === 'menu' && Platform.OS !== 'ios')) atCard('tv');

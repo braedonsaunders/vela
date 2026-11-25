@@ -2,7 +2,7 @@
 // asked for, and the now-playing bar along the bottom. Wide layouts only; phones and TVs draw the
 // same pages full width with the floating mini player. Music, audiobooks and podcasts share it;
 // listening.ts words each, and spoken.tsx draws spoken word's pages.
-import { useState, type ReactNode } from 'react';
+import { memo, useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { msg } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -39,7 +39,9 @@ function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
 }
 import { SoundBlock } from '../../blocks/sound';
 
-export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
+/** Drawn again only when its own props or what it reads change: the section around it draws for
+ * every change of the app's state, and the page below is hundreds of tiles. */
+export const MusicShell = memo(function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue(open: boolean): void }) {
   const app = useMusic();
   const m = useMediaLook();
   const host = useHost();
@@ -86,7 +88,7 @@ export function MusicShell({ queueOpen, onQueue }: { queueOpen: boolean; onQueue
       <BarPanelView panel={panel} onClose={() => setPanel('')} />
     </View>
   );
-}
+});
 
 /** Phones and upright tablets: Home, Search and Your Library (plus Rewind when available) as chips
  * under the app's navigation, the page full width, and the floating mini player over it. */

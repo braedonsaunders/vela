@@ -26,6 +26,8 @@ export class HostSource {
 
 const READER = Symbol('reader');
 interface Target { [READER]: HostReader }
+/** An env view's reader, for selectEnv. */
+const SELECT = Symbol('select');
 
 const note = (keys: string[], key: string) => { if (!keys.includes(key)) keys.push(key); };
 
@@ -52,6 +54,7 @@ const hostHandler: ProxyHandler<Target> = {
 };
 const envHandler: ProxyHandler<Target> = {
   get(target, key) {
+    if (key === SELECT) return target[READER];
     if (typeof key !== 'string') return undefined;
     const reader = target[READER];
     note(reader.envKeys, key);
@@ -70,11 +73,31 @@ const envHandler: ProxyHandler<Target> = {
   },
 };
 
+type Env = SkinHost['env'];
+
+/** What a node draws from one env key, read through selectEnv: re-read to see whether it changed. */
+interface Selection { key: string; select(value: unknown): unknown; value: unknown }
+
+/**
+ * Reads what a node draws from one env key: whether this card's preview plays, whether this flag is
+ * up. A tracked node then draws again only when that answer changes, not whenever the key does: a
+ * card's preview starting or ending redraws that card, not every card of home, and a flag redraws
+ * only the nodes it shows or hides. `id` names the answer among the node's others (`card:<id>`,
+ * `flag:<name>`). Outside a tracked host it is the plain read.
+ */
+export function selectEnv<K extends keyof Env & string, T>(env: Env, key: K, id: string, select: (value: Env[K]) => T): T {
+  const reader = (env as unknown as { [SELECT]?: HostReader })[SELECT];
+  if (!reader) return select(env[key]);
+  return reader.select(key, id, select as (value: unknown) => T);
+}
+
 /** One reader's view of a source: the keys it has read, and a version that moves only when one of
  * them changes. */
 export class HostReader {
   readonly hostKeys: string[] = [];
   readonly envKeys: string[] = [];
+  /** Answers read through selectEnv, by key and id. */
+  private readonly selections = new Map<string, Selection>();
   version = 0;
   host: SkinHost;
   env: SkinHost['env'];
@@ -96,12 +119,21 @@ export class HostReader {
     }
     return this.version;
   };
+  /** selectEnv's read: the answer, noted with how to read it again. */
+  select<T>(key: string, id: string, select: (value: unknown) => T): T {
+    const value = select((this.source.latest.env as unknown as Bag)[key]);
+    this.selections.set(`${key}\u0000${id}`, { key, select, value });
+    return value;
+  }
   private differs(a: SkinHost, b: SkinHost): boolean {
     const hostA = a as unknown as Bag, hostB = b as unknown as Bag;
     for (const key of this.hostKeys) if (key !== 'env' && hostA[key] !== hostB[key]) return true;
     if (a.env === b.env) return false;
     const envA = a.env as unknown as Bag, envB = b.env as unknown as Bag;
     for (const key of this.envKeys) if (envA[key] !== envB[key]) return true;
+    for (const read of this.selections.values()) {
+      if (envA[read.key] !== envB[read.key] && !Object.is(read.select(envB[read.key]), read.value)) return true;
+    }
     return false;
   }
   /** Fresh views, so memos and effects that depend on the host or env see a change. */

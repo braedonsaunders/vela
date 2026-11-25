@@ -7,7 +7,7 @@ import { Platform, View } from 'react-native';
 import { audioCardsOf, type Card } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import type { SkinHost } from '@vela/skin';
-import { HostContext } from '@vela/skin/src/host';
+import { TrackedHost } from '@vela/skin/src/host';
 import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
@@ -25,7 +25,9 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const vela = useVela();
   const store = vela.store;
   const base = vela.host('library', libraryId);
-  const place = parsePlace(at);
+  // The place is read from the address on every draw; the same address must give the same place,
+  // or every tile of the page draws again whenever the app's shell does.
+  const place = useMemo(() => parsePlace(at), [at]);
   const listening = listeningOf(useVelaState(state => state.libraries.value?.find(library => library.id === libraryId)?.media));
   const [menu, setMenu] = useState<MusicMenuRequest | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
@@ -127,14 +129,18 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
       base.dispatch(action as never, arg);
     },
   } : null, [base, go]);
+  const closeDrawer = useCallback(() => setDrawer(null), []);
+  const closeKeys = useCallback(() => setKeysOpen(false), []);
   if (!host) return null;
+  // A tracked host: the music app's parts draw again only for the host and env keys they read,
+  // not whenever any of Vela's view state changes (a flag elsewhere, the home hero).
   return (
-    <HostContext.Provider value={host}>
+    <TrackedHost host={host}>
       <MusicContext.Provider value={app}>
         <View pointerEvents="box-none" style={{ flex: 1 }}>
           <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />
-          <PlaylistDrawer request={drawer} close={() => setDrawer(null)} />
-          <MusicKeysSheet open={keysOpen} close={() => setKeysOpen(false)} listening={listening} />
+          <PlaylistDrawer request={drawer} close={closeDrawer} />
+          <MusicKeysSheet open={keysOpen} close={closeKeys} listening={listening} />
           {menu ? (
             <CardContextMenu card={menu.card} primary={{ action: 'select', arg: `${menu.card.id}|${menu.card.media?.role ?? menu.card.kind}|` }}
               anchor={menu.anchor} mode={menu.mode ?? 'pointer'} opener={menu.opener ?? null} playlistEntry={menu.entry} close={() => setMenu(null)}
@@ -143,6 +149,6 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
           ) : null}
         </View>
       </MusicContext.Provider>
-    </HostContext.Provider>
+    </TrackedHost>
   );
 }

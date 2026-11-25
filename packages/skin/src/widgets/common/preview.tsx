@@ -10,10 +10,12 @@
 // A `heroPreview` reports whether its hero is on screen: a hero trailer is asked for only while
 // one is, so a hero scrolled away (or a document that draws no `heroPreview`) plays nothing.
 import { createContext, useCallback, useContext, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
-import { StyleSheet, View, type HostInstance } from 'react-native';
+import { Platform, StyleSheet, View, type HostInstance } from 'react-native';
 import { GroupContext, useHost, type WidgetProps } from '../../host';
 import { heroVisibility, type HeroVisibility } from './hero-visibility';
+import { HERO_OFFSCREEN } from '../../hero-rotation';
 import { useVisibility, type Reach } from './in-view';
+import { cardPreviewing, heroPreviewing } from './preview-vocabulary';
 
 export interface PreviewSource {
   /** The URL of the card preview playing now (`env.preview.cardId`), or ''. */
@@ -59,12 +61,13 @@ export function CardPreview({ ctx }: WidgetProps) {
     intent(cardId, rowId, true);
     return () => intent(cardId, rowId, false);
   }, [active, intent, cardId, rowId]);
-  const playing = source && cardId !== '' && env.preview?.cardId === cardId ? source.cardUrl : '';
+  const playing = source && cardId !== '' && cardPreviewing(env, cardId) ? source.cardUrl : '';
   return source && playing ? <Playing Surface={source.Surface} url={playing} /> : null;
 }
 
 export function HeroPreview({ ctx }: WidgetProps) {
-  const { env } = useHost();
+  const host = useHost();
+  const { env } = host;
   const source = useContext(PreviewContext);
   const heroId = ctx.hero?.id ?? '';
   const box = useRef<HostInstance>(null);
@@ -72,11 +75,20 @@ export function HeroPreview({ ctx }: WidgetProps) {
   report.current = source?.heroVisible;
   const shown = useRef<HeroVisibility | null>(null);
   shown.current ??= heroVisibility((id, visible) => report.current?.(id, visible));
-  useVisibility(box, ON_SCREEN, visible => shown.current?.visible(visible));
+  // On TV the hero holds its title while it is wholly off the screen (HERO_OFFSCREEN).
+  const setFlag = host.setFlag;
+  const offscreen = useRef<boolean | null>(null);
+  const reportOffscreen = (on: boolean) => {
+    if (!Platform.isTV || offscreen.current === on) return;
+    offscreen.current = on;
+    setFlag(HERO_OFFSCREEN, on);
+  };
+  useVisibility(box, ON_SCREEN, visible => { shown.current?.visible(visible); reportOffscreen(!visible); });
+  useEffect(() => () => { if (offscreen.current) setFlag(HERO_OFFSCREEN, false); }, [setFlag]);
   // On TV this widget stays as the carousel rotates: its hero changes while its box stays in view.
   useEffect(() => { shown.current?.hero(heroId); }, [heroId]);
   useEffect(() => () => shown.current?.hero(''), []);
-  const playing = source && heroId !== '' && env.preview?.heroId === heroId ? source.heroUrl : '';
+  const playing = source && heroId !== '' && heroPreviewing(env, heroId) ? source.heroUrl : '';
   const heroEnded = source?.heroEnded;
   const ended = useCallback(() => heroEnded?.(heroId), [heroEnded, heroId]);
   return (
