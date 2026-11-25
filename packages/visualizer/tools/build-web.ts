@@ -79,6 +79,38 @@ const SAMPLES = Array.from(colorSamples).find(n => n <= (stage.constrained ? 2 :
     code = replace(code, 'gl.uniform2f(u.uRes, lo.w, lo.h);', 'if (desktopLoops) gl.uniform3i(u.uAuroraLayers, 14, 4, 3); gl.uniform2f(u.uRes, lo.w, lo.h);');
     code = replace(code, 'gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t);', 'if (desktopLoops) gl.uniform3i(u.uAuroraLayers, 14, 4, 3); gl.uniform1f(u.uYaw, yaw); bindTex(3, lo.t);');
   }
+  if (name === '65_shallows.js') {
+    // ANGLE otherwise emits four copies of wgrad, each of which visits all 14 drops. Evaluate the
+    // same four positions in order. The surface slope determines refraction before the bed samples.
+    const desktop = '!stage.constrained';
+    const from = code.indexOf('  vec2 gs = wgrad(ps)'), until = code.indexOf('  // the bed:', from);
+    if (from < 0 || until < 0) throw new Error('Shallows refraction changed');
+    const authored = code.slice(from, until);
+    let refraction = replace(authored, 'vec2 gs = wgrad(ps)', 'gs = slope[0]');
+    for (const [type, variable] of [['vec3', 'n'], ['float', 'path'], ['vec2', 'pf'], ['float', 'depth']])
+      refraction = replace(refraction, type + ' ' + variable + ' = ', variable + ' = ');
+    code = desktopShader(code, 'out vec4 o; uniform vec4 uDr[14];',
+      'out vec4 o; uniform int uSlopes, uDrops; uniform vec4 uDr[14];', desktop);
+    code = desktopShader(code, authored, `  const float e = .02;
+  vec2 gs, pf, slope[4]; vec3 n; float path, depth;
+  for (int i = 0; i < uSlopes; i++) {
+    vec2 pos = i == 0 ? ps : pf;
+    if (i == 2) pos += vec2(e, 0.);
+    if (i == 3) pos += vec2(0., e);
+    slope[i] = wgrad(pos);
+    if (i == 0) {
+${refraction}    }
+  }
+`, desktop);
+    code = desktopShader(code, 'const float e = .02; vec2 g0 = wgrad(pf), gx = wgrad(pf+vec2(e,0.)), gy = wgrad(pf+vec2(0.,e));',
+      'vec2 g0 = slope[1], gx = slope[2], gy = slope[3];', desktop);
+    for (const age of ['uDr[i].w-FALL', 'uDr[i].w;']) {
+      const loop = 'i < 14; i++){ float sz = uDr[i].z, a = ' + age;
+      code = desktopShader(code, loop, loop.replace('i < 14', 'i < uDrops'), desktop);
+    }
+    code = replace(code, 'setCam(u, c); gl.uniform4fv(u.uDr, D);',
+      'setCam(u, c); if (!stage.constrained) { gl.uniform1i(u.uSlopes, 4); gl.uniform1i(u.uDrops, 14); } gl.uniform4fv(u.uDr, D);');
+  }
   if (name === '50_silk.js') code = replace(code, 'SILK_W = 2048, SILK_H = 1024', 'SILK_W = stage.constrained ? 512 : 2048, SILK_H = stage.constrained ? 256 : 1024');
   if (name === '62_incense.js') {
     for (const [suffix, value] of [['W', 256], ['H', 160], ['DW', 1024], ['DH', 640]] as const)

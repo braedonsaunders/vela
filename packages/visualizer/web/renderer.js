@@ -2107,7 +2107,7 @@ scene({ id: 'forest', name: 'Deep Forest', from: 'Organic', kind: 'nature', grou
 // light pattern on the bed is the focusing of the sun by that surface (how much a patch of light is squeezed
 // or spread, from the second derivatives of the surface), slightly different for red, green and blue.
 const FS_SHALLOWS = FSH + `
-out vec4 o; uniform vec4 uDr[14];                              // each drop: x, z, size, age in seconds
+${!stage.constrained ? "out vec4 o; uniform int uSlopes, uDrops; uniform vec4 uDr[14];" : "out vec4 o; uniform vec4 uDr[14];"}                              // each drop: x, z, size, age in seconds
 float voice(float band){
   float fast=spec(band), slow=specS(band);
   return clamp(.25*fast+.3*slow+1.6*max(0.,fast-slow),0.,1.);      // the band's level, with a moderate lift on its attacks
@@ -2118,7 +2118,7 @@ vec2 wgrad(vec2 p){                                           // the slope of th
   for (int i = 0; i < 9; i++){ float fi = float(i), ang = fi*2.399+.6, k = 1.7*pow(1.32, fi); vec2 D = vec2(cos(ang), sin(ang));
     float e=i<3?uBandE.x:(i<6?uBandE.y:uBandE.z);
     g += D*(.012+.026*amp+.052*e)*cos(k*dot(D,p)-sqrt(k*4.)*uTime*.62+warp*(.6+.2*fi)+fi*1.7); }
-  for (int i = 0; i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w-FALL, life = .44+.84*sz; if (sz <= 0. || a < 0. || a > life+BACK) continue;
+  for (int i = 0; ${!stage.constrained ? "i < uDrops; i++){ float sz = uDr[i].z, a = uDr[i].w-FALL" : "i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w-FALL"}, life = .44+.84*sz; if (sz <= 0. || a < 0. || a > life+BACK) continue;
     vec2 d = p-uDr[i].xy; float r = length(d)+1e-3, x = r-a*1.5, k = 22.-8.*sz;                          // bigger drops make broader, longer-lived rings
     float w = cos(x*k)*smoothstep(0.,.09,a)*(1.-smoothstep(life*.5, life, a))*exp(-x*x*(9.-4.*sz));
     float a2 = a-BACK, x2 = r-a2*1.5; if (a2 > 0.) w += .2*cos(x2*k)*smoothstep(0.,.12,a2)*(1.-smoothstep(life*.3, life*.7, a2))*exp(-x2*x2*9.);
@@ -2144,11 +2144,7 @@ void main(){
   vec3 rd = viewRay(); const vec3 SUNL = vec3(.28, .51, .81);                 // the moon, low over the far water
   float ts = -uEye.y/rd.y; vec3 Ps = uEye+rd*ts; vec2 ps = Ps.xz;
   float d0 = depthAt(ps), wet = smoothstep(0., .25, d0);
-  vec2 gs = wgrad(ps)*smoothstep(.0, .35, d0); vec3 n = normalize(vec3(-gs.x, 1., -gs.y));
-  vec3 rr = refract(rd, n, 1./1.33);
-  float path = max(d0, 0.)/max(-rr.y, .25); vec2 pf = ps+rr.xz*path;          // the point on the bed that you see: deeper water shifts it further
-  float depth = max(depthAt(pf), 0.); path = depth/max(-rr.y, .25); pf = ps+rr.xz*path;
-  // the bed: rippled sand and stones of different sizes, some standing clear of the water near the shore
+${!stage.constrained ? "  const float e = .02;\n  vec2 gs, pf, slope[4]; vec3 n; float path, depth;\n  for (int i = 0; i < uSlopes; i++) {\n    vec2 pos = i == 0 ? ps : pf;\n    if (i == 2) pos += vec2(e, 0.);\n    if (i == 3) pos += vec2(0., e);\n    slope[i] = wgrad(pos);\n    if (i == 0) {\n  gs = slope[0]*smoothstep(.0, .35, d0); n = normalize(vec3(-gs.x, 1., -gs.y));\n  vec3 rr = refract(rd, n, 1./1.33);\n  path = max(d0, 0.)/max(-rr.y, .25); pf = ps+rr.xz*path;          // the point on the bed that you see: deeper water shifts it further\n  depth = max(depthAt(pf), 0.); path = depth/max(-rr.y, .25); pf = ps+rr.xz*path;\n    }\n  }\n" : "  vec2 gs = wgrad(ps)*smoothstep(.0, .35, d0); vec3 n = normalize(vec3(-gs.x, 1., -gs.y));\n  vec3 rr = refract(rd, n, 1./1.33);\n  float path = max(d0, 0.)/max(-rr.y, .25); vec2 pf = ps+rr.xz*path;          // the point on the bed that you see: deeper water shifts it further\n  float depth = max(depthAt(pf), 0.); path = depth/max(-rr.y, .25); pf = ps+rr.xz*path;\n"}  // the bed: rippled sand and stones of different sizes, some standing clear of the water near the shore
   float rip = sin(pf.x*7.+noise(vec3(pf*1.1, 4.))*5.+pf.y*1.5);
   vec3 sand = vec3(.62,.56,.46)*(.8+.1*rip+.16*noise(vec3(pf*42., 1.)))*(.85+.3*noise(vec3(pf*.7, 6.)));
   vec4 st = stoneAt(pf); float dd = length(st.xy), stone = st.w > 0. ? smoothstep(1., .9, dd) : 0., rim = dd*dd*stone;
@@ -2158,7 +2154,7 @@ void main(){
   vec3 bed = mix(sand, stc, stone)*shade;
   float proud = stone*smoothstep(-.02, .03, st.z*sqrt(max(1.-dd*dd, 0.))-depth);    // this much of the stone stands above the water
   // moonlight focused on the bed by the surface: strong in the shallows, fading with depth; it swells with the low end
-  const float e = .02; vec2 g0 = wgrad(pf), gx = wgrad(pf+vec2(e,0.)), gy = wgrad(pf+vec2(0.,e));
+  ${!stage.constrained ? "vec2 g0 = slope[1], gx = slope[2], gy = slope[3];" : "const float e = .02; vec2 g0 = wgrad(pf), gx = wgrad(pf+vec2(e,0.)), gy = wgrad(pf+vec2(0.,e));"}
   float hxx = (gx.x-g0.x)/e, hxy = (gx.y-g0.y)/e, hyy = (gy.y-g0.y)/e, c = min(depth, 1.2)*.8;
   vec3 cc3 = c*vec3(.94, 1., 1.07), det = (1.-cc3*hxx)*(1.-cc3*hyy)-cc3*cc3*hxy*hxy;
   vec3 caus = mix(vec3(1.), min(1./(abs(det)+.14), vec3(4.)), wet);
@@ -2195,7 +2191,7 @@ void main(){
   float pm = petal(ps+gs*.3, pc)*wet;
   col = mix(col, pc*(vec3(.12,.14,.19)+lanterns*.3), pm);
   // the drops themselves: a streak coming down, then the bead thrown back up
-  for (int i = 0; i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w; if (a > FALL+BACK || sz <= 0.) continue;
+  for (int i = 0; ${!stage.constrained ? "i < uDrops; i++){ float sz = uDr[i].z, a = uDr[i].w;" : "i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w;"} if (a > FALL+BACK || sz <= 0.) continue;
     float up = a < FALL ? (1.-a/FALL)*1.5 : sz*.42*4.*((a-FALL)/BACK)*(1.-(a-FALL)/BACK), rad = (a < FALL ? .028 : .02)*(.5+.8*sz), sy = a < FALL ? 4. : 1.2;
     vec3 C = vec3(uDr[i].x, up+rad, uDr[i].y), oc = (uEye-C)*vec3(1., 1./sy, 1.), dd = normalize(rd*vec3(1., 1./sy, 1.));
     float b = dot(oc, dd), h = b*b-dot(oc, oc)+rad*rad;
@@ -2223,7 +2219,7 @@ scene({ id: 'shallows', name: 'Shallows', from: 'Organic', kind: 'nature', group
     if(this.h2!==H[2].n){ this.h2=H[2].n; drop((r()-.5)*9.2,-1.+r()*6.2,.19+.17*H[2].amp); }
     const eye = [drift[0] + Math.sin(t * 0.06) * 0.4, 2.35, drift[1] - 3.0];              // standing at the water's edge, looking out and down
     const c = camera(eye, tgt, 0.8, Math.sin(t * 0.05) * 0.012, 0.1, 60); F.focus = Math.hypot(...sub(eye, tgt)) + 0.5;
-    draw(this.p, out, T.sw, T.sh, u => { F.set(u); setCam(u, c); gl.uniform4fv(u.uDr, D); });
+    draw(this.p, out, T.sw, T.sh, u => { F.set(u); setCam(u, c); if (!stage.constrained) { gl.uniform1i(u.uSlopes, 4); gl.uniform1i(u.uDrops, 14); } gl.uniform4fv(u.uDr, D); });
   } });
 }
 
