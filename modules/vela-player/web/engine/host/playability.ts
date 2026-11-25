@@ -1,5 +1,5 @@
 import { canAttemptOriginal } from '../original-support';
-import { pathUnplayable, type PageAbility, type Unplayable } from '../path-playability';
+import { pathUnplayable, refusedReason, type PageAbility, type Unplayable } from '../path-playability';
 import type { HostContext } from './state';
 import { supportsSource } from './quality';
 
@@ -19,7 +19,7 @@ export function unplayablePaths(context: HostContext): { id: string; reason: Unp
   const out: { id: string; reason: Unplayable }[] = [];
   for (const source of session.sources) {
     if (source.edition !== session.edition || supportsSource(context, source)) continue;
-    out.push({ id: source.id, reason: pathUnplayable(source, page) ?? 'browser' });
+    out.push({ id: source.id, reason: refusedReason(source, page) });
   }
   for (const source of session.onDemandSources ?? []) {
     const reason = pathUnplayable(source, page);

@@ -569,6 +569,8 @@
   "player.picture.fill": "Fill screen",
   "player.versions": "Versions",
   "player.version.preparing": "Preparing…",
+  "player.version.playing": "Playing now",
+  "player.version.playingRelease": "Playing {release}",
   "player.version.retrying": "Preparing… retrying in {seconds}s",
   "player.version.unavailable": "This version is no longer available. Playback continues.",
   "player.version.cannotSwitch": "This server cannot switch versions during playback. Playback continues.",

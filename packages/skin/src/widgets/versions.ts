@@ -1,4 +1,4 @@
-import type { VersionItem } from '@vela/core';
+import { msg, type VersionItem } from '@vela/core';
 
 export function versionBadge(version: VersionItem): string {
   return version.remembered ? 'Your choice' : version.pinned ? 'Pinned by owner' : version.recommended ? 'Recommended' : '';
@@ -65,9 +65,26 @@ export function selectedVersion(versions: VersionItem[] | undefined, selectedVer
   return selectedVersionId ? versions?.find(version => version.id === selectedVersionId) : undefined;
 }
 
-/** The release the player's converted qualities come from, by name: '' for the current version
- * (Auto, which is the first row and picks a release itself, or no named choice). */
-export function convertedFrom(versions: VersionItem[] | undefined, selectedVersionId: string | undefined): string {
+/** The release the player's converted qualities come from, by name: the release the server says
+ * is playing where it says (Auto's pick included), else the chosen release; '' for the current
+ * version (Auto, which is the first row and picks a release itself, or no named choice). */
+export function convertedFrom(versions: VersionItem[] | undefined, selectedVersionId: string | undefined, playingLabel = ''): string {
+  if (playingLabel.trim()) return playingLabel.split(' · ')[0]!.trim();
   const selected = selectedVersion(versions, selectedVersionId);
   return selected && selected.id !== versions?.[0]?.id ? selected.label.split(' · ')[0]! : '';
+}
+
+/** A version row's status line: "Playing now" on the release the server says is playing (which
+ * under Auto is another row than the one chosen), then the row's availability. */
+export function versionRowStatus(version: VersionItem, playingVersionId: string | null | undefined): string {
+  const availability = versionAvailability(version);
+  return version.id === playingVersionId ? `${msg('player.version.playing')} · ${availability}` : availability;
+}
+
+/** The release playing when no row of the menu is it (Auto resolving to a release it does not
+ * list), for a line under the rows: '' when a row is it or the server does not say. */
+export function playingElsewhere(versions: VersionItem[] | undefined, playingVersionId: string | null | undefined, playingLabel: string): string {
+  if (!playingLabel || playingVersionId === undefined) return '';
+  if (playingVersionId !== null && versions?.some(version => version.id === playingVersionId)) return '';
+  return msg('player.version.playingRelease', { release: playingLabel });
 }

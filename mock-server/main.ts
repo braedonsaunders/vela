@@ -8,7 +8,7 @@ import { allTitles, artwork, channels as defaultChannels, detail, extras, featur
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
 import { trickplaySheet } from './trickplay';
-import { applyCommand, createSession, events, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
+import { applyCommand, createSession, events, failover, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaArtwork, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
@@ -1173,6 +1173,12 @@ async function dispatch(req: Request): Promise<Response> {
       if (req.method === 'POST') { const data = await req.json(); if (typeof data.enabled === 'boolean') sidecarFixture.enabled = data.enabled;
         if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected; if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId; }
       return json(sidecarFixture);
+    }
+    // A mid-stream failover (Ether W380): each open session with versions moves to its next playable
+    // release and publishes a plan of a higher revision naming it (playingVersionId, playingLabel).
+    if (req.method === 'POST' && url.pathname === '/__admin/failover') {
+      const moved = [...sessions.values()].filter(s => s.plan.state !== 'ended' && s.plan.versions?.length && failover(s));
+      return json(moved.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, playingVersionId: s.plan.playingVersionId, playingLabel: s.plan.playingLabel })));
     }
     // A new revision of every open session's plan for the same source, as a server sends for any update; with
     // {"selectedSubtitleTrackId": id|null}, one in which the server changed the selected subtitle itself.

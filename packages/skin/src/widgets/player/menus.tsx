@@ -10,7 +10,7 @@ import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, MenuSection, SegmentRow, VersionChoiceRow } from './menu';
 import { nextSubtitleOffset, type PlayerView, type QualityOption } from './present';
 import type { PlaybackPlan } from '@vela/player-api';
-import { convertedFrom, versionAvailability, versionMenuChips, versionMenuGroups } from '../versions';
+import { convertedFrom, playingElsewhere, versionMenuChips, versionMenuGroups, versionRowStatus } from '../versions';
 
 export type MenuName = 'subtitles' | 'audio' | 'quality' | 'speed' | 'sleep';
 
@@ -264,7 +264,8 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       enabled={!blocked && !pendingQualityId && !pendingVersionId}
       onChoose={() => { if (!serverStream.selected) send({ type: 'quality', renditionId: serverStream.choice }); }} /> : null,
   ];
-  const source = convertedFrom(groups.versions, selectedVersionId);
+  const source = convertedFrom(groups.versions, selectedVersionId, view.playingLabel);
+  const elsewhere = playingElsewhere(groups.versions, view.playingVersionId, view.playingLabel);
   const convertedTitle = source ? msg('player.quality.convertedFrom', { version: source }) : msg('player.quality.convertedFromCurrent');
   const hasConversions = view.qualityAuto || converted.length > 0 || !!serverStream;
   const showQuality = hasVersions && (hasConversions || originals.length > 0);
@@ -273,11 +274,12 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       {groups.versions.map(version => {
         const unavailable = version.availability === 'unavailable';
         return <VersionChoiceRow key={`version:${version.id}`} look={look} name={version.label}
-          chips={versionMenuChips(version)} status={versionAvailability(version)} unavailable={unavailable}
+          chips={versionMenuChips(version)} status={versionRowStatus(version, view.playingVersionId)} unavailable={unavailable}
           selected={version.id === selectedVersionId} pending={version.id === pendingVersionId}
           enabled={!blocked && !pendingVersionId && !unavailable}
           onChoose={() => { if (version.id !== selectedVersionId) switchVersion(version.id); }} />;
       })}
+      {elsewhere ? <MenuHeading look={look} text={elsewhere} /> : null}
       {versionMessage ? <MenuHeading look={look} text={versionMessage} /> : null}
     </MenuSection> : null,
     showQuality ? <MenuRule key="quality-divider" look={look} /> : null,

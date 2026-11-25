@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
-import { present, qualityReached } from '../src/widgets/player/present';
+import { labelResolution, present, qualityReached } from '../src/widgets/player/present';
 
 function plan(): PlaybackPlan {
   const base = { sourceId: 'file', timelineId: 'timeline', edition: '1080p release', transport: 'hls', kind: 'transcode', qualities: [], boundaries: [] };
@@ -153,4 +153,33 @@ test('a converted path the page cannot play gives way to an HLS rendition of the
   const row = present(source, snapshot).qualities.find(q => q.resolution === '720p')!;
   expect(row.id).toBe('hls-720');
   expect(row.disabledReason).toBe('');
+});
+
+test('playing a release as it is, the badge names the resolution its label does', () => {
+  const source = plan(); source.selectedPathId = 'primary';
+  source.playingVersionId = 'v1080'; source.playingLabel = '1080p WEB-DL · DD+ 5.1 · 4.2 GB';
+  // A 1920×800 scope picture: decoded height alone would say 800p.
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'primary', throughputHistory: [], capabilities: {},
+    video: { width: 1920, height: 800, codec: 'hevc' } } as unknown as Snapshot;
+  const view = present(source, snapshot);
+  expect(view.quality.split(' · ')[0]).toBe('1080p');
+  expect(view.playingLabel).toBe('1080p WEB-DL · DD+ 5.1 · 4.2 GB');
+  expect(view.playingVersionId).toBe('v1080');
+  // A conversion shows its own size; a server that does not say leaves the badge as it was.
+  const converted = present({ ...source, selectedPathId: 'hls' }, { ...snapshot, sourceId: 'hls', video: { width: 1280, height: 720, codec: 'h264' } } as Snapshot);
+  expect(converted.quality.split(' · ')[0]).toBe('720p');
+  // The 818p rung of a 4K release's ladder is not called 4K.
+  const rung = present({ ...source, playingLabel: '4K Blu-ray · DTS 7.1 · 54.7 GB' }, { ...snapshot, video: { width: 1920, height: 818, codec: 'h264' } } as Snapshot);
+  expect(rung.quality.split(' · ')[0]).toBe('818p');
+  const quiet = present(plan(), { ...snapshot, sourceId: 'primary' } as Snapshot);
+  expect(quiet.quality.split(' · ')[0]).toBe('800p');
+  expect(quiet.playingVersionId).toBeUndefined();
+});
+
+test('release labels lead with their resolution', () => {
+  expect(labelResolution('4K Dolby Vision Remux · TrueHD Atmos 7.1')).toBe('4K');
+  expect(labelResolution('2160p WEB-DL')).toBe('4K');
+  expect(labelResolution('1080p WEB-DL · DD+ 5.1')).toBe('1080p');
+  expect(labelResolution('Auto · now 1080p WEB-DL')).toBe('');
+  expect(labelResolution('Director’s Cut · 1080p')).toBe('');
 });

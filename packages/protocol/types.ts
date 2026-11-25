@@ -373,6 +373,12 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   markers?: SkipMarker[];
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
+  /** The release actually playing: its versions-row id, or null when it has no row (Auto
+   * resolving to a release the menu does not list); with its label ("1080p WEB-DL · DD+ 5.1 ·
+   * 4.2 GB"). selectedVersionId stays the viewer's choice (the Auto row's id when Auto was
+   * chosen). Absent when nothing plays or the server does not say; a mid-stream failover to
+   * another release publishes a plan of a higher revision. */
+  playingVersionId?: ID | null; playingLabel?: string;
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };
   /** A live channel, or a start-over plan (`mode: 'startOver'`, a growing programme from its start: window
    * start 0, a growing edge). Positions and the window share the plan's timeline. */
@@ -411,12 +417,14 @@ export interface PlayerObservation extends Mutation, Generations { sequence: num
   throughputBps?: number; droppedFrames?: number; totalFrames?: number; selectedPathId: ID;
   audioTrackId?: ID; subtitleTrackId?: ID | null; transferredBytes?: number;
   error?: { class: 'source' | 'decoder' | 'transient'; message: string } }
-export interface SessionSnapshot { cursor: Cursor; revision: number; plan: PlaybackPlan;
+export interface SessionSnapshot extends PlayingRelease { cursor: Cursor; revision: number; plan: PlaybackPlan;
   /** Server publication does not prove transfer, accepted buffer, or playback progress. */
   publishedRanges: TimeRange[]; lastObservationSequence?: number;
   /** The live event on air on a live channel; null when none matches. Also streamed as `event: liveEvent`. */
   liveEvent?: LiveEventRef | null }
-export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } & (
+/** The release playing, as a session snapshot or event may also carry it at its top level (PlaybackPlan.playingVersionId). */
+export interface PlayingRelease { playingVersionId?: ID | null; playingLabel?: string }
+export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } & PlayingRelease & (
   { type: 'snapshot'; snapshot: SessionSnapshot } | { type: 'plan'; plan: PlaybackPlan } |
   { type: 'error'; error: ProtocolError } | { type: 'ended'; reason: string });
 export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'source' | 'decoder' | 'playback' | 'capacity' | 'transient' | 'request' | 'conflict';

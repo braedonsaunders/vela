@@ -6,7 +6,7 @@ import { requestTracks, requestSwitch } from './authorizations';
 import { activateSource } from './media';
 import { executeCommand } from './commands';
 import { pageAbility } from './playability';
-import { pathUnplayable, unplayableMessage } from '../path-playability';
+import { pathUnplayable, refusedReason, unplayableMessage } from '../path-playability';
 import type { OnDemandSource, Source } from '../model';
 
 /** Why a switch to `pathId` cannot happen on this page, or null when it can. */
@@ -18,7 +18,7 @@ function switchRefusal(context: HostContext, pathId: string, found: Source | OnD
   }
   // Offered by the session, but no player here takes it (candidateSources left it out).
   const known = context.session.current?.sources.find((s) => s.id === pathId);
-  if (known) return unplayableMessage(pathUnplayable(known, page) ?? 'browser');
+  if (known) return unplayableMessage(refusedReason(known, page));
   return 'This playback choice is no longer offered; reopen the menu and choose again';
 }
 export async function switchPathFromCommand(

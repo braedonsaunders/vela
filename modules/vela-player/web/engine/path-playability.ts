@@ -25,6 +25,13 @@ export function pathUnplayable(path: { delivery?: 'file' | 'hls'; mime?: string;
   return path.original && !page.secure ? 'insecure-page' : 'browser';
 }
 
+/** Why a path no player here takes cannot play (the engine found no route for it): its file's
+ * reason where it is a file, else the page's when the page is not secure (the packet runtime that
+ * plays what MSE cannot, HEVC or high-level HLS, needs WebCodecs), else the browser's. */
+export function refusedReason(path: { delivery?: 'file' | 'hls'; mime?: string; original?: boolean }, page: PageAbility): Unplayable {
+  return pathUnplayable(path, page) ?? (page.secure ? 'browser' : 'insecure-page');
+}
+
 /** The refusal a switch to an unplayable path answers with (the engine has no translations; the
  * menu shows its own words for the same reasons before anyone chooses). */
 export function unplayableMessage(reason: Unplayable): string {

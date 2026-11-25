@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { VersionItem } from '@vela/core';
-import { convertedFrom, preparingRetry, selectedVersion, versionAvailability, versionBadge, versionChips, versionMenuChips, versionMenuGroups, versionPlayArg } from '../src/widgets/versions';
+import { convertedFrom, playingElsewhere, preparingRetry, selectedVersion, versionAvailability, versionBadge, versionChips, versionMenuChips, versionMenuGroups, versionPlayArg, versionRowStatus } from '../src/widgets/versions';
 
 const version: VersionItem = {
   id: 'v1', label: '4K Dolby Vision Remux', recommended: true, remembered: true, pinned: true,
@@ -51,4 +51,24 @@ test('a server naming Auto as playing selects the Auto row, and conversions are 
   expect(convertedFrom(versions, 'v4k')).toBe('4K Dolby Vision Remux');
   expect(selectedVersion(versions, 'gone')).toBeUndefined();
   expect(convertedFrom(versions, undefined)).toBe('');
+});
+
+test('the release playing is marked on its row, also when Auto is the choice', () => {
+  expect(versionRowStatus(top, 'v4k')).toBe('Playing now · Ready');
+  expect(versionRowStatus(auto, 'v4k')).toBe('Ready');
+  expect(versionRowStatus(web, undefined)).toBe('Ready · cached');
+});
+
+test('a playing release the menu does not list is named under the rows', () => {
+  const versions = [auto, top, web];
+  expect(playingElsewhere(versions, 'v4k', top.label)).toBe('');
+  expect(playingElsewhere(versions, null, '720p HDTV · AAC 2.0')).toBe('Playing 720p HDTV · AAC 2.0');
+  expect(playingElsewhere(versions, 'gone', '720p HDTV')).toBe('Playing 720p HDTV');
+  expect(playingElsewhere(versions, undefined, '')).toBe('');
+});
+
+test('conversions are named from the release actually playing, Auto\'s pick included', () => {
+  expect(convertedFrom([auto, top, web], 'auto-id', '1080p WEB-DL · DD+ 5.1 · 4.2 GB')).toBe('1080p WEB-DL');
+  expect(convertedFrom([auto, top, web], 'v4k', '1080p WEB-DL · DD+ 5.1')).toBe('1080p WEB-DL');
+  expect(convertedFrom([auto, top, web], 'v4k', '')).toBe('4K Dolby Vision Remux');
 });

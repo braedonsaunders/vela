@@ -2,7 +2,7 @@
 // clock, the timeline, the choosable tracks, qualities, speeds and chapters, and the playback
 // facts for the info card. Pure: no React, no clock. A value the engine has not reported stays
 // empty rather than estimated.
-import { msg, number, second } from '@vela/core';
+import { msg, number, playingRelease, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { formatLines, type FormatLines } from './format';
@@ -102,6 +102,10 @@ export interface PlayerView {
   /** The quality playing, in words ("1080p · 8 Mbps"). */
   quality: string;
   path: string;
+  /** The release the server says is playing ("1080p WEB-DL · DD+ 5.1 · 4.2 GB"), and its row in
+   * the versions menu (null: not a row; undefined: the server does not say). */
+  playingLabel: string;
+  playingVersionId: string | null | undefined;
   chapters: ChapterMark[];
   stats: PlayerStats;
   /** Source → output video and audio, from the engine's format facts. */
@@ -356,7 +360,33 @@ export function qualityLimitReason(code: string | undefined): string {
   return /^[a-z0-9_.-]+$/.test(code) ? msg('player.qualityReason.other') : code;
 }
 
-function playingQuality(snapshot: Snapshot | null, s: PlayerStats, path: Path | undefined): string {
+/** The resolution a release label leads with ("1080p WEB-DL · …" → "1080p"), or ''. */
+export function labelResolution(label: string): string {
+  const lead = /^\s*(4K|UHD|2160p|1440p|1080p|1080i|720p|576p|480p|SD)\b/i.exec(label)?.[1] ?? '';
+  if (/^(4k|uhd|2160p)$/i.test(lead)) return '4K';
+  return lead && /^sd$/i.test(lead) ? 'SD' : lead.toLowerCase();
+}
+
+/** A path that plays its release as it is (no conversion of the server's to a size of its own). */
+function playsRelease(path: Path | undefined): boolean {
+  return !!path && (path.original === true || path.id === 'primary' || (path.kind !== 'transcode' && !path.quality));
+}
+
+/** Whether a decoded picture this wide is of the class a label's resolution names (a 1920×800
+ * scope picture is "1080p"; the 818p rung of a 4K release's ladder is not "4K"). */
+function widthIs(width: number, named: string): boolean {
+  const named1080 = named === '1080i' ? '1080p' : named;
+  const decoded = width >= 3800 ? '4K' : width >= 1900 ? '1080p' : width >= 1260 ? '720p' : 'SD';
+  return decoded === named1080 || (decoded === 'SD' && ['576p', '480p', 'SD'].includes(named1080));
+}
+
+function playingQuality(snapshot: Snapshot | null, s: PlayerStats, path: Path | undefined, release: string): string {
+  // Playing a release as it is, the badge names it as its label does when the picture is that
+  // release's size: a 1920×800 scope picture is the "1080p" release the menus name, not "800p".
+  // A lower rung of the release's ladder keeps its own size.
+  const named = playsRelease(path) ? labelResolution(release) : '';
+  const width = snapshot?.video?.width ?? 0;
+  if (named && (!width || widthIs(width, named))) return [named, s.bitrate].filter(Boolean).join(' · ');
   if (s.resolution) return [s.resolution, s.bitrate].filter(Boolean).join(' · ');
   const picked = path?.qualities.find(q => q.id === snapshot?.renditionId) ?? path?.quality;
   if (picked) return `${number(picked.height, { useGrouping: false })}p`;
@@ -401,6 +431,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
   const facts = stats(snapshot);
   const style = snapshot?.subtitleStyle;
   const rendition = snapshot?.backend === 'mse' || snapshot?.diagnostics?.implementation === 'vela-core';
+  const playing = playingRelease(plan);
   return {
     state,
     playing: state === 'playing',
@@ -450,8 +481,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
       : path
         ? `path:${path.id}`
         : '',
-    quality: playingQuality(snapshot, facts, path),
+    quality: playingQuality(snapshot, facts, path, playing?.label ?? ''),
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '',
+    playingLabel: playing?.label ?? '',
+    playingVersionId: playing ? playing.versionId : undefined,
     chapters: (plan?.chapters ?? []).map(c => ({
       id: c.id,
       name: c.name,
