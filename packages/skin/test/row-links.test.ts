@@ -17,6 +17,14 @@ test('shelves replace speculative paging with a focusable end tile', () => {
   ] });
   expect(withRowLinks({ type: 'widget', widget: 'sentinel', params: { on: 'home' } })).toMatchObject({ widget: 'sentinel' });
 });
+test('the end tile keeps the skin-owned See all part', () => {
+  const result = withRowLinks({ type: 'box', children: [
+    { type: 'repeat', over: 'row.items', item: { type: 'box' } },
+  ] }, { type: 'widget', widget: 'rowLink', params: { end: 'true' }, style: { color: 'hotpink' }, focus: { scale: '1.1' } });
+  expect(result).toMatchObject({ children: [
+    { type: 'repeat' }, { type: 'widget', widget: 'rowLink', params: { end: 'true' }, style: { color: 'hotpink', 'flex-shrink': '0' }, focus: { scale: '1.1' } },
+  ] });
+});
 test('active shelf limit also reaches the title for a complete but truncated row', () => {
   const ctx = { row: { items: Array(20).fill({}) } } as Ctx;
   const env = {} as Env;

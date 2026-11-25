@@ -20,6 +20,8 @@ export interface HeroFocusCarry<T> {
   remove(target: T): boolean;
   /** Once the redraw is done: the hero button to take the focus that was lost, if any. */
   take(): T | undefined;
+  /** Whether this is the outer hero action in the given horizontal direction. */
+  atEdge(target: T, direction: -1 | 1): boolean;
 }
 
 export function heroFocusCarry<T>(): HeroFocusCarry<T> {
@@ -53,6 +55,10 @@ export function heroFocusCarry<T>(): HeroFocusCarry<T> {
         if (rank < bestRank) { best = target; bestRank = rank; }
       }
       return best;
+    },
+    atEdge(target, direction) {
+      const ordered = [...buttons].sort((a, b) => a[1] - b[1]);
+      return (direction < 0 ? ordered[0]?.[0] : ordered.at(-1)?.[0]) === target;
     },
   };
 }

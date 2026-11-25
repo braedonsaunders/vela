@@ -23,6 +23,7 @@ import { compileTemplate, holeValue, makeArg, pathField, singleHole, type Arg, t
 import { text as valueText } from './screen/scope';
 import type { Items } from './screen/items';
 import { fold, halfPoints, lineHeightPoints, pointsToPx, screenStyleRow } from './resolve/screen-style';
+import { takesDirectionalFocus } from './focus-stop-policy';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
  * adds plugin screen documents and their blocks (docs/plugin-screens.md). */
@@ -61,6 +62,8 @@ interface Common {
   /** The brand mark's home press (labelled with the Vela home string): a pointer shortcut that
    * takes no keyboard or TV focus. */
   brand?: boolean;
+  /** False for pointer conveniences that never enter keyboard, D-pad or remote focus order. */
+  directionalFocus?: false;
   level?: number;
   testId?: Template;
   id?: Template;
@@ -382,6 +385,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
       current: node.a11y.current && tests(node.a11y.current, r), pressed: node.a11y.pressed && tests(node.a11y.pressed, r), checked: node.a11y.checked && tests(node.a11y.checked, r),
       haspopup: node.a11y.haspopup, title: compile(node.a11y.title, r) },
     group: node.group === true,
+    ...('press' in node && node.press && !takesDirectionalFocus(node.press.action, node.press.arg) ? { directionalFocus: false as const } : {}),
     escape: node.escape ? node.escape.split(/\s+/).filter(Boolean) : undefined,
     returnFocus: compile(node.returnFocus, r),
     order: Number(style.order) || 0,
@@ -435,7 +439,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
 
 /** Rewrites the app applies to skin documents' routes (never to screen documents). */
 function skinRewrites(node: Exclude<Node, UseNode>, r: Context): Exclude<Node, UseNode> {
-  node = withRowLinks(node);
+  node = withRowLinks(node, r.doc.templates?.velaSeeAll);
   // Loading is app-owned across skins. Keep the document's condition and placement,
   // but use the same passive branded indicator for status surfaces.
   const waiting = node.when?.find(test => !test.not && (
