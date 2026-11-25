@@ -145,7 +145,9 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
       pixels = maxOf(0.30, pixels * 0.65)
       return true
     }
-    return ++floorMisses < 2
+    if (++floorMisses < 2) return true
+    Log.w("VelaVisualizer", "Frame budget exceeded at minimum resolution scene=$sceneId meanMs=$average")
+    return false
   }
 
   private fun unavailable() {

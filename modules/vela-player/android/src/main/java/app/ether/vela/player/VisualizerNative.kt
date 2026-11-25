@@ -4,6 +4,9 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 
 internal object VisualizerNative {
   private val available by lazy {
@@ -12,12 +15,25 @@ internal object VisualizerNative {
 
   @Volatile private var deviceSupported: Boolean? = null
   @Volatile private var rendererFailed = false
+  private var probing = false
 
   fun supported(context: Context): Boolean {
     if (rendererFailed) return false
-    return deviceSupported ?: synchronized(this) {
-      deviceSupported ?: probeDevice(context).also { deviceSupported = it }
+    deviceSupported?.let { return it }
+    synchronized(this) {
+      if (!probing && deviceSupported == null) {
+        probing = true
+        val app = context.applicationContext
+        Thread({
+          deviceSupported = try { probeDevice(app) } catch (failure: Exception) {
+            Log.w("VelaVisualizer", "GLES capability probe failed", failure)
+            false
+          } catch (_: LinkageError) { false }
+          Handler(Looper.getMainLooper()).post { AudioPlayback.onVisualizerAvailability?.invoke() }
+        }, "VelaVisualizerProbe").start()
+      }
     }
+    return false
   }
 
   fun markRendererFailed() {
@@ -29,9 +45,12 @@ internal object VisualizerNative {
     val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     val tv = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     val memory = ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }
-    if (manager.isLowRamDevice || (tv && memory.totalMem <= 2304L * 1024 * 1024)) return false
+    if (manager.isLowRamDevice || (tv && memory.totalMem <= 2304L * 1024 * 1024)) {
+      Log.i("VelaVisualizer", "hardwareRenderer=false memoryMiB=${memory.totalMem / (1024 * 1024)} tv=$tv")
+      return false
+    }
     return manager.deviceConfigurationInfo.reqGlEsVersion >= 0x30000 && available &&
-      context.assets.list("vela-visualizer")?.contains("viz-native.js") == true
+      context.assets.list("vela-visualizer")?.contains("viz-native.js") == true && VisualizerEgl.hardwareRenderer()
   }
 
   external fun create(assets: AssetManager, width: Int, height: Int, id: String, artwork: String, accent: String): Long

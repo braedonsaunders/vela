@@ -8,6 +8,7 @@ import android.opengl.EGLExt
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 
@@ -38,14 +39,8 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
     if (context == EGL14.EGL_NO_CONTEXT) {
       display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
       check(display != EGL14.EGL_NO_DISPLAY && EGL14.eglInitialize(display, null, 0, null, 0))
-      val configs = arrayOfNulls<EGLConfig>(1)
-      val count = IntArray(1)
-      val attrs = intArrayOf(EGL14.EGL_RENDERABLE_TYPE, 0x40, EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
-        EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8, EGL14.EGL_BLUE_SIZE, 8, EGL14.EGL_NONE)
-      check(EGL14.eglChooseConfig(display, attrs, 0, configs, 0, 1, count, 0) && count[0] > 0)
-      config = configs[0]
-      context = EGL14.eglCreateContext(display, config, EGL14.EGL_NO_CONTEXT,
-        intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE), 0)
+      config = VisualizerEgl.config(display, EGL14.EGL_WINDOW_BIT)
+      context = VisualizerEgl.context(display, config)
       check(context != EGL14.EGL_NO_CONTEXT)
     }
     if (w == width && h == height && target != EGL14.EGL_NO_SURFACE) return
@@ -71,7 +66,9 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
       if (ticket != generation) return@post
       val success = try {
         if (handle != 0L && currentId != id) release()
+        val start = SystemClock.uptimeMillis()
         configure(w, h)
+        val eglReady = SystemClock.uptimeMillis()
         val first = handle == 0L
         if (first) {
           handle = VisualizerNative.create(assets, w, h, id, artwork, accent)
@@ -93,13 +90,16 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
           loggedDecks = decks.size
           Log.i("VelaVisualizer", "heardPcm scene=$id decks=$loggedDecks rate=${VisualizerAudio.RATE}")
         }
+        val drawStart = SystemClock.uptimeMillis()
         check(VisualizerNative.frame(handle, pcm))
+        val submittedAt = SystemClock.uptimeMillis()
         if (first) {
           val stamp = System.nanoTime()
           firstPresentationNs = if (EGLExt.eglPresentationTimeANDROID(display, target, stamp)) stamp else 0L
           firstScene = id
         }
         check(EGL14.eglSwapBuffers(display, target))
+        if (first) Log.i("VelaVisualizer", "firstSwap scene=$id eglMs=${eglReady-start} engineAndPcmMs=${drawStart-eglReady} drawMs=${submittedAt-drawStart} swapMs=${SystemClock.uptimeMillis()-submittedAt}")
         true
       } catch (failure: RuntimeException) {
         Log.w("VelaVisualizer", "Surface unavailable", failure)

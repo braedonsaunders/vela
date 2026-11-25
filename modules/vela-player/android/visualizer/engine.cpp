@@ -24,6 +24,7 @@ std::set<std::string> glExtensions() {
 }  // namespace
 
 Engine::Engine(std::string bundle, int width, int height, const std::string& scene, const std::string& artwork, const std::string& accent) {
+  const double start = nowMs();
   ex_ = std::make_unique<GlesExecutor>();
   const auto ext = glExtensions();
   const bool cbf = ext.count("GL_EXT_color_buffer_float"), cbhf = ext.count("GL_EXT_color_buffer_half_float");
@@ -68,7 +69,9 @@ Engine::Engine(std::string bundle, int width, int height, const std::string& sce
     def("link", 3, [this](jsi::Runtime& rt, const jsi::Value&, const jsi::Value* a, size_t n) -> jsi::Value {
       if (n < 3) throw jsi::JSError(rt, "link(id, vs, fs)");
       const int id = int(a[0].asNumber());
+      const double begin = nowMs();
       const auto r = ex_->link(id, a[1].asString(rt).utf8(rt), a[2].asString(rt).utf8(rt));
+      linkMs_ += nowMs() - begin;
       if (!r.ok) __android_log_print(ANDROID_LOG_WARN, "VelaVisualizer", "%s", r.log.c_str());
       jsi::Object o(rt);
       o.setProperty(rt, "ok", r.ok);
@@ -108,12 +111,15 @@ Engine::Engine(std::string bundle, int width, int height, const std::string& sce
     host.setProperty(rt, "extensions", std::move(exts));
     rt.global().setProperty(rt, "__host", std::move(host));
 
+    const double eval = nowMs();
     rt.evaluateJavaScript(std::make_shared<jsi::StringBuffer>(std::move(bundle)), "viz-native.js");
     viz_ = rt.global().getPropertyAsObject(rt, "__viz");
     frameFn_ = viz_->getPropertyAsFunction(rt, "frame");
     statsFn_ = viz_->getPropertyAsFunction(rt, "stats");
     resizeFn_ = viz_->getPropertyAsFunction(rt, "resize");
     requireScene(scene);
+    __android_log_print(ANDROID_LOG_INFO, "VelaVisualizer", "startup scene=%s hermesAndHostMs=%.0f evalIncludingLinkMs=%.0f linkMs=%.0f",
+                        scene.c_str(), eval - start, nowMs() - eval, linkMs_);
   }
 }
 

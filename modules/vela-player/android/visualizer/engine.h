@@ -36,6 +36,7 @@ class Engine {
   std::unique_ptr<facebook::hermes::HermesRuntime> rt_;
   std::unique_ptr<GlesExecutor> ex_;
   Analyser an_;
+  double linkMs_ = 0;
   std::shared_ptr<NativeBuffer> cmd_, band_, wave_, freq_, fastFreq_, time_;
   std::optional<jsi::Object> viz_;
   std::optional<jsi::Function> frameFn_, statsFn_, resizeFn_;
