@@ -8,7 +8,7 @@ import { allTitles, artwork, channels as defaultChannels, detail, extras, featur
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
 import { trickplaySheet } from './trickplay';
-import { applyCommand, createSession, events, failover, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
+import { applyCommand, createSession, events, failover, observe, originalLost, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaArtwork, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
@@ -1243,7 +1243,19 @@ async function dispatch(req: Request): Promise<Response> {
       const vtt = foundSubtitleVtt(s.plan.sessionId, decodeURIComponent(found[1]!));
       return vtt ? new Response(vtt, { headers: { 'Content-Type': 'text/vtt; charset=utf-8', 'Cache-Control': 'private, no-store' } }) : new Response('Not found', { status: 404 });
     }
-    const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]));
+    const selected = s.plan.paths.find(path => path.id === s.plan.selectedPathId);
+    const originalRange = req.method === 'GET' && req.headers.has('range') && selected?.original === true && selected.url?.endsWith(`/${media[3]}`);
+    if (originalRange && faults.originalLost409 > 0) {
+      faults.originalLost409--;
+      originalLost(s, faults.originalLostVersionUnavailable);
+      return new Response('Original file is gone', { status: 409, headers: { 'X-Ether-Playback-Error': 'original_lost', 'Cache-Control': 'no-store' } });
+    }
+    const truncateOriginal = originalRange && faults.originalLostTruncate > 0;
+    if (truncateOriginal) {
+      faults.originalLostTruncate--;
+      originalLost(s, faults.originalLostVersionUnavailable);
+    }
+    const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3], truncateOriginal));
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
   }

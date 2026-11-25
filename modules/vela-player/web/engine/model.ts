@@ -208,4 +208,4 @@ export type EngineEvent =
       seekGeneration?: number;
     }
   | { type: 'session-command'; sessionId: string; command: SessionCommand }
-  | { type: 'session-refresh'; sessionId: string };
+  | { type: 'session-refresh'; sessionId: string; reason?: 'original_lost'; positionSeconds?: number; sourceGeneration?: number };

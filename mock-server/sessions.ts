@@ -55,6 +55,36 @@ export function failover(s: Session): boolean {
   publish(s);
   return true;
 }
+/** Ether 0.3.22's conclusive original-loss result: either publish the pinned-version failure, or
+ * fence the old byte coordinates with a fresh grant and publish the replacement release/source. */
+export function originalLost(s: Session, versionUnavailable = false): boolean {
+  if (versionUnavailable) {
+    s.plan.sourceFailure = 'version_unavailable';
+    publish(s);
+    return true;
+  }
+  const versions = s.plan.versions ?? [];
+  const from = versions.findIndex(version => version.id === s.plan.playingVersionId);
+  const next = versions.find((version, index) => index > Math.max(0, from) && version.availability !== 'unavailable' && version.availability !== 'fetch');
+  if (next) setPlaying(s.plan, next.id);
+  const old = s.mediaToken, fresh = crypto.randomUUID();
+  const replace = (url: string) => url.replace(`/sessions/media/${s.plan.sessionId}/${old}/`, `/sessions/media/${s.plan.sessionId}/${fresh}/`);
+  for (const path of s.plan.paths) {
+    if (path.url) path.url = replace(path.url);
+    for (const quality of path.qualities) quality.url = replace(quality.url);
+    for (const rendition of path.audioRenditions ?? []) rendition.url = replace(rendition.url);
+    path.sourceId = `${path.sourceId ?? path.id}:replacement:${s.plan.sourceGeneration + 1}`;
+  }
+  for (const track of s.plan.subtitleTracks) {
+    if (track.url) track.url = replace(track.url);
+    if (track.delivery?.kind === 'external') track.delivery.url = replace(track.delivery.url);
+  }
+  s.mediaToken = fresh;
+  s.plan.sourceGeneration++;
+  delete s.plan.sourceFailure;
+  publish(s);
+  return true;
+}
 const playingOf = (plan: PlaybackPlan) => ({ ...(plan.playingVersionId !== undefined ? { playingVersionId: plan.playingVersionId } : {}), ...(plan.playingLabel !== undefined ? { playingLabel: plan.playingLabel } : {}) });
 export function snapshot(s: Session): SessionSnapshot {
   return { ...playingOf(s.plan), ...(s.liveEvent !== undefined ? { liveEvent: s.liveEvent } : {}), cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: s.plan.durationSeconds ?? fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
