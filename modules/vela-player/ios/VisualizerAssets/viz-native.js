@@ -399,49 +399,6 @@ const A = {
 };
 for (let i = 0; i < BANDS; i++) A.bandHz[i] = 28 * Math.pow(16000 / 28, i / BANDS);   // log-spaced, 28 Hz – 16 kHz
 
-function audioInit() {
-  if (A.ctx) return;
-  const ctx = A.ctx = new (window.AudioContext || window.webkitAudioContext)();
-  A.bus = ctx.createGain();
-  A.analyser = ctx.createAnalyser();
-  A.analyser.fftSize = 4096; A.analyser.smoothingTimeConstant = 0.55;
-  A.analyser.minDecibels = -92; A.analyser.maxDecibels = -18;
-  A.out = ctx.createGain(); A.out.gain.value = MUTED ? 0 : +vol.value;     // ?mute: the output stays at zero for the whole session
-  A.bus.connect(A.analyser); A.bus.connect(A.out); A.out.connect(ctx.destination);
-  A.freq = new Float32Array(A.analyser.frequencyBinCount);
-  A.time = new Float32Array(A.analyser.fftSize);
-  const ny = ctx.sampleRate / 2, n = A.analyser.frequencyBinCount;
-  A.binOf = new Array(BANDS + 1);
-  for (let i = 0; i <= BANDS; i++) A.binOf[i] = Math.min(n - 1, Math.max(1, Math.round(28 * Math.pow(16000 / 28, i / BANDS) / ny * n)));
-}
-
-function stopSources() {
-  if (A.synth) { A.synth.stop(); A.synth = null; }
-  media.pause();
-  if (A.micSrc) { A.micSrc.mediaStream.getTracks().forEach(t => t.stop()); A.micSrc.disconnect(); A.micSrc = null; }
-}
-async function useDemo() {
-  audioInit(); await A.ctx.resume(); stopSources();
-  A.synth = new DemoSynth(A.ctx, A.bus); A.synth.start();
-  A.source = 'demo'; setNow('Built-in demo', 'Generative · 124 BPM'); markSource();
-}
-async function useFile(file) {
-  audioInit(); await A.ctx.resume(); stopSources();
-  if (!A.mediaSrc) { A.mediaSrc = A.ctx.createMediaElementSource(media); A.mediaSrc.connect(A.bus); }
-  media.src = URL.createObjectURL(file); media.loop = true;
-  await media.play();
-  A.source = 'file'; setNow(file.name.replace(/\.[^.]+$/, ''), 'Local file'); markSource();
-}
-async function useMic() {
-  audioInit(); await A.ctx.resume(); stopSources();
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-    A.micSrc = A.ctx.createMediaStreamSource(stream);
-    A.micSrc.connect(A.analyser); // never to the speakers
-    A.source = 'mic'; setNow('Microphone', 'Live input'); markSource();
-  } catch (e) { setNow('Microphone unavailable', String(e.message || e)); }
-}
-
 // One-pole follower with separate attack and release rates (per second).
 const env = (cur, target, dt, att, rel) => cur + (target - cur) * (1 - Math.exp(-dt * (target > cur ? att : rel)));
 

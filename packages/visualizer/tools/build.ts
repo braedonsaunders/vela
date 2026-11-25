@@ -24,7 +24,15 @@ const parts = fs.readdirSync(fw).filter(f => /^[1-9]\d_.*\.js$/.test(f) && f !==
 const read = (p: string) => fs.readFileSync(p, 'utf8');
 const contour = parts.includes('33_contour.js') ? read(path.join(fw, '33_contour.js')) : undefined;
 const frameworkParts = parts.map(file => {
-  const source = file === '33_contour.js' && contour ? bakeCountryMap(contour) : read(path.join(fw, file));
+  let source = file === '33_contour.js' && contour ? bakeCountryMap(contour) : read(path.join(fw, file));
+  if (production && file === '10_audio.js') {
+    // The renderer only observes the active app transport. The standalone page
+    // is also a player and can open a microphone, a file or a demo oscillator.
+    const start = source.indexOf('function audioInit()');
+    const end = source.indexOf('// One-pole follower');
+    if (start < 0 || end <= start) throw new Error('Standalone audio section changed');
+    source = source.slice(0, start) + source.slice(end);
+  }
   return '// ── framework/' + file + '\n' + source;
 });
 const bundle = [

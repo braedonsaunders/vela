@@ -183,7 +183,7 @@ export function AudioDock() {
         <View style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
           {visuals ? <Visualizer mode={fullscreen ? 'fullscreen' : 'background'} /> : null}
           <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={visuals ? openVisualizer : undefined} />
-          {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20 }}>
+          {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
             <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
           </View> : null}
         </View>

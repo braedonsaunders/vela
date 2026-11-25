@@ -82,3 +82,28 @@ bun tools/perf/data-reads.ts --lab --n 4,8
 - Reads validation credentials in code from `~/.scratch/tmp/thr_9jsg8ia37s/vela-lab.env` (never printed).
 - Checks `/ether/api/updates/` first and refuses to run if `current` is older than `0.3.21-preview.32-screens`.
 - Runs once at `N=4` then `N=8` (`<= 8` cap) and stops immediately on the first error.
+
+### Music visualizer
+
+Use the muted app on a private Android TV emulator. For the 2 GB floor, check
+that the artwork tint and transport remain usable when the capability gate
+hides the visualizer. On an enabled tier, start a music queue, then open Now
+Playing and the full-screen visualizer. Record the app process's
+`VelaVisualizer` firstFrame messages for this run. Each marks the first
+TextureView presentation after selecting or initializing that scene.
+
+With the stage focused, check Left and Right, then Select to open the scene
+rail. Reset `adb -s SERIAL shell dumpsys gfxinfo app.ether.vela reset`, traverse
+the rail with 16 D-pad moves and save `dumpsys gfxinfo app.ether.vela framestats`
+as `focus.gfxinfo`. Reset again and capture the steady music screen in
+`steady.gfxinfo`. Verify Back returns to the same playing track and the
+mini-player retains its position after closing Now Playing.
+
+```sh
+bun tools/perf/visualizer.ts first-frame.log focus.gfxinfo steady.gfxinfo
+```
+
+The report checks the scene-start and focus budgets and counts UI-thread draws
+over one 60 Hz interval. Missing presentation or frame samples yield an
+unmeasured result. Measure the renderer's own frame intervals separately from
+the UI frame statistics.

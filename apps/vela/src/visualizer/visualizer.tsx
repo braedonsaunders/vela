@@ -5,6 +5,7 @@ import { thumbnails } from '../../../../packages/visualizer/thumbnails';
 import { currentInQueue, msg } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import { focusElement, focusTarget } from '@vela/skin/src/escape';
+import { hexColour, parseColour } from '@vela/skin/src/screen/colour';
 import { FocusPressable } from '@vela/skin/src/focus';
 import { useHost } from '@vela/skin/src/host';
 import { useInteraction } from '@vela/skin/src/widgets/common/controls';
@@ -16,6 +17,11 @@ import { adjacentScene, scenes, visualizerProfile } from './selection';
 import { getVisualizerScene, setVisualizerScene, subscribeVisualizerScene } from './setting';
 import { VisualizerStage } from './stage';
 import type { VisualizerMode } from './stage-types';
+
+function paletteColor(value?: string) {
+  const color = value ? parseColour(value) : undefined;
+  return color && color.a > 0 ? hexColour({ ...color, a: 1 }) : undefined;
+}
 
 function subscribeForeground(update: () => void) {
   const subscription = AppState.addEventListener('change', update);
@@ -128,8 +134,8 @@ export function Visualizer({ mode, sceneId }: { mode: VisualizerMode; sceneId?: 
     <View testID={'visualizer-' + mode} pointerEvents={background ? 'none' : 'box-none'} focusable={false}
       accessibilityElementsHidden={background} importantForAccessibility={background ? 'no-hide-descendants' : 'auto'} style={StyleSheet.absoluteFill}>
       <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={StyleSheet.absoluteFill}>
-        <VisualizerStage sceneId={id} mode={mode} active={active} still={look.still || !playing} accent={look.ui.accent}
-          artworkTint={artworkTint || look.ui.accent} onUnavailable={reportUnavailable} />
+        <VisualizerStage sceneId={id} mode={mode} active={active} still={look.still || !playing} accent={paletteColor(look.ui.accent)}
+          artworkTint={paletteColor(artworkTint)} onUnavailable={reportUnavailable} />
       </View>
       {!background ? <ScenePicker id={id} choose={choose} /> : null}
     </View>
