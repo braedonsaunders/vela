@@ -146,3 +146,12 @@ export function keyboardMap(listening: Listening): { keys: string; label: string
     { keys: '?', label: 'music.key.help' },
   ];
 }
+
+/** What a spoken-word title page is: an audiobook, a podcast show (or a lone episode), or any other container. */
+export type SpokenMode = 'audiobook' | 'show' | 'collection';
+export function spokenMode(card: Pick<Card, 'media'>): SpokenMode {
+  const media = card.media;
+  if (media?.role === 'audiobook' || (media?.role === 'book' && media.audio)) return 'audiobook';
+  if (media?.role === 'show' || media?.class === 'podcast') return 'show';
+  return 'collection';
+}

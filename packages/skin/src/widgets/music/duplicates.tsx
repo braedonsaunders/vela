@@ -5,7 +5,7 @@ import { msg, number, plural } from '@vela/core';
 import { useMediaLook } from '../media/parts';
 import { DuplicatesBlock, DuplicatesCover, useLibraryDuplicates } from '../../blocks/duplicates';
 import { useMusic } from '../../blocks/listen/app';
-import { coverSize, Header, pad } from './pages';
+import { coverSize, Header, pad } from '../../blocks/listen/pages';
 import { Wash } from '../../blocks/listen/parts';
 
 export { DuplicatesCover };

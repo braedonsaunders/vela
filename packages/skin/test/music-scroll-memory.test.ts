@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { canResume, createScrollMemory } from '../src/widgets/music/scroll-end';
+import { canResume, createScrollMemory } from '../src/blocks/listen/scroll-end';
 
 test('the page in view resumes where it was when its shell is replaced (a fold or a resize)', () => {
   const memory = createScrollMemory();

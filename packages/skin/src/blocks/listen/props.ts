@@ -1,7 +1,7 @@
 // Reading a rich block's props (packages/protocol/rich-blocks.ts) and the small pure rules the
 // Listen blocks share: lists from sources, cards from item: records, disc groups, playlist moves
 // and how many rows draw at once.
-import type { Card } from '@vela/core';
+import { msg, type Card } from '@vela/core';
 import { RICH_BLOCKS, type RichBlockName } from '../../../../protocol/rich-blocks';
 import { deref, type RecordReader } from '../../screen/scope';
 
@@ -143,4 +143,43 @@ export function barPresses(which: 'queue' | 'sound', queueFlag: string, soundFla
   const open = (flag: string) => state[flag] === 'true';
   const [own, other] = which === 'queue' ? [queueFlag, soundFlag] : [soundFlag, queueFlag];
   return [...(open(other) ? [{ action: 'close' as const, flag: other }] : []), { action: 'toggle' as const, flag: own }];
+}
+
+/** A card a prop names: an item: record, a title source's value ({item}), or a card itself. */
+export function cardOf(raw: unknown, read: RecordReader): Card | undefined {
+  const value = deref(raw, read);
+  const direct = asCard(value);
+  if (direct) return direct;
+  const inner = value && typeof value === 'object' ? (value as { item?: unknown }).item : undefined;
+  return inner === undefined ? undefined : asCard(deref(inner, read));
+}
+
+/** The cards of a list prop (a list source or a list), each followed through the record pool. */
+export function cardsOf(raw: unknown, read: RecordReader): Card[] {
+  return listOf(deref(raw, read)).flatMap(entry => { const card = asCard(deref(entry, read)); return card ? [card] : []; });
+}
+
+/** A row of songs shows each song's album once (Recently played reads as albums you came back to). */
+export function dedupeAlbums(items: readonly Card[]): Card[] {
+  const seen = new Set<string>();
+  return items.filter(item => { const album = item.media?.parent?.id ?? item.id; if (seen.has(album)) return false; seen.add(album); return true; });
+}
+
+/** A release's type by length (S0: until the plugin's releaseType reaches the wire). */
+export function releaseKind(tracks: number): 'single' | 'ep' | 'album' {
+  return tracks <= 3 ? 'single' : tracks <= 6 ? 'ep' : 'album';
+}
+
+/** The line under a music shelf's tile. */
+export function shelfSubtitle(card: Card, kind: 'none' | 'year' | 'byline' | 'release' | 'playlist'): string | undefined {
+  switch (kind) {
+    case 'year': return card.yearLabel || undefined;
+    case 'byline': return card.media?.byline || undefined;
+    case 'release': {
+      const type = releaseKind(card.media?.childCount ?? 0);
+      return [card.yearLabel, type === 'single' ? msg('music.single') : type === 'ep' ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ');
+    }
+    case 'playlist': return card.kind === 'playlist' ? msg('music.playlist') : undefined;
+    default: return undefined;
+  }
 }

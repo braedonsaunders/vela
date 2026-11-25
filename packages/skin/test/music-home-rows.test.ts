@@ -2,7 +2,7 @@
 // recentContexts and liked); surface rows are not music shelves.
 import { expect, test } from 'bun:test';
 import type { Row } from '@vela/core';
-import { musicHomeRows } from '../src/widgets/music/home-rows';
+import { musicHomeRows } from '../src/blocks/listen/home-rows';
 
 const row = (id: string, purpose: Row['purpose'], more: Partial<Row> = {}): Row => ({ id, name: id, purpose, receipt: '', items: [{ id: `${id}-a` } as Row['items'][number]],
   nextCursor: '', continuation: 'exhausted', previewOnFocus: false, presentation: '', layout: 'standard', personal: false, ...more });

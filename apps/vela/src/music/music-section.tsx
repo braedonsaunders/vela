@@ -11,7 +11,7 @@ import { TrackedHost } from '@vela/skin/src/host';
 import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
 import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
 import { listenFrom, listeningOf } from '@vela/skin/src/blocks/listen/listening';
-import { forgetSearch, readRecent, rememberSearch } from '@vela/skin/src/widgets/music/search-results';
+import { forgetSearch, readRecent, rememberSearch } from '@vela/skin/src/blocks/listen/search-results';
 import { preferences } from '../data/preferences';
 import { useVela } from '../vela';
 import { ListenKeys, useListenBack } from '../listen/keys';

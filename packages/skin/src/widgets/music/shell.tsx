@@ -9,20 +9,20 @@ import { useHost } from '../../host';
 import { headerInsetOf } from '../../resolve/inherit';
 import { useMediaLook } from '../media/parts';
 import { useMusic } from '../../blocks/listen/app';
-import { MusicLiked, MusicPlaylist } from './pages';
+import { MusicLiked, MusicPlaylist } from '../../blocks/listen/pages';
 import { MusicRewind } from './rewind';
 import { MusicImport } from './import';
 import { MusicDuplicates } from './duplicates';
-import { ListeningHome, ListeningTitle } from './spoken';
+import { ListeningHome, ListeningTitle } from '../../blocks/listen/spoken';
 import { MINI_PLAYER_HEIGHT } from '../media/player';
 import { compactMusic, musicTV } from '../../blocks/listen/layout';
 import type { MusicPlace } from '../../blocks/listen/place';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from '../../blocks/listen/bar';
 import { QueuePanel } from '../../blocks/listen/queue';
 import { RailChips, RailIcons, Sidebar } from '../../blocks/listen/rail';
-import { ListeningSearch } from './search';
-import { MusicAlbums } from './albums';
-import { PageScrollContext, usePageScroll } from './paging';
+import { ListeningSearch } from '../../blocks/listen/search';
+import { MusicAlbums } from '../../blocks/listen/albums';
+import { PageScrollContext, usePageScroll } from '../../blocks/listen/paging';
 
 function renderMusicPage(page: MusicPlace, music: boolean): ReactNode {
   if (page.kind === 'liked' && music) return <MusicLiked />;

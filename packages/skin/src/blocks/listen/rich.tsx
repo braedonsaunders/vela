@@ -26,6 +26,7 @@ import { LyricsPanel } from './lyrics';
 import { QueuePanel } from './queue';
 import { RailChips, RailIcons, Sidebar } from './rail';
 import { openNowPlaying } from './hub';
+import { isPageBlock, PageBlock } from './page-blocks';
 import { useVisualizerHost, VisualizerBlock, type VisualizerSwitch } from './visualizer';
 import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '../../widgets/media/player';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
@@ -106,7 +107,9 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
     case 'player': drawn = <PlayerRichBlock props={props} press={host.screenPress} />; break;
     case 'visualizer': drawn = <VisualizerBlock mode={props.enum('mode', ['background', 'fullscreen'] as const)} sceneId={props.text('sceneId') || undefined}
       fallback={node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : undefined} />; break;
-    default: drawn = node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;
+    default: drawn = isPageBlock(node.block)
+      ? <PageBlock name={node.block} props={props} read={scoped.screen?.record ?? (() => undefined)} template={part => look.template && look.templates?.has(part) ? look.template(part, undefined, {}, 0) : null} press={host.screenPress} />
+      : node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;
   }
   return <ListenLookProvider look={look}>{drawn}</ListenLookProvider>;
 }
@@ -115,7 +118,9 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
 
 function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?: (ctx: Ctx) => ReactNode }) {
   const read = ctx.screen?.record ?? (() => undefined);
-  const { tracks, entryIds } = tableTracks(props.value('tracks'), props.value('entryIds'), read);
+  const all = tableTracks(props.value('tracks'), props.value('entryIds'), read);
+  const limit = props.num('limit', 0, 5000);
+  const { tracks, entryIds } = limit ? { tracks: all.tracks.slice(0, limit), entryIds: all.entryIds.slice(0, limit) } : all;
   const playlistId = props.text('playlist');
   const sourceId = props.text('sourceId');
   const options: TrackListOptions = {
