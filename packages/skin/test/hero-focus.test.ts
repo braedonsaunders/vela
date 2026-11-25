@@ -105,3 +105,32 @@ test('hero action edges are the first and last ranked buttons', () => {
   expect(carry.atEdge('more', -1)).toBe(false);
   expect(carry.atEdge('restart', 1)).toBe(true);
 });
+
+test('measured, the outermost button is where the buttons stand, not their rank', () => {
+  // Resume, Restart, More info stand left to right; Restart ranks last for focus hand-over.
+  const carry = heroFocusCarry<string>();
+  carry.add('resume', resume);
+  carry.add('restart', restart);
+  carry.add('more', moreInfo);
+  const x = { resume: 76, restart: 374, more: 546 } as Record<string, number>;
+  const at = (target: string) => x[target];
+  expect(carry.atEdge('restart', 1)).toBe(true);
+  expect(carry.atEdge('restart', 1, at)).toBe(false);
+  expect(carry.atEdge('more', 1, at)).toBe(true);
+  expect(carry.atEdge('resume', -1, at)).toBe(true);
+  expect(carry.atEdge('restart', -1, at)).toBe(false);
+  expect(carry.targets()).toEqual(['resume', 'restart', 'more']);
+});
+
+test('the focused hero button is known with the time focus came to it', () => {
+  const carry = heroFocusCarry<string>();
+  carry.add('resume', resume);
+  carry.add('more', moreInfo);
+  expect(carry.current()).toBeUndefined();
+  carry.focused('resume', true, 1000);
+  carry.focused('more', true, 1500);
+  carry.focused('resume', false, 1500);
+  expect(carry.current()).toEqual({ target: 'more', since: 1500 });
+  carry.focused('more', false, 2000);
+  expect(carry.current()).toBeUndefined();
+});

@@ -9,6 +9,7 @@ import { ScreenActive } from './screen-active';
 import { createContext, createElement, useContext, useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { Platform } from 'react-native';
 import { useHost } from './host';
+import { selectEnv } from './host-source';
 import { holdBack } from './menu-key';
 import { restoreRouteFocus, returnFocusTarget } from './route-focus-policy';
 import { viewerPressedSince } from './route-focus';
@@ -190,7 +191,7 @@ export function EscapeScope({ flags, returnFocus, guide, children }: ScopeProps)
   const level = useContext(Level) + 1;
   const latest = useRef({ host, flags, returnFocus, active });
   latest.current = { host, flags, returnFocus, active };
-  const open = active && scopeOpen(flags, host.env.flags);
+  const open = active && selectEnv(host.env, 'flags', `scope:${flags.join(',')}`, open => scopeOpen(flags, open));
 
   // Open: Back closes it, and on TV focus moves into it once it is drawn (the guide hands focus
   // to its first item), so a menu over the page is never skipped for what lies behind it.
