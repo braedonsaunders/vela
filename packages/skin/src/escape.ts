@@ -11,6 +11,7 @@ import { Platform } from 'react-native';
 import { useHost } from './host';
 import { holdBack } from './menu-key';
 import { restoreRouteFocus } from './route-focus-policy';
+import { viewerPressedSince } from './route-focus';
 
 /** A press button that can take focus: a DOM element on the web, a native view on TV. */
 export interface Focusable {
@@ -136,6 +137,9 @@ function drawn(pressed: Pressed): Focusable | undefined {
   return undefined;
 }
 
+/** When focus is asked back again after the first frame (ms after the route comes back). */
+const RETURN_RETRY_MS = [150, 400];
+
 /** On TV, a route that comes back to the top (Back from a title over home) puts focus back on the
  * button that left it, which is still drawn underneath; without this nothing on it shows focus. */
 export function useReturnFocus(focused: boolean): void {
@@ -149,11 +153,21 @@ export function useReturnFocus(focused: boolean): void {
     const pressed = opener.current;
     opener.current = null;
     if (!pressed) return;
-    const frame = requestAnimationFrame(() => {
+    // Asked on the next frame, and again while the route that closed is still leaving: on Android TV
+    // a title page over a row page was still in the window when the first request landed, and its
+    // removal took focus with it, so nothing was focused at all. A press of the viewer's ends it.
+    const returned = Date.now();
+    const apply = () => {
+      if (viewerPressedSince(returned)) return;
       const target = drawn(pressed);
       if (target) focusOn(target);
-    });
-    return () => cancelAnimationFrame(frame);
+    };
+    const frame = requestAnimationFrame(apply);
+    const timers = Platform.isTV ? RETURN_RETRY_MS.map(ms => setTimeout(apply, ms)) : [];
+    return () => {
+      cancelAnimationFrame(frame);
+      timers.forEach(clearTimeout);
+    };
   }, [focused]);
 }
 

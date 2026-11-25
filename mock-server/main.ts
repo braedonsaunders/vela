@@ -277,6 +277,7 @@ function recordListening(session: Session, title: V.Title, ended: boolean): void
   title.watch = { ...watch, positionSeconds: finished || title.media?.role === 'track' ? 0 : position,
     played: title.media?.role === 'track' ? watch.played || finished : finished, lastViewedAt: new Date().toISOString() };
   viewer.policyRevision = `mock-${++viewerRevision}`;
+  feedChanged();
 }
 function recordPlayback(session: Session, ended: boolean): void {
   const media = session.plan.titleId ? findMediaTitle(session.plan.titleId) : undefined;
@@ -287,12 +288,29 @@ function recordPlayback(session: Session, ended: boolean): void {
   const finished = ended || position >= (title.durationSeconds ?? fixtureDurationSeconds) - 1;
   title.watch = { ...(title.watch ?? { favorite: false, watchlisted: false }), positionSeconds: finished ? 0 : position, played: finished };
   viewer.policyRevision = `mock-${++viewerRevision}`;
+  feedChanged();
 }
 function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g)]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const source = row.purpose === 'continue' ? { ...row, items: row.items.filter(item => item.kind !== 'title' || !removedContinue.has(item.title.id)) } : row;
   const bound = boundRow(g, source);
   return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope(g)}`, 20) };
+}
+/**
+ * Ether re-mints a viewer's row ids when the feed recomputes (playback, a watch change): a row's
+ * id carries the row-view snapshot it was read in, and its opaque `key` stays the same. An id
+ * from an older snapshot answers 409 cursor_expired; an id it never minted, 404.
+ */
+let rowSnapshot = 1;
+const feedChanged = () => { rowSnapshot++; };
+const minted = (row: V.Row, key = row.id): V.Row => ({ ...row, id: `${row.id}~${rowSnapshot}`, key });
+/** The row a wire id names, by its base id; a superseded snapshot is refused. */
+function mintedRow(id: string, candidates: V.Row[]): V.Row {
+  const at = id.lastIndexOf('~'), base = at < 0 ? id : id.slice(0, at), snapshot = at < 0 ? '' : id.slice(at + 1);
+  const row = candidates.find(r => r.id === base);
+  if (!row) fail('not-found', 'row_not_found', 'Row not found');
+  if (snapshot !== String(rowSnapshot)) fail('conflict', 'cursor_expired', 'Refresh from first page');
+  return row;
 }
 const labRows: V.Row[] = [
   ['Trending Now', 30], ['Top 10 on Ether On Air Lab Today', 10], ['New & Noteworthy', 17],
@@ -318,7 +336,7 @@ function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = []): V.Page<V.R
   ordered.splice(top + 1, 0, ...surfaces);
   const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
-  return { ...result, items: result.items.map(row => 'kind' in row ? row : homeRow(g, row, firstItems)) };
+  return { ...result, items: result.items.map(row => 'kind' in row ? row : minted(homeRow(g, row, firstItems))) };
 }
 function cached(req: Request, data: unknown, scope: string): Response {
   const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
@@ -789,12 +807,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
     if (libraryId && isMedia(libraryId)) { const shelves = mediaLibraryRows(g, libraryId); return cached(req, page(shelves.map(row => boundRow(g, row)), url, g, `library-rows:${libraryId}:${mac(JSON.stringify(shelves))}`), g.id); }
     if (libraryId && process.env.VELA_MOCK_OLD !== '1') {
-      if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${libraryId}`), g.id); }
+      if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => minted(homeRow(g, row, first), `library.${libraryId}.${row.id}`)), url, g, `library-rows:${libraryId}`), `${g.id}:${rowSnapshot}`); }
       const ids = new Set(libraryEntries(libraryId).filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
       const matches = rows.map(row => ({ ...row, items: row.items.filter(e => e.kind === 'title' && ids.has(e.title.id)) })).filter(row => row.items.length);
       const paging = new URL(url);
       if (process.env.VELA_MOCK_LIBRARY_ROW_PAGE) paging.searchParams.set('limit', process.env.VELA_MOCK_LIBRARY_ROW_PAGE);
-      return cached(req, page(matches.map(row => boundRow(g, row)), paging, g, `library-rows:${libraryId}`), g.id);
+      return cached(req, page(matches.map(row => minted(boundRow(g, row), `library.${libraryId}.${row.id}`)), paging, g, `library-rows:${libraryId}`), `${g.id}:${rowSnapshot}`);
     }
     if (!['home','detail','library'].includes(placement)) fail('request', 'invalid_placement', 'Unknown row placement');
     if (placement === 'detail') {
@@ -817,7 +835,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { collection: { id: row.id, kind: 'collection', name: row.name, artwork: [] }, ...page(boundRow(g, row).items, url, g, `collection:${row.id}`) } satisfies V.CollectionContents, g.id);
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
-  if (method === 'GET' && rowMatch) { const r = [...progressRows(), ...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
+  if (method === 'GET' && rowMatch) {
+    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...progressRows(), ...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
+    return cached(req, minted(homeRow(g, r, url)), `${g.id}:${rowSnapshot}`);
+  }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
   if (versionsMatch) {
     if (capabilities.features.versions?.available !== true) fail('policy', 'feature_unavailable', 'Versions are unavailable');
@@ -859,6 +880,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       // Played/unplayed on a book is the viewer's own reading state; unplayed clears the progress.
       if (mediaItem.media?.reading && typeof body.played === 'boolean') setReadingState(viewerId, mediaItem.id, body.played ? { ...readingState(viewerId, mediaItem), played: true } : { played: false });
       if (body.continueWatching === false) removedContinue.add(mediaItem.id);
+      if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
       viewer.policyRevision = `mock-${++viewerRevision}`;
       return json({ accepted: true } satisfies V.Ack);
     }
@@ -922,6 +944,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
       for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key];
       if (body.continueWatching === false) removedContinue.add(t.id);
+      if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
       viewer.policyRevision = `mock-${++viewerRevision}`;
       return json({ accepted: true });
     }

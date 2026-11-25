@@ -162,7 +162,7 @@ describe('media kinds', () => {
     const listed = titlesOf(await get('/libraries/books/items?limit=100')).find(title => title.id === id)!;
     expect(listed.watch?.reading?.fraction).toBe(0.5);
     const home = await get<V.Page<V.Row>>('/rows?placement=home&limit=10');
-    expect(home.items.find(row => row.id === 'media-continue-reading')!.items.some(item => item.kind === 'title' && item.title.id === id)).toBe(true);
+    expect(home.items.find(row => row.key === 'media-continue-reading')!.items.some(item => item.kind === 'title' && item.title.id === id)).toBe(true);
     await post(`/titles/${id}/reading-progress`, { idempotencyKey: key(), locator: 'epubcfi(/6/18!/4/2)', fraction: 0.99 });
     expect((await get<V.TitleDetail>(`/titles/${id}`)).title.watch?.played).toBe(true);
     await post(`/titles/${id}/watch`, { idempotencyKey: key(), played: false });
@@ -186,7 +186,7 @@ describe('media kinds', () => {
 
   test('home places the media rows after the first two rows', async () => {
     const rows = (await get<V.Page<V.Row>>('/rows?placement=home&limit=10')).items;
-    expect(rows.slice(2, 5).map(row => [row.id, row.card, row.role])).toEqual([['media-recent-albums', 'square', 'album'], ['media-continue-reading', 'poster', 'book'], ['media-continue-listening', 'square', 'episode']]);
+    expect(rows.slice(2, 5).map(row => [row.key, row.card, row.role])).toEqual([['media-recent-albums', 'square', 'album'], ['media-continue-reading', 'poster', 'book'], ['media-continue-listening', 'square', 'episode']]);
     // The retired style is never sent.
     expect(rows.every(row => !('style' in row))).toBe(true);
     expect((await get<V.Bootstrap>('/bootstrap')).rows.map(row => row.id)).toEqual(rows.slice(0, 2).map(row => row.id));

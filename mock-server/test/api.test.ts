@@ -195,6 +195,26 @@ describe('mock server: catalogue and live', () => {
     }
   });
 
+  test('a watch change re-mints Home\'s row ids as Ether does: keys stay, an old id answers 409 cursor_expired', async () => {
+    const before = await get<V.Bootstrap>('/bootstrap');
+    const feed = (bootstrap: V.Bootstrap) => bootstrap.rows.filter((row): row is V.Row => !('kind' in row));
+    const old = feed(before)[0]!;
+    expect(old.key).toBe(old.id.slice(0, old.id.lastIndexOf('~')));
+    expect((await get<V.Row>(`/rows/${encodeURIComponent(old.id)}`)).id).toBe(old.id);
+    const title = feed(before).flatMap(row => row.items).find(item => item.kind === 'title')!;
+    expect((await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: true }, authed(tokens))).status).toBe(200);
+    const after = feed(await get<V.Bootstrap>('/bootstrap'));
+    const fresh = after.find(row => row.key === old.key)!;
+    expect(fresh.id).not.toBe(old.id);
+    expect(new Set(after.map(row => row.id)).has(old.id)).toBe(false);
+    const stale = await call(`/rows/${encodeURIComponent(old.id)}`, { headers: authed(tokens) });
+    expect(stale.status).toBe(409);
+    expect(((await stale.json()) as V.ErrorResponse).error.code).toBe('cursor_expired');
+    expect((await get<V.Row>(`/rows/${encodeURIComponent(fresh.id)}`)).key).toBe(old.key);
+    expect((await call('/rows/no-such-row', { headers: authed(tokens) })).status).toBe(404);
+    await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: false }, authed(tokens));
+  });
+
   test('VELA_MOCK_CHANNELS sizes the lineup', async () => {
     const page = await get<V.Page<V.Channel>>('/live/channels?limit=100');
     expect(page.items).toHaveLength(CHANNELS);

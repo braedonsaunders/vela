@@ -325,7 +325,7 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   reflowable books, `swipeTurn` for fixed-layout ones (comics, PDFs), which foliate
   does not swipe. The position line never shows an unknown
   value (`readerPosition`). Leaving a book merges the new place into the shown
-  Continue rows in place (`reconcileProgressRows`), as watching and listening do.
+  Continue rows in place (`adoptRows`), as watching and listening do.
 - Reader on iPhone, iPad and Android phones and tablets: the same foliate engine in
   an Expo DOM component (`apps/vela/src/media/reader-surface.tsx`, on
   `@expo/dom-webview`), drawn as the engine's `Surface` inside the shared reader page,

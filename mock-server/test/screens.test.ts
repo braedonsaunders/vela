@@ -95,7 +95,7 @@ describe('on a frozen clock', () => {
   test('a published homeRow surface is a row stub in page order (after Top 10), only for a client that draws screens', async () => {
     const all = (await c.json('/rows?placement=home&limit=100')).items as (V.Row | V.SurfaceRow)[];
     const at = all.findIndex(row => 'kind' in row && row.kind === 'surface');
-    expect(all[at - 1]!.id).toBe('row-top10');
+    expect((all[at - 1] as V.Row).key).toBe('row-top10');
     expect(all[at]).toEqual({ kind: 'surface', id: 'surface:sports:sports.tonight', name: 'Sports Tonight', plugin: 'sports', surface: 'sports.tonight' });
     const plain = (await (await c.get('/rows?placement=home&limit=100', null)).json() as V.Page<V.Row | V.SurfaceRow>).items;
     expect(plain.some(row => 'kind' in row)).toBe(false);

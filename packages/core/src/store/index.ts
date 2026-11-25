@@ -181,7 +181,7 @@ export function createVela(options: VelaOptions): Vela {
     catalogue,
     playlists,
     music,
-    rows: new Rows(box, session, width),
+    rows: new Rows(box, session, width, row => home.resolveRow(row)),
     search: new Search(box, session, width),
     musicSearch: new Search(box, session, width, TYPING_MS, 'musicSearch'),
     playback,

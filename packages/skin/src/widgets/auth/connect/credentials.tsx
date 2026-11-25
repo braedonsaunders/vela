@@ -24,7 +24,7 @@ export function Credentials({ busy, onSignIn, onQuick, canPassword = true, canQu
     <View style={{ gap: layout?.tight ? 8 : 14, flexDirection: compact ? 'row' : 'column', alignItems: compact ? 'center' : undefined }}>
       {canPassword ? <View style={{ gap: layout?.minimal ? 4 : 8, flex: compact ? 1 : undefined }}>
         <Field label={msg('ui.username')} value={username} onChangeText={setUsername}
-          onSubmit={() => passwordInput.current?.focus()} kind="username" testID="connect-username" />
+          onSubmit={() => passwordInput.current?.focus()} kind="username" testID="connect-username" preferred />
         <Field label={msg('ui.password')} value={password} onChangeText={setPassword} onSubmit={submit}
           inputRef={passwordInput} kind="password" testID="connect-password" doneLabel={msg('ui.signIn')} />
         <Pill primary height={layout?.tight ? 44 : 52} label={msg('ui.signIn')} onPress={submit}

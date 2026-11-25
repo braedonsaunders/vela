@@ -156,7 +156,7 @@ export class Playback {
 
   /** The session's scrub thumbnail sheets, and an offer read apart from the plan (`trickplayOffer`). */
   private readonly trickplay = new TrickplayCache();
-  private trickplayOffer: { sessionId: string; offer: V.TrickplayMetadata | null; at: number; reading: boolean } | undefined;
+  private trickplayOffer: { sessionId: string; sourceGeneration: number; offer: V.TrickplayMetadata | null; at: number; reading: boolean } | undefined;
   private readonly trickplayListeners = new Set<() => void>();
 
   /**
@@ -592,7 +592,9 @@ export class Playback {
       sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
       idempotencyKey: this.session.key(),
     }));
-    if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: next, error: '' });
+    const now = this.box.get().playback;
+    // A restart (stall recovery) asks for the file now playing, not the one first asked for.
+    if (now.sessionId === sessionId) this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     return next;
   }
 
@@ -914,7 +916,7 @@ export class Playback {
   trickplayFrame(sessionId: string, seconds: number): TrickplayFrame | null {
     const { plan } = this.box.get().playback;
     if (!plan || plan.sessionId !== sessionId || plan.live || plan.channelId) return null;
-    const offer = plan.trickplay ?? this.readTrickplayOffer(sessionId);
+    const offer = plan.trickplay ?? this.readTrickplayOffer(sessionId, plan.sourceGeneration);
     if (!offer) return null;
     return this.trickplay.frame(sessionId, plan.sourceGeneration, offer, seconds, async (index, etag, signal) => {
       const connection = await this.session.ready();
@@ -932,11 +934,13 @@ export class Playback {
     for (const listener of [...this.trickplayListeners]) listener();
   }
 
-  /** The offer of a server that tells it apart from the plan, read now and then while asked for. */
-  private readTrickplayOffer(sessionId: string): V.TrickplayMetadata | null {
-    const held = this.trickplayOffer?.sessionId === sessionId ? this.trickplayOffer : undefined;
+  /** The offer of a server that tells it apart from the plan, read now and then while asked for; a
+   * new source (a version switch) is read afresh. */
+  private readTrickplayOffer(sessionId: string, sourceGeneration: number): V.TrickplayMetadata | null {
+    const current = this.trickplayOffer;
+    const held = current?.sessionId === sessionId && current.sourceGeneration === sourceGeneration ? current : undefined;
     if (held && (held.reading || Date.now() - held.at < TRICKPLAY_OFFER_MS)) return held.offer;
-    const entry = { sessionId, offer: held?.offer ?? null, at: Date.now(), reading: true };
+    const entry = { sessionId, sourceGeneration, offer: held?.offer ?? null, at: Date.now(), reading: true };
     this.trickplayOffer = entry;
     void (async () => {
       let asked = false;

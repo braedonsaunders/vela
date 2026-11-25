@@ -1,7 +1,7 @@
 // The search field (widget `searchInput`, and the shell's `searchField` slot): the query the
 // home and search routes read as env.query (held by the field, useQueryText). Its text takes the
 // node's inherited text rows; while it is empty, its placeholder draws them as secondary text.
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useMemo, useRef, useState } from 'react';
 import { Platform, Text, type TextStyle } from 'react-native';
 import { msg } from '@vela/core';
 import { FocusPressable as Pressable } from '../focus';
@@ -10,6 +10,8 @@ import { ownKeyboard, TvKeyboard } from './common/tv-keyboard';
 import { withClientStrings } from '../resolve/client-strings';
 import { useQueryText } from './search/query-text';
 import { useSearchFocus } from './search/use-search-focus';
+import { useSearchDoneFocus } from './search/done-focus';
+import type { Focusable } from '../escape';
 import { systemSearch } from './search/system-search';
 import { placeholderRows } from './search/placeholder-text';
 import { fontSizeOf, textStyle } from '../translate';
@@ -25,6 +27,9 @@ export function SearchInput({ params, ctx }: WidgetProps) {
     host.setFlag('search-focused', on);
   };
   const input = useSearchFocus(OWN_KEYBOARD ? () => keyboard(true) : undefined);
+  // Android TV: the field the keyboard opened from, and Done's move to the first result.
+  const entry = useRef<Focusable | null>(null);
+  const doneFocus = useSearchDoneFocus(entry, query.text, host.env.search);
   const drawn = useInheritedText();
   const inherited = useContext(InheritedContext);
   const quiet = useMemo(() => {
@@ -61,6 +66,7 @@ export function SearchInput({ params, ctx }: WidgetProps) {
     return (
       <>
         <Pressable
+          ref={entry as never}
           focusable
           accessibilityRole="search"
           accessibilityLabel={label ?? msg('ui.searchYourLibrary')}
@@ -82,8 +88,9 @@ export function SearchInput({ params, ctx }: WidgetProps) {
             onChangeText={query.change}
             placeholder={placeholder}
             doneLabel="Done"
-            onDone={() => keyboard(false)}
+            onDone={() => { keyboard(false); doneFocus(); }}
             onClose={() => keyboard(false)}
+            returnFocus={entry}
             testID={`search-${ctx.index}-keyboard`}
           />
         ) : null}

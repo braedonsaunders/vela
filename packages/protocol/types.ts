@@ -234,7 +234,11 @@ export type RowLayout = 'standard' | 'hero' | 'wide' | 'tiles' | 'tracks';
 export type RowCard = 'poster' | 'landscape' | 'square' | 'round';
 export type RowExperience = 'watch' | 'listen' | 'read' | 'gallery' | 'live';
 /** A row of titles (Home, a library's rows tab, /rows). Each presentation field is sent only when set. */
-export interface Row { id: ID; name: string; purpose: RowPurpose;
+export interface Row { id: ID;
+  /** Opaque, and the same row across bootstraps, /rows, /rows/{id} and library rows (its id changes with the
+   * row-view snapshot; a superseded id answers 409 cursor_expired). Compared, never parsed. Not on surface rows. */
+  key?: ID;
+  name: string; purpose: RowPurpose;
   receiptToken: string; presentation?: 'ranked'; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown';
   /** `tracks`: the items are track leaves with a duration and an album or artist parent (title.media.parents). */
   layout?: RowLayout; card?: RowCard;

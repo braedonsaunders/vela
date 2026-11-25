@@ -46,6 +46,18 @@ export function searchResultAnnouncement(s: SearchView): string {
   return `${count} ${count === 1 ? 'result' : 'results'} for ${s.query}`;
 }
 
+/** What each result's press does (`action:arg`, as the renderer tracks drawn presses), in the
+ * order the results stand: the list's cards, then the live hits (on now, then coming up). */
+export function searchResultPresses(s: SearchView): string[] {
+  const card = (x: { id: string; kind: string; receipt: string }) => `select:${x.id}|${x.kind}|${x.receipt}`;
+  return [
+    ...[...titles(s), ...descriptive(s), ...discovered(s)].map(card),
+    ...channels(s).map(x => `openHit:channel|${x.id}`),
+    ...airing(s).map(x => `openHit:programme|${x.id}`),
+    ...upcoming(s).map(x => `openHit:programme|${x.id}`),
+  ];
+}
+
 /** A programme's channel line: its episode, then the channel. */
 const programmeLine = (x: LiveProgrammeHit) => (x.episode !== '' ? `${x.episode} · ${x.channelName}` : x.channelName);
 

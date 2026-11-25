@@ -65,6 +65,8 @@ export interface PlayerChromeState {
   refreshVersions?(): void;
   close(): void;
   retry(): void;
+  /** Counts a live channel's returns to the foreground that should play at the edge again (0 until one). */
+  returnedLive?: number;
   /** The scrub thumbnail (trickplay) for a position, once a session offers them and its sheet is here. */
   thumbnail?(seconds: number): TrickplayFrame | null;
   /** An episode's next one, once known (null: none, or not an episode). */

@@ -4,6 +4,11 @@ import { EtherAdapter } from '../src/adapter/ether';
 import { loadGuide } from '../src/live/guide';
 import { launchMock, type RunningMock } from '../../../mock-server/test/launch';
 import { FakeCredentials } from './helpers';
+import { Home, initialHome } from '../src/store/home';
+import { Rows } from '../src/store/rows';
+import { StateBox, idle } from '../src/store/state';
+import type { VelaState } from '../src/store';
+import type { Session } from '../src/store/session';
 
 const CHANNELS = 40;
 let mock: RunningMock;
@@ -62,5 +67,23 @@ describe('EtherAdapter against the mock server', () => {
   test('fast search returns live channels', async () => {
     const result = await adapter.search({ query: 'world news', generation: 1, idempotencyKey: 'search-1' });
     expect(result.live?.channels.map(c => c.id)).toEqual(['channel-1']);
+  });
+
+  test('a watch change re-mints Home\'s rows: Home takes the new ids, and See all on an old id re-resolves', async () => {
+    const box = new StateBox({ home: initialHome, libraries: idle(), rows: {} } as unknown as VelaState);
+    const session = { epoch: 0, onReset() {}, negotiate: async () => {}, ready: async () => ({ adapter, images: async () => undefined }), check() {} } as unknown as Session;
+    const home = new Home(box, session, () => 640, 7_000, 1, 0);
+    const rows = new Rows(box, session, () => 640, row => home.resolveRow(row));
+    await home.ensure();
+    const shown = box.get().home.value!.rows.find(row => !row.surface)!;
+    const title = shown.items[0]!;
+    await adapter.setTitleWatch(title.id, { idempotencyKey: 'remint-played', played: true } as never);
+    expect((await adapter.row(shown.id).catch(error => error)).status).toBe(409);
+    await rows.load(shown.id);
+    expect(box.get().rows[shown.id]!.load).toBe('ready');
+    const fresh = box.get().home.value!.rows.find(row => row.key === shown.key)!;
+    expect(fresh.id).not.toBe(shown.id);
+    expect(box.get().rows[shown.id]!.value!.id).toBe(fresh.id);
+    await adapter.setTitleWatch(title.id, { idempotencyKey: 'remint-unplayed', played: false } as never);
   });
 });
