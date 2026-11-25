@@ -83,24 +83,79 @@ export function hasFlowHeader(shell: Node | undefined): boolean {
   return !!shell && walk(shell, true) && navigation;
 }
 
-/** The top overlay navigation's declared height, for inherited routes that start beneath it. */
+type Css = Record<string, string | undefined>;
+const PX_LENGTH = /^(-?\d+(?:\.\d+)?)px$/;
+
+/** Lengths added: plain px folded into one, anything else kept for the renderer's calc(). */
+function addLengths(terms: string[]): string {
+  const kept = terms.filter(term => term !== '0px');
+  if (kept.every(term => PX_LENGTH.test(term))) return `${kept.reduce((sum, term) => sum + Number(PX_LENGTH.exec(term)![1]), 0)}px`;
+  return kept.length === 1 ? kept[0]! : `calc(${kept.join(' + ')})`;
+}
+
+/** The largest of some lengths: the tallest item of a row. */
+function largestLength(terms: string[]): string {
+  if (terms.every(term => PX_LENGTH.test(term))) return `${Math.max(0, ...terms.map(term => Number(PX_LENGTH.exec(term)![1])))}px`;
+  return terms.length === 1 ? terms[0]! : `max(${terms.join(', ')})`;
+}
+
+/** The top and bottom of a box's padding, from padding-top/-bottom or the `padding` shorthand. */
+function verticalPadding(style: Css): string[] {
+  const sides = style.padding?.trim().split(/\s+/) ?? [];
+  const top = style['padding-top'] ?? sides[0];
+  const bottom = style['padding-bottom'] ?? sides[sides.length === 1 ? 0 : 2] ?? sides[0];
+  return [top, bottom].filter((side): side is string => !!side);
+}
+
+/** How tall a node is drawn at one breakpoint, as far as the document declares it: its height, else
+ * its in-flow children's (a column's added with its gaps, a row's tallest) and its padding. Nothing
+ * when that rests on something only layout knows (text, or a column repeating an unknown count). */
+function declaredHeight(node: Node, small: boolean): string | undefined {
+  if (node.type === 'repeat') return declaredHeight(node.item, small);
+  if (node.type !== 'box') return undefined;
+  const style: Css = { ...node.style, ...(small ? node.small : undefined) } as Css;
+  if (style.display === 'none') return '0px';
+  if (style.height !== undefined) return style.height;
+  const children = (node.children ?? []).filter(child => child.type !== 'box' || ({ ...child.style, ...(small ? child.small : undefined) } as Css).position !== 'absolute');
+  const row = style['flex-direction']?.startsWith('row') ?? false;
+  if (!row && children.some(child => child.type === 'repeat')) return undefined;
+  const heights = children.map(child => declaredHeight(child, small));
+  if (heights.some(height => height === undefined)) return undefined;
+  const drawn = (heights as string[]).filter(height => height !== '0px');
+  const gap = style['row-gap'] ?? style.gap?.trim().split(/\s+/)[0];
+  const gaps = !row && gap && drawn.length > 1 ? Array<string>(drawn.length - 1).fill(gap) : [];
+  return addLengths([row ? largestLength(drawn) : addLengths([...drawn, ...gaps]), ...verticalPadding(style)]);
+}
+
+/** The children slot's top padding at a breakpoint: where a route's own content starts in the shell. */
+function slotTop(shell: Node, small: boolean): string {
+  let top = '0px';
+  const walk = (node: Node): boolean => {
+    if (node.type === 'slot' && node.slot === 'children') {
+      top = ({ ...node.style, ...(small ? node.small : undefined) } as Css)['padding-top'] ?? '0px';
+      return true;
+    }
+    return node.type === 'box' && (node.children ?? []).some(walk);
+  };
+  walk(shell);
+  return top;
+}
+
+/** The top overlay navigation's height, for inherited routes that start beneath it: a bar at the
+ * route's top edge (top 0, or level with the children slot's top padding, as Late Night's sits in
+ * its bezel), as tall as it declares, or as its in-flow rows (Lounge's bar row; Late Night's bar
+ * and, on a phone, its channel strip under it), plus its own top padding (the safe area). */
 export function overlayHeaderOffset(shell: Node | undefined): { wide: string; small: string } {
   let found: { wide: string; small: string } | undefined;
   const walk = (node: Node) => {
     if (found || node.type !== 'box') return;
     const style = node.style ?? {};
-    if (node.role === 'navigation' && style.position === 'absolute' && style.top === '0px') {
-      // A bar without a height of its own is as tall as its in-flow content (Lounge's bar row).
-      const row = style.height === undefined
-        ? (node.children ?? []).find((child): child is Extract<Node, { type: 'box' }> => child.type === 'box' && child.style?.position !== 'absolute' && child.style?.height !== undefined)
-        : undefined;
-      // The bar's own top padding (the safe area, under a notch) sits above that row.
-      const withPadding = (height: unknown, padding: unknown) => (typeof height === 'string' && typeof padding === 'string' && padding !== '0px' ? `calc(${height} + ${padding})` : height);
-      const compact = { ...style, ...node.small };
-      const rowCompact = row ? { ...row.style, ...row.small } : undefined;
-      const wide = style.height ?? withPadding(row?.style?.height, style['padding-top']);
-      const small = compact.display === 'none' ? undefined : compact.height ?? withPadding(rowCompact?.height, compact['padding-top']);
-      if (typeof wide === 'string' && typeof (small ?? wide) === 'string') found = { wide, small: (small ?? wide) as string };
+    const compact = { ...style, ...node.small };
+    const atTop = (top: unknown, small: boolean) => top === '0px' || top === slotTop(shell!, small);
+    if (node.role === 'navigation' && style.position === 'absolute' && atTop(style.top, false) && atTop(compact.top, true)) {
+      const wide = declaredHeight(node, false);
+      const small = compact.display === 'none' ? wide : declaredHeight(node, true);
+      if (wide && small) found = { wide, small };
     }
     for (const child of node.children ?? []) walk(child);
   };

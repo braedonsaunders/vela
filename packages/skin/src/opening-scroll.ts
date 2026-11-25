@@ -3,6 +3,14 @@ export function opensAtTop(route: string): boolean {
   return route === 'title' || route === 'screen';
 }
 
+/** Whether a route opening puts focus on its first action (route-focus.ts): always on a TV, and in
+ * a browser for a detail page (a keyboard reaches its Resume at once). Native touch leaves focus to
+ * the viewer: a phone given focus drew the focus ring on a game page's Watch chip and its row
+ * scrolled to that chip, past the first. */
+export function opensWithFocus(route: string, tv: boolean, os: string): boolean {
+  return tv || (os === 'web' && opensAtTop(route));
+}
+
 /** Keep native focus from pulling an opening detail page down during its entrance/focus settle. */
 export function pinOpeningScroll(opened: number, now: number, viewerMoved: boolean, settleMs = 1400): boolean {
   return !viewerMoved && now - opened <= settleMs;

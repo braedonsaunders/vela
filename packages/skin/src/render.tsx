@@ -5,7 +5,7 @@ import { sameRouteHost } from './route-host';
 import { LAZY_STILL_MS, gridDrawn, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, scrollAudience, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
 import { msg } from '@vela/core';
-import { restartAction, secondaryPlayAction } from './restart-action';
+import { heroResumeLayout, restartAction, secondaryPlayAction } from './restart-action';
 import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './widgets/card-context-menu';
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
@@ -63,7 +63,7 @@ import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { moveWebRowFocus } from './web-row-navigation';
 import { rowLinkAvailable } from './row-link-available';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
-import { opensAtTop, pinOpeningScroll, viewerScrolledSince } from './opening-scroll';
+import { opensAtTop, opensWithFocus, pinOpeningScroll, viewerScrolledSince } from './opening-scroll';
 import { rowLinkTakesDirectionalFocus } from './focus-stop-policy';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
@@ -263,7 +263,7 @@ function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = fals
   openingFocus?: boolean;
 }) {
   useFocusStyles();
-  const opening = useRouteFocus(Platform.isTV || opensAtTop(host.env.route));
+  const opening = useRouteFocus(opensWithFocus(host.env.route, Platform.isTV, Platform.OS));
   const focus = openingFocus ? opening : null;
   const episodeNav = useMemo(episodeNavigation, []);
   const loading = useRef<SkinHost | null>(null);
@@ -1246,8 +1246,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       // fills the row beside Restart's labelled mark.
       const stack = env.small && !ctx.heroAct && id === env.detail?.title[0]?.id;
       const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg('ui.restart'), env.small && !stack);
-      element = env.small && ctx.heroAct
-        ? <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 10 }}><View style={{ flex: 1, minWidth: 0 }}>{element}</View><SkinNode node={restart} ctx={ctx} /></View>
+      const resumeLayout = env.small && ctx.heroAct ? heroResumeLayout(parentDirection) : undefined;
+      element = resumeLayout
+        ? <View style={resumeLayout.pair}><View style={resumeLayout.resume}>{element}</View><SkinNode node={restart} ctx={ctx} /></View>
         : <View style={stack ? stackedActions : { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
     }
     if (env.route === 'title' && id === env.detail?.title[0]?.id && arg.split('|')[3] === undefined) {

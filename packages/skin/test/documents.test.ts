@@ -9,7 +9,7 @@ import { RENDERER_VERSION, resolveDocument, type ResolvedDocument, type RNode } 
 import { portabilityReport } from '../src/resolve/portability';
 import { SYMBOLS } from '../src/icons';
 import { cinematicDoc } from '../../protocol/fixtures/skins/cinematic';
-import type { SkinDocument } from '../../protocol/skin';
+import type { Node, SkinDocument } from '../../protocol/skin';
 import { perfReport } from '../../../tools/skin-budget';
 
 const fixtures = join(import.meta.dir, '../../protocol/fixtures/skins');
@@ -180,7 +180,9 @@ test('inherited library reserves header space only for overlay navigation', asyn
     return [route.children[3].style?.['padding-top'], route.children[3].small?.['padding-top']];
   };
   expect(topPadding(broadcast)).toEqual(['0px', '0px']);
-  expect(topPadding(lateNight)).toEqual(['calc(56px + env(safe-area-inset-top))', 'calc(56px + env(safe-area-inset-top))']);
+  // Late Night's bar sits in its bezel (level with the route's top padding) and has no height of its
+  // own: its 78px bar row, and on a phone the 58px bar plus the 36px channel strip under it.
+  expect(topPadding(lateNight)).toEqual(['78px', '94px']);
   expect(overlayHeaderOffset(kids.slots?.shell)).toEqual({ wide: '100px', small: '68px' });
   expect(topPadding(kids)).toEqual(['100px', '68px']);
 });
@@ -190,10 +192,39 @@ test('app-drawn section pages read where the shell navigation ends from the docu
   const { velaBase } = await import('../src/resolve/base');
   const inset = (name: string) => withBase(documents.find(([n]) => n === name)![1], velaBase).traits?.headerInset;
   expect(inset('broadcast')).toEqual({ wide: '0px', small: '0px' });
-  expect(inset('latenight')).toEqual({ wide: 'calc(56px + env(safe-area-inset-top))', small: 'calc(56px + env(safe-area-inset-top))' });
+  expect(inset('latenight')).toEqual({ wide: '78px', small: '94px' });
   expect(inset('kids')).toEqual({ wide: '100px', small: '68px' });
   // Lounge's floating bar has no height of its own: its bar row's.
   expect(inset('lounge')).toEqual({ wide: 'calc(clamp(84px, 7vw, 132px) + max(0px, env(safe-area-inset-top)))', small: '64px' });
+});
+
+test('an overlay bar without a height of its own is as tall as its in-flow rows', async () => {
+  const { overlayHeaderOffset } = await import('../src/resolve/inherit');
+  const button: Node = { type: 'box', style: { height: '36px' } };
+  const shell = (nav: Partial<Extract<Node, { type: 'box' }>>, slot: Partial<Extract<Node, { type: 'slot' }>> = {}): Node => ({ type: 'box', children: [
+    { type: 'box', role: 'navigation', ...nav, style: { position: 'absolute', top: '0px', ...nav.style } },
+    { type: 'slot', slot: 'children', ...slot },
+  ] });
+  // A column adds its rows and gaps; a row takes its tallest item (a repeat stands for its item).
+  expect(overlayHeaderOffset(shell({ style: { gap: '4px' }, children: [
+    { type: 'box', style: { height: '58px' } },
+    { type: 'box', style: { 'flex-direction': 'row', 'padding-bottom': '6px' }, children: [button, { type: 'repeat', over: 'nav.destinations', item: { type: 'box', style: { height: '40px' } } }] },
+  ] }))).toEqual({ wide: '108px', small: '108px' });
+  // Layers drawn absolutely and rows hidden at a width take no room; other units are left to calc().
+  expect(overlayHeaderOffset(shell({ style: { 'padding-top': 'env(safe-area-inset-top)' }, children: [
+    { type: 'box', style: { position: 'absolute', top: '0px', bottom: '0px' } },
+    { type: 'box', style: { height: '7vw' }, small: { height: '58px' } },
+    { type: 'box', style: { display: 'none' }, small: { display: 'flex', 'flex-direction': 'row' }, children: [button] },
+  ] }))).toEqual({ wide: 'calc(7vw + env(safe-area-inset-top))', small: 'calc(94px + env(safe-area-inset-top))' });
+  // A bar level with the route's top padding (a bezel) starts where the route does.
+  expect(overlayHeaderOffset(shell({ style: { top: '12px' }, small: { top: '0px' }, children: [{ type: 'box', style: { height: '78px' } }] },
+    { style: { 'padding-top': '12px' }, small: { 'padding-top': '0px' } }))).toEqual({ wide: '78px', small: '78px' });
+  // What only layout knows (a line of text, a column of an unknown count) leaves the default.
+  const fallback = { wide: 'calc(56px + env(safe-area-inset-top))', small: 'calc(56px + env(safe-area-inset-top))' };
+  expect(overlayHeaderOffset(shell({ children: [{ type: 'text', text: 'Vela' }] }))).toEqual(fallback);
+  expect(overlayHeaderOffset(shell({ children: [{ type: 'repeat', over: 'nav.destinations', item: button }] }))).toEqual(fallback);
+  // A bar lower than the route's top is not the header.
+  expect(overlayHeaderOffset(shell({ style: { top: '40px' }, children: [button] }))).toEqual(fallback);
 });
 
 test('live library tabs use the catalogue grid without an empty alternative-view spacer', async () => {
