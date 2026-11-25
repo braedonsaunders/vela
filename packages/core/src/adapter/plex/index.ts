@@ -3,12 +3,13 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand } from '../capabilities';
+import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
+import { bifFrameAt, bifFrames, bifHeader, bifInterval, bifOffer, bifTableRange, BIF_HEADER_BYTES, jpegSize, type BifFrame } from './bif';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
@@ -26,7 +27,12 @@ interface PlexSession {
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
    * transcode request each part is played through. */
   stack?: { parts: Node[]; index: number; query: Record<string, string> };
+  /** The part's scrub thumbnail index as last read (`trickplayOffer`): its frames, the size of one,
+   * the offer made of it, and the whole file when the server would not answer a byte range. */
+  thumbnails?: { frames: BifFrame[]; offer: V.TrickplayMetadata; whole?: Uint8Array };
 }
+/** A thumbnail index larger than this is not read whole (a server that ignores byte ranges). */
+const MAX_INDEX_BYTES = 50 * 1024 * 1024;
 export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string; /** The name the server was added under (plex.tv's resource name). */ name?: string }
 const ack: V.Ack = { accepted: true };
 const no = (reason: string): V.Feature => ({ available: false, reason });
@@ -59,7 +65,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, TrickplaySheets {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -787,6 +793,83 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       publishedRanges: [],
       lastObservationSequence: s.sequence < 0 ? undefined : s.sequence,
     };
+  }
+
+  /**
+   * The playing part's scrub thumbnails, from its media index (a BIF file at
+   * `/library/parts/{id}/indexes/sd`), read after playback starts rather than delaying the plan.
+   * Each re-read takes the index's current table (Ether's grows while the session streams). Null
+   * for a live channel, audio, a multi-part title (one index per part), or a part without an index.
+   */
+  async trickplayOffer(sessionId: string): Promise<V.TrickplayMetadata | null> {
+    const s = this.session(sessionId);
+    if (s.plan.channelId || s.plan.media === 'audio' || s.stack || s.part.id == null) return null;
+    // An index read whole came from a server without byte ranges: a finished file, not read again.
+    if (s.thumbnails?.whole) return structuredClone(s.thumbnails.offer);
+    const path = `/library/parts/${enc(String(s.part.id))}/indexes/sd`;
+    const head = await this.indexBytes(path, 0, BIF_HEADER_BYTES);
+    if (!head) return null;
+    const whole = head.whole ? head.bytes : undefined;
+    const header = bifHeader(head.bytes);
+    if (!header) return null;
+    const range = bifTableRange(header);
+    const table = whole ? whole.subarray(range.start, range.end) : (await this.indexBytes(path, range.start, range.end))?.bytes;
+    const frames = table && bifFrames(header, table);
+    if (!frames?.length) return null;
+    const held = s.thumbnails;
+    let size = held && { width: held.offer.width, height: held.offer.height };
+    if (!size) {
+      const first = frames[0]!;
+      const image = whole ? whole.subarray(first.start, first.end) : (await this.indexBytes(path, first.start, first.end))?.bytes;
+      size = (image && jpegSize(image)) ?? this.thumbnailSize(s);
+    }
+    // The same table is the same offer; a grown one is a new revision of it.
+    const last = frames[frames.length - 1]!;
+    const changed = !held || held.frames.length !== frames.length || held.frames[held.frames.length - 1]!.atMs !== last.atMs || bifInterval(held.frames) !== bifInterval(frames);
+    const offer = bifOffer(frames, size, s.plan.durationSeconds ? Math.round(s.plan.durationSeconds * 1000) : undefined, changed ? (held?.offer.revision ?? 0) + 1 : held!.offer.revision);
+    if (!offer) return null;
+    s.thumbnails = { frames, offer, ...(whole ? { whole } : {}) };
+    return structuredClone(offer);
+  }
+
+  /** One slot's thumbnail (the offer's sheets are single images), read by its byte range. */
+  async trickplaySheet(sessionId: string, offer: V.TrickplayMetadata, index: number, etag?: string, signal?: AbortSignal): Promise<TrickplaySheet | null> {
+    const s = this.session(sessionId);
+    const held = s.thumbnails;
+    if (!held || offer.cols !== 1 || offer.rows !== 1) return null;
+    const frame = bifFrameAt(held.frames, offer.intervalMs, index);
+    if (!frame) return null;
+    // A slot shows the same image until the index gives it a nearer one.
+    const tag = `"bif-${frame.atMs}"`;
+    if (etag === tag) return 'unchanged';
+    const bytes = held.whole ? held.whole.slice(frame.start, frame.end)
+      : (await this.indexBytes(`/library/parts/${enc(String(s.part.id))}/indexes/sd`, frame.start, frame.end, signal))?.bytes;
+    // Not an image: the index was rewritten since its table was read; the next offer read has the new one.
+    if (!bytes || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+    return { bytes, mimeType: 'image/jpeg', etag: tag };
+  }
+
+  /** A thumbnail's size when its image cannot be measured: 320 wide, in the video's shape. */
+  private thumbnailSize(s: PlexSession): { width: number; height: number } {
+    const media = s.metadata.Media?.find((m: Node) => (m.Part || []).some((p: Node) => p.id === s.part.id)) ?? s.metadata.Media?.[0];
+    const aspect = Number(media?.width) > 0 && Number(media?.height) > 0 ? Number(media.width) / Number(media.height) : 16 / 9;
+    return { width: 320, height: Math.round(320 / aspect) };
+  }
+
+  /**
+   * Bytes `[from, to)` of a media index, with this server's token; null when there is none (404).
+   * A server that ignores the range answers with the whole file (`whole`), read only when small enough.
+   */
+  private async indexBytes(path: string, from: number, to: number, signal?: AbortSignal): Promise<{ bytes: Uint8Array; whole: boolean } | null> {
+    const response = await fetch(this.mediaTarget(path).href, { signal, redirect: 'error', credentials: 'omit',
+      headers: { ...plexHeaders(this.device), Accept: '*/*', 'X-Plex-Token': await this.token(), Range: `bytes=${from}-${to - 1}` } });
+    if (response.status === 404) return null;
+    if (response.status === 401) this.rotateTransientToken();
+    if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : 'source', code: 'plex_http', message: `Plex request failed (${response.status})`, retry: { allowed: false } }, response.status);
+    if (response.status === 206) return { bytes: new Uint8Array(await response.arrayBuffer()), whole: false };
+    if (Number(response.headers.get('content-length')) > MAX_INDEX_BYTES) { await response.body?.cancel(); return null; }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.length > MAX_INDEX_BYTES ? null : { bytes, whole: true };
   }
 
   private async requireLive() {
