@@ -83,6 +83,15 @@ export function playlistMove(entryIds: readonly string[], from: number, to: numb
   return { entryId, afterEntryId: to === 0 ? null : rest[to - 1] ?? null };
 }
 
+/** A list with the item at `from` moved to `to`. */
+export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
+  const out = [...list];
+  if (from < 0 || from >= out.length || to < 0 || to >= out.length) return out;
+  const [item] = out.splice(from, 1) as [T];
+  out.splice(to, 0, item);
+  return out;
+}
+
 /** A queue move by play positions (store.audio.move): only upcoming items move, never the one
  * playing or anything before it. Nothing when it would not move. */
 export function queueMove(from: number, to: number, at: number, length: number): { from: number; to: number } | undefined {

@@ -6,7 +6,7 @@ import type { Card } from '@vela/core';
 import { RICH_BLOCKS, RICH_BLOCK_NAMES, isRichBlock } from '../../protocol/rich-blocks';
 import { fillParts, hasRows, partRows, splitRows } from '../src/blocks/listen/part-style';
 import {
-  asCard, barPresses, discGroups, litWords, listOf, lyricLine, queueMove, nextRowCount, parseBool, parseEnum, parseNumber, playlistMove, propDefault, tableTracks, FIRST_ROWS, MORE_ROWS,
+  asCard, barPresses, discGroups, litWords, listOf, moveItem, lyricLine, queueMove, nextRowCount, parseBool, parseEnum, parseNumber, playlistMove, propDefault, tableTracks, FIRST_ROWS, MORE_ROWS,
 } from '../src/blocks/listen/props';
 
 function track(id: string, disc = 0): Card {
@@ -109,6 +109,10 @@ test('a playlist move names the entry and the one it lands after', () => {
   expect(playlistMove(ids, 2, 1)).toEqual({ entryId: 'c', afterEntryId: 'a' });
   expect(playlistMove(ids, 1, 1)).toBeUndefined();
   expect(playlistMove(ids, 1, 9)).toBeUndefined();
+  // The row drawn at once agrees with the move the store makes.
+  expect(moveItem(ids, 0, 2)).toEqual(['b', 'c', 'a', 'd']);
+  expect(moveItem(ids, 3, 0)).toEqual(['d', 'a', 'b', 'c']);
+  expect(moveItem(ids, 3, 9)).toEqual(ids);
 });
 
 test('long lists draw their first rows, then more each frame, until all', () => {
