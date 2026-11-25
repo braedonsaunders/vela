@@ -271,6 +271,8 @@ export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
       case 'gt': ok = num(v) > num(value); break;
       case 'lt': ok = num(v) < num(value); break;
       case 'mod': { const [n, rem] = value.split(':').map(Number); ok = n ? num(v) % n === rem : false; break; }
+      case 'starts': ok = value !== '' && v.startsWith(value); break;
+      case 'ends': ok = value !== '' && v.endsWith(value); break;
       default: ok = !['', 'false', '0'].includes(v);
     }
     if (ok === k.not) return false;

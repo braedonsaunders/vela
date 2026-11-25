@@ -63,7 +63,7 @@
          "collectionHeader.byline": {
           "type": "box",
           "style": {
-           "gap": "8px"
+           "gap": "10px"
           },
           "children": [
            {
@@ -71,8 +71,7 @@
             "text": "{s:music.duplicates.subtitle}",
             "style": {
              "font-size": "15px",
-             "color": "$ui.inkSecondary",
-             "max-width": "680px"
+             "color": "$ui.inkSecondary"
             }
            },
            {
@@ -87,6 +86,20 @@
              "font-size": "14px",
              "font-weight": "700",
              "color": "$ui.ink"
+            }
+           }
+          ],
+          "states": [
+           {
+            "when": [
+             {
+              "test": "env.form",
+              "is": "eq",
+              "value": "small"
+             }
+            ],
+            "style": {
+             "gap": "8px"
             }
            }
           ]
