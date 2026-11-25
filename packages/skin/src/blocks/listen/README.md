@@ -1,7 +1,7 @@
 # Listen rich blocks
 
 The music app's interactive parts as rich document blocks (docs/experiences.md: Blocks). Each block
-is a native engine (moved here unchanged from `widgets/music`, which is deleted at Listen parity)
+is a native engine (moved here unchanged from `widgets/music`, deleted at the Listen hard cut)
 that a document places, feeds and styles. A document never replaces an engine, its focus
 management or its timing.
 

@@ -52,7 +52,7 @@ Each step reaches parity with today's pages before the code it replaces is delet
 | Area | Today |
 | --- | --- |
 | Watch pages (home, library, title, person, collection, search, live home) | Already skin documents (`routes.*`) over a fixed vocabulary of app data (`vocabulary.ts`), with compiled widgets for the hard parts |
-| Listen (the music app) | Hand-written React: `widgets/music/*` (shell, pages, bar, queue, lyrics, tracks), `widgets/media/player.tsx`. It follows the skin through `ui` tokens but cannot be rearranged. |
+| Listen (the music app) | Built-in documents since the Listen hard cut: `packages/protocol/fixtures/experiences/listen/*` (shell and pages) over the rich and page-level blocks in `packages/skin/src/blocks/listen/*`. The hand-written `widgets/music` is deleted. |
 | Read | `widgets/media/reader*` (engine, layout, opening) and `app/read/[id].tsx` |
 | Gallery | No dedicated experience; photos open as ordinary library pages |
 | Live | The guide and multiview are native widgets and routes; Sports is moving to plugin documents |
@@ -250,7 +250,7 @@ then deletes the code it replaces in the same release. There are no long-lived d
 
    Data comes from `vela.*` sources over the music API that thr_9ahkvmww6a's plan adds to
    Ether. The plan's Ether model work is unchanged; only the Vela drawing becomes documents.
-   `widgets/music/*` is deleted at parity.
+   `widgets/music/*` is deleted at parity (done: the hard cut removed it and the flag that drew it).
 3. **Read.** Library pages and a `reader` block with styleable chrome. The reader engine stays
    native.
 4. **Gallery.** A `timeline` grid, a `photoViewer` block, and albums and people pages.

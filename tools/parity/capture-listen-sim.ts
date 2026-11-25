@@ -37,7 +37,7 @@ async function metroFor(route: string, audio: string): Promise<() => void> {
   const child = Bun.spawn(['bun', 'x', 'expo', 'start', '--port', port, '--clear', '--no-dev'], {
     cwd: join(root, 'apps/vela'), stdout: 'pipe', stderr: 'pipe',
     env: { ...process.env, EXPO_PUBLIC_VELA_SERVER: values.mock!, EXPO_PUBLIC_VELA_MOCK: '1', EXPO_PUBLIC_VELA_START_ROUTES: route,
-      EXPO_PUBLIC_VELA_PARITY_AUDIO: audio, ...(variant === 'document' ? { EXPO_PUBLIC_VELA_LISTEN: 'documents' } : {}), CI: '1' },
+      EXPO_PUBLIC_VELA_PARITY_AUDIO: audio, CI: '1' },
   });
   const reader = async (stream: ReadableStream<Uint8Array>) => {
     const read = stream.getReader();

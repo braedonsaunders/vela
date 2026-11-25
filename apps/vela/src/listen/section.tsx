@@ -1,6 +1,7 @@
-// A library whose experience is 'listen' opens as the audio app: the shell from the skin package,
-// given the app's router, player and the card menu, worded for what the library holds (music,
-// audiobooks, podcasts). The page in view lives in the address (`?m=`).
+// A library whose experience is 'listen' opens as the listen experience: its built-in shell and page
+// documents (ExperienceView), given the app's router, player, the card menu and the playlist drawer,
+// worded for what the library holds (music, audiobooks, podcasts). The page in view lives in the
+// address (`?m=`).
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -9,22 +10,23 @@ import { useVelaState } from '@vela/core/react';
 import type { SkinHost } from '@vela/skin';
 import { TrackedHost } from '@vela/skin/src/host';
 import { CardContextMenu } from '@vela/skin/src/widgets/card-context-menu';
-import { MusicContext, MusicShell, PlaylistDrawer, parsePlace, placeOf, placeParam, type PlaylistDrawerRequest, type MusicApp, type MusicMenuRequest, type MusicPlace } from '@vela/skin/src/widgets/music';
+import { MusicContext, placeOf, type MusicApp, type MusicMenuRequest } from '@vela/skin/src/blocks/listen/app';
+import { parsePlace, placeParam, type MusicPlace } from '@vela/skin/src/blocks/listen/place';
+import { PlaylistDrawer, type PlaylistDrawerRequest } from '@vela/skin/src/blocks/listen/playlist-drawer';
 import { listenFrom, listeningOf } from '@vela/skin/src/blocks/listen/listening';
 import { forgetSearch, readRecent, rememberSearch } from '@vela/skin/src/blocks/listen/search-results';
 import { preferences } from '../data/preferences';
 import { useVela } from '../vela';
-import { ExperienceView, hasExperience } from '@vela/skin/src/screen/experience';
+import { ListenKeys, useListenBack } from './keys';
+import { ExperienceView } from '@vela/skin/src/screen/experience';
 import { addressOfPlace, placeOfAddress, type ExperiencePlace } from '@vela/skin/src/screen/experience-route';
 import type { ScreenStateHandle } from '@vela/skin/src/screen/host';
 import { useAppScreenActions } from '../screen-actions';
-import { config } from '../data/config';
-import { ListenKeys, useListenBack } from '../listen/keys';
 
 /** Titles the audio app opens in place: its roles (and the card kinds media titles carry). */
 const OPENS_IN_PLACE = ['artist', 'album', 'track', 'season', 'show', 'audiobook', 'part', 'series', 'episode', 'podcast', 'podcastEpisode'];
 
-export function MusicSection({ libraryId, at }: { libraryId: string; at: string | undefined }) {
+export function ListenSection({ libraryId, at }: { libraryId: string; at: string | undefined }) {
   const vela = useVela();
   const store = vela.store;
   const base = vela.host('library', libraryId);
@@ -33,7 +35,6 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
   const place = useMemo(() => parsePlace(at), [at]);
   const listening = listeningOf(useVelaState(state => state.libraries.value?.find(library => library.id === libraryId)?.media));
   const [menu, setMenu] = useState<MusicMenuRequest | null>(null);
-  const [queueOpen, setQueueOpen] = useState(false);
   const [drawer, setDrawer] = useState<PlaylistDrawerRequest | null>(null);
   const [likes, setLikes] = useState<Record<string, boolean>>({});
   // Recent searches are this library's on this server for this viewer, kept on this device.
@@ -102,13 +103,12 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     dropSearch: (query?: string) => keepSearches(list => (query === undefined ? [] : forgetSearch(list, query))),
   }), [libraryId, listening, place, go, store, setLike, likes, likedIds, searches, keepSearches]);
 
-  // Until the hard cut the listen documents draw only in builds that ask for them (parity captures).
-  const documents = config.listen === 'documents' && hasExperience('listen');
+  // The shell document's state: Q toggles its queue panel (the wide shell's; Sound closes).
   const shell = useRef<ScreenStateHandle | null>(null);
   const keysApp = useMemo(() => ({
     listening, searching, search: () => go({ kind: 'search' }), like: app.like, liked: app.liked,
-    toggleQueue: () => (documents ? shell.current?.toggle('queue', { clear: ['sound'] }) : setQueueOpen(open => !open)),
-  }), [listening, searching, go, app, documents]);
+    toggleQueue: () => shell.current?.toggle('queue', { clear: ['sound'] }),
+  }), [listening, searching, go, app]);
 
   // In the music app a title opens in place, not as the title page above it.
   const host = useMemo<SkinHost | null>(() => base ? {
@@ -137,9 +137,7 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     <TrackedHost host={host}>
       <MusicContext.Provider value={app}>
         <View pointerEvents="box-none" style={{ flex: 1 }}>
-          {documents
-            ? <ExperienceView experience="listen" libraryId={libraryId} place={placeOfAddress(at)} go={goPlace} host={host} active actions={screenActions} shell={shell} />
-            : <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />}
+          <ExperienceView experience="listen" libraryId={libraryId} place={placeOfAddress(at)} go={goPlace} host={host} active actions={screenActions} shell={shell} />
           <PlaylistDrawer request={drawer} close={closeDrawer} />
           <ListenKeys store={store} app={keysApp} />
           {menu ? (

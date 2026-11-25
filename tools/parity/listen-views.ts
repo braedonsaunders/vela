@@ -1,6 +1,7 @@
 // The Listen parity matrix: which views of the listen experience (the music app, audiobooks and
 // podcasts) are captured, at which viewports, and how each reaches its state. The legacy variant is
-// today's hand-written widgets/music; the document variant is the built-in listen documents.
+// the hand-written widgets/music (deleted in the hard cut; its captures are archived baselines); the
+// document variant is the built-in listen documents.
 //
 // Every capture runs against the frozen mock (LISTEN_MOCK_ENV): fixture dates pinned, a few titles
 // already liked, silent media. Listening state is the app's own and is set per view by the mock build's

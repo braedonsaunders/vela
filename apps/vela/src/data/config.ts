@@ -16,9 +16,6 @@ export const config = {
   /** A lab build's routes to open once home is ready, `|`-separated, a few seconds apart (a TV
    * simulator has no remote to get there). Unset in a release build. */
   startRoutes: process.env.EXPO_PUBLIC_VELA_START_ROUTES ?? '',
-  /** `documents`: listen libraries draw the built-in listen documents (until the hard cut of the
-   * hand-written music app; parity captures build both). */
-  listen: process.env.EXPO_PUBLIC_VELA_LISTEN ?? '',
 };
 
 /** The development server when none is configured: mock-server on this machine. */
