@@ -1,7 +1,7 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, TVFocusGuideView, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,8 @@ import { useCanOpenVisualizer, useCanVisualize } from '../visualizer/availabilit
 import { Visualizer } from '../visualizer/visualizer';
 import { beginVisualizerFullscreen } from '../visualizer/stage';
 import { inVisualizerHistory, popVisualizerHistory, pushVisualizerHistory } from '../visualizer/page-history';
+import { visualizerPlan, visualizerProfile } from '../visualizer/selection';
+import { setVisualizerEnabled, subscribeVisualizerScene, visualizerEnabled } from '../visualizer/setting';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
 import { currentInQueue, msg, soundSettings, type Vela as Store } from '@vela/core';
@@ -138,14 +140,23 @@ export function AudioDock() {
   const musicLibrary = useVelaState(state => state.libraries.value?.some(library => library.experience === 'listen' && pathname === `/library/${library.id}`));
   const inMusicShell = !!musicLibrary && !musicTV() && wideMusic(host?.viewport.width ?? 0, host?.viewport.height ?? 0);
   const playing = !!audio.queue && !covered;
-  const visuals = useCanVisualize(playing && open && currentInQueue(audio.queue)?.media?.class === 'music');
+  // The viewer's On/Off for this profile on this device; Off mounts no stage at all.
+  const profile = useVelaState(s => visualizerProfile(s.servers.selectedId, s.auth.viewerId || s.auth.viewer));
+  const visualizerOn = useSyncExternalStore(subscribeVisualizerScene, () => visualizerEnabled(profile), () => visualizerEnabled(profile));
+  const capable = useCanVisualize(playing && open && currentInQueue(audio.queue)?.media?.class === 'music');
+  const plan = visualizerPlan(capable, visualizerOn, expanded);
+  const visuals = plan.stage !== null;
   const readyToOpen = useCanOpenVisualizer(visuals);
-  const fullscreen = visuals && expanded;
+  const fullscreen = plan.stage === 'fullscreen';
   useEffect(() => {
     if (visuals || !expanded) return;
     setExpanded(false);
     if (Platform.OS === 'web') popVisualizerHistory(window.history);
+    // Turned off from the picker (or nothing left to draw): focus goes back to Now Playing's transport.
+    if (Platform.isTV || Platform.OS === 'web') requestAnimationFrame(() => focusElement('now-playing-toggle'));
   }, [visuals, expanded]);
+  const visualizerSwitch = useMemo(() => plan.switch
+    ? { on: visualizerOn, onToggle: (on: boolean) => setVisualizerEnabled(profile, on) } : undefined, [plan.switch, visualizerOn, profile]);
   const openVisualizer = useCallback(() => {
     beginVisualizerFullscreen();
     if (Platform.OS === 'web') pushVisualizerHistory(window.history);
@@ -202,8 +213,8 @@ export function AudioDock() {
     <Presence shown={playing && open} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
       <TVFocusTrap open={playing && open}>
         <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
-          {visuals ? <Visualizer mode={fullscreen ? 'fullscreen' : 'background'} /> : null}
-          <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={readyToOpen ? openVisualizer : undefined} />
+          {plan.stage ? <Visualizer mode={plan.stage} /> : null}
+          <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={readyToOpen ? openVisualizer : undefined} visualizer={visualizerSwitch} />
           {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
             <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
           </View> : null}
