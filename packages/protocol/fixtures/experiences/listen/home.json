@@ -113,7 +113,8 @@
        }
       ]
      }
-    ]
+    ],
+    "testId": "music-main"
    },
    {
     "type": "box",

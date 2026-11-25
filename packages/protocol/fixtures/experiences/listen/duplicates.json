@@ -27,6 +27,7 @@
      "libraryId": "{param.library}"
     }
    }
-  ]
+  ],
+  "testId": "music-main"
  }
 }

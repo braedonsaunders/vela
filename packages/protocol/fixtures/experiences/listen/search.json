@@ -27,6 +27,7 @@
    {
     "type": "listenSearch"
    }
-  ]
+  ],
+  "testId": "music-main"
  }
 }
