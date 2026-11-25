@@ -2,12 +2,15 @@
 # Build apps/vela for Apple TV (Release: the JS bundle is embedded, no Metro), sign it with your
 # team's automatic provisioning, install it, and optionally open a route.
 #
-#   tools/apple-tv.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>]
+#   tools/apple-tv.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>] [--no-launch]
 #
 #   --prebuild   regenerate apps/vela/ios for tvOS (EXPO_TV=1 expo prebuild --clean, then pod install)
-#   --simulator  build for the tvOS simulator and install on the booted (or first) Apple TV simulator
-#   --device     a paired Apple TV; when omitted and exactly one is connected, that one is used
+#   --simulator  build for the tvOS simulator and install on the booted (or first) Apple TV simulator;
+#                with --device, on that simulator (its UDID or name) and no other
+#   --device     a paired Apple TV (or, with --simulator, a simulator); when omitted and exactly one
+#                physical Apple TV is connected, that one is used
 #   --team       your Apple developer team ID (device builds; see Xcode > Settings > Accounts)
+#   --no-launch  install without opening Vela
 #
 # Defaults may live in .apple-tv.env at the repository root (gitignored; the environment wins), for example:
 #   VELA_APPLE_TV=<device udid or name>
@@ -28,18 +31,21 @@ if [ -f "$root/.apple-tv.env" ]; then
   done
 fi
 device=${VELA_APPLE_TV:-}
+asked_device=""
 team=${VELA_APPLE_TEAM:-}
 prebuild=0
 simulator=0
 open=""
-usage="usage: tools/apple-tv.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>]"
+launch=1
+usage="usage: tools/apple-tv.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>] [--no-launch]"
 while [ $# -gt 0 ]; do
   case "$1" in
     --prebuild) prebuild=1 ;;
     --simulator) simulator=1 ;;
-    --device) device=$2; shift ;;
+    --device) device=$2; asked_device=$2; shift ;;
     --team) team=$2; shift ;;
     --open) open=$2; shift ;;
+    --no-launch) launch=0 ;;
     -h|--help) echo "$usage"; exit 0 ;;
     *) echo "$usage" >&2; exit 2 ;;
   esac
@@ -120,7 +126,13 @@ app=$derived/Build/Products/$products/Vela.app
 
 if [ "$simulator" = 1 ]; then
   uuid='[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}'
-  sim=$(xcrun simctl list devices booted | grep 'Apple TV' | grep -oE "$uuid" | head -1)
+  if [ -n "$asked_device" ]; then
+    sim=$(xcrun simctl list devices available | grep -F -- "$asked_device" | grep -oE "$uuid" | head -1)
+    [ -n "$sim" ] || { echo "apple-tv: no available simulator $asked_device (xcrun simctl list devices)" >&2; exit 2; }
+    xcrun simctl list devices booted | grep -q "$sim" || xcrun simctl boot "$sim"
+  else
+    sim=$(xcrun simctl list devices booted | grep 'Apple TV' | grep -oE "$uuid" | head -1)
+  fi
   if [ -z "$sim" ]; then
     sim=$(xcrun simctl list devices available | grep 'Apple TV' | grep -oE "$uuid" | head -1)
     [ -n "$sim" ] || { echo "apple-tv: no Apple TV simulator (Xcode > Settings > Platforms)" >&2; exit 2; }
@@ -128,6 +140,7 @@ if [ "$simulator" = 1 ]; then
   fi
   xcrun simctl install "$sim" "$app"
   echo "apple-tv: installed $app on simulator $sim"
+  [ "$launch" = 1 ] || exit 0
   if [ -n "$open" ]; then xcrun simctl openurl "$sim" "$open"; else xcrun simctl launch "$sim" app.ether.vela >/dev/null; fi
   exit 0
 fi

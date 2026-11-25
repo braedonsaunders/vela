@@ -324,7 +324,7 @@ function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
  */
 let rowSnapshot = 1;
 const feedChanged = () => { rowSnapshot++; };
-const minted = (row: V.Row, key = row.id): V.Row => ({ ...row, id: `${row.id}~${rowSnapshot}`, key });
+const minted = (row: V.Row, key = row.id, snapshot = rowSnapshot): V.Row => ({ ...row, id: `${row.id}~${snapshot}`, key });
 /** The row a wire id names, by its base id; a superseded snapshot is refused. */
 function mintedRow(id: string, candidates: V.Row[]): V.Row {
   const at = id.lastIndexOf('~'), base = at < 0 ? id : id.slice(0, at), snapshot = at < 0 ? '' : id.slice(at + 1);
@@ -351,13 +351,13 @@ const labHomeRows: V.Row[] = [
 ];
 /** Home's page in order: progress rows, media rows, the catalogue's rows, and a plugin's surface
  * row where the page places it (after Top 10), as Ether lists them. */
-function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = []): V.Page<V.Row | V.SurfaceRow> {
+function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = [], snapshot = rowSnapshot): V.Page<V.Row | V.SurfaceRow> {
   const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows];
   const top = ordered.findIndex(row => row.id === 'row-top10');
   ordered.splice(top + 1, 0, ...surfaces);
   const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
-  return { ...result, items: result.items.map(row => 'kind' in row ? row : minted(homeRow(g, row, firstItems))) };
+  return { ...result, items: result.items.map(row => 'kind' in row ? row : minted(homeRow(g, row, firstItems), row.id, snapshot)) };
 }
 function cached(req: Request, data: unknown, scope: string): Response {
   const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
@@ -818,8 +818,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const firstPage = new URL(url); firstPage.search = '';
     // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
     const { navigation, surfaces, homeRows: surfaceRows } = screensBootstrap(req, g.viewer.id);
-    const home = homeRows(g, firstPage, surfaceRows);
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
+    const stale = faults.bootstrapStaleReads > 0 && rowSnapshot > 1;
+    const snapshot = stale ? rowSnapshot - 1 : rowSnapshot;
+    if (stale) faults.bootstrapStaleReads--;
+    const home = homeRows(g, firstPage, surfaceRows, snapshot);
+    const bootstrap = { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap;
+    return stale ? json(bootstrap) : cached(req, bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';

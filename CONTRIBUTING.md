@@ -45,6 +45,45 @@ For UI or playback changes, inspect the affected flow in the actual app and
 report which platform was observed. Renderer rules need a document exercising
 them through the app. Explicitly identify unverified device behavior.
 
+## Release e2e gate
+
+Release qualification is automated in `tests/e2e`; do not substitute a by-hand
+lab checklist. Before an Ether RC, the coordinator runs the complete muted web
+gate with one command:
+
+```sh
+tools/e2e-gate.sh ~/.scratch/tmp/thr_9jsg8ia37s/vela-e2e.env
+```
+
+The dotenv file must be mode 600 and belong to the dedicated lab viewer. Never
+use a production viewer. The command runs deterministic mock faults first, then
+Chromium and WebKit against the private lab, and ends with exactly
+`VELA RELEASE GATE: PASS` or `VELA RELEASE GATE: FAIL`. Every suite restores
+watch state and closes playback it changes; the gate's run-level cleanup
+revokes the Vela session. Plex-mode tests use the separately configured
+owner-token file through the harness's secret route: never print, copy, revoke,
+or replace that token, and never ask for a plex.tv link code.
+
+Release suites use exact `expect(...)` assertions. Natural-language
+`agent.act(...)` steps are allowed only when followed by exact assertions and
+their recordings under `.e2e/cache/` are committed. `agent.assert(...)` belongs
+only in exploratory or bug-bash suites. CI runs the deterministic web targets
+with `e2e run --strict-cache`, so a missing or stale recording fails without a
+model call. Re-record intentionally with Codex only, review the actions for
+secrets and scope, then prove the same target with `--strict-cache`.
+
+Mock-only cases live under `tests/e2e/mock` and use `mock-server/` plus
+`/__admin/faults` for repeatable faults, markers, and stale bootstrap responses.
+Do not make a release gate depend on a naturally occurring lab fault.
+
+Native release targets are simulators and emulators only: iOS, tvOS, Android,
+and Android TV. Never select a physical Apple TV or an owner's device. Keep all
+media muted, check memory before starting, run one native target at a time, shut
+it down afterward, and take the shared build lock with
+`VELA_NATIVE_LOCK=$HOME/.bb/thread-storage/vela-orch/native.lock`. Android
+emulators on the GPU worker render in software, so compare frame times rather
+than treating them as absolute performance measurements.
+
 Keep changes focused, use descriptive names and ordinary formatting, and avoid
 speculative abstractions. Coordinate changes to wire types, shared exports and
 root dependencies with maintainers. Never commit credentials, private signing
