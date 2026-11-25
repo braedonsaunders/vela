@@ -267,6 +267,32 @@ export const RICH_BLOCKS = {
     props: { query: { type: 'template', doc: 'The albums query (the place\'s).' } },
     parts: [], templates: [], tv: 'A focus grid.',
   },
+  tileGrid: {
+    doc: 'A wrapping grid of music tiles over a list source, reading its next page (vela.more) as the end comes into reach, with "Loading more…" and a retry at its end.',
+    props: {
+      items: { type: 'value', required: true, doc: 'The list source\'s value ({items, more}).' },
+      source: { type: 'template', doc: 'The list source\'s name on this page, for vela.more.' },
+      pending: { type: 'value', doc: 'Whether a page is being read ({src.x.$pending}).' },
+      failed: { type: 'template', doc: 'The source\'s error, when its last read failed ({src.x.$error}).' },
+      tileSize: { type: 'number', default: '0', doc: 'px; 0 is 200 on TV, 132 on a phone, else 168.' },
+      subtitle: { type: 'enum', values: ['yearByline', 'none', 'year', 'byline', 'release', 'playlist'], default: 'yearByline', doc: 'The line under each tile.' },
+    },
+    parts: [], templates: [], tv: 'A focus grid; the first tile takes focus as the page opens.',
+  },
+  continueListening: {
+    doc: 'Continue listening: a card per title under way with its progress and what is left; Play resumes (select resumes on TV).',
+    props: {
+      row: { type: 'value', required: true, doc: 'A vela.rows row ({name, items}).' },
+      title: { type: 'template', doc: 'The heading; the row\'s name, else "Continue listening".' },
+    },
+    parts: [], templates: [], tv: 'A focus grid.',
+  },
+  spokenCredits: { doc: 'A spoken title\'s credits: by the author, narrated by, hosted by.', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'No focus.' },
+  spokenFacts: { doc: 'The facts under the credits: year, length, parts or chapters and genre (a book); episodes and genre (a show); year and count (a collection).', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'No focus.' },
+  spokenProgress: { doc: 'An audiobook under way: the bar, what is left and the chapter; Finished once played.', props: { item: { type: 'value', required: true, doc: 'The audiobook.' } }, parts: [], templates: [], tv: 'No focus.' },
+  spokenPlay: { doc: 'A spoken title\'s action bar: listen or resume (and Start over), or play the show\'s next episode, the heart and the menu, with a line when this device cannot play it.', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'One focus row; play takes focus first.' },
+  spokenItems: { doc: 'A spoken title\'s list: a book\'s parts or chapters; a show\'s summary and episodes with the All / New chips; a collection\'s items when they all play.', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'Rows are single focus targets.' },
+  spokenAbout: { doc: 'About: the summary and the facts table (a show\'s summary is in spokenItems).', props: { item: { type: 'value', required: true, doc: 'The title.' } }, parts: [], templates: [], tv: 'No focus.' },
 } as const satisfies Record<string, RichBlockSpec>;
 
 export type RichBlockName = keyof typeof RICH_BLOCKS;
