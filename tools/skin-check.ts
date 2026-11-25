@@ -11,22 +11,34 @@ import { join, resolve } from 'node:path';
 import { RENDERER_VERSION, resolveDocument, type ResolvedDocument, type RNode } from '../packages/skin/src/resolve';
 import { BUDGETS, type Finding, type PageCost } from '../packages/skin/src/resolve/budget';
 import { perfReport, treesReport } from './skin-budget';
-import { heldColours, resolveScreenDocument, SCREEN_CAPABILITIES, screenTrees, type ResolvedScreen } from '../packages/skin/src/resolve/screen';
+import {
+  checkExperienceOverrides,
+  heldColours,
+  resolveScreenDocument,
+  SCREEN_CAPABILITIES,
+  screenTrees,
+  velaUseProblems,
+  type OverrideFinding,
+  type ResolvedScreen,
+  type ScreenViewport,
+} from '../packages/skin/src/resolve/screen';
+import { experiencePages } from '../packages/skin/src/resolve/builtin';
 import { SCREEN_LIMITS, type ScreenDocument } from '../packages/protocol/screen';
+import { VELA_ACTIONS } from '../packages/protocol/vela-sources';
 import { SYMBOLS } from '../packages/skin/src/icons';
 import { portabilityReport, type PortabilityFinding } from '../packages/skin/src/resolve/portability';
 import { uiDefaults } from '../packages/skin/src/resolve/ui-defaults';
-import { SCREEN_SCHEMA_DIGEST } from '../packages/skin/src/resolve/screen-schema-digest';
+import { VELA_DOCUMENT_SCHEMA_DIGEST } from '../packages/skin/src/resolve/screen-schema-digest';
 import { parseColour } from '../packages/skin/src/screen/colour';
 import { validate } from './screen-schema';
 import type { SkinDocument } from '../packages/protocol/skin';
 
 const WIDTHS = [1440, 390, 1920];
 /** The viewports a screen document is checked at: a desktop, a phone and a TV. */
-const SCREEN_VIEWPORTS = [
-  { width: 1440, name: 'desktop' },
-  { width: 390, name: 'phone' },
-  { width: 1920, tv: true, scale: 1.25, name: 'tv' },
+const SCREEN_VIEWPORTS: (ScreenViewport & { name: string })[] = [
+  { width: 1440, height: 900, platform: 'web', name: 'desktop' },
+  { width: 390, height: 844, platform: 'ios', name: 'phone' },
+  { width: 1920, height: 1080, tv: true, scale: 1.25, platform: 'tv', name: 'tv' },
 ];
 
 const UI_KEYS = new Set(Object.keys(uiDefaults));
@@ -40,7 +52,7 @@ const VALID_ACTIONS = new Set([
   'searchLibrary', 'searchSort', 'searchDirection', 'searchKind', 'searchMore', 'openHit', 'retryDescriptive',
   'navigate', 'setParam', 'plugin', 'openLink', 'dismiss',
 ]);
-const STYLE_KEYS = new Set(['style', 'small', 'wide', 'tv', 'hover', 'focus', 'groupHover', 'groupFocus', 'active', 'disabledStyle', 'inner']);
+const STYLE_KEYS = new Set(['style', 'small', 'wide', 'tv', 'fold', 'hover', 'focus', 'groupHover', 'groupFocus', 'active', 'disabledStyle', 'inner']);
 
 export interface DocumentFinding {
   level: 'error' | 'warning';
@@ -122,6 +134,7 @@ export interface DocumentCheckReport {
     pluginUsed: string[];
     unknown: string[];
     undeclaredPlugin: string[];
+    velaUseErrors?: string[];
     errors: string[];
   };
   slots: {
@@ -129,6 +142,7 @@ export interface DocumentCheckReport {
     declared: string[];
     used: string[];
     experiences: string[];
+    experienceOverrides?: OverrideFinding[];
     presentationSlot?: string;
     unknown: string[];
     errors: string[];
@@ -242,7 +256,7 @@ function scanRawNode(node: unknown, at: string, isScreen: boolean, out: RawScan,
       for (const [row, raw] of Object.entries(value as Record<string, unknown>)) {
         if (typeof raw === 'string') scanStyleString(raw, `${path}.${row}`, isScreen, out);
       }
-    } else if ((key === 'below' || key === 'above') && typeof value === 'object' && !Array.isArray(value)) {
+    } else if ((key === 'below' || key === 'above' || key === 'platforms') && typeof value === 'object' && !Array.isArray(value)) {
       for (const [px, style] of Object.entries(value as Record<string, unknown>)) {
         if (style && typeof style === 'object') {
           for (const [row, raw] of Object.entries(style as Record<string, unknown>)) {
@@ -341,8 +355,6 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
     const schemaObj = await getScreenSchema();
     if (schemaObj) {
       for (const err of validate(schemaObj, doc)) {
-        // Tolerate `owner` and `experience` if G2 is in flight and schema hasn't regenerated yet
-        if (/^\/(owner|experience): is not allowed$/.test(err)) continue;
         schemaErrors.push(err);
         addFinding('error', 'schema', err.split(':')[0] || '/', err);
       }
@@ -375,11 +387,19 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
       scanRawNode(tNode, `templates.${tName}`, true, scan, 1);
     }
     if (doc.tree) scanRawNode(doc.tree, 'tree', true, scan, 1);
+    for (const [fName, fNode] of Object.entries(doc.forms ?? {})) {
+      scanRawNode(fNode, `forms.${fName}`, true, scan, 1);
+    }
+    for (const [pName, pNode] of Object.entries(doc.platforms ?? {})) {
+      scanRawNode(pNode, `platforms.${pName}`, true, scan, 1);
+    }
     if (doc.loading) scanRawNode(doc.loading, 'loading', true, scan, 1);
     if (doc.failure) scanRawNode(doc.failure, 'failure', true, scan, 1);
 
     const maxTreeDepth = Math.max(
       doc.tree ? measureTreeDepth(doc.tree) : 0,
+      ...Object.values(doc.forms ?? {}).map(n => measureTreeDepth(n)),
+      ...Object.values(doc.platforms ?? {}).map(n => measureTreeDepth(n)),
       doc.loading ? measureTreeDepth(doc.loading) : 0,
       doc.failure ? measureTreeDepth(doc.failure) : 0,
     );
@@ -515,11 +535,14 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
       addFinding('error', 'icons', 'icons', msg);
     }
 
-    // 7. Actions
+    // 7. Actions & vela.* rules (velaUseProblems)
     const declaredActions = Object.keys(doc.actions ?? {}).sort();
     const declaredActionSet = new Set(declaredActions);
     const unknownActions = [...scan.actionsUsed].filter(a => !VALID_ACTIONS.has(a)).sort();
-    const undeclaredPlugin = [...scan.pluginActionsUsed].filter(a => !declaredActionSet.has(a)).sort();
+    const undeclaredPlugin = [...scan.pluginActionsUsed]
+      .filter(a => !declaredActionSet.has(a) && !(doc.owner === 'vela' && a in VELA_ACTIONS))
+      .sort();
+    const velaProblems = velaUseProblems(doc);
     const actionErrors: string[] = [];
     for (const a of unknownActions) {
       const msg = `Unknown press action ${a}`;
@@ -531,10 +554,14 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
       actionErrors.push(msg);
       addFinding('error', 'actions', 'actions', msg);
     }
+    for (const vp of velaProblems) {
+      actionErrors.push(vp);
+      addFinding('error', 'actions', 'vela', vp);
+    }
 
     // 8. Slots
     const validScreenSlots = new Set(['children', 'searchField']);
-    const unknownSlots = [...scan.slotsUsed].filter(s => !validScreenSlots.has(s)).sort();
+    const unknownSlots = [...scan.slotsUsed].filter(s => !validScreenSlots.has(s) && !s.startsWith('plugin:')).sort();
     const slotErrors = unknownSlots.map(s => `Unknown slot ${s}`);
     for (const err of slotErrors) addFinding('error', 'slots', 'slots', err);
 
@@ -579,7 +606,7 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
         schema: doc.schema,
         renderer: doc.renderer,
         maxRenderer: RENDERER_VERSION,
-        digest: SCREEN_SCHEMA_DIGEST,
+        digest: VELA_DOCUMENT_SCHEMA_DIGEST,
         errors: schemaErrors,
       },
       limits: {
@@ -627,6 +654,7 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
         pluginUsed: [...scan.pluginActionsUsed].sort(),
         unknown: unknownActions,
         undeclaredPlugin,
+        velaUseErrors: velaProblems,
         errors: actionErrors,
       },
       slots: {
@@ -634,7 +662,7 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
         declared: [],
         used: [...scan.slotsUsed].sort(),
         experiences: [],
-        presentationSlot: doc.presentation,
+        presentationSlot: doc.presentation === 'slot' ? doc.slot : doc.presentation,
         unknown: unknownSlots,
         errors: slotErrors,
       },
@@ -653,7 +681,7 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
   }
 
   // SkinDocument branch
-  const doc = loaded as SkinDocument & { experiences?: Record<string, Record<string, unknown>> };
+  const doc = loaded as SkinDocument;
   const id = doc.id;
   const schemaErrors: string[] = [];
   if (doc.schema !== 1) {
@@ -670,9 +698,22 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
   for (const [sName, sNode] of Object.entries(doc.slots ?? {})) scanRawNode(sNode, `slots.${sName}`, false, scan, 1);
   for (const [rName, rNode] of Object.entries(doc.routes ?? {})) scanRawNode(rNode, `routes.${rName}`, false, scan, 1);
   for (const [tName, tNode] of Object.entries(doc.templates ?? {})) scanRawNode(tNode, `templates.${tName}`, false, scan, 1);
-  for (const [expName, expPages] of Object.entries(doc.experiences ?? {})) {
-    for (const [pageName, pageNode] of Object.entries(expPages ?? {})) {
-      scanRawNode(pageNode, `experiences.${expName}.${pageName}`, false, scan, 1);
+  for (const [expName, expOverride] of Object.entries(doc.experiences ?? {})) {
+    for (const [pageName, pageVal] of Object.entries(expOverride?.pages ?? {})) {
+      if (pageVal && typeof pageVal === 'object' && 'type' in pageVal) {
+        scanRawNode(pageVal, `experiences.${expName}.pages.${pageName}`, false, scan, 1);
+      } else if (pageVal && typeof pageVal === 'object') {
+        const po = pageVal as { tree?: unknown; forms?: Record<string, unknown>; platforms?: Record<string, unknown>; loading?: unknown; failure?: unknown };
+        if (po.tree) scanRawNode(po.tree, `experiences.${expName}.pages.${pageName}.tree`, false, scan, 1);
+        for (const [f, fn] of Object.entries(po.forms ?? {})) scanRawNode(fn, `experiences.${expName}.pages.${pageName}.forms.${f}`, false, scan, 1);
+        for (const [p, pn] of Object.entries(po.platforms ?? {})) scanRawNode(pn, `experiences.${expName}.pages.${pageName}.platforms.${p}`, false, scan, 1);
+      }
+    }
+    for (const [tName, tNode] of Object.entries(expOverride?.templates ?? {})) {
+      scanRawNode(tNode, `experiences.${expName}.templates.${tName}`, false, scan, 1);
+    }
+    for (const [fName, sNode] of Object.entries(expOverride?.shell ?? {})) {
+      scanRawNode(sNode, `experiences.${expName}.shell.${fName}`, false, scan, 1);
     }
   }
 
@@ -768,13 +809,26 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
   const declaredSlots = Object.keys(doc.slots ?? {}).sort();
   const unknownSlots = [
     ...declaredSlots.filter(s => !validSkinSlots.has(s)),
-    ...[...scan.slotsUsed].filter(s => !validNodeSlots.has(s)),
+    ...[...scan.slotsUsed].filter(s => !validNodeSlots.has(s) && !s.startsWith('plugin:')),
   ].sort();
   const slotErrors = unknownSlots.map(s => `Unknown slot ${s}`);
   for (const err of slotErrors) addFinding('error', 'slots', 'slots', err);
-  const experienceKeys = Object.entries(doc.experiences ?? {}).flatMap(([exp, pages]) =>
-    Object.keys(pages ?? {}).map(p => `${exp}/${p}`),
-  ).sort();
+  const experienceKeys = Object.entries(doc.experiences ?? {}).flatMap(([exp, ov]) => [
+    ...Object.keys(ov?.pages ?? {}).map(p => `${exp}/${p}`),
+    ...(ov?.shell ? [`${exp}/shell`] : []),
+  ]).sort();
+
+  const overrideFindings = checkExperienceOverrides(doc, experience => experiencePages(experience));
+  for (const ofind of overrideFindings) {
+    const at = `experiences.${ofind.experience}${ofind.page ? `.${ofind.page}` : ''}${ofind.viewport ? `.${ofind.viewport}` : ''}`;
+    if (ofind.level === 'error') {
+      slotErrors.push(`${at}: ${ofind.message}`);
+      addFinding('error', 'experiences', at, ofind.message);
+    } else {
+      budgetWarnings.push(`${at}: ${ofind.message}`);
+      addFinding('warning', 'experiences', at, ofind.message);
+    }
+  }
 
   const portability = portabilityReport(doc);
   for (const pf of portability) {
@@ -863,6 +917,7 @@ export async function analyzeLoadedDocument(loaded: SkinDocument | ScreenDocumen
       declared: declaredSlots,
       used: [...scan.slotsUsed].sort(),
       experiences: experienceKeys,
+      experienceOverrides: overrideFindings,
       unknown: unknownSlots,
       errors: slotErrors,
     },
@@ -962,6 +1017,11 @@ export async function checkDocument(path: string, options: { json?: boolean } = 
     for (const f of report.findings) { console.log(`    ${f.level === 'error' ? 'FAIL' : 'warn'} ${f.route}: ${f.message}`); if (f.level === 'error') ok = false; }
   }
   if (!printPortability(portabilityReport(doc))) ok = false;
+  for (const f of checkExperienceOverrides(doc, experience => experiencePages(experience))) {
+    const where = `${f.experience}${f.page ? `/${f.page}` : ''}${f.viewport ? ` (${f.viewport})` : ''}`;
+    console.log(`  ${f.level === 'error' ? 'FAIL' : 'warn'} experiences ${where}: ${f.message}`);
+    if (f.level === 'error') ok = false;
+  }
   try {
     const symbols = unknownSymbols(skinTrees(resolveDocument(doc, WIDTHS[0]!, 'en')));
     if (symbols.length) {

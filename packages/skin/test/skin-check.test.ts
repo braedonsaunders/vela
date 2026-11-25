@@ -96,51 +96,82 @@ describe('skin-check JSON report (analyzeDocument / analyzeLoadedDocument)', () 
     expect(report.budgets.portability.some(p => p.row === 'position' && p.level === 'error')).toBe(true);
   });
 
-  test('supports built-in vela experience documents and skin experience overrides', async () => {
-    const velaDoc = {
+  test('supports built-in vela experience documents, velaUseProblems, and skin experience overrides', async () => {
+    const velaDoc: ScreenDocument = {
       schema: 1,
       kind: 'screen',
       owner: 'vela',
       experience: 'listen',
-      renderer: 19,
+      renderer: 20,
       screen: 'listen',
       page: 'index',
       version: '1.0.0',
       title: 'Listen',
       presentation: 'section',
-      sources: {},
+      sources: {
+        now: { from: 'vela.nowPlaying' },
+      },
       tree: {
         type: 'box',
         style: { color: '$ui.ink' },
+        press: { action: 'plugin', args: { name: 'vela.play' } },
         children: [{ type: 'text', text: 'Listen' }],
       },
-    } as unknown as ScreenDocument;
+    };
 
     const screenReport = await analyzeLoadedDocument(velaDoc);
     expect(screenReport.ok).toBe(true);
     expect(screenReport.owner).toBe('vela');
     expect(screenReport.experience).toBe('listen');
+    expect(screenReport.actions.velaUseErrors).toEqual([]);
 
-    const skinWithExperiences = {
+    // Plugin document (no owner) trying to press vela.play or pass literal to vela.title is refused by velaUseProblems
+    const illegalPluginDoc: ScreenDocument = {
       schema: 1,
-      renderer: 19,
+      kind: 'screen',
+      renderer: 20,
+      screen: 'rogue',
+      page: 'index',
+      version: '1.0.0',
+      title: 'Rogue',
+      presentation: 'section',
+      sources: {
+        stolen: { from: 'vela.title', id: 'literal-id' },
+      },
+      tree: {
+        type: 'box',
+        press: { action: 'plugin', args: { name: 'vela.play' } },
+      },
+    };
+
+    const rogueReport = await analyzeLoadedDocument(illegalPluginDoc);
+    expect(rogueReport.ok).toBe(false);
+    expect(rogueReport.actions.velaUseErrors).toContain('source stolen (vela.title) argument id is not a {context.*} hole');
+    expect(rogueReport.actions.velaUseErrors).toContain('a plugin document cannot press the local action vela.play');
+
+    // Skin document with an override of a non-existent built-in page reports checkExperienceOverrides findings
+    const skinWithExperiences: SkinDocument = {
+      schema: 1,
+      renderer: 20,
       id: 'exp-skin',
       name: 'Exp Skin',
       version: '1.0.0',
       swatches: ['#000000'],
       experiences: {
         listen: {
-          index: {
-            type: 'box',
-            style: { color: '$ui.accent' },
+          pages: {
+            nonExistentPage: {
+              type: 'box',
+              style: { color: '$ui.accent' },
+            },
           },
         },
       },
-    } as unknown as SkinDocument;
+    };
 
     const skinReport = await analyzeLoadedDocument(skinWithExperiences);
-    expect(skinReport.ok).toBe(true);
-    expect(skinReport.slots.experiences).toEqual(['listen/index']);
+    expect(skinReport.slots.experiences).toEqual(['listen/nonExistentPage']);
     expect(skinReport.tokens.uiUsed).toContain('accent');
+    expect(skinReport.slots.experienceOverrides?.some(f => f.page === 'nonExistentPage' && f.level === 'error')).toBe(true);
   });
 });
