@@ -60,7 +60,14 @@ export interface Card {
 
 /** A row of cards, in the server's order. */
 export interface Row {
+  /** The server's id for the row as read: it opens the row (/rows/{id}) and may change between
+   * reads (Ether re-mints row ids when the feed recomputes after playback). */
   id: string;
+  /** The server's opaque key for the row, the same across reads, when it sends one. */
+  key?: string;
+  /** What the row was drawn as when a later read re-minted its id, so it is not drawn again from
+   * scratch (drawnAs in discovery/progress). Absent: its key, else its id. */
+  drawnAs?: string;
   name: string;
   /** Why the server placed this row; progress reconciliation uses this instead of its label. */
   purpose: V.Row['purpose'];

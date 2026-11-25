@@ -7,7 +7,7 @@ import { hasPasswordSignIn, hasQuickConnectSignIn } from '../adapter/capabilitie
 import { PlexLink, type PlexLinkState, type PlexProfileChoice } from '../adapter/plex/link';
 import { probeEther, probeServer } from '../adapter/probe';
 import type * as V from '../wire';
-import type { ServerKind, ServerRecord } from '../session/servers';
+import { ServerCredentials, type ServerKind, type ServerRecord } from '../session/servers';
 import { msg, time } from '../i18n';
 import { pageSecure, type VelaPlatform } from './platform';
 import type { Session } from './session';
@@ -353,7 +353,10 @@ export class Servers {
       let record = proven;
       if (!record && typed) record = registry.relocate(typed.id, chosen.name, chosen.origin);
       if (!record) record = registry.add('plex', chosen.name, chosen.origin);
-      await this.session.connection(record.id).credentials.set(chosen.tokens);
+      const credentials = this.session.connection(record.id).credentials;
+      await credentials.set(chosen.tokens);
+      // Kept so this device can switch Plex Home members later; it never reaches the server.
+      if (credentials instanceof ServerCredentials) await credentials.setPlexAccount(chosen.accountToken ?? null);
       this.plexCancel();
       this.session.select(record.id);
       return { id: record.id, error: '' };

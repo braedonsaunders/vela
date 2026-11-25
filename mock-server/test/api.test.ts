@@ -195,6 +195,26 @@ describe('mock server: catalogue and live', () => {
     }
   });
 
+  test('a watch change re-mints Home\'s row ids as Ether does: keys stay, an old id answers 409 cursor_expired', async () => {
+    const before = await get<V.Bootstrap>('/bootstrap');
+    const feed = (bootstrap: V.Bootstrap) => bootstrap.rows.filter((row): row is V.Row => !('kind' in row));
+    const old = feed(before)[0]!;
+    expect(old.key).toBe(old.id.slice(0, old.id.lastIndexOf('~')));
+    expect((await get<V.Row>(`/rows/${encodeURIComponent(old.id)}`)).id).toBe(old.id);
+    const title = feed(before).flatMap(row => row.items).find(item => item.kind === 'title')!;
+    expect((await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: true }, authed(tokens))).status).toBe(200);
+    const after = feed(await get<V.Bootstrap>('/bootstrap'));
+    const fresh = after.find(row => row.key === old.key)!;
+    expect(fresh.id).not.toBe(old.id);
+    expect(new Set(after.map(row => row.id)).has(old.id)).toBe(false);
+    const stale = await call(`/rows/${encodeURIComponent(old.id)}`, { headers: authed(tokens) });
+    expect(stale.status).toBe(409);
+    expect(((await stale.json()) as V.ErrorResponse).error.code).toBe('cursor_expired');
+    expect((await get<V.Row>(`/rows/${encodeURIComponent(fresh.id)}`)).key).toBe(old.key);
+    expect((await call('/rows/no-such-row', { headers: authed(tokens) })).status).toBe(404);
+    await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: false }, authed(tokens));
+  });
+
   test('VELA_MOCK_CHANNELS sizes the lineup', async () => {
     const page = await get<V.Page<V.Channel>>('/live/channels?limit=100');
     expect(page.items).toHaveLength(CHANNELS);
@@ -332,6 +352,32 @@ describe('mock server: catalogue and live', () => {
     const refused = await post(`/sessions/${plan.sessionId}/commands`, { ...command, versionId: unavailable.id, sourceGeneration: next.sourceGeneration, seekGeneration: next.seekGeneration, idempotencyKey: key() }, authed(tokens));
     expect(refused.status).toBe(409);
     expect((await refused.json() as V.ErrorResponse).error).toMatchObject({ class: 'source', code: 'version_unavailable' });
+  });
+
+  test.skipIf(!mediaGenerated)('the playing release rides on plans, snapshots and events, and a failover publishes a newer revision', async () => {
+    const versions = await get<V.TitleVersions>('/titles/title-1-3/versions');
+    const [auto, top, web] = versions.versions;
+    const start = (versionId: string) => post('/playback', {
+      titleId: versions.titleId, versionId, idempotencyKey: key(),
+      client: { device, protocolVersions: [0], containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: true, mse: true },
+    }, authed(tokens)).then(response => response.json() as Promise<V.PlaybackPlan>);
+    // Auto stays the choice; the top release, a row of its own, is what plays.
+    const plan = await start(auto!.id);
+    expect(plan.selectedVersionId).toBe(auto!.id);
+    expect(plan.playingVersionId).toBe(top!.id);
+    expect(plan.playingLabel).toBe(top!.label);
+    const snapshot = await get<V.SessionSnapshot>(`/sessions/${plan.sessionId}`);
+    expect(snapshot).toMatchObject({ playingVersionId: top!.id, playingLabel: top!.label });
+    const failed = await fetch(`${mock.url}/__admin/failover`, { method: 'POST' }).then(response => response.json()) as { sessionId: string; revision: number; playingVersionId: string }[];
+    const moved = failed.find(entry => entry.sessionId === plan.sessionId)!;
+    expect(moved.revision).toBeGreaterThan(plan.revision);
+    expect(moved.playingVersionId).toBe(web!.id);
+    const after = await get<V.SessionSnapshot>(`/sessions/${plan.sessionId}`);
+    expect(after.plan).toMatchObject({ selectedVersionId: auto!.id, playingVersionId: web!.id, playingLabel: web!.label });
+    expect(after.playingLabel).toBe(web!.label);
+    // Choosing the top release's own row plays exactly it.
+    const forced = await start(top!.id);
+    expect(forced).toMatchObject({ selectedVersionId: top!.id, playingVersionId: top!.id });
   });
 
   test('bootstrap-only delay leaves independent library reads responsive', async () => {

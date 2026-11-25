@@ -47,7 +47,12 @@ class VelaPlayerModule : Module() {
 
     // Music, audiobooks and podcasts: one Media3 player for the app in the media session
     // (modules/vela-player/src/audio.ts). Its status and the system's media commands arrive as onAudio.
-    Events("onAudio")
+    // onNetwork: the network became metered or unmetered (NetworkMetering), for the streaming cap.
+    Events("onAudio", "onNetwork")
+    Function("networkMetered") {
+      NetworkMetering.changed = { metered -> sendEvent("onNetwork", mapOf("metered" to metered)) }
+      NetworkMetering.metered(appContext.reactContext)
+    }
 
     AsyncFunction("audioLoad") { request: Map<String, Any?> ->
       val context = appContext.reactContext ?: throw IllegalStateException("Player context unavailable")
@@ -120,6 +125,9 @@ class VelaPlayerModule : Module() {
       }
       Prop("tile") { view: VelaPlayerView, tile: Int? ->
         view.setTile(tile)
+      }
+      Prop("videoFill") { view: VelaPlayerView, fill: Boolean? ->
+        view.setVideoFill(fill ?: false)
       }
       Prop("metadata") { view: VelaPlayerView, metadata: Map<String, Any?>? ->
         view.setMetadata(metadata)

@@ -3,6 +3,7 @@
 // Pure functions over Plex's own metadata shapes.
 import type * as V from '../../wire';
 import { photoFacts } from '../jellyfin/media';
+import { skipMarkers } from '../../protocol/markers';
 
 type Node = Record<string, any>;
 
@@ -45,6 +46,55 @@ function count(n: unknown, key: 'childCount' | 'index' | 'disc' = 'childCount') 
 
 /** Plex names DTS audio `dca` (DTS-HD MA `dca-ma`); the protocol's FFmpeg-style codec token for it is `dts`. */
 export const decoderAudioCodec = (codec: string) => codec === 'dca' || codec === 'dca-ma' ? 'dts' : codec;
+/**
+ * The audio a file plays: the track asked for, else the one Plex selected, else the file's default,
+ * else its first. Its Plex stream id, and its decoder codec: the file's summary `audioCodec` (one
+ * track's) stands in when that track states no codec or there is no audio stream; undefined when neither does.
+ */
+export function playingAudio(streams: Node[], summary: unknown, requestedId?: string): { id?: string; codec?: string } {
+  const audio = streams.filter(s => Number(s.streamType) === 2);
+  const track = (requestedId ? audio.find(s => String(s.id) === requestedId) : undefined) ?? audio.find(s => s.selected) ?? audio.find(s => s.default) ?? audio[0];
+  const codec = track?.codec || summary;
+  return { ...(track?.id != null ? { id: String(track.id) } : {}), ...(codec ? { codec: decoderAudioCodec(String(codec)) } : {}) };
+}
+
+/** A file's id among its title's media, as a start's `versionId` (or `mediaSourceId`) names it. */
+export const mediaId = (media: Node, index: number) => String(media.id ?? index);
+
+const RESOLUTIONS: Record<string, NonNullable<V.VersionItem['resolution']>> = { '4k': '4K', '1080': '1080p', '720': '720p', '576': '576p', '480': '480p', sd: 'SD' };
+const TRANSFERS: Record<string, NonNullable<V.VersionItem['dynamicRange']>> = { smpte2084: 'hdr10', 'arib-std-b67': 'hlg', bt709: 'sdr' };
+const RANGE_NAMES: Record<string, string> = { dv: 'Dolby Vision', hdr10: 'HDR10', hlg: 'HLG' };
+/** Plex counts channels (8); versions name the layout (7.1), for the counts that have only one. */
+const LAYOUTS: Record<string, string> = { 1: '1.0', 2: '2.0', 6: '5.1', 8: '7.1' };
+/** Codec names as the version chips write them; any other codec is shown as Plex names it, in capitals. */
+const CODEC_NAMES: Record<string, string> = { h264: 'H.264', hevc: 'HEVC', av1: 'AV1', aac: 'AAC', ac3: 'Dolby Digital', eac3: 'Dolby Digital+', truehd: 'TrueHD', dts: 'DTS', dca: 'DTS', dcama: 'DTS-HD MA' };
+const codecName = (codec: string) => CODEC_NAMES[codec.toLowerCase().replace(/[^a-z0-9]/g, '')] ?? codec.toUpperCase();
+/**
+ * One of a title's files as a version to choose: what Plex states about it (resolution, the video
+ * stream's Dolby Vision profile or colour transfer, codecs, channels, size, and its optimized-copy
+ * flag, `proxyType` 42). The first file is the one Plex plays by default; one without a part has
+ * nothing to play.
+ */
+export function plexVersion(media: Node, index: number): V.VersionItem {
+  const parts: Node[] = media.Part ?? [];
+  const video = (parts[0]?.Stream ?? []).find((s: Node) => Number(s.streamType) === 1);
+  const resolution = RESOLUTIONS[String(media.videoResolution ?? '').toLowerCase()];
+  const dynamicRange = video?.DOVIProfile !== undefined ? 'dv' : TRANSFERS[String(video?.colorTrc ?? '')];
+  const audioCodec = media.audioCodec ? decoderAudioCodec(String(media.audioCodec)) : undefined;
+  const channels = LAYOUTS[String(media.audioChannels ?? '')];
+  const sizes = parts.map(p => Number(p.size));
+  const sizeBytes = sizes.length && sizes.every(n => n > 0) ? sizes.reduce((a, b) => a + b, 0) : undefined;
+  const label = [
+    [resolution, RANGE_NAMES[dynamicRange ?? ''], media.videoCodec && codecName(String(media.videoCodec))].filter(Boolean).join(' '),
+    Number(media.proxyType) === 42 ? 'Optimized' : '',
+    [media.audioCodec && codecName(String(media.audioCodec)), channels].filter(Boolean).join(' '),
+  ].filter(Boolean).join(' · ') || `Version ${index + 1}`;
+  return { id: mediaId(media, index), label, recommended: index === 0,
+    ...(resolution ? { resolution } : {}), ...(dynamicRange ? { dynamicRange } : {}), ...(media.videoCodec ? { videoCodec: String(media.videoCodec) } : {}),
+    ...(audioCodec ? { audio: { codec: audioCodec, ...(channels ? { channels } : {}) } } : {}),
+    ...(sizeBytes ? { sizeBytes } : {}), availability: parts.length ? 'instant' : 'unavailable',
+    ...(parts.length ? {} : { note: 'Plex lists no file for this version' }) };
+}
 
 /** Audio Vela plays as the file (what every platform's audio player decodes); the rest is transcoded to MP3. */
 const DIRECT_AUDIO = ['mp3', 'mp4', 'm4a', 'm4b', 'aac', 'flac', 'wav'];
@@ -73,4 +123,102 @@ export function partAt(parts: Node[], seconds: number): { index: number; offset:
   let index = 0;
   for (let i = 0; i < offsets.length; i++) if (seconds >= offsets[i]!) index = i;
   return { index, offset: offsets[index] ?? 0, inPart: Math.max(0, seconds - (offsets[index] ?? 0)) };
+}
+
+/**
+ * What Plex's stream will deliver, from its transcode decision: the output media it describes
+ * (copied or transcoded video, in kb/s). Without an output size there is no reliable target, and
+ * the stream stays out of the numbered qualities.
+ */
+export function decidedQuality(decision: Node): V.QualityTarget | undefined {
+  const media = decidedMedia(decision);
+  const width = Number(media?.width), height = Number(media?.height), bitrate = Number(media?.bitrate);
+  if (!media || !(width > 0) || !(height > 0)) return undefined;
+  const video = String(media.videoCodec ?? '').toLowerCase();
+  return { width, height, bitrate: bitrate > 0 ? bitrate * 1000 : 0,
+    ...(video === 'h264' || video === 'hevc' ? { codec: video } : video ? { videoCodec: video } : {}) };
+}
+
+const chosen = (n: Node) => n.selected === true || n.selected === 1 || n.selected === '1';
+/** The output a transcode decision selected: the media entry Plex marks selected, else its first. */
+export function decidedMedia(decision: Node): Node | undefined {
+  const media: Node[] = decision.Metadata?.[0]?.Media ?? [];
+  return media.find(chosen) ?? media[0];
+}
+/** The part of a decision's output that plays: the one marked selected, else the requested part, else its first. */
+const decidedPart = (media: Node | undefined, index = 0): Node | undefined => media?.Part?.find(chosen) ?? media?.Part?.[index] ?? media?.Part?.[0];
+/** Whether a decision copies the video of the requested part (a remux, while the audio may still be converted). */
+export function copiesVideo(decision: Node, index = 0): boolean {
+  const streams: Node[] = decidedPart(decidedMedia(decision), index)?.Stream ?? [];
+  return streams.find(s => Number(s.streamType) === 1)?.decision === 'copy';
+}
+/** Whether a decision refuses the stream: its general, transcode or MDE code at 2000 or more, as Plezy reads them. */
+export const refusesStream = (decision: Node) => ['generalDecisionCode', 'transcodeDecisionCode', 'mdeDecisionCode'].some(key => Number(decision[key]) >= 2000);
+/**
+ * The delivery profiles to ask Plex's HLS for, in order: fMP4 segments with the H.264/HEVC and
+ * AAC/AC-3/E-AC-3 the client declares for MP4, then, for a client whose HLS route takes MPEG-TS
+ * (native HLS, or the web player's packet route on a page that declares its WebGPU original-file
+ * engine; the MSE route takes fMP4 only), MPEG-TS with H.264 and AAC, each with the client's
+ * bitrate limit. They go in the query, as a player's media requests carry only a fixed set of
+ * headers. None for a client that can claim neither; its request stays as it was.
+ */
+export function plexStreamProfiles(client: V.ClientCapabilities): Record<string, string>[] {
+  const limit = client.maxBitrate ? `+add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=${Math.floor(client.maxBitrate / 1000)}&replace=true)` : '';
+  const profile = (container: string, video: string[], audio: string[]) => ({ 'X-Plex-Client-Profile-Name': 'Generic',
+    'X-Plex-Client-Profile-Extra': `add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=${container}&segmentContainer=${container}&videoCodec=${video.join(',')}&audioCodec=${audio.join(',')}&replace=true)${limit}`,
+    segmentContainer: container, directStreamAudio: '1' });
+  const video = ['h264', 'hevc'].filter(c => client.videoCodecs.includes(c)), audio = ['aac', 'ac3', 'eac3'].filter(c => client.audioCodecs.includes(c));
+  const packet = client.originalPlayback?.webgpu ? client.originalPlayback : undefined;
+  const ts = client.hls && client.videoCodecs.includes('h264') && client.audioCodecs.includes('aac') || !!packet && packet.videoDecoders.includes('h264') && packet.audioDecoders.includes('aac');
+  return [...(client.containers.includes('mp4') && video.length && audio.length ? [profile('mp4', video, audio)] : []), ...(ts ? [profile('mpegts', ['h264'], ['aac'])] : [])];
+}
+/**
+ * Whether a decision's selected output is in the container and codecs its request's video profile
+ * names, where both state them. They are read from the part that plays (its container, its video
+ * row and its selected audio row), and from the media summary only where the part states none: a
+ * server can name another source track there (Ether, the loudest).
+ */
+export function deliversProfile(decision: Node, query: Record<string, string>): boolean {
+  const media = decidedMedia(decision);
+  const target = /add-transcode-target\(type=videoProfile&([^)]*)\)/.exec(query['X-Plex-Client-Profile-Extra'] ?? '')?.[1];
+  if (!media || !target) return true;
+  const asked = new URLSearchParams(target);
+  const named = (key: string, stated: unknown) => !asked.get(key) || !stated || asked.get(key)!.split(',').includes(String(stated).toLowerCase());
+  const part = decidedPart(media, Number(query.partIndex) || 0), streams: Node[] = part?.Stream ?? [];
+  const audio = streams.find(s => Number(s.streamType) === 2 && chosen(s))?.codec ?? media.audioCodec;
+  return named('container', part?.container ?? media.container) && named('videoCodec', streams.find(s => Number(s.streamType) === 1)?.codec ?? media.videoCodec) && named('audioCodec', audio);
+}
+
+/** Sidecar subtitle codecs Plex serves as text, converted to WebVTT on request (`format=vtt`). */
+const TEXT_SIDECARS = ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'];
+export const isTextSidecar = (codec: unknown) => TEXT_SIDECARS.includes(String(codec ?? '').toLowerCase());
+
+/**
+ * How a text sidecar (a stream with a `key`, at `url`: its credential-free address) reaches the
+ * player. ASS and SSA come as the file itself (`{key}.ass`, in UTF-8) when the player names the
+ * codec among its subtitle formats, so its styles and positions survive; anything else, and ASS
+ * for a player that does not draw it, is converted to WebVTT by the server.
+ */
+export function plexSidecar(url: URL, codec: unknown, subtitleFormats: readonly string[]): { url: string; format: 'ass' | 'webvtt' } {
+  const u = new URL(url.href);
+  const name = String(codec ?? '').toLowerCase();
+  if ((name === 'ass' || name === 'ssa') && subtitleFormats.includes(name)) {
+    if (!/\.[a-z0-9]+$/i.test(u.pathname)) u.pathname += '.ass';
+    u.searchParams.set('encoding', 'utf-8');
+    return { url: u.href, format: 'ass' };
+  }
+  u.searchParams.set('format', 'vtt');
+  return { url: u.href, format: 'webvtt' };
+}
+
+/**
+ * A title's intro and credits markers (`includeMarkers=1`: `Marker` ranges in milliseconds) as the
+ * plan carries them; Plex flags the tail credits `final`. Undefined when it has none.
+ */
+export function plexMarkers(n: Node): V.SkipMarker[] | undefined {
+  const flag = (value: unknown) => value === true || value === 1 || value === '1' || value === 'true';
+  const ranges = (Array.isArray(n.Marker) ? n.Marker : []).flatMap((m: Node): V.SkipMarker[] => m.type === 'intro' || m.type === 'credits'
+    ? [{ kind: m.type, startSeconds: Number(m.startTimeOffset) / 1000, endSeconds: Number(m.endTimeOffset) / 1000, ...(flag(m.final) ? { final: true } : {}) }]
+    : []);
+  return skipMarkers(ranges, Number(n.duration) > 0 ? Number(n.duration) / 1000 : undefined);
 }

@@ -104,7 +104,25 @@ async function api(method: string, path: string, body?: object): Promise<Documen
     return text ? JSON.parse(text) : null;
   }
 }
-class ApiError extends Error { constructor(readonly status: number, message: string) { super(message); } }
+export class ApiError extends Error { constructor(readonly status: number, message: string) { super(message); } }
+
+/**
+ * A build that has just turned VALID can still be unknown, for a minute or so, to the endpoints that
+ * add it to a group or submit it ("404 ... There is no resource of type 'builds'"). Runs `request`
+ * again after each delay (75 s in all by default); any other error, or the last 404, is thrown.
+ */
+export async function retryFreshBuild<T>(request: () => Promise<T>,
+  { delays = [5_000, 10_000, 15_000, 20_000, 25_000], sleep = (ms: number) => Bun.sleep(ms) }: { delays?: number[]; sleep?: (ms: number) => Promise<unknown> } = {}): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request();
+    } catch (error) {
+      const fresh = error instanceof ApiError && error.status === 404 && /no resource of type 'builds'/.test(error.message);
+      if (!fresh || attempt >= delays.length) throw error;
+      await sleep(delays[attempt]);
+    }
+  }
+}
 const list = async (path: string): Promise<Resource[]> => {
   const out: Resource[] = [];
   for (let next: string | undefined = path; next;) {
@@ -262,14 +280,14 @@ async function distribute(version: string, build: string, platforms: string[], w
     if (existing) await api('PATCH', `/v1/betaBuildLocalizations/${existing.id}`, { data: { type: 'betaBuildLocalizations', id: existing.id, attributes: { whatsNew } } });
     else await api('POST', '/v1/betaBuildLocalizations', { data: { type: 'betaBuildLocalizations', attributes: { locale, whatsNew }, relationships: { build: ref('builds', b.id) } } });
     // The internal group has every build already (hasAccessToAllBuilds); adding is harmless when it does not.
-    if (!internal.attributes.hasAccessToAllBuilds) await api('POST', `/v1/betaGroups/${internal.id}/relationships/builds`, { data: [{ type: 'builds', id: b.id }] });
+    if (!internal.attributes.hasAccessToAllBuilds) await retryFreshBuild(() => api('POST', `/v1/betaGroups/${internal.id}/relationships/builds`, { data: [{ type: 'builds', id: b.id }] }));
     console.log(`asc: ${platform} ${version} (${build}) is in "${INTERNAL_GROUP}"`);
     if (internalOnly || !complete) continue;
-    await api('POST', `/v1/betaGroups/${external.id}/relationships/builds`, { data: [{ type: 'builds', id: b.id }] });
+    await retryFreshBuild(() => api('POST', `/v1/betaGroups/${external.id}/relationships/builds`, { data: [{ type: 'builds', id: b.id }] }));
     const submitted = await one(`/v1/builds/${b.id}/betaAppReviewSubmission`).catch(() => null);
     if (!submitted) {
       try {
-        await api('POST', '/v1/betaAppReviewSubmissions', { data: { type: 'betaAppReviewSubmissions', relationships: { build: ref('builds', b.id) } } });
+        await retryFreshBuild(() => api('POST', '/v1/betaAppReviewSubmissions', { data: { type: 'betaAppReviewSubmissions', relationships: { build: ref('builds', b.id) } } }));
         console.log(`asc: ${platform} ${version} (${build}) submitted for Beta App Review`);
       } catch (error) {
         // A later build of an approved version is usually reviewed automatically; Apple says so here.

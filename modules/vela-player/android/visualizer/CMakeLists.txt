@@ -1,0 +1,6 @@
+find_package(ReactAndroid REQUIRED CONFIG)
+find_package(hermes-engine REQUIRED CONFIG)
+add_library(vela_visualizer SHARED analyser.cpp engine.cpp executor.cpp jni.cpp)
+target_compile_features(vela_visualizer PRIVATE cxx_std_20)
+target_compile_options(vela_visualizer PRIVATE -O2 -fexceptions -frtti)
+target_link_libraries(vela_visualizer ReactAndroid::jsi hermes-engine::hermesvm GLESv3 android log)

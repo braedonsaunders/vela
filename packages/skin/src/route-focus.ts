@@ -11,6 +11,7 @@
 import { createContext, useContext, useMemo } from 'react';
 import { Dimensions, Platform, TVEventHandler } from 'react-native';
 import type { Focusable } from './escape';
+import { viewerScrolledSince } from './opening-scroll';
 
 export interface RouteFocus {
   /** A press button of the route was drawn. */
@@ -32,10 +33,10 @@ function listen(): void {
   });
 }
 
-/** The route's first focus, for SkinRoute to provide (TV only; null elsewhere). */
-export function useRouteFocus(): RouteFocus | null {
-  if (Platform.isTV) listen();
-  return useMemo(() => (Platform.isTV ? firstFocus() : null), []);
+/** The route's first focus for directional clients; native touch leaves focus to the viewer. */
+export function useRouteFocus(enabled = Platform.isTV): RouteFocus | null {
+  if (Platform.isTV && enabled) listen();
+  return useMemo(() => (enabled ? firstFocus() : null), [enabled]);
 }
 
 export function useRouteFocusContext(): RouteFocus | null {
@@ -72,13 +73,40 @@ function onFirstScreen(target: Focusable, answer: (visible: boolean) => void): v
   });
 }
 
+/** Whether the viewer has pressed or swiped on the remote since `time` (TV; never elsewhere). */
+export function viewerPressedSince(time: number): boolean {
+  if (Platform.isTV) listen();
+  return lastViewerPress > time;
+}
+
 /** Whether the viewer has pressed or swiped since a route opened (not the press that opened it). */
 function pressedSince(opened: number): boolean {
   return lastViewerPress > opened + OPENING_PRESS_MS;
 }
 
-function move(target: Focusable): void {
-  if (target.requestTVFocus) target.requestTVFocus();
+/** A remote press, or on the web a wheel, touch, press or scrolling key: the viewer has taken over
+ * the opening page, so its first focus is not asked for again (nor the page pulled back up). */
+function viewerMovedSince(opened: number): boolean {
+  return pressedSince(opened) || viewerScrolledSince(opened);
+}
+
+function move(target: Focusable, opened: number): void {
+  if (Platform.OS === 'web') {
+    // Browser focus normally scrolls the opening Resume/Play control toward the centre. Keep the
+    // detail artwork and title at the top while still placing keyboard focus on the action; a
+    // page the viewer has already moved (wheel, trackpad, touch, scrolling keys) is left where
+    // they put it.
+    (target as Focusable & { focus?(options?: FocusOptions): void }).focus?.({ preventScroll: true });
+    requestAnimationFrame(() => {
+      if (viewerScrolledSince(opened)) return;
+      const active = document.activeElement;
+      const route = active?.closest('[role="dialog"], main');
+      if (!route) return;
+      for (const element of Array.from(route.querySelectorAll<HTMLElement>('*'))) {
+        if (element.scrollTop) element.scrollTop = 0;
+      }
+    });
+  } else if (target.requestTVFocus) target.requestTVFocus();
   else target.focus?.();
 }
 
@@ -95,13 +123,13 @@ function firstFocus(): RouteFocus {
   const focus = (target: Focusable) => {
     if (!open()) return;
     settle();
-    move(target);
+    move(target, opened);
     // A route that opens with a motion (the title card fades and rises in) cannot take focus while
     // it is still all but transparent: the engine refuses it and falls back to whatever it likes
     // (the card's close button). Asked again once the motion has settled, unless the viewer has
     // pressed something meanwhile.
     setTimeout(() => {
-      if (!pressedSince(opened)) move(target);
+      if (!viewerMovedSince(opened)) move(target, opened);
     }, SETTLED_MS);
   };
   // Measured once laid out; a control off the first screen is passed over.

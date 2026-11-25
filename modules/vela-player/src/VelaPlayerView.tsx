@@ -38,7 +38,9 @@ interface NativeModule {
   setMediaAccess(access: NativeMediaAccess | null): void;
   claimPlayPause?(claimed: boolean): void;
   pictureInPicture?(): boolean;
+  networkMetered?(): boolean;
   addListener?(event: 'onClaimedPlayPause', listener: () => void): { remove(): void };
+  addListener?(event: 'onNetwork', listener: (event: { metered?: boolean }) => void): { remove(): void };
 }
 
 interface NativeViewProps {
@@ -51,6 +53,7 @@ interface NativeViewProps {
   command?: Command;
   ambient?: boolean;
   tile?: number;
+  videoFill?: boolean;
   serverError?: Failure | null;
   onSnapshot?: (event: NativeSyntheticEvent<Snapshot>) => void;
   onError?: (event: NativeSyntheticEvent<Failure>) => void;
@@ -86,6 +89,20 @@ export function claimPlayPause(onPress: () => void): () => void {
  * foreground but its picture is still on screen, so a watch goes on. Read as the app leaves the foreground. */
 export const pictureInPicture = (): boolean =>
   Platform.OS === 'android' && (nativeModule.pictureInPicture?.() ?? false);
+
+/** Whether the device's network is metered now: mobile data, a personal hotspot or Low Data Mode
+ * (Apple), a metered network (Android). Apple TV and Android TV report unmetered unless the system
+ * says otherwise. */
+export const networkMetered = (): boolean => nativeModule.networkMetered?.() ?? false;
+
+/** Read the current network after subscribing so its first update cannot be missed. */
+export function onNetwork(listener: (metered: boolean) => void): () => void {
+  const subscription = nativeModule.networkMetered
+    ? nativeModule.addListener?.('onNetwork', event => listener(event.metered === true))
+    : undefined;
+  listener(networkMetered());
+  return () => subscription?.remove();
+}
 
 let accessGeneration = 0;
 let preparationSequence = 0;
@@ -193,6 +210,7 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     command: sent.current,
     ambient: props.ambient,
     tile: props.tile,
+    videoFill: props.videoFill === true,
     serverError: props.serverError ? { ...props.serverError, message: redactMediaError(props.serverError.message) } : null,
     onSnapshot: forward(props.onSnapshot),
     onError: forward<Failure>(error => props.onError?.({ ...error, message: redactMediaError(error.message) })),

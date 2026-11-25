@@ -7,7 +7,8 @@ import { hasSubtitleSearch, type SubtitleLanguages, type SubtitleSearchResult } 
 import { deviceLanguages, type SubtitleLanguage } from '../subtitle-languages';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
-import { hasEventStream, hasLibraryLive, hasTrickplaySheets, hasVersions } from '../adapter/capabilities';
+import { hasEventStream, hasLibraryLive, hasTrickplaySheets, hasUnloadStop, hasVersions, type UnloadRequest } from '../adapter/capabilities';
+import type { ServerAdapter } from '../adapter';
 import type { TrickplayFrame } from '../protocol/trickplay';
 import { TrickplayCache } from './trickplay';
 import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-retry';
@@ -19,7 +20,9 @@ import { randomId } from '../protocol/id';
 import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
 import { VelaError } from '../adapter/errors';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
+import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
+import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
@@ -103,7 +106,12 @@ interface Intent {
   run: object;
   target: PlaybackTarget;
   key: string;
+  /** Asked again under a new key after the server answered with a session that had already ended. */
+  fresh?: boolean;
 }
+
+/** How many sessions this client stopped are remembered (`stoppedSessions`). */
+const STOPPED_REMEMBERED = 32;
 
 const MAX_PREPARATIONS = 30;
 const POLL_SECONDS = 5;
@@ -121,6 +129,17 @@ export class Playback {
   private established = false;
   /** Backoff for asking the server again while a recovery's start requests fail. */
   private recoveryAttempt = 0;
+  /**
+   * Sessions this client stopped, newest last. A start the server answers with one of them (Ether
+   * replayed a just-stopped session, state still `ready`, to a recovery's fresh key) has no session.
+   */
+  private readonly stoppedSessions: string[] = [];
+  /**
+   * Sessions this client opened and has not finished stopping, each with the adapter that opened it
+   * and its latest plan: what a page being unloaded stops (`stopOnUnload`). One leaves once its stop
+   * was answered (or failed), or the server ended it. An attached session is its owner's, never held.
+   */
+  private readonly held = new Map<string, { adapter: ServerAdapter; plan: V.PlaybackPlan }>();
   /** Progress of the current session (stall.ts): when it is stalled, and how many restarts it has had. */
   private stall: StallWatch | undefined;
   /**
@@ -148,14 +167,14 @@ export class Playback {
   private versionsTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** The last progress report in flight, so a stop is followed by a read of what it recorded. */
-  private reporting: Promise<unknown> = Promise.resolve();
+  private reporting: Promise<V.Ack | undefined> = Promise.resolve(undefined);
 
   /** The last position the player reported for the current session. */
   private lastPosition: LastPosition | undefined;
 
   /** The session's scrub thumbnail sheets, and an offer read apart from the plan (`trickplayOffer`). */
   private readonly trickplay = new TrickplayCache();
-  private trickplayOffer: { sessionId: string; offer: V.TrickplayMetadata | null; at: number; reading: boolean } | undefined;
+  private trickplayOffer: { sessionId: string; sourceGeneration: number; offer: V.TrickplayMetadata | null; at: number; reading: boolean } | undefined;
   private readonly trickplayListeners = new Set<() => void>();
 
   /**
@@ -264,6 +283,7 @@ export class Playback {
       // Navigation or a replacement start can finish before the plan request. Release the
       // session it allocated; dropping the reply alone leaks a server playback slot.
       if ('sessionId' in reply) {
+        this.stopped(reply.sessionId);
         try { await connection.adapter.command(reply.sessionId, { kind: 'stop', sourceGeneration: reply.sourceGeneration, seekGeneration: reply.seekGeneration, idempotencyKey: `cancel-${intent.key}` }); } catch { /* Already gone. */ }
       }
       return;
@@ -279,6 +299,11 @@ export class Playback {
       return;
     }
     let plan = connection.plan(reply as V.PlaybackPlan);
+    if (this.deadSession(plan)) {
+      this.startedDead(intent, plan, attempt, preparation);
+      return;
+    }
+    this.hold(connection.adapter, plan);
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried.
@@ -301,8 +326,10 @@ export class Playback {
         plan = this.withLocalTracks(plan);
       }
       if (this.run !== run) {
-        void connection.adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
-          seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {});
+        this.stopped(plan.sessionId);
+        const sessionId = plan.sessionId;
+        void connection.adapter.command(sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
+          seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {}).finally(() => this.held.delete(sessionId));
         return;
       }
     }
@@ -352,6 +379,38 @@ export class Playback {
     if (seconds > 0) this.timer = setTimeout(() => void this.request(intent, attempt + 1, preparation), seconds * 1000);
   }
 
+  /** A start answered with a session that has already ended, or that this client stopped. */
+  private deadSession(plan: V.PlaybackPlan): boolean {
+    return plan.state === 'ended' || this.stoppedSessions.includes(plan.sessionId);
+  }
+
+  /** Remember a session this client stops (before the stop is sent: it may land unanswered). */
+  private stopped(sessionId: string): void {
+    if (!sessionId || this.stoppedSessions.includes(sessionId)) return;
+    this.stoppedSessions.push(sessionId);
+    if (this.stoppedSessions.length > STOPPED_REMEMBERED) this.stoppedSessions.shift();
+  }
+
+  /**
+   * The server answered a start with a session that cannot play (`deadSession`): no playable session
+   * was started. It is asked once more under a new key; a second such answer is the start's failure,
+   * a recovery's included (no further restarts), and the viewer is told.
+   */
+  private startedDead(intent: Intent, plan: V.PlaybackPlan, attempt: number, preparation: number): void {
+    console.warn(`Vela playback: the server answered a start with session ${plan.sessionId}, which has already ended${intent.fresh ? '; giving up' : '; asking again'}`);
+    if (!intent.fresh) {
+      void this.request({ ...intent, key: `${intent.key}-fresh`, fresh: true }, attempt, preparation);
+      return;
+    }
+    this.recovering = false;
+    this.established = false;
+    this.abandoned = null;
+    this.stall = undefined;
+    this.watch = undefined;
+    this.patch({ phase: 'failed', plan: null, sessionId: '', error: 'The server answered with a session that had already ended',
+      errorCode: 'session_ended', errorClass: 'transient', retryAfterSeconds: 0, retryAttempt: 0, versions: null, live: null });
+  }
+
   /** Follow the session until it ends or playback stops: events when the server streams them, else snapshots. */
   private followSession(run: object, connection: Connection, sessionId: string): void {
     const controller = new AbortController();
@@ -377,7 +436,7 @@ export class Playback {
     const adapter = connection.adapter;
     this.followNow = hasEventStream(adapter) ? undefined : id => {
       if (id !== sessionId || this.run !== run || controller.signal.aborted) return;
-      void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(snapshot.plan)); }).catch(() => undefined);
+      void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(withPlaying(snapshot.plan, snapshot))); }).catch(() => undefined);
     };
     const loop = async () => {
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
@@ -393,7 +452,7 @@ export class Playback {
           }
           const snapshot = await adapter.sessionSnapshot(sessionId);
           if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
-          show(present(snapshot.plan));
+          show(present(withPlaying(snapshot.plan, snapshot)));
           await delay(POLL_SECONDS * 1000, controller.signal);
         } catch {
           if (!controller.signal.aborted) this.recover(sessionId);
@@ -458,11 +517,13 @@ export class Playback {
         return;
       }
       if (old) {
+        this.stopped(old.sessionId);
         try {
           const connection = await this.session.ready();
           if (this.run !== intent.run) return;
           await this.send(connection, old.sessionId, { kind: 'stop', sourceGeneration: old.sourceGeneration,
             seekGeneration: old.seekGeneration, idempotencyKey: `recover-stop-${old.sessionId}` });
+          this.held.delete(old.sessionId);
         } catch { /* Missing sessions are already released; retry cleanup after connectivity returns. */ }
       }
       if (this.run !== intent.run) return;
@@ -479,11 +540,19 @@ export class Playback {
       const connection = await this.session.ready();
       await this.session.negotiate(connection.adapter);
       const reply = await connection.adapter.startPlayback(request);
-      return 'sessionId' in reply ? connection.plan(reply) : reply;
+      if (!('sessionId' in reply)) return reply;
+      // Its owner stops it through `command`; until then a page being unloaded stops it too.
+      const plan = connection.plan(reply);
+      if (plan.state !== 'ended') this.hold(connection.adapter, plan);
+      return plan;
     },
     command: async (sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> => {
       const connection = await this.session.ready();
-      return connection.plan(await this.send(connection, sessionId, command));
+      try {
+        const plan = connection.plan(await this.send(connection, sessionId, command));
+        this.refreshHeld(plan);
+        return plan;
+      } finally { if (command.kind === 'stop') this.held.delete(sessionId); }
     },
     sessionSnapshot: async (sessionId: string): Promise<V.SessionSnapshot> => {
       const connection = await this.session.ready();
@@ -591,7 +660,9 @@ export class Playback {
       sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
       idempotencyKey: this.session.key(),
     }));
-    if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: next, error: '' });
+    const now = this.box.get().playback;
+    // A restart (stall recovery) asks for the file now playing, not the one first asked for.
+    if (now.sessionId === sessionId) this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     return next;
   }
 
@@ -722,6 +793,8 @@ export class Playback {
     });
     if (!('sessionId' in reply)) return null;
     const plan = connection.plan(reply as V.PlaybackPlan);
+    if (this.deadSession(plan)) return null;
+    this.hold(connection.adapter, plan);
     if (epoch !== this.session.epoch) { this.release(plan); return null; }
     return plan;
   }
@@ -738,18 +811,19 @@ export class Playback {
 
   /** Give back a prepared plan that will not play: the server releases its session. */
   release(plan: V.PlaybackPlan): void {
+    this.stopped(plan.sessionId);
     void (async () => {
       const connection = await this.session.ready();
       await connection.adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
         seekGeneration: plan.seekGeneration, idempotencyKey: `release-${plan.sessionId}` });
-    })().catch(() => undefined);
+    })().catch(() => undefined).finally(() => this.held.delete(plan.sessionId));
   }
 
   /**
    * Make a prepared plan the playing one (the engine moved on to it, or the viewer skipped to it).
-   * The session that was playing stops exactly as `stop` stops it, after its last report, and the
-   * prepared one is followed from here on. `finishAfterMs`: a crossfade, where the old session still
-   * plays out for that long (within the server's handover) before it stops.
+   * An accepted end report retires the old audio session. A skip or an unreported end still
+   * needs an explicit stop. For a crossfade, `finishAfterMs` lets the old session play out
+   * within the server's handover before that stop.
    */
   adopt(target: PlaybackTarget, plan: V.PlaybackPlan, options: { finishAfterMs?: number } = {}): void {
     const previous = this.box.get().playback;
@@ -766,7 +840,7 @@ export class Playback {
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     void this.session.ready().then(connection => { if (this.run === run) this.followSession(run, connection, plan.sessionId); }, () => undefined);
     if (old && old.state !== 'ended' && old.sessionId !== plan.sessionId) {
-      const finish = () => void this.finish(old, previous.target, previous.phase, last, reported);
+      const finish = () => void this.finish(old, previous.target, previous.phase, last, reported, true);
       if (options.finishAfterMs && options.finishAfterMs > 0) setTimeout(finish, options.finishAfterMs);
       else finish();
     }
@@ -780,6 +854,7 @@ export class Playback {
     this.end();
     this.watch = undefined;
     this.box.update('playback', () => initialPlayback);
+    if (plan?.state === 'ended') this.held.delete(plan.sessionId);
     if (!plan || plan.state === 'ended') return;
     await this.finish(plan, target, phase, last, this.reporting);
   }
@@ -824,21 +899,28 @@ export class Playback {
     this.abandoned = null;
     this.patch({ phase: 'failed', plan: null, sessionId: '', error: '', errorCode: 'playback_stalled', errorClass: 'transient',
       retryAfterSeconds: 0, retryAttempt: 0, versions: null, live: null });
-    if (plan && plan.state !== 'ended' && !serverEnded) void this.finish(plan, current.target, current.phase, last, this.reporting);
+    if (plan && (plan.state === 'ended' || serverEnded)) this.held.delete(plan.sessionId);
+    else if (plan) void this.finish(plan, current.target, current.phase, last, this.reporting);
   }
 
   /** Release a session that played, then publish the resume state the server kept for it. */
-  private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<unknown>): Promise<void> {
+  private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<V.Ack | undefined>, handedOver = false): Promise<void> {
     let confirmedPosition: number | undefined;
     try {
-      await reported;
+      const ack = await reported;
       const connection = await this.session.ready();
-      await connection.adapter.command(plan.sessionId, {
-        kind: 'stop',
-        sourceGeneration: plan.sourceGeneration,
-        seekGeneration: plan.seekGeneration,
-        idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
-      });
+      const endedOnHandover = handedOver && last?.ended && ack?.accepted;
+      if (!endedOnHandover) {
+        this.stopped(plan.sessionId);
+        try {
+          await connection.adapter.command(plan.sessionId, {
+            kind: 'stop',
+            sourceGeneration: plan.sourceGeneration,
+            seekGeneration: plan.seekGeneration,
+            idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
+          });
+        } finally { this.held.delete(plan.sessionId); }
+      } else this.held.delete(plan.sessionId);
       const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
       if (titleId && plan.purpose !== 'preview') {
         // Some servers return the raw session cursor even though their resume policy drops
@@ -897,6 +979,15 @@ export class Playback {
   }
 
   /**
+   * The episode after `episode` in its series, for the player's Next episode, or null when it is the
+   * last (or its series cannot be read). Read from the server's own title details, whatever its kind.
+   */
+  async nextEpisode(episode: EpisodeRef): Promise<V.Title | null> {
+    const connection = await this.session.ready();
+    return episodeAfter(episode, id => connection.adapter.detail(id));
+  }
+
+  /**
    * The scrub thumbnail at title time `seconds` of the playing session, or null: none offered, no
    * frame there yet, or its sheet still on its way (`onTrickplay` hears when it lands). The image
    * is a `data:` URI; the sheet was read with the session's credentials, which never leave core.
@@ -904,7 +995,7 @@ export class Playback {
   trickplayFrame(sessionId: string, seconds: number): TrickplayFrame | null {
     const { plan } = this.box.get().playback;
     if (!plan || plan.sessionId !== sessionId || plan.live || plan.channelId) return null;
-    const offer = plan.trickplay ?? this.readTrickplayOffer(sessionId);
+    const offer = plan.trickplay ?? this.readTrickplayOffer(sessionId, plan.sourceGeneration);
     if (!offer) return null;
     return this.trickplay.frame(sessionId, plan.sourceGeneration, offer, seconds, async (index, etag, signal) => {
       const connection = await this.session.ready();
@@ -922,11 +1013,13 @@ export class Playback {
     for (const listener of [...this.trickplayListeners]) listener();
   }
 
-  /** The offer of a server that tells it apart from the plan, read now and then while asked for. */
-  private readTrickplayOffer(sessionId: string): V.TrickplayMetadata | null {
-    const held = this.trickplayOffer?.sessionId === sessionId ? this.trickplayOffer : undefined;
+  /** The offer of a server that tells it apart from the plan, read now and then while asked for; a
+   * new source (a version switch) is read afresh. */
+  private readTrickplayOffer(sessionId: string, sourceGeneration: number): V.TrickplayMetadata | null {
+    const current = this.trickplayOffer;
+    const held = current?.sessionId === sessionId && current.sourceGeneration === sourceGeneration ? current : undefined;
     if (held && (held.reading || Date.now() - held.at < TRICKPLAY_OFFER_MS)) return held.offer;
-    const entry = { sessionId, offer: held?.offer ?? null, at: Date.now(), reading: true };
+    const entry = { sessionId, sourceGeneration, offer: held?.offer ?? null, at: Date.now(), reading: true };
     this.trickplayOffer = entry;
     void (async () => {
       let asked = false;
@@ -1004,7 +1097,42 @@ export class Playback {
   }
 
   private patch(change: Partial<PlaybackState>): void {
+    if (change.plan) this.refreshHeld(change.plan);
     this.box.update('playback', playback => ({ ...playback, ...change }));
+  }
+
+  /** A session this client opened, held until its stop is answered (`held`). */
+  private hold(adapter: ServerAdapter, plan: V.PlaybackPlan): void {
+    this.held.set(plan.sessionId, { adapter, plan });
+  }
+
+  /** A held session's newer plan (its generations, or the server ending it) replaces the one held. */
+  private refreshHeld(plan: V.PlaybackPlan): void {
+    const held = this.held.get(plan.sessionId);
+    if (held) held.plan = plan;
+  }
+
+  /**
+   * The page is going away (the web's pagehide: a tab closed or reloaded, or the page navigated
+   * away): every session this client still holds, playing, prepared, being recovered or still
+   * being stopped, is stopped best-effort, now. Nothing can be awaited by then, so each adapter
+   * builds its stop requests synchronously and `send` fires them without waiting (fetch keepalive).
+   * A session whose adapter cannot leaves it to the server's timeout. Returns the requests sent.
+   */
+  stopOnUnload(send: (request: UnloadRequest) => void): number {
+    let sent = 0;
+    for (const [sessionId, { adapter, plan }] of [...this.held]) {
+      this.held.delete(sessionId);
+      if (plan.state === 'ended') continue;
+      this.stopped(sessionId);
+      let requests: UnloadRequest[] = [];
+      try { requests = hasUnloadStop(adapter) ? adapter.unloadStop(sessionId, { sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration }) : []; }
+      catch { /* Nothing to stop it with: the server's timeout ends it. */ }
+      for (const request of requests) {
+        try { send(request); sent++; } catch { /* Best-effort. */ }
+      }
+    }
+    return sent;
   }
 }
 

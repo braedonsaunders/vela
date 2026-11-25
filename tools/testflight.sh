@@ -138,6 +138,11 @@ for platform in $platforms; do
   fi || { tail -20 "$build/$platform-prebuild.log"; echo "testflight: $platform prebuild failed; the log is $build/$platform-prebuild.log" >&2; exit 1; }
   plist=$root/apps/vela/ios/Vela/Info.plist
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" -c "Set :CFBundleVersion $number" "$plist"
+  # The Apple TV Top Shelf extension carries the app's version and build number (ITMS-90473).
+  extension_plist=$root/apps/vela/ios/VelaTopShelfExtension/VelaTopShelfExtension-Info.plist
+  if [ -f "$extension_plist" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" -c "Set :CFBundleVersion $number" "$extension_plist"
+  fi
   rm -rf "$archive"
   # shellcheck disable=SC2046
   if ! (cd "$root/apps/vela/ios" && locked xcodebuild -workspace Vela.xcworkspace -scheme Vela -configuration Release \
@@ -147,10 +152,20 @@ for platform in $platforms; do
     echo "testflight: $platform archive failed; the log is $log" >&2
     exit 1
   fi
+  appdir=$archive/Products/Applications/Vela.app
+  # Upload validation refuses an arm64 extension whose Info.plist does not require arm64 ("Invalid
+  # Bundle ... must include the arm64 value for the UIRequiredDeviceCapabilities key"); a local export
+  # does not run that check, so make it here.
+  for extension in "$appdir"/PlugIns/*.appex; do
+    [ -d "$extension" ] || continue
+    if ! plutil -extract UIRequiredDeviceCapabilities json -o - "$extension/Info.plist" 2>/dev/null | grep -q '"arm64"'; then
+      echo "testflight: $(basename "$extension") does not list arm64 in UIRequiredDeviceCapabilities; App Store validation refuses it" >&2
+      exit 1
+    fi
+  done
   # FFmpegBuild 3.15.0's frameworks claim MinimumOSVersion 26.0 in their Info.plist although their
   # binaries target 16.0; App Store validation refuses a framework that claims more than the app
   # (ITMS-90208). Lower the claim to the app's and re-sign; the export signs everything again anyway.
-  appdir=$archive/Products/Applications/Vela.app
   minimum=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$appdir/Info.plist")
   identity=$(codesign -dvv "$appdir" 2>&1 | sed -n 's/^Authority=//p' | head -1)
   patched=0

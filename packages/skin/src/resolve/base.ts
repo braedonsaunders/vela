@@ -4,7 +4,7 @@ import { episodePage } from '../../../protocol/episode-page';
 // wears it in its own colours until it draws a route of its own. Its parts live in vela-base/.
 import type { BoxNode, Node, SkinDocument } from '../../../protocol/skin';
 import { auth } from './vela-base/auth';
-import { card, gridCard, heroCard, heroRow, libraryRow, relatedRow, row, tileCard, tileRow, wideCard, wideRow } from './vela-base/cards';
+import { card, gridCard, heroCard, heroRow, libraryRow, relatedRow, row, seeAll, tileCard, tileRow, wideCard, wideRow } from './vela-base/cards';
 import { collection } from './vela-base/collection';
 import { home } from './vela-base/home';
 import { library, libraryViews, libraryFilters, libraryAlternative } from './vela-base/library';
@@ -174,7 +174,7 @@ export const velaBase: SkinDocument = {
       still: { keyframes: 'dissolve', duration: 240 },
     },
   },
-  templates: { velaSummary: summary, velaCastPerson: castPerson, velaPersonCard: gridCard, velaPersonClose: (((title as BoxNode).children![0] as BoxNode).children![0] as BoxNode).children![0]!, velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaCardHero: heroCard, velaCardWide: wideCard, velaCardTile: tileCard, velaRow: row, velaRowHero: heroRow, velaRowWide: wideRow, velaRowTile: tileRow, velaLibraryRow: libraryRow, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
+  templates: { velaSummary: summary, velaCastPerson: castPerson, velaPersonCard: gridCard, velaPersonClose: (((title as BoxNode).children![0] as BoxNode).children![0] as BoxNode).children![0]!, velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaCardHero: heroCard, velaCardWide: wideCard, velaCardTile: tileCard, velaRow: row, velaRowHero: heroRow, velaRowWide: wideRow, velaRowTile: tileRow, velaSeeAll: seeAll, velaLibraryRow: libraryRow, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
   slots: { shell, home },
   routes: { title: episodePage(title), person: personRoute, library, auth, collection, search },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.

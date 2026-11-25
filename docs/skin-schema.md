@@ -61,3 +61,26 @@ A row in `home.rows`, `library.rows` or `detail.related` binds these keys beside
 The retired wire field `style` is not read. A plugin's surface row (a `homeRow` surface) sits in
 the list where the page put it, with no items; the renderer draws the surface's document in its
 place on Home and library pages (or nothing when this client may not draw it).
+
+Rows with a See all destination always end with a focusable See all card on every client. Row
+headings are pointer conveniences only and never enter keyboard, D-pad or remote focus order.
+Skins style the end card by overriding the inherited `velaSeeAll` template; its style, viewport
+variants, hover and focus layers are retained while Vela supplies the row-opening behavior and
+accessible label. It should use `align-self: stretch` so it matches the shelf's card height.
+
+## Music visualizer
+
+Now Playing and its visualizer are host widgets drawn in the skin's `ui` look; they are not
+document nodes. The visualizer's style hooks are the parts `visualizer.scenePicker`,
+`visualizer.sceneChip` (every choice in the picker, Off included), `visualizer.sceneChipActive`
+and `visualizer.caption` (`apps/vela/src/visualizer/parts.ts`). The host supplies them through
+`VisualizerPartsContext`; skin documents cannot set them yet.
+
+Whether the visualizer runs is the viewer's choice, kept per profile on the device beside the
+scene (`visualizer.enabled.<profile>` and `visualizer.scene.<profile>` preferences, where
+`<profile>` is `["server","viewer"]`). The viewer turns it off with the picker's first choice,
+Off, or with the Visualizer switch at the top of Now Playing's Sound tab; choosing any scene
+turns it on again. A skin cannot turn it on or off. Off, Now Playing draws the artwork wash
+(`$ui.page` over the item's accent and blurred cover) and no stage is created: no renderer, GPU
+work or audio analysis, and no full-screen entry. Reduce Motion holds a still frame while it is
+on.

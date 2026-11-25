@@ -7,6 +7,7 @@ import { liveSnapshot } from './live';
 import { readPosition, readDuration } from './position';
 import { browserFormat } from './browser-format';
 import { muxedAudioTrack } from '../muxed-audio';
+import { unplayablePaths } from './playability';
 
 export function snapshotHost(context: HostContext): Snapshot {
   const ranges = context.surface.video.buffered;
@@ -207,6 +208,7 @@ export function snapshotHost(context: HostContext): Snapshot {
       context.media.pipeline?.pendingAudioTrackId ??
       null,
     subtitleTrackId: subtitleId,
+    unplayablePaths: unplayablePaths(context),
     failure: context.playback.failure,
   };
 }

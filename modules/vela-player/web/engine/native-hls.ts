@@ -1,11 +1,12 @@
 import { cancelled } from './session';
+import type { MediaFetch } from './media-auth';
 
 /** Resolve once; native ABR must not restart a serial server encoder per rung. */
 export async function nativeMediaPlaylist(
   url: string,
   signal: AbortSignal,
   depth = 0,
-  fetcher: typeof fetch = (...args) => fetch(...args),
+  fetcher: MediaFetch = (...args) => fetch(...args),
 ): Promise<{ url: string; duration: number | null }> {
   if (depth > 1) throw new Error('Nested HLS masters are unsupported');
   const response = await fetcher(url, {

@@ -5,12 +5,14 @@ import { Alert, Label, Pill, Waiting } from '../common/controls';
 import { useLook } from '../common/look';
 import { ProfilePicker } from './connect/plex';
 
-export function PlexProfileDialog({ profiles, currentProfileId, error, onChoose, onRestart, onClose }: {
+export function PlexProfileDialog({ profiles, currentProfileId, error, onChoose, onRestart, onRelink, onClose }: {
   profiles: PlexHomeProfile[];
   currentProfileId: string;
   error: string;
   onChoose(id: string, pin?: string): Promise<void>;
   onRestart(): Promise<void>;
+  /** Plex refused the account this device switches with: only linking Plex again mends it. */
+  onRelink?(): void;
   onClose(): void;
 }) {
   const look = useLook();
@@ -41,8 +43,9 @@ export function PlexProfileDialog({ profiles, currentProfileId, error, onChoose,
           onChoose={(id, pin) => void run(() => onChoose(id, pin))} /> : null}
         {error ? <Alert>{error}</Alert> : null}
         {!profiles.length && !error ? <Waiting>Loading Plex Home profiles…</Waiting> : null}
-        {!profiles.length && error ? <ScrollView contentContainerStyle={{ gap: 12 }}><Pill primary label="Start again" disabled={busy}
-          busy={busy} onPress={() => void run(onRestart)} testID="plex-profile-restart" /></ScrollView> : null}
+        {!profiles.length && error ? <ScrollView contentContainerStyle={{ gap: 12 }}>{onRelink
+          ? <Pill primary label="Link Plex again" disabled={busy} onPress={onRelink} testID="plex-profile-relink" />
+          : <Pill primary label="Start again" disabled={busy} busy={busy} onPress={() => void run(onRestart)} testID="plex-profile-restart" />}</ScrollView> : null}
       </View>
     </View>
   </Modal>;

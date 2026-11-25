@@ -9,6 +9,7 @@ import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
 import { gapJump, timeRanges } from './gap-jump';
 import { fragmentStart, initFacts } from './init-codecs';
+import type { MediaFetch } from './media-auth';
 
 /** The rendition id of a source's own media playlist, when its plan offers no quality ladder. */
 export const STREAM_RENDITION = 'stream';
@@ -136,7 +137,7 @@ export class SegmentPipeline {
     private video: HTMLVideoElement,
     private onRendition: (r: Rendition) => void,
     private refreshPlan: () => void,
-    private readonly fetcher: typeof fetch = (...args) => fetch(...args),
+    private readonly fetcher: MediaFetch = (...args) => fetch(...args),
   ) {}
   dispose() {
     this.audio?.dispose();

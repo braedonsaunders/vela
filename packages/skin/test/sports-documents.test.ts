@@ -155,10 +155,11 @@ describe('the Sports game document', () => {
     const data = await json<Sample>('data-game.json');
     const doc = await json<ScreenDocument>('game.json');
     const key = Object.keys(data.records).find(k => k.startsWith('event:'))!;
-    const records = { ...data.records, [key]: { rev: 2, value: { ...(data.records[key]!.value as object), phase: 'upcoming', state: 'pre', scored: false, start: '2026-11-24T22:00:00.000Z' } } };
+    const records = { ...data.records, [key]: { rev: 2, value: { ...(data.records[key]!.value as object), phase: 'upcoming', state: 'pre', scored: false, start: new Date(Date.now() + 3 * 3_600_000).toISOString() } } };
     const r = resolveScreenDocument(doc, { width: 390, tv: false }, 'en', {});
     const t = texts(r.tree, screenRoot(page(data.sources), k => records[k]), envAt(390));
-    expect(t.some(x => /^Starts \d/.test(x))).toBe(true);
+    // The start is always three hours ahead of the clock, so the line may read "Starts Tomorrow 1:00 AM" near midnight.
+    expect(t.some(x => /^Starts (Today |Tomorrow )?\d/.test(x))).toBe(true);
   });
 
   test('a phone names the teams short', async () => {

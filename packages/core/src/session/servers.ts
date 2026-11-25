@@ -108,6 +108,8 @@ export class ServerCredentials {
     return value ?? null;
   }
   async set(tokens: import('../wire').Tokens | null): Promise<void> {
+    // A session that ends (signed out, refused, the server removed) takes its Plex account with it.
+    if (!tokens) await this.setPlexAccount(null);
     const sessions = this.all();
     if (JSON.stringify(sessions[this.id] ?? null) === JSON.stringify(tokens)) return;
     if (tokens) sessions[this.id] = tokens;
@@ -115,4 +117,27 @@ export class ServerCredentials {
     // Every resource reading credentials re-asks on a write, so an unchanged session is not rewritten.
     this.store.set('vela.server-sessions', JSON.stringify(sessions));
   }
+  private accounts(): Record<string, string> {
+    const raw = this.store.get(PLEX_ACCOUNTS);
+    if (!raw) return {};
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid Plex accounts');
+    return value;
+  }
+  /**
+   * A directly linked Plex server's plex.tv account token, kept beside its session only to list and
+   * switch Plex Home members. It never reaches the server; it goes with the session.
+   */
+  async plexAccount(): Promise<string | null> {
+    const value = this.accounts()[this.id];
+    return typeof value === 'string' && value ? value : null;
+  }
+  async setPlexAccount(token: string | null): Promise<void> {
+    const accounts = this.accounts();
+    if ((accounts[this.id] ?? null) === token) return;
+    if (token) accounts[this.id] = token;
+    else delete accounts[this.id];
+    this.store.set(PLEX_ACCOUNTS, JSON.stringify(accounts));
+  }
 }
+const PLEX_ACCOUNTS = 'vela.plex-accounts';

@@ -40,6 +40,11 @@ modules/vela-player/ios/Frameworks
 .claude/settings.local.json
 /skills/
 
+# e2e reports are local; replay recordings under cache are release-gate inputs.
+/.e2e/*
+!/.e2e/cache/
+!/.e2e/cache/**
+
 # Paths from before the move to apps/, packages/ and modules/ (generated output only)
 client/modules/web/universal/
 client/modules/apple/VelaMedia.xcframework

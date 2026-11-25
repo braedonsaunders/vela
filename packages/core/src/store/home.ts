@@ -5,15 +5,16 @@ import type * as V from '../wire';
 import { libraryExperience } from '../library-presentation';
 import { mediaClass } from '../media';
 import { advertise } from '../adapter/advertise';
-import { VelaError } from '../adapter/errors';
+import { supersededRow, VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
 import { card, entry, feedRow, homeModel, isSurfaceRow } from '../discovery/models';
-import { homeCard, homeWatched, laterProgressRows, progressRow, reconcileHomeProgress, reconcileShelves, recorded, type Watched } from '../discovery/progress';
+import { adoptHome, homeCard, homeWatched, matchRows, progressRow, reconcileShelves, recorded, type Watched } from '../discovery/progress';
 import type { Card, Destination, HomeModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
 import type { Session } from './session';
 import { failed, idle, loading, ready, type Load, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
+import { withReadRetry, type ReadRetryOptions } from './read-retry';
 
 export interface HomeRetry {
   allowed: boolean;
@@ -39,6 +40,10 @@ const PAGE_ITEMS = 20;
 const LIBRARY_PAGES = 100;
 const RECONCILE_RETRIES = 2;
 const RECONCILE_DELAY_MS = 500;
+/** A fresh Home read covers at most this many pages of rows (what the viewer scrolled through). */
+const HOME_PAGES = 10;
+/** A row's next page holding only items already shown reads on, at most this many pages. */
+const ROW_SKIP_PAGES = 5;
 /**
  * After a Home progress read starts, the next one waits this long. Every read issues the server's
  * ranking receipts for what it returns, so stops in a row (skipping through audiobook parts,
@@ -86,6 +91,8 @@ export class Home {
     private readonly slowDelayMs = HOME_SLOW_MS,
     private readonly reconcileDelayMs = RECONCILE_DELAY_MS,
     private readonly reconcileSpacingMs = RECONCILE_SPACING_MS,
+    /** Waits between attempts of a refused fresh read (ReadRetryOptions.sleep); injected by tests. */
+    private readonly retrySleep?: ReadRetryOptions['sleep'],
   ) {
     session.onReset(() => {
       if (this.timer) clearTimeout(this.timer);
@@ -267,9 +274,11 @@ export class Home {
         // the card, a book's reading place) may need a shelf Home does not show yet: Home itself.
         const shown = this.box.get().home.value?.rows.filter(progressRow) ?? [];
         const holding = watched === ANY_PROGRESS ? [] : shown.filter(row => row.items.some(card => card.id === watched.titleId));
-        const read = holding.length ? await this.readShelves(connection, shown) : [];
-        // The shelves that show the title must all have answered; otherwise Home itself.
-        const shelves = holding.every(row => read.some(fresh => fresh.id === row.id)) ? read : [];
+        const read = holding.length ? await this.readShelves(connection, shown) : { rows: [], superseded: false };
+        // The shelves that show the title must all have answered; otherwise Home itself. A shelf
+        // whose id the server no longer knows (it re-minted Home's row ids when the feed
+        // recomputed) means every row id on show is old: Home itself, so none is kept.
+        const shelves = !read.superseded && holding.every(row => read.rows.some(fresh => fresh.id === row.id)) ? read.rows : [];
         if (signal.aborted || generation !== this.reconcileGeneration) return;
         let value: Card | undefined;
         let merge: (home: HomeModel) => HomeModel;
@@ -277,16 +286,11 @@ export class Home {
           value = shelves.flatMap(row => row.items).find(card => card.id === watched.titleId);
           merge = home => reconcileShelves(home, shelves);
         } else {
-          const bootstrap = await connection.adapter.home(true, signal);
+          const fresh = await this.readFresh(connection, signal);
           this.session.check(epoch, 'home progress');
           if (signal.aborted || generation !== this.reconcileGeneration) return;
-          const fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, await connection.images(), this.artWidth());
           value = homeCard(fresh, watched.titleId);
-          // Progress shelves that came with a later page (not in the fresh first page) are read
-          // again one by one; one that cannot be read keeps what it shows.
-          const now = this.box.get().home.value;
-          const later = now ? await this.readShelves(connection, laterProgressRows(now, fresh)) : [];
-          merge = home => reconcileHomeProgress(home, fresh, later);
+          merge = home => adoptHome(home, fresh);
         }
         this.session.check(epoch, 'home progress');
         if (signal.aborted || generation !== this.reconcileGeneration) return;
@@ -299,11 +303,10 @@ export class Home {
           continue;
         }
         if (behind) return;
-        this.box.update('home', home => ({
-          ...home,
-          value: home.value ? merge(home.value) : home.value,
-          progressRevision: home.progressRevision + 1,
-        }));
+        this.box.update('home', home => {
+          const value = home.value ? merge(home.value) : home.value;
+          return { ...home, value, progressRevision: home.progressRevision + 1, ...(value !== home.value ? this.paged(home, value) : {}) };
+        });
         return;
       } catch {
         if (signal.aborted || epoch !== this.session.epoch) return;
@@ -313,12 +316,90 @@ export class Home {
     }
   }
 
-  /** Progress shelves read again one by one; one that cannot be read is left out (it keeps what it shows). */
-  private async readShelves(connection: Connection, rows: Row[]): Promise<Row[]> {
-    if (!rows.length) return [];
-    const read = await Promise.all(rows.map(row => connection.adapter.row(row.id, undefined, PAGE_ITEMS).catch(() => undefined)));
+  /** Progress shelves read again one by one; one that cannot be read is left out (it keeps what it
+   * shows). `superseded`: the server no longer knows one of the ids (404, 409). */
+  private async readShelves(connection: Connection, rows: Row[]): Promise<{ rows: Row[]; superseded: boolean }> {
+    if (!rows.length) return { rows: [], superseded: false };
+    let superseded = false;
+    const read = await Promise.all(rows.map(row => connection.adapter.row(row.id, undefined, PAGE_ITEMS).catch(error => {
+      if (supersededRow(error)) superseded = true;
+      return undefined;
+    })));
     const images = await connection.images();
-    return read.filter((row): row is V.Row => !!row).map(row => feedRow(row, images, this.artWidth()));
+    return { rows: read.filter((row): row is V.Row => !!row).map(row => feedRow(row, images, this.artWidth())), superseded };
+  }
+
+  /**
+   * Home read afresh as the server has it now: its first page, and further pages until as many
+   * rows as Home shows are covered (the viewer scrolled through them), at most HOME_PAGES. A
+   * further page that cannot be read ends the read there; its cursor is kept for the next page.
+   */
+  private async readFresh(connection: Connection, signal: AbortSignal): Promise<HomeModel> {
+    // Ether answers 409 bootstrap_changed (retry allowed) while its feed is being rebuilt, which
+    // is exactly when a re-read happens: asked again on the server's terms before giving up.
+    const bootstrap = await withReadRetry(() => connection.adapter.home(true, signal), { signal, sleep: this.retrySleep });
+    const images = await connection.images();
+    let fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
+    const shown = this.box.get().home.value?.rows.length ?? 0;
+    for (let page = 1; page < HOME_PAGES && fresh.nextCursor && fresh.rows.length < shown; page++) {
+      if (signal.aborted) break;
+      const cursor = fresh.nextCursor;
+      const data = await connection.adapter.rows({ cursor, placement: 'home' }, true).catch(() => undefined);
+      if (!data || data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) break;
+      fresh = { ...fresh, rows: [...fresh.rows, ...this.pageRows(fresh, data.items, images)], nextCursor: data.nextCursor ?? '' };
+    }
+    return fresh;
+  }
+
+  /** A further page of Home's rows: without the heroes' titles and without rows already listed. */
+  private pageRows(model: HomeModel, rows: (V.Row | V.SurfaceRow)[], images: Awaited<ReturnType<Connection['images']>>): Row[] {
+    const featured = new Set(model.hero.map(card => card.id));
+    const known = new Set(model.rows.map(row => row.id));
+    return rows
+      .filter(row => !known.has(row.id) && !!known.add(row.id))
+      .map(row => {
+        if (isSurfaceRow(row)) return feedRow(row, images, this.artWidth());
+        const items = row.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id));
+        return feedRow({ ...row, items }, images, this.artWidth());
+      })
+      // A plugin's surface row has no items of its own; it keeps its place.
+      .filter(row => row.surface || row.items.length > 0);
+  }
+
+  /** Home's paging state for an adopted read: its next page from the new cursor; rows being paged
+   * that are no longer on show (their id was re-minted) are no longer loading. */
+  private paged(home: HomeState, value: HomeModel | undefined): Pick<HomeState, 'moreRows' | 'rowsLoading'> {
+    const ids = new Set(value?.rows.map(row => row.id));
+    return {
+      moreRows: value?.nextCursor ? (home.moreRows === 'loading' ? 'loading' : 'idle') : 'end',
+      rowsLoading: home.rowsLoading.filter(id => ids.has(id)),
+    };
+  }
+
+  /**
+   * The row on show as `row` (an id the server may since have re-minted) in Home read afresh now,
+   * which Home then shows: for a See all whose row answered 404 or 409. Undefined when the fresh
+   * Home has no such row (matched as matchRows does: key, else surface or purpose, name and
+   * library). Concurrent asks share one read.
+   */
+  resolveRow(row: Row): Promise<Row | undefined> {
+    const read = this.resolving ??= this.readResolved().finally(() => { if (this.resolving === read) this.resolving = undefined; });
+    return read.then(rows => rows && [...matchRows([row], rows).keys()][0]);
+  }
+
+  private resolving: Promise<Row[] | undefined> | undefined;
+
+  private async readResolved(): Promise<Row[] | undefined> {
+    const epoch = this.session.epoch;
+    const connection = await this.session.ready();
+    const fresh = await this.readFresh(connection, new AbortController().signal);
+    this.session.check(epoch, 'home rows');
+    this.box.update('home', home => {
+      if (!home.value) return home;
+      const value = adoptHome(home.value, fresh);
+      return value === home.value ? home : { ...home, value, ...this.paged(home, value) };
+    });
+    return fresh.rows;
   }
 
   /** The next page of rows, without the heroes' titles and without rows already shown. */
@@ -337,19 +418,10 @@ export class Home {
       }
       const images = await connection.images();
       this.session.check(epoch, 'home rows');
-      const featured = new Set(model.hero.map(card => card.id));
-      const known = new Set(model.rows.map(row => row.id));
-      const rows = data.items
-        .filter(row => !known.has(row.id) && !!known.add(row.id))
-        .map(row => {
-          if (isSurfaceRow(row)) return feedRow(row, images, this.artWidth());
-          const items = row.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id));
-          return feedRow({ ...row, items }, images, this.artWidth());
-        })
-        // A plugin's surface row has no items of its own; it keeps its place.
-        .filter(row => row.surface || row.items.length > 0);
       this.box.update('home', home => {
-        if (!home.value || home.value.nextCursor !== cursor) return home;
+        // Home was read afresh meanwhile: its own cursor pages on (paged).
+        if (!home.value || home.value.nextCursor !== cursor) return home.moreRows === 'loading' ? { ...home, moreRows: home.value?.nextCursor ? 'idle' : 'end' } : home;
+        const rows = this.pageRows(home.value, data.items, images);
         const value = { ...home.value, rows: [...home.value.rows, ...rows], nextCursor: data.nextCursor ?? '' };
         return { ...home, value, moreRows: data.continuation === 'more' ? 'idle' : 'end' };
       });
@@ -358,46 +430,61 @@ export class Home {
     }
   }
 
-  /** The next items of one row, appended in the server's order. */
-  async rowItems(rowId: string): Promise<void> {
+  /**
+   * The next items of one row, appended in the server's order. A page holding only items already
+   * shown (a row read afresh keeps items the viewer paged to) reads on, a few pages at most. A row
+   * whose id the server no longer knows (404, 409: re-minted) is found again in Home read afresh
+   * (resolveRow), once, and pages on from there.
+   */
+  async rowItems(rowId: string, resolved = false): Promise<void> {
     const state = this.box.get().home;
     const row = state.value?.rows.find(r => r.id === rowId);
     if (!state.value || !row || !row.nextCursor || row.continuation !== 'more' || state.rowsLoading.includes(rowId)) return;
     const epoch = this.session.epoch;
-    const cursor = row.nextCursor;
     const featured = new Set(state.value.hero.map(card => card.id));
     this.setRowLoading(rowId, true);
+    let again: Row | undefined;
     try {
       const connection = await this.session.ready();
-      const data = await connection.adapter.row(rowId, cursor, PAGE_ITEMS);
-      if (data.id !== rowId) throw new Error('Wrong row returned');
-      if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) {
-        throw new Error('Invalid home item continuation');
+      for (let page = 0, cursor = row.nextCursor; page < ROW_SKIP_PAGES && cursor; page++) {
+        const data = await connection.adapter.row(rowId, cursor, PAGE_ITEMS);
+        if (data.id !== rowId) throw new Error('Wrong row returned');
+        if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) {
+          throw new Error('Invalid home item continuation');
+        }
+        const images = await connection.images();
+        this.session.check(epoch, 'home row');
+        let added = 0;
+        const read = cursor;
+        this.box.update('home', home => {
+          const current = home.value?.rows.find(r => r.id === rowId);
+          if (!home.value || !current || current.nextCursor !== read) return home;
+          const seen = new Set(current.items.map(item => item.id));
+          const items = data.items
+            .filter(item => item.kind !== 'title' || !featured.has(item.title.id))
+            .map(item => entry(item, images, this.artWidth()))
+            .filter(item => !seen.has(item.id) && !!seen.add(item.id));
+          added = items.length;
+          const next: Row = {
+            ...current,
+            items: [...current.items, ...items],
+            nextCursor: data.nextCursor ?? '',
+            continuation: data.continuation,
+          };
+          const rows = home.value.rows.map(r => (r.id === rowId ? next : r));
+          return { ...home, value: { ...home.value, rows } };
+        });
+        const now = this.box.get().home.value?.rows.find(r => r.id === rowId);
+        if (added || !now || now.continuation !== 'more') break;
+        cursor = now.nextCursor;
       }
-      const images = await connection.images();
-      this.session.check(epoch, 'home row');
-      this.box.update('home', home => {
-        const current = home.value?.rows.find(r => r.id === rowId);
-        if (!home.value || !current || current.nextCursor !== cursor) return home;
-        const seen = new Set(current.items.map(item => item.id));
-        const items = data.items
-          .filter(item => item.kind !== 'title' || !featured.has(item.title.id))
-          .map(item => entry(item, images, this.artWidth()))
-          .filter(item => !seen.has(item.id) && !!seen.add(item.id));
-        const next: Row = {
-          ...current,
-          items: [...current.items, ...items],
-          nextCursor: data.nextCursor ?? '',
-          continuation: data.continuation,
-        };
-        const rows = home.value.rows.map(r => (r.id === rowId ? next : r));
-        return { ...home, value: { ...home.value, rows } };
-      });
-    } catch {
+    } catch (error) {
       // The row keeps its cursor; the viewer can page again.
+      if (!resolved && supersededRow(error) && epoch === this.session.epoch) again = await this.resolveRow(row).catch(() => undefined);
     } finally {
       if (epoch === this.session.epoch) this.setRowLoading(rowId, false);
     }
+    if (again && again.id !== rowId) await this.rowItems(again.id, true);
   }
 
   private setRowLoading(rowId: string, on: boolean): void {

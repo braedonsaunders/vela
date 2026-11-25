@@ -438,3 +438,21 @@ export function hasMultiview(adapter: ServerAdapter): adapter is ServerAdapter &
   return 'createMultiview' in adapter && typeof adapter.createMultiview === 'function'
     && 'endMultiview' in adapter && typeof adapter.endMultiview === 'function';
 }
+
+/**
+ * One request that ends a session while its page goes away (the web's pagehide). The host fires it
+ * without waiting for an answer (fetch with keepalive), so the adapter attaches its credentials
+ * itself: a header where the server is the page's own origin or answers CORS for it, else the query.
+ */
+export interface UnloadRequest { url: string; method: 'GET' | 'POST' | 'DELETE'; headers?: Record<string, string>; body?: string }
+/**
+ * Stopping a session from a page being unloaded: the requests a stop command would send, built
+ * synchronously from what the adapter already holds (the session, the last credentials it used),
+ * since no answer can be awaited by then. Empty when it holds nothing to stop it with.
+ */
+export interface UnloadStop {
+  unloadStop(sessionId: string, at: V.Generations): UnloadRequest[];
+}
+export function hasUnloadStop(adapter: ServerAdapter): adapter is ServerAdapter & UnloadStop {
+  return 'unloadStop' in adapter && typeof adapter.unloadStop === 'function';
+}

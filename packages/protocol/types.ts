@@ -234,7 +234,11 @@ export type RowLayout = 'standard' | 'hero' | 'wide' | 'tiles' | 'tracks';
 export type RowCard = 'poster' | 'landscape' | 'square' | 'round';
 export type RowExperience = 'watch' | 'listen' | 'read' | 'gallery' | 'live';
 /** A row of titles (Home, a library's rows tab, /rows). Each presentation field is sent only when set. */
-export interface Row { id: ID; name: string; purpose: RowPurpose;
+export interface Row { id: ID;
+  /** Opaque, and the same row across bootstraps, /rows, /rows/{id} and library rows (its id changes with the
+   * row-view snapshot; a superseded id answers 409 cursor_expired). Compared, never parsed. Not on surface rows. */
+  key?: ID;
+  name: string; purpose: RowPurpose;
   receiptToken: string; presentation?: 'ranked'; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown';
   /** `tracks`: the items are track leaves with a duration and an album or artist parent (title.media.parents). */
   layout?: RowLayout; card?: RowCard;
@@ -274,7 +278,9 @@ export interface Interaction { receiptToken: string; kind: 'visible' | 'selected
   /** Visible means actually in the visible viewport; never merely prefetched. */
   visibleMilliseconds?: number; sessionId?: ID }
 export interface InteractionsRequest extends Mutation { interactions: Interaction[] }
-export type SubtitleDelivery = { kind: 'external'; format: 'webvtt' | 'webvtt-window'; url: string } |
+/** External `ass`: the authored ASS/SSA file itself (styles, positions, effects), offered only to a
+ * client whose `subtitleFormats` names the track's codec; otherwise the same track is WebVTT. */
+export type SubtitleDelivery = { kind: 'external'; format: 'webvtt' | 'webvtt-window' | 'ass'; url: string } |
   { kind: 'embedded' } | { kind: 'burn-in' };
 export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
   channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string;
@@ -352,6 +358,9 @@ export interface TrickplayMetadata {
   /** Monotonic within the plan's sourceGeneration; changes when published sheets change. */
   revision: number;
 }
+/** A stretch of a title the viewer may skip, on the plan's timeline: the opening titles, or credits.
+ * `final` (credits only): the last credits, running to the end of the title. */
+export interface SkipMarker { kind: 'intro' | 'credits'; startSeconds: number; endSeconds: number; final?: boolean }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; libraryId?: ID; liveItemId?: ID; title?: string; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   /** Audio-only plans say so; omitted: 'video'. */ media?: 'video' | 'audio';
@@ -360,8 +369,16 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
   /** Also carried by SessionSnapshot.plan and full plan events. */
   trickplay?: TrickplayMetadata;
+  /** Intro and credits ranges, sorted by start; never empty (omitted when unknown). */
+  markers?: SkipMarker[];
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
+  /** The release actually playing: its versions-row id, or null when it has no row (Auto
+   * resolving to a release the menu does not list); with its label ("1080p WEB-DL · DD+ 5.1 ·
+   * 4.2 GB"). selectedVersionId stays the viewer's choice (the Auto row's id when Auto was
+   * chosen). Absent when nothing plays or the server does not say; a mid-stream failover to
+   * another release publishes a plan of a higher revision. */
+  playingVersionId?: ID | null; playingLabel?: string;
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };
   /** A live channel, or a start-over plan (`mode: 'startOver'`, a growing programme from its start: window
    * start 0, a growing edge). Positions and the window share the plan's timeline. */
@@ -400,12 +417,14 @@ export interface PlayerObservation extends Mutation, Generations { sequence: num
   throughputBps?: number; droppedFrames?: number; totalFrames?: number; selectedPathId: ID;
   audioTrackId?: ID; subtitleTrackId?: ID | null; transferredBytes?: number;
   error?: { class: 'source' | 'decoder' | 'transient'; message: string } }
-export interface SessionSnapshot { cursor: Cursor; revision: number; plan: PlaybackPlan;
+export interface SessionSnapshot extends PlayingRelease { cursor: Cursor; revision: number; plan: PlaybackPlan;
   /** Server publication does not prove transfer, accepted buffer, or playback progress. */
   publishedRanges: TimeRange[]; lastObservationSequence?: number;
   /** The live event on air on a live channel; null when none matches. Also streamed as `event: liveEvent`. */
   liveEvent?: LiveEventRef | null }
-export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } & (
+/** The release playing, as a session snapshot or event may also carry it at its top level (PlaybackPlan.playingVersionId). */
+export interface PlayingRelease { playingVersionId?: ID | null; playingLabel?: string }
+export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } & PlayingRelease & (
   { type: 'snapshot'; snapshot: SessionSnapshot } | { type: 'plan'; plan: PlaybackPlan } |
   { type: 'error'; error: ProtocolError } | { type: 'ended'; reason: string });
 export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'source' | 'decoder' | 'playback' | 'capacity' | 'transient' | 'request' | 'conflict';

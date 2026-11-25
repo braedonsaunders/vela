@@ -8,7 +8,7 @@ import { allTitles, artwork, channels as defaultChannels, detail, extras, featur
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
 import { trickplaySheet } from './trickplay';
-import { applyCommand, createSession, events, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
+import { applyCommand, createSession, events, failover, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaArtwork, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
@@ -144,6 +144,27 @@ async function abandonedRefresh(key: string): Promise<void> {
   await Bun.sleep(Math.min(faults.refreshAbandonMs, 600_000));
   unknown();
 }
+/** Each viewer's most recently stopped session (the `startStoppedSession` fault answers a start with it). */
+const lastStopped = new Map<string, string>();
+/**
+ * The playback start faults (Faults in media.ts), for a start that is not queued: a 503
+ * `preparation_pending` while `pending` names a count left, else the viewer's last stopped session
+ * shown as `ready`. Undefined when no fault applies.
+ */
+function startFault(g: Grant, body: V.PlaybackRequest, pending: 'audioStartPending' | 'videoStartPending'): V.PlaybackPlan | undefined {
+  if (body.queued) return undefined;
+  if (faults[pending] > 0) {
+    faults[pending]--;
+    throw Response.json({ error: { class: 'transient', code: 'preparation_pending', message: 'Playback is being prepared', retry: { allowed: true, afterSeconds: 1 } } } satisfies V.ErrorResponse,
+      { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '1' } });
+  }
+  const stopped = sessions.get(lastStopped.get(g.id) ?? '');
+  if (faults.startStoppedSession > 0 && stopped) {
+    faults.startStoppedSession--;
+    return { ...stopped.plan, state: 'ready' };
+  }
+  return undefined;
+}
 function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}, statusOverride?: number): never {
   const status = statusOverride ?? { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, playback: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
   throw Response.json({ error: { class: cls, code, message, retry: { allowed: ['capacity', 'transient'].includes(cls), ...(cls === 'capacity' ? { afterSeconds: 3, maxAttempts: 3 } : {}) }, ...extra } } satisfies V.ErrorResponse, { status, headers: { 'Cache-Control': 'no-store', ...(cls === 'capacity' ? { 'Retry-After': '3' } : {}) } });
@@ -277,6 +298,7 @@ function recordListening(session: Session, title: V.Title, ended: boolean): void
   title.watch = { ...watch, positionSeconds: finished || title.media?.role === 'track' ? 0 : position,
     played: title.media?.role === 'track' ? watch.played || finished : finished, lastViewedAt: new Date().toISOString() };
   viewer.policyRevision = `mock-${++viewerRevision}`;
+  feedChanged();
 }
 function recordPlayback(session: Session, ended: boolean): void {
   const media = session.plan.titleId ? findMediaTitle(session.plan.titleId) : undefined;
@@ -287,12 +309,29 @@ function recordPlayback(session: Session, ended: boolean): void {
   const finished = ended || position >= (title.durationSeconds ?? fixtureDurationSeconds) - 1;
   title.watch = { ...(title.watch ?? { favorite: false, watchlisted: false }), positionSeconds: finished ? 0 : position, played: finished };
   viewer.policyRevision = `mock-${++viewerRevision}`;
+  feedChanged();
 }
 function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g)]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const source = row.purpose === 'continue' ? { ...row, items: row.items.filter(item => item.kind !== 'title' || !removedContinue.has(item.title.id)) } : row;
   const bound = boundRow(g, source);
   return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope(g)}`, 20) };
+}
+/**
+ * Ether re-mints a viewer's row ids when the feed recomputes (playback, a watch change): a row's
+ * id carries the row-view snapshot it was read in, and its opaque `key` stays the same. An id
+ * from an older snapshot answers 409 cursor_expired; an id it never minted, 404.
+ */
+let rowSnapshot = 1;
+const feedChanged = () => { rowSnapshot++; };
+const minted = (row: V.Row, key = row.id): V.Row => ({ ...row, id: `${row.id}~${rowSnapshot}`, key });
+/** The row a wire id names, by its base id; a superseded snapshot is refused. */
+function mintedRow(id: string, candidates: V.Row[]): V.Row {
+  const at = id.lastIndexOf('~'), base = at < 0 ? id : id.slice(0, at), snapshot = at < 0 ? '' : id.slice(at + 1);
+  const row = candidates.find(r => r.id === base);
+  if (!row) fail('not-found', 'row_not_found', 'Row not found');
+  if (snapshot !== String(rowSnapshot)) fail('conflict', 'cursor_expired', 'Refresh from first page');
+  return row;
 }
 const labRows: V.Row[] = [
   ['Trending Now', 30], ['Top 10 on Ether On Air Lab Today', 10], ['New & Noteworthy', 17],
@@ -318,7 +357,7 @@ function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = []): V.Page<V.R
   ordered.splice(top + 1, 0, ...surfaces);
   const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
-  return { ...result, items: result.items.map(row => 'kind' in row ? row : homeRow(g, row, firstItems)) };
+  return { ...result, items: result.items.map(row => 'kind' in row ? row : minted(homeRow(g, row, firstItems))) };
 }
 function cached(req: Request, data: unknown, scope: string): Response {
   const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
@@ -789,12 +828,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
     if (libraryId && isMedia(libraryId)) { const shelves = mediaLibraryRows(g, libraryId); return cached(req, page(shelves.map(row => boundRow(g, row)), url, g, `library-rows:${libraryId}:${mac(JSON.stringify(shelves))}`), g.id); }
     if (libraryId && process.env.VELA_MOCK_OLD !== '1') {
-      if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${libraryId}`), g.id); }
+      if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => minted(homeRow(g, row, first), `library.${libraryId}.${row.id}`)), url, g, `library-rows:${libraryId}`), `${g.id}:${rowSnapshot}`); }
       const ids = new Set(libraryEntries(libraryId).filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
       const matches = rows.map(row => ({ ...row, items: row.items.filter(e => e.kind === 'title' && ids.has(e.title.id)) })).filter(row => row.items.length);
       const paging = new URL(url);
       if (process.env.VELA_MOCK_LIBRARY_ROW_PAGE) paging.searchParams.set('limit', process.env.VELA_MOCK_LIBRARY_ROW_PAGE);
-      return cached(req, page(matches.map(row => boundRow(g, row)), paging, g, `library-rows:${libraryId}`), g.id);
+      return cached(req, page(matches.map(row => minted(boundRow(g, row), `library.${libraryId}.${row.id}`)), paging, g, `library-rows:${libraryId}`), `${g.id}:${rowSnapshot}`);
     }
     if (!['home','detail','library'].includes(placement)) fail('request', 'invalid_placement', 'Unknown row placement');
     if (placement === 'detail') {
@@ -817,7 +856,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { collection: { id: row.id, kind: 'collection', name: row.name, artwork: [] }, ...page(boundRow(g, row).items, url, g, `collection:${row.id}`) } satisfies V.CollectionContents, g.id);
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
-  if (method === 'GET' && rowMatch) { const r = [...progressRows(), ...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
+  if (method === 'GET' && rowMatch) {
+    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...progressRows(), ...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
+    return cached(req, minted(homeRow(g, r, url)), `${g.id}:${rowSnapshot}`);
+  }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
   if (versionsMatch) {
     if (capabilities.features.versions?.available !== true) fail('policy', 'feature_unavailable', 'Versions are unavailable');
@@ -859,6 +901,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       // Played/unplayed on a book is the viewer's own reading state; unplayed clears the progress.
       if (mediaItem.media?.reading && typeof body.played === 'boolean') setReadingState(viewerId, mediaItem.id, body.played ? { ...readingState(viewerId, mediaItem), played: true } : { played: false });
       if (body.continueWatching === false) removedContinue.add(mediaItem.id);
+      if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
       viewer.policyRevision = `mock-${++viewerRevision}`;
       return json({ accepted: true } satisfies V.Ack);
     }
@@ -922,6 +965,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
       for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key];
       if (body.continueWatching === false) removedContinue.add(t.id);
+      if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
       viewer.policyRevision = `mock-${++viewerRevision}`;
       return json({ accepted: true });
     }
@@ -1017,6 +1061,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (!source) fail('request', 'not_playable', listening.media?.reading ? 'Books open with POST /titles/:id/read' : 'Select a track, audiobook or part to play');
       if (faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted');
       if (body.positionSeconds !== undefined && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > source.durationSeconds)) fail('request', 'invalid_position', `Position must be 0–${source.durationSeconds}`);
+      const faulted = startFault(g, body, 'audioStartPending');
+      if (faulted) return json(faulted);
       const s = await createAudioSession(g.id, body, listening);
       if (!s) fail('source', 'media_not_generated', `Run bun ${musicGenerator} first`);
       return json(s.plan);
@@ -1027,6 +1073,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     // VELA_MOCK_DOWN_CHANNELS (ids or numbers): channels whose provider is down, refused as final the way a lab's broken tuner is.
     if (channel && (process.env.VELA_MOCK_DOWN_CHANNELS ?? '').split(',').some(down => down && (down === channel.id || down === String(channel.number)))) fail('source', 'network', 'The connection to the Live TV provider failed.', {}, 503);
     if (title && !['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Select an episode to play');
+    if (title && !channel && !extra) { const faulted = startFault(g, body, 'videoStartPending'); if (faulted) return json(faulted); }
     // A programme from the channel's archive (spec C3): an ended one, or the one on air from its start.
     const archive = channel && (body.programmeId || body.startAt) ? archiveRange(body, channel, id => {
       const start = Number(id.slice(id.lastIndexOf(':') + 1));
@@ -1122,7 +1169,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (body.kind === 'seek' && !s.plan.live && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > duration)) fail('request', 'invalid_position', `Position must be 0–${duration}`);
       if (body.kind === 'tracks' && !sidecarFixture.enabled) fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!sidecarFixture.enabled && !p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
-      if (body.kind === 'stop') recordPlayback(s, false);
+      if (body.kind === 'stop') { recordPlayback(s, false); lastStopped.set(s.owner, s.plan.sessionId); }
       applyCommand(s, body); return json(s.plan);
     }
   }
@@ -1150,6 +1197,12 @@ async function dispatch(req: Request): Promise<Response> {
       if (req.method === 'POST') { const data = await req.json(); if (typeof data.enabled === 'boolean') sidecarFixture.enabled = data.enabled;
         if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected; if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId; }
       return json(sidecarFixture);
+    }
+    // A mid-stream failover (Ether W380): each open session with versions moves to its next playable
+    // release and publishes a plan of a higher revision naming it (playingVersionId, playingLabel).
+    if (req.method === 'POST' && url.pathname === '/__admin/failover') {
+      const moved = [...sessions.values()].filter(s => s.plan.state !== 'ended' && s.plan.versions?.length && failover(s));
+      return json(moved.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, playingVersionId: s.plan.playingVersionId, playingLabel: s.plan.playingLabel })));
     }
     // A new revision of every open session's plan for the same source, as a server sends for any update; with
     // {"selectedSubtitleTrackId": id|null}, one in which the server changed the selected subtitle itself.

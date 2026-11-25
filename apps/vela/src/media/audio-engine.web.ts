@@ -9,6 +9,7 @@
 import type { AudioEngine, AudioEngineEvent, AudioPreload, AudioSound, AudioState } from '@vela/core';
 import { currentInQueue } from '@vela/core';
 import { createGaplessPlayer, gaplessSupported } from '@vela/player/src/gapless-audio';
+import { publishMusicOutput } from '../visualizer/music-output.web';
 
 type ElementEngine = AudioEngine & { preload(next: AudioPreload | null): void };
 
@@ -148,12 +149,19 @@ export function createAudioEngine(_authorize?: unknown): (AudioEngine & { dispos
   let url = '';
   let start = 0;
   let next: AudioPreload | null = null;
+  let playing = false;
+  const syncOutput = () => {
+    if (!url || active !== 'gapless') { publishMusicOutput('unavailable', null, false); return; }
+    const node = gapless?.mixedOutput() ?? null;
+    publishMusicOutput(node ? 'ready' : 'opening', node, playing);
+  };
   const fits = (candidate: string) => !!gapless && rate === 1 && !HLS.test(candidate);
   /** Hand the item to the <audio> element at `at` seconds (speed changed, or the track cannot be decoded here). */
   const toElement = (at: number) => {
     gapless?.unload();
     keepAlive.pause();
     active = 'element';
+    playing = false; syncOutput();
     element.load(url, at, rate);
     element.preload(next);
     if (wanted) element.play();
@@ -163,21 +171,24 @@ export function createAudioEngine(_authorize?: unknown): (AudioEngine & { dispos
     if (active !== 'gapless') return;
     switch (event) {
       case 'unsupported': toElement(start); return;
-      case 'playing': keepAlive.play(); break;
-      case 'paused': case 'ended': case 'error': keepAlive.pause(); break;
+      case 'playing': playing = true; keepAlive.play(); break;
+      case 'waiting': playing = false; break;
+      case 'paused': case 'ended': case 'error': playing = false; keepAlive.pause(); break;
       case 'advanced': url = gapless.url(); start = 0; next = null; break;
     }
+    syncOutput();
     emit(event);
   });
   const engine = () => (active === 'gapless' && gapless ? gapless : element);
   return {
     load(value, startSeconds, speed) {
-      rate = speed; url = value; start = startSeconds; next = null; wanted = false;
+      playing = false; rate = speed; url = value; start = startSeconds; next = null; wanted = false;
       element.unload();
       gapless?.unload();
       keepAlive.pause();
       if (fits(value)) { active = 'gapless'; gapless!.load(value, startSeconds); }
       else { active = 'element'; element.load(value, startSeconds, speed); }
+      syncOutput();
     },
     preload(value) {
       next = value;
@@ -194,14 +205,14 @@ export function createAudioEngine(_authorize?: unknown): (AudioEngine & { dispos
     },
     setVolume(volume) { element.setVolume?.(volume); gapless?.setVolume(volume); },
     setSound(sound: AudioSound) { element.setSound?.(sound); gapless?.setSound(sound); },
-    unload() { wanted = false; next = null; element.unload(); gapless?.unload(); keepAlive.pause(); },
+    unload() { wanted = false; playing = false; url = ''; next = null; syncOutput(); element.unload(); gapless?.unload(); keepAlive.pause(); },
     position: () => engine().position(),
     duration: () => engine().duration(),
     buffered: () => engine().buffered(),
     error: () => engine().error(),
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     /** AudioDock unmounted: nothing more reaches the store it was attached to. */
-    dispose() { listeners.clear(); },
+    dispose() { active = 'element'; url = ''; syncOutput(); listeners.clear(); },
   };
 }
 

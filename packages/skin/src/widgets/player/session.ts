@@ -5,13 +5,13 @@
 import { forcedMute, quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { commandOrigin, msg, VelaError, withSessionVersions, type PlaybackTarget, type StartRefusal } from '@vela/core';
+import { AWAKE, commandOrigin, msg, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, qualityReached } from './present';
-import { stopsInBackground } from './background';
+import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
 
@@ -36,11 +36,15 @@ export interface LiveSessionOwner {
   updatePlan(plan: PlaybackPlan): void;
 }
 
+/** Phones and tablets choose whether the picture fits the screen or fills it; TVs and the web fit. */
+const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
+
 /** `shownAway`: whether the player's picture stays on screen while the app is in the background (Android's
  * picture-in-picture window), read as the app leaves the foreground; the watch then goes on. */
 export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean): PlaybackSession {
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
+  const settings = useVelaState(state => state.playerSettings);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
@@ -116,6 +120,28 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     return () => subscription.remove();
   }, [vela, id, begin, external]);
 
+  // A channel's session is the live controller's and goes on while the app is away; the engine pauses
+  // as the app leaves (Android) and stayed paused on return, behind live with Play focused. Back in the
+  // foreground it goes to the live edge and plays (the chrome's Back to live, which knows the window),
+  // unless the viewer had paused it: then it waits where it was for their Play.
+  const viewerPaused = useRef(false);
+  const [returnedLive, setReturnedLive] = useState(0);
+  useEffect(() => {
+    if (!id || !external || Platform.OS === 'web') return;
+    let left = false;
+    let pausedThen = false;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'background' && !left && !shownAwayRef.current?.()) {
+        left = true;
+        pausedThen = viewerPaused.current;
+      } else if (state === 'active' && left) {
+        left = false;
+        if (liveReturnsToEdge(pausedThen)) setReturnedLive(count => count + 1);
+      }
+    });
+    return () => subscription.remove();
+  }, [vela, id, external]);
+
   // The server ended the session under the player (it heard nothing from it for two minutes, or it restarted):
   // a new session starts where this one was, once per session, and stays paused if it was paused.
   const restarted = useRef('');
@@ -137,9 +163,29 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     if (input.type === 'mute' && !input.muted && forcedMute()) return;
     nextId.current += 1;
     setRefused('');
+    if (input.type === 'pause') viewerPaused.current = true;
+    else if (input.type === 'play' || input.type === 'catchUp') viewerPaused.current = false;
     if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
     setCommand({ ...input, id: nextId.current } as Command);
   }, []);
+
+  // The sleep timer (core sleep.ts, as spoken audio has it): an ordinary pause after some minutes, or at
+  // the end of what plays, which also holds back anything that would start after it. Each watch starts awake.
+  const [sleep, setSleepState] = useState<Sleep>(AWAKE);
+  const sleepRef = useRef(sleep);
+  sleepRef.current = sleep;
+  useEffect(() => setSleepState(AWAKE), [kind, id]);
+  const setSleep = useCallback((mode: SleepMode, minutes = 0) => setSleepState(sleepFrom(mode, minutes, Date.now(), position.current)), []);
+  const sleepNow = useCallback(() => {
+    setSleepState(AWAKE);
+    if (!paused.current) send({ type: 'pause' });
+  }, [send]);
+  // A timer runs out between position reports too.
+  useEffect(() => {
+    if (sleep.mode !== 'timer') return;
+    const timer = setTimeout(sleepNow, Math.max(0, sleep.endsAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [sleep, sleepNow]);
 
   // An engine failure it can recover from is retried in place; anything else starts over where it stopped.
   const retry = useCallback(() => {
@@ -216,11 +262,16 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
     command,
+    videoFill: PICTURE_CHOICE && settings.picture === 'fill',
     onSnapshot: next => {
       setSnapshot(next);
       if (belongs(next, plan)) {
         position.current = next.position;
         paused.current = next.state === 'paused';
+        const asleep = sleepRef.current;
+        // The end came first: an end-of-item sleep has done its work (nothing follows), a timer has none left.
+        if (asleep.mode !== 'off' && next.state === 'ended') setSleepState(AWAKE);
+        else if (next.state === 'playing' && sleepDue(asleep, Date.now(), next.position, plan?.chapters)) sleepNow();
       }
       if (next.failure === null) setFailure(null);
       if (next.state !== 'failed') ownerRef.current?.snapshot(next);
@@ -265,10 +316,18 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
   };
 
+  const setStreaming = useCallback((next: Partial<StreamingSettings>) => vela.playerSettings.setStreaming(next), [vela]);
+  const streaming = useMemo(() => ({ settings: settings.streaming, metered: settings.metered, set: setStreaming }),
+    [settings.streaming, settings.metered, setStreaming]);
+  const sleepTimer = useMemo(() => ({ value: sleep, set: setSleep }), [sleep, setSleep]);
+  const setPicture = useCallback((fill: boolean) => vela.playerSettings.setPicture(fill ? 'fill' : 'fit'), [vela]);
+  const picture = useMemo(() => (PICTURE_CHOICE ? { fill: settings.picture === 'fill', set: setPicture } : undefined), [settings.picture, setPicture]);
+
   const chromeTarget: ChromeTarget = target.kind === 'programme' ? { kind, id, channelId: target.channelId, ...(target.from ? { from: target.from } : {}) } : { kind, id };
   const owned = owner && !ownedPlan ? owner : undefined;
   return {
     chrome: {
+      returnedLive,
       target: chromeTarget,
       plan: chromePlan,
       snapshot: playback.phase === 'preparing' ? null : snapshot,
@@ -288,6 +347,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       refreshVersions,
       retry,
       thumbnail,
+      streaming,
+      sleep: sleepTimer,
+      picture,
     },
     view,
     stop,

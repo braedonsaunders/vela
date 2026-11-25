@@ -15,10 +15,17 @@ import type { CommandInput, PlayerChromeState } from './context';
 import type { OverlaySwitch } from '../../surfaces/player';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
-import { AudioMenu, qualityMenuRows, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
+import { AudioMenu, qualityMenuRows, SleepMenu, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
 import type { PlayerView } from './present';
 import { Scrubber } from './scrubber';
 import { Volume } from './volume';
+import type { Focusable } from '../../escape';
+
+/** TV: focus to a control once the one it replaces has left the tree. */
+function focusLater(target: { current: Focusable | null }): void {
+  if (!Platform.isTV) return;
+  requestAnimationFrame(() => target.current?.requestTVFocus?.());
+}
 
 export type Opened = MenuName | 'chapters' | null;
 /** Where a TV chrome's focus lands as it comes up. */
@@ -263,11 +270,15 @@ function Controls({
   const rewind = live.live && !!live.window?.seekable;
   const gap = look.size(look.small ? 4 : 8);
   const anchorRef = useRef<ComponentRef<typeof View>>(null);
+  // Back to live leaves as it takes the picture to the edge (the LIVE mark is not a control): focus
+  // goes to the play toggle, not wherever the engine finds next (the top bar's Close on Android TV).
+  const toggleRef = useRef<Focusable | null>(null);
   const names: Record<Exclude<Opened, null>, string> = {
     subtitles: msg('ui.subtitles'),
     audio: msg('ui.audio'),
     quality: msg('ui.quality'),
     speed: msg('player.speed'),
+    sleep: msg('player.sleep'),
     chapters: msg('ui.chapters'),
   };
   const menu = opened === 'chapters' && Platform.OS === 'web' ? null : opened;
@@ -283,10 +294,12 @@ function Controls({
         return qualityMenuRows({
           look, view, plan: state.plan, blocked, send, switchVersion: state.switchVersion,
           pendingVersionId: state.pendingVersionId, versionMessage: state.versionMessage,
-          pendingQualityId: state.pendingQualityId, info, onInfo: toggleInfo,
+          pendingQualityId: state.pendingQualityId, info, onInfo: toggleInfo, streaming: state.streaming,
         });
       case 'speed':
         return <SpeedMenu look={look} view={view} blocked={blocked} send={send} />;
+      case 'sleep':
+        return state.sleep ? <SleepMenu look={look} sleep={state.sleep} episode={!!state.episode} /> : null;
     }
   };
   // Phones put the screening controls on a line of their own when the transport leaves no room.
@@ -310,6 +323,7 @@ function Controls({
         disabled={blocked}
         size={look.small ? 48 : 52}
         testID="player-toggle"
+        buttonRef={toggleRef}
         onPress={() => { if (view.playing) live.leftLive(); send({ type: view.playing ? 'pause' : 'play' }); }}
       />
       {timeline || rewind ? (
@@ -334,6 +348,9 @@ function Controls({
       ) : null}
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
+      {/* An episode's next one, at any time, and after it ends (where it takes TV focus). */}
+      {timeline && state.nextEpisode ? <ChromeButton look={look} icon="next" label={msg('player.nextEpisodeNamed', { name: state.nextEpisode.label })}
+        preferred={Platform.isTV && visible && view.ended} testID="player-next-episode" onPress={state.nextEpisode.play} /> : null}
       {/* On a channel: the programme on air from its start (its start is in the archive); in Start over, back to its beginning. */}
       {!timeline && live.archive === 'startOver' && live.window ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(live.window!.start)} /> : null}
@@ -342,7 +359,7 @@ function Controls({
       {timeline ? null : <LiveZap look={look} watch={live} disabled={!live.canZap} />}
       {timeline || live.archive ? null : <LiveMultiview look={look} watch={live} />}
       <Volume look={look} view={view} send={send} onActive={onActive} />
-      {timeline && live.archive !== 'catchUp' ? null : <LiveMark look={look} watch={live} />}
+      {timeline && live.archive !== 'catchUp' ? null : <LiveMark look={look} watch={live} onLeave={() => focusLater(toggleRef)} />}
       <View style={cluster}>
         {look.small ? null : (
           <Text
@@ -425,7 +442,29 @@ function Controls({
               testID="player-chapters-button"
               onPress={() => toggle('chapters')}
             />
+            {state.sleep ? (
+              <ChromeButton
+                look={look}
+                icon="moon"
+                compact
+                label={names.sleep}
+                selected={opened === 'sleep' || state.sleep.value.mode !== 'off'}
+                testID="player-sleep-button"
+                onPress={() => toggle('sleep')}
+              />
+            ) : null}
           </>
+        ) : null}
+        {state.picture ? (
+          <ChromeButton
+            look={look}
+            icon={state.picture.fill ? 'pictureFill' : 'pictureFit'}
+            compact
+            label={msg(state.picture.fill ? 'player.picture.fit' : 'player.picture.fill')}
+            selected={state.picture.fill}
+            testID="player-picture-button"
+            onPress={() => state.picture?.set(!state.picture.fill)}
+          />
         ) : null}
         {view.pip ? (
           <ChromeButton

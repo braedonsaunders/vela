@@ -193,6 +193,20 @@ steps authenticate with the App Store Connect API key, so the Mac needs no distr
 certificate, profile or Xcode account. Upload validation runs as part of the export, and its
 errors (ITMS-*) are in `<build dir>/<platform>-export.log`.
 
+The tvOS build embeds the Top Shelf extension (`modules/vela-top-shelf`), bundle ID
+`app.ether.vela.topshelf`, in `Vela.app/PlugIns`. The app and the extension share the App Group
+`group.app.ether.vela`. The script gives the extension the app's version and build number, which
+App Store validation requires. Validation also refuses an arm64 extension that does not list `arm64` in
+`UIRequiredDeviceCapabilities`; the config plugin writes it, and the script stops before export when an
+embedded extension lacks it, because a `--no-upload` export does not run that check. Verify both provisioning profiles include that group before
+uploading. If the archive reports an application-groups entitlement mismatch, an Account
+Holder or Admin can register `group.app.ether.vela` in Certificates, Identifiers & Profiles,
+then enable App Groups and assign that group on both `app.ether.vela` and
+`app.ether.vela.topshelf`. Re-run `tools/testflight.sh --platform tvos --no-upload` to
+regenerate the profiles and check the local App Store export. The iOS build has no extension
+and no App Group. [Register an app group](https://developer.apple.com/help/account/identifiers/register-an-app-group/)
+and [enable app groups](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/).
+
 Before the export, the script lowers the embedded frameworks' `MinimumOSVersion` to the app's
 (18.0) and re-seals them. FFmpegBuild 3.15.0's frameworks claim 26.0, although their binaries
 target 16.0, and validation refuses a framework that claims more than the app (ITMS-90208). On

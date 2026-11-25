@@ -25,6 +25,7 @@ final class UIKitPlaybackRendering: PlaybackRendering {
     private var textKey = ""
     private var styledTrack: Int?
     private let retainPausedPicture: Bool
+    private var aspectFill = false
     private var displayCriteriaObservation: NSKeyValueObservation?
     private var displayObservers: [NSObjectProtocol] = []
     init(host: UIView, retainPausedPicture: Bool) {
@@ -94,7 +95,7 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         }
         let coded = CGSize(width: Int(engine.sourceVideoWidth), height: Int(engine.sourceVideoHeight))
         let display = engine.softwareDisplaySize ?? coded
-        let rect = engine.nativePlayerLayer?.videoRect ?? AVMakeRect(aspectRatio: display, insideRect: surface.bounds)
+        let rect = Self.captionRect(picture: engine.nativePlayerLayer?.videoRect, display: display, bounds: surface.bounds, fill: aspectFill)
         if drawStyled(engine: engine, cues: cues, time: time, rect: rect, coded: coded, surface: surface) {
             captions.attributedText = nil
             textKey = ""
@@ -219,6 +220,26 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         styledCaption.isHidden = false
         return true
     }
+    func setAspectFill(_ fill: Bool) {
+        aspectFill = fill
+        frozenPicture?.contentMode = fill ? .scaleAspectFill : .scaleAspectFit
+        textKey = ""
+    }
+
+    /// Where captions are laid out: the picture as shown, kept to the view. A filled picture runs past
+    /// the view's edges, so captions keep to the part that shows rather than falling off screen.
+    nonisolated static func captionRect(picture: CGRect?, display: CGSize, bounds: CGRect, fill: Bool) -> CGRect {
+        let fitted = AVMakeRect(aspectRatio: display, insideRect: bounds)
+        var shown = picture ?? fitted
+        if picture == nil, fill, fitted.width > 0, fitted.height > 0 {
+            let scale = max(bounds.width / fitted.width, bounds.height / fitted.height)
+            shown = CGRect(x: bounds.midX - fitted.width * scale / 2, y: bounds.midY - fitted.height * scale / 2,
+                           width: fitted.width * scale, height: fitted.height * scale)
+        }
+        let visible = shown.intersection(bounds)
+        return visible.isNull || visible.isEmpty ? fitted : visible
+    }
+
     func freezePicture(frame: CGImage?, aspectFill: Bool) {
         guard frozenPicture == nil, let host else { return }
         if let frame {

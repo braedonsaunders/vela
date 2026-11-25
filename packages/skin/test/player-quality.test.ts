@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
-import { present, qualityReached } from '../src/widgets/player/present';
+import { labelResolution, present, qualityReached } from '../src/widgets/player/present';
 
 function plan(): PlaybackPlan {
   const base = { sourceId: 'file', timelineId: 'timeline', edition: '1080p release', transport: 'hls', kind: 'transcode', qualities: [], boundaries: [] };
@@ -33,11 +33,28 @@ test('a server limitation is disabled with its reason; it cannot override an ava
   expect(view.qualities.find(q => q.resolution === '720p')!.disabledReason).toBe('');
 });
 
-test('Plex/Jellyfin original-only and direct-with-fixed-HLS plans stay honest when they have no quality ladder', () => {
+test('an unnamed Plex stream can be selected separately from numbered qualities', () => {
   const source = plan();source.paths = source.paths.slice(0, 1);source.selectedPathId = 'primary';
   expect(present(source, null).qualities).toHaveLength(1);
-  source.paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', readiness: 'ready', url: '', mimeType: 'application/vnd.apple.mpegurl', qualities: [], boundaries: [] });
+  expect(present(source, null).serverStream).toBeUndefined();
+  // Plex gives both paths the part's id as their source and timeline.
+  source.paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', readiness: 'ready', url: '', mimeType: 'application/vnd.apple.mpegurl', sourceId: 'file', timelineId: 'timeline', edition: '1080p release', qualities: [], boundaries: [] });
   expect(present(source, null).qualities).toHaveLength(1);
+  expect(present(source, null).serverStream).toEqual({ choice: 'path:plex-hls', selected: false });
+  source.selectedPathId = 'plex-hls';
+  expect(present(source, null).serverStream?.selected).toBe(true);
+  source.selectedPathId = 'primary';
+  source.paths[1]!.timelineId = 'other';
+  expect(present(source, null).serverStream).toBeUndefined();
+  source.paths[1]!.timelineId = 'timeline';
+  source.paths[1]!.readiness = 'unavailable';
+  expect(present(source, null).serverStream).toBeUndefined();
+});
+
+test('a Plex stream that copies the video is still the unnamed stream', () => {
+  const source = plan(); source.paths = source.paths.slice(0, 1); source.selectedPathId = 'primary';
+  source.paths.push({ id: 'plex-hls', kind: 'remux', transport: 'hls', readiness: 'ready', url: '', mimeType: 'application/vnd.apple.mpegurl', sourceId: 'file', timelineId: 'timeline', edition: '1080p release', qualities: [], boundaries: [] });
+  expect(present(source, null).serverStream).toEqual({ choice: 'path:plex-hls', selected: false });
 });
 
 test('a probed Plex/Jellyfin HLS ladder can supply choices missing from the plan', () => {
@@ -98,4 +115,77 @@ test('limitation codes become viewer text; unknown codes are hidden, readable te
   expect(qualityLimitReason('transcoding_disabled')).toBe('The server owner has turned off conversion');
   expect(qualityLimitReason('some_new_code')).toBe('Not available');
   expect(qualityLimitReason('This server cannot encode 4K')).toBe('This server cannot encode 4K');
+});
+
+test('Plex\'s stream with a decided output is a numbered choice while the original plays', () => {
+  const source = plan(); source.paths = source.paths.slice(0, 1); source.selectedPathId = 'primary';
+  // Plex gives both paths the part's id as their source and timeline.
+  source.paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', readiness: 'ready', url: '', mimeType: 'application/vnd.apple.mpegurl', sourceId: 'file', timelineId: 'timeline', edition: '1080p release',
+    quality: { width: 1280, height: 720, bitrate: 3_800_000, codec: 'h264' }, qualities: [], boundaries: [] } as never);
+  const view = present(source, null);
+  expect(view.serverStream).toBeUndefined();
+  expect(view.qualities.map(q => [q.id, q.resolution])).toEqual([['path:primary', 'Original'], ['path:plex-hls', '720p']]);
+});
+
+test('an original this page cannot play is shown unavailable with why; a converted choice stays open', () => {
+  const source = plan();
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', throughputHistory: [], capabilities: {},
+    unplayablePaths: [{ id: 'primary', reason: 'insecure-page' }] } as unknown as Snapshot;
+  const view = present(source, snapshot);
+  const original = view.qualities.find(q => q.original)!;
+  expect(original.id).toBe('path:primary');
+  expect(original.disabledReason).toContain('https');
+  expect(view.qualities.filter(q => !q.original).every(q => !q.disabledReason)).toBe(true);
+  const browser = present(source, { ...snapshot, unplayablePaths: [{ id: 'primary', reason: 'browser' }] } as Snapshot);
+  expect(browser.qualities.find(q => q.original)!.disabledReason).toContain('browser');
+  // An engine that says nothing (native players) leaves every row open.
+  expect(present(source, { ...snapshot, unplayablePaths: undefined } as Snapshot).qualities.every(q => !q.disabledReason)).toBe(true);
+});
+
+test('a playable original file is offered before one the page cannot play', () => {
+  const source = plan();
+  source.paths.splice(1, 0, { ...source.paths[0]!, id: 'mp4', mimeType: 'video/mp4', original: false } as never);
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', throughputHistory: [], capabilities: {},
+    unplayablePaths: [{ id: 'primary', reason: 'browser' }] } as unknown as Snapshot;
+  const original = present(source, snapshot).qualities.find(q => q.original)!;
+  expect(original.id).toBe('path:mp4');
+  expect(original.disabledReason).toBe('');
+});
+
+test('a converted path the page cannot play gives way to an HLS rendition of the same height', () => {
+  const source = plan();
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', throughputHistory: [], capabilities: {},
+    unplayablePaths: [{ id: 'convert-720', reason: 'browser' }] } as unknown as Snapshot;
+  const row = present(source, snapshot).qualities.find(q => q.resolution === '720p')!;
+  expect(row.id).toBe('hls-720');
+  expect(row.disabledReason).toBe('');
+});
+
+test('playing a release as it is, the badge names the resolution its label does', () => {
+  const source = plan(); source.selectedPathId = 'primary';
+  source.playingVersionId = 'v1080'; source.playingLabel = '1080p WEB-DL · DD+ 5.1 · 4.2 GB';
+  // A 1920×800 scope picture: decoded height alone would say 800p.
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'primary', throughputHistory: [], capabilities: {},
+    video: { width: 1920, height: 800, codec: 'hevc' } } as unknown as Snapshot;
+  const view = present(source, snapshot);
+  expect(view.quality.split(' · ')[0]).toBe('1080p');
+  expect(view.playingLabel).toBe('1080p WEB-DL · DD+ 5.1 · 4.2 GB');
+  expect(view.playingVersionId).toBe('v1080');
+  // A conversion shows its own size; a server that does not say leaves the badge as it was.
+  const converted = present({ ...source, selectedPathId: 'hls' }, { ...snapshot, sourceId: 'hls', video: { width: 1280, height: 720, codec: 'h264' } } as Snapshot);
+  expect(converted.quality.split(' · ')[0]).toBe('720p');
+  // The 818p rung of a 4K release's ladder is not called 4K.
+  const rung = present({ ...source, playingLabel: '4K Blu-ray · DTS 7.1 · 54.7 GB' }, { ...snapshot, video: { width: 1920, height: 818, codec: 'h264' } } as Snapshot);
+  expect(rung.quality.split(' · ')[0]).toBe('818p');
+  const quiet = present(plan(), { ...snapshot, sourceId: 'primary' } as Snapshot);
+  expect(quiet.quality.split(' · ')[0]).toBe('800p');
+  expect(quiet.playingVersionId).toBeUndefined();
+});
+
+test('release labels lead with their resolution', () => {
+  expect(labelResolution('4K Dolby Vision Remux · TrueHD Atmos 7.1')).toBe('4K');
+  expect(labelResolution('2160p WEB-DL')).toBe('4K');
+  expect(labelResolution('1080p WEB-DL · DD+ 5.1')).toBe('1080p');
+  expect(labelResolution('Auto · now 1080p WEB-DL')).toBe('');
+  expect(labelResolution('Director’s Cut · 1080p')).toBe('');
 });

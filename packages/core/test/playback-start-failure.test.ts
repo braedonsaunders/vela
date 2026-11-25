@@ -207,3 +207,76 @@ test('finalRefusal: a 4xx the server does not allow retrying, never a network fa
   expect(finalRefusal(error(429))).toBe(false);
   expect(finalRefusal(new Error('connection refused'))).toBe(false);
 });
+
+const titlePlan = (sessionId: string, state = 'ready') => ({ sessionId, state, titleId: 'movie', positionSeconds: 0, audioTracks: [], subtitleTracks: [], sourceGeneration: 0, seekGeneration: 0 } as unknown as PlaybackPlan);
+
+test('a film whose first start is refused as still preparing plays the retry\'s plan', async () => {
+  const { box, playback, requests } = harness([
+    async () => { throw new VelaError({ class: 'transient', code: 'preparation_pending', message: 'Preparing', retry: { allowed: true, afterSeconds: 1 } }, 503, '1'); },
+    async () => titlePlan('s2'),
+  ]);
+  await playback.start({ kind: 'title', id: 'movie' });
+  expect(box.get().playback).toMatchObject({ phase: 'failed', retryAfterSeconds: 1, retryAttempt: 1 });
+  await wait(1150);
+  expect(requests()).toBe(2);
+  // The watch route's player reads its plan from this state, so a plan here is what it loads.
+  expect(box.get().playback).toMatchObject({ phase: 'playing', sessionId: 's2', error: '' });
+  expect(box.get().playback.plan?.sessionId).toBe('s2');
+  await playback.stop();
+});
+
+test('a start answered with a session that has already ended is asked once more under a new key', async () => {
+  const keys: string[] = [];
+  const answers = [titlePlan('old', 'ended'), titlePlan('s2')];
+  const adapter = {
+    startPlayback: async (request: { idempotencyKey: string }) => { keys.push(request.idempotencyKey); return answers[keys.length - 1]!; },
+    sessionSnapshot: () => new Promise<never>(() => {}),
+    command: async () => ({}) as PlaybackPlan,
+  };
+  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, client: {} };
+  const box = new StateBox({ playback: initialPlayback } as VelaState);
+  const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+  await playback.start({ kind: 'title', id: 'movie' });
+  await wait(10);
+  expect(keys).toHaveLength(2);
+  expect(keys[1]).not.toBe(keys[0]);
+  expect(box.get().playback).toMatchObject({ phase: 'playing', sessionId: 's2' });
+  await playback.stop();
+});
+
+test('a start answered twice with a session that has already ended fails, and is not asked again', async () => {
+  const { box, playback, requests } = harness([async () => titlePlan('old', 'ended')]);
+  await playback.start({ kind: 'title', id: 'movie' });
+  await wait(10);
+  expect(requests()).toBe(2);
+  expect(box.get().playback).toMatchObject({ phase: 'failed', sessionId: '', plan: null, errorCode: 'session_ended', retryAfterSeconds: 0 });
+  playback.recover('old');
+  await wait(1200);
+  expect(requests()).toBe(2);
+  await playback.stop();
+});
+
+test('a recovery the server answers with the session it just stopped (still "ready") asks afresh once', async () => {
+  const clock = manualTimers();
+  try {
+    const requests: string[] = [], stops: string[] = [];
+    const answers = ['s1', 's1', 's3'];
+    const adapter = {
+      startPlayback: async (request: { idempotencyKey: string }) => { requests.push(request.idempotencyKey); return titlePlan(answers[requests.length - 1]!); },
+      sessionSnapshot: () => new Promise<never>(() => {}),
+      command: async (id: string, command: { kind: string }) => { if (command.kind === 'stop') stops.push(id); return titlePlan(id); },
+    };
+    const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
+    const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
+    const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.recover('s1');
+    await clock.run(1000);
+    expect(stops).toEqual(['s1']);
+    expect(requests).toHaveLength(3);
+    expect(requests[1]!.startsWith('recover-')).toBe(true);
+    expect(requests[2]).toBe(`${requests[1]}-fresh`);
+    expect(box.get().playback).toMatchObject({ phase: 'playing', sessionId: 's3' });
+    await playback.stop();
+  } finally { clock.restore(); }
+});

@@ -24,7 +24,8 @@ final class PlaybackClient {
     private let isLive: Bool
     private let remoteHLS: Bool
     private let loops: Bool
-    private let aspectFill: Bool
+    /// The picture fills the view (cropping) instead of fitting it; a full-screen watch changes it as it plays.
+    private var aspectFill: Bool
     private let retainPausedPicture: Bool
     /// A multiview tile's index: its own engine beside the others, a `.secondary` shared output.
     private let tile: Int?
@@ -115,11 +116,21 @@ final class PlaybackClient {
         self.remoteHLS = remoteHLS
         self.loops = loops
         self.aspectFill = aspectFill
+        rendering.setAspectFill(aspectFill)
         pictureInPicture = !preview && tile == nil && PictureInPicture.supported ? PictureInPicture(automatic: true) : nil
     }
 
     func layout() {
         rendering.layout()
+    }
+
+    /// Fit or fill the picture while it plays (the viewer's choice on a phone or tablet).
+    func setAspectFill(_ fill: Bool) {
+        guard fill != aspectFill else { return }
+        aspectFill = fill
+        engine?.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+        rendering.setAspectFill(fill)
+        layout()
     }
 
     func value(_ name: String) -> Any? { properties[name] }
@@ -187,7 +198,9 @@ final class PlaybackClient {
             Task { @MainActor in await engine.seekToLiveEdge(offsetSeconds: offset) }
         case "sub-add":
             guard args.count > 1, let url = URL(string: args[1]), let engine else { return }
-            let track = engine.addExternalSubtitleTrack(ExternalSubtitleTrack(url: url))
+            // The plan's format, for a URL that does not name it (an ASS sidecar draws through libass).
+            let hint = args.count > 3 && !args[3].isEmpty ? args[3] : nil
+            let track = engine.addExternalSubtitleTrack(ExternalSubtitleTrack(url: url, formatHint: hint))
             engine.selectSubtitleTrack(index: track.id)
         default: break
         }

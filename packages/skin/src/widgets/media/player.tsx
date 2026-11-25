@@ -15,15 +15,18 @@ import { MediaGlyph } from './icons';
 import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './parts';
 import { Arrive, MOTION, Presence, useLast } from '../../presence';
 import { LyricsPanel } from '../music/lyrics';
-import { SoundBlock } from '../../blocks/sound';
+import { SoundBlock, SoundSection } from '../../blocks/sound';
 import { musicTV } from '../music/layout';
 import { nowPlayingSideBySide } from './window-layout';
+import { listForItem, toggleSound, type NowPlayingList } from './now-playing-list';
 
 const web = Platform.OS === 'web';
 /** A TV's focus engine moves by geometry: Now Playing's column and transport row are focus guides, so
  * the remote reaches them from the queue beside them and from the scrubber above. */
 const Guide = Platform.isTV ? TVFocusGuideView : View;
 const guided = Platform.isTV ? { autoFocus: true } : {};
+/** Now Playing's page starts this far under its header. */
+const PAGE_TOP = 18;
 
 function spoken(item: Card | undefined): boolean {
   const cls = item?.media?.class;
@@ -206,8 +209,13 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
 
 function rateLabel(rate: number): string { return `${number(rate, { maximumFractionDigits: 2, minimumFractionDigits: rate % 1 ? 1 : 1 })}×`; }
 
+/** The visualizer's On/Off for this profile, offered where the device can draw one for this item. */
+export interface VisualizerSwitch { on: boolean; onToggle(on: boolean): void }
+
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel?: 'queue' | 'lyrics' | 'sound' }) {
+export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false }: {
+  onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; visualizer?: VisualizerSwitch; hidden?: boolean;
+}) {
   const host = useHost();
   const m = useMediaLook();
   const store = useVela();
@@ -220,14 +228,36 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   const [panel, setPanel] = useState<'' | 'speed' | 'sleep'>('');
   const source = useInteraction();
   const shownPanel = useLast(panel || undefined);
-  const [list, setList] = useState<'queue' | 'chapters' | 'lyrics' | 'sound'>(opening === 'lyrics' || opening === 'sound' ? opening : 'queue');
+  const [list, setList] = useState<NowPlayingList>(opening === 'lyrics' || opening === 'sound' ? opening : 'queue');
   const book = spoken(item);
   const music = item?.media?.class === 'music' && store.music.lyricsAvailable;
-  useEffect(() => { setList(current => (current === 'sound' ? 'sound' : book && audio.chapters.length ? 'chapters' : current === 'lyrics' && music ? 'lyrics' : 'queue')); }, [book, music, audio.chapters.length, item?.id]);
+  const offered = { chapters: !!book && audio.chapters.length > 0, lyrics: !!music };
+  useEffect(() => { setList(current => listForItem(current, offered)); }, [book, music, audio.chapters.length, item?.id]);
+  // The list Sound was opened over, for the header's Sound button to go back to.
+  const beforeSound = useRef<NowPlayingList>('queue');
+  useEffect(() => { if (list !== 'sound') beforeSound.current = list; }, [list]);
+  // Where the tabs sit in the page, so the header's Sound button can bring the panel into view
+  // where it opens below the cover and transport.
+  const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
+  const listTop = useRef(0);
+  const revealing = useRef(false);
+  const [revealSound, setRevealSound] = useState(0);
+  const reveal = () => {
+    if (!revealing.current) return;
+    revealing.current = false;
+    scroller.current?.scrollTo({ y: Math.max(0, listTop.current), animated: !m.look.still });
+  };
+  // The tabs' new place arrives with their layout (from the phone's lyrics, the page re-lays out);
+  // if it does not move, two frames on.
+  useEffect(() => {
+    if (!revealSound) return;
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(reveal); });
+    return () => cancelAnimationFrame(frame);
+  }, [revealSound]);
   useEffect(() => { if (opening) setList(opening === 'sound' ? 'sound' : opening === 'lyrics' && music ? 'lyrics' : 'queue'); }, [opening, music]);
   // Space plays and pauses; Escape closes (web).
   useEffect(() => {
-    if (!web || typeof window === 'undefined') return;
+    if (hidden || !web || typeof window === 'undefined') return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (event.defaultPrevented || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
@@ -236,26 +266,42 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose, store]);
-  if (!item || !audio.queue) return null;
+  }, [onClose, store, hidden]);
+  if (!item || !audio.queue || hidden) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
   const sideBySide = nowPlayingSideBySide(m.width, m.height);
   const coverSize = sideBySide ? Math.min(480, m.height - 360, (m.width - m.gutter * 2) * 0.42) : Math.min(m.width - m.gutter * 2 - 24, m.height * 0.42, 420);
   const tint = item.accent || m.ui.accent;
+  // Keep text legible on the lighter frames of the paper and water scenes.
+  const washTop = onOpenVisualizer ? alpha(m.ui.page, 0.58) : alpha(tint, 0.3);
   const parentId = item.media?.parent?.id;
   const chapterIndex = [...audio.chapters].reverse().find(c => c.startSeconds <= audio.positionSeconds);
   const chapterAt = chapterIndex ? audio.chapters.indexOf(chapterIndex) : -1;
   const sleeping = audio.sleep.mode !== 'off';
   const sleepLeft = audio.sleep.mode === 'timer' ? Math.max(0, (audio.sleep.endsAt - Date.now()) / 1000) : 0;
   const after = upNext(audio.queue);
+  const launcherByTitle = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
+  const launcher = onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
+    nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={44} /> : null;
+  // Sound is one press away on every layout, beside the visualizer: the tab below can sit under the
+  // fold on a phone or a short window.
+  const soundButton = <RoundButton icon="sound" label={msg('music.sound')} active={list === 'sound'} size={44}
+    onPress={() => { const next = toggleSound(list, beforeSound.current, offered); setList(next); if (next === 'sound' && !sideBySide) { revealing.current = true; setRevealSound(n => n + 1); } }}
+    nativeID="now-playing-sound" testID="now-playing-sound" />;
+  const headerEnd = [soundButton, launcherByTitle ? null : launcher].filter(Boolean).length;
+  // Both ends of the header are as wide, so the source stays centred over the page.
+  const headerSide = headerEnd * 44 + (headerEnd - 1) * 8;
   const controls = (
     <Guide {...guided} style={{ gap: 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
-      <View style={{ gap: 6 }}>
-        <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
-        {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
-          onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
-          style={m.text({ 'font-size': '17px', color: '$ui.inkSecondary' })} /> : null}
-        {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {launcherByTitle ? launcher : null}
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text numberOfLines={2} accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' })} testID="now-playing-title">{item.name}</Text>
+          {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
+            onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
+            style={m.text({ 'font-size': '17px', color: '$ui.inkSecondary' })} /> : null}
+          {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
+        </View>
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
       {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text></Arrive> : null}
@@ -299,7 +345,11 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
       ) : null}
     </Guide>
   );
-  const listItems = list === 'sound' ? [<View key="sound" style={{ marginHorizontal: -18 }}><SoundBlock tv={musicTV()} /></View>] : list === 'lyrics' ? [<View key="lyrics" style={[{ height: Math.max(320, m.height - 220), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 9%, #000 86%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>] : list === 'chapters' ? (
+  const listItems = list === 'sound' ? [<View key="sound" style={{ marginHorizontal: -18 }}>
+    {/* The visualizer's switch heads the Sound tab, the one setting this device keeps per profile. */}
+    {visualizer ? <SoundSection title={msg('visualizer.setting')} hint={msg(visualizer.on ? 'visualizer.settingOnHint' : 'visualizer.settingOffHint')}
+      on={visualizer.on} onToggle={visualizer.onToggle} testID="now-playing-visualizer-setting" tv={musicTV()} /> : null}
+    <SoundBlock tv={musicTV()} /></View>] : list === 'lyrics' ? [<View key="lyrics" style={[{ height: Math.max(320, m.height - 220), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 9%, #000 86%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>] : list === 'chapters' ? (
     audio.chapters.map((c, i) => <ListRow key={c.id} number={number(i + 1)} title={c.name} trailing={clock(c.startSeconds)} current={chapterAt === i} playing={playing}
       dim={i < chapterAt} onPress={() => store.audio.seek(c.startSeconds)} testID={`now-playing-chapter-${i}`} />)
   ) : after.length ? after.map((card, i) => <ListRow key={`${card.id}-${i}`} number={number(i + 1)} title={card.name} subtitle={card.media?.byline}
@@ -315,15 +365,17 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   );
   const top = Math.max(14, host.viewport.insets.top + 10);
   return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: onOpenVisualizer ? 'transparent' : m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' }}>
         {/* Native image blur (expo-image on Android and iOS) stops far short of 90: the cover's own
             lettering showed through behind the title and transport. There the wash is the colour alone. */}
-        {item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
-        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.3)} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` })]} />
+        {!onOpenVisualizer && item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
+        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${washTop} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` })]} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }}>
-        <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
+        <View style={{ width: headerSide, alignItems: 'flex-start' }}>
+          <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
+        </View>
         {/* The link spans the header, so a TV's remote reaches it from the Up Next tabs below; its
             focus ring is drawn around the words. */}
         <Pressable {...source.handlers} disabled={!audio.queue.source} onPress={() => { const s = audio.queue?.source; if (s) { onClose(); actions.openTitle({ id: s.id, kind: parentId === s.id ? 'album' : (item.media?.class === 'audiobook' ? 'audiobook' : 'album') }); } }}
@@ -334,9 +386,12 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
             {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
           </View>
         </Pressable>
-        <View style={{ width: 42 }} />
+        <View style={{ width: headerSide, flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+          {soundButton}
+          {launcherByTitle ? null : launcher}
+        </View>
       </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: 18, paddingBottom: 48, minHeight: '100%' as never }}>
+      <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: PAGE_TOP, paddingBottom: 48, minHeight: '100%' as never }}>
         {sideBySide ? (
           <View style={{ flexDirection: 'row', gap: 56, alignItems: 'flex-start', maxWidth: 1280, width: '100%', alignSelf: 'center' } as ViewStyle}>
             <View style={{ flex: 1, gap: 34, alignItems: 'center' }}>
@@ -356,7 +411,7 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
           <View style={{ gap: 28, alignItems: 'center' }}>
             <Artwork item={item} size={coverSize} playing={playing} />
             {controls}
-            <View style={{ width: '100%', maxWidth: 560 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
+            <View style={{ width: '100%', maxWidth: 560 }} onLayout={e => { listTop.current = e.nativeEvent.layout.y + PAGE_TOP - 12; reveal(); }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
           </View>
         )}
       </ScrollView>

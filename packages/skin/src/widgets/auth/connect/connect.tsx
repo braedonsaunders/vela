@@ -26,14 +26,16 @@ export interface ConnectProps {
   brandingName?: string;
   /** This route is already the sign-in destination, with no server chooser behind it. */
   standaloneSignIn?: boolean;
+  /** Open on Sign in with Plex, the server list behind it: a linked Plex server's account linked again. */
+  plexLink?: boolean;
 }
 
-export function Connect({ servers, actions, onClose, auth, authActions, serverId = '', brandingName, standaloneSignIn = false }: ConnectProps) {
+export function Connect({ servers, actions, onClose, auth, authActions, serverId = '', brandingName, standaloneSignIn = false, plexLink = false }: ConnectProps) {
   const layout = useAuthLayout();
   useEffect(() => () => authActions?.cancelPlex(), [authActions]);
   const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId
     ? selectedAuthFlow(serverId, count, !standaloneSignIn)
-    : initialAuthFlow(count));
+    : plexLink ? { step: { page: 'plex' }, history: [initialAuthFlow(count).step] } : initialAuthFlow(count));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
@@ -69,6 +71,9 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not connect. Try again.'); }
     finally { setBusy(false); }
   };
+  // Opened to link Plex again: ask for a code at once, as Sign in with Plex does.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (plexLink) void run(() => actions.plexStart()); }, []);
   const select = (id: string) => void run(async () => {
     setNote('');
     const result = await actions.select(id);

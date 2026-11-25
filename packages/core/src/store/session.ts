@@ -9,6 +9,7 @@ import { etherConnection, nativeConnection, type Connection } from '../adapter/c
 import { EtherAdapter } from '../adapter/ether';
 import { msg } from '../i18n';
 import { randomId } from '../protocol/id';
+import { cappedClient, type StreamingLimit } from '../streaming';
 import { SessionCredentials } from '../session';
 import { ServerCredentials, ServerRegistry } from '../session/servers';
 import type { MediaCapabilities, VelaPlatform } from './platform';
@@ -41,6 +42,7 @@ export class Session {
   private activeId: string | undefined;
   private deviceValue: V.Device | undefined;
   private clientValue: V.ClientCapabilities | undefined;
+  private streamingCap: StreamingLimit | null = null;
   private audioValue: MediaCapabilities | undefined;
   /** Settles once the player has said what it plays; negotiation and playback wait for it. */
   private readonly media: Promise<void>;
@@ -89,14 +91,21 @@ export class Session {
   /** What this client declares it can play; unavailable until the player has said. */
   get client(): V.ClientCapabilities {
     if (!this.clientValue) throw new Error('Media capabilities are unavailable');
-    return this.clientValue;
+    return cappedClient(this.clientValue, this.streamingCap);
   }
 
   /** What an audio session declares (music, audiobooks, podcasts): what the app's audio engine plays,
-   * on this device. The player's declaration where the platform names no separate audio engine. */
+   * on this device. The player's declaration where the platform names no separate audio engine.
+   * The video streaming cap is not an audio limit. */
   get audioClient(): V.ClientCapabilities {
-    const client = this.client;
+    if (!this.clientValue) throw new Error('Media capabilities are unavailable');
+    const client = this.clientValue;
     return this.audioValue ? { device: client.device, protocolVersions: client.protocolVersions, ...this.audioValue } : client;
+  }
+
+  /** The viewer's streaming cap on the network in use (null: the original); later starts declare it. */
+  setStreamingLimit(limit: StreamingLimit | null): void {
+    this.streamingCap = limit;
   }
 
   /** The client declaration, once the player has said what it plays. */

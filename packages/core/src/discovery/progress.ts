@@ -86,55 +86,82 @@ function withProgress(shown: Card, fresh: Card | undefined): Card {
   return sameValue(shown, next) ? shown : next;
 }
 
+/** What a row is, for matching it across reads without a key: a plugin's surface row by its plugin,
+ * surface and library; a feed row by its purpose, name and library. */
+function what(row: Row): string {
+  if (row.surface) return `surface\u0000${row.plugin ?? ''}\u0000${row.surface}\u0000${row.library ?? ''}`;
+  return `feed\u0000${row.purpose}\u0000${row.name}\u0000${row.library ?? ''}`;
+}
+
+/** What a row draws as: kept across reads that re-mint its id (Row.drawnAs), else its key, else its id. */
+export const drawnAs = (row: Row): string => row.drawnAs ?? row.key ?? row.id;
+
 /**
- * Bring shown rows up to date with a fresh read of the same shelf, in place: progress shelves
- * (Continue Watching, Reading, Listening, Next Up) take the fresh row, other shelves keep their
- * exact objects, order and appended pages with only their cards' progress refreshed, and new
- * progress shelves are inserted beside the rows they were next to. Nothing unchanged is replaced,
- * so a page underneath a modal updates without a flash. `complete`: the fresh read is the whole
- * shelf list, so a progress shelf it no longer has (a book finished) is removed. Otherwise (Home's
- * first page) a missing progress shelf is removed only when it sat among the rows the fresh page
- * covers; one further down came with a later page and is kept, or taken from `later` (those
- * shelves read again one by one).
+ * The same row in a newer read, for each fresh row that has one among `shown`: the same id; else
+ * the same server key; else, when neither carries a key, the same surface (plugin, surface,
+ * library) or the same purpose, name and library, provided exactly one row on each side has it.
+ * A row the server re-minted (its id changes with the feed after playback) is still matched; two
+ * rows that cannot be told apart are not.
  */
-export function reconcileProgressRows(current: Row[], fresh: Row[], complete: boolean, later: Row[] = []): Row[] {
-  const freshRows = new Map([...later, ...fresh].map(row => [row.id, row]));
-  const firstPage = new Set(fresh.map(row => row.id));
-  const covered = (index: number) => current.slice(index + 1).some(row => firstPage.has(row.id));
-  const freshCards = new Map<string, Card>();
-  for (const row of fresh) for (const value of row.items) if (!freshCards.has(value.id)) freshCards.set(value.id, value);
-  const rows: Row[] = [];
-  current.forEach((row, index) => {
-    const next = freshRows.get(row.id);
-    if (progressRow(row)) {
-      if (next) rows.push(freshRow(row, next));
-      else if (!complete && !covered(index)) rows.push(row);
-      return;
-    }
-    const items = row.items.map(value => withProgress(value, freshCards.get(value.id)));
-    rows.push(items.every((value, at) => value === row.items[at]) ? row : { ...row, items });
-  });
-  // New progress shelves, before the first row that followed them in the fresh read (else after
-  // the nearest one before them, else first).
-  const shown = new Set(rows.map(row => row.id));
-  fresh.forEach((row, index) => {
-    if (!progressRow(row) || shown.has(row.id)) return;
-    const after = fresh.slice(index + 1).find(next => shown.has(next.id));
-    const before = [...fresh.slice(0, index)].reverse().find(previous => shown.has(previous.id));
-    const at = after ? rows.findIndex(value => value.id === after.id) : before ? rows.findIndex(value => value.id === before.id) + 1 : 0;
-    rows.splice(at, 0, row);
-    shown.add(row.id);
-  });
+export function matchRows(shown: readonly Row[], fresh: readonly Row[]): Map<Row, Row> {
+  const matched = new Map<Row, Row>();
+  const taken = new Set<Row>();
+  const take = (next: Row, value: Row | undefined) => { if (value && !taken.has(value)) { matched.set(next, value); taken.add(value); } };
+  const byId = new Map(shown.map(row => [row.id, row]));
+  for (const next of fresh) take(next, byId.get(next.id));
+  const byKey = new Map(shown.flatMap(row => row.key ? [[row.key, row] as const] : []));
+  for (const next of fresh) if (!matched.has(next) && next.key) take(next, byKey.get(next.key));
+  const count = (rows: readonly Row[]) => rows.reduce((counts, row) => counts.set(what(row), (counts.get(what(row)) ?? 0) + 1), new Map<string, number>());
+  const shownCount = count(shown), freshCount = count(fresh);
+  const byWhat = new Map(shown.map(row => [what(row), row]));
+  for (const next of fresh) {
+    if (matched.has(next)) continue;
+    const name = what(next), value = byWhat.get(name);
+    // Two keys that differ are two rows, whatever they are called.
+    if (value && next.key && value.key) continue;
+    if (shownCount.get(name) === 1 && freshCount.get(name) === 1) take(next, value);
+  }
+  return matched;
+}
+
+/**
+ * A fresh row drawn over the shown one it matched: the fresh row (its id, cursor, items in the
+ * server's order) drawn as the shown row was (drawnAs), so it is not drawn again from scratch, with
+ * every card it still holds (freshRow). A row the viewer paged further than the fresh read, whose
+ * fresh items begin exactly as the shown ones, keeps the further items too, so what has focus stays.
+ */
+function adoptRow(shown: Row | undefined, fresh: Row): Row {
+  if (!shown) return fresh;
+  const drawn = drawnAs(shown);
+  const further = fresh.continuation === 'more' && shown.items.length > fresh.items.length
+    && fresh.items.every((value, index) => shown.items[index]?.id === value.id);
+  const { drawnAs: _, ...own } = fresh;
+  const next: Row = { ...own, ...(drawn !== (fresh.key ?? fresh.id) ? { drawnAs: drawn } : {}),
+    ...(further ? { items: [...fresh.items, ...shown.items.slice(fresh.items.length)] } : {}) };
+  return freshRow(shown, next);
+}
+
+/**
+ * Take a fresh read of a page's rows over the rows on show. The fresh read decides which rows there
+ * are, their ids and their order; a shown row it no longer has goes, and a shown row's old id is
+ * never kept (a server re-mints row ids when the feed recomputes after playback, and the old id no
+ * longer opens). What stays is what avoids a visible refresh: a row matched to a shown one
+ * (matchRows) keeps its identity and its unchanged cards, and an unchanged row is the shown
+ * object. Nothing changed: the very same list.
+ */
+export function adoptRows(current: Row[], fresh: Row[]): Row[] {
+  const matched = matchRows(current, fresh);
+  const rows = fresh.map(row => adoptRow(matched.get(row), row));
   return rows.length === current.length && rows.every((row, index) => row === current[index]) ? current : rows;
 }
 
 /**
- * Replace only Home's server-owned progress shelves (reconcileProgressRows): other shelves keep
- * their exact objects and order (including pages appended by moreRows), and a progress shelf from
- * a later page that the fresh first page does not carry is kept.
+ * A fresh Home read (its first page and any further pages read to cover what is shown) over Home on
+ * show: the rows are the server's (adoptRows), with its cursor for the next page; the hero
+ * carousel keeps its titles and order, taking their progress and resume actions from the read.
  */
-export function reconcileHomeProgress(current: HomeModel, fresh: HomeModel, later: Row[] = []): HomeModel {
-  const rows = reconcileProgressRows(current.rows, fresh.rows, false, later);
+export function adoptHome(current: HomeModel, fresh: HomeModel): HomeModel {
+  const rows = adoptRows(current.rows, fresh.rows);
   const freshHeroes = new Map(fresh.hero.map(hero => [hero.id, hero]));
   const hero = current.hero.map(value => {
     const next = freshHeroes.get(value.id);
@@ -146,8 +173,9 @@ export function reconcileHomeProgress(current: HomeModel, fresh: HomeModel, late
     const next = freshActions.get(action.heroId);
     return next && (action.action === 'resume' || next.action === 'resume') && !sameValue(action, next) ? next : action;
   });
-  const same = rows === current.rows && hero.every((value, index) => value === current.hero[index]) && heroActions.every((value, index) => value === current.heroActions[index]);
-  return same ? current : { ...current, hero, heroActions, rows };
+  const same = rows === current.rows && current.nextCursor === fresh.nextCursor && hero.every((value, index) => value === current.hero[index])
+    && heroActions.every((value, index) => value === current.heroActions[index]);
+  return same ? current : { ...current, hero, heroActions, rows, nextCursor: fresh.nextCursor };
 }
 
 /**
@@ -172,14 +200,6 @@ export function reconcileShelves(current: HomeModel, shelves: Row[]): HomeModel 
   const same = rows.length === current.rows.length && rows.every((row, index) => row === current.rows[index])
     && hero.every((value, index) => value === current.hero[index]);
   return same ? current : { ...current, hero, rows };
-}
-
-/** Home's progress shelves the fresh first page does not carry and does not cover (they came with
- * a later page): each is read again on its own. */
-export function laterProgressRows(current: HomeModel, fresh: HomeModel): Row[] {
-  const firstPage = new Set(fresh.rows.map(row => row.id));
-  return current.rows.filter((row, index) => progressRow(row) && !firstPage.has(row.id)
-    && !current.rows.slice(index + 1).some(next => firstPage.has(next.id)));
 }
 
 export function detailWatched(detail: DetailModel, watched: Watched): DetailModel {

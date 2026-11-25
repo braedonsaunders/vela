@@ -12,6 +12,7 @@ import type { Playback, PlaybackTarget } from './playback';
 import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
+import { AWAKE, holdsNext, sleepDue, sleepFrom, type Sleep, type SleepMode } from '../sleep';
 
 export type AudioEngineEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration' | 'advanced';
 
@@ -52,7 +53,7 @@ export interface AudioEngine {
 }
 
 export type AudioPhase = 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
-export type SleepMode = 'off' | 'timer' | 'chapter' | 'item';
+export { chapterEnd, type SleepMode } from '../sleep';
 
 export interface AudioState {
   queue: AudioQueue | null;
@@ -61,7 +62,7 @@ export interface AudioState {
   durationSeconds: number;
   rate: number;
   /** The sleep timer: until a time (ms since the epoch), the end of the chapter or of the item. */
-  sleep: { mode: SleepMode; endsAt: number };
+  sleep: Sleep;
   chapters: V.Chapter[];
   error: string;
   /** No engine on this platform yet (native audio is device work). */
@@ -141,6 +142,12 @@ export class Audio {
   private sessionId = '';
   private url = '';
   private loadToken: object | undefined;
+  /**
+   * The item whose session start was asked for and not yet answered for good: settled as playback
+   * moves (`settle`). A start the server refuses for now (503 `preparation_pending`, retry allowed)
+   * is asked again by playback on the server's terms; the item waits for that, it has not failed.
+   */
+  private starting: { token: object; id: string; startSeconds: number } | undefined;
   /** Whether the item being loaded starts playing once its plan arrives (a pause while loading clears it). */
   private autoplay = true;
   private sequence = 0;
@@ -280,9 +287,7 @@ export class Audio {
 
   /** Sleep after `minutes`, at the end of the chapter or item, or never ('off'). */
   setSleep(mode: SleepMode, minutes = 0): void {
-    // A chapter sleep remembers where it was set, so it ends with that chapter rather than the next.
-    const endsAt = mode === 'timer' ? Date.now() + minutes * 60_000 : mode === 'chapter' ? this.state.positionSeconds : 0;
-    this.patch({ sleep: { mode, endsAt } });
+    this.patch({ sleep: sleepFrom(mode, minutes, Date.now(), this.state.positionSeconds) });
     this.lookAhead();
   }
 
@@ -405,13 +410,30 @@ export class Audio {
     }
     await this.playback.start(this.target(item.id, startSeconds));
     if (this.loadToken !== token) return;
-    this.loadToken = undefined;
+    this.starting = { token, id: item.id, startSeconds };
+    this.settle();
+  }
+
+  /**
+   * The start being waited on, as playback stands now: its plan loads the engine, a refusal the
+   * server allows retrying goes on waiting (playback asks again; its answer comes through `follow`),
+   * and anything else fails the item. Another title taking the session ends the wait.
+   */
+  private settle(): void {
+    const starting = this.starting;
+    if (!starting) return;
+    if (this.loadToken !== starting.token) { this.starting = undefined; return; }
     const playback = this.box.get().playback;
-    if (playback.phase === 'failed' || !playback.plan) {
-      this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
+    const mine = playback.target?.kind === 'title' && playback.target.id === starting.id;
+    const waiting = mine && (playback.phase === 'starting' || playback.phase === 'preparing' || (playback.phase === 'failed' && playback.retryAfterSeconds > 0));
+    if (waiting) return;
+    this.starting = undefined;
+    this.loadToken = undefined;
+    if (mine && playback.phase === 'playing' && playback.plan && playback.sessionId) {
+      this.begin(playback.plan, starting.startSeconds);
       return;
     }
-    this.begin(playback.plan, startSeconds);
+    this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
   }
 
   /** The playback target for a queue item: a title, with the queue's source as its play context
@@ -478,8 +500,7 @@ export class Audio {
    * ends there or the sleep timer stops at the item's end. */
   private upcoming(): Card | undefined {
     const queue = this.state.queue;
-    const sleep = this.state.sleep.mode;
-    if (!queue || sleep === 'item' || sleep === 'chapter') return undefined;
+    if (!queue || holdsNext(this.state.sleep)) return undefined;
     const after = next(queue, true);
     return after ? current(after) : undefined;
   }
@@ -602,7 +623,7 @@ export class Audio {
   }
 
   private follow(): void {
-    if (!this.sessionId) return;
+    if (!this.sessionId) { this.settle(); return; }
     const playback = this.box.get().playback;
     if (playback.sessionId === this.sessionId && playback.plan) {
       const path = playback.plan.paths.find(p => p.id === playback.plan!.selectedPathId);
@@ -633,14 +654,16 @@ export class Audio {
       });
       return;
     }
-    // Another session took over. Let go of ours first: an engine that reports its pause at once
-    // must not find it still here, or the paused state's patch follows again, without end.
+    // Another session took over, or playback gave this item up (its recovery failed). Let go of ours
+    // first: an engine that reports its pause at once must not find it still here, or the paused
+    // state's patch follows again, without end.
     if (playback.sessionId !== this.sessionId && playback.phase !== 'preparing') {
       this.sessionId = ''; this.url = '';
       this.forget();
       this.engine?.pause();
       this.engine?.unload();
-      if (this.state.phase !== 'idle' && this.state.phase !== 'ended') this.patch({ phase: 'paused' });
+      if (mine && playback.phase === 'failed') this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
+      else if (this.state.phase !== 'idle' && this.state.phase !== 'ended') this.patch({ phase: 'paused' });
     }
   }
 
@@ -679,26 +702,21 @@ export class Audio {
     this.playback.snapshot({ sessionId: this.sessionId, live: null, position, state: this.state.phase === 'paused' ? 'paused' : 'playing' });
     if (now - this.lastPatch >= 250) { this.lastPatch = now; this.patch({ positionSeconds: position }); }
     if (now - this.lastObservation >= OBSERVE_EVERY_MS) this.observe('playing');
-    const sleep = this.state.sleep;
-    if (sleep.mode === 'timer' && now >= sleep.endsAt) this.sleepNow();
-    if (sleep.mode === 'chapter') {
-      const end = chapterEnd(this.state.chapters, sleep.endsAt);
-      if (end !== undefined && position >= end - 0.3) this.sleepNow();
-    }
+    if (sleepDue(this.state.sleep, now, position, this.state.chapters)) this.sleepNow();
     this.lookAhead(position);
   }
 
   private sleepNow(): void {
-    this.patch({ sleep: { mode: 'off', endsAt: 0 } });
+    this.patch({ sleep: AWAKE });
     this.pause();
   }
 
   private ended(): void {
     this.observe('ended');
     this.held('ended');
-    if (this.state.sleep.mode === 'item' || this.state.sleep.mode === 'chapter') {
+    if (holdsNext(this.state.sleep)) {
       // Asleep on the next item: its session starts when the viewer resumes.
-      this.patch({ sleep: { mode: 'off', endsAt: 0 }, phase: 'paused' });
+      this.patch({ sleep: AWAKE, phase: 'paused' });
       const after = this.state.queue && next(this.state.queue, true);
       if (after) this.patch({ queue: after, positionSeconds: 0, chapters: [] });
       this.halt();
@@ -749,6 +767,7 @@ export class Audio {
   private halt(): void {
     this.forget();
     this.loadToken = undefined;
+    this.starting = undefined;
     this.engine?.unload();
     this.sessionId = ''; this.url = '';
   }
@@ -762,12 +781,4 @@ export class Audio {
 function planURL(plan: V.PlaybackPlan): string | undefined {
   const path = plan.paths.find(p => p.id === plan.selectedPathId) ?? plan.paths[0];
   return path && 'url' in path && path.url ? path.url : undefined;
-}
-
-/** Where the chapter playing at `position` ends: its end, else the next chapter's start. */
-export function chapterEnd(chapters: V.Chapter[], position: number): number | undefined {
-  const sorted = [...chapters].sort((a, b) => a.startSeconds - b.startSeconds);
-  const index = sorted.findLastIndex(c => c.startSeconds <= position);
-  if (index < 0) return sorted[0]?.startSeconds;
-  return sorted[index]!.endSeconds ?? sorted[index + 1]?.startSeconds;
 }

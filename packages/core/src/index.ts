@@ -3,7 +3,7 @@
 // the React bindings are `@vela/core/react`.
 export { artworkURL, type Images } from './discovery/artwork';
 export { card, detailDateDisplay, detailModel, entry, feedRow, homeModel, libraryLiveCard, withDateDisplay } from './discovery/models';
-export { reconcileProgressRows } from './discovery/progress';
+export { adoptRows, drawnAs } from './discovery/progress';
 export { clock, duration, localeContext, minute, msg, number, percent, plural, second, setLocale, time, withLocale } from './i18n';
 export type { LocaleContext } from './i18n';
 export { VelaError } from './adapter/errors';
@@ -25,8 +25,13 @@ export { personSectionLabels, libraryKey, type CollectionPage, type LibraryQuery
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
 export { namesTitle, normalizeQuery, readsAsDescription, searchList, wantsDescription, type SearchList } from './store/search-list';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
+export { sendKeepalive, stopSessionsOnPageHide } from './store/unload';
+export { hasUnloadStop, type UnloadRequest, type UnloadStop } from './adapter/capabilities';
 export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protocol/trickplay';
+export { skipAction, type SkipAction } from './protocol/markers';
+export type { EpisodeRef } from './adapter/series';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
+export { playingRelease, withPlaying } from './store/playing-release';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
 export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse, HistoryRecapPeriod, PlaylistImportFormat, ImportSource, PlaylistImportUnmatched } from './wire';
@@ -63,6 +68,9 @@ export { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow, type AuthFl
 export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, mediaCardKind, opensMediaPage, podcastOrder, shapeOf, videoParents, videoRole, MEDIA_PAGE_KINDS, MEDIA_PAGE_ROLES, type CardMedia, type CardShape, type MediaCredit, type MediaParent } from './media';
 export type { ChildrenModel, MediaFeatures } from './store/media';
 export { AUDIO_RATES, chapterEnd, preloadLead, type AudioEngine, type AudioEngineEvent, type AudioPreload, type AudioSound, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
+export { AWAKE, holdsNext, sleepDue, sleepFrom, sleepLeftMs, type Sleep } from './sleep';
+export { DEFAULT_STREAMING, STREAMING_LIMITS, STREAMING_QUALITIES, streamingSettings, type StreamingQuality, type StreamingSettings } from './streaming';
+export { storedPlayerSettings, type PictureFit, type PlayerSettingsState, type StoredPlayerSettings } from './store/player-settings';
 export { autoplayNext, current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf } from './audio/cards';
 export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, recapLabels, recapStatCards, type DuplicateGroupModel, type DuplicateGroupsList, type HistoryRecapModel, type LikedList, type Lyrics as MusicLyrics, type PlaylistImportMatchModel, type PlaylistImportModel, type PlaylistImportUnmatchedModel, type RecapChartBucket, type RecapEntryModel, type RecapLabels, type RecentContext, type RecordingReleasesModel } from './store/music';

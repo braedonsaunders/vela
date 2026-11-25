@@ -8,7 +8,7 @@ import { router, usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createVela, type Vela as Store, type VelaState } from '@vela/core';
+import { createVela, stopSessionsOnPageHide, type Vela as Store, type VelaState } from '@vela/core';
 import { VelaProvider as StoreProvider, useVelaState } from '@vela/core/react';
 import { VelaPlayerView } from '@vela/player';
 import { useFold } from '@vela/fold';
@@ -38,6 +38,7 @@ setQuietPlayback(__DEV__ || !!config.startRoutes || (Platform.OS !== 'web' && !!
 import { aboutApp, listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';
+import { usePlayerSettings } from './player-settings';
 import { AppearancePicker } from './picker';
 import { AddToPlaylist } from './playlists/add-to-playlist';
 import { useLast } from '@vela/skin/src/presence';
@@ -59,6 +60,7 @@ import { useSearchAddress } from './use-search-address';
 import { pageTitle } from './page-title';
 import { prefetchLibrary, prefetchLibrariesWhenIdle } from './browse/prefetch';
 import { screenOf, screenPath } from './plugin-screens';
+import { useTopShelf } from './top-shelf';
 
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
@@ -121,6 +123,8 @@ function runtimeStore(): NonNullable<typeof runtime> {
   if (!runtime) {
     const boot = platform();
     runtime = { boot, store: createVela({ ...boot, rendererVersion: RENDERER_VERSION }) };
+    // A closed or reloaded tab, or a page navigated away, stops its playback at the server.
+    if (Platform.OS === 'web' && typeof window !== 'undefined') stopSessionsOnPageHide(window, runtime.store.playback);
   }
   return runtime;
 }
@@ -170,9 +174,11 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   const { auth, servers } = state;
   const signedIn = auth.phase === 'signed-in';
   useMediaAccess(store, signedIn ? auth.revision : null);
+  usePlayerSettings(store);
   const live = useLiveController(store, signedIn ? auth.revision : null);
   const multiview = useMultiviewController(store, signedIn ? auth.revision : null, live);
   useSignedOutGate(auth.phase);
+  useTopShelf(auth, state.home);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -503,7 +509,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
         {shownPlaylistTarget ? <AddToPlaylist key={shownPlaylistTarget.titleId} {...shownPlaylistTarget} open={!!playlistTarget} close={closeAddToPlaylist} /> : null}
         {state.auth.plexSwitching && overlayHost ? <HostContext.Provider value={overlayHost}>
           <PlexProfileDialog profiles={state.auth.plex?.profiles ?? []} currentProfileId={state.auth.viewerId} error={state.auth.error}
-            onChoose={(id, pin) => store.auth.choosePlexProfile(id, pin)} onRestart={() => store.auth.startPlexProfileSwitch()} onClose={() => store.auth.cancelPlex()} />
+            onChoose={(id, pin) => store.auth.choosePlexProfile(id, pin)} onRestart={() => store.auth.startPlexProfileSwitch()} onClose={() => store.auth.cancelPlex()}
+            onRelink={state.auth.plexRelink ? () => { store.auth.cancelPlex(); router.push({ pathname: '/connect', params: { plex: '1' } }); } : undefined} />
         </HostContext.Provider> : null}
       </LaunchGate>
     </VelaContext.Provider>

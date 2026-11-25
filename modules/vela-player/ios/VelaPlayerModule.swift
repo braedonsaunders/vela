@@ -68,7 +68,13 @@ public final class VelaPlayerModule: Module {
 
         // The app takes the remote's play/pause for itself (an alert toast's action) until released.
         // onAudio: the audio player's status and the system's media commands (AudioPlayback).
-        Events("onClaimedPlayPause", "onAudio")
+        // onNetwork: the network became metered or unmetered (NetworkPath), for the streaming cap.
+        Events("onClaimedPlayPause", "onAudio", "onNetwork")
+        Function("networkMetered") { [weak self] () -> Bool in
+            let path = NetworkPath.shared
+            path.changed = { metered in self?.sendEvent("onNetwork", ["metered": metered]) }
+            return path.metered
+        }
         AsyncFunction("claimPlayPause") { [weak self] (claimed: Bool) in
             MainActor.assumeIsolated {
                 SystemMediaControls.shared.playPauseClaim = claimed ? { self?.sendEvent("onClaimedPlayPause", [:]) } : nil
@@ -187,6 +193,9 @@ public final class VelaPlayerModule: Module {
             }
             Prop("tile") { (view: VelaPlayerView, tile: Int?) in
                 view.setTile(tile)
+            }
+            Prop("videoFill") { (view: VelaPlayerView, fill: Bool?) in
+                view.setVideoFill(fill ?? false)
             }
             Prop("metadata") { (view: VelaPlayerView, metadata: [String: Any]?) in
                 view.setMetadata(metadata)

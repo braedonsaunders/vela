@@ -161,8 +161,27 @@ func localChoicesOnServerPath() {
     precondition(sidecar.subtitleTrackId == nil && sidecar.subtitleClientOnly)
 }
 
+/// An ASS sidecar's delivery format reaches the engine as its format hint (its URL may not name it).
+func assFormatHint() {
+    let decoded = VelaPlan.decode([
+        "sessionId": "s", "revision": 1, "sourceGeneration": 1, "seekGeneration": 1, "positionSeconds": 0, "selectedPathId": "hls",
+        "paths": [["id": "hls", "kind": "transcode", "transport": "hls", "readiness": "ready"]], "audioTracks": [],
+        "subtitleTracks": [
+            ["id": "ass", "name": "Signs", "codec": "ass", "delivery": ["kind": "external", "format": "ass", "url": "https://media.example/library/streams/7.ass?encoding=utf-8"]],
+            ["id": "vtt", "name": "English", "delivery": ["kind": "external", "format": "webvtt", "url": "https://media.example/library/streams/8?format=vtt"]],
+            ["id": "embedded", "name": "French", "streamIndex": 3, "delivery": ["kind": "embedded"]],
+        ],
+        "selectedSubtitleTrackId": "ass",
+    ])!
+    precondition(decoded.subtitleTrack("ass")?.externalFormatHint == "ass")
+    precondition(decoded.subtitleTrack("vtt")?.externalFormatHint == nil)
+    precondition(decoded.subtitleTrack("embedded")?.externalFormatHint == nil)
+    precondition((decoded.subtitleTrack("ass")?.snapshot["delivery"] as? [String: Any])?["format"] as? String == "ass")
+}
+
 @main struct Probe {
     static func main() {
+        assFormatHint()
         sidecarSteps()
         adoption()
         embeddedAfterSidecar()

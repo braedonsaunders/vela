@@ -1,0 +1,474 @@
+diff --git a/packages/visualizer/framework/33_contour.js b/packages/visualizer/framework/33_contour.js
+index 8683aed..d988b58 100644
+--- a/packages/visualizer/framework/33_contour.js
++++ b/packages/visualizer/framework/33_contour.js
+@@ -11,7 +11,8 @@ const MAP_NAMES = ['PORT LEGATO', 'CADENCE', 'TREBLE REACH', 'LARGO BAY', 'ALLEG
+ const FS_MAP = FSH + `
+ out vec4 o; uniform sampler2D uText; uniform float uS, uHead, uFocusD; uniform vec3 uMk[8];
+ const float TOWN = 7.;
+-vec2 route(float s){ return vec2(s*.5, 2.6*sin(s*.045)+1.2*sin(s*.11)); }
++float bend(float north){ return 3.6*sin(north*.35); }
++vec2 route(float s){ float north=5.2*sin(s*.09)+1.5*sin(s*.21); return vec2(s*.32+bend(north), north); }
+ vec3 vor(vec2 p){ vec2 ip = floor(p), fp = fract(p); float f1 = 9., f2 = 9., id = 0.;
+   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec2 g = vec2(float(i),float(j)), h = vec2(hash2(ip+g), hash2(ip+g+37.3)), r = g+.15+.7*h-fp; float d = dot(r,r);
+     if (d < f1){ f2 = f1; f1 = d; id = h.x; } else if (d < f2) f2 = d; }
+@@ -45,6 +46,9 @@ void main(){
+     const float SEA = .5;
+     float H = land(m), fH = max(fwidth(H), 1e-5), isLand = smoothstep(-1., 1., (H-SEA)/fH);
+     float elev = clamp((H-SEA)/.24, 0., 1.), sF = spec(.04+elev*.8), sS = specS(.04+elev*.8), s = mix(sS, sF, .35);
++    float relief = clamp((dFdy(H)-dFdx(H))/fH,-1.,1.);
++    float ridge = smoothstep(.03,.5,elev)*isLand*rvC;
++    paper *= 1.+relief*ridge*(.22+.16*s);
+     float iso = (H-SEA)*46., fi = max(fwidth(iso), 1e-5), isoM = iso/5., fM = max(fwidth(isoM), 1e-5);
+     float minor = (1.-smoothstep(.2,1.1,abs(fract(iso-.5)-.5)/fi))*(1.-smoothstep(.3,.9,fi));
+     float major = 1.-smoothstep(.6,1.6,abs(fract(isoM-.5)-.5)/fM);
+@@ -83,7 +87,7 @@ void main(){
+       float rr = length(m-uMk[i].xy); cr2 += 1.-smoothstep(.5,1.8,abs(rr-.14*sz)/max(fwidth(rr), 1e-5));
+       float lf = smoothstep(0.,.12,a)*(1.-smoothstep(2.,2.9,a)); red += cr2*lf*.9; glow += neon(.9)*cr2*lf*(1.-smoothstep(0.,.8,a))*1.2; }
+     // the route travelled, in red, and where you are
+-    float sP = m.x/.5, dz = m.y-route(sP).y;
++    float sP = (m.x-bend(m.y))/.32, dz = m.y-route(sP).y;
+     red += lineW(dz, 1.4)*smoothstep(.3,.5,fract(sP*.9))*smoothstep(uS, uS-.6, sP)*(1.-smoothstep(uS-2., uS-26., sP))*.9;
+     float fe = max(fwidth(dE), 1e-5), here = (1.-smoothstep(.06, .06+fe*1.5, dE))+(1.-smoothstep(.5,1.6,abs(dE-.17)/fe));
+     red += here; glow += neon(.9)*here*(.3+.7*uKick);
+@@ -113,7 +117,7 @@ scene({ id: 'contour', name: 'Neon Cartography', from: 'Neon', kind: 'field', gr
+   init() { this.p = program(VS, FS_MAP); this.text = textAtlas(MAP_NAMES, 4, 256, 40, 'italic 600 23px "Baskerville", "Palatino", "Book Antiqua", Georgia, serif');
+     this.mk = new Float32Array(24); this.last = new Float32Array(8).fill(9); },
+   draw(F, out) {
+-    const t = F.time, s = F.travel, C = [s * 0.5, 2.6 * Math.sin(s * 0.045) + 1.2 * Math.sin(s * 0.11)];
++    const t = F.time, s = F.travel, north = 5.2 * Math.sin(s * 0.09) + 1.5 * Math.sin(s * 0.21), C = [s * 0.32 + 3.6 * Math.sin(north * 0.35), north];
+     for (let i = 0; i < 8; i++) { if (A.pulse[i] < this.last[i]) { const a = Math.random() * 6.283, r = 1.5 + Math.random() * 4.5; this.mk[i * 3] = C[0] + 2 + Math.cos(a) * r; this.mk[i * 3 + 1] = C[1] + Math.sin(a) * r * 0.8; this.mk[i * 3 + 2] = 0.5 + 0.9 * Math.min(1, A.kickAmp / 3) * Math.random() + 0.3 * Math.random(); } this.last[i] = A.pulse[i]; }
+     const head = 0.3 * Math.sin(t * 0.04), D = 18.5 + 3 * A.dyn, el = 1.0;
+     const em = [C[0] + Math.sin(head) * D * Math.cos(el), C[1] - Math.cos(head) * D * Math.cos(el)];
+diff --git a/packages/visualizer/framework/35_atoll.js a/packages/visualizer/framework/35_atoll.js
+deleted file mode 100644
+index a4379f9..0000000
+--- a/packages/visualizer/framework/35_atoll.js
++++ /dev/null
+@@ -1,71 +0,0 @@
+-
+-// ───────────────────────── Isoline Atoll: an island drawn only in contour lines, its hills raised by the music ─────────────────────────
+-{
+-// Seven hills stand on a shelf. Each belongs to a stretch of the spectrum, from the broad bass hill to the
+-// sharp treble peaks; its height follows that stretch on a slow envelope, so the land swells and settles
+-// and the contours redraw themselves smoothly. The light on each hill's lines follows the same band, faster.
+-const ATOLL_FN = `
+-uniform vec4 uHill[7];                       // x, z, spread and height of each hill
+-uniform float uLit[7];                       // how brightly its band is sounding now
+-vec2 atollH(vec2 p){                         // height, and the light of the nearest hills
+-  float r = length(p), h = 0., lit = 0., wsum = 1e-3;
+-  for (int i = 0; i < 7; i++){ vec2 d = p-uHill[i].xy; float g = exp(-dot(d,d)/(uHill[i].z*uHill[i].z)); h += uHill[i].w*g; lit += uLit[i]*g; wsum += g; }
+-  float shelf = exp(-r*r*.02);
+-  h += .5*shelf+.44*(fbm(vec3(p*.2, uTime*.012))-.5)*shelf;                 // the natural irregularity of land
+-  h += ring(r, 4.2, 1.7, 2.6)*.06*shelf;                                    // each kick: a low swell rolls outward
+-  return vec2(h*(1.-smoothstep(9.5, 12.5, r))-.13, lit/wsum); }`;
+-const VS_ATOLL = VSH + ATOLL_FN + `
+-out vec3 vW; out float vDepth, vLit;
+-void main(){ vec2 p = (aUV*2.-1.)*13., h = atollH(p); vW = vec3(p.x, h.x, p.y); vLit = h.y; gl_Position = uVP*vec4(vW,1.); vDepth = gl_Position.w; }`;
+-const FS_ATOLL = FSH + `
+-in vec3 vW; in float vDepth, vLit; out vec4 o;
+-void main(){
+-  if (length(vW.xz) > 12.6) discard;                                        // beyond the shelf there is only the sea chart
+-  float h = vW.y, r = length(vW.xz), iso = h*8., fw = max(fwidth(iso), .01), isoM = iso/5., fwM = max(fwidth(isoM), .003);
+-  float minor = (1.-smoothstep(.2,1.3,abs(fract(iso-.5)-.5)/fw))*(1.-smoothstep(.3,.9,fw));
+-  float major = (1.-smoothstep(.6,1.9,abs(fract(isoM-.5)-.5)/fwM))*(1.-smoothstep(.5,1.,fwM));
+-  float shore = 1.-smoothstep(.8,2.4,abs(h)/max(fwidth(h), 1e-4));
+-  float land = smoothstep(-.01,.01,h), up = clamp(h/2.6, 0., 1.), lit = vLit*vLit;
+-  vec3 n = normalize(cross(dFdx(vW), dFdy(vW))); if (n.y < 0.) n = -n;
+-  vec3 v = normalize(uEye-vW), lc = mix(neon(.56+up*.42), vec3(1.,.95,.88), up*up*.5);       // sea-blue at the shore, warming toward the summits
+-  float beat = ring(r, 4.2, .9, 2.6);
+-  vec3 col = vec3(.004,.006,.012)*(.4+.8*max(dot(n, normalize(vec3(-.5,.7,.35))), 0.))+lc*up*up*.012+neon(.6)*pow(1.-max(dot(n,v),0.), 4.)*.03;   // dark glass under the lines
+-  col += lc*(minor*(.1+.9*lit)+major*(.42+1.9*lit))*land*(1.+.9*beat);
+-  col += (lc*.4+.6)*major*lit*lit*1.5*land;
+-  col += neon(.58)*(minor*.04+major*.1)*(1.-land)*exp(h*2.5);                               // soundings, fading with depth
+-  col += (neon(.56)*.5+.5)*shore*(.55+.5*uBassS+.5*beat);                                    // the shoreline is the brightest line
+-  col *= 1.-smoothstep(10.5, 12.8, r);
+-  o = vec4(col, vDepth);
+-}`;
+-const FS_ATOLL_BG = FSH + `
+-out vec4 o;
+-void main(){ vec3 rd = viewRay(); float depth = 120.;
+-  vec3 col = vec3(.0025,.0035,.008)+neon(.6)*.008*exp(-abs(rd.y)*3.);
+-  if (rd.y < -.002){ float t = (-.13-uEye.y)/rd.y; vec3 p = uEye+rd*t; float r = length(p.xz); depth = t;
+-    float fr = max(fwidth(r), 1e-4), rings = (1.-smoothstep(.6,1.6,abs(fract(r*.4-.5)-.5)/(fr*.4)))*smoothstep(11.5,12.6,r);
+-    float th = atan(p.z,p.x)/TAU*72., tick = (1.-smoothstep(.6,1.6,abs(fract(th-.5)-.5)/max(fwidth(th), 1e-4)))*smoothstep(.45,.0,abs(r-13.6)-.3);
+-    col += neon(.6)*(rings*.035+tick*.1+ring(r-10., 4.2, .5, 2.6)*.05)*exp(-max(r-12.,0.)*.1)*(.6+uLevelS); }
+-  o = vec4(col, depth); }`;
+-// which stretch of the spectrum each hill follows, where it stands, and how broad it is
+-const HILLS = [[0.00, 0.06, 0.2, -0.4, 3.3], [0.06, 0.14, -2.6, 1.6, 2.6], [0.14, 0.26, 2.9, 2.2, 2.2], [0.26, 0.4, -3.4, -2.6, 1.9],
+-               [0.4, 0.55, 3.6, -2.4, 1.6], [0.55, 0.72, -0.6, 4.3, 1.4], [0.72, 0.92, 0.9, -4.6, 1.2]];
+-scene({ id: 'atoll', name: 'Isoline Atoll', from: 'Fable', kind: 'terrain', group: 'refined', pal: 0,
+-  about: 'An island drawn only in contour lines: seven hills, one for each stretch of the spectrum, swell and settle slowly with the music while their lines brighten with it',
+-  inputs: ['bandsS (seven averages, smoothed again)', 'bands (seven averages)', 'bassS', 'levelS', 'pulse'],
+-  cost: 'Light: 131k triangles with one small fbm a vertex; depth of field is most of the cost. Phones: no depth of field.',
+-  post: { dof: { ap: 10, max: 8 }, bloom: 0.5, thr: 0.65, spread: 0.68, ca: 0.4, vig: 0.9, pulse: 0.3 },
+-  init() { this.bg = program(VS, FS_ATOLL_BG); this.land = program(VS_ATOLL, FS_ATOLL); this.h = new Float32Array(28); this.lit = new Float32Array(7); this.amp = new Float32Array(7); },
+-  draw(F, out) {
+-    const t = F.time, k = 1 - Math.exp(-F.dt * 1.5);
+-    HILLS.forEach(([lo, hi, x, z, sp], i) => { let s = 0, f = 0, n = 0;
+-      for (let b = Math.floor(lo * BANDS); b < hi * BANDS; b++) { s += A.bandsS[b]; f += A.bands[b]; n++; }
+-      this.amp[i] += (s / n - this.amp[i]) * k;                                       // form follows the band slowly: about a second
+-      this.lit[i] = f / n;
+-      this.h.set([x + Math.sin(t * 0.05 + i * 2.1) * 0.5, z + Math.cos(t * 0.04 + i * 1.3) * 0.5, sp, 0.25 + 2.5 * Math.pow(this.amp[i], 1.3)], i * 4); });
+-    const a = t * 0.05, R = 23, tgt = [0, 0.5, 0], eye = [Math.sin(a) * R, 12.5 + Math.sin(t * 0.07) * 1.5, Math.cos(a) * R];
+-    const c = camera(eye, tgt, 0.64, 0, 0.5, 200); F.focus = Math.hypot(...sub(eye, tgt)) * 0.97;
+-    const set = u => { F.set(u); setCam(u, c); gl.uniform4fv(u.uHill, this.h); gl.uniform1fv(u.uLit, this.lit); };
+-    beginMS(); quad(this.bg, set);
+-    gl.enable(gl.DEPTH_TEST); mesh(this.land, grid(256), set); endMS(out);
+-  } });
+-}
+diff --git a/packages/visualizer/framework/40_globe.js a/packages/visualizer/framework/40_globe.js
+deleted file mode 100644
+index 50373dc..0000000
+--- a/packages/visualizer/framework/40_globe.js
++++ /dev/null
+@@ -1,94 +0,0 @@
+-
+-// ───────────────────────── Meridian: a wire globe; each parallel is one moment of the spectrum, sliding from pole to pole ─────────────────────────
+-{
+-const GLOBE_FN = `
+-float globeV(vec2 a){ float f = .5-.5*cos((a.x*2.-1.)*PI);
+-  float v = mix(hist(.04, a.y)*.7+hist(.2, a.y)*.3, hist(.02+f*.82, a.y), smoothstep(0.,.14,a.y));
+-  return v*(1.-smoothstep(.86,1.,a.y)); }
+-vec3 globeP(vec2 a){ float lon = (a.x*2.-1.)*PI, lat = a.y*PI; float v = globeV(a);
+-  return vec3(sin(lat)*cos(lon), cos(lat), sin(lat)*sin(lon))*(1.+v*v*.42*(.35+.65*sin(lat))+uBassS*.03+uKick*.035); }`;
+-const VS_GLOBE = VSH + GLOBE_FN + `
+-out vec3 vW, vN; out vec2 vUV; out float vV, vF;
+-void main(){
+-  vW = globeP(aUV); vUV = aUV; vV = globeV(aUV); vF = .5-.5*cos((aUV.x*2.-1.)*PI);
+-  vec2 lo = max(aUV-.004, 0.), hi = min(aUV+.004, 1.);
+-  vec3 a = globeP(vec2(hi.x,aUV.y))-globeP(vec2(lo.x,aUV.y)), b = globeP(vec2(aUV.x,hi.y))-globeP(vec2(aUV.x,lo.y));
+-  vN = cross(a, b); vN = length(vN) > 1e-9 ? normalize(vN) : normalize(vW); if (dot(vN, vW) < 0.) vN = -vN;
+-  gl_Position = uVP*vec4(vW,1.);
+-}`;
+-const FS_GLOBE = FSH + `
+-in vec3 vW, vN; in vec2 vUV; in float vV, vF; out vec4 o; uniform float uBack;
+-void main(){
+-  vec2 g = vec2(vUV.x*96., vUV.y*84.), fw = max(fwidth(g), 1e-5), px = abs(fract(g-.5)-.5)/fw;
+-  vec2 ln = (1.-smoothstep(vec2(.25,.35), vec2(1.15,1.3), px))*(1.-smoothstep(.25,.8,fw));
+-  float amp = vV*vV;
+-  vec3 lc = vivid(.5+vF*.38+vUV.y*.22);
+-  float wv = ring(vUV.y, .55, .045, 1.9);                                  // each kick: a band of light travels from pole to pole
+-  vec3 line = (lc*(ln.y*(.16+3.2*amp)+ln.x*(.05+.7*amp)) + (lc*.4+.6)*ln.x*ln.y*(amp*4.+wv*1.5))*(1.+.2*uKick+2.2*wv);
+-  vec3 n = normalize(vN), v = normalize(uEye-vW);
+-  if (uBack > .5){ o = vec4(line*.3, 0.); return; }           // the far side, seen through the shell
+-  float fr = pow(1.-abs(dot(n,v)), 2.5);
+-  vec3 fill = vivid(.62)*.006 + lc*amp*.04 + vivid(.7)*fr*(.05+.2*uBass+.2*uKick) + (vivid(.12)*.6+.4)*(1.-fr)*(.012+.05*uBassS);   // glass, warmed from inside
+-  o = vec4(fill+line, .6);
+-}`;
+-const FS_GLOBE_BG = FSH + `
+-out vec4 o;
+-void main(){ vec3 rd = viewRay(); vec3 col = vec3(.002,.0025,.006) + vivid(.62)*.012*fbm(rd*2.2+4.);
+-  col += stars(rd)*.8;
+-  float tca = -dot(uEye, rd), b = length(cross(uEye, rd));
+-  if (tca > 0.){ col += vivid(.6)*exp(-max(b-1.,0.)*5.)*(.08+.16*uBass+.12*uKick);
+-    col += (vivid(.12)*.7+.3)*exp(-b*b*55.)*(.3+.9*uBass+1.2*uKick);         // the core, seen through the shell
+-    vec3 pc = uEye+rd*tca; float ang = atan(dot(pc, uCamU), dot(pc, uCamR));
+-    float shaft = noise(vec3(ang*5., uTime*.12, 1.))*noise(vec3(ang*13., uTime*.09, 5.)), bandA = spec(.04+(.5+.5*sin(ang))*.7);
+-    col += (vivid(.12)*.6+.4)*shaft*shaft*(.5+2.5*bandA*bandA)*exp(-max(b-.15, 0.)*1.5)*(.14+.5*uBassS); }   // its light, breaking out between the wires
+-  o = vec4(col, 1.); }`;
+-// Three thin rings turn about the globe, like the rings of an armillary sphere: one each for bass, mids and
+-// highs. Each carries a bead that runs round it as fast as its band is loud, and lights along its length with it.
+-const VS_ARM = VSH + `
+-uniform mat3 uTilt; uniform float uRad; out vec2 vP;
+-void main(){ float a = aUV.x*TAU, r = uRad+(aUV.y-.5)*.1; vP = aUV; gl_Position = uVP*vec4(uTilt*vec3(cos(a)*r, 0., sin(a)*r), 1.); }`;
+-const FS_ARM = FSH + `
+-in vec2 vP; out vec4 o; uniform float uBand, uSat;
+-void main(){ float fv = max(fwidth(vP.y), 1e-4), ln = 1.-smoothstep(.5,1.8,abs(vP.y-.5)/fv), fu = max(fwidth(vP.x*90.), 1e-4);
+-  float tick = (1.-smoothstep(.1,.1+fu,abs(fract(vP.x*90.)-.5)))*step(abs(vP.y-.5), .32)*(1.-smoothstep(.3,.8,fu));
+-  float s = spec(uBand+.2*abs(vP.x*2.-1.)), back = fract(uSat-vP.x), dd = min(back, 1.-back);
+-  float bead = exp(-dd*dd*30000.)*exp(-pow((vP.y-.5)/.35, 2.)), tail = exp(-back*16.)*ln;
+-  o = vec4(neon(.5+uBand*1.2)*(ln*(.12+1.1*s*s)+tick*(.05+.3*s))+(neon(.5+uBand*1.2)*.4+.6)*(bead*3.5+tail*1.4), 1.); }`;
+-// A tilted ring of dust around the globe; every radius is a band.
+-const VS_RING = VSP + `
+-uniform float uDpr; out vec3 vCol;
+-float h1(float n){ return fract(sin(n)*43758.5453123); }
+-void main(){
+-  float id = float(gl_VertexID), a = h1(id*.1031+1.3), b = h1(id*.11369+2.1), c = h1(id*.13787+3.7);
+-  float band = pow(a, .8), r = 1.62+band*.95, s = specS(.03+band*.8), sl = spec(.03+band*.8);
+-  float ang = b*TAU + uTime*(.5/(r*sqrt(r)));
+-  vec3 p = vec3(cos(ang)*r, (c-.5)*.035*(1.+6.*s*s), sin(ang)*r);
+-  p.yz = rot(.42)*p.yz; p.xy = rot(-.2)*p.xy;
+-  gl_Position = uVP*vec4(p,1.);
+-  gl_PointSize = clamp((1.2+2.4*s+step(.985,c)*2.)*uDpr*3./max(gl_Position.w,.2), 1., 24.);
+-  vCol = vivid(.5+band*.45)*(.06+(s*s*.6+sl*sl*.4)*1.8+uHigh*.1);
+-}`;
+-
+-scene({ id: 'globe', name: 'Meridian', from: 'Fable', kind: 'sphere', group: 'refined', pal: 0,
+-  about: 'A wire globe lit from within: its parallels are moments of the spectrum sliding from pole to pole, each kick sends a band of light across it, and three armillary rings carry beads that run as fast as bass, mids and highs are loud',
+-  inputs: ['hist', 'specS', 'spec', 'bassS', 'midS', 'highS', 'bass', 'high', 'kick', 'pulse'],
+-  cost: 'Cheap. The globe is drawn twice (far side, then near side) and the ring is 90k points.',
+-  post: { trail: 0.15, bloom: 0.5, thr: 0.6, ca: 0.4, pulse: 0.3 },
+-  init() { this.bg = program(VS, FS_GLOBE_BG); this.shell = program(VS_GLOBE, FS_GLOBE); this.ring = program(VS_RING, FS_POINT); this.arm = program(VS_ARM, FS_ARM); this.sat = [0, 0.3, 0.6]; },
+-  draw(F, out) {
+-    const t = F.time, c = camera(orbit(t * 0.09, 0.5 + Math.sin(t * 0.07) * 0.16, 4.7), [0, -0.05, 0], 0.8, 0, 0.1, 60);
+-    const set = u => { F.set(u); setCam(u, c); }, g = grid(256);
+-    beginMS(); quad(this.bg, set);
+-    gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+-    gl.cullFace(gl.FRONT); gl.depthMask(false); mesh(this.shell, g, u => { set(u); gl.uniform1f(u.uBack, 1); });
+-    gl.cullFace(gl.BACK); gl.depthMask(true); mesh(this.shell, g, u => { set(u); gl.uniform1f(u.uBack, 0); });
+-    gl.disable(gl.CULL_FACE); gl.depthMask(false); gl.blendFunc(gl.ONE, gl.ONE);
+-    points(this.ring, 90000, u => { set(u); gl.uniform1f(u.uDpr, F.px); });
+-    gl.depthMask(false);
+-    [A.bassS, A.midS, A.highS].forEach((lv, i) => { this.sat[i] = (this.sat[i] + F.dt * (0.03 + 0.4 * lv * lv)) % 1;
+-      const a = 0.5 + i * 1.1 + Math.sin(t * 0.05 + i * 2) * 0.35, b = i * 2.1 + t * 0.03 * (i - 1), ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+-      mesh(this.arm, grid(128), u => { set(u); gl.uniformMatrix3fv(u.uTilt, false, [cb, sb, 0, -sb * ca, cb * ca, sa, sb * sa, -cb * sa, ca]);
+-        gl.uniform1f(u.uRad, 1.52 + i * 0.13); gl.uniform1f(u.uBand, 0.03 + i * 0.27); gl.uniform1f(u.uSat, this.sat[i]); }); });
+-    endMS(out);
+-  } });
+-}
+diff --git a/packages/visualizer/framework/46_nebula.js b/packages/visualizer/framework/46_nebula.js
+index 88fd6a3..685da67 100644
+--- a/packages/visualizer/framework/46_nebula.js
++++ b/packages/visualizer/framework/46_nebula.js
+@@ -21,7 +21,7 @@ void main(){
+   vec3 acc = vec3(0.); float tr = 1.;
+   if (h > 0.){
+     h = sqrt(h); float t0 = max(-b-h, 0.), t1 = -b+h;
+-    const int N = 44; float dt = (t1-t0)/float(N);
++    const int N = 36; float dt = (t1-t0)/float(N);
+     float jit = fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(.06711056,.00583715))));
+     for (int i = 0; i < N; i++){
+       vec3 p = ro+rd*(t0+(float(i)+jit)*dt); float r = length(p)/1.25, d = dens(p, r);
+@@ -44,7 +44,7 @@ void main(){ vec3 rd = viewRay(); vec2 uv = gl_FragCoord.xy/uRes, e = 1.2/uRes;
+ scene({ id: 'nebula', name: 'Nebula', from: 'Claude', kind: 'field', group: 'refined', pal: 0, hue: t => 0.05 * Math.sin(t * 0.045),
+   about: 'A whirlpool of lit gas filling the frame: every wisp answers its own band, and each kick sends a faint, broken shell of light out through it',
+   inputs: ['spec', 'specS', 'bassS', 'kick', 'pulse', 'dyn', 'drop'],
+-  cost: 'Heavy: a 40-step volume march with five noise lookups a step, done at two-thirds resolution. Phones: 20 steps at a third. TVs: 28 steps.',
++  cost: 'Heavy: a 36-step volume march with six noise lookups a step, done at two-thirds resolution. Phones: 20 steps at a third. TVs: 28 steps.',
+   post: { trail: 0.3, bloom: 0.55, thr: 0.8, knee: 0.6, spread: 0.72, exp: 1.0, ca: 0.5, pulse: 0.15 },
+   init() { this.p = program(VS, FS_NEB); this.up = program(VS, FS_NEB_UP); },
+   draw(F, out) {
+diff --git a/packages/visualizer/framework/60_watercolour.js b/packages/visualizer/framework/60_watercolour.js
+index af0c799..c1e3924 100644
+--- a/packages/visualizer/framework/60_watercolour.js
++++ b/packages/visualizer/framework/60_watercolour.js
+@@ -37,11 +37,11 @@ void main(){
+     s.rgb += paintOf(uDropP[i].w)*smoothstep(1., 0., rr)*land(a)*uDt*1.9; s.a = max(s.a, smoothstep(1.25, .5, rr)*smoothstep(0.,.1,a)); }
+   // strokes
+   for (int i = 0; i < 6; i++){ float a = uStk[i].w; if (a > DUR) continue; float u = a/DUR, ez = 1.-(1.-u)*(1.-u), ang = uStk[i].z, L = uStk2[i].x, w = uStk2[i].y, cv = uStk2[i].z;
+-    vec2 dir = vec2(cos(ang), sin(ang)), per = vec2(-dir.y, dir.x), head = uStk[i].xy*vec2(ASP, 1.)+L*(ez*dir+cv*ez*ez*per), tg = normalize(dir+2.*cv*ez*per), nm = vec2(-tg.y, tg.x);
++    vec2 dir = vec2(cos(ang), sin(ang)), per = vec2(-dir.y, dir.x), head = uStk[i].xy*vec2(ASP, 1.)+L*(ez*dir+cv*ez*(1.-ez)*per), tg = normalize(dir+cv*(1.-2.*ez)*per), nm = vec2(-tg.y, tg.x);
+     vec2 d = p-head; float al = dot(d, tg), ac = dot(d, nm)/w; if (abs(ac) > 1.2 || abs(al) > w) continue;
+     float load = 1.-.8*u, bris = smoothstep(.62-.5*load, .78-.5*load, noise(vec3(ac*4.5+ang*9., ang*31., ez*L*5.))*.6+noise(vec3(ac*13., ang*7., ez*L*9.))*.4+.25*load);   // the bristles show as the brush runs dry
+     float foot = smoothstep(1., .82, abs(ac))*smoothstep(w, w*.4, abs(al));
+-    s.rgb += paintOf(uStk2[i].w)*foot*bris*(.5+.5*load)*uDt*38.; s.a = max(s.a, foot*.2); }
++    s.rgb += paintOf(uStk2[i].w)*foot*bris*(.5+.5*load)*uDt*38.; s.a = mix(s.a, min(s.a,.12), foot*bris*.6); }
+   // dots (hats) and splatter (snares)
+   for (int i = 0; i < 8; i++){ float a = uDot[i].w; if (a > .4) continue; float dd = length((uv-uDot[i].xy)*vec2(ASP, 1.))/uDot[i].z;
+     s.rgb += (paintOf(float(i)*1.3)*.6+.5)*smoothstep(1., .7, dd)*land(a)*uDt*9.; s.a = max(s.a, smoothstep(1.3, .8, dd)*.3*smoothstep(0.,.1,a)); }
+@@ -50,7 +50,7 @@ void main(){
+     float dd = length(q-c-.12-.76*vec2(hash2(c+sd), hash2(c+sd+3.)));
+     s.rgb += paintOf(sd*3.+h)*smoothstep(.12+.3*h, .04, dd)*keep*land(a)*uDt*7.; s.a = max(s.a, smoothstep(.5, .1, dd)*keep*.5*smoothstep(0.,.1,a)); }
+   s.a = max(s.a-uDt*.04, 0.);                                              // the paper dries
+-  s.rgb = min(s.rgb*exp(-uDt*.024), vec3(3.));                             // and old paint fades, so the sheet keeps renewing
++  s.rgb = min(s.rgb*exp(-uDt*.018), vec3(3.));                             // and old paint fades, so the sheet keeps renewing
+   o = s;
+ }`;
+ const FS_WC = FSH + COVER + `
+@@ -87,8 +87,8 @@ scene({ id: 'wash', name: 'Watercolour', from: 'Organic', kind: 'paint', group:
+     for (let j = 0; j < 6; j++) K[j * 4 + 3] += F.dt;
+     for (let j = 0; j < 8; j++) O[j * 4 + 3] += F.dt;
+     newPulses(this.last, i => D.set([0.08 + r() * 0.84, 0.1 + r() * 0.8, 0.14 + 0.12 * A.bassS + 0.06 * r(), r() * 3], i * 4));
+-    if (A.notes !== this.nn) { this.nn = A.notes; const j = this.ki++ % 6, len = 0.1 + 0.2 * A.noteAmp + 0.08 * r();
+-      K.set([hand[0] + (r() - 0.5) * 0.3, hand[1] + (r() - 0.5) * 0.36, r() * 6.283, 0], j * 4); K2.set([len, 0.007 + 0.014 * A.noteAmp + 0.005 * r(), (r() - 0.5) * 0.9, A.noteBand * 9 + this.ki * 0.41], j * 4); }
++    if (A.notes !== this.nn) { this.nn = A.notes; const j = this.ki++ % 6, len = 0.07 + 0.34 * r() ** 1.5 + 0.14 * A.noteAmp;
++      K.set([hand[0] + (r() - 0.5) * 0.46, hand[1] + (r() - 0.5) * 0.48, r() * 6.283, 0], j * 4); K2.set([len, 0.007 + 0.014 * A.noteAmp + 0.005 * r(), (r() - 0.5) * 2.2, A.noteBand * 9 + this.ki * 0.41], j * 4); }
+     if (A.hats !== this.hn) { this.hn = A.hats; O.set([hand[0] + (r() - 0.5) * 0.5, hand[1] + (r() - 0.5) * 0.5, 0.003 + 0.006 * A.hatAmp + 0.002 * r(), 0], (this.di++ & 7) * 4); }
+     if (A.snares !== this.sn) { this.sn = A.snares; S.set([hand[0] + (r() - 0.5) * 0.4, hand[1] + (r() - 0.5) * 0.4, r(), 0], (this.si++ & 3) * 4); }
+     draw(this.sim, this.b, WC_W, WC_H, u => { F.set(u); bindTex(3, this.a.t); gl.uniform1i(u.uState, 3); gl.uniform1f(u.uDt, Math.min(F.dt, 1 / 30));
+diff --git a/packages/visualizer/framework/61_ink.js b/packages/visualizer/framework/61_ink.js
+index 7938d74..c94f082 100644
+--- a/packages/visualizer/framework/61_ink.js
++++ b/packages/visualizer/framework/61_ink.js
+@@ -5,14 +5,14 @@ const INK_W = 256, INK_H = 160, INK_DW = 1024, INK_DH = 640;
+ // Each kick lets ink in somewhere new: dropped from above, pushed in from a side wall, rising from the floor,
+ // or bled into the middle. uDropP is where and which ink; uDropV is the push it arrives with and how it spreads.
+ const INK_COMMON = `
+-in vec2 uv; out vec4 o; uniform sampler2D uVel, uDye; uniform float uDt, uAsp; uniform vec4 uDropP[8], uDropV[8];
++in vec2 uv; out vec4 o; uniform sampler2D uVel, uDye; uniform float uDt, uAsp; uniform float uJetAge[8]; uniform vec4 uDropP[8], uDropV[8];
+ float land(float a){ return smoothstep(0.,.07,a)*(1.-smoothstep(.12,.55,a)); }
+ vec3 inkOf(float k){ k = mod(k, 3.); return clamp(vec3(max(1.-abs(k), 1.-abs(k-3.)), 1.-abs(k-1.), 1.-abs(k-2.)), 0., 1.); }`;
+ const FS_INK_FORCE = HEAD + LIB + INK_COMMON + `
+ void main(){
+   vec2 v = texture(uVel, uv).xy; float den = dot(texture(uDye, uv).rgb, vec3(1.));
+   v.y -= den*.05*uDt;                                                       // ink is only a little heavier than water, so it hangs
+-  for (int i = 0; i < 8; i++){ float a = uPulse[i]; if (a > .7) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.); float g = exp(-dot(d,d)/.0024);
++  for (int i = 0; i < 8; i++){ float a = uJetAge[i]; if (a > .7) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.); float g = exp(-dot(d,d)/.0024);
+     v += (uDropV[i].xy+uDropV[i].z*d/(length(d)+.02))*g*land(a)*uDt*(3.2+3.*uBassS); }
+   vec2 p = uv*vec2(uAsp, 1.); float t = uTime*.07;
+   v += vec2(cos(p.y*2.3+t)+.5*cos(p.y*5.1-t*1.7), sin(p.x*1.9-t*1.3)+.5*sin(p.x*4.3+t*2.1))*uDt*.01*(.3+1.2*uMidS);   // the mids stir the tank, gently
+@@ -20,9 +20,9 @@ void main(){
+ }`;
+ const FS_INK_DYE = HEAD + LIB + INK_COMMON + `
+ void main(){
+-  vec3 dye = texture(uDye, uv).rgb*exp(-uDt*.011);                          // it thins out only over a minute or more, so colours build up in layers
+-  for (int i = 0; i < 8; i++){ float a = uPulse[i]; if (a > .7) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.);
+-    dye += inkOf(uDropP[i].w)*exp(-dot(d,d)/(.0006+.0009*uDropV[i].w))*land(a)*uDt*(7.+9.*uDropV[i].w); }
++  vec3 dye = texture(uDye, uv).rgb*exp(-uDt*.028);                          // it thins out only over a minute or more, so colours build up in layers
++  for (int i = 0; i < 8; i++){ float a = uJetAge[i]; if (a > .7) continue; vec2 d = (uv-uDropP[i].xy)*vec2(uAsp, 1.);
++    dye += inkOf(uDropP[i].w)*exp(-dot(d,d)/(.001+.0017*uDropV[i].w))*land(a)*uDt*(7.+9.*uDropV[i].w); }
+   o = vec4(min(dye, vec3(3.2)), 1.);
+ }`;
+ const FS_INK = FSH + COVER + `
+@@ -43,22 +43,34 @@ void main(){
+   o = vec4(col*(1.-.55*dot(q,q)), 1.);
+ }`;
+ scene({ id: 'ink', name: 'Ink in Water', from: 'Organic', kind: 'fluid', group: 'organic', pal: 0, hue: () => 0,
+-  about: 'A lit tank: every kick lets ink in from somewhere new (above, a side, the floor, the middle); it unfurls slowly in a real fluid simulation and lingers, so the colours build up in layers',
++  about: 'A lit tank: a bass jet rises in the centre, snares enter from the right and pitched notes from the left; it unfurls slowly in a real fluid simulation and lingers, so the colours build up in layers',
+   inputs: ['bassS', 'midS', 'levelS', 'pulse'],
+   cost: 'Moderate: a 256×160 fluid solve (18 pressure iterations) and a 1024×640 dye field. Phones: 128×80 with 10 iterations and a 512×320 dye field.',
+   post: { bloom: 0.06, thr: 1.6, exp: 1.0, ca: 0.15, vig: 0.3, grain: 0.02, pulse: 0 },
+   init() { this.force = program(VS, FS_INK_FORCE); this.dye = program(VS, FS_INK_DYE); this.show = program(VS, FS_INK);
+-    this.fluid = new Fluid(INK_W, INK_H, INK_DW, INK_DH); this.P = new Float32Array(32); this.V = new Float32Array(32); this.last = new Float32Array(8).fill(9); this.n = 0; },
++    this.fluid = new Fluid(INK_W, INK_H, INK_DW, INK_DH); this.P = new Float32Array(32); this.V = new Float32Array(32); this.last = new Float32Array(8).fill(9); this.n = 0; this.age = new Float32Array(8).fill(9); this.sn = A.snares; this.nn = A.notes; this.noteAt = -1; },
+   draw(F, out) {
+-    newPulses(this.last, i => { const r = Math.random, k = this.n++ % 5, ink = (this.n * 0.37 + r() * 0.5) % 3, big = 0.3 + 0.7 * Math.min(1, A.kickAmp / 3) * r();
+-      const src = [                                               // x, y, push x, push y, outward spread
+-        [0.14 + r() * 0.72, 0.93, (r() - 0.5) * 0.3, -1, 0],       // a drop from above
+-        [0.04, 0.2 + r() * 0.6, 1, (r() - 0.5) * 0.4, 0],          // in from the left wall
+-        [0.3 + r() * 0.4, 0.35 + r() * 0.3, 0, 0, 0.55],           // bled into the middle
+-        [0.96, 0.2 + r() * 0.6, -1, (r() - 0.5) * 0.4, 0],         // in from the right wall
+-        [0.14 + r() * 0.72, 0.05, (r() - 0.5) * 0.3, 0.9, 0]][k];  // rising from the floor
+-      this.P.set([src[0], src[1], 0, ink], i * 4); this.V.set([src[2], src[3], src[4], big], i * 4); });
+-    this.fluid.step(F.dt, { force: this.force, dye: this.dye, set: u => { F.set(u); gl.uniform4fv(u.uDropP, this.P); gl.uniform4fv(u.uDropV, this.V); }, keepV: 0.988, vort: 5, iters: 18, wall: 0.03 });
++    // Repeated hits feed the same plume. A listener can follow each instrument in one place.
++    for (let j = 0; j < 8; j++) this.age[j] += F.dt;
++    const jet = (x, y, dx, dy, dye, strength) => {
++      const i = this.n++ % 8;
++      this.age[i] = 0;
++      this.P.set([x, y, 0, dye], i * 4);
++      this.V.set([dx, dy, 0.12, strength], i * 4);
++    };
++    newPulses(this.last, () => jet(.5, .25, .08, 1.05, 0, Math.min(1, A.kickAmp / 2.5)));
++    if (this.sn !== A.snares) {
++      this.sn = A.snares;
++      jet(.69, .61, -.8, -.32, 1, .67);
++    }
++    if (this.nn !== A.notes) {
++      this.nn = A.notes;
++      if (F.time - this.noteAt > .28 && A.noteAmp > .36) {
++        this.noteAt = F.time;
++        jet(.31, .45 + .22 * A.noteBand, .75, .24, 2, A.noteAmp * .72);
++      }
++    }
++    this.fluid.step(F.dt, { force: this.force, dye: this.dye, set: u => { F.set(u); gl.uniform1fv(u.uJetAge, this.age); gl.uniform4fv(u.uDropP, this.P); gl.uniform4fv(u.uDropV, this.V); }, keepV: 0.988, vort: 5, iters: 18, wall: 0.03 });
+     draw(this.show, out, T.sw, T.sh, u => { F.set(u); bindTex(3, this.fluid.d[0].t); gl.uniform1i(u.uDye, 3); });
+   } });
+ }
+diff --git a/packages/visualizer/framework/62_incense.js b/packages/visualizer/framework/62_incense.js
+index 891d1d1..03daad2 100644
+--- a/packages/visualizer/framework/62_incense.js
++++ b/packages/visualizer/framework/62_incense.js
+@@ -11,14 +11,16 @@ void main(){
+   vec2 d = (uv-uTip.xy)*vec2(uAsp, 1.);
+   v += vec2(0., 1.)*exp(-dot(d,d)/.0004)*uDt*(4.5+2.5*uLevelS);
+   for (int i = 0; i < 8; i++){ float a = uPulse[i]; if (a > .9) continue;       // each kick: a breath of air across the column
+-    v.x += uSide[i]*exp(-pow((uv.y-.28-a*.5)/.14, 2.))*smoothstep(0.,.12,a)*(1.-smoothstep(.3,.9,a))*uDt*.85; }
++    v.x += uSide[i]*exp(-pow((uv.y-.28-a*.5)/.14, 2.))*smoothstep(0.,.12,a)*(1.-smoothstep(.3,.9,a))*uDt*1.15; }
+   vec2 p = uv*vec2(uAsp, 1.); float t = uTime*.2;
+   v += vec2(sin(p.y*4.+t)+.6*sin(p.y*9.-t*1.6), 0.)*uDt*.02*(.3+1.5*uHighS)*smoothstep(.2,.5,uv.y);   // the room's own small draughts
++  float height = smoothstep(.16,.75,uv.y);
++  v.x += (tanh((uv.x-uTip.x)*16.)*.33 + sin(uv.y*11.-t)*.14)*height*uDt*min(den,1.);
+   o = vec4(v, 0., 1.);
+ }`;
+ const FS_SMK_DYE = HEAD + LIB + SMK_COMMON + `
+ void main(){
+-  vec3 s = texture(uDye, uv).rgb; s.r *= exp(-uDt*.16); s.g *= exp(-uDt*1.1);     // r: smoke, g: its heat near the ember
++  vec3 s = texture(uDye, uv).rgb; s.r *= exp(-uDt*.09); s.g *= exp(-uDt*1.1);     // r: smoke, g: its heat near the ember
+   vec2 d = (uv-uTip.xy)*vec2(uAsp, 1.); float g = exp(-dot(d,d)/.00009);
+   s.r += g*uDt*(9.+10.*uLevelS+10.*uKick+12.*uAccent); s.g += g*uDt*14.;
+   s.r *= 1.-uDt*2.*smoothstep(.9, 1., uv.y);
+@@ -54,7 +56,7 @@ scene({ id: 'incense', name: 'Incense', from: 'Organic', kind: 'fluid', group: '
+     this.fluid = new Fluid(SMK_W, SMK_H, SMK_DW, SMK_DH); this.side = new Float32Array(8); this.last = new Float32Array(8).fill(9); this.flip = 1; this.nn = A.notes; this.kink = 0; this.wob = 0; },
+   draw(F, out) {
+     const t = F.time;
+-    if (A.notes !== this.nn) { this.nn = A.notes; this.kink = (this.kink > 0 ? -1 : 1) * (0.006 + 0.012 * A.noteAmp); }   // every note puts a small kink in the thread
++    if (A.notes !== this.nn) { this.nn = A.notes; this.kink = (this.kink > 0 ? -1 : 1) * (0.009 + 0.016 * A.noteAmp); }   // every note puts a small kink in the thread
+     this.kink *= Math.exp(-F.dt * 5); this.wob += (this.kink - this.wob) * (1 - Math.exp(-F.dt * 14));
+     const tip = [0.47 + 0.003 * Math.sin(t * 1.3) + this.wob, 0.13, 0];
+     newPulses(this.last, i => { this.flip = -this.flip; this.side[i] = this.flip * (0.6 + Math.random() * 0.8); });
+diff --git a/packages/visualizer/framework/63_leaves.js b/packages/visualizer/framework/63_leaves.js
+index c2c793d..3167fff 100644
+--- a/packages/visualizer/framework/63_leaves.js
++++ b/packages/visualizer/framework/63_leaves.js
+@@ -15,7 +15,7 @@ void main(){
+   const vec3 BOX = vec3(22., 13., 13.);                                          // larger than the view at every depth, so a leaf only ever wraps out of sight
+   float sp = .6+.8*h4, ph = uFall*sp+uWind*.35+h5*40.;                           // its own weight, and its own clock, wound by the fall and the wind
+   float sway = sin(ph*1.7+h6*6.)*.5+sin(ph*.9+h1*9.)*.35;
+-  vec3 c = vec3(mod(h1*BOX.x+uWind*(.6+.6*h6)+sway, BOX.x)-BOX.x*.5, mod(h2*BOX.y-uFall*sp, BOX.y)-BOX.y*.5, h3*h3*BOX.z+1.4);
++  vec3 c = vec3(mod(h1*BOX.x+uWind*(h3-.48)*1.8+sway+1.45*sin(ph*.57+h3*7.), BOX.x)-BOX.x*.5, mod(h2*BOX.y-uFall*sp+.55*sin(ph*.85+h1*6.), BOX.y)-BOX.y*.5, h3*h3*BOX.z+1.4+.55*sin(ph*.42+h7*8.));
+   float a1 = ph*2.1+h7*6.28, a2 = ph*1.3+h1*6.28+sway*.8, a3 = h3*6.28+sin(ph*.7)*.6;                      // tumbling
+   float c1 = cos(a1), s1 = sin(a1), c2 = cos(a2), s2 = sin(a2), c3 = cos(a3), s3 = sin(a3);
+   mat3 R = mat3(c3,s3,0., -s3,c3,0., 0.,0.,1.)*mat3(c2,0.,-s2, 0.,1.,0., s2,0.,c2)*mat3(1.,0.,0., 0.,c1,s1, 0.,-s1,c1);
+@@ -76,7 +76,7 @@ scene({ id: 'leaves', name: 'Falling Leaves', from: 'Organic', kind: 'nature', g
+   draw(F, out) {
+     const t = F.time;
+     this.fall += F.dt * (0.35 + 0.6 * A.levelS + 0.35 * A.dyn - 0.55 * A.accent - 1.3 * A.drop);   // strong beats hold them up a moment          // a big moment lifts them
+-    this.wind += F.dt * (0.2 + 1.6 * A.bassS + 3.4 * A.kick + 2.2 * A.accent);                          // every kick is a gust
++    this.wind += F.dt * ((0.35 + 1.6 * A.bassS + 3.4 * A.kick + 2.2 * A.accent) * Math.sin(t * 0.21 + 0.8));                          // every kick is a gust
+     const c = camera([Math.sin(t * 0.07) * 0.3, Math.sin(t * 0.05) * 0.2, 0], [0, 0.35, 10], 0.75, Math.sin(t * 0.06) * 0.03, 0.2, 80);
+     const set = u => { F.set(u); setCam(u, c); gl.uniform1f(u.uFall, this.fall % 100000); gl.uniform1f(u.uWind, this.wind % 100000); };
+     F.focus = 6;
+diff --git a/packages/visualizer/framework/64_wheat.js b/packages/visualizer/framework/64_wheat.js
+index de49ed0..c95329b 100644
+--- a/packages/visualizer/framework/64_wheat.js
++++ b/packages/visualizer/framework/64_wheat.js
+@@ -23,7 +23,11 @@ float gust(vec2 xz){
+   float age = clamp((along+14.)/70.+.025*noise(vec3(across*.2, 1., 7.)), 0., 1.);   // a gust takes seventeen seconds to cross the field
+   vec4 h = slowH(age);                                                              // the music as it was when this gust set out
+   float turb = noise(vec3(xz*.22-uWdir*uTime*.45, uTime*.07));
+-  return .1+.5*h.z+.8*h.y*(.6+.4*noise(vec3(across*.11, uTime*.05, 2.)))+.16*turb*(.4+h.w); }`;
++  float nearField = exp(-max(xz.y-2.,0.)*.09);
++  float lane = .5+.5*sin(across*.85+along*.28+2.*turb);
++  float bassPocket = nearField*lane*(.8*uKick+.65*uBass);
++  float treble = nearField*(1.-lane)*uHigh*(.35+.22*sin(across*3.+uTime*3.));
++  return .09+.4*h.z+.85*h.y*(.4+.6*turb)+.14*turb*h.w+bassPocket+treble; }`;
+ const VS_WHEAT = VSP + WHEAT_FN + `
+ out vec3 vW; out vec4 vI; out float vDepth;
+ const float TT[6] = float[6](0., .36, .64, .76, .88, 1.), WW[6] = float[6](1., .9, .8, 2.7, 2.3, .0);
+diff --git a/packages/visualizer/framework/65_shallows.js b/packages/visualizer/framework/65_shallows.js
+index 119a0d5..79d80fc 100644
+--- a/packages/visualizer/framework/65_shallows.js
++++ b/packages/visualizer/framework/65_shallows.js
+@@ -13,10 +13,10 @@ vec2 wgrad(vec2 p){                                           // the slope of th
+   vec2 g = vec2(0.); float warp = noise(vec3(p*.35, uTime*.12))*5., amp = .45+1.1*uBassS+.4*uDyn;
+   for (int i = 0; i < 9; i++){ float fi = float(i), ang = fi*2.399+.6, k = 1.7*pow(1.32, fi); vec2 D = vec2(cos(ang), sin(ang));
+     g += D*.05*(i < 5 ? amp : .5+1.7*uHighS)*cos(k*dot(D,p)-sqrt(k*4.)*uTime*1.1+warp*(.6+.2*fi)+fi*1.7); }
+-  for (int i = 0; i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w-FALL, life = .9+2.3*sz; if (a < 0. || a > life+BACK) continue;
++  for (int i = 0; i < 14; i++){ float sz = uDr[i].z, a = uDr[i].w-FALL, life = .65+1.25*sz; if (sz <= 0. || a < 0. || a > life+BACK) continue;
+     vec2 d = p-uDr[i].xy; float r = length(d)+1e-3, x = r-a*1.5, k = 22.-8.*sz;                          // bigger drops make broader, longer-lived rings
+     float w = cos(x*k)*smoothstep(0.,.12,a)*(1.-smoothstep(life*.5, life, a))*exp(-x*x*(9.-4.*sz));
+-    float a2 = a-BACK, x2 = r-a2*1.5; if (a2 > 0.) w += .45*cos(x2*k)*smoothstep(0.,.12,a2)*(1.-smoothstep(life*.3, life*.7, a2))*exp(-x2*x2*9.);
++    float a2 = a-BACK, x2 = r-a2*1.5; if (a2 > 0.) w += .2*cos(x2*k)*smoothstep(0.,.12,a2)*(1.-smoothstep(life*.3, life*.7, a2))*exp(-x2*x2*9.);
+     g += d/r*w*(.2+.5*sz)/(1.+r*.7); }
+   return g; }
+ float petal(vec2 p, out vec3 pc){                              // a few petals riding the surface
+@@ -70,18 +70,21 @@ void main(){
+   o = vec4(col, ts+path);
+ }`;
+ scene({ id: 'shallows', name: 'Shallows', from: 'Organic', kind: 'nature', group: 'organic', pal: 0, hue: () => 0,
+-  about: 'Sunlight through clear moving water onto sand and stones: drops fall into it with the music (big on the kick, smaller on the snare, a little one for every note, placed by its pitch) and their rings sweep the light across the bed',
++  about: 'Sunlight through clear moving water onto sand and stones: drops fall into it with the music (a single drop on a spaced kick, or a smaller pitch-placed drop in the gaps) and their rings sweep the light across the bed',
+   inputs: ['bassS', 'highS', 'levelS', 'high', 'kick', 'pulse', 'snares, notes (onsets)', 'dyn'],
+   cost: 'Moderate: four surface-slope evaluations a pixel (about 70 trig calls). Phones: five waves instead of nine, at reduced resolution.',
+   post: { dof: { ap: 4, max: 5 }, bloom: 0.35, thr: 1.1, knee: 0.6, exp: 1.0, ca: 0.3, vig: 0.6, pulse: 0.2 },
+-  init() { this.p = program(VS, FS_SHALLOWS); this.dr = new Float32Array(56).fill(99); this.di = 0; this.last = new Float32Array(8).fill(9); this.sn = A.snares; this.nn = A.notes; },
++  init() { this.p = program(VS, FS_SHALLOWS); this.dr = new Float32Array(56); this.di = 0; this.last = new Float32Array(8).fill(9); this.lastDrop = -10; this.nn = A.notes; },
+   draw(F, out) {
+     const t = F.time, drift = [t * 0.12, t * 0.05], tgt = [drift[0], 0, drift[1] + 1.2];
+     const D = this.dr, r = Math.random, drop = (x, z, size) => { D.set([tgt[0] + x, tgt[2] + z, size, 0], (this.di++ % 14) * 4); };
+     for (let i = 0; i < 14; i++) D[i * 4 + 3] += F.dt;
+-    newPulses(this.last, () => drop((r() - 0.5) * 3.6, (r() - 0.5) * 2.4, 0.65 + 0.35 * Math.min(1, A.kickAmp / 3)));       // kicks: the big drops
+-    if (A.snares !== this.sn) { this.sn = A.snares; drop((r() - 0.5) * 5, (r() - 0.5) * 3.2, 0.45); }
+-    if (A.notes !== this.nn) { this.nn = A.notes; drop((A.noteBand - 0.45) * 9, (r() - 0.5) * 3.4 + 0.3, 0.12 + 0.22 * A.noteAmp); }   // notes: small ones, placed by pitch
++    newPulses(this.last, () => {
++      if (t - this.lastDrop < 0.78) return;
++      this.lastDrop = t;
++      drop((r() - 0.5) * 3.6, (r() - 0.5) * 2.4, 0.65 + 0.35 * Math.min(1, A.kickAmp / 3)); });       // kicks: the big drops
++
++    if (A.notes !== this.nn) { this.nn = A.notes; if (t - this.lastDrop > 1.15 && A.noteAmp > 0.55) { this.lastDrop = t; drop((A.noteBand - 0.45) * 9, (r() - 0.5) * 3.4 + 0.3, 0.12 + 0.22 * A.noteAmp); } }   // notes: small ones, placed by pitch
+     const eye = [drift[0] + Math.sin(t * 0.06) * 0.5, 3.1, drift[1] - 1.9];
+     const c = camera(eye, tgt, 0.78, Math.sin(t * 0.05) * 0.04, 0.1, 60); F.focus = Math.hypot(...sub(eye, tgt)) + 0.5;
+     draw(this.p, out, T.sw, T.sh, u => { F.set(u); setCam(u, c); gl.uniform4fv(u.uDr, D); });

@@ -2,16 +2,17 @@
 // audio, quality (grouped by resolution, each by its bitrate and what it needs, with the info
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
 import { SubtitleSearch, SubtitleSearchEntry } from './subtitle-search';
-import { msg, number } from '@vela/core';
+import { clock, msg, number, sleepLeftMs, STREAMING_QUALITIES, type StreamingQuality, type StreamingSettings } from '@vela/core';
+import { useEffect } from 'react';
 import { useState, type ReactNode } from 'react';
-import type { CommandInput } from './context';
+import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, MenuSection, SegmentRow, VersionChoiceRow } from './menu';
 import { nextSubtitleOffset, type PlayerView, type QualityOption } from './present';
 import type { PlaybackPlan } from '@vela/player-api';
-import { versionAvailability, versionMenuChips, versionMenuGroups } from '../versions';
+import { convertedFrom, playingElsewhere, versionMenuChips, versionMenuGroups, versionRowStatus } from '../versions';
 
-export type MenuName = 'subtitles' | 'audio' | 'quality' | 'speed';
+export type MenuName = 'subtitles' | 'audio' | 'quality' | 'speed' | 'sleep';
 
 interface Props {
   look: PlayerLook;
@@ -211,6 +212,7 @@ export function AudioMenu({ look, view, blocked, send }: Props) {
 
 interface QualityProps extends Props {
   plan: PlaybackPlan | null;
+  streaming?: PlayerChromeState['streaming'];
   pendingQualityId?: string;
   pendingVersionId?: string;
   versionMessage: string;
@@ -219,12 +221,11 @@ interface QualityProps extends Props {
   onInfo(): void;
 }
 
-export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion, pendingVersionId, versionMessage, info, onInfo, pendingQualityId }: QualityProps): ReactNode[] {
+export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion, pendingVersionId, versionMessage, info, onInfo, pendingQualityId, streaming }: QualityProps): ReactNode[] {
   const chosen = (option: QualityOption) =>
     option.aliases.includes(view.lockedQuality) || (!view.lockedQuality && !view.qualityAuto && option.aliases.includes(view.qualityId));
   const groups = versionMenuGroups(plan?.versions, view.qualities);
   const selectedVersionId = plan?.selectedVersionId;
-  const selectedVersion = groups.versions.find(version => version.id === selectedVersionId);
   const hasVersions = groups.versions.length > 0;
   const originals = groups.converted.filter(option => option.original);
   const converted = groups.converted.filter(option => !option.original);
@@ -244,6 +245,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       onChoose={() => { if (!chosen(option)) send({ type: 'quality', renditionId: option.id }); }}
     />;
   };
+  const serverStream = view.serverStream;
   const qualityRows = [
     ...(hasVersions ? originals.map(qualityRow) : []),
     view.qualityAuto ? (
@@ -257,30 +259,37 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       />
     ) : null,
     ...(hasVersions ? converted : groups.converted).map(qualityRow),
+    serverStream ? <ChoiceRow key={serverStream.choice} look={look} name={msg('player.quality.plexStream')}
+      selected={serverStream.selected} pending={pendingQualityId === serverStream.choice}
+      enabled={!blocked && !pendingQualityId && !pendingVersionId}
+      onChoose={() => { if (!serverStream.selected) send({ type: 'quality', renditionId: serverStream.choice }); }} /> : null,
   ];
-  const convertedTitle = selectedVersion && selectedVersion.id !== groups.versions[0]?.id
-    ? msg('player.quality.convertedFrom', { version: selectedVersion.label.split(' · ')[0]! }) : msg('player.quality.convertedFromCurrent');
-  const hasConversions = view.qualityAuto || converted.length > 0;
+  const source = convertedFrom(groups.versions, selectedVersionId, view.playingLabel);
+  const elsewhere = playingElsewhere(groups.versions, view.playingVersionId, view.playingLabel);
+  const convertedTitle = source ? msg('player.quality.convertedFrom', { version: source }) : msg('player.quality.convertedFromCurrent');
+  const hasConversions = view.qualityAuto || converted.length > 0 || !!serverStream;
   const showQuality = hasVersions && (hasConversions || originals.length > 0);
   return [
     hasVersions ? <MenuSection key="versions" look={look} title={msg('player.versions')}>
       {groups.versions.map(version => {
         const unavailable = version.availability === 'unavailable';
         return <VersionChoiceRow key={`version:${version.id}`} look={look} name={version.label}
-          chips={versionMenuChips(version)} status={versionAvailability(version)} unavailable={unavailable}
+          chips={versionMenuChips(version)} status={versionRowStatus(version, view.playingVersionId)} unavailable={unavailable}
           selected={version.id === selectedVersionId} pending={version.id === pendingVersionId}
           enabled={!blocked && !pendingVersionId && !unavailable}
           onChoose={() => { if (version.id !== selectedVersionId) switchVersion(version.id); }} />;
       })}
+      {elsewhere ? <MenuHeading look={look} text={elsewhere} /> : null}
       {versionMessage ? <MenuHeading look={look} text={versionMessage} /> : null}
     </MenuSection> : null,
     showQuality ? <MenuRule key="quality-divider" look={look} /> : null,
     ...(showQuality ? [
       <MenuSection key="quality" look={look} title={hasConversions ? convertedTitle : msg('player.quality.title')}>{qualityRows}</MenuSection>,
     ] : qualityRows),
-    !view.qualities.length && !view.qualityAuto ? (
+    !view.qualities.length && !view.qualityAuto && !serverStream ? (
       <ChoiceRow key="current" look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
     ) : null,
+    ...(streaming ? [<MenuRule key="streaming-divider" look={look} />, <StreamingSettingsRows key="streaming" look={look} streaming={streaming} />] : []),
     <MenuRule key="info-divider" look={look} />,
     <ChoiceRow
       key="info"
@@ -293,6 +302,54 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       testID="player-info-toggle"
     />,
   ];
+}
+
+const STREAMING_LABELS: Record<StreamingQuality, string> = { original: 'player.streaming.original', '1080p': '1080p', '720p': '720p', '480p': '480p' };
+
+/** The streaming cap for each network type, applied from the next start. */
+function StreamingSettingsRows({ look, streaming }: { look: PlayerLook; streaming: NonNullable<PlayerChromeState['streaming']> }) {
+  const options = STREAMING_QUALITIES.map(value => ({ value, label: value === 'original' ? msg(STREAMING_LABELS[value]) : STREAMING_LABELS[value] }));
+  const pick = (network: keyof StreamingSettings) => (value: string) => {
+    if (value !== streaming.settings[network]) streaming.set({ [network]: value as StreamingQuality });
+  };
+  return (
+    <>
+      <MenuHeading look={look} text={msg('player.streaming')} />
+      <SegmentRow look={look} name={msg(look.tv ? 'player.streaming.unmetered' : 'player.streaming.wifi')} enabled
+        current={streaming.settings.wifi} options={options} onPick={pick('wifi')} />
+      <SegmentRow look={look} name={msg(look.tv ? 'player.streaming.metered' : 'player.streaming.mobile')} enabled
+        current={streaming.settings.mobile} options={options} onPick={pick('mobile')} />
+      <MenuHeading look={look} text={msg(streaming.metered ? 'player.streaming.onMobile' : 'player.streaming.nextTitle')} />
+    </>
+  );
+}
+
+const SLEEP_MINUTES = [15, 30, 60];
+
+/** The sleep timer: off, after some minutes, or at the end of what plays. The running timer shows what is left. */
+export function SleepMenu({ look, sleep, episode }: { look: PlayerLook; sleep: NonNullable<PlayerChromeState['sleep']>; episode: boolean }) {
+  const { value } = sleep;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (value.mode !== 'timer') return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [value.mode]);
+  const left = clock(Math.ceil(sleepLeftMs(value, now) / 1000));
+  const minutes = value.mode === 'timer' ? value.minutes : 0;
+  return (
+    <>
+      <ChoiceRow look={look} name={msg('player.sleep.off')} selected={value.mode === 'off'} enabled onChoose={() => sleep.set('off')} testID="player-sleep-off" />
+      {SLEEP_MINUTES.map(count => (
+        <ChoiceRow key={count} look={look} name={msg('player.sleep.minutes', { count: number(count) })}
+          detail={value.mode === 'timer' && minutes === count ? msg('player.sleep.in', { time: left }) : ''}
+          selected={value.mode === 'timer' && minutes === count} enabled onChoose={() => sleep.set('timer', count)} testID={`player-sleep-${count}`} />
+      ))}
+      <ChoiceRow look={look} name={msg(episode ? 'player.sleep.episode' : 'player.sleep.title')}
+        detail={value.mode === 'item' ? msg('player.sleep.atEnd') : ''}
+        selected={value.mode === 'item'} enabled onChoose={() => sleep.set('item')} testID="player-sleep-end" />
+    </>
+  );
 }
 
 export function SpeedMenu({ look, view, blocked, send }: Props) {

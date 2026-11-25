@@ -2,16 +2,16 @@ import { ScreenActive } from './screen-active';
 import { pagerState, readsPager, reportPager, subscribePager } from './pager-book';
 export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
-import { LAZY_STILL_MS, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, type LazySample } from './lazy-items';
+import { LAZY_STILL_MS, gridDrawn, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, scrollAudience, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
 import { msg } from '@vela/core';
-import { restartAction, secondaryPlayAction } from './restart-action';
+import { heroResumeLayout, restartAction, secondaryPlayAction } from './restart-action';
 import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './widgets/card-context-menu';
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
-import { heroSegmentDestination, isHeroControl, isHeroSegment } from './hero-pager';
+import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
 import { heroButtonRank, heroFocusCarry } from './hero-focus';
 // The skin document renderer: one recursive component per node kind over a resolved document
@@ -35,7 +35,7 @@ import { SYMBOLS } from './icons';
 import { useFocusStyles } from './focus';
 import { focusStyle } from './focus-style';
 import { isFocusVisible } from './focus-visible';
-import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-focus';
+import { RouteFocusContext, useRouteFocus, useRouteFocusContext, viewerPressedSince } from './route-focus';
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { ExpandableSummary } from './summary';
@@ -61,7 +61,10 @@ import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { moveWebRowFocus } from './web-row-navigation';
+import { rowLinkAvailable } from './row-link-available';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
+import { opensAtTop, opensWithFocus, pinOpeningScroll, viewerScrolledSince } from './opening-scroll';
+import { rowLinkTakesDirectionalFocus } from './focus-stop-policy';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
 const NOTHING = () => {};
@@ -260,7 +263,7 @@ function SkinRouteView({ host, node, after, lead = null, hideLibraryViews = fals
   openingFocus?: boolean;
 }) {
   useFocusStyles();
-  const opening = useRouteFocus();
+  const opening = useRouteFocus(opensWithFocus(host.env.route, Platform.isTV, Platform.OS));
   const focus = openingFocus ? opening : null;
   const episodeNav = useMemo(episodeNavigation, []);
   const loading = useRef<SkinHost | null>(null);
@@ -785,6 +788,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // A route scrolled off its top sets flag keep-page-scrolled (kept through flag resets), so a
   // shell can back its bar once the page moves under it (cleared as the route leaves).
   const scrolled = useRef(false);
+  const opened = useRef(Date.now());
+  const openingMoved = useRef(false);
   const noteScrolled = (y: number) => {
     const on = y > 24;
     if (on === scrolled.current) return;
@@ -801,6 +806,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     ?? (ctx.person ? contextCard(ctx.person.id || ctx.person.name, 'person', ctx.person.name, ctx.person.portrait) : undefined)
     ?? (ctx.extra ? contextCard(ctx.extra.id, 'extra', ctx.extra.name) : undefined);
   const cardArg = node.press ? fill(node.press.arg, ctx, env) : '';
+  const heroAction = !!ctx.hero && !!node.press && !isHeroControl(node.press.action, cardArg);
   const cardHref = node.press ? host.href?.(node.press.action, cardArg) : undefined;
   const cardPrimary = menuCard && node.press && (node.press.action === 'play' || node.press.action === 'playExtra' || node.press.action === 'person' || node.press.action === 'openHit' || cardArg.split('|')[0] === menuCard.id)
     ? { action: node.press.action, arg: cardArg }
@@ -822,7 +828,15 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     setCardMenu({ mode: 'pointer', anchor: { kind: 'point', point: { x, y } } });
   }, [cardPrimary?.action, cardPrimary?.arg]);
   useTVMenuEvent(event => {
-    if (!Platform.isTV || !ui.focus || !cardPrimary) return;
+    if (!Platform.isTV || !ui.focus) return;
+    const direction = event.eventType === 'left' ? -1 : event.eventType === 'right' ? 1 : 0;
+    if (direction && heroAction && buttonRef.current && heroFocus.atEdge(buttonRef.current, direction as -1 | 1)) {
+      const count = env.home?.hero.length ?? 0;
+      const target = count > 1 ? (env.heroIndex + direction + count) % count : null;
+      if (target !== null) host.dispatch('pickHero', String(target));
+      return;
+    }
+    if (!cardPrimary) return;
     // Android TV's Menu key opens the card's menu; tvOS's Menu is Back (it reaches here while anything
     // holds Back, a section's root included), so there only a long select does.
     if (event.eventType === 'longSelect' || (event.eventType === 'menu' && Platform.OS !== 'ios')) openAnchoredMenu('tv');
@@ -861,6 +875,26 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   useEffect(() => {
     if (searching) scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [searching]);
+
+  // Detail routes start at their artwork, even though native focus engines try to pull Play or
+  // Resume toward the centre. Both the route and a skin's nested title scroller receive the reset.
+  const openingAtTop = opensAtTop(env.route) && (!!route || (!!fx.scrollY && !fx.scrollX));
+  useLayoutEffect(() => {
+    if (!openingAtTop || env.load !== 'ready') return;
+    opened.current = Date.now();
+    openingMoved.current = false;
+    const top = () => {
+      if (pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current) || viewerScrolledSince(opened.current))) {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+        if (web && scrollRef.current) (scrollRef.current as unknown as HTMLElement).scrollTop = 0;
+      }
+    };
+    top();
+    const frame = requestAnimationFrame(top);
+    const settled = setTimeout(top, 760);
+    const lateContent = setTimeout(top, 1200);
+    return () => { cancelAnimationFrame(frame); clearTimeout(settled); clearTimeout(lateContent); };
+  }, [openingAtTop, env.entry, env.load]);
 
   useEffect(() => {
     if (!node.pager || !fx.scrollX || !rowId) return;
@@ -1001,17 +1035,31 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const metrics = pager ?? pagerMetrics.current;
       reportPager(rowId, { atStart: metrics.x <= 1, atEnd: metrics.x + metrics.width >= width - 1 });
     } : undefined;
-    // Android TV: the route's offset, for keeping focused controls below the shell's bar.
-    const routeLayout = route ? use(RouteLayout) : null;
-    const rowScroll = horizontal && lazyRepeats ? rowScrolls : null;
-    const onScroll = route ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // The route hears its own scroll and that of a vertical box scrolling inside it (a title or
+    // person modal's body), so its grids and lazily drawn rows draw ahead as either moves. On
+    // Android TV the route's offset also keeps focused controls below the shell's bar.
+    const audience = scrollAudience(!!route, horizontal, !!lazyRepeats);
+    const routeLayout = audience === 'route' ? use(RouteLayout) : null;
+    const rowScroll = audience === 'row' ? rowScrolls : null;
+    const trackScroll = route ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (routeReveal) offsetY.current = e.nativeEvent.contentOffset.y;
       noteScrolled(e.nativeEvent.contentOffset.y);
       routeLayout?.scrolled();
     } : rowScroll ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       onPagerScroll?.(e);
       rowScroll.scrolled();
+    } : routeLayout ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onPagerScroll?.(e);
+      routeLayout.scrolled();
     } : onPagerScroll;
+    const onScroll = openingAtTop ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const pin = e.nativeEvent.contentOffset.y > 0
+        && pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current) || viewerScrolledSince(opened.current));
+      if (pin) {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+        if (web) (e.currentTarget as unknown as HTMLElement).scrollTop = 0;
+      } else trackScroll?.(e);
+    } : trackScroll;
     if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
@@ -1019,6 +1067,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         refreshControl={route && host.refresh && Platform.OS !== 'web' && !Platform.isTV ? <RefreshControl refreshing={!!host.refreshing} onRefresh={host.refresh} /> : undefined}
         StickyHeaderComponent={NativeStickyHeader}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
+        {...(openingAtTop ? { onScrollBeginDrag: () => { openingMoved.current = true; } } : {})}
         onLayout={onPagerLayout} onContentSizeChange={onPagerContent}
         {...(web && horizontal && rowId ? { dataSet: { velaRow: rowId } } : {})}
         {...a11y} {...(web && route && (env.route === 'title' || env.route === 'person')
@@ -1034,7 +1083,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     // focus (keyboard, tvOS focus engine, D-pad) and carries the label; the box keeps its motion.
     // The button registers under the box's id, so Escape's returnFocus can land on it.
     const press = node.press;
-    const heroButton = Platform.isTV && !!ctx.hero && !!press && !isHeroControl(press.action, fill(press.arg, ctx, env));
+    const heroButton = Platform.isTV && heroAction;
     const registerButton = focusTarget(a11y.nativeID);
     const bindButton = (target: Focusable | null) => {
       // React Native Web's merged refs discard callback return values and detach with null.
@@ -1106,15 +1155,14 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, buttonHitBox, NO_RING]} disabled={disabled}
         {...(href ? { href } : {})}
         pointerEvents={web ? undefined : pointer.content === 'none' ? 'none' : 'auto'}
-        focusable={selectable(node) && !unfocusable}
+        focusable={node.directionalFocus !== false && selectable(node) && !unfocusable}
         {...(web ? { dataSet: { velaFocus: 'frame', ...(cardPrimary && rowId ? { velaRowItem: String(ctx.index) } : {}), ...(heroSegment ? { velaHeroSegment: String(ctx.index) } : {}) }, onKeyDown: (event) => {
           const key = (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key;
-          const heroTo = heroSegment ? heroSegmentDestination(key, ctx.index, env.home?.hero.length ?? 0) : null;
-          if (heroTo !== null) {
+          if (heroAction && (key === 'ArrowLeft' || key === 'ArrowRight')) {
             event.preventDefault(); event.stopPropagation();
-            const group = (event.currentTarget as unknown as HTMLElement).closest('[role="group"]') ?? document;
-            host.dispatch('pickHero', String(heroTo));
-            requestAnimationFrame(() => group.querySelector<HTMLElement>(`[data-vela-hero-segment="${heroTo}"]`)?.focus());
+            const count = env.home?.hero.length ?? 0;
+            const target = count > 1 ? (env.heroIndex + (key === 'ArrowLeft' ? -1 : 1) + count) % count : null;
+            if (target !== null) host.dispatch('pickHero', String(target));
             return;
           }
           if (cardPrimary && (key === 'ContextMenu' || (key === 'F10' && (event as unknown as { shiftKey?: boolean }).shiftKey))) {
@@ -1126,7 +1174,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
           if (buttonRef.current) episodeNav?.key(buttonRef.current, { key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() });
         } } : {})}
         {...(web ? pressAria(a11y, node, expanded) : {})}
-        {...(heroSegment ? { tabIndex: ctx.index === env.heroIndex ? 0 : -1, 'aria-current': ctx.index === env.heroIndex ? 'true' : undefined } : {})}
+        {...(web && node.directionalFocus === false ? { tabIndex: -1 } : {})}
+        {...(heroSegment ? { 'aria-current': ctx.index === env.heroIndex ? 'true' : undefined } : {})}
         onLongPress={cardPrimary ? () => openAnchoredMenu(Platform.isTV ? 'tv' : 'touch') : undefined}
         {...(web && cardPrimary ? { onContextMenu: openPointerMenu } : {})}
         onPress={onPress}
@@ -1140,7 +1189,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
         onBlur={() => { set('focus', false); if (heroButton && buttonRef.current) heroFocus.focused(buttonRef.current, false); if (inHero || heroControl) holdHero(host.setFlag, false, Platform.isTV); }}
-        onPointerDown={() => set('focus', false)}
+        onPointerDown={event => {
+          set('focus', false);
+          if (web && node.directionalFocus === false) (event as unknown as { preventDefault?(): void }).preventDefault?.();
+        }}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
         accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={expanded === undefined ? a11y.accessibilityState : { ...a11y.accessibilityState, expanded }}
@@ -1194,8 +1246,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       // fills the row beside Restart's labelled mark.
       const stack = env.small && !ctx.heroAct && id === env.detail?.title[0]?.id;
       const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg('ui.restart'), env.small && !stack);
-      element = env.small && ctx.heroAct
-        ? <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 10 }}><View style={{ flex: 1, minWidth: 0 }}>{element}</View><SkinNode node={restart} ctx={ctx} /></View>
+      const resumeLayout = env.small && ctx.heroAct ? heroResumeLayout(parentDirection) : undefined;
+      element = resumeLayout
+        ? <View style={resumeLayout.pair}><View style={resumeLayout.resume}>{element}</View><SkinNode node={restart} ctx={ctx} /></View>
         : <View style={stack ? stackedActions : { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
     }
     if (env.route === 'title' && id === env.detail?.title[0]?.id && arg.split('|')[3] === undefined) {
@@ -1269,10 +1322,11 @@ function focusableWithin(node: RNode): boolean {
   if (known !== undefined) return known;
   let found: boolean;
   switch (node.kind) {
-    case 'box': found = (!!node.press && selectable(node)) || (Platform.isTV && (node.readingStop === true || !!node.readingStopWhen?.length)) || node.children.some(focusableWithin); break;
+    case 'box': found = (!!node.press && node.directionalFocus !== false && selectable(node)) || (Platform.isTV && (node.readingStop === true || !!node.readingStopWhen?.length)) || node.children.some(focusableWithin); break;
     case 'repeat': found = focusableWithin(node.item); break;
     case 'slot': found = node.slot === 'searchField' && !SYSTEM_SEARCH; break;
-    case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget); break;
+    case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget)
+      && (node.widget !== 'rowLink' || rowLinkTakesDirectionalFocus(node.params.end === 'true')); break;
     default: found = false;
   }
   focusables.set(node, found);
@@ -1492,15 +1546,17 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
       // A hidden scene (a retained section behind another) has no size: it draws nothing ahead.
       if (!w && !h) return;
       // One batch per drawn state, however many scroll events asked for it.
-      if (y < Dimensions.get('window').height * (1 + GRID_REACH)) setDrawn(count => count === at && count < total.current ? count + GRID_BATCH : count);
+      setDrawn(count => gridDrawn(count, at, total.current, y, Dimensions.get('window').height, GRID_REACH, GRID_BATCH));
     });
   }, []);
   const complete = drawn >= items.length;
+  // Checked after each draw and as the grid grows (Show more adds titles below the drawn ones,
+  // which would otherwise only lengthen the spacer).
   useEffect(() => {
     if (complete) return;
     const frame = requestAnimationFrame(ahead);
     return () => cancelAnimationFrame(frame);
-  }, [drawn, complete, ahead, rowHeight, width]);
+  }, [drawn, complete, ahead, rowHeight, width, items.length]);
   useEffect(() => (complete || !layout ? undefined : layout.onScroll(ahead)), [complete, layout, ahead]);
   useLayoutEffect(() => { if (items.length) layout?.grid(); }, [layout, items.length]);
   const gap = grid.gap;
@@ -1785,10 +1841,13 @@ function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: 
     },
   }), [group, routeFocus]);
   const { style, text, fx } = useLeafStyle(node, ctx, ui);
-  const { still } = useHost().env;
+  const host = useHost();
+  const { still } = host.env;
   const Part = WIDGETS[node.widget];
   const Frame = frameFor(node);
   if (fx.hidden || !Part) return null;
+  // A row's end card with nothing to open draws nothing, not an empty styled frame.
+  if (node.widget === 'rowLink' && node.params?.end === 'true' && !rowLinkAvailable(ctx.row, host.openRow, ctx.rowVisibleCount, node.params.limit)) return null;
   // A focused drop-down always shows it: in its document's focus look, else the shared ring (as a
   // press box without a look of its own), since the widget draws no focus of its own.
   const ring = ui.focus && RINGED_WIDGETS.has(node.widget) && !focusLook(node) ? focusStyle(style.transform, still) : undefined;

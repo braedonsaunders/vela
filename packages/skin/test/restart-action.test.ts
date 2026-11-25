@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { restartAction, secondaryPlayAction } from '../src/restart-action';
+import { heroResumeLayout, restartAction, secondaryPlayAction } from '../src/restart-action';
 import type { RNode } from '../src/resolve';
 
 const secondary: Extract<RNode, { kind: 'box' }> = { kind: 'box', when: [], states: [], group: false, order: 0, controlStates: true,
@@ -44,4 +44,18 @@ test('a restart cloned from Resume leaves out its progress track', () => {
   const restart = restartAction(primary, undefined, 'film|||0', 'Restart');
   expect(restart.children).toHaveLength(2);
   expect(restart.children[1]).toMatchObject({ kind: 'text', text: 'Restart' });
+});
+
+test('a phone hero keeps Resume its own width beside the Restart mark, in a column or a wrapping row of actions', () => {
+  for (const parent of ['row', 'column'] as const) {
+    const { pair, resume } = heroResumeLayout(parent);
+    expect(pair).toMatchObject({ flexDirection: 'row', alignSelf: 'stretch' });
+    // A zero basis (flex: 1) drew Resume as nothing wherever the pair sized to its content.
+    expect(resume).toEqual({ flexGrow: 1, flexShrink: 1, minWidth: 0 });
+    expect(resume.flex).toBeUndefined();
+    expect(resume.flexBasis).toBeUndefined();
+  }
+  // In a row (Late Night's hero buttons) the pair takes the line's spare room; a column already spans it.
+  expect(heroResumeLayout('row').pair).toMatchObject({ flexGrow: 1, flexShrink: 1, minWidth: 0 });
+  expect(heroResumeLayout('column').pair.flexGrow).toBeUndefined();
 });

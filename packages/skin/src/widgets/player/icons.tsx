@@ -26,7 +26,12 @@ export type PlayerIconName =
   | 'check'
   | 'ticker'
   | 'tickerOn'
-  | 'tiles';
+  | 'tiles'
+  | 'moon'
+  | 'pictureFit'
+  | 'pictureFill'
+  | 'skip'
+  | 'next';
 
 interface Props {
   name: PlayerIconName;
@@ -127,6 +132,23 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
       );
     case 'fullscreen':
       return <Path d={FULLSCREEN} stroke={color} {...STROKE} strokeWidth={1.8} />;
+    case 'moon':
+      return <Path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z" stroke={color} {...STROKE} />;
+    // The picture fitted inside the screen (bars at its sides), or filling it out to the edges.
+    case 'pictureFit':
+      return (
+        <>
+          <Rect x={2.5} y={5.5} width={19} height={13} rx={2.5} stroke={color} {...STROKE} />
+          <Rect x={6.5} y={8.5} width={11} height={7} rx={1} fill={color} />
+        </>
+      );
+    case 'pictureFill':
+      return (
+        <>
+          <Rect x={2.5} y={5.5} width={19} height={13} rx={2.5} stroke={color} {...STROKE} />
+          <Path d="M6 9.5V8h2.5M15.5 8H18v1.5M18 14.5V16h-2.5M8.5 16H6v-1.5" stroke={color} {...STROKE} />
+        </>
+      );
     case 'channelUp':
       return <Path d="M6 15l6-6 6 6" stroke={color} {...STROKE} strokeWidth={2} />;
     case 'channelDown':
@@ -149,6 +171,17 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
           <Rect x={13} y={4.5} width={8} height={6.5} rx={1.5} stroke={color} {...STROKE} />
           <Rect x={3} y={13} width={8} height={6.5} rx={1.5} stroke={color} {...STROKE} />
           <Rect x={13} y={13} width={8} height={6.5} rx={1.5} stroke={color} {...STROKE} />
+        </>
+      );
+    case 'skip':
+      // Two chevrons: past a stretch (the intro, the credits).
+      return <Path d="M5.5 6.5l5.5 5.5-5.5 5.5M12.5 6.5l5.5 5.5-5.5 5.5" stroke={color} {...STROKE} strokeWidth={2} />;
+    case 'next':
+      // Play to the bar: the next episode.
+      return (
+        <>
+          <Path d="M5.5 5.3v13.4a.8.8 0 0 0 1.2.7l10.3-6.7a.8.8 0 0 0 0-1.4L6.7 4.6a.8.8 0 0 0-1.2.7z" fill={color} />
+          <Path d="M19 5v14" stroke={color} {...STROKE} strokeWidth={2} />
         </>
       );
     case 'ticker':

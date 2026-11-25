@@ -366,6 +366,24 @@ const rowItemOf = (template: string): Node => ({
   children: [...(template === 'velaCardHero' ? [] : [numeral(false), numeral(true)]), { type: 'use', template }],
 });
 export const rowItem: Node = rowItemOf('velaCard');
+/** Every expandable row's final card. Skins may override the `velaSeeAll` template. */
+export const seeAll: Node = {
+  type: 'widget',
+  widget: 'rowLink',
+  params: { end: 'true' },
+  style: {
+    display: 'flex',
+    'align-self': 'stretch',
+    'min-width': '154px',
+    'min-height': '120px',
+    'border-radius': '$ui.radiusCard',
+    'background-color': '$ui.control',
+    color: '$ui.inkSecondary',
+  },
+  small: { 'min-width': '124px' },
+  hover: { 'background-color': '$ui.controlHover', color: '$ui.ink' },
+  focus: { 'background-color': '$ui.controlHover', color: '$ui.ink', 'box-shadow': focusRing },
+};
 // The row's end cell: its next page loads as the end comes near (home rows only).
 export const rowEnd: Node = {
   type: 'box',

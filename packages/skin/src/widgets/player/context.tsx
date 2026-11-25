@@ -2,7 +2,7 @@
 // view's latest snapshot, why a start failed, and the few things the chrome can ask for. The
 // chrome never sees media credentials, URLs or the server: it sends view commands and asks the
 // route to close or retry.
-import type { TrickplayFrame } from '@vela/core';
+import type { Sleep, SleepMode, StreamingSettings, TrickplayFrame } from '@vela/core';
 import { createContext, useContext } from 'react';
 import type { Command, Failure, PlaybackPlan, Snapshot } from '@vela/player-api';
 
@@ -12,6 +12,7 @@ export type CommandInput = WithoutId<Command>;
 
 /** Why playback could not start: all streams in use (capacity), a refusal, or no server. */
 export interface StartFailure {
+  streamingCap?: boolean;
   capacity: boolean;
   message: string;
 }
@@ -31,6 +32,14 @@ export interface ChromeTarget {
   /** A programme's channel (catch-up and Start over), and whether it plays from the start of one on air. */
   channelId?: string;
   from?: 'start';
+}
+
+/** The episode after the one playing, which the chrome offers to start. */
+export interface NextEpisode {
+  /** Its name in the viewer's words ("S1 · E3 · Name"). */
+  label: string;
+  /** Leave this episode and start that one. */
+  play(): void;
 }
 
 export interface PlayerChromeState {
@@ -57,8 +66,21 @@ export interface PlayerChromeState {
   refreshVersions?(): void;
   close(): void;
   retry(): void;
+  /** Counts a live channel's returns to the foreground that should play at the edge again (0 until one). */
+  returnedLive?: number;
   /** The scrub thumbnail (trickplay) for a position, once a session offers them and its sheet is here. */
   thumbnail?(seconds: number): TrickplayFrame | null;
+  /** This device's streaming cap on each network and whether the network is metered now; a change
+   * applies from the next start. */
+  streaming?: { settings: StreamingSettings; metered: boolean; set(next: Partial<StreamingSettings>): void };
+  /** The watch's sleep timer: pause after some minutes, or at the end of what is playing. */
+  sleep?: { value: Sleep; set(mode: SleepMode, minutes?: number): void };
+  /** What is playing is an episode (its sleep choice names the episode). */
+  episode?: boolean;
+  /** A phone's or tablet's picture fits the screen or fills it (this device's setting); absent elsewhere. */
+  picture?: { fill: boolean; set(fill: boolean): void };
+  /** An episode's next one, once known (null: none, or not an episode). */
+  nextEpisode?: NextEpisode | null;
 }
 
 export const PlayerChromeContext = createContext<PlayerChromeState | null>(null);

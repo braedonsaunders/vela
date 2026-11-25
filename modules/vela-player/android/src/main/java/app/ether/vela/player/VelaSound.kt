@@ -13,6 +13,7 @@ package app.ether.vela.player
 
 import android.os.SystemClock
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.exoplayer.audio.AudioSink
@@ -162,6 +163,10 @@ internal class VelaSoundProcessor(val deck: Int) : BaseAudioProcessor() {
   private var fresh = true
   private var capture: SoundCapture.Deck? = null
 
+  @Volatile var visualizer: VisualizerAudio? = null
+  private var visualizerOffset = 0L
+  private var nextVisualizerOffset = 0L
+
   // Commands (main thread)
 
   /** A new item loaded into this processor's player (its playlist starts over). */
@@ -195,6 +200,7 @@ internal class VelaSoundProcessor(val deck: Int) : BaseAudioProcessor() {
 
   /** The sink moved to a stream offset: a new item's stream when it is new, or an earlier one again. */
   fun onStreamOffset(offsetUs: Long) {
+    nextVisualizerOffset = offsetUs
     synchronized(lock) { applyReset() }
     if (awaitingFirstOffset) {
       awaitingFirstOffset = false
@@ -245,6 +251,7 @@ internal class VelaSoundProcessor(val deck: Int) : BaseAudioProcessor() {
   override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
     val format = inputAudioFormat
     synchronized(lock) { applyReset() }
+    visualizerOffset = nextVisualizerOffset
     val offset = streamMetadata.positionOffsetUs
     frame = if (offset == C.TIME_UNSET) 0.0 else offset * format.sampleRate / 1_000_000.0
     // A new item's first sample: its own gain, at once (the boundary between two songs, not a glide).
@@ -313,6 +320,7 @@ internal class VelaSoundProcessor(val deck: Int) : BaseAudioProcessor() {
       frame += 1.0
     }
     output.flip()
+    visualizer?.write(output, frames, channels, format.sampleRate, float, frame - frames, visualizerOffset)
     fresh = false
     positionUs = (frame * 1_000_000.0 / rate).toLong()
   }
@@ -368,12 +376,24 @@ internal class VelaSoundProcessor(val deck: Int) : BaseAudioProcessor() {
 }
 
 /** What the sink last said is heard: the item-clock position (µs) at elapsedRealtimeNanos `atNs`. */
-internal class Heard(val positionUs: Long, val atNs: Long, val playing: Boolean)
+internal class Heard(val positionUs: Long, val rendererUs: Long, val atNs: Long, val playing: Boolean)
 
 /** DefaultAudioSink with the processor told which stream (item) its next buffers belong to, and the
  * heard position kept for the main thread (ExoPlayer's own getCurrentPosition is only as fresh as the
  * playback thread's last update, tens of milliseconds and more). */
 internal class VelaSoundSink(sink: AudioSink, private val sound: VelaSoundProcessor) : ForwardingAudioSink(sink) {
+  @Volatile var decodedPcm = true
+    private set
+
+  override fun configure(audioSinkConfig: AudioSink.AudioSinkConfig) {
+    super.configure(audioSinkConfig)
+    val decoded = audioSinkConfig.format.sampleMimeType == MimeTypes.AUDIO_RAW
+    if (decoded != decodedPcm) {
+      decodedPcm = decoded
+      AudioPlayback.visualizerFormatChanged()
+    }
+  }
+
   private var offsetUs = 0L
   private var playing = false
   @Volatile var heard: Heard? = null
@@ -386,6 +406,12 @@ internal class VelaSoundSink(sink: AudioSink, private val sound: VelaSoundProces
     return last.positionUs + ((SystemClock.elapsedRealtimeNanos() - last.atNs) / 1000.0 * speed).toLong()
   }
 
+  fun heardRendererUs(speed: Double): Long? {
+    val last = heard ?: return null
+    if (!last.playing) return null
+    return last.rendererUs + ((SystemClock.elapsedRealtimeNanos() - last.atNs) / 1000.0 * speed).toLong()
+  }
+
   override fun setOutputStreamOffsetUs(outputStreamOffsetUs: Long) {
     offsetUs = outputStreamOffsetUs
     sound.onStreamOffset(outputStreamOffsetUs)
@@ -395,7 +421,7 @@ internal class VelaSoundSink(sink: AudioSink, private val sound: VelaSoundProces
   override fun getCurrentPositionUs(sourceEnded: Boolean): Long {
     val position = super.getCurrentPositionUs(sourceEnded)
     if (position != AudioSink.CURRENT_POSITION_NOT_SET) {
-      heard = Heard(position - offsetUs, SystemClock.elapsedRealtimeNanos(), playing)
+      heard = Heard(position - offsetUs, position, SystemClock.elapsedRealtimeNanos(), playing)
       sound.onSinkPosition(position, offsetUs)
     }
     return position
@@ -403,8 +429,8 @@ internal class VelaSoundSink(sink: AudioSink, private val sound: VelaSoundProces
 
   override fun play() { playing = true; super.play() }
   override fun pause() { playing = false; heard = null; super.pause() }
-  override fun flush() { heard = null; super.flush() }
-  override fun reset() { playing = false; heard = null; super.reset() }
+  override fun flush() { heard = null; sound.visualizer?.invalidate(); super.flush() }
+  override fun reset() { playing = false; heard = null; sound.visualizer?.invalidate(); super.reset() }
 }
 
 /**
@@ -497,5 +523,11 @@ internal object SoundCapture {
       json.writeText("{\"deck\":$number,\"rate\":$rate,\"channels\":$channels,\"frames\":${count / channels}," +
         "\"segments\":[${segments.joinToString(",")}],\"positions\":[${positions.joinToString(",")}],\"marks\":[${marks.joinToString(",")}]}")
     }
+  }
+}
+
+internal data class VisualizerDeck(val audio: VisualizerAudio, val sink: VelaSoundSink, val speed: Double) {
+  fun mix(pcm: FloatArray) {
+    sink.heardRendererUs(speed)?.let { audio.add(it, pcm) }
   }
 }

@@ -4,7 +4,7 @@
     "slug": "vela",
     "icon": "./assets/brand/vela-app-icon-1024.png",
     "scheme": "vela",
-    "version": "0.2.63",
+    "version": "0.2.69",
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#090b0e",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "app.ether.vela",
-      "versionCode": 2063
+      "versionCode": 2069
     },
     "web": {
       "output": "single",
@@ -63,10 +63,12 @@
       ],
       "./plugins/android-cleartext",
       "./plugins/android-signing",
+      "./plugins/android-metro-inputs",
       "./plugins/android-tv-keys",
       "./plugins/android-hardware-bitmaps",
       "./plugins/android-picture-in-picture",
-      "./plugins/apple-player"
+      "./plugins/apple-player",
+      "@vela/top-shelf"
     ]
   }
 }

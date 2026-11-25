@@ -2,7 +2,7 @@
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { libraryCardArtwork, libraryTabs, libraryKey, recommendationTab, recommendationTabWaits, reconcileProgressRows, settledPluginLevels, tabCard, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
+import { libraryCardArtwork, libraryTabs, libraryKey, recommendationTab, recommendationTabWaits, adoptRows, settledPluginLevels, tabCard, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
 import type { LibraryPage } from '@vela/skin/src/widgets/library/model';
@@ -140,14 +140,14 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       // Recommendations on show are read again quietly (progress moved): they stay as they are,
       // and change only if what they show does. Redrawing a whole library page for an equal
       // answer held a TV's JS thread for 0.6-2 s on returns to the section. A changed answer
-      // takes the new places into the rows on show (reconcileProgressRows): unchanged rows and
-      // cards keep their objects, so only what moved draws again.
+      // takes the server's rows (adoptRows: their ids, order and membership, a re-minted id
+      // included); unchanged rows and cards keep their objects, so only what moved draws again.
       const shown = held;
       void store.catalogue.libraryRecommendations(id, kind, progressRevision > 0, rowsTab).then(value => {
         if (!active) return;
         checked.current = check;
         if (!value) return;
-        const next = reconcileProgressRows(shown, value, true);
+        const next = adoptRows(shown, value);
         if (next === shown) return;
         startTransition(() => setRows({ key: rowsKey, load: 'ready', attempt: rowsAttempt, value: next, progressRevision }));
       }).catch(() => { if (active) checked.current = check; });

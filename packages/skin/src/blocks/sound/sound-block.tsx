@@ -113,6 +113,12 @@ function NowLevel() {
   );
 }
 
+/** A titled setting with an optional On/Off switch, as the panel draws its own. Now Playing draws the
+ * visualizer's switch with it above the panel. */
+export function SoundSection(props: { title: string; hint: string; on?: boolean; onToggle?(on: boolean): void; children?: ReactNode; testID?: string; tv?: boolean }) {
+  return <SoundTV.Provider value={!!props.tv}><Section {...props} /></SoundTV.Provider>;
+}
+
 function Section({ title, hint, on, onToggle, children, testID }: { title: string; hint: string; on?: boolean; onToggle?(on: boolean): void; children?: ReactNode; testID?: string }) {
   const m = useSoundLook();
   return (

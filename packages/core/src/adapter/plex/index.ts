@@ -3,12 +3,14 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand } from '../capabilities';
+import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
-import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
+import { withinStreamingCap } from '../../streaming';
+import { copiesVideo, decidedMedia, decidedQuality, deliversProfile, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, mediaId, partAt, partOffsets, playingAudio, plexAudioMime, plexMarkers, plexProjection, plexSidecar, plexStreamProfiles, plexVersion, refusesStream } from './media';
+import { bifFrameAt, bifFrames, bifHeader, bifInterval, bifOffer, bifTableRange, BIF_HEADER_BYTES, jpegSize, type BifFrame } from './bif';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
@@ -19,20 +21,54 @@ interface PlexSession {
   metadata: Node;
   sequence: number;
   pending: Promise<unknown>;
+  /** The transcode session of the server's stream while one is started (none while the stream is deferred). */
   transcodeId?: string;
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
+  /** A title that started without intro or credits markers: when they were last asked for, and how often. */
+  markers?: { at: number; asked: number; reading: boolean };
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
    * transcode request each part is played through. */
   stack?: { parts: Node[]; index: number; query: Record<string, string> };
+  /** The server's stream offered beside an original that plays, not asked for yet: its transcode
+   * request, decided when the session first needs the stream. */
+  deferred?: Record<string, string>;
+  /** The part's scrub thumbnail index as last read (`trickplayOffer`): its frames, the size of one,
+   * the offer made of it, and the whole file when the server would not answer a byte range. */
+  thumbnails?: { frames: BifFrame[]; offer: V.TrickplayMetadata; whole?: Uint8Array };
+  /** What a video start declared, so a version switch (and a subtitle added later) is chosen the same way. */
+  request?: Pick<V.PlaybackRequest, 'client' | 'allowTranscode'>;
+  /** The audio stream known to be selected on the playing part (by Plex at the start, the start's request or a track change); unset while it is not known. */
+  partAudio?: string;
 }
+/** A title's markers missing at the start are asked for again this often, this many times (Ether
+ * knows them once the session's source is probed). */
+const MARKERS_AGAIN_MS = 30_000;
+const MARKERS_ASKS = 6;
+/** A thumbnail index larger than this is not read whole (a server that ignores byte ranges). */
+const MAX_INDEX_BYTES = 50 * 1024 * 1024;
 export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string; /** The name the server was added under (plex.tv's resource name). */ name?: string }
 const ack: V.Ack = { accepted: true };
 const no = (reason: string): V.Feature => ({ available: false, reason });
 const yes: V.Feature = { available: true };
 const enc = encodeURIComponent;
 const seconds = (n: unknown) => Math.max(0, Number(n || 0) / 1000);
+/** Plex media rates are in kb/s. A decision can state a rate without giving output dimensions. */
+function fitsStreamingCap(media: Node | undefined, client: V.ClientCapabilities): boolean {
+  return withinStreamingCap({ bitrate: Number(media?.bitrate) * 1000, width: Number(media?.width), height: Number(media?.height) }, client);
+}
+/** Whether the client plays a file as it is, with the audio codec of the track that will play: in its
+ * original-file engine or its native player. A codec Plex does not state does not refuse it. */
+function playsOriginal(client: V.ClientCapabilities, media: Node, audioCodec: string | undefined): boolean {
+  const original = client.originalPlayback;
+  return !!original && original.demuxContainers.includes(media.container) && (!media.videoCodec || original.videoDecoders.includes(media.videoCodec)) && (!audioCodec || original.audioDecoders.includes(audioCodec)) ||
+    client.containers.includes(media.container) && (!media.videoCodec || client.videoCodecs.includes(media.videoCodec)) && (!audioCodec || client.audioCodecs.includes(audioCodec));
+}
+/** A file's own length where Plex states it (a title's files can differ), else the title's. */
+const fileSeconds = (media: Node, n: Node) => seconds(media.duration ?? n.duration);
+/** A position kept inside a file of known length. */
+const inside = (at: number, duration: number) => duration > 0 ? Math.min(at, duration) : at;
 function fail(message: string, kind: V.ProtocolError['class'] = 'request'): never {
   throw new VelaError({ class: kind, code: 'plex_unsupported', message, retry: { allowed: false } }, 400);
 }
@@ -59,7 +95,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions, TrickplaySheets, UnloadStop {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -67,6 +103,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private watchlistProbe?: Promise<boolean>;
   private liveConfig?: { dvr: string; grid: string; channels: string };
   private delegation?: Promise<string>;
+  /** The token the last authorised request carried, for a request that cannot wait for credentials (`unloadStop`). */
+  private lastToken?: string;
   constructor(private config: PlexConfig) {
     const u = new URL(config.origin);
     if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.pathname !== '/' || u.search || u.hash) throw new Error('Plex requires a server origin');
@@ -95,6 +133,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private async token(): Promise<string> {
     const tokens = await this.config.credentials.get();
     if (!tokens) fail('Sign in required', 'auth');
+    this.lastToken = tokens.accessToken;
     return tokens.accessToken;
   }
   /** Delegation lifetime is set by PMS; never persist it or infer an expiry. */
@@ -180,12 +219,38 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
     return { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }], protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: name || this.config.name || 'Plex Media Server', version: root.version || '' },
-      features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes, sessionTrackChanges: yes },
+      features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes, sessionTrackChanges: yes, versions: yes },
       skins: [{ id: 'cinematic', name: 'Cinematic' }], defaultSkinId: 'cinematic' };
   }
   async revokeSession(_r: V.RevokeRequest): Promise<V.Ack> {
     for (const [id, s] of this.sessions) if (s.plan.state !== 'ended') await this.command(id, { kind: 'stop', ...s.plan, idempotencyKey: `revoke-${id}` });
-    this.sessions.clear(); this.rotateTransientToken(); await this.config.credentials.set(null); return ack;
+    this.sessions.clear(); this.rotateTransientToken(); this.lastToken = undefined; await this.config.credentials.set(null); return ack;
+  }
+  /**
+   * A page being unloaded stops a session as a stop command does: the timeline reports it stopped,
+   * its transcode is stopped, a live tune's subscription is ended. Built now, from the last token
+   * used, and the session ends here too, so a page brought back (the back/forward cache) reports
+   * nothing more for it. Every parameter, the token included, rides in the query: a header would
+   * need a CORS preflight, and a page going away cannot rely on one.
+   */
+  unloadStop(sessionId: string, _at: V.Generations): UnloadRequest[] {
+    const s = this.sessions.get(sessionId);
+    const token = this.lastToken;
+    if (!s || s.plan.state === 'ended' || !token) return [];
+    const { Accept: _, ...identity } = plexHeaders(this.device);
+    const url = (path: string, query: Record<string, unknown> = {}) => {
+      const u = new URL(path, this.origin);
+      for (const [key, value] of Object.entries({ ...query, ...identity, 'X-Plex-Token': token })) if (value !== undefined) u.searchParams.set(key, String(value));
+      return u.href;
+    };
+    const requests: UnloadRequest[] = [];
+    if (!s.plan.channelId) requests.push({ method: 'POST', url: url('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`,
+      time: Math.round(s.plan.positionSeconds * 1000), duration: s.metadata.duration, state: 'stopped', session: sessionId, hasMDE: 1,
+      identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': sessionId }) });
+    requests.push({ method: 'GET', url: url(`/${s.plan.media === 'audio' ? 'music' : 'video'}/:/transcode/universal/stop`, { session: s.transcodeId ?? sessionId }) });
+    if (s.plan.channelId && s.metadata.subscriptionId) requests.push({ method: 'DELETE', url: url(`/media/subscriptions/${enc(s.metadata.subscriptionId)}`) });
+    s.plan.state = 'ended';
+    return requests;
   }
   private artwork(n: Node): V.ArtworkRef[] {
     const image = (type: string) => (n.Image || []).find((i: Node) => i.type === type)?.url;
@@ -404,7 +469,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return { collection: { id, kind: kind === 'playlist' ? 'playlist' : 'collection', name: n.title || '', summary: n.summary, artwork: this.artwork(n) }, ...page(this.nodes(children).map(n => this.entry(n)), start, children.totalSize) };
   }
   private async metadata(id: string): Promise<Node> {
-    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1, includeOnDeck: 1 });
+    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1, includeOnDeck: 1, includeMarkers: 1 });
     const n = this.nodes(c)[0]; if (!n) fail('Plex title not found', 'not-found');
     if (n.librarySectionID !== undefined && !this.sections.has(String(n.librarySectionID))) await this.libraries({}).catch(() => undefined);
     return n;
@@ -511,76 +576,153 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const part = (n.Media || []).flatMap((m: Node) => m.Part || []).find((p: Node) => String(p.id) === String(s.part.id));
     for (const t of part?.Stream || []) {
       if (Number(t.streamType) !== 3 || !t.key || s.plan.subtitleTracks.some(p => p.id === String(t.id))) continue;
-      const url = new URL(this.mediaURL(t.key)); url.searchParams.set('format', 'vtt');
-      s.plan.subtitleTracks.push({ id: String(t.id), kind: 'subtitle', name: t.displayTitle || t.language || 'Subtitle', language: t.languageCode || 'und', codec: 'webvtt', delivery: { kind: 'external', format: 'webvtt', url: url.href } });
+      const sidecar = plexSidecar(new URL(this.mediaURL(t.key)), t.codec, s.request?.client.subtitleFormats ?? []);
+      s.plan.subtitleTracks.push({ id: String(t.id), kind: 'subtitle', name: t.displayTitle || t.language || 'Subtitle', language: t.languageCode || 'und',
+        codec: sidecar.format === 'ass' ? String(t.codec).toLowerCase() : 'webvtt', delivery: { kind: 'external', format: sidecar.format, url: sidecar.url } });
     }
     s.plan.revision++;
     return structuredClone(s.plan);
+  }
+  /** A movie's or episode's files, when it has several: Plex has no remembered or pinned choice. */
+  private versions(n: Node): V.VersionItem[] {
+    const media: Node[] = ['movie', 'episode', 'clip'].includes(n.type) ? n.Media ?? [] : [];
+    return media.length > 1 ? media.map(plexVersion) : [];
+  }
+  async titleVersions(id: string): Promise<V.TitleVersions> {
+    return { titleId: id, selectedVersionId: null, versions: this.versions(await this.metadata(id)) };
+  }
+  async clearVersionChoice(id: string, _request: V.ClearVersionChoiceRequest): Promise<V.ClearVersionChoiceResponse> {
+    return { ...(await this.titleVersions(id)), cleared: false };
   }
   async startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
     for (const s of this.sessions.values()) if (s.mutations.has(r.idempotencyKey)) return s.mutations.get(r.idempotencyKey)!;
     if (r.channelId) return this.livePlayback(r);
     const id = r.titleId || r.extraId!; const n = await this.metadata(id);
-    const media = r.mediaSourceId ? n.Media?.find((m: Node, index: number) => String(m.id ?? index) === r.mediaSourceId) : n.Media?.[0];
+    const chosen = r.versionId ?? r.mediaSourceId;
+    const media = chosen ? n.Media?.find((m: Node, index: number) => mediaId(m, index) === chosen) : n.Media?.[0];
+    if (r.versionId && !media) fail('Unknown Plex version');
     const parts: Node[] = media?.Part ?? [];
     if (!parts.length) fail('Plex title has no playable media', 'playback');
     if (n.type === 'track') return this.audioPlayback(r, id, n, media, parts[0]!);
+    const duration = fileSeconds(media, n);
+    const start = inside(r.positionSeconds ?? seconds(n.viewOffset), duration);
+    const sessionId = `vela-${randomId()}`;
+    const source = await this.videoSource(r, id, n, media, start, sessionId);
+    const versions = r.titleId ? this.versions(n) : [];
+    const markers = r.extraId ? undefined : plexMarkers(n);
+    const plan: V.PlaybackPlan = { sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0,
+      ...(r.extraId ? { extraId: id } : { titleId: id }), ...(markers ? { markers } : {}), state: 'ready', positionSeconds: start, durationSeconds: duration, ...source.plan, chapters: this.chapters(n),
+      fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' },
+      ...(versions.length ? { selectedVersionId: mediaId(media, n.Media.indexOf(media)), versions } : {}) };
+    this.sessions.set(sessionId, { plan, part: source.part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]),
+      request: { client: r.client, allowTranscode: r.allowTranscode }, ...(source.stack ? { stack: source.stack } : {}), ...(source.deferred ? { deferred: source.deferred } : {}),
+      ...(source.partAudio ? { partAudio: source.partAudio } : {}),
+      ...(source.transcodeId ? { transcodeId: source.transcodeId } : {}), ...(markers || r.extraId ? {} : { markers: { at: Date.now(), asked: 0, reading: false } }) });
+    return structuredClone(plan);
+  }
+  /**
+   * The paths and tracks for one of a video title's files from a title position: the original
+   * file where the client plays it, and the server's stream (as transcode session `transcodeId`).
+   */
+  private async videoSource(r: Pick<V.PlaybackRequest, 'client' | 'allowTranscode' | 'audioTrackId' | 'subtitleTrackId'>, id: string, n: Node, media: Node, start: number, transcodeId: string) {
+    const parts: Node[] = media.Part ?? [];
+    if (!parts.length) fail('Plex title has no playable media', 'playback');
     // A movie stacked from several files plays them in turn through one session: each part is
     // transcoded (remuxed where it can be) on the title's timeline, and the session moves on at its end.
     const stacked = parts.length > 1;
-    const start = r.positionSeconds ?? seconds(n.viewOffset);
     const at = partAt(parts, start);
     const part = stacked ? parts[at.index]! : parts[0]!;
     if (stacked && (r.allowTranscode === false || !(r.client.hls || r.client.mse))) fail('This title is in several parts, which play through the server\'s stream', 'playback');
-    const sessionId = `vela-${randomId()}`;
     const streams: Node[] = part.Stream || [];
     const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => {
-      const textSidecar = !!s.key && ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'].includes(s.codec);
-      const external = textSidecar ? new URL(this.mediaURL(s.key)) : undefined;
-      if (external) external.searchParams.set('format', 'vtt');
+      const external = !!s.key && isTextSidecar(s.codec) ? plexSidecar(new URL(this.mediaURL(s.key)), s.codec, r.client.subtitleFormats ?? []) : undefined;
       return { id: String(s.id), streamIndex: s.index,
         kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
         default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
         ...(type === 3 ? external
-          ? { url: external.href, delivery: { kind: 'external' as const, format: 'webvtt' as const, url: external.href } }
-          : { delivery: s.key ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
+          ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
+          // A native-HLS-only web page cannot read subtitle packets from the original file. Mark
+          // its embedded tracks server-rendered so a later selection switches to Plex HLS and
+          // requests a burn instead of presenting an unusable local track.
+          : { delivery: s.key || !r.client.originalPlayback ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
     });
     const audioTracks = tracks(2), subtitleTracks = tracks(3);
     const audio = r.audioTrackId || audioTracks.find(t => t.default)?.id;
     const subtitle = r.subtitleTrackId === undefined ? subtitleTracks.find(t => t.default)?.id || null : r.subtitleTrackId;
     if (audio && !audioTracks.some(t => t.id === audio) || subtitle && !subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex track');
     const burnSubtitle = subtitle ? subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind === 'burn-in' : false;
+    const playing = playingAudio(streams, media.audioCodec, audio);
+    const direct = playsOriginal(r.client, media, playing.codec) && !burnSubtitle && !stacked;
+    // Plex states a file's rate in kb/s. An over-cap original requires an explicit switch.
+    const capped = !fitsStreamingCap(media, r.client);
+    if (!direct && r.allowTranscode === false) fail(burnSubtitle ? 'Selected Plex subtitle requires transcoding' : 'Original media is incompatible and transcoding is disabled', 'playback');
     // Plex part stream selection is viewer state; perform only explicit preferences.
     if (r.audioTrackId !== undefined || r.subtitleTrackId !== undefined) await this.request(`/library/parts/${enc(String(part.id))}`, { audioStreamID: r.audioTrackId, subtitleStreamID: r.subtitleTrackId === null ? 0 : r.subtitleTrackId, allParts: 1 }, 'PUT');
-    const original = r.client.originalPlayback;
-    const compatible = !!original && original.demuxContainers.includes(media.container) &&
-      (!media.videoCodec || original.videoDecoders.includes(media.videoCodec)) && (!media.audioCodec || original.audioDecoders.includes(decoderAudioCodec(media.audioCodec)));
-    const nativeCompatible = r.client.containers.includes(media.container) && (!media.videoCodec || r.client.videoCodecs.includes(media.videoCodec)) && (!media.audioCodec || r.client.audioCodecs.includes(decoderAudioCodec(media.audioCodec)));
-    const direct = (compatible || nativeCompatible) && !burnSubtitle && !stacked;
-    if (!direct && r.allowTranscode === false) fail(burnSubtitle ? 'Selected Plex subtitle requires transcoding' : 'Original media is incompatible and transcoding is disabled', 'playback');
     const paths: V.PlaybackPath[] = [];
     if (direct) paths.push({ id: 'original', kind: 'direct', transport: 'file', mimeType: media.container === 'mp4' ? 'video/mp4' : media.container === 'webm' ? 'video/webm' : 'video/x-matroska',
       readiness: 'ready', url: this.mediaURL(part.key), original: true, range: true, byteLength: Number(part.size) || undefined, sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: 0,
       originalVideo: { codec: media.videoCodec, width: media.width, height: media.height }, qualities: [], boundaries: [] });
+    let deferred: Record<string, string> | undefined, streamed: string | undefined;
     if (r.allowTranscode !== false && (r.client.hls || r.client.mse)) {
-      const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
-      const query = { path: `/library/metadata/${id}`, mediaIndex: n.Media.indexOf(media), partIndex: stacked ? at.index : 0, protocol: 'hls', directPlay: 0, directStream: 1,
-        session: sessionId, offset: stacked ? at.inPart : 0, fastSeek: 1, 'X-Plex-Client-Identifier': this.config.clientIdentifier,
+      const query = Object.fromEntries(Object.entries({ path: `/library/metadata/${id}`, mediaIndex: n.Media.indexOf(media), partIndex: stacked ? at.index : 0, protocol: 'hls', directPlay: 0, directStream: 1,
+        session: transcodeId, offset: stacked ? at.inPart : 0, fastSeek: 1, 'X-Plex-Client-Identifier': this.config.clientIdentifier,
         maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`,
-        subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
-      for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
-      if (await this.decide(u, !!direct)) paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
-        sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, qualities: [], boundaries: [] });
+        subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 }).map(([key, value]) => [key, String(value)]));
+      const hls = { id: 'plex-hls', kind: 'transcode' as const, transport: 'hls' as const, mimeType: 'application/vnd.apple.mpegurl',
+        sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, qualities: [], boundaries: [] };
+      if (direct && !capped) {
+        // The original plays: the stream stays a choice, decided when a switch or a track first needs it.
+        paths.push({ ...hls, readiness: 'on-demand' });
+        deferred = query;
+      } else {
+        const stream = await this.serverStream(query, r.client, !!direct);
+        if (stream && direct) paths.unshift({ ...hls, readiness: 'ready', ...stream.path });
+        else if (stream) paths.push({ ...hls, readiness: 'ready', ...stream.path });
+        streamed = stream?.session;
+      }
+    }
+    if (capped && !paths.some(path => path.id === 'plex-hls')) {
+      throw new VelaError({ class: 'playback', code: 'plex_streaming_cap',
+        message: 'Plex cannot stream this title within the selected quality cap. Choosing Original removes the cap for this network type.',
+        retry: { allowed: false } }, 400);
     }
     if (!paths.length) fail('No compatible Plex playback path', 'playback');
-    const plan: V.PlaybackPlan = { sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0,
-      ...(r.extraId ? { extraId: id } : { titleId: id }), state: 'ready', positionSeconds: start, durationSeconds: seconds(n.duration),
-      paths, selectedPathId: paths[0].id, audioTracks, subtitleTracks, selectedAudioTrackId: audio, selectedSubtitleTrackId: subtitle, chapters: this.chapters(n),
-      fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' } };
     const hls = paths.find(p => p.id === 'plex-hls');
-    this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]),
-      ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}) });
-    return structuredClone(plan);
+    // The track admission judged (an inferred default or first one too) is the one the player opens. A stacked
+    // title's parts have their own stream ids, so an inferred one stays out of its plan and its part restarts.
+    return { part, partAudio: audio, plan: { paths, selectedPathId: paths[0]!.id, audioTracks, subtitleTracks, selectedAudioTrackId: stacked ? audio : audio ?? playing.id, selectedSubtitleTrackId: subtitle },
+      ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}), ...(deferred ? { deferred } : {}),
+      ...(streamed ? { transcodeId: streamed } : {}) };
+  }
+  /**
+   * Another of the playing title's files, in the same session from the given position (else the
+   * session's, kept inside the file): its paths and tracks chosen as at a start, then the stream that
+   * may still run stopped.
+   */
+  switchVersion(sessionId: string, r: Extract<V.SessionCommand, { kind: 'version' }>): Promise<V.PlaybackPlan> {
+    return this.mutate(sessionId, r, async s => {
+      const listed = s.plan.versions?.some(v => v.id === r.versionId);
+      const media: Node | undefined = listed ? s.metadata.Media?.find((m: Node, index: number) => mediaId(m, index) === r.versionId) : undefined;
+      if (!media || !s.request || !s.plan.titleId) fail('Unknown Plex version');
+      const asked = r.positionSeconds ?? s.plan.positionSeconds;
+      if (!Number.isFinite(asked) || asked < 0) fail('Invalid playback position');
+      const duration = fileSeconds(media, s.metadata);
+      const at = inside(asked, duration);
+      const transcodeId = `${sessionId}-${s.plan.sourceGeneration + 1}`;
+      const source = await this.videoSource(s.request, s.plan.titleId, s.metadata, media, at, transcodeId);
+      // The stream is stopped only where it plays: one left for the file was stopped when it was left.
+      if (s.plan.selectedPathId === 'plex-hls') await this.stopTranscode(s.transcodeId ?? sessionId);
+      s.part = source.part;
+      s.transcodeId = source.transcodeId ?? transcodeId;
+      // Scrub thumbnails are the file's own (its part's index); markers are the title's and stay.
+      delete s.thumbnails;
+      if (source.stack) s.stack = source.stack; else delete s.stack;
+      if (source.deferred) s.deferred = source.deferred; else delete s.deferred;
+      // Nothing was written to the part: the start's selection may no longer be the part's, so its audio is not known.
+      delete s.partAudio;
+      // Tracks belong to the file: the new one starts on its own defaults.
+      s.plan = { ...s.plan, ...source.plan, positionSeconds: at, durationSeconds: duration, selectedVersionId: r.versionId, sourceGeneration: s.plan.sourceGeneration + 1 };
+    });
   }
   /** A track: its file where every platform's audio player decodes it, else the server's MP3 stream. */
   private audioPlayback(r: V.PlaybackRequest, id: string, n: Node, media: Node, part: Node): V.PlaybackPlan {
@@ -604,17 +746,26 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   /** Point a multi-part session at one part, from a place inside it: a new transcode on the title's timeline. */
   private async playPart(s: PlexSession, index: number, inPart: number, overrides: Record<string, string> = {}) {
     const stack = s.stack!;
-    await this.stopTranscode(s.transcodeId ?? s.plan.sessionId);
     const transcodeId = `${s.plan.sessionId}-${s.plan.sourceGeneration + 1}`;
-    const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
-    for (const [key, value] of Object.entries({ ...stack.query, ...overrides, partIndex: String(index), offset: String(inPart), session: transcodeId })) u.searchParams.set(key, value);
-    await this.decide(u);
-    stack.query = { ...stack.query, ...overrides };
+    const stream = await this.serverStream({ ...stack.query, ...overrides, partIndex: String(index), offset: String(inPart), session: transcodeId }, s.request!.client);
+    if (!stream) fail('Plex will not stream this part', 'playback');
+    // The replacement is accepted: only now is the running stream retired.
+    await this.stopTranscode(s.transcodeId ?? s.plan.sessionId);
+    // The accepted request, its profile included, is the one the next part is asked with.
+    stack.query = stream.query;
+    // Another part has its own stream ids: the audio known on it is only the one asked for it (the selection read at
+    // the start may since have changed).
+    if (index !== stack.index) s.partAudio = overrides.audioStreamID;
     stack.index = index;
     s.part = stack.parts[index]!;
-    s.transcodeId = transcodeId;
+    s.transcodeId = stream.session;
     const at = partOffsets(stack.parts)[index]! + inPart;
-    s.plan.paths = s.plan.paths.map(p => p.id === 'plex-hls' ? { ...p, readiness: 'ready' as const, url: u.href, sourceId: String(s.part.id), timelineId: String(s.part.id), timelineOriginSeconds: at } : p);
+    // A decision that states no output size leaves the stream unnumbered rather than at the previous part's size.
+    s.plan.paths = s.plan.paths.map(p => {
+      if (p.id !== 'plex-hls') return p;
+      const { quality: _, ...rest } = p;
+      return { ...rest, readiness: 'ready' as const, ...stream.path, sourceId: String(s.part.id), timelineId: String(s.part.id), timelineOriginSeconds: at };
+    });
     s.plan.selectedPathId = 'plex-hls';
     s.plan.positionSeconds = at;
     s.plan.sourceGeneration++;
@@ -634,14 +785,47 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   }
   /**
    * Ask for the playback decision for a video transcode URL before handing it to the player, as Plex's
-   * own clients do: Ether refuses a video start.m3u8 its client has not asked a decision for (400).
-   * `optional`: another path can play, so a refused decision drops this one instead of the start.
+   * own clients do: it says whether the server will stream it, and what it will deliver.
    */
-  private async decide(start: URL, optional = false): Promise<boolean> {
+  private async decide(start: URL): Promise<Node> {
     const decision = new URL('/video/:/transcode/universal/decision', this.origin);
     decision.search = start.search;
-    try { await this.request(decision.pathname, Object.fromEntries(decision.searchParams)); return true; }
-    catch (error) { if (optional) return false; throw error; }
+    return await this.request(decision.pathname, Object.fromEntries(decision.searchParams)) ?? {};
+  }
+  /**
+   * The server's stream for a transcode request, once its decision allows it within the client's cap.
+   * It is asked with the client's first delivery profile, and once more with the next in a fresh
+   * transcode session when Plex refuses the request (400 or 500), answers a refusing decision code,
+   * selects another container or codec, or answers an output above the cap. A request pinned to
+   * MPEG-TS keeps it; a restart of an fMP4 one may fall back once. A decision not taken is not stopped:
+   * on some servers that stop can end the source session the accepted stream shares, and the server
+   * expires it. The accepted transcode session and request, and the path facts: the URL, `remux` when
+   * the video is copied, and the quality where the decision states the output size. Null when Plex will
+   * not stream it (and, `optional`, when it refuses the request).
+   */
+  private async serverStream(query: Record<string, string>, client: V.ClientCapabilities, optional = false):
+    Promise<{ session: string; query: Record<string, string>; path: { url: string; kind: 'remux' | 'transcode'; quality?: V.QualityTarget } } | null> {
+    const profiles = query.segmentContainer === 'mpegts' ? [] : plexStreamProfiles(client);
+    const attempts = profiles.length ? profiles : [{}];
+    for (const [i, profile] of attempts.entries()) {
+      const asked: Record<string, string> = { ...query, ...profile, ...(i ? { session: `${query.session}-ts` } : {}) };
+      const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
+      for (const [key, value] of Object.entries(asked)) u.searchParams.set(key, value);
+      const last = i === attempts.length - 1;
+      let decided: Node;
+      try { decided = await this.decide(u); }
+      catch (error) {
+        // A refused request may be taken with the next profile; auth, a missing title, gateway and transport failures are not retried.
+        if (!last && error instanceof VelaError && (error.status === 400 || error.status === 500)) continue;
+        if (optional) return null;
+        throw error;
+      }
+      if (!refusesStream(decided) && deliversProfile(decided, asked) && fitsStreamingCap(decidedMedia(decided), client)) {
+        const quality = decidedQuality(decided);
+        return { session: asked.session!, query: asked, path: { url: u.href, kind: copiesVideo(decided, Number(asked.partIndex) || 0) ? 'remux' : 'transcode', ...(quality ? { quality } : {}) } };
+      }
+    }
+    return null;
   }
   private async timeline(s: PlexSession, state: string) {
     if (s.plan.channelId) return;
@@ -711,44 +895,114 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       if (subtitle != null && !s.plan.subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex subtitle track');
       const burn = s.plan.subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind === 'burn-in';
       const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
-      const restart = path?.kind !== 'direct' || burn;
+      const restart = path?.kind !== 'direct' || burn || !this.audible(s, audio);
       const hls = s.plan.paths.find(p => p.id === 'plex-hls');
-      if (restart && (!hls || !hls.url)) fail('Selected Plex tracks require an unavailable transcode');
-      await this.request(`/library/parts/${enc(String(s.part.id))}`, {
-        audioStreamID: r.audioTrackId, subtitleStreamID: r.subtitleTrackId === null ? 0 : r.subtitleTrackId, allParts: 1,
-      }, 'PUT');
-      if (restart && hls && s.stack) {
-        const at = partAt(s.stack.parts, s.plan.positionSeconds);
-        await this.playPart(s, at.index, at.inPart, { subtitleStreamID: subtitle ?? '0', subtitles: burn ? 'burn' : 'auto', ...(audio !== undefined ? { audioStreamID: audio } : {}) });
-      } else if (restart && hls) {
-        await this.stopTranscode(s.transcodeId ?? id);
-        const url = new URL(hls.url!);
-        const transcodeId = `${id}-${s.plan.sourceGeneration + 1}`;
-        url.searchParams.set('session', transcodeId);
-        url.searchParams.set('offset', String(s.plan.positionSeconds));
-        url.searchParams.set('subtitleStreamID', subtitle ?? '0');
-        url.searchParams.set('subtitles', burn ? 'burn' : 'auto');
-        if (audio !== undefined) url.searchParams.set('audioStreamID', audio);
-        await this.decide(url);
-        s.plan.paths = s.plan.paths.map(p => p.id === hls.id ? { ...p, readiness: 'ready' as const, url: url.href, timelineOriginSeconds: s.plan.positionSeconds } : p);
-        s.plan.selectedPathId = hls.id;
-        s.plan.sourceGeneration++;
-        s.transcodeId = transcodeId;
+      if (restart && (!hls || !hls.url && !s.deferred)) fail('Selected Plex tracks require an unavailable transcode');
+      const part = `/library/parts/${enc(String(s.part.id))}`;
+      const select = () => this.request(part, { audioStreamID: r.audioTrackId, subtitleStreamID: r.subtitleTrackId === null ? 0 : r.subtitleTrackId, allParts: 1 }, 'PUT');
+      if (!restart || !hls) await select();
+      else {
+        // The replacement is decided before the running stream changes. Plex burns the part's subtitle rather than
+        // the query's, and very likely takes the audio from the part too, so the whole new selection is written
+        // first, once; when the stream is refused, what was selected before is put back (best-effort).
+        if (r.audioTrackId !== undefined || r.subtitleTrackId !== undefined) await select();
+        try {
+          if (s.stack) {
+            const at = partAt(s.stack.parts, s.plan.positionSeconds);
+            await this.playPart(s, at.index, at.inPart, { subtitleStreamID: subtitle ?? '0', subtitles: burn ? 'burn' : 'auto', ...(audio !== undefined ? { audioStreamID: audio } : {}) });
+          } else {
+            const transcodeId = `${id}-${s.plan.sourceGeneration + 1}`;
+            // The running stream's request, or the one deferred at the start.
+            const query = hls.url ? Object.fromEntries(new URL(hls.url).searchParams) : s.deferred!;
+            const stream = await this.serverStream({ ...query, session: transcodeId, offset: String(s.plan.positionSeconds), subtitleStreamID: subtitle ?? '0', subtitles: burn ? 'burn' : 'auto',
+              ...(audio !== undefined ? { audioStreamID: audio } : {}) }, s.request!.client);
+            if (!stream) fail('Plex will not stream the selected tracks', 'playback');
+            // Only a stream that was started is stopped; a deferred one never was.
+            const old = hls.url ? s.transcodeId ?? id : undefined;
+            // A decision that states no output size leaves the stream unnumbered rather than at the old size.
+            s.plan.paths = s.plan.paths.map(p => {
+              if (p.id !== hls.id) return p;
+              const { quality: _, ...rest } = p;
+              return { ...rest, readiness: 'ready' as const, ...stream.path, timelineOriginSeconds: s.plan.positionSeconds };
+            });
+            s.plan.selectedPathId = hls.id;
+            s.plan.sourceGeneration++;
+            s.transcodeId = stream.session;
+            delete s.deferred;
+            // The new stream is accepted, selected and published: the old one is retired best-effort, not waited for.
+            if (old) void this.stopTranscode(old).catch(() => undefined);
+          }
+        } catch (error) { return this.unselect(s, r, part, error); }
       }
+      if (r.audioTrackId !== undefined) s.partAudio = r.audioTrackId;
       s.plan.selectedAudioTrackId = audio;
       s.plan.selectedSubtitleTrackId = subtitle;
     });
   }
 
+  /** After a refused restart: puts back (best-effort) the part's known prior audio and subtitle streams (0 would turn
+   * automatic subtitles off), and keeps the audio the part now has: the prior one, the new one where none was known,
+   * unknown when the put-back failed. */
+  private async unselect(s: PlexSession, r: TrackCommand, part: string, error: unknown): Promise<never> {
+    const prior = { audioStreamID: r.audioTrackId !== undefined ? s.partAudio : undefined, subtitleStreamID: r.subtitleTrackId !== undefined ? s.plan.selectedSubtitleTrackId ?? undefined : undefined };
+    const restored = !(prior.audioStreamID || prior.subtitleStreamID) || await this.request(part, { ...prior, allParts: 1 }, 'PUT').then(() => true, () => false);
+    if (r.audioTrackId !== undefined) s.partAudio = !prior.audioStreamID ? r.audioTrackId : restored ? prior.audioStreamID : undefined;
+    throw error;
+  }
+  /** Whether the session's file plays on as it is with an audio track: the client decodes its codec there. */
+  private audible(s: PlexSession, audio: string | undefined): boolean {
+    const media: Node | undefined = s.metadata.Media?.find((m: Node) => (m.Part ?? []).some((p: Node) => String(p.id) === String(s.part.id)));
+    return !s.request || !media || playsOriginal(s.request.client, media, playingAudio(s.part.Stream ?? [], media.audioCodec, audio).codec);
+  }
   /** A plan offers the original file and the universal transcode; the session moves between them. */
   switchPath(id: string, r: SwitchCommand): Promise<V.PlaybackPlan> {
-    return this.mutate(id, r, s => {
-      if (!s.plan.paths.some(p => p.id === r.pathId)) fail('Unknown Plex path');
+    return this.mutate(id, r, async s => {
+      const path = s.plan.paths.find(p => p.id === r.pathId);
+      if (!path) fail('Unknown Plex path');
       if (!Number.isFinite(r.atSeconds) || r.atSeconds < 0) fail('Invalid switch position');
+      if (path.kind === 'direct' && !this.audible(s, s.plan.selectedAudioTrackId)) fail('The selected audio track cannot play from the original file', 'playback');
+      if (path.readiness === 'on-demand') {
+        // The stream deferred at the start (or left for the file), decided now from its own request.
+        const stream = s.deferred && s.request ? await this.serverStream(s.deferred, s.request.client) : null;
+        if (!stream) fail('Plex will not stream this title', 'playback');
+        // A decision that states no output size leaves the stream unnumbered rather than at an earlier one's size.
+        s.plan.paths = s.plan.paths.map(p => {
+          if (p.id !== path.id) return p;
+          const { quality: _, ...rest } = p;
+          return { ...rest, readiness: 'ready' as const, ...stream.path };
+        });
+        s.transcodeId = stream.session;
+        delete s.deferred;
+      }
+      const left = s.plan.selectedPathId === 'plex-hls' && r.pathId !== 'plex-hls' ? this.deferStream(s) : undefined;
       s.plan.selectedPathId = r.pathId;
       s.plan.positionSeconds = r.atSeconds;
       s.plan.sourceGeneration++;
+      // The stream left is stopped (Plex would run it until it expires it), best-effort and not waited for. That
+      // stop can end the server's whole session, so the playing file's timeline is reported again after it.
+      if (left) void this.stopTranscode(left).then(() => this.serialize(s, async () => {
+        if (s.plan.state !== 'ended') await this.timeline(s, s.plan.state === 'paused' ? 'paused' : 'playing');
+      })).catch(() => undefined);
     });
+  }
+  /**
+   * The server's stream, being left for the file, made a choice again: its accepted request kept (decided
+   * again when it is next chosen) under a transcode session of its own, its URL dropped. The running
+   * transcode session it was played under, for the caller to stop.
+   */
+  private deferStream(s: PlexSession): string | undefined {
+    const hls = s.plan.paths.find(p => p.id === 'plex-hls');
+    if (!hls?.url) return undefined;
+    // Each generation's stream has its own session: this one is named for the switch's generation.
+    s.deferred = { ...Object.fromEntries(new URL(hls.url).searchParams), session: `${s.plan.sessionId}-${s.plan.sourceGeneration + 1}` };
+    s.plan.paths = s.plan.paths.map(p => {
+      if (p.id !== hls.id) return p;
+      const { url: _, ...rest } = p;
+      return { ...rest, readiness: 'on-demand' as const };
+    });
+    const running = s.transcodeId ?? s.plan.sessionId;
+    delete s.transcodeId;
+    return running;
   }
 
   /** Apply one session mutation once per idempotency key, at the generations it was issued for. */
@@ -780,6 +1034,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
 
   async sessionSnapshot(id: string): Promise<V.SessionSnapshot> {
     const s = this.session(id);
+    this.askMarkers(s);
     return {
       cursor: String(s.plan.revision),
       revision: s.plan.revision,
@@ -787,6 +1042,102 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       publishedRanges: [],
       lastObservationSequence: s.sequence < 0 ? undefined : s.sequence,
     };
+  }
+
+  /**
+   * The playing part's scrub thumbnails, from its media index (a BIF file at
+   * `/library/parts/{id}/indexes/sd`), read after playback starts rather than delaying the plan.
+   * Each re-read takes the index's current table (Ether's grows while the session streams). Null
+   * for a live channel, audio, a multi-part title (one index per part), or a part without an index.
+   */
+  async trickplayOffer(sessionId: string): Promise<V.TrickplayMetadata | null> {
+    const s = this.session(sessionId);
+    if (s.plan.channelId || s.plan.media === 'audio' || s.stack || s.part.id == null) return null;
+    // An index read whole came from a server without byte ranges: a finished file, not read again.
+    if (s.thumbnails?.whole) return structuredClone(s.thumbnails.offer);
+    const path = `/library/parts/${enc(String(s.part.id))}/indexes/sd`;
+    const head = await this.indexBytes(path, 0, BIF_HEADER_BYTES);
+    if (!head) return null;
+    const whole = head.whole ? head.bytes : undefined;
+    const header = bifHeader(head.bytes);
+    if (!header) return null;
+    const range = bifTableRange(header);
+    const table = whole ? whole.subarray(range.start, range.end) : (await this.indexBytes(path, range.start, range.end))?.bytes;
+    const frames = table && bifFrames(header, table);
+    if (!frames?.length) return null;
+    const held = s.thumbnails;
+    let size = held && { width: held.offer.width, height: held.offer.height };
+    if (!size) {
+      const first = frames[0]!;
+      const image = whole ? whole.subarray(first.start, first.end) : (await this.indexBytes(path, first.start, first.end))?.bytes;
+      size = (image && jpegSize(image)) ?? this.thumbnailSize(s);
+    }
+    // The same table is the same offer; a grown one is a new revision of it.
+    const last = frames[frames.length - 1]!;
+    const changed = !held || held.frames.length !== frames.length || held.frames[held.frames.length - 1]!.atMs !== last.atMs || bifInterval(held.frames) !== bifInterval(frames);
+    const offer = bifOffer(frames, size, s.plan.durationSeconds ? Math.round(s.plan.durationSeconds * 1000) : undefined, changed ? (held?.offer.revision ?? 0) + 1 : held!.offer.revision);
+    if (!offer) return null;
+    s.thumbnails = { frames, offer, ...(whole ? { whole } : {}) };
+    return structuredClone(offer);
+  }
+
+  /** One slot's thumbnail (the offer's sheets are single images), read by its byte range. */
+  async trickplaySheet(sessionId: string, offer: V.TrickplayMetadata, index: number, etag?: string, signal?: AbortSignal): Promise<TrickplaySheet | null> {
+    const s = this.session(sessionId);
+    const held = s.thumbnails;
+    if (!held || offer.cols !== 1 || offer.rows !== 1) return null;
+    const frame = bifFrameAt(held.frames, offer.intervalMs, index);
+    if (!frame) return null;
+    // A slot shows the same image until the index gives it a nearer one.
+    const tag = `"bif-${frame.atMs}"`;
+    if (etag === tag) return 'unchanged';
+    const bytes = held.whole ? held.whole.slice(frame.start, frame.end)
+      : (await this.indexBytes(`/library/parts/${enc(String(s.part.id))}/indexes/sd`, frame.start, frame.end, signal))?.bytes;
+    // Not an image: the index was rewritten since its table was read; the next offer read has the new one.
+    if (!bytes || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+    return { bytes, mimeType: 'image/jpeg', etag: tag };
+  }
+
+  /** A thumbnail's size when its image cannot be measured: 320 wide, in the video's shape. */
+  private thumbnailSize(s: PlexSession): { width: number; height: number } {
+    const media = s.metadata.Media?.find((m: Node) => (m.Part || []).some((p: Node) => p.id === s.part.id)) ?? s.metadata.Media?.[0];
+    const aspect = Number(media?.width) > 0 && Number(media?.height) > 0 ? Number(media.width) / Number(media.height) : 16 / 9;
+    return { width: 320, height: Math.round(320 / aspect) };
+  }
+
+  /**
+   * Bytes `[from, to)` of a media index, with this server's token; null when there is none (404).
+   * A server that ignores the range answers with the whole file (`whole`), read only when small enough.
+   */
+  private async indexBytes(path: string, from: number, to: number, signal?: AbortSignal): Promise<{ bytes: Uint8Array; whole: boolean } | null> {
+    const response = await fetch(this.mediaTarget(path).href, { signal, redirect: 'error', credentials: 'omit',
+      headers: { ...plexHeaders(this.device), Accept: '*/*', 'X-Plex-Token': await this.token(), Range: `bytes=${from}-${to - 1}` } });
+    if (response.status === 404) return null;
+    if (response.status === 401) this.rotateTransientToken();
+    if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : 'source', code: 'plex_http', message: `Plex request failed (${response.status})`, retry: { allowed: false } }, response.status);
+    if (response.status === 206) return { bytes: new Uint8Array(await response.arrayBuffer()), whole: false };
+    if (Number(response.headers.get('content-length')) > MAX_INDEX_BYTES) { await response.body?.cancel(); return null; }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.length > MAX_INDEX_BYTES ? null : { bytes, whole: true };
+  }
+
+  /**
+   * A title that started without markers asks for them again now and then, in the background, while
+   * its session is followed: a server may know them only once the session's source is probed. The
+   * plan carries them from the next snapshot on.
+   */
+  private askMarkers(s: PlexSession): void {
+    const state = s.markers;
+    if (!state || state.reading || s.plan.state === 'ended' || state.asked >= MARKERS_ASKS || Date.now() - state.at < MARKERS_AGAIN_MS) return;
+    state.reading = true;
+    state.asked++;
+    void this.metadata(String(s.metadata.ratingKey)).then(n => {
+      const markers = plexMarkers(n);
+      if (!markers || s.plan.state === 'ended') return;
+      s.plan.markers = markers;
+      s.plan.revision++;
+      s.markers = undefined;
+    }).catch(() => undefined).finally(() => { if (s.markers === state) { state.reading = false; state.at = Date.now(); } });
   }
 
   private async requireLive() {

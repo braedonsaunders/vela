@@ -35,14 +35,35 @@ export function answerTracks(plan: PlaybackPlan, cmd: { audioTrackId?: string; s
   if (cmd.subtitleTrackId !== undefined) plan.selectedSubtitleTrackId = cmd.subtitleTrackId;
   if (sidecarFixture.enabled && plan.paths.find(path => path.id === plan.selectedPathId)?.original !== true) plan.sourceGeneration++;
 }
+/** Ether W380: the release actually playing. The first row is Auto, which plays the top release
+ * (its own row, which forces exactly that release when chosen); any other row plays itself. */
+export function setPlaying(plan: PlaybackPlan, versionId?: string) {
+  const versions = plan.versions ?? [];
+  const auto = versions[0]?.id === plan.selectedVersionId;
+  const playing = versions.find(v => v.id === (versionId ?? (auto ? versions[1]?.id : plan.selectedVersionId)));
+  if (!playing) { delete plan.playingVersionId; delete plan.playingLabel; return; }
+  plan.playingVersionId = playing.id;
+  plan.playingLabel = playing.label;
+}
+/** A mid-stream failover to the next release that can play: a plan of a higher revision naming it. */
+export function failover(s: Session): boolean {
+  const versions = s.plan.versions ?? [];
+  const from = versions.findIndex(v => v.id === s.plan.playingVersionId);
+  const next = versions.find((v, i) => i > Math.max(0, from) && v.availability !== 'unavailable' && v.availability !== 'fetch');
+  if (!next) return false;
+  setPlaying(s.plan, next.id);
+  publish(s);
+  return true;
+}
+const playingOf = (plan: PlaybackPlan) => ({ ...(plan.playingVersionId !== undefined ? { playingVersionId: plan.playingVersionId } : {}), ...(plan.playingLabel !== undefined ? { playingLabel: plan.playingLabel } : {}) });
 export function snapshot(s: Session): SessionSnapshot {
-  return { ...(s.liveEvent !== undefined ? { liveEvent: s.liveEvent } : {}), cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: s.plan.durationSeconds ?? fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
+  return { ...playingOf(s.plan), ...(s.liveEvent !== undefined ? { liveEvent: s.liveEvent } : {}), cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: s.plan.durationSeconds ?? fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
 }
 const encode = (event: SessionEvent) => new TextEncoder().encode(`id: ${event.cursor}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
 export function publish(s: Session) {
   s.plan.revision++;
   refreshLive(s.plan);
-  const base = { cursor: String(s.plan.revision), revision: s.plan.revision, sessionId: s.plan.sessionId };
+  const base = { cursor: String(s.plan.revision), revision: s.plan.revision, sessionId: s.plan.sessionId, ...playingOf(s.plan) };
   const event: SessionEvent = s.plan.state === 'ended' ? { ...base, type: 'ended', reason: 'stopped' } : { ...base, type: 'plan', plan: structuredClone(s.plan) };
   s.history.push(event); if (s.history.length > 128) s.history.shift();
   for (const [c, close] of s.listeners) { c.enqueue(encode(event)); if (event.type === 'ended') close(); }
@@ -51,6 +72,14 @@ export function publish(s: Session) {
     for (const timer of s.pendingCodecs?.timers.values() ?? []) clearTimeout(timer);
     s.pendingCodecs?.timers.clear();
   }
+}
+/** Ether's example ranges for a 3000-second episode, scaled onto the fixture's 180 seconds. */
+export function episodeMarkers(): NonNullable<PlaybackPlan['markers']> {
+  return [
+    { kind: 'intro', startSeconds: 5, endSeconds: 25 },
+    { kind: 'credits', startSeconds: 140, endSeconds: 155 },
+    { kind: 'credits', startSeconds: 165, endSeconds: fixtureDurationSeconds, final: true },
+  ];
 }
 export async function createSession(owner: string, request: PlaybackRequest, pending?: { neverVerify: boolean; pathId: string }, versionData?: Pick<PlaybackPlan, 'selectedVersionId' | 'versions' | 'rememberedChoice'>): Promise<Session> {
   const id = crypto.randomUUID(), token = crypto.randomUUID(), base = `/sessions/media/${id}/${token}`;
@@ -69,6 +98,7 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
     fallback: { state: faults.fallbackUnavailable ? 'unavailable' : 'unsupported', reason: 'Mock serves pre-generated alternatives; no proactive encoder scheduler.' },
     ...versionData,
   };
+  if (plan.versions?.length) setPlaying(plan);
   if (!request.channelId && available && request.client.mse && request.allowTranscode !== false && !faults.fallbackUnavailable) {
     const mse = await mseFixture(base);
     if (mse) plan.paths.push({ id: 'transcode-mse', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl',
@@ -95,6 +125,9 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
       plan.selectedSubtitleTrackId = request.subtitleTrackId ?? (originalFixture.selectSubtitle ? originalFixture.subtitles[0].id : null);
     }
   }
+  // An episode's intro and credits, shaped as Ether sends them (an intro, credits broken by a scene, the
+  // final tail credits), placed inside the 180-second fixture.
+  if (request.titleId?.startsWith('episode-') && !originalFixture.name) plan.markers = episodeMarkers();
   // The fixture's scrub thumbnails, for on-demand plans of the fixture itself (not a format original).
   const trickplay = !request.channelId && !originalFixture.name && available ? await trickplayOffer() : null;
   if (trickplay) plan.trickplay = trickplay;
@@ -148,7 +181,7 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
     case 'stop': s.plan.state = 'ended'; break;
     case 'tracks': answerTracks(s.plan, cmd); break;
     case 'switch': s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds; break;
-    case 'version': s.plan.selectedVersionId = cmd.versionId; s.plan.sourceGeneration++; s.plan.seekGeneration++; if (cmd.positionSeconds !== undefined) s.plan.positionSeconds = cmd.positionSeconds; break;
+    case 'version': s.plan.selectedVersionId = cmd.versionId; setPlaying(s.plan); s.plan.sourceGeneration++; s.plan.seekGeneration++; if (cmd.positionSeconds !== undefined) s.plan.positionSeconds = cmd.positionSeconds; break;
   }
   publish(s);
 }

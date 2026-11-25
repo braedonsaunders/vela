@@ -11,6 +11,12 @@ export class VelaError extends Error {
   }
 }
 
+/** The server no longer knows a row's id or its cursor (404, or 409 cursor_expired): it re-minted
+ * the row, as Ether does for Home's rows when the feed recomputes after playback. */
+export function supersededRow(error: unknown): boolean {
+  return error instanceof VelaError && (error.status === 404 || error.status === 409);
+}
+
 /** The refusal for an operation this server's adapter does not offer. */
 export function notOffered(operation: string): VelaError {
   const detail: V.ProtocolError = {

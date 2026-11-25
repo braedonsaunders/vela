@@ -5,3 +5,4 @@
 -keepclasseswithmembernames class app.ether.vela.player.DoviNative { native <methods>; }
 # libvela_ass.so binds AssNative by name.
 -keepclasseswithmembernames class app.ether.vela.player.AssNative { native <methods>; }
+-keepclasseswithmembernames class app.ether.vela.player.VisualizerNative { native <methods>; }

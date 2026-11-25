@@ -162,7 +162,7 @@ describe('media kinds', () => {
     const listed = titlesOf(await get('/libraries/books/items?limit=100')).find(title => title.id === id)!;
     expect(listed.watch?.reading?.fraction).toBe(0.5);
     const home = await get<V.Page<V.Row>>('/rows?placement=home&limit=10');
-    expect(home.items.find(row => row.id === 'media-continue-reading')!.items.some(item => item.kind === 'title' && item.title.id === id)).toBe(true);
+    expect(home.items.find(row => row.key === 'media-continue-reading')!.items.some(item => item.kind === 'title' && item.title.id === id)).toBe(true);
     await post(`/titles/${id}/reading-progress`, { idempotencyKey: key(), locator: 'epubcfi(/6/18!/4/2)', fraction: 0.99 });
     expect((await get<V.TitleDetail>(`/titles/${id}`)).title.watch?.played).toBe(true);
     await post(`/titles/${id}/watch`, { idempotencyKey: key(), played: false });
@@ -186,7 +186,7 @@ describe('media kinds', () => {
 
   test('home places the media rows after the first two rows', async () => {
     const rows = (await get<V.Page<V.Row>>('/rows?placement=home&limit=10')).items;
-    expect(rows.slice(2, 5).map(row => [row.id, row.card, row.role])).toEqual([['media-recent-albums', 'square', 'album'], ['media-continue-reading', 'poster', 'book'], ['media-continue-listening', 'square', 'episode']]);
+    expect(rows.slice(2, 5).map(row => [row.key, row.card, row.role])).toEqual([['media-recent-albums', 'square', 'album'], ['media-continue-reading', 'poster', 'book'], ['media-continue-listening', 'square', 'episode']]);
     // The retired style is never sent.
     expect(rows.every(row => !('style' in row))).toBe(true);
     expect((await get<V.Bootstrap>('/bootstrap')).rows.map(row => row.id)).toEqual(rows.slice(0, 2).map(row => row.id));
@@ -222,6 +222,27 @@ describe('media kinds', () => {
     const response = await post('/playback', { idempotencyKey: key(), titleId: 'concert-comet-arcade-nights', client });
     if (response.status !== 200) expect(((await response.json()) as V.ErrorResponse).error).toMatchObject({ code: "media_not_generated" });
   });
+});
+
+test('the playback start faults: preparation_pending once, then the retry plays; a stopped session handed back', async () => {
+  const faults = (body: object) => fetch(`${mock.url}/__admin/faults`, { method: 'POST', body: JSON.stringify(body) });
+  await faults({ audioStartPending: 1 });
+  const request = { titleId: 'track-paper-boats-1-01', client, idempotencyKey: key() };
+  const refused = await post('/playback', request);
+  expect(refused.status).toBe(503);
+  expect(refused.headers.get('Retry-After')).toBe('1');
+  expect((await refused.json() as V.ErrorResponse).error).toMatchObject({ class: 'transient', code: 'preparation_pending', retry: { allowed: true, afterSeconds: 1 } });
+  // The retry, under the same key, is answered with a session.
+  const plan = await (await post('/playback', request)).json() as V.PlaybackPlan;
+  expect(plan.state).toBe('ready');
+  await post(`/sessions/${plan.sessionId}/commands`, { kind: 'stop', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration, idempotencyKey: key() });
+  // Ether rc.15's broker: a new start, under a new key, answered with the session just stopped.
+  await faults({ startStoppedSession: 1 });
+  const replayed = await (await post('/playback', { ...request, idempotencyKey: key() })).json() as V.PlaybackPlan;
+  expect(replayed).toMatchObject({ sessionId: plan.sessionId, state: 'ready' });
+  const fresh = await (await post('/playback', { ...request, idempotencyKey: key() })).json() as V.PlaybackPlan;
+  expect(fresh.sessionId).not.toBe(plan.sessionId);
+  expect(await (await fetch(`${mock.url}/__admin/faults`)).json()).toMatchObject({ audioStartPending: 0, videoStartPending: 0, startStoppedSession: 0 });
 });
 
 test('an older server (VELA_MOCK_OLD=1) has no media libraries or flags', async () => {

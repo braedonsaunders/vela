@@ -41,3 +41,20 @@ export function lazyBatch(axis: 'x' | 'y', batch: number, moving: boolean): numb
   if (moving) return batch;
   return axis === 'y' ? 1 : Math.max(1, Math.ceil(batch / 2));
 }
+
+/** A grid's drawn count after its spacer was measured at window offset `y`: one batch more while
+ * the spacer is within `reach` screen heights below the screen and cells are left to draw, and
+ * only from the count that was measured (`at`), so many scroll events add one batch. A grid that
+ * grew (a person's Show more taking 50 titles to 100) draws on from where it was. */
+export function gridDrawn(count: number, at: number, total: number, y: number, screenHeight: number, reach: number, batch: number): number {
+  if (count !== at || count >= total) return count;
+  return y < screenHeight * (1 + reach) ? count + batch : count;
+}
+
+/** Which scroll a scroll box's movement tells: the route's (its own scroll, and any vertical box
+ * scrolling inside it, such as a title or person modal's body, whose grids and lazily drawn rows
+ * draw ahead as it moves), a horizontal row's (its lazily drawn items), or none. */
+export function scrollAudience(route: boolean, horizontal: boolean, lazyRow: boolean): 'route' | 'row' | null {
+  if (route || !horizontal) return 'route';
+  return lazyRow ? 'row' : null;
+}

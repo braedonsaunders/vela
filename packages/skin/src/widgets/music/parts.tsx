@@ -241,11 +241,13 @@ export function Shelf({ title, detail, children, onMore, moreLabel, moreTestID }
         </View>
       </View>
       {detail ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginBottom: 4 }]}>{detail}</Text> : null}
-      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} style={musicTV() ? SHELF_TV_BLEED : undefined} contentContainerStyle={musicTV() ? SHELF_TV_ROOM : { gap: 0 }}
+      <FocusScope.Provider value={`shelf:${title}`}><FocusGroup><ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} style={musicTV() ? SHELF_TV_BLEED : undefined} contentContainerStyle={[musicTV() ? SHELF_TV_ROOM : { gap: 0 }, { alignItems: 'stretch' }]}
         scrollEventThrottle={64}
         onScroll={event => { const x = event.nativeEvent.contentOffset.x; setSpan(old => Math.abs(old.x - x) < 1 ? old : { ...old, x }); }}
         onLayout={event => { const width = event.nativeEvent.layout.width; setSpan(old => old.width === width ? old : { ...old, width }); }}
-        onContentSizeChange={content => setSpan(old => old.content === content ? old : { ...old, content })}>{children}</ScrollView></FocusGroup></FocusScope.Provider>
+        onContentSizeChange={content => setSpan(old => old.content === content ? old : { ...old, content })}>{children}
+        {onMore ? <ShelfMoreCard label={moreLabel ?? msg('music.showAll')} onPress={onMore} testID={moreTestID ? `${moreTestID}-card` : undefined} /> : null}
+      </ScrollView></FocusGroup></FocusScope.Provider>
     </View>
   );
 }
@@ -258,18 +260,35 @@ function ShelfMore({ label, onPress, testID }: { label: string; onPress(): void;
   const lit = state.hover || state.focus;
   return (
     // A button, not a link: React Native Web leaves a link's Enter to the browser, and this is no anchor.
-    <Pressable {...handlers} onPress={onPress} accessibilityRole="button" testID={testID}
+    <Pressable {...handlers} onPress={onPress} accessibilityRole="button" testID={testID} focusable={false}
+      {...(web ? { tabIndex: -1 } : {})}
       style={[NO_RING, { paddingHorizontal: tv ? 14 : 6, paddingVertical: tv ? 6 : 4, borderRadius: 999, backgroundColor: tv && state.focus ? m.ui.ink : 'transparent' }]}>
       <Text style={m.text({ 'font-size': tv ? '18px' : '13px', 'font-weight': '650', color: tv && state.focus ? m.ui.inkInverse : lit ? '$ui.ink' : '$ui.inkQuiet' })}>{label}</Text>
     </Pressable>
   );
 }
 
+/** The keyboard/remote destination for a shelf's See all page; focus memory restores Back here. */
+function ShelfMoreCard({ label, onPress, testID }: { label: string; onPress(): void; testID?: string }) {
+  const m = useMediaLook();
+  return <Surface onPress={onPress} label={label} testID={testID} focusId="see-all"
+    style={(lit, focus) => [{ width: m.small ? 124 : 158, minHeight: m.small ? 160 : 210, alignSelf: 'stretch', marginHorizontal: 8,
+      borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.controlHover : m.ui.control },
+    musicTV() ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.03 : 1 }] } : {}, transition('background-color, transform', 160)]}
+    contentStyle={{ flex: 1, minHeight: 0, alignItems: 'center', justifyContent: 'center', padding: 18 }}>
+    {lit => <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+      <Text style={m.text({ 'font-size': '15px', 'font-weight': '700', color: lit ? '$ui.ink' : '$ui.inkSecondary' })}>{label}</Text>
+      <Glyph symbol="forward-chevron" size={15} color={lit ? m.ui.ink : m.ui.inkSecondary} />
+    </View>}
+  </Surface>;
+}
+
 function ShelfArrow({ flip, label, disabled, onPress }: { flip: boolean; label: string; disabled: boolean; onPress(): void }) {
   const m = useMediaLook();
   const { state, handlers } = useInteraction();
   return (
-    <Pressable {...handlers} onPress={disabled ? undefined : onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }}
+    <Pressable {...handlers} onPress={disabled ? undefined : onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} focusable={false}
+      {...(web ? { tabIndex: -1 } : {})}
       style={[NO_RING, { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: state.hover || state.focus ? m.ui.control : alpha(m.ui.ink, 0.06), opacity: disabled ? 0.35 : 1 }]}>
       <View style={flip ? { transform: [{ scaleX: -1 }] } : undefined}><Glyph symbol="back" size={18} color={m.ui.ink} /></View>
     </Pressable>

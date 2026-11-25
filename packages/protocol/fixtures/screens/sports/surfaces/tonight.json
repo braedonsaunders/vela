@@ -44,7 +44,7 @@
           "role": "button",
           "label": "{g.sides.0.short} – {g.sides.1.short}",
           "testId": "sports-tonight-{g.id}",
-          "press": { "action": "navigate", "args": { "screen": "sports", "page": "game", "event": "{g.id}" } },
+          "press": { "action": "navigate", "args": { "screen": "sports", "page": "game", "event": "{g.$key}" } },
           "style": {
             "padding": "12px 14px",
             "gap": "8px",

@@ -22,9 +22,13 @@ import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayComma
 import { PICTURE_TEST_ID } from './remote-actions';
 import { watchFrames } from './fold-layout';
 import { Status, type Failed } from './status';
+import { SkipButton, skipHere } from './skip';
 import { useVelaState } from '@vela/core/react';
 import { PlayerOverlays, usePlayerSurfaces } from '../../surfaces/player';
 import { PlayerToasts, takeToastKey } from '../../surfaces/toasts';
+
+/** After Back to live on a return to the foreground, the play (the view takes one command a render). */
+const RETURN_PLAY_MS = 300;
 
 /** Rapid steps add up from the last target, not from a position the engine has yet to report. */
 const STEP_MEMORY_MS = 1500;
@@ -64,6 +68,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const [opened, setOpened] = useState<Opened>(null);
   const [info, setInfo] = useState(false);
   const [active, setActive] = useState(false);
+  /** The bottom bar's height (its fade included): the skip button stands just over its controls. */
+  const [barHeight, setBarHeight] = useState(0);
   /** What a hidden chrome focuses when it comes up (TV): the play toggle, or the timeline after a
    * step from the remote, so that the next side presses keep stepping. */
   const [reveal, setReveal] = useState<Reveal>('toggle');
@@ -85,6 +91,15 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
   const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send);
+  // A channel back in the foreground goes to the live edge and plays (session.ts, returnedLive).
+  const returnedLive = state.returnedLive ?? 0;
+  useEffect(() => {
+    if (!returnedLive || !live.live || live.archive) return;
+    live.backToLive();
+    // The engine paused as the app left; a play that finds it playing changes nothing.
+    const timer = setTimeout(() => state.send({ type: 'play' }), RETURN_PLAY_MS);
+    return () => clearTimeout(timer);
+  }, [returnedLive]);
   // Plugin overlays and toasts (docs/plugin-screens.md: Surfaces), where the app draws them.
   const liveEvent = useVelaState(s => s.playback.liveEvent);
   // The session that has played, so a later wait in it reads as a stall rather than a start.
@@ -186,6 +201,10 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   });
 
   const tv = look.tv && Platform.isTV;
+  // Skip intro, Skip credits or Next episode, while the position is inside a range the plan names.
+  const skip = failed || live.live || live.archive ? null : skipHere(state.plan?.markers, view.position, view.ended, state.nextEpisode);
+  const fade = look.small ? 80 : look.size(150);
+  const skipBottom = surfaces.lift + (chromeUp && barHeight > fade ? barHeight - fade + look.size(look.small ? 8 : 12) : look.size(look.small ? 20 : 44));
 
   // Touch: a tap on the picture shows a hidden chrome, or hides a standing one (closing a menu first).
   const tapStage = () => {
@@ -233,7 +252,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         onPress={ANDROID_TV ? undefined : tapStage}
         style={StyleSheet.absoluteFill}
         focusable={Platform.isTV ? !idle.visible : Platform.OS === 'android'}
-        hasTVPreferredFocus={Platform.isTV}
+        // A skip button over the hidden chrome takes focus instead, so select skips.
+        hasTVPreferredFocus={Platform.isTV && !skip}
       />}
       <View style={[StyleSheet.absoluteFill, frame]} pointerEvents="box-none">
       {/* Each bar holds its own edge: on a short screen they overlap at the middle rather than
@@ -248,7 +268,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
       <PlayerToasts look={look} top={chromeUp ? top : look.small ? 18 : look.size(30)} playingChannelId={live.live ? live.channelId : ''}
         right={info && !failed && !look.small ? look.gutter + look.size(300) + look.size(14) : undefined} />
       <View style={[styles.bottom, { bottom: surfaces.lift }, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
-        pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
+        pointerEvents="box-none" onFocus={tv ? idle.stir : undefined} onLayout={event => setBarHeight(event.nativeEvent.layout.height)}>
         <BottomBar
           look={look}
           state={state}
@@ -272,6 +292,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           overlaySwitches={surfaces.switches}
         />
       </View>
+      {/* Over the bottom bar's fade (which would dim it and take its presses); gone while a menu is open. */}
+      {skip && !opened ? <SkipButton look={look} action={skip} next={state.nextEpisode} bottom={skipBottom} chromeUp={idle.visible} seek={seek} /> : null}
       <View
         style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
         pointerEvents="box-none"
@@ -283,6 +305,11 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           waitingLabel={waitingLabel(view)}
           retrying={failed ? null : state.retrying ?? null}
           onRetry={state.retry}
+          useOriginal={state.startFailure?.streamingCap && state.streaming ? () => {
+            const streaming = state.streaming!;
+            streaming.set({ [streaming.metered ? 'mobile' : 'wifi']: 'original' });
+            state.retry();
+          } : undefined}
           onClose={state.close}
           zap={live.live && live.canZap ? live.zap : undefined}
           dial={failed && live.canZap ? <LiveDial channelId={live.channelId} small={look.small} still={look.still} /> : null}

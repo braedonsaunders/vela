@@ -1,5 +1,6 @@
 import type * as V from '../../wire';
 import type { Credentials } from '../index';
+import type { UnloadRequest } from '../capabilities';
 import { VelaError } from '../errors';
 import { readEvents, type EventHandler } from '../../protocol/sse';
 
@@ -13,7 +14,11 @@ export interface RequestOptions {
   cacheable?: boolean;
   /** On web, retain this ETag answer across a full reload in this tab. */
   persistent?: boolean;
-  /** Replace cached grants without sending an old ETag. */
+  /**
+   * Read past every cache: no ETag of ours, and none the platform's HTTP stack keeps (the browser
+   * cache; OkHttp's on Android, which otherwise revalidates on its own and turns the server's 304
+   * into the old body). The answer still replaces a cacheable entry.
+   */
   fresh?: boolean;
   /** Refresh and resend once on 401 (default true). */
   retryAuth?: boolean;
@@ -42,6 +47,8 @@ export class EtherTransport {
    * replay that unknown outcome forever.
    */
   private spentRefreshKeys = new Map<string, number>();
+  /** The session the last authorised request carried, for a request that cannot wait for credentials (`unloadRequest`). */
+  private lastTokens: V.Tokens | undefined;
 
   constructor(
     private readonly origin: string,
@@ -78,10 +85,11 @@ export class EtherTransport {
     const cached = cacheable && !fresh ? this.cache.get(key) ?? (persistent ? persistentRead(key) : undefined) : undefined;
     if (cached && !this.cache.has(key)) this.cache.set(key, cached);
     const send = (token: Token, useCache = true) => {
-      const headers: Record<string, string> = { ...options.headers };
+      const headers: Record<string, string> = fresh ? uncached(options.headers) : { ...options.headers };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (cached && useCache) headers['If-None-Match'] = cached.etag;
       const init: RequestInit = { method, signal, headers };
+      if (fresh) init.cache = 'no-store';
       if (body !== undefined) init.body = JSON.stringify(body);
       return this.fetchBound(`/vela/v0${path}`, init, token);
     };
@@ -237,6 +245,7 @@ export class EtherTransport {
     const latest = await this.credentials.get();
     if (latest?.refreshToken !== rejected.refreshToken) return;
     await this.credentials.set(null);
+    this.lastTokens = undefined;
     this.cache.clear();
     this.onSessionRejected?.();
   }
@@ -273,10 +282,22 @@ export class EtherTransport {
   private fetchBound(path: string, init: RequestInit, token: Token): Promise<Response> {
     const headers: Record<string, string> = { ...init.headers as Record<string, string> };
     if (token) {
+      this.lastTokens = token;
       headers.Authorization = `Bearer ${token.accessToken}`;
       headers['X-Vela-Device-Id'] = this.credentials.device.id;
     }
     return fetch(this.boundURL(path), { ...init, redirect: 'error', headers });
+  }
+
+  /**
+   * A JSON request under /vela/v0 for a page being unloaded, authorised as the last request was
+   * (`fetchBound`), since nothing can await credentials by then. Null before any authorised request.
+   */
+  unloadRequest(path: string, body: unknown): UnloadRequest | null {
+    const tokens = this.lastTokens;
+    if (!tokens) return null;
+    return { url: this.boundURL(`/vela/v0${path}`), method: 'POST', body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.accessToken}`, 'X-Vela-Device-Id': this.credentials.device.id } };
   }
 
   /** The path under /vela/v0 of a URL inside the bound server, or undefined outside it. */
@@ -287,6 +308,18 @@ export class EtherTransport {
       return `${url.pathname.slice('/vela/v0'.length)}${url.search}`;
     } catch { return undefined; }
   }
+}
+
+/**
+ * Request headers that keep every HTTP cache between us and the server out of a fresh read. The
+ * browser honours `cache: 'no-store'`; expo/fetch (the native global fetch) drops that option, so
+ * the platform cache (OkHttp's on Android, URLCache on Apple) is told by header: no stored answer
+ * used or revalidated (no-cache), none kept (no-store), and Pragma for HTTP/1.0 caches. No
+ * validator of the caller's survives.
+ */
+function uncached(headers: Record<string, string> = {}): Record<string, string> {
+  const kept = Object.fromEntries(Object.entries(headers).filter(([name]) => !/^(if-none-match|if-modified-since|if-match|if-unmodified-since|if-range|cache-control|pragma)$/i.test(name)));
+  return { ...kept, 'Cache-Control': 'no-cache, no-store', Pragma: 'no-cache' };
 }
 
 /** Whether a 401 is Ether refusing the preview token (problem code preview_expired). */
