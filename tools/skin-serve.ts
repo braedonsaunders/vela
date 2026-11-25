@@ -236,6 +236,7 @@ export async function startSkinPreviewServer(options: SkinServeOptions): Promise
     const upstreamUrl = `${targetBaseUrl}${url.pathname}${url.search}`;
     const headers = new Headers(req.headers);
     headers.delete('host');
+    headers.delete('accept-encoding');
     const init: RequestInit = {
       method: req.method,
       headers,
@@ -265,6 +266,9 @@ export async function startSkinPreviewServer(options: SkinServeOptions): Promise
     }
 
     const resHeaders = new Headers(upstreamRes.headers);
+    resHeaders.delete('content-encoding');
+    resHeaders.delete('content-length');
+    resHeaders.delete('transfer-encoding');
     for (const [k, v] of Object.entries(CORS_HEADERS)) resHeaders.set(k, v);
     return new Response(upstreamRes.body, {
       status: upstreamRes.status,
