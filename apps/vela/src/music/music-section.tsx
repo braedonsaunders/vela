@@ -14,19 +14,12 @@ import { listenFrom, listeningOf } from '@vela/skin/src/blocks/listen/listening'
 import { forgetSearch, readRecent, rememberSearch } from '@vela/skin/src/blocks/listen/search-results';
 import { preferences } from '../data/preferences';
 import { useVela } from '../vela';
-<<<<<<< HEAD
-=======
-import { ListenKeys, useListenBack } from '../listen/keys';
->>>>>>> origin/bb/experiences-g2-document-system-resolver-protocol-thr_atix5sn6yg
 import { ExperienceView, hasExperience } from '@vela/skin/src/screen/experience';
 import { addressOfPlace, placeOfAddress, type ExperiencePlace } from '@vela/skin/src/screen/experience-route';
 import type { ScreenStateHandle } from '@vela/skin/src/screen/host';
 import { useAppScreenActions } from '../screen-actions';
 import { config } from '../data/config';
-<<<<<<< HEAD
 import { ListenKeys, useListenBack } from '../listen/keys';
-=======
->>>>>>> origin/bb/experiences-g2-document-system-resolver-protocol-thr_atix5sn6yg
 
 /** Titles the audio app opens in place: its roles (and the card kinds media titles carry). */
 const OPENS_IN_PLACE = ['artist', 'album', 'track', 'season', 'show', 'audiobook', 'part', 'series', 'episode', 'podcast', 'podcastEpisode'];
