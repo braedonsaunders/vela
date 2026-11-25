@@ -15,7 +15,7 @@ import { msg } from '../i18n';
 import type { Card, PlaylistModel } from '../models';
 import { childrenKey } from '../plugin-levels';
 import { sameJSON, type RecordStore } from './records';
-import { boolArg, cardList, cardOf, cardValue, intArg, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, ref, rowsValue, sourceArgs, textArg, type LocalAnswer, type LocalRecords, type LocalScope } from './local-records';
+import { boolArg, cardList, lyricsLine, cardOf, cardValue, intArg, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, ref, rowsValue, sourceArgs, textArg, type LocalAnswer, type LocalRecords, type LocalScope } from './local-records';
 import type { Vela } from '../store';
 import type { Loadable } from '../store/state';
 import { MAX_CHILDREN } from '../store/media';
@@ -404,7 +404,7 @@ export class LocalSources {
         const lyrics = loaded.value;
         if (!lyrics) return { value: { lines: [], synced: false, plain: '', instrumental: false, source: '', none: true } };
         const synced = lyrics.lines.length > 0;
-        const lines = synced ? lyrics.lines : lyrics.plain.split('\n').map(text => ({ startMs: -1, text }));
+        const lines = synced ? lyrics.lines.flatMap(line => lyricsLine(line) ?? []) : lyrics.plain.split('\n').map(text => ({ startMs: -1, text }));
         return { value: { lines, synced, plain: lyrics.plain, instrumental: lyrics.instrumental, source: lyrics.source, none: false } };
       }
       case 'vela.readingProgress': {

@@ -1,7 +1,7 @@
 // Vela's own sources as records: lists of references, the queue and Now Playing records, source
 // arguments filled from a page's params, and action arguments read in their declared types.
 import { describe, expect, test } from 'bun:test';
-import { boolArg, cardList, cardOf, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, rowsValue, sourceArgs } from '../src/screens/local-records';
+import { boolArg, cardList, cardOf, intsArg, lyricsLine, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, rowsValue, sourceArgs } from '../src/screens/local-records';
 import { importRecord, libraryQuery, LocalSources, playlistCard } from '../src/screens/local';
 import { createQueue, enqueue } from '../src/audio/queue';
 import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_SOURCES } from '../../protocol/vela-sources';
@@ -117,5 +117,16 @@ describe('the import record', () => {
     const { value, records } = importRecord({ load: 'ready', error: '', value: model });
     expect(value).toMatchObject({ state: 'matching', progress: 0.25, matched: [{ index: 0, item: { $record: 'item:m' }, by: 'isrc' }], unmatched: [{ index: 1, candidates: [{ $record: 'item:c1' }] }] });
     expect(Object.keys(records).sort()).toEqual(['item:c1', 'item:m']);
+  });
+});
+
+describe('lyrics lines', () => {
+  test('word timing, translation and romanisation pass through when sent; malformed parts are left out', () => {
+    expect(lyricsLine({ startMs: 1000, text: 'Hola' })).toEqual({ startMs: 1000, text: 'Hola' });
+    expect(lyricsLine({ startMs: 1000, endMs: 2000, text: 'Hola mundo', translation: 'Hello world', romanized: 'Hola mundo',
+      words: [{ startMs: 1000, text: 'Hola' }, { text: 'bad' }, { startMs: 1500, endMs: 2000, text: 'mundo' }] }))
+      .toEqual({ startMs: 1000, endMs: 2000, text: 'Hola mundo', translation: 'Hello world', romanised: 'Hola mundo',
+        words: [{ startMs: 1000, text: 'Hola' }, { startMs: 1500, endMs: 2000, text: 'mundo' }] });
+    expect(lyricsLine({ startMs: 5 })).toBeUndefined();
   });
 });

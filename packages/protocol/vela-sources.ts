@@ -216,9 +216,19 @@ export interface NowPlayingRecord {
   sleep: { mode: string; endsAt: number };
 }
 
+/** One lyrics line; word timing, translation and romanisation when the server sends them. */
+export interface LyricsLine {
+  startMs: number;
+  endMs?: number;
+  text: string;
+  words?: { startMs: number; endMs?: number; text: string }[];
+  translation?: string;
+  romanised?: string;
+}
+
 export interface LyricsValue {
   /** Synced lines (startMs) or plain lines (startMs -1). */
-  lines: { startMs: number; text: string }[];
+  lines: LyricsLine[];
   synced: boolean;
   plain: string;
   instrumental: boolean;

@@ -217,3 +217,29 @@ export function intsArg(value: unknown): number[] {
   if (Array.isArray(value)) return value.map(intArg).filter((n): n is number => n !== undefined);
   return textArg(value).split(',').map(intArg).filter((n): n is number => n !== undefined);
 }
+
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+/**
+ * A lyrics line as documents read it: its time and text, and the server's word timing, translation
+ * and romanisation when it sent them (anything malformed is left out, never guessed).
+ */
+export function lyricsLine(line: unknown): P.LyricsLine | undefined {
+  if (!line || typeof line !== 'object') return undefined;
+  const raw = line as Record<string, unknown>;
+  if (typeof raw.text !== 'string') return undefined;
+  const out: P.LyricsLine = { startMs: finite(raw.startMs) ? raw.startMs : -1, text: raw.text };
+  if (finite(raw.endMs)) out.endMs = raw.endMs;
+  if (Array.isArray(raw.words)) {
+    const words = raw.words.flatMap(word => {
+      const w = word as Record<string, unknown> | null;
+      if (!w || typeof w.text !== 'string' || !finite(w.startMs)) return [];
+      return [{ startMs: w.startMs, ...(finite(w.endMs) ? { endMs: w.endMs } : {}), text: w.text }];
+    });
+    if (words.length) out.words = words;
+  }
+  if (typeof raw.translation === 'string' && raw.translation) out.translation = raw.translation;
+  const romanised = typeof raw.romanised === 'string' ? raw.romanised : typeof raw.romanized === 'string' ? raw.romanized : '';
+  if (romanised) out.romanised = romanised;
+  return out;
+}
