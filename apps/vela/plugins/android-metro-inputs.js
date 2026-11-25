@@ -19,6 +19,16 @@ tasks.withType(com.facebook.react.tasks.BundleHermesCTask).configureEach {
 }
 `;
     }
+    // Metro copies the current assets into an existing task output. Drop that
+    // output before rebundling so removing a preview also removes it from the APK.
+    if (!mod.modResults.contents.includes('// Vela Metro generated resources')) {
+      mod.modResults.contents += `
+// Vela Metro generated resources
+tasks.withType(com.facebook.react.tasks.BundleHermesCTask).configureEach {
+    doFirst { bundle -> bundle.resourcesDir.get().asFile.deleteDir() }
+}
+`;
+    }
     return mod;
   });
 };
