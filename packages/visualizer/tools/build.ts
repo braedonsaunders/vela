@@ -3,7 +3,7 @@
 // dist/viz-native.js     glrec + host prelude + the framework (UI section left out) + host epilogue: one script for JSC/Hermes
 // dist/programs.json     every program the bundle links, captured by running it headless against a recording host
 import { bakeCountryMap } from './country-map';
-import { mapAtlasSource } from './map-atlas';
+import { mapAtlasSource, mapAtlasVariant } from './map-atlas';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -33,7 +33,7 @@ const bundle = [
   read(path.join(root, 'runtime/host-prelude.js')).replace(/^'use strict';/, ''),
   read(path.join(root, 'runtime/analyse-split.js')).replace(/^if \(typeof module.*$/m, ''),
   ...frameworkParts,
-  contour ? mapAtlasSource(contour.includes('function worldMapTexture()') ? 'round-six' : '') : '',
+  contour ? mapAtlasSource(mapAtlasVariant(contour)) : '',
   read(path.join(root, 'runtime/host-epilogue.js')),
 ].join('\n');
 fs.mkdirSync(out, { recursive: true });

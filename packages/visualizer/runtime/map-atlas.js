@@ -5,12 +5,7 @@ textAtlas = function (labels, cols, cw, ch, font) {
       font !== atlas.font || JSON.stringify(labels) !== JSON.stringify(atlas.labels)) {
     throw new Error('Map label layout changed. Regenerate contour-labels.r8.');
   }
-  const pixels = new Uint8Array(atlas.width * atlas.height);
-  for (const [offset, hex] of atlas.spans) {
-    for (let i = 0; i < hex.length; i += 2) {
-      pixels[offset + i / 2] = parseInt(hex.slice(i, i + 2), 16);
-    }
-  }
+  const pixels = __unpackAtlas(atlas.packed, atlas.width * atlas.height);
   const t = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, t);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, atlas.width, atlas.height, 0, gl.RED, gl.UNSIGNED_BYTE, pixels);

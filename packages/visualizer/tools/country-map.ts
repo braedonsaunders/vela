@@ -1,6 +1,8 @@
 // Run the authoring texture factories at build time. Capture both the texels and
 // the upload/sampler calls, so native hosts need neither a GIS rasterizer nor
 // per-candidate assumptions about filtering, wrapping or the number of channels.
+import { packTexture, unpackTexture } from './texture-bytes';
+
 const { GLC } = require('../runtime/glrec.js');
 
 export function bakeCountryMap(sceneSource: string): string {
@@ -22,14 +24,14 @@ export function bakeCountryMap(sceneSource: string): string {
     },
     texImage2D(target: number, level: number, format: number, width: number, height: number,
       border: number, channels: number, type: number, data: Uint8Array) {
-      const n = channels === GLC.RED ? 1 : channels === GLC.RG ? 2 : 0;
+      const n = channels === GLC.RED ? 1 : channels === GLC.RG ? 2 : channels === GLC.RGBA ? 4 : 0;
       if (uploaded || !n || type !== GLC.UNSIGNED_BYTE || data.length !== width * height * n) {
-        throw new Error('Expected a single R8 or RG8 cartography texture');
+        throw new Error('Expected a single byte-per-channel cartography texture');
       }
       uploaded = true;
       const args = [target, level, format, width, height, border, channels, type].join(', ');
-      statements.push('const bytes = (' + decodeCountryRuns.toString() + ')(' +
-        JSON.stringify(encodeCountryRuns(data)) + ', ' + data.length + ');');
+      statements.push('const bytes = (' + unpackTexture.toString() + ')(' +
+        JSON.stringify(packTexture(data)) + ', ' + data.length + ');');
       statements.push('gl.texImage2D(' + args + ', bytes);');
     },
     texParameteri(target: number, param: number, value: number) {
@@ -48,28 +50,10 @@ export function bakeCountryMap(sceneSource: string): string {
       statements.join('\n  ') + '\n  return t;\n}';
     nativeSource = nativeSource.replace(original, () => replacement);
   }
-  return nativeSource;
-}
-
-export function encodeCountryRuns(pixels: Uint8Array): string {
-  const records = [];
-  for (let i = 0; i < pixels.length;) {
-    const first = i++;
-    while (i < pixels.length && pixels[i] === pixels[first] && i - first < 65535) i++;
-    records.push((i - first).toString(16).padStart(4, '0'), pixels[first].toString(16).padStart(2, '0'));
-  }
-  return records.join('');
-}
-
-export function decodeCountryRuns(runs: string, size: number) {
-  const pixels = new Uint8Array(size);
-  let offset = 0;
-  for (let i = 0; i < runs.length; i += 6) {
-    const count = parseInt(runs.slice(i, i + 4), 16);
-    const id = parseInt(runs.slice(i + 4, i + 6), 16);
-    pixels.fill(id, offset, offset + count);
-    offset += count;
-  }
-  if (offset !== size) throw new Error('Invalid country map size');
-  return pixels;
+  // The baked factories no longer read the authoring base64 blobs. Keep any
+  // blob still used by other scene code (and keep the ordinary city table).
+  return nativeSource.replace(/const (\w+)\s*=\s*"[A-Za-z0-9+/=]{100,}";/g, (declaration, name: string) => {
+    const rest = nativeSource.replace(declaration, '');
+    return new RegExp('\\b' + name + '\\b').test(rest) ? declaration : '';
+  });
 }

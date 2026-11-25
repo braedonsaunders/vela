@@ -1,14 +1,16 @@
 import { expect, test } from 'bun:test';
-import { bakeCountryMap, decodeCountryRuns, encodeCountryRuns } from '../tools/country-map';
+import { bakeCountryMap } from '../tools/country-map';
+
+import { packTexture, unpackTexture } from '../tools/texture-bytes';
 
 test('country-map packing preserves ocean, adjacent IDs and runs longer than 16 bits', () => {
   const ids = new Uint8Array(70004);
   ids.fill(177, 1, 70001);
   ids.set([4, 1, 0], 70001);
-  const runs = encodeCountryRuns(ids);
-  expect(runs.length).toBe(36);
-  expect(Buffer.from(decodeCountryRuns(runs, ids.length)).equals(Buffer.from(ids))).toBe(true);
-  expect(() => decodeCountryRuns(runs, ids.length - 1)).toThrow('Invalid country map size');
+  const runs = packTexture(ids);
+  expect(runs.length).toBeLessThan(ids.length / 20);
+  expect(Buffer.from(unpackTexture(runs, ids.length)).equals(Buffer.from(ids))).toBe(true);
+  expect(() => unpackTexture(runs, ids.length - 1)).toThrow('exceeds its image');
 });
 
 test('native map baking preserves independent formats, texels and sampling for both factories', () => {
@@ -33,4 +35,11 @@ test('native map baking preserves independent formats, texels and sampling for b
     return calls;
   }
   expect(capture(bakeCountryMap(source))).toEqual(capture(source));
+});
+
+test('texture packets preserve literal boundaries and repeats mixed with antialiased glyph coverage', () => {
+  const bytes = Uint8Array.from({ length: 1025 }, (_, i) => i % 200 < 130 ? i & 255 : 0);
+  expect(unpackTexture(packTexture(bytes), bytes.length)).toEqual(bytes);
+  expect(unpackTexture(packTexture(new Uint8Array()), 0)).toHaveLength(0);
+  expect(() => unpackTexture('', 1)).toThrow('Incomplete texture');
 });
