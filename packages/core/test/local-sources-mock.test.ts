@@ -8,7 +8,7 @@ import type { VelaPlatform } from '../src/store/platform';
 import type { ScreenDocument } from '../src/wire';
 import { launchMock, type RunningMock } from '../../../mock-server/test/launch';
 import { mediaChildren, mediaGroups } from '../../protocol/fixtures/media';
-import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue } from '../../protocol/vela-sources';
+import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue, GuideValue } from '../../protocol/vela-sources';
 import { MemoryStore } from './helpers';
 
 let mock: RunningMock;
@@ -148,4 +148,18 @@ test('search reads the audio app\'s search, with the exact name as the top match
   await until(() => Object.keys(store.getState().screens.pages[empty.key]?.pending ?? { x: 1 }).length === 0);
   expect(store.getState().screens.pages[empty.key]!.sources.found).toMatchObject({ items: [], top: null });
   empty.release();
+});
+
+test('the guide answers a day of channels as channel records', async () => {
+  const guidePage: ScreenDocument = { ...albumPage, page: 'guide', params: {}, sources: { guide: { from: 'vela.guide', day: '0' } } };
+  store.screens.provideDocuments(href => (href === 'vela:live/guide' ? guidePage : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.live', page: 'guide' }, href: 'vela:live/guide' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors).toEqual({});
+  const guide = page().sources.guide as GuideValue;
+  expect(guide.day).toBe(0);
+  expect(guide.channels.length).toBeGreaterThan(0);
+  expect(store.screens.records.get(guide.channels[0]!.$record)?.value).toMatchObject({ id: expect.any(String), name: expect.any(String) });
+  handle.release();
 });

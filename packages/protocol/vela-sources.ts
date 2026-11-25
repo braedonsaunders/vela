@@ -85,7 +85,7 @@ export const VELA_SOURCES = {
   'vela.queue': { args: {}, live: true, doc: 'The audio queue: a reference to the `queue:current` record (QueueRecord).' },
   'vela.nowPlaying': { args: {}, live: true, doc: 'What plays now: a reference to `nowPlaying:current` (NowPlayingRecord), pushed about once a second while a page reads it.' },
   'vela.lyrics': { args: { id: id('The track.'), translate: id('A language to translate into, when the server offers it.', false) }, doc: 'LyricsValue.' },
-  'vela.guide': { args: { window: id('hours ahead (default 3).', false) }, doc: 'The Live TV guide window: GuideValue.' },
+  'vela.guide': { args: { day: { type: 'int', doc: 'Days from today (0 when absent; the guide reaches a week ahead).' } }, doc: 'One day of the Live TV guide: GuideValue, channels as `channel:` records.' },
   'vela.readingProgress': { args: { id: id('The readable title.') }, doc: 'ReadingProgressValue.' },
   'vela.recap': {
     args: { period: { type: 'enum', required: true, enum: ['week', 'month', 'year', 'all'] }, at: id('An anchor date (YYYY-MM-DD).', false), library: id('One library.', false) },
@@ -248,7 +248,18 @@ export interface SearchValue extends ListValue {
   groups: Record<string, RecordRef[]>;
 }
 
-export interface GuideValue { channels: RecordRef[]; from: string; to: string }
+/** `vela.guide`: a `channel:` record holds the channel, what it airs now and next, and the day's programmes. */
+export interface GuideValue {
+  channels: RecordRef[];
+  day: number;
+  dayLabel: string;
+  /** Minutes from the day's timeline start to now, and the timeline's length. */
+  nowMinute: number;
+  minutes: number;
+  days: { offset: number; label: string; date: string }[];
+  /** The owner's named Guides (tabs). */
+  guides: { id: string; name: string }[];
+}
 
 export interface ReadingProgressValue { fraction: number; locator: string; label: string }
 

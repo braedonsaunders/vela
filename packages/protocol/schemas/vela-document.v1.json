@@ -8471,13 +8471,12 @@
         },
         "vela.guide": {
           "args": {
-            "window": {
-              "doc": "hours ahead (default 3).",
-              "required": false,
-              "type": "string"
+            "day": {
+              "doc": "Days from today (0 when absent; the guide reaches a week ahead).",
+              "type": "int"
             }
           },
-          "doc": "The Live TV guide window: GuideValue."
+          "doc": "One day of the Live TV guide: GuideValue, channels as `channel:` records."
         },
         "vela.import": {
           "args": {},

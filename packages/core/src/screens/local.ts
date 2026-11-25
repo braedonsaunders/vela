@@ -8,7 +8,7 @@
 import type * as V from '../wire';
 import type { SourceSpec } from '../../../protocol/screen';
 import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_LOCAL_RECORDS, VELA_SOURCES, type ImportRecord, type ListValue, type PlaylistValue, type TitleValue, type VelaActionName, type VelaSourceName } from '../../../protocol/vela-sources';
-import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasMusicLibrary, hasTitleChildren } from '../adapter/capabilities';
+import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasLiveTv, hasMusicLibrary, hasTitleChildren } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { audioCardsOf } from '../audio/cards';
 import { msg } from '../i18n';
@@ -25,7 +25,7 @@ import { libraryKey, type LibraryQuery } from '../store/catalogue';
 import { recapKey, type PlaylistImportModel } from '../store/music';
 
 /** The stores local answers wrap (the Vela store; a subset so tests can stand in). */
-export type LocalStores = Pick<Vela, 'getState' | 'subscribe' | 'catalogue' | 'media' | 'music' | 'playlists' | 'home' | 'audio' | 'musicSearch'>;
+export type LocalStores = Pick<Vela, 'getState' | 'subscribe' | 'catalogue' | 'media' | 'music' | 'playlists' | 'home' | 'audio' | 'musicSearch' | 'live'>;
 
 /** What the server says it offers, read after the session is ready. */
 export interface LocalServer {
@@ -495,9 +495,22 @@ export class LocalSources {
         const top = topMatch(items, q);
         return { value: { ...value, q, byDescription: list.byDescription, top: top ? ref(itemKey(top.id)) : null, groups }, records };
       }
-      case 'vela.guide':
-        // Not answered locally yet: documents hide these parts.
-        return unsupported();
+      case 'vela.guide': {
+        const { adapter } = await this.features();
+        if (!hasLiveTv(adapter as never)) return unsupported();
+        const day = Math.max(0, Math.min(6, intArg(args.day) ?? 0));
+        const held = stores.getState().live.guide[day];
+        if (fresh || !held?.value || held.load === 'failed') await stores.live.guide(day);
+        const loaded = await settled(stores, () => stores.getState().live.guide[day]);
+        const guide = loaded?.value;
+        if (!guide) return { error: loadableError(loaded) };
+        const records: LocalRecords = {};
+        const channels = guide.channels.map(channel => { records[`channel:${channel.id}`] = channel; return ref(`channel:${channel.id}`); });
+        return {
+          value: { channels, day: guide.day, dayLabel: guide.dayLabel, nowMinute: guide.nowMinute, minutes: guide.minutes, days: guide.days, guides: guide.guides },
+          records,
+        };
+      }
     }
   }
 
