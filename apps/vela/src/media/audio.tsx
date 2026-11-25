@@ -48,10 +48,12 @@ const FocusGuide = TVFocusGuideView as ComponentType<ComponentProps<typeof TVFoc
 
 /** On a TV, Now Playing draws over a page that stays in the focus engine: while open it takes the
  * focus and keeps it (the remote's presses never reach the page beneath), and gives it back on close. */
-function TVFocusTrap({ open, children }: { open: boolean; children: ReactNode }) {
-  const guide = useRef<Focusable>(null);
+function TVFocusTrap({ open, children, guideRef }: { open: boolean; children: ReactNode; guideRef?: Ref<Focusable> & { current: Focusable | null } }) {
+  const own = useRef<Focusable>(null);
+  const guide = guideRef ?? own;
   useEffect(() => {
-    if (!open) return;
+    // Given a guide, its owner asks for focus once what it traps has drawn.
+    if (!open || guideRef) return;
     const frame = requestAnimationFrame(() => guide.current?.requestTVFocus?.());
     return () => cancelAnimationFrame(frame);
   }, [open]);
@@ -213,8 +215,12 @@ export function AudioDock() {
   // full-screen visualizer from them (vela:listen/nowPlaying and vela:listen/visualizer); the dock
   // still opens, closes and leads them.
   const documents = config.listen === 'documents' && hasExperience('listen');
-  const dock = useMemo<ListenDock>(() => ({ close, openVisualizer: readyToOpen ? openVisualizer : undefined, visualizer: visualizerSwitch, hidden: fullscreen }),
-    [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen]);
+  // A document draws once its first read answers: the trap takes focus then (a TV), not on
+  // opening, so focus lands where the hand-written one's did (the guide's first child).
+  const trap = useRef<Focusable>(null);
+  const focusTrap = useCallback(() => { setTimeout(() => trap.current?.requestTVFocus?.(), 400); }, []);
+  const dock = useMemo<ListenDock>(() => ({ close, openVisualizer: readyToOpen ? openVisualizer : undefined, visualizer: visualizerSwitch, hidden: fullscreen, shown: focusTrap }),
+    [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen, focusTrap]);
   const noBack = useCallback(() => undefined, []);
   const noParams = useCallback(() => undefined, []);
   const screenActions = useAppScreenActions({ host: host ?? null, back: noBack, setParams: noParams });
@@ -230,7 +236,7 @@ export function AudioDock() {
   // tabs above the screen.
   const nowPlaying = (
     <Presence shown={playing && open} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
-      <TVFocusTrap open={playing && open}>
+      <TVFocusTrap open={playing && open} guideRef={documents ? trap : undefined}>
         <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
           {documents ? (
             <ListenDockContext.Provider value={dock}>
