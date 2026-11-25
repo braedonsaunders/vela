@@ -151,7 +151,7 @@ internal class PlayerController(
       return
     }
     val path = next.selectedPath ?: return
-    val source = "${next.sessionId}:${path.id}:${next.sourceGeneration}"
+    val source = next.sourceKey(path)
     val sameFile = previous?.sessionId == next.sessionId && path.isOriginalFile &&
       previous?.selectedPath?.isOriginalFile == true &&
       (previous?.selectedPath?.url == path.url || (path.sourceId != null && previous?.selectedPath?.sourceId == path.sourceId && previous?.selectedPath?.timelineId == path.timelineId)) && previous?.selectedPath?.id == path.id
@@ -679,7 +679,7 @@ internal class PlayerController(
     val url = path.url?.let(MediaAccessStore::resolve) ?: return
     activeSource = ""
     state.failure = null
-    start(plan, path, url, "${plan.sessionId}:${path.id}:${plan.sourceGeneration}", state.position)
+    start(plan, path, url, plan.sourceKey(path), state.position)
   }
 
   private companion object {

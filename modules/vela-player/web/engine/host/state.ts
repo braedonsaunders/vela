@@ -23,18 +23,22 @@ export type ExtendedVideo = HTMLVideoElement & {
   webkitSupportsPresentationMode?: (mode: string) => boolean;
   webkitSetPresentationMode?: (mode: string) => void;
 };
+export interface PendingSwitch {
+  startedAt: number;
+  sessionId: string;
+  sourceId: string;
+  source: number;
+  seek: number;
+  position: number;
+  recovery: boolean;
+}
 export interface HostSessionState {
   readonly controller: SessionController;
   current?: PlaybackSession;
-  pendingSwitch?: {
-    startedAt: number;
-    sessionId: string;
-    sourceId: string;
-    source: number;
-    seek: number;
-    position: number;
-    recovery: boolean;
-  };
+  pendingSwitch?: PendingSwitch;
+  /** A switch given up while its media played on (switch-wait.ts): no longer awaited, but the
+   * server may still answer it, and that answer is handed off where the media then is. */
+  droppedSwitch?: PendingSwitch;
   pendingSeek?: {
     position: number;
     startedAt: number;
