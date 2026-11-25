@@ -18,12 +18,15 @@ import { LyricsPanel } from '../music/lyrics';
 import { SoundBlock, SoundSection } from '../../blocks/sound';
 import { musicTV } from '../music/layout';
 import { nowPlayingSideBySide } from './window-layout';
+import { listForItem, toggleSound, type NowPlayingList } from './now-playing-list';
 
 const web = Platform.OS === 'web';
 /** A TV's focus engine moves by geometry: Now Playing's column and transport row are focus guides, so
  * the remote reaches them from the queue beside them and from the scrubber above. */
 const Guide = Platform.isTV ? TVFocusGuideView : View;
 const guided = Platform.isTV ? { autoFocus: true } : {};
+/** Now Playing's page starts this far under its header. */
+const PAGE_TOP = 18;
 
 function spoken(item: Card | undefined): boolean {
   const cls = item?.media?.class;
@@ -225,10 +228,32 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const [panel, setPanel] = useState<'' | 'speed' | 'sleep'>('');
   const source = useInteraction();
   const shownPanel = useLast(panel || undefined);
-  const [list, setList] = useState<'queue' | 'chapters' | 'lyrics' | 'sound'>(opening === 'lyrics' || opening === 'sound' ? opening : 'queue');
+  const [list, setList] = useState<NowPlayingList>(opening === 'lyrics' || opening === 'sound' ? opening : 'queue');
   const book = spoken(item);
   const music = item?.media?.class === 'music' && store.music.lyricsAvailable;
-  useEffect(() => { setList(current => (current === 'sound' ? 'sound' : book && audio.chapters.length ? 'chapters' : current === 'lyrics' && music ? 'lyrics' : 'queue')); }, [book, music, audio.chapters.length, item?.id]);
+  const offered = { chapters: !!book && audio.chapters.length > 0, lyrics: !!music };
+  useEffect(() => { setList(current => listForItem(current, offered)); }, [book, music, audio.chapters.length, item?.id]);
+  // The list Sound was opened over, for the header's Sound button to go back to.
+  const beforeSound = useRef<NowPlayingList>('queue');
+  useEffect(() => { if (list !== 'sound') beforeSound.current = list; }, [list]);
+  // Where the tabs sit in the page, so the header's Sound button can bring the panel into view
+  // where it opens below the cover and transport.
+  const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
+  const listTop = useRef(0);
+  const revealing = useRef(false);
+  const [revealSound, setRevealSound] = useState(0);
+  const reveal = () => {
+    if (!revealing.current) return;
+    revealing.current = false;
+    scroller.current?.scrollTo({ y: Math.max(0, listTop.current), animated: !m.look.still });
+  };
+  // The tabs' new place arrives with their layout (from the phone's lyrics, the page re-lays out);
+  // if it does not move, two frames on.
+  useEffect(() => {
+    if (!revealSound) return;
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(reveal); });
+    return () => cancelAnimationFrame(frame);
+  }, [revealSound]);
   useEffect(() => { if (opening) setList(opening === 'sound' ? 'sound' : opening === 'lyrics' && music ? 'lyrics' : 'queue'); }, [opening, music]);
   // Space plays and pauses; Escape closes (web).
   useEffect(() => {
@@ -258,6 +283,14 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const launcherByTitle = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
   const launcher = onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
     nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={44} /> : null;
+  // Sound is one press away on every layout, beside the visualizer: the tab below can sit under the
+  // fold on a phone or a short window.
+  const soundButton = <RoundButton icon="sound" label={msg('music.sound')} active={list === 'sound'} size={44}
+    onPress={() => { const next = toggleSound(list, beforeSound.current, offered); setList(next); if (next === 'sound' && !sideBySide) { revealing.current = true; setRevealSound(n => n + 1); } }}
+    nativeID="now-playing-sound" testID="now-playing-sound" />;
+  const headerEnd = [soundButton, launcherByTitle ? null : launcher].filter(Boolean).length;
+  // Both ends of the header are as wide, so the source stays centred over the page.
+  const headerSide = headerEnd * 44 + (headerEnd - 1) * 8;
   const controls = (
     <Guide {...guided} style={{ gap: 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -340,7 +373,9 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${washTop} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` })]} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }}>
-        <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
+        <View style={{ width: headerSide, alignItems: 'flex-start' }}>
+          <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
+        </View>
         {/* The link spans the header, so a TV's remote reaches it from the Up Next tabs below; its
             focus ring is drawn around the words. */}
         <Pressable {...source.handlers} disabled={!audio.queue.source} onPress={() => { const s = audio.queue?.source; if (s) { onClose(); actions.openTitle({ id: s.id, kind: parentId === s.id ? 'album' : (item.media?.class === 'audiobook' ? 'audiobook' : 'album') }); } }}
@@ -351,9 +386,12 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
             {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
           </View>
         </Pressable>
-        {!launcherByTitle && launcher ? launcher : <View style={{ width: 42 }} />}
+        <View style={{ width: headerSide, flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+          {soundButton}
+          {launcherByTitle ? null : launcher}
+        </View>
       </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: 18, paddingBottom: 48, minHeight: '100%' as never }}>
+      <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: PAGE_TOP, paddingBottom: 48, minHeight: '100%' as never }}>
         {sideBySide ? (
           <View style={{ flexDirection: 'row', gap: 56, alignItems: 'flex-start', maxWidth: 1280, width: '100%', alignSelf: 'center' } as ViewStyle}>
             <View style={{ flex: 1, gap: 34, alignItems: 'center' }}>
@@ -373,7 +411,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
           <View style={{ gap: 28, alignItems: 'center' }}>
             <Artwork item={item} size={coverSize} playing={playing} />
             {controls}
-            <View style={{ width: '100%', maxWidth: 560 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
+            <View style={{ width: '100%', maxWidth: 560 }} onLayout={e => { listTop.current = e.nativeEvent.layout.y + PAGE_TOP - 12; reveal(); }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
           </View>
         )}
       </ScrollView>
