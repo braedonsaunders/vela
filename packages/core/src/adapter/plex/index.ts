@@ -3,12 +3,12 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand } from '../capabilities';
+import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, Versions } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
-import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, partAt, partOffsets, plexAudioMime, plexProjection } from './media';
+import { decoderAudioCodec, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, mediaId, partAt, partOffsets, plexAudioMime, plexProjection, plexVersion } from './media';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
@@ -20,12 +20,16 @@ interface PlexSession {
   sequence: number;
   pending: Promise<unknown>;
   transcodeId?: string;
+  /** The server's stream was selected under the current transcode session, which may still run after a switch to the file. */
+  streamed?: boolean;
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
    * transcode request each part is played through. */
   stack?: { parts: Node[]; index: number; query: Record<string, string> };
+  /** What a video start declared, so a version switch can choose that file's paths the same way. */
+  request?: Pick<V.PlaybackRequest, 'client' | 'allowTranscode'>;
 }
 export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string; /** The name the server was added under (plex.tv's resource name). */ name?: string }
 const ack: V.Ack = { accepted: true };
@@ -33,6 +37,10 @@ const no = (reason: string): V.Feature => ({ available: false, reason });
 const yes: V.Feature = { available: true };
 const enc = encodeURIComponent;
 const seconds = (n: unknown) => Math.max(0, Number(n || 0) / 1000);
+/** A file's own length where Plex states it (a title's files can differ), else the title's. */
+const fileSeconds = (media: Node, n: Node) => seconds(media.duration ?? n.duration);
+/** A position kept inside a file of known length. */
+const inside = (at: number, duration: number) => duration > 0 ? Math.min(at, duration) : at;
 function fail(message: string, kind: V.ProtocolError['class'] = 'request'): never {
   throw new VelaError({ class: kind, code: 'plex_unsupported', message, retry: { allowed: false } }, 400);
 }
@@ -59,7 +67,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -180,7 +188,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
     return { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }], protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: name || this.config.name || 'Plex Media Server', version: root.version || '' },
-      features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes, sessionTrackChanges: yes },
+      features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes, sessionTrackChanges: yes, versions: yes },
       skins: [{ id: 'cinematic', name: 'Cinematic' }], defaultSkinId: 'cinematic' };
   }
   async revokeSession(_r: V.RevokeRequest): Promise<V.Ack> {
@@ -517,22 +525,53 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     s.plan.revision++;
     return structuredClone(s.plan);
   }
+  /** A movie's or episode's files, when it has several: Plex has no remembered or pinned choice. */
+  private versions(n: Node): V.VersionItem[] {
+    const media: Node[] = ['movie', 'episode', 'clip'].includes(n.type) ? n.Media ?? [] : [];
+    return media.length > 1 ? media.map(plexVersion) : [];
+  }
+  async titleVersions(id: string): Promise<V.TitleVersions> {
+    return { titleId: id, selectedVersionId: null, versions: this.versions(await this.metadata(id)) };
+  }
+  async clearVersionChoice(id: string, _request: V.ClearVersionChoiceRequest): Promise<V.ClearVersionChoiceResponse> {
+    return { ...(await this.titleVersions(id)), cleared: false };
+  }
   async startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
     for (const s of this.sessions.values()) if (s.mutations.has(r.idempotencyKey)) return s.mutations.get(r.idempotencyKey)!;
     if (r.channelId) return this.livePlayback(r);
     const id = r.titleId || r.extraId!; const n = await this.metadata(id);
-    const media = r.mediaSourceId ? n.Media?.find((m: Node, index: number) => String(m.id ?? index) === r.mediaSourceId) : n.Media?.[0];
+    const chosen = r.versionId ?? r.mediaSourceId;
+    const media = chosen ? n.Media?.find((m: Node, index: number) => mediaId(m, index) === chosen) : n.Media?.[0];
+    if (r.versionId && !media) fail('Unknown Plex version');
     const parts: Node[] = media?.Part ?? [];
     if (!parts.length) fail('Plex title has no playable media', 'playback');
     if (n.type === 'track') return this.audioPlayback(r, id, n, media, parts[0]!);
+    const duration = fileSeconds(media, n);
+    const start = inside(r.positionSeconds ?? seconds(n.viewOffset), duration);
+    const sessionId = `vela-${randomId()}`;
+    const source = await this.videoSource(r, id, n, media, start, sessionId);
+    const versions = r.titleId ? this.versions(n) : [];
+    const plan: V.PlaybackPlan = { sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0,
+      ...(r.extraId ? { extraId: id } : { titleId: id }), state: 'ready', positionSeconds: start, durationSeconds: duration, ...source.plan, chapters: this.chapters(n),
+      fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' },
+      ...(versions.length ? { selectedVersionId: mediaId(media, n.Media.indexOf(media)), versions } : {}) };
+    this.sessions.set(sessionId, { plan, part: source.part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]),
+      request: { client: r.client, allowTranscode: r.allowTranscode }, ...(source.stack ? { stack: source.stack } : {}) });
+    return structuredClone(plan);
+  }
+  /**
+   * The paths and tracks for one of a video title's files from a title position: the original
+   * file where the client plays it, and the server's stream (as transcode session `transcodeId`).
+   */
+  private async videoSource(r: Pick<V.PlaybackRequest, 'client' | 'allowTranscode' | 'audioTrackId' | 'subtitleTrackId'>, id: string, n: Node, media: Node, start: number, transcodeId: string) {
+    const parts: Node[] = media.Part ?? [];
+    if (!parts.length) fail('Plex title has no playable media', 'playback');
     // A movie stacked from several files plays them in turn through one session: each part is
     // transcoded (remuxed where it can be) on the title's timeline, and the session moves on at its end.
     const stacked = parts.length > 1;
-    const start = r.positionSeconds ?? seconds(n.viewOffset);
     const at = partAt(parts, start);
     const part = stacked ? parts[at.index]! : parts[0]!;
     if (stacked && (r.allowTranscode === false || !(r.client.hls || r.client.mse))) fail('This title is in several parts, which play through the server\'s stream', 'playback');
-    const sessionId = `vela-${randomId()}`;
     const streams: Node[] = part.Stream || [];
     const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => {
       const textSidecar = !!s.key && ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'].includes(s.codec);
@@ -565,7 +604,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (r.allowTranscode !== false && (r.client.hls || r.client.mse)) {
       const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
       const query = { path: `/library/metadata/${id}`, mediaIndex: n.Media.indexOf(media), partIndex: stacked ? at.index : 0, protocol: 'hls', directPlay: 0, directStream: 1,
-        session: sessionId, offset: stacked ? at.inPart : 0, fastSeek: 1, 'X-Plex-Client-Identifier': this.config.clientIdentifier,
+        session: transcodeId, offset: stacked ? at.inPart : 0, fastSeek: 1, 'X-Plex-Client-Identifier': this.config.clientIdentifier,
         maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`,
         subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
       for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
@@ -573,14 +612,34 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: stacked ? start : 0, qualities: [], boundaries: [] });
     }
     if (!paths.length) fail('No compatible Plex playback path', 'playback');
-    const plan: V.PlaybackPlan = { sessionId, revision: 1, sourceGeneration: 0, seekGeneration: 0,
-      ...(r.extraId ? { extraId: id } : { titleId: id }), state: 'ready', positionSeconds: start, durationSeconds: seconds(n.duration),
-      paths, selectedPathId: paths[0].id, audioTracks, subtitleTracks, selectedAudioTrackId: audio, selectedSubtitleTrackId: subtitle, chapters: this.chapters(n),
-      fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' } };
     const hls = paths.find(p => p.id === 'plex-hls');
-    this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]),
-      ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}) });
-    return structuredClone(plan);
+    return { part, plan: { paths, selectedPathId: paths[0]!.id, audioTracks, subtitleTracks, selectedAudioTrackId: audio, selectedSubtitleTrackId: subtitle },
+      ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}) };
+  }
+  /**
+   * Another of the playing title's files, in the same session from the given position (else the
+   * session's, kept inside the file): its paths and tracks chosen as at a start, then the stream that
+   * may still run stopped.
+   */
+  switchVersion(sessionId: string, r: Extract<V.SessionCommand, { kind: 'version' }>): Promise<V.PlaybackPlan> {
+    return this.mutate(sessionId, r, async s => {
+      const listed = s.plan.versions?.some(v => v.id === r.versionId);
+      const media: Node | undefined = listed ? s.metadata.Media?.find((m: Node, index: number) => mediaId(m, index) === r.versionId) : undefined;
+      if (!media || !s.request || !s.plan.titleId) fail('Unknown Plex version');
+      const asked = r.positionSeconds ?? s.plan.positionSeconds;
+      if (!Number.isFinite(asked) || asked < 0) fail('Invalid playback position');
+      const duration = fileSeconds(media, s.metadata);
+      const at = inside(asked, duration);
+      const transcodeId = `${sessionId}-${s.plan.sourceGeneration + 1}`;
+      const source = await this.videoSource(s.request, s.plan.titleId, s.metadata, media, at, transcodeId);
+      if (s.streamed || s.plan.paths.find(p => p.id === s.plan.selectedPathId)?.kind === 'transcode') await this.stopTranscode(s.transcodeId ?? sessionId);
+      s.part = source.part;
+      s.transcodeId = transcodeId;
+      s.streamed = false;
+      if (source.stack) s.stack = source.stack; else delete s.stack;
+      // Tracks belong to the file: the new one starts on its own defaults.
+      s.plan = { ...s.plan, ...source.plan, positionSeconds: at, durationSeconds: duration, selectedVersionId: r.versionId, sourceGeneration: s.plan.sourceGeneration + 1 };
+    });
   }
   /** A track: its file where every platform's audio player decodes it, else the server's MP3 stream. */
   private audioPlayback(r: V.PlaybackRequest, id: string, n: Node, media: Node, part: Node): V.PlaybackPlan {
@@ -745,6 +804,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return this.mutate(id, r, s => {
       if (!s.plan.paths.some(p => p.id === r.pathId)) fail('Unknown Plex path');
       if (!Number.isFinite(r.atSeconds) || r.atSeconds < 0) fail('Invalid switch position');
+      // Leaving the server's stream does not stop it: a version switch still does.
+      if (s.plan.paths.find(p => p.id === s.plan.selectedPathId)?.kind === 'transcode') s.streamed = true;
       s.plan.selectedPathId = r.pathId;
       s.plan.positionSeconds = r.atSeconds;
       s.plan.sourceGeneration++;

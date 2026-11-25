@@ -181,3 +181,42 @@ test('the chrome shows the newer of the refreshed list and the plan', () => {
   const remembered = withSessionVersions(planOf('s1', cold), { ...refreshed, rememberedChoice: { scope: 'title', active: true, label: '4K WEB-DL' } });
   expect(remembered.rememberedChoice?.label).toBe('4K WEB-DL');
 });
+
+test('a version switched to in the player is the one a restart asks for', async () => {
+  const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
+  const timers = new Map<number, { ms: number; fire: () => unknown }>();
+  let sequence = 0;
+  globalThis.setTimeout = ((fire: () => unknown, ms: number) => { const id = ++sequence; timers.set(id, { ms, fire }); return id; }) as never;
+  globalThis.clearTimeout = ((id: number) => { timers.delete(id); }) as never;
+  try {
+    const requests: Record<string, unknown>[] = [];
+    const adapter = {
+      startPlayback: async (r: Record<string, unknown>) => { requests.push(r); return planOf(`s${requests.length}`, real, { sourceGeneration: 0, seekGeneration: 0 }); },
+      sessionSnapshot: async (id: string) => ({ plan: planOf(id, real) }),
+      streamSession: (_id: string, _cursor: string, _on: unknown, signal?: AbortSignal) =>
+        new Promise<void>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true })),
+      streamViewerEvents: async () => {},
+      command: async (id: string) => planOf(id, real),
+      titleVersions: async () => ({ titleId: 'psycho', selectedVersionId: null, versions: real }),
+      clearVersionChoice: async () => ({ titleId: 'psycho', selectedVersionId: null, versions: real, cleared: false }),
+      switchVersion: async (id: string, c: { versionId: string }) => planOf(id, real, { sourceGeneration: 1, seekGeneration: 0, selectedVersionId: c.versionId }),
+    };
+    const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
+    const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
+    const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+    await playback.start({ kind: 'title', id: 'psycho', versionId: 'a' });
+    await settle();
+    playback.snapshot({ sessionId: 's1', live: null, position: 30, state: 'playing' });
+    await playback.switchVersion('s1', 'b', 30);
+    expect(box.get().playback.target).toEqual({ kind: 'title', id: 'psycho', versionId: 'b' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 31, state: 'loading' });
+    playback.recover('s1');
+    const restart = [...timers].find(([, t]) => t.ms === 1000)!;
+    timers.delete(restart[0]);
+    await restart[1].fire();
+    await settle();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({ titleId: 'psycho', versionId: 'b' });
+    await playback.stop();
+  } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; }
+});
