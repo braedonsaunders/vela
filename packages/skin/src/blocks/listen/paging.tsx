@@ -6,9 +6,9 @@ import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { msg } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
-import { NO_RING, useInteraction } from '../common/controls';
-import { useMediaLook } from '../media/parts';
-import { musicTV } from '../../blocks/listen/layout';
+import { NO_RING, useInteraction } from '../../widgets/common/controls';
+import { useMediaLook } from '../../widgets/media/parts';
+import { musicTV } from './layout';
 import { canResume, createScrollMemory, nearEnd, type ScrollMetrics } from './scroll-end';
 
 type Listener = (metrics: ScrollMetrics) => void;

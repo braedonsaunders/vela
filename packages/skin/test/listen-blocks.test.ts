@@ -6,7 +6,7 @@ import type { Card } from '@vela/core';
 import { RICH_BLOCKS, RICH_BLOCK_NAMES, isRichBlock } from '../../protocol/rich-blocks';
 import { fillParts, hasRows, partRows, splitRows } from '../src/blocks/listen/part-style';
 import {
-  asCard, barPresses, discGroups, litWords, listOf, moveItem, lyricLine, queueMove, nextRowCount, parseBool, parseEnum, parseNumber, playlistMove, propDefault, tableTracks, FIRST_ROWS, MORE_ROWS,
+  asCard, barPresses, cardOf, cardsOf, dedupeAlbums, releaseKind, shelfSubtitle, discGroups, litWords, listOf, moveItem, lyricLine, queueMove, nextRowCount, parseBool, parseEnum, parseNumber, playlistMove, propDefault, tableTracks, FIRST_ROWS, MORE_ROWS,
 } from '../src/blocks/listen/props';
 
 function track(id: string, disc = 0): Card {
@@ -146,4 +146,26 @@ test('lyrics light the line being sung and the words sung so far', () => {
   expect(litWords(words, 3000)).toBe(0);
   expect(litWords(words, 4200)).toBe(1);
   expect(litWords(words, 5000)).toBe(3);
+});
+
+test('a prop names a card by record, by a title source value, or as a card; lists follow records', () => {
+  const records: Record<string, { rev: number; value: unknown }> = { 'item:a': { rev: 1, value: track('a') }, 'item:b': { rev: 1, value: track('b') } };
+  const read = (key: string) => records[key];
+  expect(cardOf({ $record: 'item:a' }, read)?.id).toBe('a');
+  expect(cardOf({ item: { $record: 'item:b' } }, read)?.id).toBe('b');
+  expect(cardOf(track('c'), read)?.id).toBe('c');
+  expect(cardOf({ item: { $record: 'item:none' } }, read)).toBeUndefined();
+  expect(cardsOf({ items: [{ $record: 'item:a' }, { $record: 'item:x' }, { $record: 'item:b' }], more: false }, read).map(c => c.id)).toEqual(['a', 'b']);
+});
+
+test('shelves show a song\'s album once, and word their tiles by kind', () => {
+  const song = (id: string, album: string) => ({ id, kind: 'track', name: id, media: { parent: { id: album } } }) as unknown as Card;
+  expect(dedupeAlbums([song('1', 'x'), song('2', 'x'), song('3', 'y')]).map(c => c.id)).toEqual(['1', '3']);
+  expect([releaseKind(3), releaseKind(6), releaseKind(7)]).toEqual(['single', 'ep', 'album']);
+  const album = { id: 'a', kind: 'album', name: 'A', yearLabel: '2019', media: { childCount: 9, byline: 'Lanterns' } } as unknown as Card;
+  expect(shelfSubtitle(album, 'year')).toBe('2019');
+  expect(shelfSubtitle(album, 'byline')).toBe('Lanterns');
+  expect(shelfSubtitle(album, 'none')).toBeUndefined();
+  expect(shelfSubtitle(album, 'release')?.startsWith('2019 · ')).toBe(true);
+  expect(shelfSubtitle(album, 'playlist')).toBeUndefined();
 });
