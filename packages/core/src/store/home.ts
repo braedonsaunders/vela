@@ -344,7 +344,7 @@ export class Home {
     for (let page = 1; page < HOME_PAGES && fresh.nextCursor && fresh.rows.length < shown; page++) {
       if (signal.aborted) break;
       const cursor = fresh.nextCursor;
-      const data = await connection.adapter.rows({ cursor, placement: 'home' }).catch(() => undefined);
+      const data = await connection.adapter.rows({ cursor, placement: 'home' }, true).catch(() => undefined);
       if (!data || data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) break;
       fresh = { ...fresh, rows: [...fresh.rows, ...this.pageRows(fresh, data.items, images)], nextCursor: data.nextCursor ?? '' };
     }

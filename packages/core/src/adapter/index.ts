@@ -16,7 +16,8 @@ export interface ServerAdapter {
 
   /** The signed-in viewer's home: rows, heroes and the server's description. */
   home(fresh?: boolean, signal?: AbortSignal): Promise<Home>;
-  rows(query: V.RowsQuery): Promise<V.Page<V.Row | V.SurfaceRow>>;
+  /** `fresh`: past every cache (a Home read afresh after its row ids were re-minted). */
+  rows(query: V.RowsQuery, fresh?: boolean): Promise<V.Page<V.Row | V.SurfaceRow>>;
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
   libraries(query: V.LibrariesQuery): Promise<V.Page<V.Library>>;
   library(id: string, query: V.LibraryBrowseQuery, options?: { fresh?: boolean; snapshot?: boolean }): Promise<V.LibraryContents>;
