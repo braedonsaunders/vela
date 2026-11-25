@@ -22,7 +22,7 @@
  },
  "tree": {
   "type": "sections",
-  "testId": "music-duplicates-page",
+  "testId": "music-main",
   "children": [
    {
     "type": "box",
@@ -101,7 +101,8 @@
        }
       ]
      }
-    ]
+    ],
+    "testId": "music-duplicates-page"
    }
   ]
  }

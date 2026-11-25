@@ -21,7 +21,7 @@
  },
  "tree": {
   "type": "sections",
-  "testId": "music-import-page",
+  "testId": "music-main",
   "children": [
    {
     "type": "box",
@@ -186,7 +186,8 @@
        }
       ]
      }
-    ]
+    ],
+    "testId": "music-import-page"
    }
   ]
  }

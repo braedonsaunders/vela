@@ -33,7 +33,7 @@
  },
  "tree": {
   "type": "sections",
-  "testId": "music-rewind-page",
+  "testId": "music-main",
   "gap": "0px",
   "children": [
    {
@@ -112,7 +112,8 @@
        }
       ]
      }
-    ]
+    ],
+    "testId": "music-rewind-page"
    }
   ]
  }
