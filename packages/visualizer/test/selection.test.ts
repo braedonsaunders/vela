@@ -20,8 +20,8 @@ test('selection belongs to a profile on one server and survives reopening', () =
   settings.set(first, 'incense');
   expect(updates).toBe(1);
 });
-test('retired IDs fall back to the document default or first scene; remote changes wrap', () => {
-  const settings = sceneSelection({ get: () => 'contour', set() {} });
+test.each(['contour', 'forest'])('retired %s falls back to the document default or first scene; remote changes wrap', retired => {
+  const settings = sceneSelection({ get: () => retired, set() {} });
   expect(settings.get('profile', 'leaves')).toBe('leaves');
   expect(settings.get('profile', 'missing')).toBe(scenes[0]!.id);
   expect(adjacentScene(scenes[0]!.id, -1)).toBe(scenes.at(-1)!.id);

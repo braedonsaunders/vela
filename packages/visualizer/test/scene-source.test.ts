@@ -13,7 +13,7 @@ test('the release omits retired Cartography assets and packages only current pic
   const native = join(release, '../../modules/vela-player/ios/VisualizerAssets');
   const ids = scenes.map(scene => scene.id).sort();
   expect(ids).not.toContain('contour');
-  expect(readdirSync(join(release, 'thumbnails'))).not.toContain('contour.jpg');
+  expect(readdirSync(join(release, 'thumbnails')).sort()).toEqual(ids.map(id => id + '.jpg'));
   const imports = readFileSync(join(release, 'thumbnails.ts'), 'utf8');
   const previews = Array.from(imports.matchAll(/require\('\.\/thumbnails\/([^']+)\.jpg'\)/g), match => match[1]);
   expect(previews.sort()).toEqual(ids);
@@ -39,11 +39,11 @@ test('the shipped scene sources reproduce the reviewed standalone page byte for 
   expect(scenes.map(scene => scene.id)).toEqual(authored.filter(id => source.includeForest || id !== 'forest'));
 });
 
-test('dropping Deep Forest excludes only its source from both renderer generators', () => {
+test('both renderer generators use only the final reviewed sources', () => {
   const directory = join(import.meta.dir, '../scenes');
   const all = rendererParts(directory, true);
-  expect(all).toContain('64_forest.js');
-  expect(rendererParts(directory, false)).toEqual(all.filter(name => name !== '64_forest.js'));
+  expect(all).not.toContain('64_forest.js');
+  expect(rendererParts(directory)).toEqual(all);
 });
 
 test('the packaged native bundle regenerates byte for byte and Metal covers every linked shader pair', () => {

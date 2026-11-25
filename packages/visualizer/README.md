@@ -42,10 +42,6 @@ tools glslang and SPIRV-Cross.
 packages/visualizer/tools/build-release.sh
 ```
 
-The owner can drop Deep Forest by setting `includeForest` to `false` in
-[review.json](review.json) and regenerating. The build excludes its WebGL
-source, native programs and picker preview. The reviewed page stays reproducible.
-
 This links every release scene against the recorder and captures its shaders.
 It regenerates the WebGL module, native JavaScript, Metal shader
 table and library source, scene manifest and static thumbnail imports. The
