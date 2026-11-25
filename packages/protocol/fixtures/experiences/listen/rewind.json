@@ -1,33 +1,119 @@
 {
-  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
-  "screen": "listen", "page": "rewind", "version": "1",
-  "title": "{s:music.rewind.title}", "presentation": "section",
-  "params": { "library": { "type": "string" } },
-  "sources": {
-    "recap": { "from": "vela.recap", "period": "{state.period|or:month}", "library": "{param.library}" }
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "rewind",
+ "version": "1",
+ "title": "{s:music.rewind.title}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
   },
-  "tree": {
-    "type": "sections", "testId": "music-rewind-page", "gap": "0px",
-    "children": [{
-      "type": "box",
-      "children": [
-        { "type": "wash", "props": { "height": "460",
-          "accent": "{src.recap.topArtists.0.item.accent|or:}",
-          "image": "{src.recap.topArtists.0.item.poster}" } },
-        { "type": "box", "style": { "padding-left": "28px", "padding-right": "28px", "padding-bottom": "48px" }, "small": { "padding-left": "16px", "padding-right": "16px" },
-          "children": [
-            { "type": "collectionHeader", "props": { "eyebrow": "{s:music.rewind.eyebrow}", "title": "{s:music.rewind.title}" },
-              "partTemplates": {
-                "collectionHeader.cover": { "type": "cover", "props": { "kind": "rewind" } },
-                "collectionHeader.byline": { "type": "text", "text": "", "style": { "font-size": "15px", "color": "$ui.inkSecondary" }, "spans": [
-                  { "text": "{env.viewer|or:Viewer}", "style": { "font-weight": "700", "color": "$ui.ink" } },
-                  { "text": " · {s:music.rewind.subtitle|with:period=state.period~or:month~string:music.rewind.period~lower}" },
-                  { "text": " · {s:music.rewind.firstPlay|with:date=src.recap.firstPlayAt~fullDate}", "when": [{ "test": "src.recap.firstPlayAt" }] }
-                ] }
-              } },
-            { "type": "recap", "props": { "libraryId": "{param.library}", "periodState": "period" } }
-          ] }
-      ]
-    }]
+  "period": {
+   "type": "enum",
+   "enum": [
+    "week",
+    "month",
+    "year",
+    "all"
+   ],
+   "default": "month"
   }
+ },
+ "sources": {
+  "recap": {
+   "from": "vela.recap",
+   "period": "{param.period|or:month}",
+   "library": "{param.library}"
+  }
+ },
+ "tree": {
+  "type": "sections",
+  "testId": "music-rewind-page",
+  "gap": "0px",
+  "children": [
+   {
+    "type": "box",
+    "children": [
+     {
+      "type": "wash",
+      "props": {
+       "height": "460",
+       "accent": "{src.recap.topArtists.0.item.accent|or:}",
+       "image": "{src.recap.topArtists.0.item.poster}"
+      }
+     },
+     {
+      "type": "box",
+      "style": {
+       "padding-left": "28px",
+       "padding-right": "28px",
+       "padding-bottom": "48px"
+      },
+      "small": {
+       "padding-left": "16px",
+       "padding-right": "16px"
+      },
+      "children": [
+       {
+        "type": "collectionHeader",
+        "props": {
+         "eyebrow": "{s:music.rewind.eyebrow}",
+         "title": "{s:music.rewind.title}"
+        },
+        "partTemplates": {
+         "collectionHeader.cover": {
+          "type": "cover",
+          "props": {
+           "kind": "rewind"
+          }
+         },
+         "collectionHeader.byline": {
+          "type": "text",
+          "text": "",
+          "style": {
+           "font-size": "15px",
+           "color": "$ui.inkSecondary"
+          },
+          "spans": [
+           {
+            "text": "{env.viewer|or:Viewer}",
+            "style": {
+             "font-weight": "700",
+             "color": "$ui.ink"
+            }
+           },
+           {
+            "text": " \u00b7 {s:music.rewind.subtitle|with:period=param.period~or:month~string:music.rewind.period~lower}"
+           },
+           {
+            "text": " \u00b7 {s:music.rewind.firstPlay|with:date=src.recap.firstPlayAt~fullDate}",
+            "when": [
+             {
+              "test": "src.recap.firstPlayAt"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "recap",
+        "props": {
+         "libraryId": "{param.library}",
+         "periodParam": "period",
+         "periodState": "period"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
 }
