@@ -3841,6 +3841,10 @@
                 "all"
               ]
             },
+            "periodParam": {
+              "doc": "A page param holding the period: the block reads it and changes it with setParam, so a vela.recap source reading {param.<name>} follows.",
+              "type": "template"
+            },
             "periodState": {
               "doc": "A document state value holding the chosen period (`open name=value`), so the page's heading can read it.",
               "type": "template"
