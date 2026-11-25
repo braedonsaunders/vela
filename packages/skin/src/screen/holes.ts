@@ -37,7 +37,9 @@ export interface HoleScope {
 /** A binding path: dot segments from a root (`$` allowed: `$index`, `$key`, `$pending`). */
 const PATH = /^[$A-Za-z_][\w$-]*(\.[\w$^-]+)*$/;
 
-const ENV_KEYS = new Set(['small', 'wide', 'tv', 'isTV', 'still', 'canMultiview', 'canPlay', 'canRetry', 'error', 'range5', 'range6']);
+const ENV_KEYS = new Set(['small', 'wide', 'tv', 'isTV', 'still', 'canMultiview', 'canPlay', 'canRetry', 'error', 'range5', 'range6',
+  // Renderer 20: a device capability, the platform, the form factor and a partly open foldable's posture.
+  'canVisualize', 'platform', 'form', 'fold']);
 
 const fillT = (t: Template, c: Ctx, e: Env): string =>
   typeof t === 'string' ? t : t.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
@@ -79,6 +81,11 @@ export function pathValue(path: string, scope: HoleScope): Value {
           case 'still': return e.still;
           case 'canMultiview': return e.canMultiview === true;
           case 'canPlay': return e.canPlay !== false;
+          // False on clients and devices without the visualizer.
+          case 'canVisualize': return e.canVisualize === true;
+          case 'platform': return e.platform ?? '';
+          case 'form': return e.form ?? (e.tv ? 'tv' : e.small ? 'small' : 'wide');
+          case 'fold': return e.fold ?? '';
           // The first read's failure as the server or the network gave it (the failure node's message line).
           case 'error': return c.screen?.page.load === 'failed' ? c.screen.page.error ?? '' : '';
           case 'canRetry': return c.screen ? c.screen.page.load === 'failed' || Object.keys(c.screen.page.errors).length > 0 : false;
