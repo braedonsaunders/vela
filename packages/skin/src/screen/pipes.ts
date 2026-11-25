@@ -14,7 +14,7 @@ export type Pipe = (value: unknown, read: RecordReader) => unknown;
 export const PIPE_NAMES = ['start', 'day', 'time', 'date', 'duration', 'number', 'percent', 'upper', 'initials', 'not', 'count',
   'eq', 'lt', 'first', 'then', 'with', 'tint', 'readable', 'crest', 'alpha', 'asOf',
   // Renderer 20: a date with its year, lower case, a greeting for the time of day, and plural (holes.ts).
-  'fullDate', 'lower', 'greeting', 'plural', 'or', 'string', 'totalLabel'] as const;
+  'fullDate', 'lower', 'greeting', 'plural', 'or', 'string', 'totalLabel', 'initial'] as const;
 
 /** The clock pipes read (tests set it). */
 let now = () => Date.now();
@@ -192,6 +192,8 @@ export function pipe(spec: string, page: string): Pipe | undefined {
     case 'totalLabel': return (v, read) => totalLabel(v, read);
     case 'greeting': return (v, read) => greetingText(deref(v, read));
     case 'initials': return (v, read) => initials(text(v, read));
+    // The first character, upper case (a viewer badge's "D").
+    case 'initial': return (v, read) => ([...text(v, read).trim()][0] ?? '').toLocaleUpperCase();
     case 'not': return (v, read) => !truthy(text(v, read));
     case 'count': return (v, read) => { const list = deref(v, read); return Array.isArray(list) ? list.length : 0; };
     case 'eq': return (v, read) => text(v, read) === arg;

@@ -168,6 +168,14 @@
          "subtitle": "yearByline"
         }
        }
+      ],
+      "when": [
+       {
+        "test": "src.albums.$error",
+        "is": "eq",
+        "value": "unsupported",
+        "not": true
+       }
       ]
      }
     ]

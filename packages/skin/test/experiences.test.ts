@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { RENDERER_VERSION, fill, type RNode } from '../src/resolve';
+import { RENDERER_VERSION, fill, holds, type RNode } from '../src/resolve';
 import { checkExperienceOverrides, checkScreenDocument, formFactor, resolveScreenDocument, velaUseProblems, type ScreenViewport } from '../src/resolve/screen';
 import { builtinDocument, builtinIndex, builtinScreenId } from '../src/resolve/builtin';
 import { platformOf } from '../src/screen/platform-of';
@@ -422,5 +422,21 @@ describe('totalLabel', () => {
     expect(draw({ list: { items: [{ durationSeconds: 200 }, { durationSeconds: 220 }] } })).toBe('2 songs, 7 min');
     expect(draw({ list: [{ durationSeconds: 60 }] })).toBe('1 song, 1 min');
     expect(draw({ list: [] })).toBe('0 songs');
+  });
+});
+
+describe('starts/ends conditions and the initial pipe', () => {
+  test('a row id ending in :top; the first letter of a name', () => {
+    const doc = builtIn({ type: 'box', children: [
+      { type: 'text', text: 'top', when: [{ test: 'src.row.id', is: 'ends', value: ':top' }] },
+      { type: 'text', text: 'artist', when: [{ test: 'src.row.id', is: 'starts', value: 'artist-' }] },
+      { type: 'text', text: '{src.name|initial}' },
+    ] });
+    const tree = resolveScreenDocument(doc, at()).tree;
+    const c = root({ row: { id: 'artist-x:top' }, name: 'demo viewer' });
+    const shown = children(tree).filter(n => holds(n.when, c, env)).map(n => textOf(n, c));
+    expect(shown).toEqual(['top', 'artist', 'D']);
+    const other = root({ row: { id: 'x:related' } });
+    expect(children(tree).filter(n => holds(n.when, other, env)).length).toBe(1);
   });
 });

@@ -404,14 +404,16 @@
       "description": "One test on the binding vocabulary or the skin's own flags; a node's `when` list must all hold.",
       "properties": {
         "is": {
-          "description": "set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` \"n:r\", the number % n == r.",
+          "description": "set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` \"n:r\", the number % n == r.\nRenderer 20: starts/ends: the text begins or ends with `value` (a row id's \":top\").",
           "enum": [
+            "ends",
             "eq",
             "gt",
             "lt",
             "mod",
             "ne",
-            "set"
+            "set",
+            "starts"
           ]
         },
         "not": {

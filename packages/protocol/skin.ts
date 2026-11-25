@@ -51,8 +51,9 @@ export interface PartLayers {
 export interface Condition {
   /** A binding key (`card.played`, `hero.backdrop`, `env.small`), or `flag:<name>`. */
   test: string;
-  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` "n:r", the number % n == r. */
-  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt' | 'mod';
+  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` "n:r", the number % n == r.
+   *  Renderer 20: starts/ends: the text begins or ends with `value` (a row id's ":top"). */
+  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt' | 'mod' | 'starts' | 'ends';
   value?: string;
   not?: boolean;
 }
