@@ -77,7 +77,7 @@ export const VELA_SOURCES = {
     doc: "The viewer's likes of one role, newest first, paged: ListValue.",
   },
   'vela.playlists': { args: {}, doc: "The viewer's playlists as `item:` records of kind playlist: ListValue." },
-  'vela.playlist': { args: { id: id('The playlist.') }, doc: 'One playlist and its entries: PlaylistValue.' },
+  'vela.playlist': { args: { id: id('The playlist.'), audio: { type: 'bool', doc: 'Only entries that play as audio (items, entryIds and total together).' } }, doc: 'One playlist and its entries: PlaylistValue.' },
   'vela.recent': { args: {}, doc: 'What the viewer last played from: RecentValue.' },
   'vela.search': {
     args: { q: id('The query; empty answers no items.', false), kind: id('A result kind the server offers (searchKinds).', false), library: id('Search within one library (its media class when the server cannot scope).', false) },

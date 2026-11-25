@@ -408,10 +408,13 @@ export class LocalSources {
         }
         const model = loaded?.value;
         if (!model) return { error: loadableError(loaded) };
-        const list = cardList(model.items, model.more, model.entryCount);
+        // `audio`: only what plays as audio (the music app lists a playlist's songs, not its videos).
+        const audioOnly = boolArg(args.audio) === true;
+        const entries = audioOnly ? model.items.filter(item => item.media?.audio) : model.items;
+        const list = cardList(entries, model.more, audioOnly ? entries.length : model.entryCount);
         const known = stores.getState().playlists.list.value?.find(item => item.id === id);
         const playlist = playlistCard({ id, name: model.name, poster: known?.poster ?? model.items[0]?.poster ?? '', backdrop: known?.backdrop ?? '', itemCount: model.entryCount ?? model.items.length, smart: !!model.smart });
-        const value: PlaylistValue = { ...list.value, playlist: ref(itemKey(id)), entryIds: model.items.map(item => item.entryId ?? ''), smart: !!model.smart, summary: model.summary ?? '' };
+        const value: PlaylistValue = { ...list.value, playlist: ref(itemKey(id)), entryIds: entries.map(item => item.entryId ?? ''), smart: !!model.smart, summary: model.summary ?? '' };
         return { value, records: { ...list.records, [itemKey(id)]: { ...playlist, summary: model.summary ?? '' } } };
       }
       case 'vela.recent': {

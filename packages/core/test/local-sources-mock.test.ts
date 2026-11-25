@@ -246,6 +246,22 @@ test('a param left out reads its default; a playlist reordered in the store is a
   handle.release();
 });
 
+test('a playlist read with audio lists only what plays as audio, entry ids and total alike', async () => {
+  await store.playlists.load();
+  // The mock's playlist of videos: the music app shows it with no songs.
+  const videos = store.getState().playlists.list.value!.find(item => item.name === 'Weekend watch')!;
+  const doc: ScreenDocument = { ...albumPage, page: 'audioList', params: {}, sources: { all: { from: 'vela.playlist', id: videos.id }, songs: { from: 'vela.playlist', id: videos.id, audio: 'true' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/audioList' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'audioList' }, href: 'vela:listen/audioList' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  const all = page().sources.all as PlaylistValue, songs = page().sources.songs as PlaylistValue;
+  expect(all.items.length).toBeGreaterThan(0);
+  expect(all.entryIds).toHaveLength(all.items.length);
+  expect(songs).toMatchObject({ items: [], entryIds: [], total: 0 });
+  handle.release();
+});
+
 test("the library's album view answers unsupported where the library has none", async () => {
   const doc: ScreenDocument = { ...albumPage, page: 'albums', params: { query: { type: 'string' } }, sources: { albums: { from: 'vela.library', id: 'music', view: 'albums', q: '{param.query}', limit: '50' } } };
   store.screens.provideDocuments(href => (href === 'vela:listen/albums' ? doc : undefined));
