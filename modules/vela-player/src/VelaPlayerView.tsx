@@ -95,13 +95,13 @@ export const pictureInPicture = (): boolean =>
  * says otherwise. */
 export const networkMetered = (): boolean => nativeModule.networkMetered?.() ?? false;
 
-/** Hear the network become metered or unmetered, until the returned function stops it. */
+/** Read the current network after subscribing so its first update cannot be missed. */
 export function onNetwork(listener: (metered: boolean) => void): () => void {
-  if (!nativeModule.networkMetered || !nativeModule.addListener) return () => {};
-  const subscription = nativeModule.addListener('onNetwork', event => listener(event.metered === true));
-  // Asking starts the system's monitor, which reports each change from then on.
-  nativeModule.networkMetered();
-  return () => subscription.remove();
+  const subscription = nativeModule.networkMetered
+    ? nativeModule.addListener?.('onNetwork', event => listener(event.metered === true))
+    : undefined;
+  listener(networkMetered());
+  return () => subscription?.remove();
 }
 
 let accessGeneration = 0;

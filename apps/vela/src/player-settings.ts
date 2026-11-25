@@ -4,7 +4,7 @@
 import { useEffect, useRef } from 'react';
 import type { Vela } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
-import { networkMetered, onNetwork } from '@vela/player';
+import { onNetwork } from '@vela/player';
 import { preferences } from './data/preferences';
 
 const PLAYER_SETTINGS = 'player-settings';
@@ -14,7 +14,6 @@ export function usePlayerSettings(store: Vela): void {
     let stored: unknown = null;
     try { stored = JSON.parse(preferences.get(PLAYER_SETTINGS) ?? 'null'); } catch { /* Unreadable: the defaults. */ }
     store.playerSettings.load(stored);
-    store.playerSettings.setMetered(networkMetered());
     return onNetwork(metered => store.playerSettings.setMetered(metered));
   }, [store]);
   const streaming = useVelaState(state => state.playerSettings.streaming);

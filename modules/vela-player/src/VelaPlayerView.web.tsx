@@ -148,8 +148,8 @@ export const networkMetered = (): boolean => {
 
 export function onNetwork(listener: (metered: boolean) => void): () => void {
   const network = connection();
-  if (!network?.addEventListener) return () => {};
   const changed = () => listener(networkMetered());
-  network.addEventListener('change', changed);
-  return () => network.removeEventListener('change', changed);
+  network?.addEventListener?.('change', changed);
+  changed();
+  return () => network?.removeEventListener?.('change', changed);
 }
