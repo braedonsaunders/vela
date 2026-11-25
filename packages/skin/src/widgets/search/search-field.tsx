@@ -15,6 +15,7 @@ import { useQueryText } from './query-text';
 import { resolveUi } from '../../resolve/ui';
 import { type Focusable } from '../../escape';
 import { useSearchFocus } from './use-search-focus';
+import { useSearchDoneFocus } from './done-focus';
 import { useRouteFocusContext } from '../../route-focus';
 import { RevealContext } from '../../tv-reveal';
 import { measure, useHost, type WidgetProps } from '../../host';
@@ -90,6 +91,12 @@ export function SearchField({ ctx }: WidgetProps) {
   const closeKeyboard = () => {
     setTyping(false);
     focus(false);
+  };
+  // Done: the first result once the answer has drawn (Back keeps focus on the field).
+  const doneFocus = useSearchDoneFocus(frame, query.text, host.env.search);
+  const doneKeyboard = () => {
+    closeKeyboard();
+    doneFocus();
   };
   const input = useSearchFocus(OWN_KEYBOARD ? openKeyboard : undefined);
   const placeholder = host.env.home?.descriptiveAvailable
@@ -193,8 +200,9 @@ export function SearchField({ ctx }: WidgetProps) {
           onChangeText={query.change}
           placeholder={placeholder}
           doneLabel="Done"
-          onDone={closeKeyboard}
+          onDone={doneKeyboard}
           onClose={closeKeyboard}
+          returnFocus={frame}
           testID={`search-${ctx.index}-keyboard`}
         />
       ) : null}

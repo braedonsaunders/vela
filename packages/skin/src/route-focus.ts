@@ -72,6 +72,12 @@ function onFirstScreen(target: Focusable, answer: (visible: boolean) => void): v
   });
 }
 
+/** Whether the viewer has pressed or swiped on the remote since `time` (TV; never elsewhere). */
+export function viewerPressedSince(time: number): boolean {
+  if (Platform.isTV) listen();
+  return lastViewerPress > time;
+}
+
 /** Whether the viewer has pressed or swiped since a route opened (not the press that opened it). */
 function pressedSince(opened: number): boolean {
   return lastViewerPress > opened + OPENING_PRESS_MS;

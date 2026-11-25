@@ -117,15 +117,18 @@ const progressBootstrap = (id?: string, positionSeconds = 0) => ({
 
 test('Home with no progress shelf yet reads itself once, asks again only while the server shows an older place, and merges quietly', async () => {
   const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
-  const answers = [progressBootstrap(), progressBootstrap('watched', 10), progressBootstrap('watched', 42)];
+  const withOrdinary = (positionSeconds: number) => ({ ...bootstrap, rows: [...progressBootstrap('watched', positionSeconds).rows, ...progressBootstrap().rows] }) as Bootstrap;
+  const answers = [progressBootstrap(), withOrdinary(10), withOrdinary(42)];
   const calls: boolean[] = [];
   const api = { home: async (fresh = false) => { calls.push(fresh); return answers.shift()!; } };
   const session = { epoch: 0, onReset() {}, negotiate: async () => {}, ready: async () => ({ adapter: api, images: async () => undefined }), check() {} };
   const home = new Home(box, session as unknown as Session, () => 640, HOME_SLOW_MS, 1, 0);
   await home.ensure();
+  const ordinary = box.get().home.value!.rows[0];
   await home.reconcile({ titleId: 'watched', positionSeconds: 42, finished: false });
   expect(calls).toEqual([false, true, true]);
   expect(box.get().home.value?.rows.map(row => row.id)).toEqual(['continue', 'ordinary']);
+  expect(box.get().home.value?.rows[1]).toBe(ordinary);
   expect(box.get().home.value?.rows[0]?.items[0]?.progressSeconds).toBe(42);
   expect(box.get().home.progressRevision).toBe(1);
 });

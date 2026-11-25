@@ -11,7 +11,7 @@ import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, qualityReached } from './present';
-import { stopsInBackground } from './background';
+import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
 
@@ -120,6 +120,28 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     return () => subscription.remove();
   }, [vela, id, begin, external]);
 
+  // A channel's session is the live controller's and goes on while the app is away; the engine pauses
+  // as the app leaves (Android) and stayed paused on return, behind live with Play focused. Back in the
+  // foreground it goes to the live edge and plays (the chrome's Back to live, which knows the window),
+  // unless the viewer had paused it: then it waits where it was for their Play.
+  const viewerPaused = useRef(false);
+  const [returnedLive, setReturnedLive] = useState(0);
+  useEffect(() => {
+    if (!id || !external || Platform.OS === 'web') return;
+    let left = false;
+    let pausedThen = false;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'background' && !left && !shownAwayRef.current?.()) {
+        left = true;
+        pausedThen = viewerPaused.current;
+      } else if (state === 'active' && left) {
+        left = false;
+        if (liveReturnsToEdge(pausedThen)) setReturnedLive(count => count + 1);
+      }
+    });
+    return () => subscription.remove();
+  }, [vela, id, external]);
+
   // The server ended the session under the player (it heard nothing from it for two minutes, or it restarted):
   // a new session starts where this one was, once per session, and stays paused if it was paused.
   const restarted = useRef('');
@@ -141,6 +163,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     if (input.type === 'mute' && !input.muted && forcedMute()) return;
     nextId.current += 1;
     setRefused('');
+    if (input.type === 'pause') viewerPaused.current = true;
+    else if (input.type === 'play' || input.type === 'catchUp') viewerPaused.current = false;
     if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
     setCommand({ ...input, id: nextId.current } as Command);
   }, []);
@@ -303,6 +327,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const owned = owner && !ownedPlan ? owner : undefined;
   return {
     chrome: {
+      returnedLive,
       target: chromeTarget,
       plan: chromePlan,
       snapshot: playback.phase === 'preparing' ? null : snapshot,

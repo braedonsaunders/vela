@@ -14,6 +14,7 @@ import { ChromeButton } from './button';
 import { useMultiview } from '../multiview/context';
 import type { ChromeTarget, CommandInput } from './context';
 import { catchUpWatchOf, liveWatchOf } from './target';
+import { backToLiveLeft } from './live-focus';
 import type { PlayerLook } from './look';
 
 export interface LiveWatch {
@@ -199,8 +200,16 @@ export function LiveMultiview({ look, watch }: { look: PlayerLook; watch: LiveWa
 
 /** LIVE at the edge; Back to live (the same control as the others) once the picture trails live, or
  * from a programme in the archive. */
-export function LiveMark({ look, watch }: { look: PlayerLook; watch: LiveWatch }) {
-  if (watch.behind > 0 || watch.window?.delayed || watch.archive) {
+export function LiveMark({ look, watch, onLeave }: { look: PlayerLook; watch: LiveWatch; onLeave?(): void }) {
+  const offered = watch.behind > 0 || !!watch.window?.delayed || !!watch.archive;
+  // Pressed, Back to live gives way to the LIVE mark: the bar hands its focus on (onLeave).
+  const pressed = useRef(false);
+  useEffect(() => {
+    if (!backToLiveLeft(pressed.current, offered)) return;
+    pressed.current = false;
+    onLeave?.();
+  }, [offered]);
+  if (offered) {
     return (
       <ChromeButton
         look={look}
@@ -208,7 +217,10 @@ export function LiveMark({ look, watch }: { look: PlayerLook; watch: LiveWatch }
         text={msg('catchUp.backToLive')}
         label={msg('catchUp.backToLive')}
         testID="player-go-live"
-        onPress={watch.backToLive}
+        onPress={() => {
+          pressed.current = true;
+          watch.backToLive();
+        }}
       />
     );
   }

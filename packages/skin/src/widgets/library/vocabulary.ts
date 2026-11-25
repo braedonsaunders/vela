@@ -2,7 +2,7 @@
 // the library view on show (`library.*`), its sort and filter options (`opt.*`), the collection
 // on show (`collection.*`), and the collections those pages repeat over. The semantics are those
 // of the Contract renderer's table (tools/renderer.ts at cf3b1e5), key for key.
-import { libraryCard, libraryCardRatio, msg } from '@vela/core';
+import { drawnAs, libraryCard, libraryCardRatio, msg } from '@vela/core';
 import type { Choice, CollectionModel, LibraryModel } from '@vela/core';
 import type { CollectionPage, LibraryOption, LibraryPage, OptionOf } from './model';
 import { identityKeys } from '../../identity-keys';
@@ -122,7 +122,7 @@ export function libraryCollection<C extends LibraryCtx & { card?: LibraryModel['
   switch (over) {
     case 'library.rows': {
       const rows = (e.library?.extras?.rows ?? []).slice(0, limit);
-      const keys = identityKeys(rows.map(row => row.id));
+      const keys = identityKeys(rows.map(drawnAs));
       return rows.map((row, index) => ({ ...c, row, key: `row:${keys[index]}`, index }));
     }
     case 'library.people': return (e.library?.extras?.collections ?? []).slice(0, limit).map((card, index) => ({ ...c, index, person: { id: card.id, name: card.name, portrait: card.poster, role: card.facts, canOpen: true } }));

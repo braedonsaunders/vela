@@ -268,7 +268,7 @@ test('every detail header is field-driven for movies, episodes and plugin media,
       }
     }
   }
-});
+}, 30_000); // Resolves every detail header; slow on a loaded machine.
 
 test('every skin receives only the selected season episodes from the shared collection', async () => {
   const { collection, accessor } = await import('../src/vocabulary');

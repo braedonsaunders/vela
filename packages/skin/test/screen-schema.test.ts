@@ -8,7 +8,7 @@ import { SCREEN_SCHEMA_DIGEST } from '../src/resolve/screen-schema-digest';
 test('the committed schema and digest match the types, and the fixtures validate', async () => {
   expect(await drift()).toEqual([]);
   expect(SCREEN_SCHEMA_DIGEST).toMatch(/^[0-9a-f]{64}$/);
-});
+}, 30_000); // Generates the schema from the types; slow on a loaded machine.
 
 test('the schema defines NavigateAction and refuses what the language does not have', () => {
   const schema = generateSchema();

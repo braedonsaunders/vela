@@ -46,6 +46,44 @@ function count(n: unknown, key: 'childCount' | 'index' | 'disc' = 'childCount') 
 /** Plex names DTS audio `dca` (DTS-HD MA `dca-ma`); the protocol's FFmpeg-style codec token for it is `dts`. */
 export const decoderAudioCodec = (codec: string) => codec === 'dca' || codec === 'dca-ma' ? 'dts' : codec;
 
+/** A file's id among its title's media, as a start's `versionId` (or `mediaSourceId`) names it. */
+export const mediaId = (media: Node, index: number) => String(media.id ?? index);
+
+const RESOLUTIONS: Record<string, NonNullable<V.VersionItem['resolution']>> = { '4k': '4K', '1080': '1080p', '720': '720p', '576': '576p', '480': '480p', sd: 'SD' };
+const TRANSFERS: Record<string, NonNullable<V.VersionItem['dynamicRange']>> = { smpte2084: 'hdr10', 'arib-std-b67': 'hlg', bt709: 'sdr' };
+const RANGE_NAMES: Record<string, string> = { dv: 'Dolby Vision', hdr10: 'HDR10', hlg: 'HLG' };
+/** Plex counts channels (8); versions name the layout (7.1), for the counts that have only one. */
+const LAYOUTS: Record<string, string> = { 1: '1.0', 2: '2.0', 6: '5.1', 8: '7.1' };
+/** Codec names as the version chips write them; any other codec is shown as Plex names it, in capitals. */
+const CODEC_NAMES: Record<string, string> = { h264: 'H.264', hevc: 'HEVC', av1: 'AV1', aac: 'AAC', ac3: 'Dolby Digital', eac3: 'Dolby Digital+', truehd: 'TrueHD', dts: 'DTS', dca: 'DTS', dcama: 'DTS-HD MA' };
+const codecName = (codec: string) => CODEC_NAMES[codec.toLowerCase().replace(/[^a-z0-9]/g, '')] ?? codec.toUpperCase();
+/**
+ * One of a title's files as a version to choose: what Plex states about it (resolution, the video
+ * stream's Dolby Vision profile or colour transfer, codecs, channels, size, and its optimized-copy
+ * flag, `proxyType` 42). The first file is the one Plex plays by default; one without a part has
+ * nothing to play.
+ */
+export function plexVersion(media: Node, index: number): V.VersionItem {
+  const parts: Node[] = media.Part ?? [];
+  const video = (parts[0]?.Stream ?? []).find((s: Node) => Number(s.streamType) === 1);
+  const resolution = RESOLUTIONS[String(media.videoResolution ?? '').toLowerCase()];
+  const dynamicRange = video?.DOVIProfile !== undefined ? 'dv' : TRANSFERS[String(video?.colorTrc ?? '')];
+  const audioCodec = media.audioCodec ? decoderAudioCodec(String(media.audioCodec)) : undefined;
+  const channels = LAYOUTS[String(media.audioChannels ?? '')];
+  const sizes = parts.map(p => Number(p.size));
+  const sizeBytes = sizes.length && sizes.every(n => n > 0) ? sizes.reduce((a, b) => a + b, 0) : undefined;
+  const label = [
+    [resolution, RANGE_NAMES[dynamicRange ?? ''], media.videoCodec && codecName(String(media.videoCodec))].filter(Boolean).join(' '),
+    Number(media.proxyType) === 42 ? 'Optimized' : '',
+    [media.audioCodec && codecName(String(media.audioCodec)), channels].filter(Boolean).join(' '),
+  ].filter(Boolean).join(' · ') || `Version ${index + 1}`;
+  return { id: mediaId(media, index), label, recommended: index === 0,
+    ...(resolution ? { resolution } : {}), ...(dynamicRange ? { dynamicRange } : {}), ...(media.videoCodec ? { videoCodec: String(media.videoCodec) } : {}),
+    ...(audioCodec ? { audio: { codec: audioCodec, ...(channels ? { channels } : {}) } } : {}),
+    ...(sizeBytes ? { sizeBytes } : {}), availability: parts.length ? 'instant' : 'unavailable',
+    ...(parts.length ? {} : { note: 'Plex lists no file for this version' }) };
+}
+
 /** Audio Vela plays as the file (what every platform's audio player decodes); the rest is transcoded to MP3. */
 const DIRECT_AUDIO = ['mp3', 'mp4', 'm4a', 'm4b', 'aac', 'flac', 'wav'];
 export function directAudio(media: Node): boolean {
