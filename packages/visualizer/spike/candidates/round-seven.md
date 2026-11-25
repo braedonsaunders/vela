@@ -36,7 +36,7 @@ In the author's separate muted music run, the six revised scenes each advanced 4
 
 ## Geography provenance
 
-The authoring tool `round7-work/map.py` selects 187 river features of scale rank 4 or better from 462 Natural Earth 1:50m features. It simplifies each polyline with a 0.09-degree tolerance, quantizes to eighths of a degree and delta-encodes the coordinates. It appends 1,251 settlement positions from the Natural Earth populated places source used in round six. Running the packer against the frozen inputs reproduced the embedded 15,304-byte base64 payload. At runtime the scene reads river coverage and settlement markers from a 1440 × 720 two-channel texture.
+The [preserved authoring script](round-seven/map.py), originally `round7-work/map.py`, selects 187 river features of scale rank 4 or better from 462 Natural Earth 1:50m features. It simplifies each polyline with a 0.09-degree tolerance, quantizes to eighths of a degree and delta-encodes the coordinates. It appends 1,251 settlement positions from the Natural Earth populated places source used in round six. Running the packer against the frozen inputs reproduced the embedded 15,304-byte base64 payload. The author subsequently refined only the map fragment shader with per-country coverage and lower river glow. The candidate patch incorporates that post-packer edit. At runtime the scene reads river coverage and settlement markers from a 1440 × 720 two-channel texture.
 
 | Authoring input | SHA-256 |
 | --- | --- |
