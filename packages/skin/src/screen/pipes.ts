@@ -5,6 +5,7 @@
 import { duration as durationText, durationLabel, localeContext, msg, number as numberText, time as clockText } from '@vela/core';
 import { crest, hexColour, parseColour, readable, tint, withAlpha } from './colour';
 import { deref, text, type RecordReader } from './scope';
+import { roleLabel, spokenMode } from '../blocks/listen/listening';
 
 /** A value through a pipe. `read` follows record references (a side or a list may be one). */
 export type Pipe = (value: unknown, read: RecordReader) => unknown;
@@ -14,7 +15,7 @@ export type Pipe = (value: unknown, read: RecordReader) => unknown;
 export const PIPE_NAMES = ['start', 'day', 'time', 'date', 'duration', 'number', 'percent', 'upper', 'initials', 'not', 'count',
   'eq', 'lt', 'first', 'then', 'with', 'tint', 'readable', 'crest', 'alpha', 'asOf',
   // Renderer 20: a date with its year, lower case, a greeting for the time of day, and plural (holes.ts).
-  'fullDate', 'lower', 'greeting', 'plural', 'or', 'string', 'totalLabel', 'initial'] as const;
+  'fullDate', 'lower', 'greeting', 'plural', 'or', 'string', 'totalLabel', 'initial', 'roleLabel', 'spokenMode'] as const;
 
 /** The clock pipes read (tests set it). */
 let now = () => Date.now();
@@ -146,6 +147,13 @@ export function totalLabel(value: unknown, read: RecordReader): string {
   return seconds ? `${count}, ${durationLabel(seconds)}` : count;
 }
 
+/** A title from a value: an item: record, a vela.title value ({item}) or the card itself. */
+function cardOf(value: unknown, read: RecordReader): Parameters<typeof roleLabel>[0] & { media?: { role?: string; class?: string; audio?: unknown } } | undefined {
+  let v = deref(value, read) as Record<string, unknown> | undefined;
+  if (v && typeof v === 'object' && v.item && typeof v.item === 'object') v = deref(v.item, read) as Record<string, unknown>;
+  return v && typeof v === 'object' ? v as never : undefined;
+}
+
 /** Up to two initials of a name, upper case. */
 export function initials(name: string): string {
   const words = name.trim().split(/[\s\-_.]+/).filter(Boolean);
@@ -190,6 +198,10 @@ export function pipe(spec: string, page: string): Pipe | undefined {
     case 'or': return (v, read) => { const value = deref(v, read); return text(value, read) === '' ? arg : value; };
     case 'fullDate': return (v, read) => fullDateText(deref(v, read));
     case 'totalLabel': return (v, read) => totalLabel(v, read);
+    // A title's kind as the music pages name it (Album, EP, Audiobook, Podcast…), and how a spoken
+    // title draws (audiobook, show or collection).
+    case 'roleLabel': return (v, read) => { const card = cardOf(v, read); return card ? msg(roleLabel(card)) : ''; };
+    case 'spokenMode': return (v, read) => { const card = cardOf(v, read); return card ? spokenMode(card as never) : ''; };
     case 'greeting': return (v, read) => greetingText(deref(v, read));
     case 'initials': return (v, read) => initials(text(v, read));
     // The first character, upper case (a viewer badge's "D").
