@@ -171,6 +171,22 @@ these sources, so existing skin documents keep working unchanged.
   with the same rules. Slots carry the same bounds as surfaces: box, focus, clipping, at most N
   per slot, and an owner-set order.
 
+### The language as built (renderer 20)
+
+[skin-schema.md § Renderer 20](skin-schema.md#renderer-20) is the reference. In short:
+
+- Built-in pages: `owner: "vela"`, `experience`; address `vela:<experience>/<page>`, screen
+  `vela.<experience>`; bundled from `packages/protocol/fixtures/experiences/<experience>/`.
+  A shell is the page `shell`, with `forms: {small, wide, tv, fold}`.
+- Skin overrides: `experiences.<id>.{pages, templates, parts, shell}`, merged at resolve time.
+- Variants: `platforms` (node style overlay; page whole tree) and `forms` (page whole tree).
+- Rich blocks: `{type, props, parts, partTemplates, fallback}` against
+  `packages/protocol/rich-blocks.ts`; `fallback` is generic on every block.
+- Slots: `{type: "slot", slot: "plugin:<id>", context}` in pages; surfaces with presentation
+  `slot` and `slot: <id>`; the list is `$defs.Slots`. Slot contexts: a title's slots give
+  `title` (`item:`) and `titleKind` (picks by `when.titleKind`, never sent); the player
+  overlays give the player context.
+
 ## 3. Author tools
 
 - **Live preview:**
@@ -188,7 +204,7 @@ these sources, so existing skin documents keep working unchanged.
     budgets.
   - It produces a JSON report for Studio and CI, plus readable output.
   - Ether runs the same checks at install against the vendored schema.
-- **Versioned schema:** `vela-document.v1.json` (today `plugin-screen.v1.json`) is generated from
+- **Versioned schema:** `vela-document.v1.json` (formerly `plugin-screen.v1.json`; renderer 20) is generated from
   the TypeScript types, with a digest beside `RENDERER_VERSION`. Changes within version 1 are
   additive; anything else is a new major version. Docs are generated from the schema's comments.
 - **TV performance budgets:**

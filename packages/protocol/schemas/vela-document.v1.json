@@ -203,6 +203,10 @@
         "focus": {
           "$ref": "#/$defs/Style"
         },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
           "type": "boolean"
@@ -267,6 +271,28 @@
             },
             "peek": {
               "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
             }
           },
           "type": "object"
@@ -404,6 +430,117 @@
       ],
       "type": "object"
     },
+    "ExperienceOverride": {
+      "additionalProperties": false,
+      "description": "A skin's overrides of one experience (`SkinDocument.experiences.<id>`), merged over the built-in\ndocuments at resolve time; whatever is left out stays Vela's.",
+      "properties": {
+        "pages": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SectionsNode"
+              },
+              {
+                "$ref": "#/$defs/ShelfNode"
+              },
+              {
+                "$ref": "#/$defs/GridNode"
+              },
+              {
+                "$ref": "#/$defs/TabsNode"
+              },
+              {
+                "$ref": "#/$defs/TableNode"
+              },
+              {
+                "$ref": "#/$defs/LineGraphNode"
+              },
+              {
+                "$ref": "#/$defs/PlayerNode"
+              },
+              {
+                "$ref": "#/$defs/ParamInputNode"
+              },
+              {
+                "$ref": "#/$defs/TitleCardNode"
+              },
+              {
+                "$ref": "#/$defs/MarqueeNode"
+              },
+              {
+                "$ref": "#/$defs/RichNode"
+              },
+              {
+                "$ref": "#/$defs/VisualizerNode"
+              },
+              {
+                "$ref": "#/$defs/BoxNode"
+              },
+              {
+                "$ref": "#/$defs/TextNode"
+              },
+              {
+                "$ref": "#/$defs/ImageNode"
+              },
+              {
+                "$ref": "#/$defs/IconNode"
+              },
+              {
+                "$ref": "#/$defs/RepeatNode"
+              },
+              {
+                "$ref": "#/$defs/UseNode"
+              },
+              {
+                "$ref": "#/$defs/SlotNode"
+              },
+              {
+                "$ref": "#/$defs/WidgetNode"
+              },
+              {
+                "$ref": "#/$defs/PageOverride"
+              }
+            ]
+          },
+          "description": "Pages drawn whole, by page id (`album`, `nowPlaying`).",
+          "type": "object"
+        },
+        "parts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PartStyle"
+          },
+          "description": "Rich-block parts (`lyrics.activeLine`), merged over the pages' own part styles.",
+          "type": "object"
+        },
+        "shell": {
+          "additionalProperties": false,
+          "description": "The experience's shell, per form factor.",
+          "properties": {
+            "fold": {
+              "$ref": "#/$defs/Node"
+            },
+            "small": {
+              "$ref": "#/$defs/Node"
+            },
+            "tv": {
+              "$ref": "#/$defs/Node"
+            },
+            "wide": {
+              "$ref": "#/$defs/Node"
+            }
+          },
+          "type": "object"
+        },
+        "templates": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Node"
+          },
+          "description": "Templates by name, merged over every page's own. A template named after a rich-block part\n(`trackTable.row`, `queue.row`) replaces that part's template, where the block allows it.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "GridNode": {
       "additionalProperties": false,
       "properties": {
@@ -524,8 +661,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "gap": {
           "type": "string"
@@ -596,6 +740,28 @@
         },
         "over": {
           "type": "string"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
         },
         "returnFocus": {
           "type": "string"
@@ -790,6 +956,10 @@
         "focus": {
           "$ref": "#/$defs/Style"
         },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
           "type": "boolean"
@@ -850,6 +1020,28 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
         },
         "returnFocus": {
           "type": "string"
@@ -1044,66 +1236,15 @@
           "type": "boolean"
         },
         "fallback": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SectionsNode"
-            },
-            {
-              "$ref": "#/$defs/ShelfNode"
-            },
-            {
-              "$ref": "#/$defs/GridNode"
-            },
-            {
-              "$ref": "#/$defs/TabsNode"
-            },
-            {
-              "$ref": "#/$defs/TableNode"
-            },
-            {
-              "$ref": "#/$defs/LineGraphNode"
-            },
-            {
-              "$ref": "#/$defs/PlayerNode"
-            },
-            {
-              "$ref": "#/$defs/ParamInputNode"
-            },
-            {
-              "$ref": "#/$defs/TitleCardNode"
-            },
-            {
-              "$ref": "#/$defs/MarqueeNode"
-            },
-            {
-              "$ref": "#/$defs/BoxNode"
-            },
-            {
-              "$ref": "#/$defs/TextNode"
-            },
-            {
-              "$ref": "#/$defs/ImageNode"
-            },
-            {
-              "$ref": "#/$defs/IconNode"
-            },
-            {
-              "$ref": "#/$defs/RepeatNode"
-            },
-            {
-              "$ref": "#/$defs/UseNode"
-            },
-            {
-              "$ref": "#/$defs/SlotNode"
-            },
-            {
-              "$ref": "#/$defs/WidgetNode"
-            }
-          ],
+          "$ref": "#/$defs/Node",
           "description": "Renderer 19: drawn instead when the source is empty, refused or fails to load."
         },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -1158,6 +1299,28 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
           "type": "object"
         },
         "returnFocus": {
@@ -1344,8 +1507,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -1431,6 +1601,28 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
           "type": "object"
         },
         "returnFocus": {
@@ -1629,8 +1821,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "gap": {
           "type": "string"
@@ -1701,6 +1900,28 @@
         },
         "over": {
           "type": "string"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
         },
         "returnFocus": {
           "type": "string"
@@ -1939,6 +2160,12 @@
           "$ref": "#/$defs/MarqueeNode"
         },
         {
+          "$ref": "#/$defs/RichNode"
+        },
+        {
+          "$ref": "#/$defs/VisualizerNode"
+        },
+        {
           "$ref": "#/$defs/BoxNode"
         },
         {
@@ -1963,6 +2190,65 @@
           "$ref": "#/$defs/WidgetNode"
         }
       ]
+    },
+    "PageOverride": {
+      "additionalProperties": false,
+      "description": "A skin's replacement of a whole built-in page: a tree, or a tree with variants. The page keeps\nthe built-in document's sources, params, actions and strings.",
+      "properties": {
+        "failure": {
+          "$ref": "#/$defs/Node"
+        },
+        "forms": {
+          "additionalProperties": false,
+          "description": "Whole-tree replacements by form factor and by platform (a platform wins over a form).",
+          "properties": {
+            "fold": {
+              "$ref": "#/$defs/Node"
+            },
+            "small": {
+              "$ref": "#/$defs/Node"
+            },
+            "tv": {
+              "$ref": "#/$defs/Node"
+            },
+            "wide": {
+              "$ref": "#/$defs/Node"
+            }
+          },
+          "type": "object"
+        },
+        "loading": {
+          "$ref": "#/$defs/Node"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Node"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Node"
+            },
+            "ios": {
+              "$ref": "#/$defs/Node"
+            },
+            "tv": {
+              "$ref": "#/$defs/Node"
+            },
+            "web": {
+              "$ref": "#/$defs/Node"
+            }
+          },
+          "type": "object"
+        },
+        "tree": {
+          "$ref": "#/$defs/Node"
+        }
+      },
+      "required": [
+        "tree"
+      ],
+      "type": "object"
     },
     "ParamInputNode": {
       "additionalProperties": false,
@@ -2050,8 +2336,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -2113,6 +2406,28 @@
         },
         "placeholder": {
           "type": "string"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
         },
         "returnFocus": {
           "type": "string"
@@ -2241,8 +2556,70 @@
       ],
       "type": "object"
     },
+    "PartLayers": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "$ref": "#/$defs/Style"
+        },
+        "focus": {
+          "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style"
+        },
+        "hover": {
+          "$ref": "#/$defs/Style"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
+        },
+        "small": {
+          "$ref": "#/$defs/Style"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "tv": {
+          "$ref": "#/$defs/Style"
+        },
+        "wide": {
+          "$ref": "#/$defs/Style"
+        }
+      },
+      "type": "object"
+    },
+    "PartStyle": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Style"
+        },
+        {
+          "$ref": "#/$defs/PartLayers"
+        }
+      ]
+    },
     "PlayerNode": {
       "additionalProperties": false,
+      "description": "With `channel`: one muted live preview of a channel (renderer 19). Without (renderer 20): the rich\nplayback player, its props and parts in rich-blocks.ts.",
       "properties": {
         "a11y": {
           "additionalProperties": false,
@@ -2330,8 +2707,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -2386,6 +2770,49 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "partTemplates": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Node"
+          },
+          "description": "Part templates by part name (`queue.row`), over a document template of that name.",
+          "type": "object"
+        },
+        "parts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PartStyle"
+          },
+          "description": "Part styles by part name (`trackTable.activeRow`), over the document's `parts`.",
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
+        },
+        "props": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The block's props (rich-blocks.ts), as Templates; a single hole passes its raw value.",
           "type": "object"
         },
         "returnFocus": {
@@ -2478,7 +2905,6 @@
         }
       },
       "required": [
-        "channel",
         "type"
       ],
       "type": "object"
@@ -2489,6 +2915,7 @@
         "page",
         "playerOverlay",
         "section",
+        "slot",
         "titlePanel",
         "toast"
       ]
@@ -2540,6 +2967,10 @@
         "action"
       ],
       "type": "object"
+    },
+    "Renderer": {
+      "const": 20,
+      "description": "The RENDERER_VERSION this schema describes."
     },
     "RepeatNode": {
       "additionalProperties": false,
@@ -2654,6 +3085,10 @@
         "focus": {
           "$ref": "#/$defs/Style"
         },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
           "type": "boolean"
@@ -2720,6 +3155,28 @@
         },
         "over": {
           "type": "string"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
         },
         "returnFocus": {
           "type": "string"
@@ -2816,6 +3273,677 @@
       "required": [
         "item",
         "over",
+        "type"
+      ],
+      "type": "object"
+    },
+    "RichBlocks": {
+      "const": {
+        "bar": {
+          "doc": "The persistent now-playing bar: what is playing (cover, title, artist or chapter, the heart), the transport and the seek bar, and lyrics, Sound, the queue, volume and full screen. Spoken word trades shuffle, previous, next and repeat for speed, 15/30 s skips and the sleep timer.",
+          "parts": [
+            "bar.root",
+            "bar.cover",
+            "bar.title",
+            "bar.subtitle",
+            "bar.transport",
+            "bar.toggle",
+            "bar.scrubber",
+            "bar.time",
+            "bar.actions",
+            "bar.panel"
+          ],
+          "props": {
+            "queueFlag": {
+              "default": "queue",
+              "doc": "The document state flag the queue button toggles (the shell shows the queue block while it is set).",
+              "type": "template"
+            },
+            "sound": {
+              "default": "true",
+              "doc": "Show the Sound button.",
+              "type": "boolean"
+            },
+            "soundFlag": {
+              "default": "sound",
+              "doc": "The document state flag the Sound button toggles; opening one closes the other.",
+              "type": "template"
+            }
+          },
+          "templates": [],
+          "tv": "Not drawn on TV (the TV shell floats the mini player). Reads the audio position once a second."
+        },
+        "duplicates": {
+          "doc": "Duplicate recordings in a library and the preferred version of each (section-B duplicates block).",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "Not offered on TV."
+        },
+        "eq": {
+          "doc": "Sound: AutoMix, volume levelling and the equalizer, or only the equalizer bands (`bands`).",
+          "parts": [
+            "eq.section",
+            "eq.band",
+            "eq.preset"
+          ],
+          "props": {
+            "bands": {
+              "default": "false",
+              "doc": "Only the equalizer bands and presets.",
+              "type": "boolean"
+            },
+            "closeFlag": {
+              "doc": "The document state flag the close button clears; draws its own header with it.",
+              "type": "template"
+            }
+          },
+          "templates": [],
+          "tv": "Sliders become − and + (a remote's arrows move the focus)."
+        },
+        "lyrics": {
+          "doc": "Lyrics that follow playback: the line being sung is lit (word by word when the lyrics are word-timed), sung lines fade, the list keeps the line in view, and pressing a line seeks there. Plain lyrics scroll as text.",
+          "parts": [
+            "lyrics.line",
+            "lyrics.activeLine",
+            "lyrics.pastLine",
+            "lyrics.word",
+            "lyrics.activeWord",
+            "lyrics.translation",
+            "lyrics.source",
+            "lyrics.message"
+          ],
+          "props": {
+            "item": {
+              "doc": "The track (an item: record); the one playing when absent.",
+              "type": "value"
+            },
+            "large": {
+              "default": "false",
+              "doc": "Now Playing's large type.",
+              "type": "boolean"
+            },
+            "translate": {
+              "default": "false",
+              "doc": "Show the translation under each line when the lyrics carry one.",
+              "type": "boolean"
+            }
+          },
+          "templates": [],
+          "tv": "Lines are reading stops; the active line scrolls into view without motion when motion is reduced. Word timing redraws only the active line."
+        },
+        "nowPlaying": {
+          "doc": "Now Playing: the artwork stage with its ambient tint, the title and byline, the scrubber and transport, and the queue, chapters, lyrics and Sound beside the stage (side by side by width, as the Duo window layout) or under it.",
+          "parts": [
+            "nowPlaying.stage",
+            "nowPlaying.artwork",
+            "nowPlaying.title",
+            "nowPlaying.byline",
+            "nowPlaying.tint",
+            "nowPlaying.tabs",
+            "nowPlaying.header"
+          ],
+          "props": {
+            "closeFlag": {
+              "doc": "The document state flag the close button clears; no close button without it.",
+              "type": "template"
+            },
+            "panel": {
+              "doc": "The list shown first.",
+              "type": "enum",
+              "values": [
+                "queue",
+                "chapters",
+                "lyrics",
+                "sound"
+              ]
+            },
+            "visualizer": {
+              "default": "true",
+              "doc": "Offer the visualizer (the header button and the Sound panel's switch) where env.canVisualize.",
+              "type": "boolean"
+            }
+          },
+          "templateScope": {
+            "nowPlaying.background": [
+              "playing",
+              "accent"
+            ]
+          },
+          "templates": [
+            "nowPlaying.background"
+          ],
+          "tv": "The transport row and the list beside it are focus guides; the play button takes focus first. A background template is drawn behind the stage and takes no focus."
+        },
+        "player": {
+          "doc": "The audio transport on its own (a Listen player; with `channel` the node is instead the muted live preview): scrubber with chapter marks, time, transport, and the quality and audio menus.",
+          "parts": [
+            "player.scrubber",
+            "player.transport",
+            "player.toggle",
+            "player.time",
+            "player.quality",
+            "player.menu"
+          ],
+          "props": {
+            "menus": {
+              "default": "true",
+              "doc": "Show the quality and audio (speed, sleep) menus.",
+              "type": "boolean"
+            },
+            "size": {
+              "default": "large",
+              "doc": "The mini player's scale or Now Playing's.",
+              "type": "enum",
+              "values": [
+                "compact",
+                "large"
+              ]
+            }
+          },
+          "templates": [],
+          "tv": "The scrubber is focusable (left and right seek); the toggle is the preferred focus."
+        },
+        "playlistImport": {
+          "doc": "The playlist import flow over the local import: record (section-B import block).",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "Not offered on TV."
+        },
+        "queue": {
+          "doc": "The queue: what is playing, what the viewer queued (Play next, Add to queue) and what comes next from the source and autoplay. Rows play, remove and move (drag on web pointers, Move up / Move down in their menu).",
+          "parts": [
+            "queue.heading",
+            "queue.section",
+            "queue.row",
+            "queue.activeRow",
+            "queue.title",
+            "queue.byline"
+          ],
+          "props": {
+            "closeFlag": {
+              "doc": "The document state flag the close button clears; no close button without it.",
+              "type": "template"
+            },
+            "header": {
+              "default": "true",
+              "doc": "Draw the Queue heading.",
+              "type": "boolean"
+            },
+            "limit": {
+              "default": "60",
+              "doc": "Rows drawn per section, at most 200.",
+              "type": "number"
+            }
+          },
+          "templateScope": {
+            "queue.row": [
+              "index",
+              "section",
+              "active",
+              "playing",
+              "lit"
+            ]
+          },
+          "templates": [
+            "queue.row"
+          ],
+          "tv": "Each row is one focus target. Redraws when the queue changes, not with the position."
+        },
+        "rail": {
+          "doc": "Your Library: Home, Search and Rewind, the library heading with collapse, new playlist and the library tools, filters, and the playlists, liked albums and artists (spoken word: the books or shows under way). Collapsed it is an icon rail; embedded (a phone, a TV) a plain list.",
+          "parts": [
+            "rail.nav",
+            "rail.navItem",
+            "rail.activeNavItem",
+            "rail.heading",
+            "rail.filter",
+            "rail.row",
+            "rail.activeRow"
+          ],
+          "props": {
+            "collapseFlag": {
+              "default": "railCollapsed",
+              "doc": "The document state flag holding the viewer's collapse (the shell sizes the rail from it).",
+              "type": "template"
+            },
+            "mode": {
+              "default": "auto",
+              "doc": "auto collapses below 1180 px and keeps the viewer's choice.",
+              "type": "enum",
+              "values": [
+                "auto",
+                "expanded",
+                "collapsed",
+                "embedded"
+              ]
+            }
+          },
+          "templates": [],
+          "tv": "Rows are single focus targets; the rail is one focus column."
+        },
+        "recap": {
+          "doc": "Rewind: the listening recap for a period with its charts (section-B recap block).",
+          "parts": [],
+          "props": {},
+          "templates": [],
+          "tv": "As the Rewind page."
+        },
+        "trackTable": {
+          "doc": "A tracklist: number (a play control on hover, a live meter on the track playing), cover, title with the explicit mark and artist, album, the heart, duration and the row menu. Double-click or Enter plays from a track (a tap on touch, select on TV); right-click or long-press opens the menu.",
+          "parts": [
+            "trackTable.header",
+            "trackTable.row",
+            "trackTable.activeRow",
+            "trackTable.number",
+            "trackTable.title",
+            "trackTable.artist",
+            "trackTable.album",
+            "trackTable.duration",
+            "trackTable.disc"
+          ],
+          "props": {
+            "album": {
+              "default": "false",
+              "doc": "Show the album column (wide windows only, never on TV).",
+              "type": "boolean"
+            },
+            "covers": {
+              "default": "false",
+              "doc": "Show each track's cover (a playlist, Liked Songs, Top Tracks).",
+              "type": "boolean"
+            },
+            "discs": {
+              "default": "false",
+              "doc": "Group a multi-disc album under disc headings.",
+              "type": "boolean"
+            },
+            "entryIds": {
+              "doc": "Playlist entry ids, parallel to tracks (a vela.playlist source's entryIds): Remove from this playlist, and drag reorder.",
+              "type": "value"
+            },
+            "header": {
+              "default": "true",
+              "doc": "Draw the column header (never on a phone).",
+              "type": "boolean"
+            },
+            "playlist": {
+              "doc": "The playlist id when the tracks are its entries.",
+              "type": "template"
+            },
+            "position": {
+              "default": "false",
+              "doc": "Number by position instead of track number.",
+              "type": "boolean"
+            },
+            "reorder": {
+              "default": "false",
+              "doc": "Drag rows to reorder (a playlist the viewer owns; web pointer only). Needs playlist and entryIds.",
+              "type": "boolean"
+            },
+            "sourceId": {
+              "doc": "Where the tracks are listed (Now Playing's \"Playing from\"): its id.",
+              "type": "template"
+            },
+            "sourceKind": {
+              "doc": "Its kind.",
+              "type": "enum",
+              "values": [
+                "title",
+                "playlist",
+                "favorites"
+              ]
+            },
+            "sourceName": {
+              "doc": "Its name.",
+              "type": "template"
+            },
+            "tracks": {
+              "doc": "The tracks: a list source ({items, more}) or a list of item: records.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templateScope": {
+            "trackTable.row": [
+              "index",
+              "number",
+              "active",
+              "playing",
+              "disc",
+              "lit"
+            ]
+          },
+          "templates": [
+            "trackTable.row"
+          ],
+          "tv": "Each row is one focus target (select plays, a long select opens the menu); nothing inside a row takes focus. Rows draw with the page; a list longer than 200 rows draws its first 200 and the rest as the viewer nears the end."
+        },
+        "visualizer": {
+          "doc": "The music visualizer (implementation: the visualizer lead): Now Playing's background or full screen with the scene picker.",
+          "parts": [
+            "visualizer.scenePicker",
+            "visualizer.sceneChip",
+            "visualizer.sceneChipActive",
+            "visualizer.caption"
+          ],
+          "props": {
+            "mode": {
+              "doc": "Where it draws.",
+              "required": true,
+              "type": "enum",
+              "values": [
+                "background",
+                "fullscreen"
+              ]
+            },
+            "sceneId": {
+              "doc": "The scene; the viewer's choice when absent.",
+              "type": "template"
+            }
+          },
+          "templates": [],
+          "tv": "Drawn only where env.canVisualize; a generic fallback elsewhere."
+        }
+      },
+      "description": "Each rich block's props, the parts a document may style and the parts whose template it may replace (rich-blocks.ts)."
+    },
+    "RichNode": {
+      "additionalProperties": false,
+      "properties": {
+        "a11y": {
+          "additionalProperties": false,
+          "description": "The press button's accessibility state and role.",
+          "properties": {
+            "checked": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "current": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "expanded": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "haspopup": {
+              "type": "string"
+            },
+            "hidden": {
+              "type": "boolean"
+            },
+            "pressed": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "role": {
+              "type": "string"
+            },
+            "selected": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "above": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Style"
+          },
+          "type": "object"
+        },
+        "active": {
+          "$ref": "#/$defs/Style",
+          "description": "While pressed (pointer down), over the hover style: e.g. { scale: '0.97' } as a compiled control's press scale."
+        },
+        "below": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Style"
+          },
+          "type": "object"
+        },
+        "disabled": {
+          "description": "A pressable box: disabled while these hold, drawn with `disabledStyle`.",
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        },
+        "disabledStyle": {
+          "$ref": "#/$defs/Style"
+        },
+        "escape": {
+          "description": "Escape clears this flag and moves focus to `returnFocus` (an element id).",
+          "type": "string"
+        },
+        "exit": {
+          "description": "A motion preset played as the node leaves.",
+          "type": "string"
+        },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
+        "focus": {
+          "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
+        "group": {
+          "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
+          "type": "boolean"
+        },
+        "groupFocus": {
+          "$ref": "#/$defs/Style"
+        },
+        "groupHover": {
+          "$ref": "#/$defs/Style"
+        },
+        "hover": {
+          "$ref": "#/$defs/Style",
+          "description": "Pointer hover and keyboard focus overlays (the renderer tracks both)."
+        },
+        "id": {
+          "description": "A box's element id (`detail-scroll-{env.entry}`: the route's scroll the navigation restores).",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "layoutTransition": {
+          "type": "string"
+        },
+        "level": {
+          "type": "number"
+        },
+        "motion": {
+          "description": "A motion preset by name (`motion` table), its delay staggered by the item index.",
+          "type": "string"
+        },
+        "needs": {
+          "description": "Renderer 19, screens: lazy sources read when this node is about to draw.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "onChange": {
+          "additionalProperties": false,
+          "description": "Renderer 19: play a motion preset when the filled value changes (a score pops).",
+          "properties": {
+            "motion": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "motion",
+            "value"
+          ],
+          "type": "object"
+        },
+        "partTemplates": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Node"
+          },
+          "description": "Part templates by part name (`queue.row`), over a document template of that name.",
+          "type": "object"
+        },
+        "parts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PartStyle"
+          },
+          "description": "Part styles by part name (`trackTable.activeRow`), over the document's `parts`.",
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
+        },
+        "props": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The block's props (rich-blocks.ts), as Templates; a single hole passes its raw value.",
+          "type": "object"
+        },
+        "returnFocus": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "sharedElement": {
+          "type": "string"
+        },
+        "small": {
+          "$ref": "#/$defs/Style"
+        },
+        "stagger": {
+          "additionalProperties": false,
+          "properties": {
+            "cap": {
+              "type": "number"
+            },
+            "step": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "cap",
+            "step"
+          ],
+          "type": "object"
+        },
+        "states": {
+          "description": "The first state whose conditions hold replaces `style` on the same element (transitions run).",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "focus": {
+                "$ref": "#/$defs/Style"
+              },
+              "groupFocus": {
+                "$ref": "#/$defs/Style"
+              },
+              "groupHover": {
+                "$ref": "#/$defs/Style"
+              },
+              "hover": {
+                "$ref": "#/$defs/Style"
+              },
+              "label": {
+                "type": "string"
+              },
+              "style": {
+                "$ref": "#/$defs/Style"
+              },
+              "when": {
+                "items": {
+                  "$ref": "#/$defs/Condition"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "style",
+              "when"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/Style",
+          "description": "Overrides by viewport: `small` under 640 px, `wide` from 1200 px, `tv` on a TV (renderer 19)."
+        },
+        "testId": {
+          "type": "string"
+        },
+        "tv": {
+          "$ref": "#/$defs/Style"
+        },
+        "type": {
+          "enum": [
+            "bar",
+            "duplicates",
+            "eq",
+            "lyrics",
+            "nowPlaying",
+            "playlistImport",
+            "queue",
+            "rail",
+            "recap",
+            "trackTable"
+          ]
+        },
+        "when": {
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        },
+        "wide": {
+          "$ref": "#/$defs/Style"
+        }
+      },
+      "required": [
         "type"
       ],
       "type": "object"
@@ -2984,69 +4112,37 @@
           "description": "Served by Ether from the manifest: the plugin actions this page may call.",
           "type": "object"
         },
+        "experience": {
+          "description": "Renderer 20: the experience a built-in page belongs to (`listen`); the page is addressed as\n`vela:<experience>/<page>`.",
+          "type": "string"
+        },
         "failure": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SectionsNode"
-            },
-            {
-              "$ref": "#/$defs/ShelfNode"
-            },
-            {
-              "$ref": "#/$defs/GridNode"
-            },
-            {
-              "$ref": "#/$defs/TabsNode"
-            },
-            {
-              "$ref": "#/$defs/TableNode"
-            },
-            {
-              "$ref": "#/$defs/LineGraphNode"
-            },
-            {
-              "$ref": "#/$defs/PlayerNode"
-            },
-            {
-              "$ref": "#/$defs/ParamInputNode"
-            },
-            {
-              "$ref": "#/$defs/TitleCardNode"
-            },
-            {
-              "$ref": "#/$defs/MarqueeNode"
-            },
-            {
-              "$ref": "#/$defs/BoxNode"
-            },
-            {
-              "$ref": "#/$defs/TextNode"
-            },
-            {
-              "$ref": "#/$defs/ImageNode"
-            },
-            {
-              "$ref": "#/$defs/IconNode"
-            },
-            {
-              "$ref": "#/$defs/RepeatNode"
-            },
-            {
-              "$ref": "#/$defs/UseNode"
-            },
-            {
-              "$ref": "#/$defs/SlotNode"
-            },
-            {
-              "$ref": "#/$defs/WidgetNode"
-            }
-          ]
+          "$ref": "#/$defs/Node"
         },
         "focus": {
           "additionalProperties": false,
           "properties": {
             "initial": {
               "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "forms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: whole-tree replacements of `tree` by form factor and by platform (a platform's wins).",
+          "properties": {
+            "fold": {
+              "$ref": "#/$defs/Node"
+            },
+            "small": {
+              "$ref": "#/$defs/Node"
+            },
+            "tv": {
+              "$ref": "#/$defs/Node"
+            },
+            "wide": {
+              "$ref": "#/$defs/Node"
             }
           },
           "type": "object"
@@ -3083,68 +4179,19 @@
           "const": "screen"
         },
         "loading": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SectionsNode"
-            },
-            {
-              "$ref": "#/$defs/ShelfNode"
-            },
-            {
-              "$ref": "#/$defs/GridNode"
-            },
-            {
-              "$ref": "#/$defs/TabsNode"
-            },
-            {
-              "$ref": "#/$defs/TableNode"
-            },
-            {
-              "$ref": "#/$defs/LineGraphNode"
-            },
-            {
-              "$ref": "#/$defs/PlayerNode"
-            },
-            {
-              "$ref": "#/$defs/ParamInputNode"
-            },
-            {
-              "$ref": "#/$defs/TitleCardNode"
-            },
-            {
-              "$ref": "#/$defs/MarqueeNode"
-            },
-            {
-              "$ref": "#/$defs/BoxNode"
-            },
-            {
-              "$ref": "#/$defs/TextNode"
-            },
-            {
-              "$ref": "#/$defs/ImageNode"
-            },
-            {
-              "$ref": "#/$defs/IconNode"
-            },
-            {
-              "$ref": "#/$defs/RepeatNode"
-            },
-            {
-              "$ref": "#/$defs/UseNode"
-            },
-            {
-              "$ref": "#/$defs/SlotNode"
-            },
-            {
-              "$ref": "#/$defs/WidgetNode"
-            }
-          ]
+          "$ref": "#/$defs/Node"
         },
         "motion": {
           "additionalProperties": {
             "$ref": "#/$defs/MotionPreset"
           },
           "type": "object"
+        },
+        "owner": {
+          "description": "Renderer 20: `vela` on Vela's built-in page documents (bundled, never served by Ether, and their\n`vela.*` source arguments may read params). Absent on a plugin's documents.",
+          "enum": [
+            "vela"
+          ]
         },
         "page": {
           "type": "string"
@@ -3159,6 +4206,34 @@
         "params": {
           "additionalProperties": {
             "$ref": "#/$defs/ParamSpec"
+          },
+          "type": "object"
+        },
+        "parts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PartStyle"
+          },
+          "description": "Renderer 20: rich-block part styles for every block in the document (`queue.row`); a block's own\n`parts` apply over these. A template named after a part (`queue.row`) is that part's template.",
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Node"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Node"
+            },
+            "ios": {
+              "$ref": "#/$defs/Node"
+            },
+            "tv": {
+              "$ref": "#/$defs/Node"
+            },
+            "web": {
+              "$ref": "#/$defs/Node"
+            }
           },
           "type": "object"
         },
@@ -3186,6 +4261,10 @@
         "screen": {
           "description": "Plugin-scoped screen (or surface) id and the page within it.",
           "type": "string"
+        },
+        "slot": {
+          "$ref": "#/$defs/SlotId",
+          "description": "Renderer 20, presentation `slot`: the published slot this surface fills."
         },
         "sources": {
           "additionalProperties": {
@@ -3378,8 +4457,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "gap": {
           "type": "string"
@@ -3437,6 +4523,28 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
           "type": "object"
         },
         "returnFocus": {
@@ -3616,62 +4724,7 @@
           "$ref": "#/$defs/Style"
         },
         "empty": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SectionsNode"
-            },
-            {
-              "$ref": "#/$defs/ShelfNode"
-            },
-            {
-              "$ref": "#/$defs/GridNode"
-            },
-            {
-              "$ref": "#/$defs/TabsNode"
-            },
-            {
-              "$ref": "#/$defs/TableNode"
-            },
-            {
-              "$ref": "#/$defs/LineGraphNode"
-            },
-            {
-              "$ref": "#/$defs/PlayerNode"
-            },
-            {
-              "$ref": "#/$defs/ParamInputNode"
-            },
-            {
-              "$ref": "#/$defs/TitleCardNode"
-            },
-            {
-              "$ref": "#/$defs/MarqueeNode"
-            },
-            {
-              "$ref": "#/$defs/BoxNode"
-            },
-            {
-              "$ref": "#/$defs/TextNode"
-            },
-            {
-              "$ref": "#/$defs/ImageNode"
-            },
-            {
-              "$ref": "#/$defs/IconNode"
-            },
-            {
-              "$ref": "#/$defs/RepeatNode"
-            },
-            {
-              "$ref": "#/$defs/UseNode"
-            },
-            {
-              "$ref": "#/$defs/SlotNode"
-            },
-            {
-              "$ref": "#/$defs/WidgetNode"
-            }
-          ]
+          "$ref": "#/$defs/Node"
         },
         "escape": {
           "description": "Escape clears this flag and moves focus to `returnFocus` (an element id).",
@@ -3684,8 +4737,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "gap": {
           "type": "string"
@@ -3784,6 +4844,28 @@
         },
         "over": {
           "type": "string"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
         },
         "returnFocus": {
           "type": "string"
@@ -3885,9 +4967,670 @@
       ],
       "type": "object"
     },
+    "SkinDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "additionalProperties": false,
+          "properties": {
+            "frame": {
+              "additionalProperties": false,
+              "description": "A framed title page's surround, drawn behind the document's frame over home: scrim colour (default media.overlay),\nbackdrop blur (default 'blur(18px) saturate(1.1)'), or flat: no scrim (a full-page title).",
+              "properties": {
+                "blur": {
+                  "type": "string"
+                },
+                "flat": {
+                  "type": "boolean"
+                },
+                "scrim": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "from": {
+              "type": "number"
+            },
+            "small": {
+              "enum": [
+                "fullscreen",
+                "modal",
+                "stack"
+              ]
+            },
+            "split": {
+              "type": "string"
+            },
+            "wide": {
+              "enum": [
+                "fullscreen",
+                "modal",
+                "stack"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "experiences": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ExperienceOverride"
+          },
+          "description": "Renderer 20: overrides of the built-in experiences (`listen`), merged over Vela's page documents:\nwhole pages, templates (a part's template by the part's name), part styles and the shell per form\nfactor. Whatever is left out stays Vela's.",
+          "type": "object"
+        },
+        "fonts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SkinFont"
+          },
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "keyframes": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "opacity": {
+                  "type": "number"
+                },
+                "rotate": {
+                  "type": "number"
+                },
+                "scale": {
+                  "type": "number"
+                },
+                "translate": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "description": "The document's own keyframes (`keyframes: \"doc:<name>\"` in a preset): opacity, translate (px/%), scale, rotate (deg).",
+          "type": "object"
+        },
+        "live": {
+          "additionalProperties": false,
+          "description": "`home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md).",
+          "properties": {
+            "home": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "motion": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MotionPreset"
+          },
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        },
+        "preview": {
+          "description": "Same-origin `/vela/v0/appearance/` URLs.",
+          "type": "string"
+        },
+        "renderer": {
+          "description": "The renderer version the document needs (the client's RENDERER_VERSION must be at least this).",
+          "type": "number"
+        },
+        "routes": {
+          "additionalProperties": false,
+          "description": "A tree per route the document draws whole (the route view); a route left out is the Vela base's.\n`search` is drawn in home's view, after home's nodes, while a query is open.",
+          "properties": {
+            "auth": {
+              "$ref": "#/$defs/Node"
+            },
+            "collection": {
+              "$ref": "#/$defs/Node"
+            },
+            "home": {
+              "$ref": "#/$defs/Node"
+            },
+            "library": {
+              "$ref": "#/$defs/Node"
+            },
+            "live": {
+              "$ref": "#/$defs/Node"
+            },
+            "person": {
+              "$ref": "#/$defs/Node"
+            },
+            "search": {
+              "$ref": "#/$defs/Node"
+            },
+            "title": {
+              "$ref": "#/$defs/Node"
+            },
+            "watch": {
+              "$ref": "#/$defs/Node"
+            }
+          },
+          "type": "object"
+        },
+        "schema": {
+          "const": 1
+        },
+        "slots": {
+          "additionalProperties": false,
+          "description": "One tree per foundation slot; a slot left out is the Vela base's (renderer 15).",
+          "properties": {
+            "card": {
+              "$ref": "#/$defs/Node"
+            },
+            "home": {
+              "$ref": "#/$defs/Node"
+            },
+            "row": {
+              "$ref": "#/$defs/Node"
+            },
+            "shell": {
+              "$ref": "#/$defs/Node"
+            },
+            "status": {
+              "$ref": "#/$defs/Node"
+            }
+          },
+          "type": "object"
+        },
+        "status": {
+          "description": "The document draws its pages' loading and failure states itself (home and routes, from env.load, env.canRetry and\nthe retry action); without it the foundation's status screen shows while home loads or fails.",
+          "type": "boolean"
+        },
+        "strings": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "description": "`{s:key}` in any template, by locale (`en` is the fallback).",
+          "type": "object"
+        },
+        "swatches": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tagline": {
+          "type": "string"
+        },
+        "templates": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "object"
+        },
+        "tokens": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "`$name` in any style value. Colours become CSS properties the theme sheet sets.",
+          "type": "object"
+        },
+        "traits": {
+          "additionalProperties": false,
+          "description": "How the foundation frames the document's pages: home fades under a floating bar; home, libraries and Live TV pan sideways.",
+          "properties": {
+            "barMask": {
+              "type": "boolean"
+            },
+            "headerInset": {
+              "additionalProperties": false,
+              "properties": {
+                "small": {
+                  "type": "string"
+                },
+                "wide": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "small",
+                "wide"
+              ],
+              "type": "object"
+            },
+            "ink": {
+              "type": "string"
+            },
+            "page": {
+              "type": "string"
+            },
+            "panSections": {
+              "type": "boolean"
+            },
+            "splashOnPaper": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "ui": {
+          "additionalProperties": false,
+          "description": "Renderer 15: the look of the Vela base (the built-in routes the document inherits), read as\n`$ui.<name>` in any style. Colours, the two font stacks (`font`, `fontDisplay`) and radii in px\n(`radiusControl`, `radiusCard`, `radiusPanel`); a key left out takes Cinematic's value.",
+          "properties": {
+            "accent": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "alert": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "control": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "controlHover": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "focusHalo": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "font": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "fontDisplay": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "glass": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "glassEdge": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "glassEdgeStrong": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "highlight": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "ink": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "inkHover": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "inkInverse": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "inkQuiet": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "inkSecondary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "live": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "onAccent": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "page": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "popover": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "positive": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "radiusCard": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "radiusControl": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "radiusPanel": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "raised": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "scrim": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "shadow": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "skeleton": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "skeletonLight": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "track": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "trackStrong": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "renderer",
+        "schema",
+        "swatches",
+        "version"
+      ],
+      "type": "object"
+    },
+    "SkinFont": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "style": {
+                "enum": [
+                  "italic",
+                  "normal"
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "weight": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "style",
+              "url",
+              "weight"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "sizeAdjust": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "family",
+        "files"
+      ],
+      "type": "object"
+    },
+    "SlotContextSpec": {
+      "additionalProperties": false,
+      "description": "A slot's context entry: the `{context.<name>}` a slot surface reads, and the record kind it refers to.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "ref": {
+          "enum": [
+            "channel",
+            "event",
+            "item"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "SlotId": {
+      "enum": [
+        "gallery.photo.panel",
+        "home.rows",
+        "listen.album.panel",
+        "listen.artist.panel",
+        "listen.nowPlaying.panel",
+        "player.overlay.bottom",
+        "player.overlay.topLeft",
+        "player.overlay.topRight",
+        "read.sidePanel",
+        "title.panel",
+        "toast"
+      ]
+    },
     "SlotNode": {
       "additionalProperties": false,
-      "description": "A foundation slot: `children` (the route content the shell wraps), `searchField`.",
+      "description": "A foundation slot: `children` (the route content the shell wraps), `searchField`; or (renderer 20, in a\nbuilt-in page) a published plugin slot, `plugin:<slot id>` (experiences.ts SLOTS), where the slot\nsurfaces plugins contribute draw, each in its own box.",
       "properties": {
         "a11y": {
           "additionalProperties": false,
@@ -3954,6 +5697,13 @@
           },
           "type": "object"
         },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "A plugin slot: the `{context.<name>}` values its surfaces read (the slot's published context names only).",
+          "type": "object"
+        },
         "disabled": {
           "description": "A pressable box: disabled while these hold, drawn with `disabledStyle`.",
           "items": {
@@ -3974,6 +5724,10 @@
         },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -4005,6 +5759,10 @@
         "level": {
           "type": "number"
         },
+        "limit": {
+          "description": "A plugin slot: at most this many surfaces (within the slot's cap).",
+          "type": "number"
+        },
         "motion": {
           "description": "A motion preset by name (`motion` table), its delay staggered by the item index.",
           "type": "string"
@@ -4033,6 +5791,28 @@
           ],
           "type": "object"
         },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
+        },
         "returnFocus": {
           "type": "string"
         },
@@ -4045,6 +5825,17 @@
         "slot": {
           "enum": [
             "children",
+            "plugin:gallery.photo.panel",
+            "plugin:home.rows",
+            "plugin:listen.album.panel",
+            "plugin:listen.artist.panel",
+            "plugin:listen.nowPlaying.panel",
+            "plugin:player.overlay.bottom",
+            "plugin:player.overlay.topLeft",
+            "plugin:player.overlay.topRight",
+            "plugin:read.sidePanel",
+            "plugin:title.panel",
+            "plugin:toast",
             "searchField"
           ]
         },
@@ -4133,6 +5924,269 @@
         "type"
       ],
       "type": "object"
+    },
+    "SlotSpec": {
+      "additionalProperties": false,
+      "description": "A published slot (`$defs.Slots` in the generated schema). `cap.perPlugin`: surfaces one plugin may\nput in it; `cap.perSlot`: surfaces drawn in it across plugins (in the owner's order). `version`:\nthe RENDERER_VERSION that published it.",
+      "properties": {
+        "cap": {
+          "additionalProperties": false,
+          "properties": {
+            "perPlugin": {
+              "type": "number"
+            },
+            "perSlot": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "context": {
+          "items": {
+            "$ref": "#/$defs/SlotContextSpec"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "cap",
+        "context",
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Slots": {
+      "const": [
+        {
+          "cap": {
+            "perPlugin": 1
+          },
+          "context": [],
+          "id": "home.rows",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perPlugin": 1
+          },
+          "context": [
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "titleKind"
+            }
+          ],
+          "id": "title.panel",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perPlugin": 1,
+            "perSlot": 3
+          },
+          "context": [
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "titleKind"
+            }
+          ],
+          "id": "listen.album.panel",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perPlugin": 1,
+            "perSlot": 3
+          },
+          "context": [
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "titleKind"
+            }
+          ],
+          "id": "listen.artist.panel",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perPlugin": 1,
+            "perSlot": 2
+          },
+          "context": [
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "titleKind"
+            }
+          ],
+          "id": "listen.nowPlaying.panel",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perPlugin": 1,
+            "perSlot": 2
+          },
+          "context": [
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "titleKind"
+            }
+          ],
+          "id": "read.sidePanel",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perPlugin": 1,
+            "perSlot": 2
+          },
+          "context": [
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "titleKind"
+            }
+          ],
+          "id": "gallery.photo.panel",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perSlot": 2
+          },
+          "context": [
+            {
+              "name": "channel",
+              "ref": "channel"
+            },
+            {
+              "name": "event",
+              "ref": "event"
+            },
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "kind"
+            },
+            {
+              "name": "chrome"
+            },
+            {
+              "name": "pictureTime"
+            },
+            {
+              "name": "delayed"
+            }
+          ],
+          "id": "player.overlay.topLeft",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perSlot": 2
+          },
+          "context": [
+            {
+              "name": "channel",
+              "ref": "channel"
+            },
+            {
+              "name": "event",
+              "ref": "event"
+            },
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "kind"
+            },
+            {
+              "name": "chrome"
+            },
+            {
+              "name": "pictureTime"
+            },
+            {
+              "name": "delayed"
+            }
+          ],
+          "id": "player.overlay.topRight",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perSlot": 2
+          },
+          "context": [
+            {
+              "name": "channel",
+              "ref": "channel"
+            },
+            {
+              "name": "event",
+              "ref": "event"
+            },
+            {
+              "name": "title",
+              "ref": "item"
+            },
+            {
+              "name": "kind"
+            },
+            {
+              "name": "chrome"
+            },
+            {
+              "name": "pictureTime"
+            },
+            {
+              "name": "delayed"
+            }
+          ],
+          "id": "player.overlay.bottom",
+          "version": 20
+        },
+        {
+          "cap": {
+            "perPlugin": 1,
+            "perSlot": 3
+          },
+          "context": [
+            {
+              "name": "alert"
+            }
+          ],
+          "id": "toast",
+          "version": 20
+        }
+      ],
+      "description": "The published slots (experiences.ts SLOTS): a slot surface fills one by id; context names its {context.*} values; cap bounds surfaces per plugin and per slot."
     },
     "SourceError": {
       "additionalProperties": false,
@@ -4626,7 +6680,7 @@
       "description": "A surface a client may show (bootstrap `surfaces`, filtered, capped and ordered by Ether). `when` is\nevaluated by Vela locally. Routes: GET /surfaces/{id}/document, GET /surfaces/{id}/data?p.event=&p.channel=\n&p.title=&p.kind=&p.alert.ref=&tz= (404: draw nothing), POST /surfaces/{id}/actions/{action}.\n`id` is \"<pluginShort>.<id>\".",
       "properties": {
         "anchor": {
-          "description": "playerOverlay only.",
+          "description": "playerOverlay (and the player.overlay.* slots) only.",
           "enum": [
             "bottom",
             "topLeft",
@@ -4643,6 +6697,7 @@
           "enum": [
             "homeRow",
             "playerOverlay",
+            "slot",
             "titlePanel",
             "toast"
           ]
@@ -4670,6 +6725,10 @@
             "label"
           ],
           "type": "object"
+        },
+        "slot": {
+          "$ref": "#/$defs/SlotId",
+          "description": "Renderer 20, presentation `slot`: the published slot it fills (its context, box and caps)."
         },
         "ttl": {
           "description": "toast only: seconds on screen, 8..30.",
@@ -4862,11 +6921,18 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
         },
         "focusRows": {
           "type": "number"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -4925,6 +6991,28 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
           "type": "object"
         },
         "returnFocus": {
@@ -5148,8 +7236,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -5212,6 +7307,28 @@
         "pin": {
           "description": "With `bind.param`: on first draw an empty param takes the resolved `default` (history replace, no re-read), so a later\nchange of the default does not move the selection.",
           "type": "boolean"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
         },
         "returnFocus": {
           "type": "string"
@@ -5410,6 +7527,10 @@
         "focus": {
           "$ref": "#/$defs/Style"
         },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
           "type": "boolean"
@@ -5463,6 +7584,28 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
           "type": "object"
         },
         "returnFocus": {
@@ -5649,8 +7792,15 @@
           "description": "A motion preset played as the node leaves.",
           "type": "string"
         },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
         "focus": {
           "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
         },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
@@ -5708,6 +7858,28 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
           "type": "object"
         },
         "returnFocus": {
@@ -5901,6 +8073,10 @@
         "focus": {
           "$ref": "#/$defs/Style"
         },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
           "type": "boolean"
@@ -5954,6 +8130,28 @@
             "motion",
             "value"
           ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
           "type": "object"
         },
         "press": {
@@ -6064,6 +8262,734 @@
       ],
       "type": "object"
     },
+    "VelaActions": {
+      "const": {
+        "vela.addToQueue": {
+          "args": {
+            "item": {
+              "doc": "An item or container.",
+              "required": true,
+              "type": "ref"
+            }
+          },
+          "doc": "Queue at the end."
+        },
+        "vela.duplicatePreference": {
+          "args": {
+            "hideOthers": {
+              "type": "bool"
+            },
+            "libraryId": {
+              "doc": "The library.",
+              "required": true,
+              "type": "string"
+            },
+            "preferred": {
+              "doc": "The release to keep.",
+              "required": true,
+              "type": "ref"
+            },
+            "recordingId": {
+              "doc": "The recording.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "Choose the preferred release of a recording, optionally hiding the others."
+        },
+        "vela.like": {
+          "args": {
+            "item": {
+              "doc": "The title.",
+              "required": true,
+              "type": "ref"
+            },
+            "on": {
+              "required": true,
+              "type": "bool"
+            }
+          },
+          "doc": "Like or unlike (follow, save) a title. The answer patches the item record and refreshes favorites lists on the page."
+        },
+        "vela.more": {
+          "args": {
+            "source": {
+              "doc": "A list source on this page.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "Read the next page of a list source (appended to its items)."
+        },
+        "vela.play": {
+          "args": {
+            "context": {
+              "doc": "What to play through: the name of a list source on this page, or an `item:` container (album, artist, playlist, show).",
+              "required": false,
+              "type": "string"
+            },
+            "item": {
+              "doc": "The item to start at (`item:` key or id); the first of the context when absent.",
+              "required": false,
+              "type": "ref"
+            },
+            "shuffle": {
+              "type": "bool"
+            }
+          },
+          "doc": "Play an item, a container, or a list on this page from an item."
+        },
+        "vela.playNext": {
+          "args": {
+            "item": {
+              "doc": "An item or container.",
+              "required": true,
+              "type": "ref"
+            }
+          },
+          "doc": "Queue to play after the current item."
+        },
+        "vela.playlistImport": {
+          "args": {
+            "format": {
+              "enum": [
+                "m3u",
+                "csv"
+              ],
+              "type": "enum"
+            },
+            "library": {
+              "doc": "The library the playlist is for.",
+              "required": true,
+              "type": "string"
+            },
+            "name": {
+              "doc": "A file name (with text).",
+              "required": false,
+              "type": "string"
+            },
+            "text": {
+              "doc": "The file text (with name and format).",
+              "required": false,
+              "type": "string"
+            },
+            "url": {
+              "doc": "A link to a playlist on an advertised source.",
+              "required": false,
+              "type": "string"
+            }
+          },
+          "doc": "Start a playlist import; its progress is polled into the `import:current` record."
+        },
+        "vela.playlistImportReset": {
+          "args": {},
+          "doc": "Forget the import (start again)."
+        },
+        "vela.playlistImportSave": {
+          "args": {
+            "choose": {
+              "doc": "`index=titleId` pairs, comma-separated, for ambiguous matches.",
+              "required": false,
+              "type": "string"
+            },
+            "exclude": {
+              "doc": "Comma-separated matched indices to leave out.",
+              "required": false,
+              "type": "string"
+            },
+            "name": {
+              "doc": "A new name.",
+              "required": false,
+              "type": "string"
+            }
+          },
+          "doc": "Save the finished import as a playlist; navigates to it."
+        },
+        "vela.setVisualizerScene": {
+          "args": {
+            "id": {
+              "doc": "A scene id, or \"off\".",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "The viewer's visualizer scene on this device (per profile, not synced)."
+        },
+        "vela.startRadio": {
+          "args": {
+            "item": {
+              "doc": "The seed.",
+              "required": true,
+              "type": "ref"
+            }
+          },
+          "doc": "Play the seed, then what the server continues it with."
+        }
+      },
+      "description": "The vela.* local actions (press `plugin` with `name: \"vela.<name>\"`), answered by the client; built-in documents only."
+    },
+    "VelaSources": {
+      "const": {
+        "vela.children": {
+          "args": {
+            "id": {
+              "doc": "The parent title.",
+              "required": true,
+              "type": "string"
+            },
+            "role": {
+              "doc": "One child level (album, track, concert); every child when absent.",
+              "type": "string"
+            }
+          },
+          "doc": "A title's children in the server's order, paged: ListValue."
+        },
+        "vela.duplicates": {
+          "args": {
+            "libraryId": {
+              "doc": "The library.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "Duplicate recording groups, paged: DuplicatesValue."
+        },
+        "vela.favorites": {
+          "args": {
+            "class": {
+              "doc": "A media class (music, audiobook, podcast).",
+              "required": false,
+              "type": "string"
+            },
+            "role": {
+              "doc": "track, album, artist, …",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "The viewer's likes of one role, newest first, paged: ListValue."
+        },
+        "vela.guide": {
+          "args": {
+            "window": {
+              "doc": "hours ahead (default 3).",
+              "required": false,
+              "type": "string"
+            }
+          },
+          "doc": "The Live TV guide window: GuideValue."
+        },
+        "vela.import": {
+          "args": {},
+          "doc": "The playlist import in progress: a reference to `import:current` (ImportRecord).",
+          "live": true
+        },
+        "vela.library": {
+          "args": {
+            "direction": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "enum"
+            },
+            "favorite": {
+              "type": "bool"
+            },
+            "genre": {
+              "doc": "A genre filter.",
+              "required": false,
+              "type": "string"
+            },
+            "id": {
+              "doc": "The library.",
+              "required": true,
+              "type": "string"
+            },
+            "kind": {
+              "doc": "A kind filter.",
+              "required": false,
+              "type": "string"
+            },
+            "played": {
+              "enum": [
+                "true",
+                "false",
+                ""
+              ],
+              "type": "enum"
+            },
+            "q": {
+              "doc": "Search within the library.",
+              "required": false,
+              "type": "string"
+            },
+            "sort": {
+              "doc": "A sort the library offers (name, added, year, …).",
+              "required": false,
+              "type": "string"
+            },
+            "year": {
+              "type": "int"
+            }
+          },
+          "doc": "A library listing, paged: ListValue."
+        },
+        "vela.lyrics": {
+          "args": {
+            "id": {
+              "doc": "The track.",
+              "required": true,
+              "type": "string"
+            },
+            "translate": {
+              "doc": "A language to translate into, when the server offers it.",
+              "required": false,
+              "type": "string"
+            }
+          },
+          "doc": "LyricsValue."
+        },
+        "vela.nowPlaying": {
+          "args": {},
+          "doc": "What plays now: a reference to `nowPlaying:current` (NowPlayingRecord), pushed about once a second while a page reads it.",
+          "live": true
+        },
+        "vela.playlist": {
+          "args": {
+            "id": {
+              "doc": "The playlist.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "One playlist and its entries: PlaylistValue."
+        },
+        "vela.playlists": {
+          "args": {},
+          "doc": "The viewer's playlists as `item:` records of kind playlist: ListValue."
+        },
+        "vela.queue": {
+          "args": {},
+          "doc": "The audio queue: a reference to the `queue:current` record (QueueRecord).",
+          "live": true
+        },
+        "vela.readingProgress": {
+          "args": {
+            "id": {
+              "doc": "The readable title.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "ReadingProgressValue."
+        },
+        "vela.recap": {
+          "args": {
+            "at": {
+              "doc": "An anchor date (YYYY-MM-DD).",
+              "required": false,
+              "type": "string"
+            },
+            "library": {
+              "doc": "One library.",
+              "required": false,
+              "type": "string"
+            },
+            "period": {
+              "enum": [
+                "week",
+                "month",
+                "year",
+                "all"
+              ],
+              "required": true,
+              "type": "enum"
+            }
+          },
+          "doc": "A listening recap (Rewind): RecapValue."
+        },
+        "vela.recent": {
+          "args": {},
+          "doc": "What the viewer last played from: RecentValue."
+        },
+        "vela.recording": {
+          "args": {
+            "id": {
+              "doc": "A title (track).",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "Every release of the title's recording: RecordingValue."
+        },
+        "vela.rows": {
+          "args": {
+            "libraryId": {
+              "doc": "placement library: the library.",
+              "required": false,
+              "type": "string"
+            },
+            "placement": {
+              "doc": "Home's rows, a title's related rows, or a library's recommended rows.",
+              "enum": [
+                "home",
+                "title",
+                "library"
+              ],
+              "required": true,
+              "type": "enum"
+            },
+            "tab": {
+              "doc": "placement library: a recommended tab's own rows.",
+              "required": false,
+              "type": "string"
+            },
+            "titleId": {
+              "doc": "placement title: the title.",
+              "required": false,
+              "type": "string"
+            }
+          },
+          "doc": "Rows of items: RowsValue."
+        },
+        "vela.search": {
+          "args": {
+            "kind": {
+              "doc": "A result kind (track, album, artist, playlist, …).",
+              "required": false,
+              "type": "string"
+            },
+            "library": {
+              "doc": "Search within one library.",
+              "required": false,
+              "type": "string"
+            },
+            "q": {
+              "doc": "The query; empty answers no items.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "Search results, paged: ListValue."
+        },
+        "vela.title": {
+          "args": {
+            "id": {
+              "doc": "A title id (an `item:` key is accepted too).",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "One title: TitleValue. Its `item:` record carries the card; the source adds what only a detail read knows."
+        },
+        "vela.visualizer": {
+          "args": {},
+          "doc": "The viewer's visualizer setting on this device: a reference to `setting:visualizer` (VisualizerSetting).",
+          "live": true
+        }
+      },
+      "description": "The vela.* sources the client answers (vela-sources.ts). Ether accepts `from: \"vela.<name>\"` only for these, and in a plugin document only {context.*} holes as their arguments."
+    },
+    "VisualizerNode": {
+      "additionalProperties": false,
+      "description": "Renderer 20: the music visualizer (its engine is the app's). Without the capability (env.canVisualize\nfalse) it draws its `fallback`. Parts: visualizer.scenePicker, sceneChip, sceneChipActive, caption.",
+      "properties": {
+        "a11y": {
+          "additionalProperties": false,
+          "description": "The press button's accessibility state and role.",
+          "properties": {
+            "checked": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "current": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "expanded": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "haspopup": {
+              "type": "string"
+            },
+            "hidden": {
+              "type": "boolean"
+            },
+            "pressed": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "role": {
+              "type": "string"
+            },
+            "selected": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "above": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Style"
+          },
+          "type": "object"
+        },
+        "active": {
+          "$ref": "#/$defs/Style",
+          "description": "While pressed (pointer down), over the hover style: e.g. { scale: '0.97' } as a compiled control's press scale."
+        },
+        "below": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Style"
+          },
+          "type": "object"
+        },
+        "disabled": {
+          "description": "A pressable box: disabled while these hold, drawn with `disabledStyle`.",
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        },
+        "disabledStyle": {
+          "$ref": "#/$defs/Style"
+        },
+        "escape": {
+          "description": "Escape clears this flag and moves focus to `returnFocus` (an element id).",
+          "type": "string"
+        },
+        "exit": {
+          "description": "A motion preset played as the node leaves.",
+          "type": "string"
+        },
+        "fallback": {
+          "$ref": "#/$defs/Node"
+        },
+        "focus": {
+          "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
+        "group": {
+          "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
+          "type": "boolean"
+        },
+        "groupFocus": {
+          "$ref": "#/$defs/Style"
+        },
+        "groupHover": {
+          "$ref": "#/$defs/Style"
+        },
+        "hover": {
+          "$ref": "#/$defs/Style",
+          "description": "Pointer hover and keyboard focus overlays (the renderer tracks both)."
+        },
+        "id": {
+          "description": "A box's element id (`detail-scroll-{env.entry}`: the route's scroll the navigation restores).",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "layoutTransition": {
+          "type": "string"
+        },
+        "level": {
+          "type": "number"
+        },
+        "mode": {
+          "enum": [
+            "background",
+            "fullscreen"
+          ]
+        },
+        "motion": {
+          "description": "A motion preset by name (`motion` table), its delay staggered by the item index.",
+          "type": "string"
+        },
+        "needs": {
+          "description": "Renderer 19, screens: lazy sources read when this node is about to draw.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "onChange": {
+          "additionalProperties": false,
+          "description": "Renderer 19: play a motion preset when the filled value changes (a score pops).",
+          "properties": {
+            "motion": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "motion",
+            "value"
+          ],
+          "type": "object"
+        },
+        "partTemplates": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Node"
+          },
+          "description": "Part templates by part name (`queue.row`), over a document template of that name.",
+          "type": "object"
+        },
+        "parts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PartStyle"
+          },
+          "description": "Part styles by part name (`trackTable.activeRow`), over the document's `parts`.",
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
+        },
+        "props": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The block's props (rich-blocks.ts), as Templates; a single hole passes its raw value.",
+          "type": "object"
+        },
+        "returnFocus": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "sceneId": {
+          "type": "string"
+        },
+        "sharedElement": {
+          "type": "string"
+        },
+        "small": {
+          "$ref": "#/$defs/Style"
+        },
+        "stagger": {
+          "additionalProperties": false,
+          "properties": {
+            "cap": {
+              "type": "number"
+            },
+            "step": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "cap",
+            "step"
+          ],
+          "type": "object"
+        },
+        "states": {
+          "description": "The first state whose conditions hold replaces `style` on the same element (transitions run).",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "focus": {
+                "$ref": "#/$defs/Style"
+              },
+              "groupFocus": {
+                "$ref": "#/$defs/Style"
+              },
+              "groupHover": {
+                "$ref": "#/$defs/Style"
+              },
+              "hover": {
+                "$ref": "#/$defs/Style"
+              },
+              "label": {
+                "type": "string"
+              },
+              "style": {
+                "$ref": "#/$defs/Style"
+              },
+              "when": {
+                "items": {
+                  "$ref": "#/$defs/Condition"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "style",
+              "when"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/Style",
+          "description": "Overrides by viewport: `small` under 640 px, `wide` from 1200 px, `tv` on a TV (renderer 19)."
+        },
+        "testId": {
+          "type": "string"
+        },
+        "tv": {
+          "$ref": "#/$defs/Style"
+        },
+        "type": {
+          "const": "visualizer"
+        },
+        "when": {
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        },
+        "wide": {
+          "$ref": "#/$defs/Style"
+        }
+      },
+      "required": [
+        "mode",
+        "type"
+      ],
+      "type": "object"
+    },
     "WidgetNode": {
       "additionalProperties": false,
       "description": "Widgets: `install`, `observe`, `liveTile`; `searchInput` (params placeholder, label, placeholderColor; its node style sets the\ntext's colour and font) within 3 levels of home or the shell; `sentinel` (params.on: `row` | `home` | `library`) asks for\nthe next page; `select` (params options: library.genres | library.sorts | library.kinds, action, arg with {value},\nnone: a leading empty option's label, label) is the platform select styled by its node.",
@@ -6154,6 +9080,10 @@
         "focus": {
           "$ref": "#/$defs/Style"
         },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
         "group": {
           "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
           "type": "boolean"
@@ -6212,6 +9142,28 @@
         "params": {
           "additionalProperties": {
             "type": "string"
+          },
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
           },
           "type": "object"
         },
@@ -6314,9 +9266,9 @@
       "type": "object"
     }
   },
-  "$id": "https://vela.app/schemas/plugin-screen.v1.json",
+  "$id": "https://vela.app/schemas/vela-document.v1.json",
   "$ref": "#/$defs/ScreenDocument",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Generated by tools/screen-schema.ts from packages/protocol/screen.ts and skin.ts. Do not edit.",
-  "title": "Vela plugin screen document"
+  "description": "Generated by tools/screen-schema.ts from packages/protocol/screen.ts, skin.ts and experiences.ts. Do not edit. The root is a page document (kind \"screen\": plugin and built-in pages); skins are #/$defs/SkinDocument.",
+  "title": "Vela document"
 }
