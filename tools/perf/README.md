@@ -1,6 +1,6 @@
 # Vela Performance Harness (`tools/perf`)
 
-Measured performance and load-regression tools for plugin screens (`docs/plugin-screens.md`), targeting the owner's floor TV device profile (budget Google TV stick: onn 4K / Chromecast with Google TV class) and Ether's parallel source-read path.
+Measured performance and load-regression tools for built-in experience documents and plugin screens (`docs/experiences.md`, `docs/plugin-screens.md`), targeting the owner's floor TV device profile (budget Google TV stick: onn 4K / Chromecast with Google TV class) and Ether's parallel source-read path.
 
 ## Performance Budgets
 
@@ -15,16 +15,17 @@ Measured performance and load-regression tools for plugin screens (`docs/plugin-
 
 ## Files
 
-- [`emulator-floor.sh`](file:///Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_tx7jctbqv7-1/vela/tools/perf/emulator-floor.sh): Configures and manages the `vela-tv-floor` Android TV AVD on `gpu-workstation` (`1920x1080 @ 320 dpi`, `2048 MB` RAM, `4` cores throttled to Cortex-A55 class via `systemd-run --user --scope -p CPUQuota=100%`). Records its exact PID and only ever stops the PID it started. Refuses to run on macOS.
-- [`tv-route.ts`](file:///Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_tx7jctbqv7-1/vela/tools/perf/tv-route.ts): Measures a route (or compares legacy `/screen/sports` vs document `/screen/sports?screens=1` via `--compare-sports`) on the `vela-tv-floor` emulator.
-- [`gfxinfo.ts`](file:///Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_tx7jctbqv7-1/vela/tools/perf/gfxinfo.ts): Parser and percentile (`p50`, `p95`, `max`, jank count `> 16.67 ms`) calculator for Android `dumpsys gfxinfo <pkg> framestats` (`PROFILEDATA` CSV blocks).
-- [`record-push.ts`](file:///Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_tx7jctbqv7-1/vela/tools/perf/record-push.ts): Structural reader isolation probe that evaluates a screen document's collections against `RecordStore` and counts how many items actually read a pushed `$record` vs how many items are invalidated by `ScreenView`'s root `useRecordReader()`.
-- [`data-reads.ts`](file:///Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_tx7jctbqv7-1/vela/tools/perf/data-reads.ts): Bounded, opt-in load regression for parallel screen page data reads (`N` up to 8, requesting all sources) with 4 open `/vela/v0/live/stream` topics. Enforces a version gate (`>= 0.3.21-preview.32-screens`) before running against `--lab`.
-- [`perf.test.ts`](file:///Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_tx7jctbqv7-1/vela/tools/perf/perf.test.ts): Unit tests for `gfxinfo.ts`, `record-push.ts`, and the `data-reads.ts` version gate.
+- `gate.ts`: Enforced opt-in TV performance gate (`bun tools/perf/gate.ts <route>`) for built-in experience documents and plugin screens. Runs `vela-tv-floor` measurements on `gpu-workstation` (Linux only, single-emulator lock, killing only its own PIDs) and exits non-zero when any budget (`firstFrame <= 400 ms`, `focusMove p95 <= 16 ms`, `recordPush <= 2 frames & readers-only`) fails.
+- `emulator-floor.sh`: Configures and manages the `vela-tv-floor` Android TV AVD on `gpu-workstation` (`1920x1080 @ 320 dpi`, `2048 MB` RAM, `4` cores throttled to Cortex-A55 class via `systemd-run --user --scope -p CPUQuota=100%`). Records its exact PID and only ever stops the PID it started. Refuses to run on macOS.
+- `tv-route.ts`: Measures a route (or compares legacy `/screen/sports` vs document `/screen/sports?screens=1` via `--compare-sports`) on the `vela-tv-floor` emulator.
+- `gfxinfo.ts`: Parser and percentile (`p50`, `p95`, `max`, jank count `> 16.67 ms`) calculator for Android `dumpsys gfxinfo <pkg> framestats` (`PROFILEDATA` CSV blocks).
+- `record-push.ts`: Structural reader isolation probe that evaluates a screen document's collections against `RecordStore` and counts how many items actually read a pushed `$record` vs how many items are invalidated by `ScreenView`'s root `useRecordReader()`.
+- `data-reads.ts`: Bounded, opt-in load regression for parallel screen page data reads (`N` up to 8, requesting all sources) with 4 open `/vela/v0/live/stream` topics. Enforces a version gate (`>= 0.3.21-preview.32-screens`) before running against `--lab`.
+- `perf.test.ts`: Unit tests for `gate.ts`, `gfxinfo.ts`, `record-push.ts`, and the `data-reads.ts` version gate.
 
 ---
 
-## 1. Android TV Floor Emulator Profile (`gpu-workstation` only)
+## 1. Enforced TV Performance Gate (`tools/perf/gate.ts`, `gpu-workstation` only)
 
 All Android TV emulator runs execute on `gpu-workstation` (`Ubuntu-24.04` WSL2) — never on macOS.
 
@@ -39,6 +40,18 @@ bash tools/perf/emulator-floor.sh start --port 5584 --cpu-quota 100%
 - **Resolution / Density**: `1920x1080` @ `320 dpi`
 - **Memory**: `2048 MB` RAM (`256 MB` VM heap)
 - **CPU**: `4` vCPUs pinned to cores `0-3` and throttled with `systemd-run --user --scope -p CPUQuota=100%` (~25% of one host Zen 5 core per guest vCPU, matching Amlogic S905Y4 / S905X2 quad-core Cortex-A55 throughput)
+
+### Run the Enforced Gate for a Built-In Experience or Screen Route
+
+```bash
+# Gate a built-in experience route (e.g. /listen or /library/music) or plugin screen (/screen/sports):
+bun tools/perf/gate.ts /listen
+bun tools/perf/gate.ts /screen/sports --json --out tools/perf/reports/sports-gate.json
+```
+
+- Refuses to run on macOS (`assertLinuxHost`).
+- Acquires a single-emulator lock (`~/.scratch/tmp/vela-tv-floor/gate.lock`) so two runs never contend on `emulator-5584`.
+- Exits with code `1` if `firstFrame > 400 ms`, `focusMove p95 > 16 ms`, `recordPush > 2 frames`, or `passReaderIsolation` is false.
 
 ### Measure a Single Route or Compare Legacy vs Document Sports
 

@@ -1,11 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { ScreenDocument } from '../../packages/protocol/screen';
 import type { ScreenPageState } from '../../packages/core/src/screens/types';
 import { parseGfxinfoFramestats, summarizeFrames } from './gfxinfo';
 import { auditRecordPushIsolation } from './record-push';
 import { meetsPreviewScreensGate } from './data-reads';
+import {
+  acquireGateLock,
+  assertLinuxHost,
+  auditBuiltInDocumentRecordPush,
+  evaluatePerfGate,
+  formatGateReport,
+  parseGateArgs,
+  resolveRouteDocumentPath,
+} from './gate';
+import type { RoutePerfResult } from './tv-route';
 
 describe('tools/perf/gfxinfo', () => {
   test('parses 14-column PROFILEDATA CSV blocks and computes p50, p95, max, and jank counts', () => {
@@ -176,4 +187,177 @@ test('a gated visualizer with no presentation evidence cannot pass the TV budget
   const { visualizerPerf } = await import('./visualizer');
   const result = visualizerPerf('', '', '');
   expect(result).toMatchObject({ measured: false, pass: false, focusP95Ms: null, uiMaxMs: null });
+});
+
+describe('tools/perf/gate.ts', () => {
+  const makeResult = (overrides: Partial<RoutePerfResult> = {}): RoutePerfResult => ({
+    label: 'document',
+    route: '/listen',
+    gitRef: 'b6192802',
+    udid: 'emulator-5584',
+    measuredAt: '2026-11-25T19:00:00Z',
+    deviceProfile: {
+      resolution: '1920x1080',
+      density: '320 dpi',
+      ramMb: 2048,
+      cores: 4,
+      cpuQuota: '100%',
+    },
+    firstFrame: {
+      routeToFirstFrameMs: 142.4,
+      mountFrameMaxMs: 48.2,
+      firstRouteFrameDurationMs: 28.1,
+      mountFrameCount: 9,
+      budgetMs: 400,
+      pass: true,
+    },
+    focusMove: {
+      steps: 16,
+      stats: {
+        count: 32,
+        p50Ms: 6.4,
+        p95Ms: 11.8,
+        maxMs: 14.2,
+        minMs: 4.1,
+        meanMs: 7.0,
+        jankCount: 0,
+        jankRatio: 0,
+        durationsMs: [6.4, 11.8],
+      },
+      budgetP95Ms: 16,
+      pass: true,
+    },
+    recordPush: {
+      kind: 'screen-record-stream',
+      framesRendered: 1,
+      stats: {
+        count: 1,
+        p50Ms: 5.5,
+        p95Ms: 5.5,
+        maxMs: 5.5,
+        minMs: 5.5,
+        meanMs: 5.5,
+        jankCount: 0,
+        jankRatio: 0,
+        durationsMs: [5.5],
+      },
+      readerAudit: {
+        pushedRecordKey: 'record:listen:index:0',
+        totalCollectionItems: 24,
+        actualReaderItems: 2,
+        currentRootInvalidatedItems: 2,
+        isolatedPerItemInvalidatedItems: 2,
+        rootReadsTotalRecords: 0,
+        isolatesToReadersOnly: true,
+        rootCause: 'isolated',
+      },
+      budgetFrames: 2,
+      passFrames: true,
+      passReaderIsolation: true,
+      pass: true,
+    },
+    ...overrides,
+  });
+
+  test('parseGateArgs parses route and flags', () => {
+    const parsed = parseGateArgs(['/listen', '--udid', 'emulator-5584', '--json', '--cpu-quota', '100%']);
+    expect(parsed.route).toBe('/listen');
+    expect(parsed.udid).toBe('emulator-5584');
+    expect(parsed.json).toBe(true);
+    expect(parsed.cpuQuota).toBe('100%');
+
+    const normalized = parseGateArgs(['screen/sports']);
+    expect(normalized.route).toBe('/screen/sports');
+  });
+
+  test('evaluatePerfGate passes when all three budgets hold and fails with structured reasons when exceeded', () => {
+    const passing = evaluatePerfGate(makeResult());
+    expect(passing.ok).toBe(true);
+    expect(passing.failures).toEqual([]);
+    expect(formatGateReport(passing)).toContain('pass');
+
+    const failing = evaluatePerfGate(
+      makeResult({
+        firstFrame: {
+          routeToFirstFrameMs: 485.0,
+          mountFrameMaxMs: 485.0,
+          firstRouteFrameDurationMs: 120.0,
+          mountFrameCount: 12,
+          budgetMs: 400,
+          pass: false,
+        },
+        focusMove: {
+          steps: 16,
+          stats: {
+            count: 20,
+            p50Ms: 10.0,
+            p95Ms: 21.4,
+            maxMs: 28.0,
+            minMs: 6.0,
+            meanMs: 12.0,
+            jankCount: 3,
+            jankRatio: 0.15,
+            durationsMs: [],
+          },
+          budgetP95Ms: 16,
+          pass: false,
+        },
+        recordPush: {
+          kind: 'screen-record-stream',
+          framesRendered: 5,
+          stats: {
+            count: 5,
+            p50Ms: 9.0,
+            p95Ms: 14.0,
+            maxMs: 14.0,
+            minMs: 7.0,
+            meanMs: 9.5,
+            jankCount: 0,
+            jankRatio: 0,
+            durationsMs: [],
+          },
+          budgetFrames: 2,
+          passFrames: false,
+          passReaderIsolation: false,
+          pass: false,
+        },
+      }),
+    );
+    expect(failing.ok).toBe(false);
+    expect(failing.failures.map(f => f.metric)).toEqual([
+      'firstFrame',
+      'focusMove',
+      'recordPushFrames',
+      'recordPushIsolation',
+    ]);
+    expect(formatGateReport(failing)).toContain('FAIL');
+  });
+
+  test('assertLinuxHost refuses macOS and allows linux', () => {
+    expect(() => assertLinuxHost('darwin')).toThrow(/gpu-workstation \(Linux\)/);
+    expect(() => assertLinuxHost('linux')).not.toThrow();
+  });
+
+  test('acquireGateLock prevents concurrent runs and cleans up on release', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vela-gate-lock-'));
+    try {
+      const release = acquireGateLock(dir);
+      // Same PID can re-acquire
+      const release2 = acquireGateLock(dir);
+      release2();
+      release();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('resolveRouteDocumentPath and auditBuiltInDocumentRecordPush work on built-in / screen documents', () => {
+    const root = resolve(import.meta.dir, '../..');
+    const resolvedPath = resolveRouteDocumentPath('/screen/news', root);
+    expect(resolvedPath).toEndWith('packages/protocol/fixtures/screens/news/index.json');
+    const doc = JSON.parse(readFileSync(resolvedPath!, 'utf8')) as ScreenDocument;
+    const audit = auditBuiltInDocumentRecordPush(doc);
+    expect(audit.isolatesToReadersOnly).toBe(true);
+    expect(audit.actualReaderItems).toBeGreaterThan(0);
+  });
 });

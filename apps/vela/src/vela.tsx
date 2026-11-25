@@ -30,7 +30,15 @@ import { holdBack } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { setQuietPlayback } from '@vela/skin/src/quiet-playback';
-import { PreviewBadge, previewReturnPath, startPreview, usePreviewReload } from './screen-preview';
+import {
+  MultiFramePreviewHost,
+  PreviewBadge,
+  previewHostUrl,
+  previewReturnPath,
+  startPreview,
+  usePreviewReload,
+  usePreviewSkinDocument,
+} from './screen-preview';
 
 // A lab or development build (a pinned server on a device, start routes, or __DEV__) never starts
 // playback with sound: it may open a channel or multiview on launch on a shared TV.
@@ -153,6 +161,14 @@ export function VelaProvider({ children }: { children: ReactNode }) {
     });
   }, [store]);
   usePreviewReload(store);
+  const hostPreviewUrl = previewHostUrl();
+  if (Platform.OS === 'web' && hostPreviewUrl) {
+    return (
+      <StoreProvider vela={store}>
+        <MultiFramePreviewHost previewUrl={hostPreviewUrl} />
+      </StoreProvider>
+    );
+  }
   return (
     <StoreProvider vela={store}>
       <AppProvider store={store} consoleUrl={consoleUrl}>{children}</AppProvider>
@@ -347,18 +363,25 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     }));
     return () => { cancelled = true; };
   }, [installed, appearance, origin, store]);
+  const previewSkin = usePreviewSkinDocument();
   const selectedId = chosenSkin(documents.map(d => d.id), choice, appearance);
   const selectedIndex = documents.findIndex(d => d.id === selectedId);
-  const raw = documents[selectedIndex]!;
+  const raw = previewSkin ?? documents[selectedIndex]!;
   const packMark = appearance?.packs.find(pack => pack.id === raw.id)?.wordmark;
   const branding = useMemo(() => packMark ? { ...appearance?.branding, wordmark: { url: packMark, width: 240, height: 60 } } : appearance?.branding, [packMark, appearance?.branding]);
+  const lastGoodSkin = useRef<ResolvedDocument | null>(null);
   const resolved = useMemo(() => {
     try {
-      return { doc: resolveDocument(raw, width, 'en', branding), error: null };
+      const doc = resolveDocument(raw, width, 'en', branding);
+      lastGoodSkin.current = doc;
+      return { doc, error: null };
     } catch (error) {
+      if (previewSkin && lastGoodSkin.current) {
+        return { doc: lastGoodSkin.current, error: null };
+      }
       return { doc: null, error: String(error) };
     }
-  }, [raw, width, branding]);
+  }, [raw, width, branding, previewSkin]);
 
   useEffect(() => {
     setFontsReady(false);
