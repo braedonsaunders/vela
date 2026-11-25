@@ -1,5 +1,6 @@
 import type * as V from '../../wire';
 import type { Credentials } from '../index';
+import type { UnloadRequest } from '../capabilities';
 import { VelaError } from '../errors';
 import { readEvents, type EventHandler } from '../../protocol/sse';
 
@@ -46,6 +47,8 @@ export class EtherTransport {
    * replay that unknown outcome forever.
    */
   private spentRefreshKeys = new Map<string, number>();
+  /** The session the last authorised request carried, for a request that cannot wait for credentials (`unloadRequest`). */
+  private lastTokens: V.Tokens | undefined;
 
   constructor(
     private readonly origin: string,
@@ -242,6 +245,7 @@ export class EtherTransport {
     const latest = await this.credentials.get();
     if (latest?.refreshToken !== rejected.refreshToken) return;
     await this.credentials.set(null);
+    this.lastTokens = undefined;
     this.cache.clear();
     this.onSessionRejected?.();
   }
@@ -278,10 +282,22 @@ export class EtherTransport {
   private fetchBound(path: string, init: RequestInit, token: Token): Promise<Response> {
     const headers: Record<string, string> = { ...init.headers as Record<string, string> };
     if (token) {
+      this.lastTokens = token;
       headers.Authorization = `Bearer ${token.accessToken}`;
       headers['X-Vela-Device-Id'] = this.credentials.device.id;
     }
     return fetch(this.boundURL(path), { ...init, redirect: 'error', headers });
+  }
+
+  /**
+   * A JSON request under /vela/v0 for a page being unloaded, authorised as the last request was
+   * (`fetchBound`), since nothing can await credentials by then. Null before any authorised request.
+   */
+  unloadRequest(path: string, body: unknown): UnloadRequest | null {
+    const tokens = this.lastTokens;
+    if (!tokens) return null;
+    return { url: this.boundURL(`/vela/v0${path}`), method: 'POST', body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.accessToken}`, 'X-Vela-Device-Id': this.credentials.device.id } };
   }
 
   /** The path under /vela/v0 of a URL inside the bound server, or undefined outside it. */

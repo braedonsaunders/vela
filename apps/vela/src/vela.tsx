@@ -8,7 +8,7 @@ import { router, usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createVela, type Vela as Store, type VelaState } from '@vela/core';
+import { createVela, stopSessionsOnPageHide, type Vela as Store, type VelaState } from '@vela/core';
 import { VelaProvider as StoreProvider, useVelaState } from '@vela/core/react';
 import { VelaPlayerView } from '@vela/player';
 import { useFold } from '@vela/fold';
@@ -123,6 +123,8 @@ function runtimeStore(): NonNullable<typeof runtime> {
   if (!runtime) {
     const boot = platform();
     runtime = { boot, store: createVela({ ...boot, rendererVersion: RENDERER_VERSION }) };
+    // A closed or reloaded tab, or a page navigated away, stops its playback at the server.
+    if (Platform.OS === 'web' && typeof window !== 'undefined') stopSessionsOnPageHide(window, runtime.store.playback);
   }
   return runtime;
 }

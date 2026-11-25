@@ -25,6 +25,8 @@ export { personSectionLabels, libraryKey, type CollectionPage, type LibraryQuery
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
 export { namesTitle, normalizeQuery, readsAsDescription, searchList, wantsDescription, type SearchList } from './store/search-list';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
+export { sendKeepalive, stopSessionsOnPageHide } from './store/unload';
+export { hasUnloadStop, type UnloadRequest, type UnloadStop } from './adapter/capabilities';
 export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protocol/trickplay';
 export { skipAction, type SkipAction } from './protocol/markers';
 export type { EpisodeRef } from './adapter/series';
