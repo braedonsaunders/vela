@@ -923,3 +923,250 @@ describe('Plex selected audio', () => {
     expect((await adapter.sessionSnapshot(started.sessionId)).plan).toEqual(started);
   });
 });
+
+describe('Plex progress beside commands on a slow server', () => {
+  const single = { ratingKey: '3', type: 'movie', title: 'Single', duration: 600000, Media: [{ id: 3, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', duration: 600000,
+    Part: [{ id: 3, key: '/library/parts/3/1/file.mp4', duration: 600000, Stream: [{ id: 31, index: 1, streamType: 2, codec: 'aac', selected: true }, { id: 32, index: 2, streamType: 3, codec: 'pgs' }] }] }] };
+  /** The server for a title whose first timeline post is held until `release`; later posts answer 500 while `failing`. */
+  const slow = (title: { ratingKey: string } = single) => {
+    const server = { failing: false, release: () => {} };
+    const held = new Promise<void>(resolve => { server.release = resolve; });
+    const seen = routeFetch({ [`GET /library/metadata/${title.ratingKey}`]: { MediaContainer: { Metadata: [title] } }, 'GET /video/:/transcode/universal/decision': {},
+      'GET /video/:/transcode/universal/stop': {}, 'PUT /:/scrobble': {}, 'PUT /library/parts/3': {},
+      'POST /:/timeline': () => server.failing ? new Response('', { status: 500 }) : {} });
+    const routed = globalThis.fetch;
+    let first = true;
+    globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+      const answer = await routed(input, init);
+      if (first && String(input).includes('/:/timeline')) { first = false; await held; }
+      return answer;
+    }, { preconnect: () => {} }) as typeof fetch;
+    const posts = () => seen.filter(r => r.url.pathname === '/:/timeline').map(r => `${r.url.searchParams.get('state')} ${Number(r.url.searchParams.get('time')) / 1000}`);
+    return { server, seen, posts };
+  };
+  const at = (sequence: number, positionSeconds: number, state = 'playing') => ({ sequence, state, positionSeconds, sourceGeneration: 0, seekGeneration: 0 }) as never;
+  const seek = (positionSeconds: number, idempotencyKey: string) => ({ kind: 'seek' as const, positionSeconds, idempotencyKey, sourceGeneration: 0, seekGeneration: 0 });
+
+  test('progress waiting behind a slow post is sent once, as its newest, and a seek does not wait behind it', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'q', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    for (const [sequence, position] of [[2, 18], [3, 19], [4, 20]] as const) reports.push(adapter.reportObservation(plan.sessionId, at(sequence, position)));
+    const moved = adapter.command(plan.sessionId, seek(95, 'q1'));
+    await settle();
+    expect(posts()).toEqual(['playing 17']);
+    server.release();
+    expect(await Promise.all(reports)).toEqual(Array(4).fill({ accepted: true }));
+    expect((await moved).positionSeconds).toBe(95);
+    expect(posts()).toEqual(['playing 17', 'playing 95']);
+    expect((await adapter.sessionSnapshot(plan.sessionId)).lastObservationSequence).toBe(4);
+  });
+
+  test('a pause reported behind a slow post is sent before the seek after it', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'p', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 18)), adapter.reportObservation(plan.sessionId, at(3, 19, 'paused')), adapter.reportObservation(plan.sessionId, at(4, 20, 'paused')));
+    const moved = adapter.command(plan.sessionId, seek(95, 'p1'));
+    server.release();
+    await Promise.all(reports);
+    expect((await moved).state).toBe('paused');
+    expect(posts()).toEqual(['playing 17', 'playing 18', 'paused 20', 'paused 95']);
+  });
+
+  test('a failed post fails every report it stood for, and the next one is sent', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'f', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    server.failing = true;
+    const waiting = [[2, 18], [3, 19], [4, 20]].map(([sequence, position]) => adapter.reportObservation(plan.sessionId, at(sequence!, position!)));
+    server.release();
+    expect(await first).toEqual({ accepted: true });
+    expect((await Promise.allSettled(waiting)).map(r => r.status === 'rejected' && r.reason instanceof VelaError)).toEqual([true, true, true]);
+    server.failing = false;
+    expect(await adapter.reportObservation(plan.sessionId, at(5, 21))).toEqual({ accepted: true });
+    expect(posts()).toEqual(['playing 17', 'playing 20', 'playing 21']);
+  });
+
+  test('a stop is the last post, at the newest position, and progress after it sends nothing', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 's', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 18)), adapter.reportObservation(plan.sessionId, at(3, 19)));
+    const stopped = adapter.command(plan.sessionId, { kind: 'stop', idempotencyKey: 's1', sourceGeneration: 0, seekGeneration: 0 });
+    server.release();
+    await Promise.all(reports);
+    expect((await stopped).state).toBe('ended');
+    expect(await adapter.reportObservation(plan.sessionId, at(4, 20))).toEqual({ accepted: true });
+    expect(posts()).toEqual(['playing 17', 'stopped 19']);
+  });
+
+  test('an older report waiting beside a newer one is not sent', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'o', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(3, 19)), adapter.reportObservation(plan.sessionId, at(2, 18)));
+    const moved = adapter.command(plan.sessionId, seek(95, 'o1'));
+    server.release();
+    expect(await Promise.all(reports)).toEqual(Array(3).fill({ accepted: true }));
+    await moved;
+    expect(posts()).toEqual(['playing 17', 'playing 95']);
+    expect((await adapter.sessionSnapshot(plan.sessionId)).lastObservationSequence).toBe(3);
+  });
+
+  test('an end waits for the progress before it and is scrobbled once', async () => {
+    const { server, seen, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'e', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 18)), adapter.reportObservation(plan.sessionId, at(3, 19)),
+      adapter.reportObservation(plan.sessionId, at(4, 600, 'ended')), adapter.reportObservation(plan.sessionId, at(5, 600, 'ended')));
+    server.release();
+    await Promise.all(reports);
+    expect(posts()).toEqual(['playing 17', 'playing 19', 'stopped 600']);
+    expect(seen.filter(r => r.url.pathname === '/:/scrobble')).toHaveLength(1);
+    expect((await adapter.sessionSnapshot(plan.sessionId)).plan.state).toBe('ended');
+  });
+
+  test('a burned-in subtitle chosen behind a slow post starts the stream at the newest position, without its post', async () => {
+    const { server, seen, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'b', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 5))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 13)));
+    const burned = adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '32', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'b1' });
+    server.release();
+    await Promise.all(reports);
+    const stream = (await burned).paths.find(p => p.id === 'plex-hls')!;
+    expect([new URL(stream.url!).searchParams.get('offset'), stream.timelineOriginSeconds]).toEqual(['13', 13]);
+    expect(seen.filter(r => r.url.pathname.endsWith('/decision')).map(r => r.url.searchParams.get('offset'))).toEqual(['13']);
+    expect(posts()).toEqual(['playing 5']);
+  });
+
+  test('a stacked title\'s next part follows each progress report before it, in order', async () => {
+    const { server, posts } = slow(twofold);
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 't', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 28))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 29)), adapter.reportObservation(plan.sessionId, at(3, 29.2)), adapter.reportObservation(plan.sessionId, at(4, 30, 'ended')));
+    server.release();
+    await Promise.all(reports);
+    expect(posts()).toEqual(['playing 28', 'playing 29', 'playing 29.2', 'playing 30']);
+    const next = (await adapter.sessionSnapshot(plan.sessionId)).plan;
+    expect([next.state, next.positionSeconds, next.sourceGeneration, new URL(next.paths[0]!.url!).searchParams.get('partIndex')]).toEqual(['playing', 30, 1, '1']);
+  });
+
+  test('progress that reaches the end of a stacked title\'s part is not replaced by a later one', async () => {
+    const { server, posts } = slow(twofold);
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '1', client, idempotencyKey: 'u', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 29.6)), adapter.reportObservation(plan.sessionId, at(3, 29)));
+    server.release();
+    const settled = await Promise.allSettled(reports);
+    expect(settled.map(r => r.status === 'fulfilled' || r.reason instanceof VelaError && r.reason.detail.code)).toEqual([true, true, 'stale_generation']);
+    expect(posts()).toEqual(['playing 17', 'playing 30']);
+    const next = (await adapter.sessionSnapshot(plan.sessionId)).plan;
+    expect([next.sourceGeneration, new URL(next.paths[0]!.url!).searchParams.get('partIndex')]).toEqual([1, '1']);
+  });
+
+  for (const [from, to] of [['buffering', 'playing'], ['playing', 'buffering']] as const) {
+    test(`${to} after ${from} is still sent before a command that does not post it`, async () => {
+      const { server, posts } = slow();
+      const adapter = plex();
+      const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: `${to}`, positionSeconds: 0 } as never);
+      const reports = [adapter.reportObservation(plan.sessionId, at(1, 17, from))];
+      await settle();
+      reports.push(adapter.reportObservation(plan.sessionId, at(2, 19, to)));
+      const burned = adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '32', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: `${to}1` });
+      server.release();
+      await Promise.all(reports);
+      await burned;
+      expect(posts()).toEqual([`${from} 17`, `${to} 19`]);
+    });
+  }
+
+  test('an invalid position waiting behind a slow post is refused, and the report after it is sent', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'i', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    const waiting = [adapter.reportObservation(plan.sessionId, at(2, -1)), adapter.reportObservation(plan.sessionId, at(3, 19))];
+    server.release();
+    await first;
+    expect((await Promise.allSettled(waiting)).map(r => r.status)).toEqual(['rejected', 'fulfilled']);
+    expect(posts()).toEqual(['playing 17', 'playing 19']);
+  });
+
+  test('a command for other generations does not take the waiting report\'s post', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'g', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 19)));
+    const stale = adapter.command(plan.sessionId, { kind: 'pause', idempotencyKey: 'g1', sourceGeneration: 0, seekGeneration: 1 });
+    server.release();
+    await Promise.all(reports);
+    expect((await Promise.allSettled([stale]))[0]!.status).toBe('rejected');
+    expect(posts()).toEqual(['playing 17', 'playing 19']);
+  });
+
+  test('progress taken over by a command still moves the session on from ready', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'r', positionSeconds: 0 } as never);
+    const first = adapter.command(plan.sessionId, seek(5, 'r1'));
+    await settle();
+    const report = adapter.reportObservation(plan.sessionId, { sequence: 1, state: 'playing', positionSeconds: 17, sourceGeneration: 0, seekGeneration: 1 } as never);
+    const again = adapter.command(plan.sessionId, { ...seek(40, 'r2'), seekGeneration: 1 });
+    server.release();
+    expect((await first).state).toBe('ready');
+    expect(await report).toEqual({ accepted: true });
+    expect((await again).state).toBe('playing');
+    expect(posts()).toEqual(['playing 5', 'playing 40']);
+  });
+
+  test('a refused seek does not take the waiting report\'s post', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'n', positionSeconds: 0 } as never);
+    const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
+    await settle();
+    reports.push(adapter.reportObservation(plan.sessionId, at(2, 19)));
+    const refused = adapter.command(plan.sessionId, seek(-1, 'n1'));
+    server.release();
+    await Promise.all(reports);
+    expect((await Promise.allSettled([refused]))[0]!.status).toBe('rejected');
+    expect(posts()).toEqual(['playing 17', 'playing 19']);
+  });
+
+  test('a command repeated with its key does not take the waiting report\'s post', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'k', positionSeconds: 0 } as never);
+    const resume = { kind: 'resume' as const, idempotencyKey: 'k1', sourceGeneration: 0, seekGeneration: 0 };
+    server.release();
+    const resumed = await adapter.command(plan.sessionId, resume);
+    const report = adapter.reportObservation(plan.sessionId, at(1, 17));
+    const repeated = adapter.command(plan.sessionId, resume);
+    expect(await report).toEqual({ accepted: true });
+    expect(await repeated).toEqual(resumed);
+    expect(posts()).toEqual(['playing 0', 'playing 17']);
+  });
+});
