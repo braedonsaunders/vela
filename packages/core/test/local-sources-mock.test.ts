@@ -245,3 +245,13 @@ test('a param left out reads its default; a playlist reordered in the store is a
   await store.playlists.moveEntry(list.id, last, before[before.length - 2]!);
   handle.release();
 });
+
+test("the library's album view answers unsupported where the library has none", async () => {
+  const doc: ScreenDocument = { ...albumPage, page: 'albums', params: { query: { type: 'string' } }, sources: { albums: { from: 'vela.library', id: 'music', view: 'albums', q: '{param.query}', limit: '50' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/albums' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'albums' }, href: 'vela:listen/albums', params: { query: 'a' } });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors.albums).toBe('unsupported');
+  handle.release();
+});

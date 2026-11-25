@@ -168,8 +168,9 @@ export function sourceArgs(spec: SourceSpec, scope: LocalScope): Record<string, 
   for (const [name, raw] of Object.entries(args)) {
     if (raw === undefined || raw === null) continue;
     const text = typeof raw === 'string' ? raw : typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : '';
-    out[name] = text.replace(/\{(param|context)\.([A-Za-z0-9_.-]+)\}/g, (_hole, kind: string, key: string) =>
-      (kind === 'param' ? scope.params[key] : scope.context?.[key]) ?? '');
+    // `{param.x}` and `{context.x}`, with `|or:<text>` for an empty or missing value.
+    out[name] = text.replace(/\{(param|context)\.([A-Za-z0-9_.-]+)(?:\|or:([^}]*))?\}/g, (_hole, kind: string, key: string, fallback?: string) =>
+      (kind === 'param' ? scope.params[key] : scope.context?.[key]) || (fallback ?? ''));
   }
   return out;
 }

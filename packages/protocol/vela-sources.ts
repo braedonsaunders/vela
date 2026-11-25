@@ -68,6 +68,7 @@ export const VELA_SOURCES = {
       q: id('Search within the library.', false),
       tab: id('One of the library\'s tabs (its album view, say).', false),
       limit: { type: 'int', doc: 'Titles per page (1 to 100; the server\'s default when absent).' },
+      view: { type: 'enum', enum: ['albums'], doc: "A named view: `albums`, the library's searchable album view (with q; unsupported where the library has none)." },
     },
     doc: 'A library listing, paged: ListValue.',
   },
