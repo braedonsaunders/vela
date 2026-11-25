@@ -429,8 +429,8 @@ internal class VelaSoundSink(sink: AudioSink, private val sound: VelaSoundProces
 
   override fun play() { playing = true; super.play() }
   override fun pause() { playing = false; heard = null; super.pause() }
-  override fun flush() { heard = null; super.flush() }
-  override fun reset() { playing = false; heard = null; super.reset() }
+  override fun flush() { heard = null; sound.visualizer?.invalidate(); super.flush() }
+  override fun reset() { playing = false; heard = null; sound.visualizer?.invalidate(); super.reset() }
 }
 
 /**

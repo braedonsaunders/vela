@@ -15,7 +15,12 @@ internal class VisualizerAudio {
   private val mono = FloatArray(1 shl 18)
   private var first = 0L
   private var end = 0L
+  @Volatile private var generation = 0
+  private var writtenGeneration = 0
   private var skipped = false // playback thread only
+
+  /** Sink seeks/resets invalidate the previous route immediately, including before the next write. */
+  fun invalidate() { generation++ }
 
   fun write(output: ByteBuffer, frames: Int, channels: Int, rate: Int, float: Boolean, itemFrame: Double, offsetUs: Long) {
     if (!lock.tryLock()) {
@@ -25,6 +30,11 @@ internal class VisualizerAudio {
     try {
       val start = (itemFrame * RATE / rate + offsetUs * (RATE / 1e6)).roundToLong()
       val stop = ((itemFrame + frames) * RATE / rate + offsetUs * (RATE / 1e6)).roundToLong()
+      if (writtenGeneration != generation) {
+        writtenGeneration = generation
+        first = start
+        end = start
+      }
       if (start != end) {
         if (skipped && start > end && start - end < mono.size) {
           for (frame in end until start) mono[frame.toInt() and (mono.size - 1)] = 0f
@@ -49,6 +59,7 @@ internal class VisualizerAudio {
   fun add(heardUs: Long, dest: FloatArray) {
     lock.lock() // Only the renderer waits for an in-progress write.
     try {
+      if (writtenGeneration != generation) return
       val pos = (heardUs * (RATE / 1e6)).roundToLong() - dest.size
       for (i in maxOf(first - pos, 0L) until minOf(end - pos, dest.size.toLong())) {
         dest[i.toInt()] += mono[(pos + i).toInt() and (mono.size - 1)]
