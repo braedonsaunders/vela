@@ -25,6 +25,9 @@ import { useVelaState } from '@vela/core/react';
 import { PlayerOverlays, usePlayerSurfaces } from '../../surfaces/player';
 import { PlayerToasts, takeToastKey } from '../../surfaces/toasts';
 
+/** After Back to live on a return to the foreground, the play (the view takes one command a render). */
+const RETURN_PLAY_MS = 300;
+
 /** Rapid steps add up from the last target, not from a position the engine has yet to report. */
 const STEP_MEMORY_MS = 1500;
 const ANDROID_TV = Platform.OS === 'android' && Platform.isTV;
@@ -84,6 +87,15 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
   const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send);
+  // A channel back in the foreground goes to the live edge and plays (session.ts, returnedLive).
+  const returnedLive = state.returnedLive ?? 0;
+  useEffect(() => {
+    if (!returnedLive || !live.live || live.archive) return;
+    live.backToLive();
+    // The engine paused as the app left; a play that finds it playing changes nothing.
+    const timer = setTimeout(() => state.send({ type: 'play' }), RETURN_PLAY_MS);
+    return () => clearTimeout(timer);
+  }, [returnedLive]);
   // Plugin overlays and toasts (docs/plugin-screens.md: Surfaces), where the app draws them.
   const liveEvent = useVelaState(s => s.playback.liveEvent);
   // The session that has played, so a later wait in it reads as a stall rather than a start.

@@ -114,7 +114,8 @@ function SearchBox({ value, onChange, placeholder, onSubmit }: { value: string; 
       ) : null}
       {typing ? (
         <TvKeyboard kind="search" label={placeholder} value={value} onChangeText={onChange} placeholder={placeholder} doneLabel={msg('music.search')}
-          onDone={() => { setTyping(false); onSubmit(); }} onClose={() => setTyping(false)} testID="music-search-keyboard" />
+          onDone={() => { setTyping(false); onSubmit(); }} onClose={() => setTyping(false)} testID="music-search-keyboard"
+          returnFocus={frame as never} />
       ) : null}
     </View>
   );

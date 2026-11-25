@@ -4,8 +4,9 @@
 // keyboard and the screen flickered instead). The text line at the top is a real text field:
 // selecting it still opens the system keyboard, for voice and for phone remote apps that type.
 // Back closes the sheet and keeps the text; the done key closes it and lets the field submit.
-import { memo, useCallback, useRef, useState, type ComponentRef } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Modal, Platform, Text, View } from 'react-native';
+import type { Focusable } from '../../escape';
 import { FocusPressable as Pressable } from '../../focus';
 import { useFocusClaim } from './focus-claim';
 import { TextField } from './text-field';
@@ -28,7 +29,15 @@ export interface TvKeyboardProps {
   onClose(): void;
   placeholder?: string;
   testID?: string;
+  /** The control that opened the sheet: focus goes back to it as the sheet closes (Done or Back),
+   * unless something else takes it first (search's first result, the next field's keyboard). */
+  returnFocus?: { current: Focusable | null };
 }
+
+/** How long Android takes to close the sheet's dialog window and hand focus back to the activity's
+ * window: a request made before that lands in the closing dialog, and the activity then restores
+ * whatever it held, which after the page redrew under the sheet was the shell's first tab. */
+export const RETURN_FOCUS_MS = 120;
 
 const KEY = 46;
 const GAP = 6;
@@ -58,8 +67,9 @@ function caption(key: Key, mode: KeyboardMode, doneLabel: string): string {
   }
 }
 
-export function TvKeyboard({ kind, label, value, onChangeText, doneLabel, onDone, onClose, placeholder, testID }: TvKeyboardProps) {
+export function TvKeyboard({ kind, label, value, onChangeText, doneLabel, onDone, onClose, placeholder, testID, returnFocus }: TvKeyboardProps) {
   const look = useLook();
+  useReturnFocusOnClose(returnFocus);
   const [mode, setMode] = useState<KeyboardMode>({ shift: false, symbols: false });
   const rows = keyboardRows(kind, mode);
   // Keys are drawn once per layout change and keep a stable press callback: a D-pad move redraws
@@ -143,6 +153,24 @@ export function TvKeyboard({ kind, label, value, onChangeText, doneLabel, onDone
       </View>
     </Modal>
   );
+}
+
+/** As the sheet unmounts, put focus back on its opener once the dialog window has gone. A later
+ * request (the caller's own move) wins: it lands after this one. */
+function useReturnFocusOnClose(target: { current: Focusable | null } | undefined): void {
+  const latest = useRef(target);
+  latest.current = target;
+  useEffect(() => () => {
+    const ref = latest.current;
+    if (!ref || !Platform.isTV) return;
+    setTimeout(() => focusOn(ref.current), RETURN_FOCUS_MS);
+  }, []);
+}
+
+function focusOn(target: Focusable | null): void {
+  if (!target) return;
+  if (target.requestTVFocus) target.requestTVFocus();
+  else target.focus?.();
 }
 
 const KeyButton = memo(function KeyButton({ row, column, caption, units, primary, preferred, testID, onKey }: {
