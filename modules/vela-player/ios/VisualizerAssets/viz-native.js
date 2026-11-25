@@ -2990,8 +2990,8 @@ var __viz = {
   audioFormat: __audioFormat,
   tint: __tint,
   setScene(id, immediate = false) {
-    const index = typeof id === 'string' ? SCENES.findIndex(s => s.id === id) : id;
-    if (!Number.isInteger(index) || index < 0 || index >= SCENES.length) return;
+    const index = typeof id === 'string' ? Math.max(0, SCENES.findIndex(s => s.id === id)) : id;
+    if (!Number.isInteger(index)) return;
     setScene(index);
     if (immediate) { prevIx = -1; prevLive = false; needStill = false; }
   },
