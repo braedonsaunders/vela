@@ -22,6 +22,7 @@ import { VelaError } from '../adapter/errors';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
 import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
+import { carriedTrack, trackChoice, type TrackChoice } from './track-match';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -154,6 +155,9 @@ export class Playback {
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
+  /** The file `audio` and `subtitle` were chosen on and what those tracks were there (track-match.ts). */
+  private audioChoice: TrackChoice | undefined;
+  private subtitleChoice: TrackChoice | undefined;
   private externalId: string | undefined;
   private follow: AbortController | undefined;
   /** Read the followed session's snapshot now (servers without an event stream), not at the next poll. */
@@ -306,10 +310,11 @@ export class Playback {
     this.hold(connection.adapter, plan);
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
-    // refuse track commands. Only choices that name a track in the new plan are carried.
+    // refuse track commands. Only choices that name a track in the new plan are carried, by id on
+    // the same file and by what the track is on another (track-match.ts).
     const live = target.kind === 'channel' || target.kind === 'library-live' || (target.kind === 'programme' && target.from === 'start');
-    const audio = this.audio !== undefined && plan.audioTracks.some(t => t.id === this.audio) ? this.audio : undefined;
-    const subtitle = this.subtitle === null || (this.subtitle !== undefined && plan.subtitleTracks.some(t => t.id === this.subtitle)) ? this.subtitle : undefined;
+    const audio = this.audio !== undefined ? carriedTrack(this.audio, this.audioChoice, plan, plan.audioTracks) : undefined;
+    const subtitle = this.subtitle === null ? null : this.subtitle !== undefined ? carriedTrack(this.subtitle, this.subtitleChoice, plan, plan.subtitleTracks) : undefined;
     const differs = (audio !== undefined && audio !== plan.selectedAudioTrackId)
       || (subtitle !== undefined && subtitle !== (plan.selectedSubtitleTrackId ?? null));
     if (this.recovering && !live && differs) {
@@ -320,10 +325,19 @@ export class Playback {
           idempotencyKey: this.session.key(),
         }));
       } catch {
+        // Subtitles off refused together with an audio change are asked for on their own: a
+        // stream with burned-in subtitles cannot have them removed by the engine. Not once the
+        // viewer has moved on: on Plex, Off is also stored as the part's subtitle preference.
+        const off = this.run === run && subtitle === null && audio !== undefined && (plan.selectedSubtitleTrackId ?? null) !== null
+          ? await this.send(connection, plan.sessionId, { kind: 'tracks', subtitleTrackId: null, sourceGeneration: plan.sourceGeneration,
+            seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() }).catch(() => undefined)
+          : undefined;
         // Some servers leave track selection to the engines. Their plan still describes the
         // available tracks, so carry the viewer's choices into the new engine session.
-        this.localTracks = true;
-        plan = this.withLocalTracks(plan);
+        if (this.run === run) {
+          this.localTracks = true;
+          plan = this.withLocalTracks(off ? connection.plan(off) : plan);
+        }
       }
       if (this.run !== run) {
         this.stopped(plan.sessionId);
@@ -495,8 +509,14 @@ export class Playback {
     this.follow?.abort();
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
-    this.audio ??= current.plan?.selectedAudioTrackId;
-    if (this.subtitle === undefined) this.subtitle = current.plan?.selectedSubtitleTrackId;
+    if (this.audio === undefined) {
+      this.audio = current.plan?.selectedAudioTrackId;
+      this.audioChoice = trackChoice(current.plan, current.plan?.audioTracks, this.audio);
+    }
+    if (this.subtitle === undefined) {
+      this.subtitle = current.plan?.selectedSubtitleTrackId;
+      this.subtitleChoice = trackChoice(current.plan, current.plan?.subtitleTracks, this.subtitle ?? undefined);
+    }
     const target = current.target.kind === 'title'
       ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
       : current.target;
@@ -761,9 +781,18 @@ export class Playback {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
-    if (snapshot.state === 'playing' || snapshot.state === 'paused') {
-      if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
-      if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
+    // A report from the session's previous source (queued before the plan moved on) names that
+    // source's tracks: the last choice made on the current one stands.
+    if ((snapshot.state === 'playing' || snapshot.state === 'paused')
+      && (snapshot.sourceGeneration === undefined || snapshot.sourceGeneration === current.plan?.sourceGeneration)) {
+      if (snapshot.audioTrackId) {
+        this.audio = snapshot.audioTrackId;
+        this.audioChoice = trackChoice(current.plan, current.plan?.audioTracks, this.audio);
+      }
+      if (snapshot.subtitleTrackId !== undefined) {
+        this.subtitle = snapshot.subtitleTrackId;
+        this.subtitleChoice = trackChoice(current.plan, current.plan?.subtitleTracks, this.subtitle ?? undefined);
+      }
     }
     if (this.stall && snapshot.sessionId && current.phase === 'playing') {
       this.stall = heardEngine(this.stall, snapshot, Date.now());
@@ -964,6 +993,8 @@ export class Playback {
     this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
+    this.audioChoice = undefined;
+    this.subtitleChoice = undefined;
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
     this.externalId = undefined;
