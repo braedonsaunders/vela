@@ -147,6 +147,7 @@ export const RICH_BLOCKS = {
     props: {
       libraryId: { type: 'template', doc: 'The library; the experience\'s when absent.' },
       period: { type: 'enum', values: ['week', 'month', 'year', 'all'], default: 'month', doc: 'The period shown first.' },
+      periodParam: { type: 'template', doc: 'A page param holding the period: the block reads it and changes it with setParam, so a vela.recap source reading {param.<name>} follows.' },
       periodState: { type: 'template', doc: 'A document state value holding the chosen period (`open name=value`), so the page\'s heading can read it.' },
     },
     parts: [],

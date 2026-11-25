@@ -12,18 +12,28 @@
  "params": {
   "library": {
    "type": "string"
+  },
+  "period": {
+   "type": "enum",
+   "enum": [
+    "week",
+    "month",
+    "year",
+    "all"
+   ],
+   "default": "month"
   }
  },
  "sources": {
   "recap": {
    "from": "vela.recap",
-   "period": "{state.period|or:month}",
+   "period": "{param.period|or:month}",
    "library": "{param.library}"
   }
  },
  "tree": {
   "type": "sections",
-  "testId": "music-rewind-page",
+  "testId": "music-main",
   "gap": "0px",
   "children": [
    {
@@ -78,7 +88,7 @@
             }
            },
            {
-            "text": " \u00b7 {s:music.rewind.subtitle|with:period=state.period~or:month~string:music.rewind.period~lower}"
+            "text": " \u00b7 {s:music.rewind.subtitle|with:period=param.period~or:month~string:music.rewind.period~lower}"
            },
            {
             "text": " \u00b7 {s:music.rewind.firstPlay|with:date=src.recap.firstPlayAt~fullDate}",
@@ -96,12 +106,14 @@
         "type": "recap",
         "props": {
          "libraryId": "{param.library}",
+         "periodParam": "period",
          "periodState": "period"
         }
        }
       ]
      }
-    ]
+    ],
+    "testId": "music-rewind-page"
    }
   ]
  }

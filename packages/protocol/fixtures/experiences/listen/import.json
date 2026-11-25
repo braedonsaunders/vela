@@ -7,25 +7,187 @@
  "screen": "listen",
  "page": "import",
  "version": "1",
- "title": "{s:music.import}",
+ "title": "{s:music.import.title}",
  "presentation": "section",
  "params": {
   "library": {
    "type": "string"
   }
  },
- "sources": {},
+ "sources": {
+  "import": {
+   "from": "vela.import"
+  }
+ },
  "tree": {
   "type": "sections",
-  "style": {
-   "padding-bottom": "32px"
-  },
+  "testId": "music-main",
   "children": [
    {
-    "type": "playlistImport",
-    "props": {
-     "libraryId": "{param.library}"
-    }
+    "type": "box",
+    "children": [
+     {
+      "type": "wash",
+      "props": {
+       "height": "420",
+       "accent": "{src.import.matched.0.item.accent}",
+       "image": "{src.import.matched.0.item.poster}"
+      }
+     },
+     {
+      "type": "box",
+      "style": {
+       "padding-left": "28px",
+       "padding-right": "28px",
+       "padding-bottom": "48px"
+      },
+      "small": {
+       "padding-left": "16px",
+       "padding-right": "16px"
+      },
+      "children": [
+       {
+        "type": "collectionHeader",
+        "when": [
+         {
+          "test": "src.import.state",
+          "is": "ne",
+          "value": "idle"
+         },
+         {
+          "test": "state.name",
+          "not": true
+         }
+        ],
+        "props": {
+         "eyebrow": "{s:music.import.eyebrow}",
+         "title": "{src.import.name}"
+        },
+        "partTemplates": {
+         "collectionHeader.cover": {
+          "type": "box",
+          "children": [
+           {
+            "type": "cover",
+            "when": [
+             {
+              "test": "src.import.matched.length"
+             }
+            ],
+            "props": {
+             "kind": "mosaic",
+             "tracks": "{src.import.matched}",
+             "poster": "{src.import.poster}"
+            }
+           },
+           {
+            "type": "cover",
+            "when": [
+             {
+              "test": "src.import.matched.length",
+              "not": true
+             }
+            ],
+            "props": {
+             "kind": "import"
+            }
+           }
+          ]
+         },
+         "collectionHeader.byline": {
+          "type": "importSubtitle"
+         }
+        }
+       },
+       {
+        "type": "collectionHeader",
+        "when": [
+         {
+          "test": "src.import.state",
+          "is": "ne",
+          "value": "idle"
+         },
+         {
+          "test": "state.name"
+         }
+        ],
+        "props": {
+         "eyebrow": "{s:music.import.eyebrow}",
+         "title": "{state.name}"
+        },
+        "partTemplates": {
+         "collectionHeader.cover": {
+          "type": "box",
+          "children": [
+           {
+            "type": "cover",
+            "when": [
+             {
+              "test": "src.import.matched.length"
+             }
+            ],
+            "props": {
+             "kind": "mosaic",
+             "tracks": "{src.import.matched}",
+             "poster": "{src.import.poster}"
+            }
+           },
+           {
+            "type": "cover",
+            "when": [
+             {
+              "test": "src.import.matched.length",
+              "not": true
+             }
+            ],
+            "props": {
+             "kind": "import"
+            }
+           }
+          ]
+         },
+         "collectionHeader.byline": {
+          "type": "importSubtitle"
+         }
+        }
+       },
+       {
+        "type": "collectionHeader",
+        "when": [
+         {
+          "test": "src.import.state",
+          "is": "ne",
+          "value": "idle",
+          "not": true
+         }
+        ],
+        "props": {
+         "eyebrow": "{s:music.import.eyebrow}",
+         "title": "{s:music.import.title}"
+        },
+        "partTemplates": {
+         "collectionHeader.cover": {
+          "type": "cover",
+          "props": {
+           "kind": "import"
+          }
+         },
+         "collectionHeader.byline": {
+          "type": "importSubtitle"
+         }
+        }
+       },
+       {
+        "type": "playlistImport",
+        "props": {
+         "libraryId": "{param.library}",
+         "nameState": "name"
+        }
+       }
+      ]
+     }
+    ],
+    "testId": "music-import-page"
    }
   ],
   "testId": "music-main"

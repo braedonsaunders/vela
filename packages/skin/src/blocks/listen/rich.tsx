@@ -209,14 +209,19 @@ const PERIODS = ['week', 'month', 'year', 'all'] as const;
 
 function RecapRichBlock({ props, ctx, press }: { props: Props; ctx: Ctx; press?(p: ScreenPress): void }) {
   const app = useMusic();
+  // The period lives in a page param (the vela.recap source re-reads on it) or, older documents, in state.
+  const periodParam = props.text('periodParam');
   const periodState = props.text('periodState');
-  const chosen = periodState ? ctx.screen?.state[periodState] : '';
+  const chosen = (periodParam ? ctx.screen?.page.params[periodParam] : '') || (periodState ? ctx.screen?.state[periodState] : '');
   const period: HistoryRecapPeriod = parseEnum(chosen || props.text('period'), PERIODS, 'month');
   return (
     <RecapBlock libraryId={props.text('libraryId') || app.libraryId}
       listening={app.listening === 'audiobook' || app.listening === 'podcast' ? app.listening : 'music'}
       period={period}
-      onPeriodChange={next => { if (periodState) press?.({ action: 'open', arg: `${periodState}=${next}`, args: {}, control: 'recap-period' }); }}
+      onPeriodChange={next => {
+        if (periodParam) press?.({ action: 'setParam', arg: periodParam, args: { name: periodParam, value: next }, control: 'recap-period' });
+        if (periodState) press?.({ action: 'open', arg: `${periodState}=${next}`, args: {}, control: 'recap-period' });
+      }}
       onSelectCard={card => app.go(placeOf(card))}
       onPlayCards={(cards, index) => app.play(cards, index, { id: 'rewind', name: msg('music.rewind.title') })} />
   );

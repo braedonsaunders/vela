@@ -17,67 +17,162 @@
    "type": "string"
   }
  },
- "sources": {},
+ "sources": {
+  "albums": {
+   "from": "vela.library",
+   "id": "{param.library}",
+   "view": "albums",
+   "q": "{param.query}",
+   "limit": "50"
+  }
+ },
  "tree": {
   "type": "sections",
-  "testId": "music-albums",
-  "style": {
-   "padding-left": "28px",
-   "padding-right": "28px",
-   "padding-top": "24px",
-   "padding-bottom": "24px"
-  },
-  "small": {
-   "padding-left": "16px",
-   "padding-right": "16px",
-   "padding-top": "12px"
-  },
-  "tv": {
-   "padding-left": "28px",
-   "padding-right": "28px"
-  },
   "children": [
    {
-    "type": "text",
-    "text": "{s:music.albums}",
+    "type": "box",
+    "testId": "music-albums",
     "style": {
-     "font-size": "13px",
-     "font-weight": "700",
-     "letter-spacing": "0.16em",
-     "text-transform": "uppercase",
-     "color": "$ui.inkSecondary"
-    },
-    "tv": {
-     "font-size": "16px"
-    }
-   },
-   {
-    "type": "text",
-    "role": "heading",
-    "level": 1,
-    "text": "{s:music.albumsMatching|with:query=param.query}",
-    "style": {
-     "font-family": "$ui.fontDisplay",
-     "font-size": "34px",
-     "color": "$ui.ink",
-     "letter-spacing": "-0.01em",
-     "margin-top": "4px",
-     "margin-bottom": "18px"
+     "padding-left": "28px",
+     "padding-right": "28px",
+     "padding-top": "24px",
+     "padding-bottom": "24px"
     },
     "small": {
-     "font-size": "26px",
-     "margin-bottom": "12px"
+     "padding-left": "16px",
+     "padding-right": "16px",
+     "padding-top": "12px"
     },
-    "tv": {
-     "font-size": "40px"
-    }
-   },
-   {
-    "type": "albumsGrid",
-    "props": {
-     "query": "{param.query}"
-    }
+    "children": [
+     {
+      "type": "text",
+      "text": "{s:music.albums}",
+      "style": {
+       "font-size": "13px",
+       "font-weight": "700",
+       "letter-spacing": "0.16em",
+       "text-transform": "uppercase",
+       "color": "$ui.inkSecondary"
+      },
+      "tv": {
+       "font-size": "16px"
+      }
+     },
+     {
+      "type": "text",
+      "role": "heading",
+      "level": 1,
+      "text": "{s:music.albumsMatching|with:query=param.query}",
+      "style": {
+       "font-family": "$ui.fontDisplay",
+       "font-size": "34px",
+       "color": "$ui.ink",
+       "letter-spacing": "-0.01em",
+       "margin-top": "4px",
+       "margin-bottom": "18px",
+       "line-clamp": "2"
+      },
+      "small": {
+       "font-size": "26px",
+       "margin-bottom": "12px"
+      },
+      "tv": {
+       "font-size": "40px"
+      }
+     },
+     {
+      "type": "text",
+      "testId": "music-albums-empty",
+      "text": "{s:listening.noResults|with:query=param.query}",
+      "when": [
+       {
+        "test": "src.albums.items.length",
+        "is": "eq",
+        "value": "0"
+       },
+       {
+        "test": "src.albums.$pending",
+        "not": true
+       },
+       {
+        "test": "src.albums.$error",
+        "not": true
+       }
+      ],
+      "style": {
+       "font-size": "15px",
+       "color": "$ui.inkSecondary"
+      },
+      "tv": {
+       "font-size": "20px"
+      }
+     },
+     {
+      "type": "text",
+      "testId": "music-albums-empty",
+      "text": "{s:listening.noResults|with:query=param.query}",
+      "when": [
+       {
+        "test": "src.albums.$error",
+        "is": "eq",
+        "value": "unsupported"
+       }
+      ],
+      "style": {
+       "font-size": "15px",
+       "color": "$ui.inkSecondary"
+      },
+      "tv": {
+       "font-size": "20px"
+      }
+     },
+     {
+      "type": "text",
+      "testId": "music-albums-loading",
+      "text": "{s:listening.searching}",
+      "when": [
+       {
+        "test": "src.albums.items.length",
+        "not": true
+       },
+       {
+        "test": "src.albums.$pending"
+       }
+      ],
+      "style": {
+       "font-size": "15px",
+       "color": "$ui.inkSecondary"
+      },
+      "tv": {
+       "font-size": "20px"
+      }
+     },
+     {
+      "type": "box",
+      "style": {
+       "margin-left": "-12px",
+       "margin-right": "-12px"
+      },
+      "small": {
+       "margin-left": "-8px",
+       "margin-right": "-8px"
+      },
+      "children": [
+       {
+        "type": "tileGrid",
+        "props": {
+         "items": "{src.albums}",
+         "source": "albums",
+         "pending": "{src.albums.$pending}",
+         "failed": "{src.albums.$error}",
+         "subtitle": "yearByline"
+        }
+       }
+      ]
+     }
+    ]
    }
-  ]
+  ],
+  "testId": "music-main"
  }
 }
