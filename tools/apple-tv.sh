@@ -76,8 +76,10 @@ if [ "$simulator" = 0 ] && [ -z "$team" ]; then
 fi
 
 project="$root/apps/vela/ios/Vela.xcodeproj/project.pbxproj"
-# A project generated for iPhone (tools/ios.sh) builds nothing for Apple TV: regenerate it.
-if [ -f "$project" ] && ! grep -q 'SDKROOT = appletvos' "$project"; then prebuild=1; fi
+# Regenerate iPhone projects and Apple TV projects created before the Top Shelf extension.
+if [ -f "$project" ] && { ! grep -q 'SDKROOT = appletvos' "$project" || ! grep -q 'VelaTopShelfExtension.appex' "$project"; }; then
+  prebuild=1
+fi
 # libass (ASS/SSA as authored) is built once per checkout and again when ass/build.sh changes; the
 # podspec picks it up at pod install.
 if ! "$root/modules/vela-player/ios/ass/build.sh" --check; then
@@ -91,7 +93,11 @@ fi
 cd "$root/apps/vela/ios"
 # The generated project keeps the version it was generated with: the app's version is app.json's.
 version=$(sed -n 's/^ *"version": "\([0-9.]*\)".*/\1/p' "$root/apps/vela/app.json" | head -1)
-[ -n "$version" ] && /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" Vela/Info.plist
+if [ -n "$version" ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" Vela/Info.plist
+  # The Top Shelf extension carries the app's version.
+  [ ! -f VelaTopShelfExtension/VelaTopShelfExtension-Info.plist ] || /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" VelaTopShelfExtension/VelaTopShelfExtension-Info.plist
+fi
 # A native module's new or removed files join the Pods project only through pod install.
 if [ -n "$(find "$root/modules" -path '*/ios/*' -newer Pods/Manifest.lock -print -quit 2>/dev/null)" ]; then
   pod install >/dev/null

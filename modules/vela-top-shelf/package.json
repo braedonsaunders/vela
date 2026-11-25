@@ -1,0 +1,9 @@
+{
+  "name": "@vela/top-shelf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Apple TV Top Shelf: Continue Watching written to an App Group for a TV Services extension the config plugin adds",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": { "expo": "*", "expo-modules-core": "*", "react-native": "*" }
+}

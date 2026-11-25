@@ -13,6 +13,7 @@ support is under active development; a build does not establish device parity.
 | `packages/player-api` | Shared player view contract |
 | `modules/vela-player` | Native playback module and web player |
 | `modules/vela-fold` | A foldable's posture and fold (iPhone Duo); flat elsewhere |
+| `modules/vela-top-shelf` | Apple TV Top Shelf: Continue Watching in an App Group, read by a TV Services extension |
 | `mock-server` | Fixture-backed Bun protocol server |
 | `tools/release` | Web export, inventory, signing and distribution tooling |
 
