@@ -42,7 +42,8 @@ describe('renderer 20 and the renderer-bump rule', () => {
   });
   test('every renderer-19 plugin document (Sports, the news desk) still resolves unchanged in shape', () => {
     const fixtures = join(import.meta.dir, '../../protocol/fixtures/screens');
-    const files = readdirSync(fixtures, { recursive: true }).map(String).filter(f => f.endsWith('.json') && !/(^|\/)data/.test(f));
+    // Sports' and the news desk's (the mock music plugin's slot panel is a renderer-20 document).
+    const files = readdirSync(fixtures, { recursive: true }).map(String).filter(f => f.endsWith('.json') && !/(^|\/)data/.test(f) && /^(sports|news)\//.test(f));
     expect(files.length).toBeGreaterThan(5);
     for (const file of files) {
       const doc = JSON.parse(readFileSync(join(fixtures, file), 'utf8')) as ScreenDocument;
