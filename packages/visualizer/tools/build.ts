@@ -4,6 +4,8 @@
 // dist/programs.json     every program the bundle links, captured by running it headless against a recording host
 import { bakeCountryMap } from './country-map';
 import { mapAtlasSource, mapAtlasVariant } from './map-atlas';
+import { rendererParts } from './renderer-parts';
+import review from '../review.json';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -15,7 +17,7 @@ const only = opt('--scenes')?.split(',');
 const production = args.includes('--production');
 
 const fw = path.resolve(opt('--framework') ?? path.join(root, production ? 'scenes' : 'framework'));
-const parts = fs.readdirSync(fw).filter(f => /^[1-9]\d_.*\.js$/.test(f) && f !== '95_ui.js' && f !== '11_synth.js').sort()
+const parts = rendererParts(fw, !production || review.includeForest)
   .filter(f => {
     if (!only || !/^[3-6]\d_/.test(f)) return true;
     const src = fs.readFileSync(path.join(fw, f), 'utf8'); const m = /scene\(\{\s*id:\s*'([^']+)'/.exec(src);

@@ -1,5 +1,5 @@
 
-// ───────────── Shared helpers for scenes: reduced-resolution targets, a 2D fluid solver, a text atlas ─────────────
+// ───────────── Shared helpers for scenes: reduced-resolution targets and a 2D fluid solver ─────────────
 // A scene-owned target at 1/div of the render size, rebuilt with the rest when the size changes. Soft volumes
 // (nebula, aurora) are marched at half size and enlarged; that is a 4× saving and the right first cut on phones.
 function RTs(name, div) { return T.pool[name] || (T.pool[name] = target(Math.max(2, Math.ceil(T.sw / div)), Math.max(2, Math.ceil(T.sh / div)))); }
@@ -44,7 +44,7 @@ function Fluid(w, h, dw, dh) {
   Object.assign(this, { w, h, dw, dh, v: [mk(w, h), mk(w, h)], p: [mk(w, h), mk(w, h)], aux: mk(w, h), d: [mk(dw, dh), mk(dw, dh)] });
 }
 Fluid.prototype.step = function (dt, o) {
-  const { w, h, dw, dh, v, p, aux, d } = this, tx = [1 / w, 1 / h], asp = w / h;
+  const { w, h, dw, dh, v, p, aux, d } = this, tx = [1 / w, 1 / h], asp = o.asp || w / h;   // o.asp: the aspect of the screen area the grid is stretched over
   const pass = (prog, dst, W, H, set) => draw(prog, dst, W, H, set);
   dt = Math.min(dt, 1 / 30);
   // velocity: carry itself along, take the scene's forces, keep its curls alive, then make it divergence-free
@@ -67,22 +67,6 @@ Fluid.prototype.step = function (dt, o) {
   pass(FLUID.advect, d[1], dw, dh, u => { bindTex(4, v[0].t); gl.uniform1i(u.uVel, 4); bindTex(5, d[0].t); gl.uniform1i(u.uSrc, 5); gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uKeep, 1); gl.uniform1f(u.uAsp, asp); gl.uniform1f(u.uWall, 0); });
   pass(o.dye, d[0], dw, dh, u => { o.set(u); bindTex(4, v[0].t); gl.uniform1i(u.uVel, 4); bindTex(5, d[1].t); gl.uniform1i(u.uDye, 5); gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uAsp, asp); });
 };
-
-// Words as a texture: `labels` drawn in a grid of cells with the platform's text renderer. A port replaces
-// this one function with its own text rasteriser (Core Text, Skia paragraph) and keeps the same atlas layout.
-function textAtlas(labels, cols, cw, ch, font) {
-  const rows = Math.ceil(labels.length / cols), c = document.createElement('canvas'); c.width = cols * cw; c.height = rows * ch;
-  const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
-  x.fillStyle = '#fff'; x.font = font; x.textBaseline = 'middle'; x.textAlign = 'left';
-  try { x.letterSpacing = '3px'; } catch (e) {}
-  labels.forEach((s, i) => x.fillText(s, (i % cols) * cw + 6, ((i / cols) | 0) * ch + ch / 2 + 1, cw - 12));
-  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return { t, cols, rows, n: labels.length };
-}
 
 // Calls fn(slot) for every kick pulse that has started since the last call (scenes use it to give each
 // pulse a place of its own: where a drop lands, where a ripple starts).

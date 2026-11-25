@@ -14261,10 +14261,19 @@ struct p036_vert_out
 }
 
 namespace p036_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
 
 
 
 using namespace metal;
+
+// Implementation of the GLSL mod() function, which is slightly different than Metal fmod()
+template<typename Tx, typename Ty>
+inline Tx mod(Tx x, Ty y)
+{
+    return x - y * floor(x / y);
+}
 
 struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
 {
@@ -14304,9 +14313,13 @@ struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
     float3 uPA[4];
     float3 uPB[4];
     float uDt;
+    float4 uWashAge[8];
+    float4 uDropP[8];
+    float4 uSpl[4];
+    float4 uStk[6];
+    float4 uStk2[6];
+    float4 uDot[8];
     float uAsp;
-    float3 uTip[3];
-    float4 uSide[8];
 };
 
 struct p036_frag_out
@@ -14319,33 +14332,246 @@ struct p036_frag_in
     float2 uv [[user(locn0)]];
 };
 
-[[host_name("p036_frag")]] fragment p036_frag_out p036_frag(p036_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _52 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], texture2d<float> uDye [[texture(1)]], sampler uVelSmplr [[sampler(0)]], sampler uDyeSmplr [[sampler(1)]])
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _97 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _104 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _112 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _117 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _128 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _133 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _141 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _146 = hash(param_7);
+    return mix(mix(mix(_97, _104, f.x), mix(_112, _117, f.x), f.y), mix(mix(_128, _133, f.x), mix(_141, _146, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float psi(thread const float2& p, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _201)
+{
+    float3 param = float3(p * 3.2000000476837158203125, _201.uTime * 0.0500000007450580596923828125);
+    return _noise(param);
+}
+
+static inline __attribute__((always_inline))
+float3 paintOf(thread float& k)
+{
+    k = mod(k, 3.0);
+    return fast::clamp(float3(fast::max(1.0 - abs(k), 1.0 - abs(k - 3.0)), 1.0 - abs(k - 1.0), 1.0 - abs(k - 2.0)), float3(0.0), float3(1.0));
+}
+
+static inline __attribute__((always_inline))
+float hash2(thread const float2& p)
+{
+    return fract(sin(dot(p, float2(127.09999847412109375, 311.70001220703125))) * 43758.546875);
+}
+
+static inline __attribute__((always_inline))
+float land(thread const float& a)
+{
+    return exp((-a) * 12.0) * 3.599999904632568359375;
+}
+
+[[host_name("p036_frag")]] fragment p036_frag_out p036_frag(p036_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _201 [[buffer(0)]], texture2d<float> uState [[texture(0)]], sampler uStateSmplr [[sampler(0)]])
 {
     p036_frag_out out = {};
-    float2 v = uVel.sample(uVelSmplr, in.uv).xy;
-    float3 sm = uDye.sample(uDyeSmplr, in.uv).xyz;
-    float den = dot(sm, float3(1.0));
-    v.y += ((((sm.x * (0.4000000059604644775390625 + (0.89999997615814208984375 * _52.uBandE[0u]))) + (sm.y * (0.449999988079071044921875 + (0.800000011920928955078125 * _52.uBandE[1u])))) + (sm.z * (0.5 + (0.800000011920928955078125 * _52.uBandE[2u])))) * _52.uDt);
-    for (int i = 0; i < 3; i++)
+    float2 p = in.uv * float2(_201.uAsp, 1.0);
+    float2 tx = float2(0.001041666720993816852569580078125, 0.00166666670702397823333740234375);
+    float2 param = p + float2(0.0, 0.0199999995529651641845703125);
+    float2 param_1 = p - float2(0.0, 0.0199999995529651641845703125);
+    float2 param_2 = p - float2(0.0199999995529651641845703125, 0.0);
+    float2 param_3 = p + float2(0.0199999995529651641845703125, 0.0);
+    float2 v = ((float2(psi(param, _201) - psi(param_1, _201), psi(param_2, _201) - psi(param_3, _201)) / float2(0.039999999105930328369140625)) * 0.010999999940395355224609375) * (0.5 + _201.uMidS);
+    for (int i = 0; i < 8; i++)
     {
-        float2 d = (in.uv - _52.uTip[i].xy) * float2(_52.uAsp, 1.0);
-        v += (((float2(0.0, 1.0) * exp((-dot(d, d)) / 0.00039999998989515006542205810546875)) * _52.uDt) * ((3.5 + (3.0 * _52.uBandE[i])) + (4.0 * _52.uHitS[i])));
-    }
-    for (int i_1 = 0; i_1 < 8; i_1++)
-    {
-        float a = _52.uPulse[i_1].x;
-        if (a > 0.89999997615814208984375)
+        float a = _201.uWashAge[i].x;
+        if (a > 1.2000000476837158203125)
         {
             continue;
         }
-        float front = (in.uv.y - 0.2700000107288360595703125) - (a * 0.949999988079071044921875);
-        float gust = exp(((-front) * front) / 0.0430000014603137969970703125) * exp((-a) * 4.0);
-        v.x += (((_52.uSide[i_1].x * gust) * _52.uDt) * 1.60000002384185791015625);
+        float2 d = (in.uv - _201.uDropP[i].xy) * float2(_201.uAsp, 1.0);
+        float R = _201.uDropP[i].z;
+        v += (((((d / float2(length(d) + 9.9999997473787516355514526367188e-05)) * exp((-dot(d, d)) / ((R * R) * 1.60000002384185791015625))) * smoothstep(0.0, 0.100000001490116119384765625, a)) * (1.0 - smoothstep(0.20000000298023223876953125, 1.0, a))) * 0.0900000035762786865234375);
     }
-    float height = smoothstep(0.20000000298023223876953125, 0.800000011920928955078125, in.uv.y);
-    v.x += (((((precise::tanh((in.uv.x - 0.5) * 5.0) * 0.20000000298023223876953125) + (sin((in.uv.y * 11.0) - (_52.uTime * 0.20000000298023223876953125)) * 0.100000001490116119384765625)) * height) * _52.uDt) * fast::min(den, 1.0));
-    v.x += ((_52.uDt * (((sin((in.uv.y * 15.0) + (_52.uTime * 0.20000000298023223876953125)) * _52.uHitS.z) * 0.5) + ((sin((in.uv.y * 24.0) - (_52.uTime * 0.20000000298023223876953125)) * _52.uBandE[2u]) * 0.1500000059604644775390625))) * smoothstep(0.20000000298023223876953125, 0.680000007152557373046875, in.uv.y));
-    out.o = float4(v, 0.0, 1.0);
+    float wet0 = uState.sample(uStateSmplr, in.uv).w;
+    float2 src = in.uv - (((v / float2(_201.uAsp, 1.0)) * _201.uDt) * (0.25 + wet0));
+    float4 s = uState.sample(uStateSmplr, src);
+    float4 av = (((uState.sample(uStateSmplr, (src + float2(tx.x * 1.5, 0.0))) + uState.sample(uStateSmplr, (src - float2(tx.x * 1.5, 0.0)))) + uState.sample(uStateSmplr, (src + float2(0.0, tx.y * 1.5)))) + uState.sample(uStateSmplr, (src - float2(0.0, tx.y * 1.5)))) * 0.25;
+    float k = fast::clamp((s.w * _201.uDt) * 24.0, 0.0, 0.60000002384185791015625);
+    float4 _424 = s;
+    float3 _430 = mix(_424.xyz, av.xyz, float3(k));
+    s.x = _430.x;
+    s.y = _430.y;
+    s.z = _430.z;
+    s.w = mix(s.w, av.w, k * 0.60000002384185791015625);
+    for (int i_1 = 0; i_1 < 8; i_1++)
+    {
+        float a_1 = _201.uWashAge[i_1].x;
+        if (a_1 > 0.699999988079071044921875)
+        {
+            continue;
+        }
+        float2 d_1 = (in.uv - _201.uDropP[i_1].xy) * float2(_201.uAsp, 1.0);
+        float r = length(d_1);
+        float R_1 = _201.uDropP[i_1].z * (1.0 + (0.62000000476837158203125 * _201.uBandE[0u]));
+        float seed = _201.uDropP[i_1].w;
+        float theta = precise::atan2(d_1.y, d_1.x);
+        float petal = 0.5 + (0.5 * sin(((theta * 9.0) + seed) + (1.5 * sin((theta * 3.0) + seed))));
+        float3 param_4 = float3(d_1 * 22.0, seed);
+        float jag = (0.660000026226043701171875 + (0.25 * petal)) + (0.2199999988079071044921875 * _noise(param_4));
+        float rr = r / fast::max(0.001000000047497451305389404296875, R_1 * jag);
+        float reach = 0.550000011920928955078125 + (0.60000002384185791015625 * (1.0 - exp((-a_1) * 23.0)));
+        float crown = exp(-powr((rr - reach) / 0.12999999523162841796875, 2.0));
+        float wet = 1.0 - smoothstep(reach * 0.4799999892711639404296875, reach, rr);
+        float hit = ((((1.0 - exp((-a_1) * 30.0)) * exp((-a_1) * 10.0)) * 0.75) * ((wet * 1.39999997615814208984375) + (crown * 0.949999988079071044921875))) * (1.0 + (0.699999988079071044921875 * _201.uBassS));
+        float param_5 = seed;
+        float3 _598 = paintOf(param_5);
+        float3 centre = _598;
+        float param_6 = (seed + 0.85000002384185791015625) + (petal * 0.4199999868869781494140625);
+        float3 _608 = paintOf(param_6);
+        float3 fringe = _608;
+        float3 pigment = mix(centre, fringe, float3(smoothstep(0.12999999523162841796875, 0.9900000095367431640625, rr))) * (0.819999992847442626953125 + (0.37000000476837158203125 * petal));
+        float4 _623 = s;
+        float3 _642 = mix(_623.xyz, pigment * (0.550000011920928955078125 + ((0.75 * _201.uDropP[i_1].z) / 0.2599999904632568359375)), float3(fast::clamp((hit * _201.uDt) * 23.0, 0.0, 0.800000011920928955078125)));
+        s.x = _642.x;
+        s.y = _642.y;
+        s.z = _642.z;
+        float2 fleckGrid = (d_1 / float2(R_1 + 9.9999997473787516355514526367188e-05)) * 13.0;
+        float2 cell = floor(fleckGrid);
+        float2 param_7 = cell + float2(seed);
+        float2 param_8 = (cell + float2(seed)) + float2(3.0);
+        float2 offset = fract(fleckGrid) - float2(hash2(param_7), hash2(param_8));
+        float2 param_9 = (cell + float2(seed)) + float2(9.0);
+        float spatter = ((exp((-dot(offset, offset)) * 31.0) * step(0.7200000286102294921875, hash2(param_9))) * smoothstep(0.5, 0.89999997615814208984375, rr)) * (1.0 - smoothstep(1.0, 1.7000000476837158203125, rr));
+        float4 _720 = s;
+        float3 _722 = _720.xyz + ((((fringe * spatter) * exp((-a_1) * 23.0)) * _201.uDt) * 27.0);
+        s.x = _722.x;
+        s.y = _722.y;
+        s.z = _722.z;
+        s.w = fast::max(s.w, wet * 0.7200000286102294921875);
+    }
+    for (int i_2 = 0; i_2 < 6; i_2++)
+    {
+        float a_2 = _201.uStk[i_2].w;
+        if (a_2 > (0.5 + _201.uDt))
+        {
+            continue;
+        }
+        float u1 = fast::clamp(a_2 / 0.5, 0.0, 1.0);
+        float u0 = fast::clamp((a_2 - _201.uDt) / 0.5, 0.0, 1.0);
+        float e1 = 1.0 - ((1.0 - u1) * (1.0 - u1));
+        float e0 = 1.0 - ((1.0 - u0) * (1.0 - u0));
+        float ang = _201.uStk[i_2].z;
+        float L = _201.uStk2[i_2].x;
+        float cv = _201.uStk2[i_2].z;
+        float w = _201.uStk2[i_2].y * (0.550000011920928955078125 + (0.449999988079071044921875 * sin(3.1415927410125732421875 * fast::min(u1 * 1.14999997615814208984375, 1.0))));
+        float2 dir = float2(cos(ang), sin(ang));
+        float2 per = float2(-dir.y, dir.x);
+        float2 o0 = _201.uStk[i_2].xy * float2(_201.uAsp, 1.0);
+        float2 h0 = o0 + (((dir * e0) + (per * ((cv * e0) * e0))) * L);
+        float2 h1 = o0 + (((dir * e1) + (per * ((cv * e1) * e1))) * L);
+        float2 sg = h1 - h0;
+        float sl = length(sg);
+        if (sl < 9.9999999747524270787835121154785e-07)
+        {
+            continue;
+        }
+        float2 tg = sg / float2(sl);
+        float2 nm = float2(-tg.y, tg.x);
+        float2 d_2 = p - h0;
+        float al = dot(d_2, tg);
+        float ac = dot(d_2, nm) / w;
+        float dd = abs(ac);
+        if (((dd > 1.10000002384185791015625) || (al < 0.0)) || (al > sl))
+        {
+            continue;
+        }
+        float load = 1.0 - (0.800000011920928955078125 * u1);
+        float3 param_10 = float3((ac * 4.5) + (ang * 9.0), ang * 31.0, (e1 * L) * 5.0);
+        float3 param_11 = float3(ac * 13.0, ang * 7.0, (e1 * L) * 9.0);
+        float bris = smoothstep(0.62000000476837158203125 - (0.5 * load), 0.7799999713897705078125 - (0.5 * load), ((_noise(param_10) * 0.60000002384185791015625) + (_noise(param_11) * 0.4000000059604644775390625)) + (0.25 * load));
+        float foot = smoothstep(1.0, 0.800000011920928955078125, dd);
+        float param_12 = _201.uStk2[i_2].w;
+        float3 _975 = paintOf(param_12);
+        float4 _985 = s;
+        float3 _987 = _985.xyz + ((((_975 * foot) * bris) * (0.5 + (0.5 * load))) * 1.10000002384185791015625);
+        s.x = _987.x;
+        s.y = _987.y;
+        s.z = _987.z;
+        s.w = fast::max(s.w, foot * 0.180000007152557373046875);
+    }
+    for (int i_3 = 0; i_3 < 8; i_3++)
+    {
+        float a_3 = _201.uDot[i_3].w;
+        if (a_3 > 0.4000000059604644775390625)
+        {
+            continue;
+        }
+        float dd_1 = length((in.uv - _201.uDot[i_3].xy) * float2(_201.uAsp, 1.0)) / _201.uDot[i_3].z;
+        float param_13 = float(i_3) * 1.2999999523162841796875;
+        float3 _1042 = paintOf(param_13);
+        float param_14 = a_3;
+        float4 _1057 = s;
+        float3 _1059 = _1057.xyz + ((((((_1042 * 0.60000002384185791015625) + float3(0.5)) * smoothstep(1.0, 0.699999988079071044921875, dd_1)) * land(param_14)) * _201.uDt) * 9.0);
+        s.x = _1059.x;
+        s.y = _1059.y;
+        s.z = _1059.z;
+        s.w = fast::max(s.w, (smoothstep(1.2999999523162841796875, 0.800000011920928955078125, dd_1) * 0.300000011920928955078125) * smoothstep(0.0, 0.100000001490116119384765625, a_3));
+    }
+    for (int j = 0; j < 4; j++)
+    {
+        float a_4 = _201.uSpl[j].w;
+        if (a_4 > 0.5)
+        {
+            continue;
+        }
+        float2 q = ((in.uv - _201.uSpl[j].xy) * float2(_201.uAsp, 1.0)) / float2(0.02999999932944774627685546875);
+        float2 c = floor(q);
+        float sd = _201.uSpl[j].z;
+        float2 param_15 = c + float2(sd * 17.0);
+        float h = hash2(param_15);
+        float2 param_16 = c + float2(sd * 5.0);
+        float keep = step(0.7400000095367431640625, h) * smoothstep(8.0, 1.0, length(c) + (3.0 * hash2(param_16)));
+        float2 param_17 = c + float2(sd);
+        float2 param_18 = (c + float2(sd)) + float2(3.0);
+        float dd_2 = length(((q - c) - float2(0.119999997317790985107421875)) - (float2(hash2(param_17), hash2(param_18)) * 0.7599999904632568359375));
+        float param_19 = (sd * 3.0) + h;
+        float3 _1176 = paintOf(param_19);
+        float param_20 = a_4;
+        float4 _1193 = s;
+        float3 _1195 = _1193.xyz + (((((_1176 * smoothstep(0.119999997317790985107421875 + (0.300000011920928955078125 * h), 0.039999999105930328369140625, dd_2)) * keep) * land(param_20)) * _201.uDt) * 7.0);
+        s.x = _1195.x;
+        s.y = _1195.y;
+        s.z = _1195.z;
+        s.w = fast::max(s.w, ((smoothstep(0.5, 0.100000001490116119384765625, dd_2) * keep) * 0.5) * smoothstep(0.0, 0.100000001490116119384765625, a_4));
+    }
+    s.w = fast::max(s.w - (_201.uDt * 0.12999999523162841796875), 0.0);
+    float4 _1224 = s;
+    float _1239 = s.w;
+    float3 _1246 = fast::min(_1224.xyz * exp(((-_201.uDt) * (0.026000000536441802978515625 + (0.0199999995529651641845703125 * (1.0 - _201.uDyn)))) * (1.0 + (2.2000000476837158203125 * _1239))), float3(3.0));
+    s.x = _1246.x;
+    s.y = _1246.y;
+    s.z = _1246.z;
+    out.o = s;
     return out;
 }
 
@@ -14489,11 +14715,50 @@ struct p037_vert_out
 
 namespace p037_frag_scope {
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
 
 
 
 
 using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
 
 struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
 {
@@ -14532,10 +14797,6 @@ struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
     float3 uCamF;
     float3 uPA[4];
     float3 uPB[4];
-    float uDt;
-    float uAsp;
-    float3 uTip[3];
-    float4 uSide[8];
 };
 
 struct p037_frag_out
@@ -14543,29 +14804,120 @@ struct p037_frag_out
     float4 o [[color(0)]];
 };
 
-struct p037_frag_in
-{
-    float2 uv [[user(locn0)]];
-};
-
 static inline __attribute__((always_inline))
-float3 own(thread const int& i)
+float hash(thread float3& p)
 {
-    return float3(float(i == 0), float(i == 1), float(i == 2));
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
 }
 
-[[host_name("p037_frag")]] fragment p037_frag_out p037_frag(p037_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _58 [[buffer(0)]], texture2d<float> uDye [[texture(0)]], sampler uDyeSmplr [[sampler(0)]])
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _90 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _97 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _105 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _110 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _121 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _126 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _134 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _139 = hash(param_7);
+    return mix(mix(mix(_90, _97, f.x), mix(_105, _110, f.x), f.y), mix(mix(_121, _126, f.x), mix(_134, _139, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float tooth(thread const float2& p)
+{
+    float3 param = float3(p * 150.0, 1.0);
+    float3 param_1 = float3(p * 64.0, 5.0);
+    float3 param_2 = float3(p * float2(22.0, 300.0), 9.0);
+    return ((_noise(param) * 0.449999988079071044921875) + (_noise(param_1) * 0.3499999940395355224609375)) + (_noise(param_2) * 0.20000000298023223876953125);
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _182)
+{
+    t += _182.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _182.uPA[0];
+    param[1] = _182.uPA[1];
+    param[2] = _182.uPA[2];
+    param[3] = _182.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _211;
+    if (_182.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _182.uPB[0];
+        param_2[1] = _182.uPB[1];
+        param_2[2] = _182.uPB[2];
+        param_2[3] = _182.uPB[3];
+        float param_3 = t;
+        _211 = mix(c, palOf(param_2, param_3), float3(_182.uPalMix));
+    }
+    else
+    {
+        _211 = c;
+    }
+    return _211;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _182)
+{
+    float param = t;
+    float3 _243 = pal(param, _182);
+    float3 c = fast::max(_243, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+[[host_name("p037_frag")]] fragment p037_frag_out p037_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _182 [[buffer(0)]], texture2d<float> uState [[texture(0)]], sampler uStateSmplr [[sampler(0)]], float4 gl_FragCoord [[position]])
 {
     p037_frag_out out = {};
-    float3 s = uDye.sample(uDyeSmplr, in.uv).xyz * exp((-_58.uDt) * 0.070000000298023223876953125);
-    for (int i = 0; i < 3; i++)
-    {
-        float2 d = (in.uv - _58.uTip[i].xy) * float2(_58.uAsp, 1.0);
-        int param = i;
-        s += (((own(param) * exp((-dot(d, d)) / 0.00011000000085914507508277893066406)) * _58.uDt) * ((3.0 + ((16.0 * _58.uBandE[i]) * _58.uBandE[i])) + (22.0 * _58.uHit[i])));
-    }
-    s *= (1.0 - ((_58.uDt * 2.0) * smoothstep(0.930000007152557373046875, 1.0, in.uv.y)));
-    out.o = float4(fast::min(s, float3(3.0)), 1.0);
+    float2 uv = gl_FragCoord.xy / _182.uRes;
+    float2 p = uv * float2(_182.uRes.x / _182.uRes.y, 1.0);
+    float2 e = float2(0.001562500023283064365386962890625, 0.0024999999441206455230712890625);
+    float4 s = uState.sample(uStateSmplr, uv);
+    float3 gx = uState.sample(uStateSmplr, (uv + float2(e.x, 0.0))).xyz - uState.sample(uStateSmplr, (uv - float2(e.x, 0.0))).xyz;
+    float3 gy = uState.sample(uStateSmplr, (uv + float2(0.0, e.y))).xyz - uState.sample(uStateSmplr, (uv - float2(0.0, e.y))).xyz;
+    float2 param = p;
+    float th = tooth(param);
+    float dens = dot(s.xyz, float3(1.0));
+    float edge = length(float2(dot(gx, float3(1.0)), dot(gy, float3(1.0))));
+    float3 pig = (s.xyz * (1.0 + (((0.5 - th) * 0.60000002384185791015625) * (1.0 - (0.60000002384185791015625 * s.w))))) + ((((s.xyz / float3(fast::max(dens, 0.001000000047497451305389404296875))) * edge) * 2.599999904632568359375) * (1.0 - (0.5 * s.w)));
+    float param_1 = 0.0;
+    float3 c0 = mix(float3(0.100000001490116119384765625, 0.23999999463558197021484375, 0.699999988079071044921875), neon(param_1, _182), float3(0.100000001490116119384765625));
+    float param_2 = 0.3300000131130218505859375;
+    float3 c1 = mix(float3(0.819999992847442626953125, 0.12999999523162841796875, 0.2700000107288360595703125), neon(param_2, _182), float3(0.100000001490116119384765625));
+    float param_3 = 0.660000026226043701171875;
+    float3 c2 = mix(float3(0.959999978542327880859375, 0.660000026226043701171875, 0.14000000059604644775390625), neon(param_3, _182), float3(0.100000001490116119384765625));
+    float3 T = exp((-((((-log(fast::max(c0, float3(0.039999999105930328369140625)))) * pig.x) + ((-log(fast::max(c1, float3(0.039999999105930328369140625)))) * pig.y)) + ((-log(fast::max(c2, float3(0.039999999105930328369140625)))) * pig.z))) * 0.85000002384185791015625);
+    float3 paper = (float3(0.930000007152557373046875, 0.9049999713897705078125, 0.85000002384185791015625) * (0.89999997615814208984375 + (0.14000000059604644775390625 * th))) * (1.0 - (0.070000000298023223876953125 * s.w));
+    float3 param_4 = float3(p * float2(3.0, 60.0), 3.0);
+    paper *= (0.9700000286102294921875 + (0.02999999932944774627685546875 * _noise(param_4)));
+    float2 q = (gl_FragCoord.xy / _182.uRes) - float2(0.5);
+    out.o = float4((paper * T) * (1.019999980926513671875 - (0.5 * dot(q, q))), 1.0);
     return out;
 }
 
@@ -14709,50 +15061,11 @@ struct p038_vert_out
 
 namespace p038_frag_scope {
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
-#pragma clang diagnostic ignored "-Wmissing-braces"
 
 
 
 
 using namespace metal;
-
-template<typename T, size_t Num>
-struct spvUnsafeArray
-{
-    T elements[Num ? Num : 1];
-
-    thread T& operator [] (size_t pos) thread
-    {
-        return elements[pos];
-    }
-    constexpr const thread T& operator [] (size_t pos) const thread
-    {
-        return elements[pos];
-    }
-
-    device T& operator [] (size_t pos) device
-    {
-        return elements[pos];
-    }
-    constexpr const device T& operator [] (size_t pos) const device
-    {
-        return elements[pos];
-    }
-
-    constexpr const constant T& operator [] (size_t pos) const constant
-    {
-        return elements[pos];
-    }
-
-    threadgroup T& operator [] (size_t pos) threadgroup
-    {
-        return elements[pos];
-    }
-    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
-    {
-        return elements[pos];
-    }
-};
 
 struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
 {
@@ -14791,7 +15104,11 @@ struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
     float3 uCamF;
     float3 uPA[4];
     float3 uPB[4];
-    float3 uTip[3];
+    float uDt;
+    float uAsp;
+    float4 uJetAge[8];
+    float4 uDropP[8];
+    float4 uDropV[8];
 };
 
 struct p038_frag_out
@@ -14799,121 +15116,40 @@ struct p038_frag_out
     float4 o [[color(0)]];
 };
 
-static inline __attribute__((always_inline))
-float2 cover(thread const float2& uv, thread const float& simAsp, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66)
+struct p038_frag_in
 {
-    float a = _66.uRes.x / _66.uRes.y;
-    float2 _178;
-    if (a > simAsp)
-    {
-        _178 = float2(uv.x, ((uv.y - 0.5) * (simAsp / a)) + 0.5);
-    }
-    else
-    {
-        _178 = float2(((uv.x - 0.5) * (a / simAsp)) + 0.5, uv.y);
-    }
-    return _178;
-}
+    float2 uv [[user(locn0)]];
+};
 
 static inline __attribute__((always_inline))
-float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+float land(thread const float& a)
 {
-    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+    return ((1.0 - exp((-a) * 45.0)) * exp((-a) * 11.0)) * 1.25;
 }
 
-static inline __attribute__((always_inline))
-float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66)
-{
-    t += _66.uHue;
-    spvUnsafeArray<float3, 4> param;
-    param[0] = _66.uPA[0];
-    param[1] = _66.uPA[1];
-    param[2] = _66.uPA[2];
-    param[3] = _66.uPA[3];
-    float param_1 = t;
-    float3 c = palOf(param, param_1);
-    float3 _96;
-    if (_66.uPalMix > 0.0)
-    {
-        spvUnsafeArray<float3, 4> param_2;
-        param_2[0] = _66.uPB[0];
-        param_2[1] = _66.uPB[1];
-        param_2[2] = _66.uPB[2];
-        param_2[3] = _66.uPB[3];
-        float param_3 = t;
-        _96 = mix(c, palOf(param_2, param_3), float3(_66.uPalMix));
-    }
-    else
-    {
-        _96 = c;
-    }
-    return _96;
-}
-
-static inline __attribute__((always_inline))
-float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66)
-{
-    float param = t;
-    float3 _128 = pal(param, _66);
-    float3 c = fast::max(_128, float3(0.0));
-    float m = fast::max(c.x, fast::max(c.y, c.z));
-    float n = fast::min(c.x, fast::min(c.y, c.z));
-    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
-}
-
-[[host_name("p038_frag")]] fragment p038_frag_out p038_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66 [[buffer(0)]], texture2d<float> uDye [[texture(0)]], sampler uDyeSmplr [[sampler(0)]], float4 gl_FragCoord [[position]])
+[[host_name("p038_frag")]] fragment p038_frag_out p038_frag(p038_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _74 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], texture2d<float> uDye [[texture(1)]], sampler uVelSmplr [[sampler(0)]], sampler uDyeSmplr [[sampler(1)]])
 {
     p038_frag_out out = {};
-    float2 sc = gl_FragCoord.xy / _66.uRes;
-    float2 param = sc;
-    float param_1 = 1.60000002384185791015625;
-    float2 uv = cover(param, param_1, _66);
-    float2 q = sc - float2(0.5);
-    float2 p = uv * float2(1.60000002384185791015625, 1.0);
-    float3 s = uDye.sample(uDyeSmplr, uv).xyz;
-    float den = dot(s, float3(1.0));
-    float3 gx = uDye.sample(uDyeSmplr, (uv + float2(0.00244140625, 0.0))).xyz - uDye.sample(uDyeSmplr, (uv - float2(0.00244140625, 0.0))).xyz;
-    float3 gy = uDye.sample(uDyeSmplr, (uv + float2(0.0, 0.00390625))).xyz - uDye.sample(uDyeSmplr, (uv - float2(0.0, 0.00390625))).xyz;
-    float2 g = float2(dot(gx, float3(1.0)), dot(gy, float3(1.0)));
-    float3 col = float3(0.006000000052154064178466796875, 0.004999999888241291046142578125, 0.006000000052154064178466796875) + (((float3(0.0500000007450580596923828125, 0.02999999932944774627685546875, 0.017999999225139617919921875) * exp(-powr((uv.y - 0.0500000007450580596923828125) / 0.300000011920928955078125, 2.0))) * (0.4000000059604644775390625 + (0.300000011920928955078125 * _66.uBassS))) * exp(-powr(q.x / 0.60000002384185791015625, 2.0)));
-    float param_2 = 0.62000000476837158203125;
-    col += (mix(float3(0.0199999995529651641845703125, 0.02999999932944774627685546875, 0.0500000007450580596923828125), neon(param_2, _66) * 0.039999999105930328369140625, float3(0.4000000059604644775390625)) * exp((-length((sc - float2(0.949999988079071044921875, 0.75)) * float2(1.60000002384185791015625, 1.0))) * 2.400000095367431640625));
-    float hue = _66.uTime * 0.01200000010430812835693359375;
-    float param_3 = 0.07999999821186065673828125 + hue;
-    float3 c0 = mix(float3(1.0, 0.62000000476837158203125, 0.36000001430511474609375), neon(param_3, _66), float3(0.449999988079071044921875));
-    float param_4 = 0.4199999868869781494140625 + hue;
-    float3 c1 = mix(float3(0.550000011920928955078125, 0.75, 1.0), neon(param_4, _66), float3(0.449999988079071044921875));
-    float param_5 = 0.75 + hue;
-    float3 c2 = mix(float3(0.7200000286102294921875, 1.0, 0.7799999713897705078125), neon(param_5, _66), float3(0.449999988079071044921875));
-    float3 tintc = (((c0 * s.x) + (c1 * s.y)) + (c2 * s.z)) / float3(fast::max(den, 0.001000000047497451305389404296875));
-    float a = 1.0 - exp((-den) * 2.0);
-    float lit = fast::clamp(0.5 - (dot(g, float2(0.9438583850860595703125, 0.3303504288196563720703125)) * 1.10000002384185791015625), 0.0, 1.0);
-    float3 glow = ((((c0 * s.x) * _66.uHit.x) + ((c1 * s.y) * _66.uHit.y)) + ((c2 * s.z) * _66.uHit.z)) / float3(fast::max(den, 0.001000000047497451305389404296875));
-    float3 smc = ((tintc * (0.2199999988079071044921875 + (0.75 * lit))) * (0.550000011920928955078125 + (0.5 * _66.uLevelS))) + (glow * (0.3499999940395355224609375 + (0.4000000059604644775390625 * lit)));
-    col = mix(col, smc, float3(a * 0.89999997615814208984375));
-    float3 _543;
-    for (int i = 0; i < 3; i++)
+    float2 v = uVel.sample(uVelSmplr, in.uv).xy;
+    float3 ink = uDye.sample(uDyeSmplr, in.uv).xyz;
+    v.y += (((ink.x * 0.1599999964237213134765625) - (ink.z * 0.14000000059604644775390625)) * _74.uDt);
+    v.x += ((((0.5 - in.uv.x) * ink.y) * 0.20000000298023223876953125) * _74.uDt);
+    for (int i = 0; i < 8; i++)
     {
-        float2 tp = _66.uTip[i].xy * float2(1.60000002384185791015625, 1.0);
-        float2 base = tp + float2((0.100000001490116119384765625 * (float(i) - 1.0)) + 0.0599999986588954925537109375, -0.5);
-        float2 ab = base - tp;
-        float2 pa = p - tp;
-        float h = fast::clamp(dot(pa, ab) / dot(ab, ab), 0.0, 1.0);
-        float ds = length(pa - (ab * h));
-        col = mix(col, float3(0.100000001490116119384765625, 0.064999997615814208984375, 0.04500000178813934326171875) * (0.5 + (2.5 * exp((-h) * 10.0))), float3(smoothstep(0.0035000001080334186553955078125, 0.00200000009499490261077880859375, ds)));
-        float de = length(p - tp);
-        if (i == 0)
+        float a = _74.uJetAge[i].x;
+        if (a > 0.300000011920928955078125)
         {
-            _543 = c0;
+            continue;
         }
-        else
-        {
-            _543 = select(c2, c1, bool3(i == 1));
-        }
-        float3 ec = _543;
-        col += (mix(float3(1.0, 0.4199999868869781494140625, 0.119999997317790985107421875), ec, float3(0.3499999940395355224609375)) * ((smoothstep(0.007000000216066837310791015625, 0.0030000000260770320892333984375, de) * ((3.0 + (7.0 * _66.uBandE[i])) + (9.0 * _66.uHit[i]))) + (exp((-de) * 42.0) * ((0.20000000298023223876953125 + (0.5 * _66.uBandE[i])) + (0.800000011920928955078125 * _66.uHit[i])))));
+        float2 d = (in.uv - _74.uDropP[i].xy) * float2(_74.uAsp, 1.0);
+        float g = exp((-dot(d, d)) / 0.00449999980628490447998046875);
+        float param = a;
+        v += (((((_74.uDropV[i].xy + ((d * _74.uDropV[i].z) / float2(length(d) + 0.0199999995529651641845703125))) * g) * land(param)) * _74.uDt) * (15.0 + (16.0 * _74.uDropV[i].w)));
     }
-    out.o = float4(col * (1.0 - (0.60000002384185791015625 * dot(q, q))), 1.0);
+    float2 p = in.uv * float2(_74.uAsp, 1.0);
+    float t = _74.uTime * 0.070000000298023223876953125;
+    v += (((float2(cos((p.y * 2.2999999523162841796875) + t) + (0.5 * cos((p.y * 5.099999904632568359375) - (t * 1.7000000476837158203125))), sin((p.x * 1.89999997615814208984375) - (t * 1.2999999523162841796875)) + (0.5 * sin((p.x * 4.30000019073486328125) + (t * 2.099999904632568359375)))) * _74.uDt) * 0.00999999977648258209228515625) * (0.300000011920928955078125 + (1.2000000476837158203125 * _74.uMidS)));
+    out.o = float4(v, 0.0, 1.0);
     return out;
 }
 
@@ -15056,17 +15292,62 @@ struct p039_vert_out
 }
 
 namespace p039_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
 
 
 
 using namespace metal;
 
+// Implementation of the GLSL mod() function, which is slightly different than Metal fmod()
+template<typename Tx, typename Ty>
+inline Tx mod(Tx x, Ty y)
+{
+    return x - y * floor(x / y);
+}
+
 struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
 {
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
     float uDt;
-    float uKeep;
     float uAsp;
-    float uWall;
+    float4 uJetAge[8];
+    float4 uDropP[8];
+    float4 uDropV[8];
 };
 
 struct p039_frag_out
@@ -15079,20 +15360,85 @@ struct p039_frag_in
     float2 uv [[user(locn0)]];
 };
 
-[[host_name("p039_frag")]] fragment p039_frag_out p039_frag(p039_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _28 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], texture2d<float> uSrc [[texture(1)]], sampler uVelSmplr [[sampler(0)]], sampler uSrcSmplr [[sampler(1)]])
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _77 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _84 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _92 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _97 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _108 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _113 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _121 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _126 = hash(param_7);
+    return mix(mix(mix(_77, _84, f.x), mix(_92, _97, f.x), f.y), mix(mix(_108, _113, f.x), mix(_121, _126, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float3 inkOf(thread float& k)
+{
+    k = mod(k, 3.0);
+    return fast::clamp(float3(fast::max(1.0 - abs(k), 1.0 - abs(k - 3.0)), 1.0 - abs(k - 1.0), 1.0 - abs(k - 2.0)), float3(0.0), float3(1.0));
+}
+
+static inline __attribute__((always_inline))
+float land(thread const float& a)
+{
+    return ((1.0 - exp((-a) * 45.0)) * exp((-a) * 11.0)) * 1.25;
+}
+
+[[host_name("p039_frag")]] fragment p039_frag_out p039_frag(p039_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _202 [[buffer(0)]], texture2d<float> uDye [[texture(0)]], sampler uDyeSmplr [[sampler(0)]])
 {
     p039_frag_out out = {};
-    float2 v = uVel.sample(uVelSmplr, in.uv).xy;
-    float4 c = uSrc.sample(uSrcSmplr, (in.uv - ((v * _28.uDt) * float2(1.0 / _28.uAsp, 1.0)))) * _28.uKeep;
-    if (_28.uWall > 0.0)
+    float3 dye = uDye.sample(uDyeSmplr, in.uv).xyz * exp((-_202.uDt) * 0.04500000178813934326171875);
+    float3 param = float3(in.uv.x * 9.0, _202.uTime * 0.1500000059604644775390625, 1.0);
+    float nx = _noise(param);
+    float3 param_1 = float3(in.uv.y * 9.0, _202.uTime * 0.1500000059604644775390625, 5.0);
+    float ny = _noise(param_1);
+    dye.x += (((((_202.uBandE[0u] * _202.uBandE[0u]) * exp(((-in.uv.y) * in.uv.y) / 0.006000000052154064178466796875)) * smoothstep(0.300000011920928955078125, 0.800000011920928955078125, nx)) * _202.uDt) * 0.5);
+    dye.y += (((((_202.uBandE[1u] * _202.uBandE[1u]) * (exp(((-in.uv.x) * in.uv.x) / 0.0040000001899898052215576171875) + exp(((-(1.0 - in.uv.x)) * (1.0 - in.uv.x)) / 0.0040000001899898052215576171875))) * smoothstep(0.300000011920928955078125, 0.800000011920928955078125, ny)) * _202.uDt) * 0.449999988079071044921875);
+    dye.z += (((((_202.uBandE[2u] * _202.uBandE[2u]) * exp(((-(1.0 - in.uv.y)) * (1.0 - in.uv.y)) / 0.006000000052154064178466796875)) * smoothstep(0.3400000035762786865234375, 0.839999973773956298828125, nx)) * _202.uDt) * 1.2999999523162841796875);
+    for (int i = 0; i < 8; i++)
     {
-        float2 e = fast::min(in.uv, float2(1.0) - in.uv);
-        float4 _78 = c;
-        float2 _80 = _78.xy * (smoothstep(0.0, _28.uWall, e.x) * smoothstep(0.0, _28.uWall, e.y));
-        c.x = _80.x;
-        c.y = _80.y;
+        float a = _202.uJetAge[i].x;
+        if (a > 0.300000011920928955078125)
+        {
+            continue;
+        }
+        float2 d = (in.uv - _202.uDropP[i].xy) * float2(_202.uAsp, 1.0);
+        float2 dir = fast::normalize(_202.uDropV[i].xy);
+        float2 per = float2(-dir.y, dir.x);
+        float along = dot(d, dir);
+        float across = dot(d, per);
+        float tendril = sin((along * 75.0) + _202.uDropP[i].z) * 0.00999999977648258209228515625;
+        float w = 0.0130000002682209014892578125 + (0.0199999995529651641845703125 * _202.uDropV[i].w);
+        float plume = exp((-powr(along / 0.0949999988079071044921875, 2.0)) - powr((across - tendril) / w, 2.0));
+        plume += (0.7200000286102294921875 * exp((-powr((along - 0.0350000001490116119384765625) / 0.07500000298023223876953125, 2.0)) - powr((across + (tendril * 2.0)) / (w * 0.7200000286102294921875), 2.0)));
+        float param_2 = _202.uDropP[i].w;
+        float3 _453 = inkOf(param_2);
+        float param_3 = a;
+        dye += ((((_453 * plume) * land(param_3)) * _202.uDt) * (15.0 + (17.0 * _202.uDropV[i].w)));
     }
-    out.o = c;
+    out.o = float4(fast::min(dye, float3(1.25)), 1.0);
     return out;
 }
 
@@ -15235,14 +15581,92 @@ struct p040_vert_out
 }
 
 namespace p040_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
 
 
 
 using namespace metal;
 
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
 struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
 {
-    float2 uTx;
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float4 uJetAge[8];
+    float4 uDropP[8];
+    float4 uDropV[8];
 };
 
 struct p040_frag_out
@@ -15250,16 +15674,160 @@ struct p040_frag_out
     float4 o [[color(0)]];
 };
 
-struct p040_frag_in
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
 {
-    float2 uv [[user(locn0)]];
-};
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
 
-[[host_name("p040_frag")]] fragment p040_frag_out p040_frag(p040_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _20 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], sampler uVelSmplr [[sampler(0)]])
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _116 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _121 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _129 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _134 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _145 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _150 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _158 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _163 = hash(param_7);
+    return mix(mix(mix(_116, _121, f.x), mix(_129, _134, f.x), f.y), mix(mix(_145, _150, f.x), mix(_158, _163, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _208)
+{
+    t += _208.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _208.uPA[0];
+    param[1] = _208.uPA[1];
+    param[2] = _208.uPA[2];
+    param[3] = _208.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _237;
+    if (_208.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _208.uPB[0];
+        param_2[1] = _208.uPB[1];
+        param_2[2] = _208.uPB[2];
+        param_2[3] = _208.uPB[3];
+        float param_3 = t;
+        _237 = mix(c, palOf(param_2, param_3), float3(_208.uPalMix));
+    }
+    else
+    {
+        _237 = c;
+    }
+    return _237;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _208)
+{
+    float param = t;
+    float3 _269 = pal(param, _208);
+    float3 c = fast::max(_269, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float spec(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).x;
+}
+
+static inline __attribute__((always_inline))
+float specS(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).y;
+}
+
+[[host_name("p040_frag")]] fragment p040_frag_out p040_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _208 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], texture2d<float> uDye [[texture(1)]], sampler uSpecSmplr [[sampler(0)]], sampler uDyeSmplr [[sampler(1)]], float4 gl_FragCoord [[position]])
 {
     p040_frag_out out = {};
-    float c = (uVel.sample(uVelSmplr, (in.uv + float2(_20.uTx.x, 0.0))).y - uVel.sample(uVelSmplr, (in.uv - float2(_20.uTx.x, 0.0))).y) - (uVel.sample(uVelSmplr, (in.uv + float2(0.0, _20.uTx.y))).x - uVel.sample(uVelSmplr, (in.uv - float2(0.0, _20.uTx.y))).x);
-    out.o = float4(c * 0.5, 0.0, 0.0, 1.0);
+    float2 sc = gl_FragCoord.xy / _208.uRes;
+    float2 uv = sc;
+    float2 q = sc - float2(0.5);
+    float3 dye = uDye.sample(uDyeSmplr, uv).xyz;
+    float3 gx = uDye.sample(uDyeSmplr, (uv + float2(0.001953125, 0.0))).xyz - uDye.sample(uDyeSmplr, (uv - float2(0.001953125, 0.0))).xyz;
+    float3 gy = uDye.sample(uDyeSmplr, (uv + float2(0.0, 0.00312500004656612873077392578125))).xyz - uDye.sample(uDyeSmplr, (uv - float2(0.0, 0.00312500004656612873077392578125))).xyz;
+    float2 g = float2(dot(gx, float3(1.0)), dot(gy, float3(1.0)));
+    float3 bg = mix(float3(0.7400000095367431640625, 0.790000021457672119140625, 0.839999973773956298828125), float3(0.930000007152557373046875, 0.939999997615814208984375, 0.949999988079071044921875), float3(exp((-dot(q, q)) * 2.599999904632568359375))) * (0.819999992847442626953125 + (0.100000001490116119384765625 * _208.uLevelS));
+    float3 param = float3(uv * 6.0, _208.uTime * 0.20000000298023223876953125);
+    bg *= (1.0 + ((0.0500000007450580596923828125 * sin(((uv.y * 40.0) + _208.uTime) + (_noise(param) * 6.0))) * smoothstep(0.75, 1.0, uv.y)));
+    float param_1 = 0.0;
+    float3 c0 = mix(float3(0.039999999105930328369140625, 0.119999997317790985107421875, 0.5), neon(param_1, _208), float3(0.07999999821186065673828125));
+    float param_2 = 0.3300000131130218505859375;
+    float3 c1 = mix(float3(0.7799999713897705078125, 0.0500000007450580596923828125, 0.300000011920928955078125), neon(param_2, _208), float3(0.07999999821186065673828125));
+    float param_3 = 0.660000026226043701171875;
+    float3 c2 = mix(float3(0.980000019073486328125, 0.5, 0.039999999105930328369140625), neon(param_3, _208), float3(0.07999999821186065673828125));
+    float3 T = exp((-((((-log(fast::max(c0, float3(0.02999999932944774627685546875)))) * dye.x) + ((-log(fast::max(c1, float3(0.02999999932944774627685546875)))) * dye.y)) + ((-log(fast::max(c2, float3(0.02999999932944774627685546875)))) * dye.z))) * 1.10000002384185791015625);
+    float pitch = fast::clamp((0.100000001490116119384765625 + (0.7799999713897705078125 * uv.y)) + (0.0599999986588954925537109375 * sin(uv.x * 16.0)), 0.0, 1.0);
+    float edge = fast::clamp((length(g) * 2.0) + dot(dye, float3(0.07999999821186065673828125)), 0.0, 1.0);
+    float param_4 = pitch;
+    float param_5 = pitch;
+    float lift = fast::clamp(spec(param_4, uSpec, uSpecSmplr) - specS(param_5, uSpec, uSpecSmplr), 0.0, 0.550000011920928955078125);
+    float3 col = (bg * T) + ((mix(float3(0.2199999988079071044921875, 0.36000001430511474609375, 0.63999998569488525390625), float3(0.5299999713897705078125, 0.12999999523162841796875, 0.23999999463558197021484375), float3(uv.y)) * (edge * lift)) * 0.3499999940395355224609375);
+    float3 _677;
+    for (int i = 0; i < 8; i++)
+    {
+        float a = _208.uJetAge[i].x;
+        if (a > 0.4799999892711639404296875)
+        {
+            continue;
+        }
+        float2 d = (uv - _208.uDropP[i].xy) * float2(1.60000002384185791015625, 1.0);
+        float2 dir = fast::normalize(_208.uDropV[i].xy);
+        float2 per = float2(-dir.y, dir.x);
+        float along = dot(d, dir);
+        float across = dot(d, per);
+        float grow = smoothstep(-0.017999999225139617919921875, 0.104999996721744537353515625, along) * (1.0 - smoothstep(0.104999996721744537353515625, 0.3400000035762786865234375, along));
+        float curl = sin((along * 48.0) + _208.uDropP[i].z) * (0.01200000010430812835693359375 + (0.017999999225139617919921875 * smoothstep(0.0, 0.180000007152557373046875, a)));
+        float ribbon = exp(-powr((across - curl) / (0.017999999225139617919921875 + (0.0379999987781047821044921875 * a)), 2.0)) * grow;
+        float mouth = exp((-dot(d, d)) / (0.00179999996908009052276611328125 + ((0.01200000010430812835693359375 * a) * a)));
+        float familyBoost = (_208.uDropP[i].w > 1.5) ? 1.37999999523162841796875 : 1.0;
+        float fresh = ((((ribbon * 0.7200000286102294921875) + mouth) * exp((-a) * 6.19999980926513671875)) * (1.14999997615814208984375 + (0.85000002384185791015625 * _208.uDropV[i].w))) * familyBoost;
+        if (_208.uDropP[i].w < 0.5)
+        {
+            _677 = float3(0.0350000001490116119384765625, 0.119999997317790985107421875, 0.7599999904632568359375);
+        }
+        else
+        {
+            _677 = select(float3(1.0, 0.4799999892711639404296875, 0.02500000037252902984619140625), float3(0.920000016689300537109375, 0.0350000001490116119384765625, 0.2800000011920928955078125), bool3(_208.uDropP[i].w < 1.5));
+        }
+        float3 ic = _677;
+        col = mix(col, ic * 0.4199999868869781494140625, float3(fast::clamp(fresh * 0.7200000286102294921875, 0.0, 0.839999973773956298828125)));
+        col += ((ic * fresh) * 0.1599999964237213134765625);
+    }
+    float3 have = dye / (float3(1.0) + dye);
+    float3 hg = (_208.uHit * 0.449999988079071044921875) + (_208.uHitS * 0.550000011920928955078125);
+    col += (((((float3(0.100000001490116119384765625, 0.300000011920928955078125, 0.949999988079071044921875) * have.x) * hg.x) + ((float3(0.949999988079071044921875, 0.1500000059604644775390625, 0.4000000059604644775390625) * have.y) * hg.y)) + ((float3(1.0, 0.699999988079071044921875, 0.1500000059604644775390625) * have.z) * hg.z)) * 0.20000000298023223876953125);
+    col *= (1.0 + fast::clamp(dot(g, float2(0.5, 0.800000011920928955078125)) * 0.3499999940395355224609375, -0.25, 0.300000011920928955078125));
+    col *= (1.0 - (smoothstep(0.98500001430511474609375, 1.0, uv.y) * 0.25));
+    out.o = float4(col * (1.0 - (0.550000011920928955078125 * dot(q, q))), 1.0);
     return out;
 }
 
@@ -15409,9 +15977,10 @@ using namespace metal;
 
 struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
 {
-    float2 uTx;
     float uDt;
-    float uVort;
+    float uKeep;
+    float uAsp;
+    float uWall;
 };
 
 struct p041_frag_out
@@ -15424,13 +15993,20 @@ struct p041_frag_in
     float2 uv [[user(locn0)]];
 };
 
-[[host_name("p041_frag")]] fragment p041_frag_out p041_frag(p041_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _29 [[buffer(0)]], texture2d<float> uCurl [[texture(0)]], texture2d<float> uVel [[texture(1)]], sampler uCurlSmplr [[sampler(0)]], sampler uVelSmplr [[sampler(1)]])
+[[host_name("p041_frag")]] fragment p041_frag_out p041_frag(p041_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _28 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], texture2d<float> uSrc [[texture(1)]], sampler uVelSmplr [[sampler(0)]], sampler uSrcSmplr [[sampler(1)]])
 {
     p041_frag_out out = {};
-    float c = uCurl.sample(uCurlSmplr, in.uv).x;
-    float2 g = float2(abs(uCurl.sample(uCurlSmplr, (in.uv + float2(_29.uTx.x, 0.0))).x) - abs(uCurl.sample(uCurlSmplr, (in.uv - float2(_29.uTx.x, 0.0))).x), abs(uCurl.sample(uCurlSmplr, (in.uv + float2(0.0, _29.uTx.y))).x) - abs(uCurl.sample(uCurlSmplr, (in.uv - float2(0.0, _29.uTx.y))).x));
-    g /= float2(length(g) + 9.9999997473787516355514526367188e-06);
-    out.o = float4(uVel.sample(uVelSmplr, in.uv).xy + (float2(g.y, -g.x) * ((_29.uVort * _29.uDt) * c)), 0.0, 1.0);
+    float2 v = uVel.sample(uVelSmplr, in.uv).xy;
+    float4 c = uSrc.sample(uSrcSmplr, (in.uv - ((v * _28.uDt) * float2(1.0 / _28.uAsp, 1.0)))) * _28.uKeep;
+    if (_28.uWall > 0.0)
+    {
+        float2 e = fast::min(in.uv, float2(1.0) - in.uv);
+        float4 _78 = c;
+        float2 _80 = _78.xy * (smoothstep(0.0, _28.uWall, e.x) * smoothstep(0.0, _28.uWall, e.y));
+        c.x = _80.x;
+        c.y = _80.y;
+    }
+    out.o = c;
     return out;
 }
 
@@ -15593,10 +16169,11 @@ struct p042_frag_in
     float2 uv [[user(locn0)]];
 };
 
-[[host_name("p042_frag")]] fragment p042_frag_out p042_frag(p042_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _22 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], sampler uVelSmplr [[sampler(0)]])
+[[host_name("p042_frag")]] fragment p042_frag_out p042_frag(p042_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _20 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], sampler uVelSmplr [[sampler(0)]])
 {
     p042_frag_out out = {};
-    out.o = float4(0.5 * ((uVel.sample(uVelSmplr, (in.uv + float2(_22.uTx.x, 0.0))).x - uVel.sample(uVelSmplr, (in.uv - float2(_22.uTx.x, 0.0))).x) + (uVel.sample(uVelSmplr, (in.uv + float2(0.0, _22.uTx.y))).y - uVel.sample(uVelSmplr, (in.uv - float2(0.0, _22.uTx.y))).y)), 0.0, 0.0, 1.0);
+    float c = (uVel.sample(uVelSmplr, (in.uv + float2(_20.uTx.x, 0.0))).y - uVel.sample(uVelSmplr, (in.uv - float2(_20.uTx.x, 0.0))).y) - (uVel.sample(uVelSmplr, (in.uv + float2(0.0, _20.uTx.y))).x - uVel.sample(uVelSmplr, (in.uv - float2(0.0, _20.uTx.y))).x);
+    out.o = float4(c * 0.5, 0.0, 0.0, 1.0);
     return out;
 }
 
@@ -15747,7 +16324,8 @@ using namespace metal;
 struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
 {
     float2 uTx;
-    float uKeep;
+    float uDt;
+    float uVort;
 };
 
 struct p043_frag_out
@@ -15760,10 +16338,13 @@ struct p043_frag_in
     float2 uv [[user(locn0)]];
 };
 
-[[host_name("p043_frag")]] fragment p043_frag_out p043_frag(p043_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _21 [[buffer(0)]], texture2d<float> uPrs [[texture(0)]], texture2d<float> uDiv [[texture(1)]], sampler uPrsSmplr [[sampler(0)]], sampler uDivSmplr [[sampler(1)]])
+[[host_name("p043_frag")]] fragment p043_frag_out p043_frag(p043_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _29 [[buffer(0)]], texture2d<float> uCurl [[texture(0)]], texture2d<float> uVel [[texture(1)]], sampler uCurlSmplr [[sampler(0)]], sampler uVelSmplr [[sampler(1)]])
 {
     p043_frag_out out = {};
-    out.o = float4((((((uPrs.sample(uPrsSmplr, (in.uv + float2(_21.uTx.x, 0.0))).x + uPrs.sample(uPrsSmplr, (in.uv - float2(_21.uTx.x, 0.0))).x) + uPrs.sample(uPrsSmplr, (in.uv + float2(0.0, _21.uTx.y))).x) + uPrs.sample(uPrsSmplr, (in.uv - float2(0.0, _21.uTx.y))).x) * _21.uKeep) - uDiv.sample(uDivSmplr, in.uv).x) * 0.25, 0.0, 0.0, 1.0);
+    float c = uCurl.sample(uCurlSmplr, in.uv).x;
+    float2 g = float2(abs(uCurl.sample(uCurlSmplr, (in.uv + float2(_29.uTx.x, 0.0))).x) - abs(uCurl.sample(uCurlSmplr, (in.uv - float2(_29.uTx.x, 0.0))).x), abs(uCurl.sample(uCurlSmplr, (in.uv + float2(0.0, _29.uTx.y))).x) - abs(uCurl.sample(uCurlSmplr, (in.uv - float2(0.0, _29.uTx.y))).x));
+    g /= float2(length(g) + 9.9999997473787516355514526367188e-06);
+    out.o = float4(uVel.sample(uVelSmplr, in.uv).xy + (float2(g.y, -g.x) * ((_29.uVort * _29.uDt) * c)), 0.0, 1.0);
     return out;
 }
 
@@ -15926,10 +16507,10 @@ struct p044_frag_in
     float2 uv [[user(locn0)]];
 };
 
-[[host_name("p044_frag")]] fragment p044_frag_out p044_frag(p044_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _27 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], texture2d<float> uPrs [[texture(1)]], sampler uVelSmplr [[sampler(0)]], sampler uPrsSmplr [[sampler(1)]])
+[[host_name("p044_frag")]] fragment p044_frag_out p044_frag(p044_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _22 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], sampler uVelSmplr [[sampler(0)]])
 {
     p044_frag_out out = {};
-    out.o = float4(uVel.sample(uVelSmplr, in.uv).xy - (float2(uPrs.sample(uPrsSmplr, (in.uv + float2(_27.uTx.x, 0.0))).x - uPrs.sample(uPrsSmplr, (in.uv - float2(_27.uTx.x, 0.0))).x, uPrs.sample(uPrsSmplr, (in.uv + float2(0.0, _27.uTx.y))).x - uPrs.sample(uPrsSmplr, (in.uv - float2(0.0, _27.uTx.y))).x) * 0.5), 0.0, 1.0);
+    out.o = float4(0.5 * ((uVel.sample(uVelSmplr, (in.uv + float2(_22.uTx.x, 0.0))).x - uVel.sample(uVelSmplr, (in.uv - float2(_22.uTx.x, 0.0))).x) + (uVel.sample(uVelSmplr, (in.uv + float2(0.0, _22.uTx.y))).y - uVel.sample(uVelSmplr, (in.uv - float2(0.0, _22.uTx.y))).y)), 0.0, 0.0, 1.0);
     return out;
 }
 
@@ -16072,6 +16653,1134 @@ struct p045_vert_out
 }
 
 namespace p045_frag_scope {
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float2 uTx;
+    float uKeep;
+};
+
+struct p045_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p045_frag_in
+{
+    float2 uv [[user(locn0)]];
+};
+
+[[host_name("p045_frag")]] fragment p045_frag_out p045_frag(p045_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _21 [[buffer(0)]], texture2d<float> uPrs [[texture(0)]], texture2d<float> uDiv [[texture(1)]], sampler uPrsSmplr [[sampler(0)]], sampler uDivSmplr [[sampler(1)]])
+{
+    p045_frag_out out = {};
+    out.o = float4((((((uPrs.sample(uPrsSmplr, (in.uv + float2(_21.uTx.x, 0.0))).x + uPrs.sample(uPrsSmplr, (in.uv - float2(_21.uTx.x, 0.0))).x) + uPrs.sample(uPrsSmplr, (in.uv + float2(0.0, _21.uTx.y))).x) + uPrs.sample(uPrsSmplr, (in.uv - float2(0.0, _21.uTx.y))).x) * _21.uKeep) - uDiv.sample(uDivSmplr, in.uv).x) * 0.25, 0.0, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p046_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p046_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p046_vert")]] vertex p046_vert_out p046_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p046_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p046_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p046_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p046_vert_screen")]] vertex p046_vert_out p046_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p046_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p046_frag_scope {
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float2 uTx;
+};
+
+struct p046_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p046_frag_in
+{
+    float2 uv [[user(locn0)]];
+};
+
+[[host_name("p046_frag")]] fragment p046_frag_out p046_frag(p046_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _27 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], texture2d<float> uPrs [[texture(1)]], sampler uVelSmplr [[sampler(0)]], sampler uPrsSmplr [[sampler(1)]])
+{
+    p046_frag_out out = {};
+    out.o = float4(uVel.sample(uVelSmplr, in.uv).xy - (float2(uPrs.sample(uPrsSmplr, (in.uv + float2(_27.uTx.x, 0.0))).x - uPrs.sample(uPrsSmplr, (in.uv - float2(_27.uTx.x, 0.0))).x, uPrs.sample(uPrsSmplr, (in.uv + float2(0.0, _27.uTx.y))).x - uPrs.sample(uPrsSmplr, (in.uv - float2(0.0, _27.uTx.y))).x) * 0.5), 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p047_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p047_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p047_vert")]] vertex p047_vert_out p047_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p047_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p047_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p047_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p047_vert_screen")]] vertex p047_vert_out p047_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p047_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p047_frag_scope {
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float uDt;
+    float uAsp;
+    float3 uTip[3];
+    float4 uSide[8];
+};
+
+struct p047_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p047_frag_in
+{
+    float2 uv [[user(locn0)]];
+};
+
+[[host_name("p047_frag")]] fragment p047_frag_out p047_frag(p047_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _52 [[buffer(0)]], texture2d<float> uVel [[texture(0)]], texture2d<float> uDye [[texture(1)]], sampler uVelSmplr [[sampler(0)]], sampler uDyeSmplr [[sampler(1)]])
+{
+    p047_frag_out out = {};
+    float2 v = uVel.sample(uVelSmplr, in.uv).xy;
+    float3 sm = uDye.sample(uDyeSmplr, in.uv).xyz;
+    float den = dot(sm, float3(1.0));
+    v.y += ((((sm.x * (0.4000000059604644775390625 + (0.89999997615814208984375 * _52.uBandE[0u]))) + (sm.y * (0.449999988079071044921875 + (0.800000011920928955078125 * _52.uBandE[1u])))) + (sm.z * (0.5 + (0.800000011920928955078125 * _52.uBandE[2u])))) * _52.uDt);
+    for (int i = 0; i < 3; i++)
+    {
+        float2 d = (in.uv - _52.uTip[i].xy) * float2(_52.uAsp, 1.0);
+        v += (((float2(0.0, 1.0) * exp((-dot(d, d)) / 0.00039999998989515006542205810546875)) * _52.uDt) * ((3.5 + (3.0 * _52.uBandE[i])) + (4.0 * _52.uHitS[i])));
+    }
+    for (int i_1 = 0; i_1 < 8; i_1++)
+    {
+        float a = _52.uPulse[i_1].x;
+        if (a > 0.89999997615814208984375)
+        {
+            continue;
+        }
+        float front = (in.uv.y - 0.2700000107288360595703125) - (a * 0.949999988079071044921875);
+        float gust = exp(((-front) * front) / 0.0430000014603137969970703125) * exp((-a) * 4.0);
+        v.x += (((_52.uSide[i_1].x * gust) * _52.uDt) * 1.60000002384185791015625);
+    }
+    float height = smoothstep(0.20000000298023223876953125, 0.800000011920928955078125, in.uv.y);
+    v.x += (((((precise::tanh((in.uv.x - 0.5) * 5.0) * 0.20000000298023223876953125) + (sin((in.uv.y * 11.0) - (_52.uTime * 0.20000000298023223876953125)) * 0.100000001490116119384765625)) * height) * _52.uDt) * fast::min(den, 1.0));
+    v.x += ((_52.uDt * (((sin((in.uv.y * 15.0) + (_52.uTime * 0.20000000298023223876953125)) * _52.uHitS.z) * 0.5) + ((sin((in.uv.y * 24.0) - (_52.uTime * 0.20000000298023223876953125)) * _52.uBandE[2u]) * 0.1500000059604644775390625))) * smoothstep(0.20000000298023223876953125, 0.680000007152557373046875, in.uv.y));
+    out.o = float4(v, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p048_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p048_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p048_vert")]] vertex p048_vert_out p048_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p048_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p048_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p048_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p048_vert_screen")]] vertex p048_vert_out p048_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p048_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p048_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float uDt;
+    float uAsp;
+    float3 uTip[3];
+    float4 uSide[8];
+};
+
+struct p048_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p048_frag_in
+{
+    float2 uv [[user(locn0)]];
+};
+
+static inline __attribute__((always_inline))
+float3 own(thread const int& i)
+{
+    return float3(float(i == 0), float(i == 1), float(i == 2));
+}
+
+[[host_name("p048_frag")]] fragment p048_frag_out p048_frag(p048_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _58 [[buffer(0)]], texture2d<float> uDye [[texture(0)]], sampler uDyeSmplr [[sampler(0)]])
+{
+    p048_frag_out out = {};
+    float3 s = uDye.sample(uDyeSmplr, in.uv).xyz * exp((-_58.uDt) * 0.070000000298023223876953125);
+    for (int i = 0; i < 3; i++)
+    {
+        float2 d = (in.uv - _58.uTip[i].xy) * float2(_58.uAsp, 1.0);
+        int param = i;
+        s += (((own(param) * exp((-dot(d, d)) / 0.00011000000085914507508277893066406)) * _58.uDt) * ((3.0 + ((16.0 * _58.uBandE[i]) * _58.uBandE[i])) + (22.0 * _58.uHit[i])));
+    }
+    s *= (1.0 - ((_58.uDt * 2.0) * smoothstep(0.930000007152557373046875, 1.0, in.uv.y)));
+    out.o = float4(fast::min(s, float3(3.0)), 1.0);
+    return out;
+}
+
+
+}
+
+namespace p049_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p049_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p049_vert")]] vertex p049_vert_out p049_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p049_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p049_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p049_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p049_vert_screen")]] vertex p049_vert_out p049_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p049_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p049_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float3 uTip[3];
+};
+
+struct p049_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+static inline __attribute__((always_inline))
+float2 cover(thread const float2& uv, thread const float& simAsp, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66)
+{
+    float a = _66.uRes.x / _66.uRes.y;
+    float2 _178;
+    if (a > simAsp)
+    {
+        _178 = float2(uv.x, ((uv.y - 0.5) * (simAsp / a)) + 0.5);
+    }
+    else
+    {
+        _178 = float2(((uv.x - 0.5) * (a / simAsp)) + 0.5, uv.y);
+    }
+    return _178;
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66)
+{
+    t += _66.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _66.uPA[0];
+    param[1] = _66.uPA[1];
+    param[2] = _66.uPA[2];
+    param[3] = _66.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _96;
+    if (_66.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _66.uPB[0];
+        param_2[1] = _66.uPB[1];
+        param_2[2] = _66.uPB[2];
+        param_2[3] = _66.uPB[3];
+        float param_3 = t;
+        _96 = mix(c, palOf(param_2, param_3), float3(_66.uPalMix));
+    }
+    else
+    {
+        _96 = c;
+    }
+    return _96;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66)
+{
+    float param = t;
+    float3 _128 = pal(param, _66);
+    float3 c = fast::max(_128, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+[[host_name("p049_frag")]] fragment p049_frag_out p049_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _66 [[buffer(0)]], texture2d<float> uDye [[texture(0)]], sampler uDyeSmplr [[sampler(0)]], float4 gl_FragCoord [[position]])
+{
+    p049_frag_out out = {};
+    float2 sc = gl_FragCoord.xy / _66.uRes;
+    float2 param = sc;
+    float param_1 = 1.60000002384185791015625;
+    float2 uv = cover(param, param_1, _66);
+    float2 q = sc - float2(0.5);
+    float2 p = uv * float2(1.60000002384185791015625, 1.0);
+    float3 s = uDye.sample(uDyeSmplr, uv).xyz;
+    float den = dot(s, float3(1.0));
+    float3 gx = uDye.sample(uDyeSmplr, (uv + float2(0.00244140625, 0.0))).xyz - uDye.sample(uDyeSmplr, (uv - float2(0.00244140625, 0.0))).xyz;
+    float3 gy = uDye.sample(uDyeSmplr, (uv + float2(0.0, 0.00390625))).xyz - uDye.sample(uDyeSmplr, (uv - float2(0.0, 0.00390625))).xyz;
+    float2 g = float2(dot(gx, float3(1.0)), dot(gy, float3(1.0)));
+    float3 col = float3(0.006000000052154064178466796875, 0.004999999888241291046142578125, 0.006000000052154064178466796875) + (((float3(0.0500000007450580596923828125, 0.02999999932944774627685546875, 0.017999999225139617919921875) * exp(-powr((uv.y - 0.0500000007450580596923828125) / 0.300000011920928955078125, 2.0))) * (0.4000000059604644775390625 + (0.300000011920928955078125 * _66.uBassS))) * exp(-powr(q.x / 0.60000002384185791015625, 2.0)));
+    float param_2 = 0.62000000476837158203125;
+    col += (mix(float3(0.0199999995529651641845703125, 0.02999999932944774627685546875, 0.0500000007450580596923828125), neon(param_2, _66) * 0.039999999105930328369140625, float3(0.4000000059604644775390625)) * exp((-length((sc - float2(0.949999988079071044921875, 0.75)) * float2(1.60000002384185791015625, 1.0))) * 2.400000095367431640625));
+    float hue = _66.uTime * 0.01200000010430812835693359375;
+    float param_3 = 0.07999999821186065673828125 + hue;
+    float3 c0 = mix(float3(1.0, 0.62000000476837158203125, 0.36000001430511474609375), neon(param_3, _66), float3(0.449999988079071044921875));
+    float param_4 = 0.4199999868869781494140625 + hue;
+    float3 c1 = mix(float3(0.550000011920928955078125, 0.75, 1.0), neon(param_4, _66), float3(0.449999988079071044921875));
+    float param_5 = 0.75 + hue;
+    float3 c2 = mix(float3(0.7200000286102294921875, 1.0, 0.7799999713897705078125), neon(param_5, _66), float3(0.449999988079071044921875));
+    float3 tintc = (((c0 * s.x) + (c1 * s.y)) + (c2 * s.z)) / float3(fast::max(den, 0.001000000047497451305389404296875));
+    float a = 1.0 - exp((-den) * 2.0);
+    float lit = fast::clamp(0.5 - (dot(g, float2(0.9438583850860595703125, 0.3303504288196563720703125)) * 1.10000002384185791015625), 0.0, 1.0);
+    float3 glow = ((((c0 * s.x) * _66.uHit.x) + ((c1 * s.y) * _66.uHit.y)) + ((c2 * s.z) * _66.uHit.z)) / float3(fast::max(den, 0.001000000047497451305389404296875));
+    float3 smc = ((tintc * (0.2199999988079071044921875 + (0.75 * lit))) * (0.550000011920928955078125 + (0.5 * _66.uLevelS))) + (glow * (0.3499999940395355224609375 + (0.4000000059604644775390625 * lit)));
+    col = mix(col, smc, float3(a * 0.89999997615814208984375));
+    float3 _543;
+    for (int i = 0; i < 3; i++)
+    {
+        float2 tp = _66.uTip[i].xy * float2(1.60000002384185791015625, 1.0);
+        float2 base = tp + float2((0.100000001490116119384765625 * (float(i) - 1.0)) + 0.0599999986588954925537109375, -0.5);
+        float2 ab = base - tp;
+        float2 pa = p - tp;
+        float h = fast::clamp(dot(pa, ab) / dot(ab, ab), 0.0, 1.0);
+        float ds = length(pa - (ab * h));
+        col = mix(col, float3(0.100000001490116119384765625, 0.064999997615814208984375, 0.04500000178813934326171875) * (0.5 + (2.5 * exp((-h) * 10.0))), float3(smoothstep(0.0035000001080334186553955078125, 0.00200000009499490261077880859375, ds)));
+        float de = length(p - tp);
+        if (i == 0)
+        {
+            _543 = c0;
+        }
+        else
+        {
+            _543 = select(c2, c1, bool3(i == 1));
+        }
+        float3 ec = _543;
+        col += (mix(float3(1.0, 0.4199999868869781494140625, 0.119999997317790985107421875), ec, float3(0.3499999940395355224609375)) * ((smoothstep(0.007000000216066837310791015625, 0.0030000000260770320892333984375, de) * ((3.0 + (7.0 * _66.uBandE[i])) + (9.0 * _66.uHit[i]))) + (exp((-de) * 42.0) * ((0.20000000298023223876953125 + (0.5 * _66.uBandE[i])) + (0.800000011920928955078125 * _66.uHit[i])))));
+    }
+    out.o = float4(col * (1.0 - (0.60000002384185791015625 * dot(q, q))), 1.0);
+    return out;
+}
+
+
+}
+
+namespace p050_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p050_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p050_vert")]] vertex p050_vert_out p050_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p050_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p050_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p050_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p050_vert_screen")]] vertex p050_vert_out p050_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p050_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p050_frag_scope {
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
 #pragma clang diagnostic ignored "-Wmissing-braces"
 
@@ -16157,7 +17866,7 @@ struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
     float3 uPB[4];
 };
 
-struct p045_frag_out
+struct p050_frag_out
 {
     float4 o [[color(0)]];
 };
@@ -16295,9 +18004,9 @@ float bokeh(thread const float2& q, thread const float& sc, thread const float& 
     return s;
 }
 
-[[host_name("p045_frag")]] fragment p045_frag_out p045_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _222 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], sampler uSpecSmplr [[sampler(0)]], float4 gl_FragCoord [[position]])
+[[host_name("p050_frag")]] fragment p050_frag_out p050_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _222 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], sampler uSpecSmplr [[sampler(0)]], float4 gl_FragCoord [[position]])
 {
-    p045_frag_out out = {};
+    p050_frag_out out = {};
     float2 q = ((gl_FragCoord.xy * 2.0) - _222.uRes) / float2(_222.uRes.y);
     float2 sp = float2(1.0499999523162841796875, 0.7799999713897705078125);
     float ds = length(q - sp);
@@ -16330,7 +18039,7 @@ float bokeh(thread const float2& q, thread const float& sc, thread const float& 
 
 }
 
-namespace p046_vert_scope {
+namespace p051_vert_scope {
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
 
 
@@ -16386,7 +18095,7 @@ struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
     float uWind;
 };
 
-struct p046_vert_out
+struct p051_vert_out
 {
     float2 vUV [[user(locn0)]];
     float3 vN [[user(locn1)]];
@@ -16412,9 +18121,9 @@ float hashu(thread const uint& v)
     return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
 }
 
-[[host_name("p046_vert")]] vertex p046_vert_out p046_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _117 [[buffer(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+[[host_name("p051_vert")]] vertex p051_vert_out p051_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _117 [[buffer(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
 {
-    p046_vert_out out = {};
+    p051_vert_out out = {};
     uint id = uint(int(gl_InstanceIndex)) * 7u;
     uint param = id;
     float h1 = hashu(param);
@@ -16498,7 +18207,7 @@ float hashu(thread const uint& v)
 
 }
 
-namespace p046_vert_screen_scope {
+namespace p051_vert_screen_scope {
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
 
 
@@ -16554,7 +18263,7 @@ struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
     float uWind;
 };
 
-struct p046_vert_out
+struct p051_vert_out
 {
     float2 vUV [[user(locn0)]];
     float3 vN [[user(locn1)]];
@@ -16580,9 +18289,9 @@ float hashu(thread const uint& v)
     return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
 }
 
-[[host_name("p046_vert_screen")]] vertex p046_vert_out p046_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _117 [[buffer(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+[[host_name("p051_vert_screen")]] vertex p051_vert_out p051_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _117 [[buffer(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
 {
-    p046_vert_out out = {};
+    p051_vert_out out = {};
     uint id = uint(int(gl_InstanceIndex)) * 7u;
     uint param = id;
     float h1 = hashu(param);
@@ -16665,7 +18374,7 @@ float hashu(thread const uint& v)
 
 }
 
-namespace p046_frag_scope {
+namespace p051_frag_scope {
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
 #pragma clang diagnostic ignored "-Wmissing-braces"
 
@@ -16751,12 +18460,12 @@ struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
     float3 uPB[4];
 };
 
-struct p046_frag_out
+struct p051_frag_out
 {
     float4 o [[color(0)]];
 };
 
-struct p046_frag_in
+struct p051_frag_in
 {
     float2 vUV [[user(locn0)]];
     float3 vN [[user(locn1)]];
@@ -16858,9 +18567,9 @@ float _noise(thread const float3& x)
     return mix(mix(mix(_90, _97, f.x), mix(_105, _110, f.x), f.y), mix(mix(_121, _126, f.x), mix(_134, _139, f.x), f.y), f.z);
 }
 
-[[host_name("p046_frag")]] fragment p046_frag_out p046_frag(p046_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _183 [[buffer(0)]], bool gl_FrontFacing [[front_facing]])
+[[host_name("p051_frag")]] fragment p051_frag_out p051_frag(p051_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _183 [[buffer(0)]], bool gl_FrontFacing [[front_facing]])
 {
-    p046_frag_out out = {};
+    p051_frag_out out = {};
     float2 p = (in.vUV * 2.0) - float2(1.0);
     float yy = in.vUV.y;
     float lobed = step(0.60000002384185791015625, in.vH.x);
@@ -16897,6 +18606,3994 @@ float _noise(thread const float3& x)
     col += (((sc * powr(fast::max(dot(reflect(float3(-0.439999997615814208984375, -0.5, -0.74500000476837158203125), n), V), 0.0), 24.0)) * 0.300000011920928955078125) * lit);
     col *= (1.0 - ((0.25 * veins) * lit));
     out.o = float4(col * exp((-in.vDepth) * 0.0199999995529651641845703125), in.vDepth);
+    return out;
+}
+
+
+}
+
+namespace p052_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p052_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p052_vert")]] vertex p052_vert_out p052_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p052_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p052_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p052_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p052_vert_screen")]] vertex p052_vert_out p052_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p052_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p052_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p052_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+static inline __attribute__((always_inline))
+float3 viewRay(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85, thread float4& gl_FragCoord)
+{
+    float2 q = ((gl_FragCoord.xy / _85.uRes) * 2.0) - float2(1.0);
+    return fast::normalize((_85.uCamF + (_85.uCamR * ((q.x * _85.uTan) * _85.uAspect))) + (_85.uCamU * (q.y * _85.uTan)));
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85)
+{
+    t += _85.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _85.uPA[0];
+    param[1] = _85.uPA[1];
+    param[2] = _85.uPA[2];
+    param[3] = _85.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _259;
+    if (_85.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _85.uPB[0];
+        param_2[1] = _85.uPB[1];
+        param_2[2] = _85.uPB[2];
+        param_2[3] = _85.uPB[3];
+        float param_3 = t;
+        _259 = mix(c, palOf(param_2, param_3), float3(_85.uPalMix));
+    }
+    else
+    {
+        _259 = c;
+    }
+    return _259;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85)
+{
+    float param = t;
+    float3 _291 = pal(param, _85);
+    float3 c = fast::max(_291, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float3 fsunC(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85)
+{
+    float param = 0.100000001490116119384765625;
+    return mix(float3(1.0, 0.86000001430511474609375, 0.550000011920928955078125), neon(param, _85), float3(0.07999999821186065673828125)) * (((0.699999988079071044921875 + (0.3499999940395355224609375 * _85.uDyn)) + (0.300000011920928955078125 * _85.uBassS)) + (0.100000001490116119384765625 * _85.uHitS.x));
+}
+
+static inline __attribute__((always_inline))
+float3 fogC(thread const float3& v, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85)
+{
+    float s = powr(fast::max(dot(v, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), 0.0), 3.0);
+    return (mix(float3(0.01600000075995922088623046875, 0.02999999932944774627685546875, 0.0240000002086162567138671875), float3(0.300000011920928955078125, 0.37999999523162841796875, 0.2199999988079071044921875), float3(0.07999999821186065673828125 + (0.920000016689300537109375 * s))) * (0.550000011920928955078125 + (0.3499999940395355224609375 * _85.uDyn))) + (((fsunC(_85) * s) * s) * 0.4000000059604644775390625);
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _151 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _156 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _164 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _169 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _180 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _185 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _193 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _198 = hash(param_7);
+    return mix(mix(mix(_151, _156, f.x), mix(_164, _169, f.x), f.y), mix(mix(_180, _185, f.x), mix(_193, _198, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float hist(thread const float& f, thread const float& age, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85)
+{
+    return uHist.sample(uHistSmplr, float2(fast::clamp(f, 0.0040000001899898052215576171875, 0.995999991893768310546875), _85.uHistHead - (fast::clamp(age, 0.0, 1.0) * 0.9882810115814208984375))).x;
+}
+
+static inline __attribute__((always_inline))
+float gustAt(thread const float3& p, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85)
+{
+    float3 param = float3(p.x * 0.100000001490116119384765625, 0.0, 2.0);
+    float param_1 = 0.02999999932944774627685546875 + (0.0500000007450580596923828125 * _noise(param));
+    float param_2 = fast::clamp((p.z - 2.0) / 75.0, 0.0, 1.0);
+    return (0.20000000298023223876953125 + (0.949999988079071044921875 * hist(param_1, param_2, uHist, uHistSmplr, _85))) + (0.300000011920928955078125 * _85.uBassS);
+}
+
+static inline __attribute__((always_inline))
+float spec(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).x;
+}
+
+[[host_name("p052_frag")]] fragment p052_frag_out p052_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _85 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], texture2d<float> uHist [[texture(1)]], sampler uSpecSmplr [[sampler(0)]], sampler uHistSmplr [[sampler(1)]], float4 gl_FragCoord [[position]])
+{
+    p052_frag_out out = {};
+    float3 rd = viewRay(_85, gl_FragCoord);
+    float3 param = rd;
+    float3 col = fogC(param, _85);
+    float depth = 200.0;
+    col += ((fsunC(_85) * exp((-acos(fast::clamp(dot(rd, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), -1.0, 1.0))) * 3.2000000476837158203125)) * 0.5);
+    if (rd.y < (-0.00200000009499490261077880859375))
+    {
+        float t = (-_85.uEye.y) / rd.y;
+        float3 p = _85.uEye + (rd * t);
+        depth = t;
+        float3 param_1 = float3(p.xz * 3.099999904632568359375, 1.0);
+        float3 param_2 = float3(p.xz * 11.0, 4.0);
+        float3 param_3 = float3(p.xz * 0.60000002384185791015625, 7.0);
+        float litter = ((_noise(param_1) * 0.5) + (_noise(param_2) * 0.300000011920928955078125)) + (_noise(param_3) * 0.20000000298023223876953125);
+        float path = exp(-powr((p.x - (sin(p.z * 0.12999999523162841796875) * 1.2000000476837158203125)) / 1.10000002384185791015625, 2.0));
+        float3 g = mix(mix(float3(0.02999999932944774627685546875, 0.04500000178813934326171875, 0.017999999225139617919921875), float3(0.0900000035762786865234375, 0.07500000298023223876953125, 0.0350000001490116119384765625), float3(litter)), float3(0.12999999523162841796875, 0.104999996721744537353515625, 0.0599999986588954925537109375), float3(path * 0.699999988079071044921875)) * (0.60000002384185791015625 + (0.60000002384185791015625 * litter));
+        float3 param_4 = p;
+        float3 param_5 = float3((p.xz * 0.449999988079071044921875) + ((float2(0.75, 0.300000011920928955078125) * gustAt(param_4, uHist, uHistSmplr, _85)) * 0.5), _85.uTime * 0.0500000007450580596923828125);
+        float3 param_6 = float3(p.xz * 1.60000002384185791015625, 3.0 + (_85.uTime * 0.070000000298023223876953125));
+        float fl = smoothstep(0.560000002384185791015625, 0.7200000286102294921875, _noise(param_5)) * smoothstep(0.300000011920928955078125, 0.699999988079071044921875, _noise(param_6));
+        float param_7 = 0.100000001490116119384765625 + (0.60000002384185791015625 * fract(p.z * 0.070000000298023223876953125));
+        g += (((fsunC(_85) * g) * fl) * (4.0 + (7.0 * spec(param_7, uSpec, uSpecSmplr))));
+        float3 param_8 = rd;
+        col = mix(g * (0.60000002384185791015625 + (0.5 * _85.uDyn)), fogC(param_8, _85), float3(1.0 - exp((-t) * 0.02199999988079071044921875)));
+    }
+    out.o = float4(col, depth);
+    return out;
+}
+
+
+}
+
+namespace p053_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p053_vert_out
+{
+    float3 vW [[user(locn0)]];
+    float3 vN [[user(locn1)]];
+    float2 vBark [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+void tree(thread const float& i, thread float3& base, thread float& rad, thread float& ht, thread float2& lean)
+{
+    uint id = (uint(i) * 7u) + 11u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    float z = 3.0 + (powr(h1, 1.25) * 66.0);
+    float side = (h2 < 0.5) ? (-1.0) : 1.0;
+    base = float3((side * (1.7999999523162841796875 + (powr(h3, 1.39999997615814208984375) * (7.0 + (z * 0.2199999988079071044921875))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.0, z);
+    rad = (0.20000000298023223876953125 + ((0.4199999868869781494140625 * h4) * h4)) + (0.119999997317790985107421875 * step(0.89999997615814208984375, h5));
+    ht = (15.0 + (11.0 * h5)) + (rad * 8.0);
+    uint param_5 = id + 5u;
+    uint param_6 = id + 6u;
+    lean = (float2(hashu(param_5), hashu(param_6)) - float2(0.5)) * 1.7999999523162841796875;
+}
+
+static inline __attribute__((always_inline))
+float3 trunkAt(thread const float3& base, thread const float2& lean, thread const float& y, thread const float& ht)
+{
+    float t = y / ht;
+    return base + float3((lean.x * t) * t, y, (lean.y * t) * t);
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _173 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _178 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _186 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _191 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _202 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _207 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _215 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _220 = hash(param_7);
+    return mix(mix(mix(_173, _178, f.x), mix(_186, _191, f.x), f.y), mix(mix(_202, _207, f.x), mix(_215, _220, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float hist(thread const float& f, thread const float& age, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    return uHist.sample(uHistSmplr, float2(fast::clamp(f, 0.0040000001899898052215576171875, 0.995999991893768310546875), _70.uHistHead - (fast::clamp(age, 0.0, 1.0) * 0.9882810115814208984375)), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float gustAt(thread const float3& p, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    float3 param = float3(p.x * 0.100000001490116119384765625, 0.0, 2.0);
+    float param_1 = 0.02999999932944774627685546875 + (0.0500000007450580596923828125 * _noise(param));
+    float param_2 = fast::clamp((p.z - 2.0) / 75.0, 0.0, 1.0);
+    return (0.20000000298023223876953125 + (0.949999988079071044921875 * hist(param_1, param_2, uHist, uHistSmplr, _70))) + (0.300000011920928955078125 * _70.uBassS);
+}
+
+[[host_name("p053_vert")]] vertex p053_vert_out p053_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70 [[buffer(0)]], texture2d<float> uHist [[texture(0)]], sampler uHistSmplr [[sampler(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p053_vert_out out = {};
+    float param = float(int(gl_InstanceIndex));
+    float3 param_1;
+    float param_2;
+    float param_3;
+    float2 param_4;
+    tree(param, param_1, param_2, param_3, param_4);
+    float3 base = param_1;
+    float rad = param_2;
+    float ht = param_3;
+    float2 lean = param_4;
+    int q = int(gl_VertexIndex) / 6;
+    int k = spvSMod(int(gl_VertexIndex), 6);
+    int2 c = int2(spvSMod(q, 10) + int(((k == 1) || (k == 2)) || (k == 4)), (q / 10) + int(((k == 2) || (k == 4)) || (k == 5)));
+    float t = float(c.y) / 9.0;
+    float y = (((t * t) * 0.89999997615814208984375) + (t * 0.100000001490116119384765625)) * ht;
+    float a = (float(c.x) / 10.0) * 6.283185482025146484375;
+    float r = ((rad * (1.0 - (0.550000011920928955078125 * t))) * (1.0 + ((0.89999997615814208984375 * exp((-y) * 1.60000002384185791015625)) * (1.0 + (0.3499999940395355224609375 * sin((a * 3.0) + (base.x * 5.0))))))) * (1.0 + (0.0599999986588954925537109375 * sin((a * 2.0) + (y * 0.699999988079071044921875))));
+    float3 param_5 = base;
+    float2 param_6 = lean;
+    float param_7 = y;
+    float param_8 = ht;
+    float3 ctr = trunkAt(param_5, param_6, param_7, param_8);
+    float3 param_9 = base;
+    float3 _531 = ctr;
+    float2 _533 = _531.xz + ((((float2(0.75, 0.300000011920928955078125) * gustAt(param_9, uHist, uHistSmplr, _70)) * t) * t) * 0.2199999988079071044921875);
+    ctr.x = _533.x;
+    ctr.z = _533.y;
+    out.vN = float3(cos(a), 0.0, sin(a));
+    out.vW = ctr + (out.vN * r);
+    out.vBark = float2(((a * rad) * 5.0) + base.x, y);
+    out.gl_Position = _70.uVP * float4(out.vW, 1.0);
+    out.vDepth = out.gl_Position.w;
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p053_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p053_vert_out
+{
+    float3 vW [[user(locn0)]];
+    float3 vN [[user(locn1)]];
+    float2 vBark [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+void tree(thread const float& i, thread float3& base, thread float& rad, thread float& ht, thread float2& lean)
+{
+    uint id = (uint(i) * 7u) + 11u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    float z = 3.0 + (powr(h1, 1.25) * 66.0);
+    float side = (h2 < 0.5) ? (-1.0) : 1.0;
+    base = float3((side * (1.7999999523162841796875 + (powr(h3, 1.39999997615814208984375) * (7.0 + (z * 0.2199999988079071044921875))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.0, z);
+    rad = (0.20000000298023223876953125 + ((0.4199999868869781494140625 * h4) * h4)) + (0.119999997317790985107421875 * step(0.89999997615814208984375, h5));
+    ht = (15.0 + (11.0 * h5)) + (rad * 8.0);
+    uint param_5 = id + 5u;
+    uint param_6 = id + 6u;
+    lean = (float2(hashu(param_5), hashu(param_6)) - float2(0.5)) * 1.7999999523162841796875;
+}
+
+static inline __attribute__((always_inline))
+float3 trunkAt(thread const float3& base, thread const float2& lean, thread const float& y, thread const float& ht)
+{
+    float t = y / ht;
+    return base + float3((lean.x * t) * t, y, (lean.y * t) * t);
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _173 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _178 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _186 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _191 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _202 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _207 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _215 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _220 = hash(param_7);
+    return mix(mix(mix(_173, _178, f.x), mix(_186, _191, f.x), f.y), mix(mix(_202, _207, f.x), mix(_215, _220, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float hist(thread const float& f, thread const float& age, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    return uHist.sample(uHistSmplr, float2(fast::clamp(f, 0.0040000001899898052215576171875, 0.995999991893768310546875), _70.uHistHead - (fast::clamp(age, 0.0, 1.0) * 0.9882810115814208984375)), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float gustAt(thread const float3& p, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    float3 param = float3(p.x * 0.100000001490116119384765625, 0.0, 2.0);
+    float param_1 = 0.02999999932944774627685546875 + (0.0500000007450580596923828125 * _noise(param));
+    float param_2 = fast::clamp((p.z - 2.0) / 75.0, 0.0, 1.0);
+    return (0.20000000298023223876953125 + (0.949999988079071044921875 * hist(param_1, param_2, uHist, uHistSmplr, _70))) + (0.300000011920928955078125 * _70.uBassS);
+}
+
+[[host_name("p053_vert_screen")]] vertex p053_vert_out p053_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70 [[buffer(0)]], texture2d<float> uHist [[texture(0)]], sampler uHistSmplr [[sampler(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p053_vert_out out = {};
+    float param = float(int(gl_InstanceIndex));
+    float3 param_1;
+    float param_2;
+    float param_3;
+    float2 param_4;
+    tree(param, param_1, param_2, param_3, param_4);
+    float3 base = param_1;
+    float rad = param_2;
+    float ht = param_3;
+    float2 lean = param_4;
+    int q = int(gl_VertexIndex) / 6;
+    int k = spvSMod(int(gl_VertexIndex), 6);
+    int2 c = int2(spvSMod(q, 10) + int(((k == 1) || (k == 2)) || (k == 4)), (q / 10) + int(((k == 2) || (k == 4)) || (k == 5)));
+    float t = float(c.y) / 9.0;
+    float y = (((t * t) * 0.89999997615814208984375) + (t * 0.100000001490116119384765625)) * ht;
+    float a = (float(c.x) / 10.0) * 6.283185482025146484375;
+    float r = ((rad * (1.0 - (0.550000011920928955078125 * t))) * (1.0 + ((0.89999997615814208984375 * exp((-y) * 1.60000002384185791015625)) * (1.0 + (0.3499999940395355224609375 * sin((a * 3.0) + (base.x * 5.0))))))) * (1.0 + (0.0599999986588954925537109375 * sin((a * 2.0) + (y * 0.699999988079071044921875))));
+    float3 param_5 = base;
+    float2 param_6 = lean;
+    float param_7 = y;
+    float param_8 = ht;
+    float3 ctr = trunkAt(param_5, param_6, param_7, param_8);
+    float3 param_9 = base;
+    float3 _531 = ctr;
+    float2 _533 = _531.xz + ((((float2(0.75, 0.300000011920928955078125) * gustAt(param_9, uHist, uHistSmplr, _70)) * t) * t) * 0.2199999988079071044921875);
+    ctr.x = _533.x;
+    ctr.z = _533.y;
+    out.vN = float3(cos(a), 0.0, sin(a));
+    out.vW = ctr + (out.vN * r);
+    out.vBark = float2(((a * rad) * 5.0) + base.x, y);
+    out.gl_Position = _70.uVP * float4(out.vW, 1.0);
+    out.vDepth = out.gl_Position.w;
+    return out;
+}
+
+
+}
+
+namespace p053_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p053_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p053_frag_in
+{
+    float3 vW [[user(locn0)]];
+    float3 vN [[user(locn1)]];
+    float2 vBark [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+};
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _91 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _98 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _106 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _111 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _122 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _127 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _135 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _140 = hash(param_7);
+    return mix(mix(mix(_91, _98, f.x), mix(_106, _111, f.x), f.y), mix(mix(_122, _127, f.x), mix(_135, _140, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    t += _184.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _184.uPA[0];
+    param[1] = _184.uPA[1];
+    param[2] = _184.uPA[2];
+    param[3] = _184.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _213;
+    if (_184.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _184.uPB[0];
+        param_2[1] = _184.uPB[1];
+        param_2[2] = _184.uPB[2];
+        param_2[3] = _184.uPB[3];
+        float param_3 = t;
+        _213 = mix(c, palOf(param_2, param_3), float3(_184.uPalMix));
+    }
+    else
+    {
+        _213 = c;
+    }
+    return _213;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    float param = t;
+    float3 _245 = pal(param, _184);
+    float3 c = fast::max(_245, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float3 fsunC(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    float param = 0.100000001490116119384765625;
+    return mix(float3(1.0, 0.86000001430511474609375, 0.550000011920928955078125), neon(param, _184), float3(0.07999999821186065673828125)) * (((0.699999988079071044921875 + (0.3499999940395355224609375 * _184.uDyn)) + (0.300000011920928955078125 * _184.uBassS)) + (0.100000001490116119384765625 * _184.uHitS.x));
+}
+
+static inline __attribute__((always_inline))
+float3 fogC(thread const float3& v, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    float s = powr(fast::max(dot(v, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), 0.0), 3.0);
+    return (mix(float3(0.01600000075995922088623046875, 0.02999999932944774627685546875, 0.0240000002086162567138671875), float3(0.300000011920928955078125, 0.37999999523162841796875, 0.2199999988079071044921875), float3(0.07999999821186065673828125 + (0.920000016689300537109375 * s))) * (0.550000011920928955078125 + (0.3499999940395355224609375 * _184.uDyn))) + (((fsunC(_184) * s) * s) * 0.4000000059604644775390625);
+}
+
+[[host_name("p053_frag")]] fragment p053_frag_out p053_frag(p053_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184 [[buffer(0)]])
+{
+    p053_frag_out out = {};
+    float3 param = float3(in.vBark.x * 1.2999999523162841796875, in.vBark.y * 0.300000011920928955078125, 1.0);
+    float3 param_1 = float3(in.vBark.x * 4.099999904632568359375, in.vBark.y * 1.10000002384185791015625, 5.0);
+    float b = (_noise(param) * 0.60000002384185791015625) + (_noise(param_1) * 0.4000000059604644775390625);
+    float ridge = smoothstep(0.36000001430511474609375, 0.62000000476837158203125, b);
+    float3 n = fast::normalize(in.vN);
+    float3 v = fast::normalize(_184.uEye - in.vW);
+    float3 sc = fsunC(_184);
+    float3 param_2 = float3(in.vBark * float2(11.0, 2.599999904632568359375), 2.0);
+    float fine = _noise(param_2);
+    float3 param_3 = float3(in.vBark.x * 2.599999904632568359375, in.vBark.y * 0.5, 8.0);
+    float crack = smoothstep(0.5, 0.300000011920928955078125, b) * smoothstep(0.3499999940395355224609375, 0.60000002384185791015625, _noise(param_3));
+    float3 bark = (mix(float3(0.01200000010430812835693359375, 0.00999999977648258209228515625, 0.008000000379979610443115234375), float3(0.300000011920928955078125, 0.20999999344348907470703125, 0.12999999523162841796875), float3(ridge)) * (0.449999988079071044921875 + (0.89999997615814208984375 * fine))) * (1.0 - (0.699999988079071044921875 * crack));
+    float3 param_4 = float3(in.vW.x * 0.800000011920928955078125, in.vW.y * 0.449999988079071044921875, in.vW.z * 0.800000011920928955078125);
+    float moss = smoothstep(0.5, 0.75, _noise(param_4)) * smoothstep(5.0, 0.300000011920928955078125, in.vW.y);
+    bark = mix(bark, float3(0.0599999986588954925537109375, 0.12999999523162841796875, 0.02999999932944774627685546875) * (0.5 + (0.89999997615814208984375 * ridge)), float3(moss * 0.85000002384185791015625));
+    float lit = fast::max(dot(n, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), 0.0);
+    float rim = powr(1.0 - fast::max(dot(n, v), 0.0), 3.0) * smoothstep(-0.60000002384185791015625, 0.5, dot(n, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)));
+    float3 col = ((bark * (float3(0.0500000007450580596923828125, 0.085000000894069671630859375, 0.0599999986588954925537109375) + ((sc * lit) * 1.5))) * (0.550000011920928955078125 + (0.60000002384185791015625 * ridge))) + (((sc * ((bark * 6.0) + float3(0.039999999105930328369140625))) * rim) * (0.5 + (0.5 * ridge)));
+    col *= (0.5 + (0.5 * smoothstep(0.0, 2.5, in.vW.y)));
+    float dist = length(in.vW - _184.uEye);
+    float3 param_5 = -v;
+    col = mix(col, fogC(param_5, _184), float3(1.0 - exp((-dist) * 0.02199999988079071044921875)));
+    out.o = float4(col, in.vDepth);
+    return out;
+}
+
+
+}
+
+namespace p054_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p054_vert_out
+{
+    float3 vW [[user(locn0)]];
+    float3 vN [[user(locn1)]];
+    float2 vBark [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+void tree(thread const float& i, thread float3& base, thread float& rad, thread float& ht, thread float2& lean)
+{
+    uint id = (uint(i) * 7u) + 11u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    float z = 3.0 + (powr(h1, 1.25) * 66.0);
+    float side = (h2 < 0.5) ? (-1.0) : 1.0;
+    base = float3((side * (1.7999999523162841796875 + (powr(h3, 1.39999997615814208984375) * (7.0 + (z * 0.2199999988079071044921875))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.0, z);
+    rad = (0.20000000298023223876953125 + ((0.4199999868869781494140625 * h4) * h4)) + (0.119999997317790985107421875 * step(0.89999997615814208984375, h5));
+    ht = (15.0 + (11.0 * h5)) + (rad * 8.0);
+    uint param_5 = id + 5u;
+    uint param_6 = id + 6u;
+    lean = (float2(hashu(param_5), hashu(param_6)) - float2(0.5)) * 1.7999999523162841796875;
+}
+
+static inline __attribute__((always_inline))
+float3 trunkAt(thread const float3& base, thread const float2& lean, thread const float& y, thread const float& ht)
+{
+    float t = y / ht;
+    return base + float3((lean.x * t) * t, y, (lean.y * t) * t);
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _173 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _178 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _186 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _191 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _202 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _207 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _215 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _220 = hash(param_7);
+    return mix(mix(mix(_173, _178, f.x), mix(_186, _191, f.x), f.y), mix(mix(_202, _207, f.x), mix(_215, _220, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float hist(thread const float& f, thread const float& age, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    return uHist.sample(uHistSmplr, float2(fast::clamp(f, 0.0040000001899898052215576171875, 0.995999991893768310546875), _70.uHistHead - (fast::clamp(age, 0.0, 1.0) * 0.9882810115814208984375)), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float gustAt(thread const float3& p, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    float3 param = float3(p.x * 0.100000001490116119384765625, 0.0, 2.0);
+    float param_1 = 0.02999999932944774627685546875 + (0.0500000007450580596923828125 * _noise(param));
+    float param_2 = fast::clamp((p.z - 2.0) / 75.0, 0.0, 1.0);
+    return (0.20000000298023223876953125 + (0.949999988079071044921875 * hist(param_1, param_2, uHist, uHistSmplr, _70))) + (0.300000011920928955078125 * _70.uBassS);
+}
+
+[[host_name("p054_vert")]] vertex p054_vert_out p054_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70 [[buffer(0)]], texture2d<float> uHist [[texture(0)]], sampler uHistSmplr [[sampler(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p054_vert_out out = {};
+    float ti = float(int(gl_InstanceIndex) / 3);
+    uint id = (uint(int(gl_InstanceIndex)) * 4u) + 101u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    float param_3 = ti;
+    float3 param_4;
+    float param_5;
+    float param_6;
+    float2 param_7;
+    tree(param_3, param_4, param_5, param_6, param_7);
+    float3 base = param_4;
+    float rad = param_5;
+    float ht = param_6;
+    float2 lean = param_7;
+    int q = int(gl_VertexIndex) / 6;
+    int k = spvSMod(int(gl_VertexIndex), 6);
+    int2 c = int2(spvSMod(q, 6) + int(((k == 1) || (k == 2)) || (k == 4)), (q / 6) + int(((k == 2) || (k == 4)) || (k == 5)));
+    float t = float(c.y) / 4.0;
+    float a = (float(c.x) / 6.0) * 6.283185482025146484375;
+    float y0 = ht * (0.4199999868869781494140625 + (0.300000011920928955078125 * h1));
+    float az = h2 * 6.283185482025146484375;
+    float len = (3.0 + (4.0 * h3)) + (rad * 5.0);
+    float3 ax = fast::normalize(float3(cos(az), 0.550000011920928955078125 + (0.300000011920928955078125 * h3), sin(az)));
+    float3 param_8 = base;
+    float2 param_9 = lean;
+    float param_10 = y0;
+    float param_11 = ht;
+    float3 s0 = trunkAt(param_8, param_9, param_10, param_11);
+    float3 ctr = (s0 + ((ax * len) * t)) + float3(0.0, ((-0.60000002384185791015625) * t) * t, 0.0);
+    float3 param_12 = base;
+    float3 param_13 = ctr;
+    float3 _561 = ctr;
+    float2 _563 = _561.xz + (((((float2(0.75, 0.300000011920928955078125) * gustAt(param_12, uHist, uHistSmplr, _70)) * (y0 / ht)) * (y0 / ht)) * 0.2199999988079071044921875) + (((float2(0.75, 0.300000011920928955078125) * gustAt(param_13, uHist, uHistSmplr, _70)) * t) * 0.119999997317790985107421875));
+    ctr.x = _563.x;
+    ctr.z = _563.y;
+    float3 u = fast::normalize(cross(ax, float3(0.0, 1.0, 0.00999999977648258209228515625)));
+    float3 w = cross(ax, u);
+    out.vN = (u * cos(a)) + (w * sin(a));
+    out.vW = ctr + (((out.vN * rad) * 0.3400000035762786865234375) * (1.0 - (0.75 * t)));
+    out.vBark = float2(((a * rad) * 2.0) + (h1 * 9.0), t * len);
+    out.gl_Position = _70.uVP * float4(out.vW, 1.0);
+    out.vDepth = out.gl_Position.w;
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p054_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p054_vert_out
+{
+    float3 vW [[user(locn0)]];
+    float3 vN [[user(locn1)]];
+    float2 vBark [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+void tree(thread const float& i, thread float3& base, thread float& rad, thread float& ht, thread float2& lean)
+{
+    uint id = (uint(i) * 7u) + 11u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    float z = 3.0 + (powr(h1, 1.25) * 66.0);
+    float side = (h2 < 0.5) ? (-1.0) : 1.0;
+    base = float3((side * (1.7999999523162841796875 + (powr(h3, 1.39999997615814208984375) * (7.0 + (z * 0.2199999988079071044921875))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.0, z);
+    rad = (0.20000000298023223876953125 + ((0.4199999868869781494140625 * h4) * h4)) + (0.119999997317790985107421875 * step(0.89999997615814208984375, h5));
+    ht = (15.0 + (11.0 * h5)) + (rad * 8.0);
+    uint param_5 = id + 5u;
+    uint param_6 = id + 6u;
+    lean = (float2(hashu(param_5), hashu(param_6)) - float2(0.5)) * 1.7999999523162841796875;
+}
+
+static inline __attribute__((always_inline))
+float3 trunkAt(thread const float3& base, thread const float2& lean, thread const float& y, thread const float& ht)
+{
+    float t = y / ht;
+    return base + float3((lean.x * t) * t, y, (lean.y * t) * t);
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _173 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _178 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _186 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _191 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _202 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _207 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _215 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _220 = hash(param_7);
+    return mix(mix(mix(_173, _178, f.x), mix(_186, _191, f.x), f.y), mix(mix(_202, _207, f.x), mix(_215, _220, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float hist(thread const float& f, thread const float& age, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    return uHist.sample(uHistSmplr, float2(fast::clamp(f, 0.0040000001899898052215576171875, 0.995999991893768310546875), _70.uHistHead - (fast::clamp(age, 0.0, 1.0) * 0.9882810115814208984375)), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float gustAt(thread const float3& p, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    float3 param = float3(p.x * 0.100000001490116119384765625, 0.0, 2.0);
+    float param_1 = 0.02999999932944774627685546875 + (0.0500000007450580596923828125 * _noise(param));
+    float param_2 = fast::clamp((p.z - 2.0) / 75.0, 0.0, 1.0);
+    return (0.20000000298023223876953125 + (0.949999988079071044921875 * hist(param_1, param_2, uHist, uHistSmplr, _70))) + (0.300000011920928955078125 * _70.uBassS);
+}
+
+[[host_name("p054_vert_screen")]] vertex p054_vert_out p054_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70 [[buffer(0)]], texture2d<float> uHist [[texture(0)]], sampler uHistSmplr [[sampler(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p054_vert_out out = {};
+    float ti = float(int(gl_InstanceIndex) / 3);
+    uint id = (uint(int(gl_InstanceIndex)) * 4u) + 101u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    float param_3 = ti;
+    float3 param_4;
+    float param_5;
+    float param_6;
+    float2 param_7;
+    tree(param_3, param_4, param_5, param_6, param_7);
+    float3 base = param_4;
+    float rad = param_5;
+    float ht = param_6;
+    float2 lean = param_7;
+    int q = int(gl_VertexIndex) / 6;
+    int k = spvSMod(int(gl_VertexIndex), 6);
+    int2 c = int2(spvSMod(q, 6) + int(((k == 1) || (k == 2)) || (k == 4)), (q / 6) + int(((k == 2) || (k == 4)) || (k == 5)));
+    float t = float(c.y) / 4.0;
+    float a = (float(c.x) / 6.0) * 6.283185482025146484375;
+    float y0 = ht * (0.4199999868869781494140625 + (0.300000011920928955078125 * h1));
+    float az = h2 * 6.283185482025146484375;
+    float len = (3.0 + (4.0 * h3)) + (rad * 5.0);
+    float3 ax = fast::normalize(float3(cos(az), 0.550000011920928955078125 + (0.300000011920928955078125 * h3), sin(az)));
+    float3 param_8 = base;
+    float2 param_9 = lean;
+    float param_10 = y0;
+    float param_11 = ht;
+    float3 s0 = trunkAt(param_8, param_9, param_10, param_11);
+    float3 ctr = (s0 + ((ax * len) * t)) + float3(0.0, ((-0.60000002384185791015625) * t) * t, 0.0);
+    float3 param_12 = base;
+    float3 param_13 = ctr;
+    float3 _561 = ctr;
+    float2 _563 = _561.xz + (((((float2(0.75, 0.300000011920928955078125) * gustAt(param_12, uHist, uHistSmplr, _70)) * (y0 / ht)) * (y0 / ht)) * 0.2199999988079071044921875) + (((float2(0.75, 0.300000011920928955078125) * gustAt(param_13, uHist, uHistSmplr, _70)) * t) * 0.119999997317790985107421875));
+    ctr.x = _563.x;
+    ctr.z = _563.y;
+    float3 u = fast::normalize(cross(ax, float3(0.0, 1.0, 0.00999999977648258209228515625)));
+    float3 w = cross(ax, u);
+    out.vN = (u * cos(a)) + (w * sin(a));
+    out.vW = ctr + (((out.vN * rad) * 0.3400000035762786865234375) * (1.0 - (0.75 * t)));
+    out.vBark = float2(((a * rad) * 2.0) + (h1 * 9.0), t * len);
+    out.gl_Position = _70.uVP * float4(out.vW, 1.0);
+    out.vDepth = out.gl_Position.w;
+    return out;
+}
+
+
+}
+
+namespace p054_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p054_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p054_frag_in
+{
+    float3 vW [[user(locn0)]];
+    float3 vN [[user(locn1)]];
+    float2 vBark [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+};
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _91 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _98 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _106 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _111 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _122 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _127 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _135 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _140 = hash(param_7);
+    return mix(mix(mix(_91, _98, f.x), mix(_106, _111, f.x), f.y), mix(mix(_122, _127, f.x), mix(_135, _140, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    t += _184.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _184.uPA[0];
+    param[1] = _184.uPA[1];
+    param[2] = _184.uPA[2];
+    param[3] = _184.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _213;
+    if (_184.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _184.uPB[0];
+        param_2[1] = _184.uPB[1];
+        param_2[2] = _184.uPB[2];
+        param_2[3] = _184.uPB[3];
+        float param_3 = t;
+        _213 = mix(c, palOf(param_2, param_3), float3(_184.uPalMix));
+    }
+    else
+    {
+        _213 = c;
+    }
+    return _213;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    float param = t;
+    float3 _245 = pal(param, _184);
+    float3 c = fast::max(_245, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float3 fsunC(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    float param = 0.100000001490116119384765625;
+    return mix(float3(1.0, 0.86000001430511474609375, 0.550000011920928955078125), neon(param, _184), float3(0.07999999821186065673828125)) * (((0.699999988079071044921875 + (0.3499999940395355224609375 * _184.uDyn)) + (0.300000011920928955078125 * _184.uBassS)) + (0.100000001490116119384765625 * _184.uHitS.x));
+}
+
+static inline __attribute__((always_inline))
+float3 fogC(thread const float3& v, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184)
+{
+    float s = powr(fast::max(dot(v, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), 0.0), 3.0);
+    return (mix(float3(0.01600000075995922088623046875, 0.02999999932944774627685546875, 0.0240000002086162567138671875), float3(0.300000011920928955078125, 0.37999999523162841796875, 0.2199999988079071044921875), float3(0.07999999821186065673828125 + (0.920000016689300537109375 * s))) * (0.550000011920928955078125 + (0.3499999940395355224609375 * _184.uDyn))) + (((fsunC(_184) * s) * s) * 0.4000000059604644775390625);
+}
+
+[[host_name("p054_frag")]] fragment p054_frag_out p054_frag(p054_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _184 [[buffer(0)]])
+{
+    p054_frag_out out = {};
+    float3 param = float3(in.vBark.x * 1.2999999523162841796875, in.vBark.y * 0.300000011920928955078125, 1.0);
+    float3 param_1 = float3(in.vBark.x * 4.099999904632568359375, in.vBark.y * 1.10000002384185791015625, 5.0);
+    float b = (_noise(param) * 0.60000002384185791015625) + (_noise(param_1) * 0.4000000059604644775390625);
+    float ridge = smoothstep(0.36000001430511474609375, 0.62000000476837158203125, b);
+    float3 n = fast::normalize(in.vN);
+    float3 v = fast::normalize(_184.uEye - in.vW);
+    float3 sc = fsunC(_184);
+    float3 param_2 = float3(in.vBark * float2(11.0, 2.599999904632568359375), 2.0);
+    float fine = _noise(param_2);
+    float3 param_3 = float3(in.vBark.x * 2.599999904632568359375, in.vBark.y * 0.5, 8.0);
+    float crack = smoothstep(0.5, 0.300000011920928955078125, b) * smoothstep(0.3499999940395355224609375, 0.60000002384185791015625, _noise(param_3));
+    float3 bark = (mix(float3(0.01200000010430812835693359375, 0.00999999977648258209228515625, 0.008000000379979610443115234375), float3(0.300000011920928955078125, 0.20999999344348907470703125, 0.12999999523162841796875), float3(ridge)) * (0.449999988079071044921875 + (0.89999997615814208984375 * fine))) * (1.0 - (0.699999988079071044921875 * crack));
+    float3 param_4 = float3(in.vW.x * 0.800000011920928955078125, in.vW.y * 0.449999988079071044921875, in.vW.z * 0.800000011920928955078125);
+    float moss = smoothstep(0.5, 0.75, _noise(param_4)) * smoothstep(5.0, 0.300000011920928955078125, in.vW.y);
+    bark = mix(bark, float3(0.0599999986588954925537109375, 0.12999999523162841796875, 0.02999999932944774627685546875) * (0.5 + (0.89999997615814208984375 * ridge)), float3(moss * 0.85000002384185791015625));
+    float lit = fast::max(dot(n, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), 0.0);
+    float rim = powr(1.0 - fast::max(dot(n, v), 0.0), 3.0) * smoothstep(-0.60000002384185791015625, 0.5, dot(n, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)));
+    float3 col = ((bark * (float3(0.0500000007450580596923828125, 0.085000000894069671630859375, 0.0599999986588954925537109375) + ((sc * lit) * 1.5))) * (0.550000011920928955078125 + (0.60000002384185791015625 * ridge))) + (((sc * ((bark * 6.0) + float3(0.039999999105930328369140625))) * rim) * (0.5 + (0.5 * ridge)));
+    col *= (0.5 + (0.5 * smoothstep(0.0, 2.5, in.vW.y)));
+    float dist = length(in.vW - _184.uEye);
+    float3 param_5 = -v;
+    col = mix(col, fogC(param_5, _184), float3(1.0 - exp((-dist) * 0.02199999988079071044921875)));
+    out.o = float4(col, in.vDepth);
+    return out;
+}
+
+
+}
+
+namespace p055_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float uMode;
+};
+
+struct p055_vert_out
+{
+    float2 vUV [[user(locn0)]];
+    float3 vW [[user(locn1)]];
+    float4 vI [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+void tree(thread const float& i, thread float3& base, thread float& rad, thread float& ht, thread float2& lean)
+{
+    uint id = (uint(i) * 7u) + 11u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    float z = 3.0 + (powr(h1, 1.25) * 66.0);
+    float side = (h2 < 0.5) ? (-1.0) : 1.0;
+    base = float3((side * (1.7999999523162841796875 + (powr(h3, 1.39999997615814208984375) * (7.0 + (z * 0.2199999988079071044921875))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.0, z);
+    rad = (0.20000000298023223876953125 + ((0.4199999868869781494140625 * h4) * h4)) + (0.119999997317790985107421875 * step(0.89999997615814208984375, h5));
+    ht = (15.0 + (11.0 * h5)) + (rad * 8.0);
+    uint param_5 = id + 5u;
+    uint param_6 = id + 6u;
+    lean = (float2(hashu(param_5), hashu(param_6)) - float2(0.5)) * 1.7999999523162841796875;
+}
+
+static inline __attribute__((always_inline))
+float3 trunkAt(thread const float3& base, thread const float2& lean, thread const float& y, thread const float& ht)
+{
+    float t = y / ht;
+    return base + float3((lean.x * t) * t, y, (lean.y * t) * t);
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _173 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _178 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _186 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _191 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _202 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _207 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _215 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _220 = hash(param_7);
+    return mix(mix(mix(_173, _178, f.x), mix(_186, _191, f.x), f.y), mix(mix(_202, _207, f.x), mix(_215, _220, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float hist(thread const float& f, thread const float& age, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    return uHist.sample(uHistSmplr, float2(fast::clamp(f, 0.0040000001899898052215576171875, 0.995999991893768310546875), _70.uHistHead - (fast::clamp(age, 0.0, 1.0) * 0.9882810115814208984375)), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float gustAt(thread const float3& p, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    float3 param = float3(p.x * 0.100000001490116119384765625, 0.0, 2.0);
+    float param_1 = 0.02999999932944774627685546875 + (0.0500000007450580596923828125 * _noise(param));
+    float param_2 = fast::clamp((p.z - 2.0) / 75.0, 0.0, 1.0);
+    return (0.20000000298023223876953125 + (0.949999988079071044921875 * hist(param_1, param_2, uHist, uHistSmplr, _70))) + (0.300000011920928955078125 * _70.uBassS);
+}
+
+[[host_name("p055_vert")]] vertex p055_vert_out p055_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70 [[buffer(0)]], texture2d<float> uHist [[texture(0)]], sampler uHistSmplr [[sampler(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p055_vert_out out = {};
+    uint id = (uint(int(gl_InstanceIndex)) * 6u) + 3u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    uint param_5 = id + 5u;
+    float h6 = hashu(param_5);
+    float inner;
+    float3 ctr;
+    float sz;
+    float lit;
+    float band;
+    float wsc;
+    if (_70.uMode < 0.5)
+    {
+        float ti = float(int(gl_InstanceIndex) / 130);
+        float param_6 = ti;
+        float3 param_7;
+        float param_8;
+        float param_9;
+        float2 param_10;
+        tree(param_6, param_7, param_8, param_9, param_10);
+        float3 base = param_7;
+        float rad = param_8;
+        float ht = param_9;
+        float2 lean = param_10;
+        float cr = 3.0 + (rad * 6.0);
+        float low = step(0.699999988079071044921875, h5);
+        float yc = mix(ht * (0.550000011920928955078125 + (0.4000000059604644775390625 * h4)), ht * (0.2199999988079071044921875 + (0.300000011920928955078125 * h4)), low);
+        float cz = (h2 * 2.0) - 1.0;
+        float sr = sqrt(1.0 - (cz * cz));
+        float3 dirc = float3(cos(h1 * 6.283185482025146484375) * sr, (cz * 0.75) + 0.119999997317790985107421875, sin(h1 * 6.283185482025146484375) * sr);
+        inner = mix(powr(h3, 0.449999988079071044921875), 0.5 + (0.4000000059604644775390625 * h3), low);
+        float3 param_11 = base;
+        float2 param_12 = lean;
+        float param_13 = yc;
+        float param_14 = ht;
+        ctr = trunkAt(param_11, param_12, param_13, param_14) + (((dirc * cr) * inner) * float3(1.0, 0.60000002384185791015625, 1.0));
+        sz = 1.2999999523162841796875 + (1.2999999523162841796875 * h6);
+        lit = smoothstep(-0.5, 0.800000011920928955078125, dot(fast::normalize(dirc), float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)));
+        band = fract((ti * 0.617999970912933349609375) + 0.070000000298023223876953125);
+        wsc = 0.5 + (yc / ht);
+    }
+    else
+    {
+        float z = 2.0 + (powr(h1, 1.39999997615814208984375) * 40.0);
+        float side = (h2 < 0.5) ? (-1.0) : 1.0;
+        ctr = float3((side * (1.0 + ((h3 * h3) * (6.0 + (z * 0.20000000298023223876953125))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.25 + (0.5 * h4), z);
+        inner = 0.60000002384185791015625 + (0.4000000059604644775390625 * h4);
+        sz = 0.550000011920928955078125 + (0.75 * h6);
+        lit = 0.0500000007450580596923828125 + ((0.5 * h5) * h5);
+        band = h5;
+        wsc = 0.3499999940395355224609375;
+    }
+    float3 param_15 = ctr;
+    float g = gustAt(param_15, uHist, uHistSmplr, _70);
+    float sway = (g * (0.100000001490116119384765625 + (0.100000001490116119384765625 * h4))) * wsc;
+    float3 _649 = ctr;
+    float2 _651 = _649.xz + ((float2(0.75, 0.300000011920928955078125) * sway) + ((float2(sin((_70.uTime * 1.7000000476837158203125) + (h1 * 40.0)), cos((_70.uTime * 1.2999999523162841796875) + (h2 * 40.0))) * 0.0199999995529651641845703125) * ((1.0 + (4.0 * _70.uBandE[2u])) + (3.0 * _70.uHitS.z))));
+    ctr.x = _651.x;
+    ctr.z = _651.y;
+    ctr.y -= (sway * 0.2199999988079071044921875);
+    float a1 = (h1 * 6.283185482025146484375) + ((sin((_70.uTime * (1.60000002384185791015625 + (2.0 * h4))) + (h2 * 30.0)) * 0.1599999964237213134765625) * ((0.4000000059604644775390625 + g) + (2.0 * _70.uHitS.z)));
+    float a2 = h6 * 6.283185482025146484375;
+    float3 u = fast::normalize(float3(cos(a1), 0.3499999940395355224609375 * sin(a2 * 3.0), sin(a1)));
+    float3 up = fast::normalize(float3(sin(a2) * 0.699999988079071044921875, 1.0, cos(a2) * 0.699999988079071044921875));
+    float3 w = fast::normalize(cross(u, up));
+    bool _719 = int(gl_VertexIndex) == 1;
+    bool _726;
+    if (!_719)
+    {
+        _726 = int(gl_VertexIndex) == 2;
+    }
+    else
+    {
+        _726 = _719;
+    }
+    bool _733;
+    if (!_726)
+    {
+        _733 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _733 = _726;
+    }
+    bool _736 = int(gl_VertexIndex) == 2;
+    bool _742;
+    if (!_736)
+    {
+        _742 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _742 = _736;
+    }
+    bool _748;
+    if (!_742)
+    {
+        _748 = int(gl_VertexIndex) == 5;
+    }
+    else
+    {
+        _748 = _742;
+    }
+    float2 q = float2(float(_733), float(_748));
+    sz *= smoothstep(2.2000000476837158203125, 5.5, length(ctr - _70.uEye));
+    out.vW = ctr + (((u * (q.x - 0.5)) + (w * (q.y - 0.5))) * sz);
+    out.vUV = q;
+    out.vI = float4((h3 * 31.0) + (h5 * 7.0), lit, inner, band);
+    out.gl_Position = _70.uVP * float4(out.vW, 1.0);
+    out.vDepth = out.gl_Position.w;
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p055_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float uMode;
+};
+
+struct p055_vert_out
+{
+    float2 vUV [[user(locn0)]];
+    float3 vW [[user(locn1)]];
+    float4 vI [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+void tree(thread const float& i, thread float3& base, thread float& rad, thread float& ht, thread float2& lean)
+{
+    uint id = (uint(i) * 7u) + 11u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    float z = 3.0 + (powr(h1, 1.25) * 66.0);
+    float side = (h2 < 0.5) ? (-1.0) : 1.0;
+    base = float3((side * (1.7999999523162841796875 + (powr(h3, 1.39999997615814208984375) * (7.0 + (z * 0.2199999988079071044921875))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.0, z);
+    rad = (0.20000000298023223876953125 + ((0.4199999868869781494140625 * h4) * h4)) + (0.119999997317790985107421875 * step(0.89999997615814208984375, h5));
+    ht = (15.0 + (11.0 * h5)) + (rad * 8.0);
+    uint param_5 = id + 5u;
+    uint param_6 = id + 6u;
+    lean = (float2(hashu(param_5), hashu(param_6)) - float2(0.5)) * 1.7999999523162841796875;
+}
+
+static inline __attribute__((always_inline))
+float3 trunkAt(thread const float3& base, thread const float2& lean, thread const float& y, thread const float& ht)
+{
+    float t = y / ht;
+    return base + float3((lean.x * t) * t, y, (lean.y * t) * t);
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _173 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _178 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _186 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _191 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _202 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _207 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _215 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _220 = hash(param_7);
+    return mix(mix(mix(_173, _178, f.x), mix(_186, _191, f.x), f.y), mix(mix(_202, _207, f.x), mix(_215, _220, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float hist(thread const float& f, thread const float& age, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    return uHist.sample(uHistSmplr, float2(fast::clamp(f, 0.0040000001899898052215576171875, 0.995999991893768310546875), _70.uHistHead - (fast::clamp(age, 0.0, 1.0) * 0.9882810115814208984375)), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float gustAt(thread const float3& p, texture2d<float> uHist, sampler uHistSmplr, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70)
+{
+    float3 param = float3(p.x * 0.100000001490116119384765625, 0.0, 2.0);
+    float param_1 = 0.02999999932944774627685546875 + (0.0500000007450580596923828125 * _noise(param));
+    float param_2 = fast::clamp((p.z - 2.0) / 75.0, 0.0, 1.0);
+    return (0.20000000298023223876953125 + (0.949999988079071044921875 * hist(param_1, param_2, uHist, uHistSmplr, _70))) + (0.300000011920928955078125 * _70.uBassS);
+}
+
+[[host_name("p055_vert_screen")]] vertex p055_vert_out p055_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _70 [[buffer(0)]], texture2d<float> uHist [[texture(0)]], sampler uHistSmplr [[sampler(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p055_vert_out out = {};
+    uint id = (uint(int(gl_InstanceIndex)) * 6u) + 3u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    uint param_4 = id + 4u;
+    float h5 = hashu(param_4);
+    uint param_5 = id + 5u;
+    float h6 = hashu(param_5);
+    float inner;
+    float3 ctr;
+    float sz;
+    float lit;
+    float band;
+    float wsc;
+    if (_70.uMode < 0.5)
+    {
+        float ti = float(int(gl_InstanceIndex) / 130);
+        float param_6 = ti;
+        float3 param_7;
+        float param_8;
+        float param_9;
+        float2 param_10;
+        tree(param_6, param_7, param_8, param_9, param_10);
+        float3 base = param_7;
+        float rad = param_8;
+        float ht = param_9;
+        float2 lean = param_10;
+        float cr = 3.0 + (rad * 6.0);
+        float low = step(0.699999988079071044921875, h5);
+        float yc = mix(ht * (0.550000011920928955078125 + (0.4000000059604644775390625 * h4)), ht * (0.2199999988079071044921875 + (0.300000011920928955078125 * h4)), low);
+        float cz = (h2 * 2.0) - 1.0;
+        float sr = sqrt(1.0 - (cz * cz));
+        float3 dirc = float3(cos(h1 * 6.283185482025146484375) * sr, (cz * 0.75) + 0.119999997317790985107421875, sin(h1 * 6.283185482025146484375) * sr);
+        inner = mix(powr(h3, 0.449999988079071044921875), 0.5 + (0.4000000059604644775390625 * h3), low);
+        float3 param_11 = base;
+        float2 param_12 = lean;
+        float param_13 = yc;
+        float param_14 = ht;
+        ctr = trunkAt(param_11, param_12, param_13, param_14) + (((dirc * cr) * inner) * float3(1.0, 0.60000002384185791015625, 1.0));
+        sz = 1.2999999523162841796875 + (1.2999999523162841796875 * h6);
+        lit = smoothstep(-0.5, 0.800000011920928955078125, dot(fast::normalize(dirc), float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)));
+        band = fract((ti * 0.617999970912933349609375) + 0.070000000298023223876953125);
+        wsc = 0.5 + (yc / ht);
+    }
+    else
+    {
+        float z = 2.0 + (powr(h1, 1.39999997615814208984375) * 40.0);
+        float side = (h2 < 0.5) ? (-1.0) : 1.0;
+        ctr = float3((side * (1.0 + ((h3 * h3) * (6.0 + (z * 0.20000000298023223876953125))))) + (sin(z * 0.12999999523162841796875) * 1.2000000476837158203125), 0.25 + (0.5 * h4), z);
+        inner = 0.60000002384185791015625 + (0.4000000059604644775390625 * h4);
+        sz = 0.550000011920928955078125 + (0.75 * h6);
+        lit = 0.0500000007450580596923828125 + ((0.5 * h5) * h5);
+        band = h5;
+        wsc = 0.3499999940395355224609375;
+    }
+    float3 param_15 = ctr;
+    float g = gustAt(param_15, uHist, uHistSmplr, _70);
+    float sway = (g * (0.100000001490116119384765625 + (0.100000001490116119384765625 * h4))) * wsc;
+    float3 _649 = ctr;
+    float2 _651 = _649.xz + ((float2(0.75, 0.300000011920928955078125) * sway) + ((float2(sin((_70.uTime * 1.7000000476837158203125) + (h1 * 40.0)), cos((_70.uTime * 1.2999999523162841796875) + (h2 * 40.0))) * 0.0199999995529651641845703125) * ((1.0 + (4.0 * _70.uBandE[2u])) + (3.0 * _70.uHitS.z))));
+    ctr.x = _651.x;
+    ctr.z = _651.y;
+    ctr.y -= (sway * 0.2199999988079071044921875);
+    float a1 = (h1 * 6.283185482025146484375) + ((sin((_70.uTime * (1.60000002384185791015625 + (2.0 * h4))) + (h2 * 30.0)) * 0.1599999964237213134765625) * ((0.4000000059604644775390625 + g) + (2.0 * _70.uHitS.z)));
+    float a2 = h6 * 6.283185482025146484375;
+    float3 u = fast::normalize(float3(cos(a1), 0.3499999940395355224609375 * sin(a2 * 3.0), sin(a1)));
+    float3 up = fast::normalize(float3(sin(a2) * 0.699999988079071044921875, 1.0, cos(a2) * 0.699999988079071044921875));
+    float3 w = fast::normalize(cross(u, up));
+    bool _719 = int(gl_VertexIndex) == 1;
+    bool _726;
+    if (!_719)
+    {
+        _726 = int(gl_VertexIndex) == 2;
+    }
+    else
+    {
+        _726 = _719;
+    }
+    bool _733;
+    if (!_726)
+    {
+        _733 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _733 = _726;
+    }
+    bool _736 = int(gl_VertexIndex) == 2;
+    bool _742;
+    if (!_736)
+    {
+        _742 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _742 = _736;
+    }
+    bool _748;
+    if (!_742)
+    {
+        _748 = int(gl_VertexIndex) == 5;
+    }
+    else
+    {
+        _748 = _742;
+    }
+    float2 q = float2(float(_733), float(_748));
+    sz *= smoothstep(2.2000000476837158203125, 5.5, length(ctr - _70.uEye));
+    out.vW = ctr + (((u * (q.x - 0.5)) + (w * (q.y - 0.5))) * sz);
+    out.vUV = q;
+    out.vI = float4((h3 * 31.0) + (h5 * 7.0), lit, inner, band);
+    out.gl_Position = _70.uVP * float4(out.vW, 1.0);
+    out.vDepth = out.gl_Position.w;
+    return out;
+}
+
+
+}
+
+namespace p055_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p055_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p055_frag_in
+{
+    float2 vUV [[user(locn0)]];
+    float3 vW [[user(locn1)]];
+    float4 vI [[user(locn2)]];
+    float vDepth [[user(locn3)]];
+};
+
+static inline __attribute__((always_inline))
+float hash2(thread const float2& p)
+{
+    return fract(sin(dot(p, float2(127.09999847412109375, 311.70001220703125))) * 43758.546875);
+}
+
+static inline __attribute__((always_inline))
+float2x2 rot(thread const float& a)
+{
+    float c = cos(a);
+    float s = sin(a);
+    return float2x2(float2(c, -s), float2(s, c));
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _118)
+{
+    t += _118.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _118.uPA[0];
+    param[1] = _118.uPA[1];
+    param[2] = _118.uPA[2];
+    param[3] = _118.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _147;
+    if (_118.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _118.uPB[0];
+        param_2[1] = _118.uPB[1];
+        param_2[2] = _118.uPB[2];
+        param_2[3] = _118.uPB[3];
+        float param_3 = t;
+        _147 = mix(c, palOf(param_2, param_3), float3(_118.uPalMix));
+    }
+    else
+    {
+        _147 = c;
+    }
+    return _147;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _118)
+{
+    float param = t;
+    float3 _179 = pal(param, _118);
+    float3 c = fast::max(_179, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float3 fsunC(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _118)
+{
+    float param = 0.100000001490116119384765625;
+    return mix(float3(1.0, 0.86000001430511474609375, 0.550000011920928955078125), neon(param, _118), float3(0.07999999821186065673828125)) * (((0.699999988079071044921875 + (0.3499999940395355224609375 * _118.uDyn)) + (0.300000011920928955078125 * _118.uBassS)) + (0.100000001490116119384765625 * _118.uHitS.x));
+}
+
+static inline __attribute__((always_inline))
+float spec(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).x;
+}
+
+static inline __attribute__((always_inline))
+float specS(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).y;
+}
+
+static inline __attribute__((always_inline))
+float3 fogC(thread const float3& v, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _118)
+{
+    float s = powr(fast::max(dot(v, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), 0.0), 3.0);
+    return (mix(float3(0.01600000075995922088623046875, 0.02999999932944774627685546875, 0.0240000002086162567138671875), float3(0.300000011920928955078125, 0.37999999523162841796875, 0.2199999988079071044921875), float3(0.07999999821186065673828125 + (0.920000016689300537109375 * s))) * (0.550000011920928955078125 + (0.3499999940395355224609375 * _118.uDyn))) + (((fsunC(_118) * s) * s) * 0.4000000059604644775390625);
+}
+
+[[host_name("p055_frag")]] fragment p055_frag_out p055_frag(p055_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _118 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], sampler uSpecSmplr [[sampler(0)]])
+{
+    p055_frag_out out = {};
+    float2 g = in.vUV * 5.0;
+    float2 c = floor(g);
+    float m = 0.0;
+    float tone = 0.0;
+    for (int j = -1; j <= 1; j++)
+    {
+        for (int i = -1; i <= 1; i++)
+        {
+            float2 cc = c + float2(float(i), float(j));
+            bool _340 = cc.x < 0.0;
+            bool _348;
+            if (!_340)
+            {
+                _348 = cc.x > 4.0;
+            }
+            else
+            {
+                _348 = _340;
+            }
+            bool _355;
+            if (!_348)
+            {
+                _355 = cc.y < 0.0;
+            }
+            else
+            {
+                _355 = _348;
+            }
+            bool _362;
+            if (!_355)
+            {
+                _362 = cc.y > 4.0;
+            }
+            else
+            {
+                _362 = _355;
+            }
+            if (_362)
+            {
+                continue;
+            }
+            float2 param = cc + float2(in.vI.x);
+            float h = hash2(param);
+            float param_1 = h * 6.283185482025146484375;
+            float2 param_2 = (cc + float2(in.vI.x)) + float2(3.0);
+            float2 param_3 = (cc + float2(in.vI.x)) + float2(5.0);
+            float2 l = rot(param_1) * (((g - cc) - float2(0.5)) - ((float2(hash2(param_2), hash2(param_3)) - float2(0.5)) * 0.550000011920928955078125));
+            float leaf = (length(float2(l.x * 2.599999904632568359375, l.y)) - 0.4699999988079071044921875) + (0.300000011920928955078125 * abs(l.y));
+            if ((leaf < 0.0) && (h > 0.300000011920928955078125))
+            {
+                m = 1.0;
+                tone = h + (0.3499999940395355224609375 * smoothstep(0.0, 0.0599999986588954925537109375, abs(l.x)));
+            }
+        }
+    }
+    if (m < 0.5)
+    {
+        discard_fragment();
+    }
+    float3 v = fast::normalize(in.vW - _118.uEye);
+    float3 sc = fsunC(_118);
+    float toSun = powr(fast::max(dot(v, float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625)), 0.0), 2.0);
+    float param_4 = 0.039999999105930328369140625 + (in.vI.w * 0.7799999713897705078125);
+    float bandv = spec(param_4, uSpec, uSpecSmplr);
+    float param_5 = 0.039999999105930328369140625 + (in.vI.w * 0.7799999713897705078125);
+    float bs = specS(param_5, uSpec, uSpecSmplr);
+    float3 dark = (mix(float3(0.006000000052154064178466796875, 0.0199999995529651641845703125, 0.008000000379979610443115234375), float3(0.0500000007450580596923828125, 0.12999999523162841796875, 0.02999999932944774627685546875), float3(in.vI.y)) * (0.3499999940395355224609375 + (0.800000011920928955078125 * in.vI.z))) * (0.60000002384185791015625 + (0.60000002384185791015625 * tone));
+    float3 glowc = (((mix(float3(0.300000011920928955078125, 0.550000011920928955078125, 0.070000000298023223876953125), float3(0.800000011920928955078125, 0.7799999713897705078125, 0.180000007152557373046875), float3(tone * 0.60000002384185791015625)) * sc) * (0.0599999986588954925537109375 + (1.2999999523162841796875 * toSun))) * (0.1500000059604644775390625 + (0.85000002384185791015625 * in.vI.z))) * in.vI.y;
+    float3 col = (dark * (0.800000011920928955078125 + (0.60000002384185791015625 * _118.uMidS))) + (glowc * (((0.300000011920928955078125 + ((1.60000002384185791015625 * bs) * bs)) + (0.449999988079071044921875 * fast::max(bandv - bs, 0.0))) + ((0.300000011920928955078125 * _118.uHitS.y) * in.vI.y)));
+    float dist = length(in.vW - _118.uEye);
+    float3 param_6 = v;
+    col = mix(col, fogC(param_6, _118), float3(1.0 - exp((-dist) * 0.02199999988079071044921875)));
+    out.o = float4(col, in.vDepth);
+    return out;
+}
+
+
+}
+
+namespace p056_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p056_vert_out
+{
+    float3 vS [[user(locn0)]];
+    float vBand [[user(locn1)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+[[host_name("p056_vert")]] vertex p056_vert_out p056_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _158 [[buffer(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p056_vert_out out = {};
+    uint id = (uint(int(gl_InstanceIndex)) * 4u) + 77u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    float3 foot = float3((h1 - 0.5) * (9.0 + (18.0 * h2)), 0.0, 5.0 + (h2 * 42.0));
+    bool _110 = int(gl_VertexIndex) == 1;
+    bool _117;
+    if (!_110)
+    {
+        _117 = int(gl_VertexIndex) == 2;
+    }
+    else
+    {
+        _117 = _110;
+    }
+    bool _124;
+    if (!_117)
+    {
+        _124 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _124 = _117;
+    }
+    bool _128 = int(gl_VertexIndex) == 2;
+    bool _134;
+    if (!_128)
+    {
+        _134 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _134 = _128;
+    }
+    bool _141;
+    if (!_134)
+    {
+        _141 = int(gl_VertexIndex) == 5;
+    }
+    else
+    {
+        _141 = _134;
+    }
+    float2 q = float2(float(_124), float(_141));
+    float3 side = fast::normalize(cross(float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625), foot - _158.uEye));
+    float3 p = (foot + (float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625) * ((q.y * 24.0) / 0.60930001735687255859375))) + ((side * (q.x - 0.5)) * (0.89999997615814208984375 + (1.60000002384185791015625 * h3)));
+    out.vS = float3(q, length(foot - _158.uEye));
+    out.vBand = h4;
+    out.gl_Position = _158.uVP * float4(p, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p056_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p056_vert_out
+{
+    float3 vS [[user(locn0)]];
+    float vBand [[user(locn1)]];
+    float4 gl_Position [[position]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+[[host_name("p056_vert_screen")]] vertex p056_vert_out p056_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _158 [[buffer(0)]], uint gl_InstanceIndex [[instance_id]], uint gl_VertexIndex [[vertex_id]])
+{
+    p056_vert_out out = {};
+    uint id = (uint(int(gl_InstanceIndex)) * 4u) + 77u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    float3 foot = float3((h1 - 0.5) * (9.0 + (18.0 * h2)), 0.0, 5.0 + (h2 * 42.0));
+    bool _110 = int(gl_VertexIndex) == 1;
+    bool _117;
+    if (!_110)
+    {
+        _117 = int(gl_VertexIndex) == 2;
+    }
+    else
+    {
+        _117 = _110;
+    }
+    bool _124;
+    if (!_117)
+    {
+        _124 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _124 = _117;
+    }
+    bool _128 = int(gl_VertexIndex) == 2;
+    bool _134;
+    if (!_128)
+    {
+        _134 = int(gl_VertexIndex) == 4;
+    }
+    else
+    {
+        _134 = _128;
+    }
+    bool _141;
+    if (!_134)
+    {
+        _141 = int(gl_VertexIndex) == 5;
+    }
+    else
+    {
+        _141 = _134;
+    }
+    float2 q = float2(float(_124), float(_141));
+    float3 side = fast::normalize(cross(float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625), foot - _158.uEye));
+    float3 p = (foot + (float3(0.3145000040531158447265625, 0.60930001735687255859375, 0.727900028228759765625) * ((q.y * 24.0) / 0.60930001735687255859375))) + ((side * (q.x - 0.5)) * (0.89999997615814208984375 + (1.60000002384185791015625 * h3)));
+    out.vS = float3(q, length(foot - _158.uEye));
+    out.vBand = h4;
+    out.gl_Position = _158.uVP * float4(p, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p056_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+};
+
+struct p056_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p056_frag_in
+{
+    float3 vS [[user(locn0)]];
+    float vBand [[user(locn1)]];
+};
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _119 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _124 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _132 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _137 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _148 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _153 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _161 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _166 = hash(param_7);
+    return mix(mix(mix(_119, _124, f.x), mix(_132, _137, f.x), f.y), mix(mix(_148, _153, f.x), mix(_161, _166, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float spec(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).x;
+}
+
+static inline __attribute__((always_inline))
+float specS(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).y;
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _208)
+{
+    t += _208.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _208.uPA[0];
+    param[1] = _208.uPA[1];
+    param[2] = _208.uPA[2];
+    param[3] = _208.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _237;
+    if (_208.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _208.uPB[0];
+        param_2[1] = _208.uPB[1];
+        param_2[2] = _208.uPB[2];
+        param_2[3] = _208.uPB[3];
+        float param_3 = t;
+        _237 = mix(c, palOf(param_2, param_3), float3(_208.uPalMix));
+    }
+    else
+    {
+        _237 = c;
+    }
+    return _237;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _208)
+{
+    float param = t;
+    float3 _269 = pal(param, _208);
+    float3 c = fast::max(_269, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float3 fsunC(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _208)
+{
+    float param = 0.100000001490116119384765625;
+    return mix(float3(1.0, 0.86000001430511474609375, 0.550000011920928955078125), neon(param, _208), float3(0.07999999821186065673828125)) * (((0.699999988079071044921875 + (0.3499999940395355224609375 * _208.uDyn)) + (0.300000011920928955078125 * _208.uBassS)) + (0.100000001490116119384765625 * _208.uHitS.x));
+}
+
+[[host_name("p056_frag")]] fragment p056_frag_out p056_frag(p056_frag_in in [[stage_in]], constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _208 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], sampler uSpecSmplr [[sampler(0)]])
+{
+    p056_frag_out out = {};
+    float x = (in.vS.x * 2.0) - 1.0;
+    float prof = (exp(((-x) * x) * 3.5) * smoothstep(0.0, 0.07999999821186065673828125, in.vS.y)) * smoothstep(1.0, 0.550000011920928955078125, in.vS.y);
+    float3 param = float3((in.vS.x * 7.0) + (in.vBand * 30.0), (in.vS.y * 3.0) - (_208.uTime * 0.07999999821186065673828125), in.vBand * 9.0);
+    float dust = 0.550000011920928955078125 + (0.449999988079071044921875 * _noise(param));
+    float param_1 = 0.0500000007450580596923828125 + (in.vBand * 0.800000011920928955078125);
+    float b = spec(param_1, uSpec, uSpecSmplr);
+    float param_2 = 0.0500000007450580596923828125 + (in.vBand * 0.800000011920928955078125);
+    float bs = specS(param_2, uSpec, uSpecSmplr);
+    out.o = float4((((fsunC(_208) * prof) * dust) * (((0.0350000001490116119384765625 + ((0.550000011920928955078125 * bs) * bs)) + (0.25 * fast::max(b - bs, 0.0))) + (0.07999999821186065673828125 * _208.uHitS.x))) * exp((-in.vS.z) * 0.017999999225139617919921875), 0.0);
+    return out;
+}
+
+
+}
+
+namespace p057_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+// Implementation of the GLSL mod() function, which is slightly different than Metal fmod()
+template<typename Tx, typename Ty>
+inline Tx mod(Tx x, Ty y)
+{
+    return x - y * floor(x / y);
+}
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float uDpr;
+    float uFocus;
+    float uWindT;
+};
+
+struct p057_vert_out
+{
+    float3 vCol [[user(locn0)]];
+    float4 gl_Position [[position]];
+    float gl_PointSize [[point_size]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+float spec(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124)
+{
+    t += _124.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _124.uPA[0];
+    param[1] = _124.uPA[1];
+    param[2] = _124.uPA[2];
+    param[3] = _124.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _153;
+    if (_124.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _124.uPB[0];
+        param_2[1] = _124.uPB[1];
+        param_2[2] = _124.uPB[2];
+        param_2[3] = _124.uPB[3];
+        float param_3 = t;
+        _153 = mix(c, palOf(param_2, param_3), float3(_124.uPalMix));
+    }
+    else
+    {
+        _153 = c;
+    }
+    return _153;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124)
+{
+    float param = t;
+    float3 _185 = pal(param, _124);
+    float3 c = fast::max(_185, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float3 fsunC(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124)
+{
+    float param = 0.100000001490116119384765625;
+    return mix(float3(1.0, 0.86000001430511474609375, 0.550000011920928955078125), neon(param, _124), float3(0.07999999821186065673828125)) * (((0.699999988079071044921875 + (0.3499999940395355224609375 * _124.uDyn)) + (0.300000011920928955078125 * _124.uBassS)) + (0.100000001490116119384765625 * _124.uHitS.x));
+}
+
+[[host_name("p057_vert")]] vertex p057_vert_out p057_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], sampler uSpecSmplr [[sampler(0)]], uint gl_VertexIndex [[vertex_id]])
+{
+    p057_vert_out out = {};
+    uint id = (uint(int(gl_VertexIndex)) * 4u) + 9u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    float3 p = float3(mod((h1 * 26.0) + (_124.uWindT * (0.4000000059604644775390625 + (0.5 * h4))), 26.0) - 13.0, (0.300000011920928955078125 + (h2 * 9.0)) + (0.300000011920928955078125 * sin((_124.uTime * (0.300000011920928955078125 + h4)) + (h3 * 20.0))), 1.0 + (h3 * 30.0));
+    out.gl_Position = _124.uVP * float4(p, 1.0);
+    float d = fast::max(out.gl_Position.w, 0.0500000007450580596923828125);
+    float size = fast::max(1.5, (abs(d - _124.uFocus) / d) * 8.0) * _124.uDpr;
+    out.gl_PointSize = fast::min(size, 26.0);
+    float edge = smoothstep(0.0, 2.0, 13.0 - abs(p.x));
+    float param_4 = 0.60000002384185791015625 + (0.37999999523162841796875 * h4);
+    float tw = spec(param_4, uSpec, uSpecSmplr);
+    out.vCol = (((((fsunC(_124) * (0.5 + (1.5 * step(0.89999997615814208984375, h4)))) * (((0.119999997317790985107421875 + ((2.599999904632568359375 * tw) * tw)) + (0.4000000059604644775390625 * _124.uHit.z)) + (0.89999997615814208984375 * _124.uHitS.z))) * edge) * (2.0 / (size * size))) * (0.60000002384185791015625 + (0.4000000059604644775390625 * sin((_124.uTime * (1.0 + (h1 * 3.0))) + (h2 * 40.0))))) * exp((-d) * 0.02999999932944774627685546875);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p057_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+// Implementation of the GLSL mod() function, which is slightly different than Metal fmod()
+template<typename Tx, typename Ty>
+inline Tx mod(Tx x, Ty y)
+{
+    return x - y * floor(x / y);
+}
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float uDpr;
+    float uFocus;
+    float uWindT;
+};
+
+struct p057_vert_out
+{
+    float3 vCol [[user(locn0)]];
+    float4 gl_Position [[position]];
+    float gl_PointSize [[point_size]];
+};
+
+static inline __attribute__((always_inline))
+uint pcg(thread const uint& v)
+{
+    uint s = (v * 747796405u) + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+static inline __attribute__((always_inline))
+float hashu(thread const uint& v)
+{
+    uint param = v;
+    return float(pcg(param) >> uint(8)) * 5.9604644775390625e-08;
+}
+
+static inline __attribute__((always_inline))
+float spec(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5), level(0.0)).x;
+}
+
+static inline __attribute__((always_inline))
+float3 palOf(thread const spvUnsafeArray<float3, 4>& p, thread const float& t)
+{
+    return p[0] + (p[1] * cos(((p[2] * t) + p[3]) * 6.283185482025146484375));
+}
+
+static inline __attribute__((always_inline))
+float3 pal(thread float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124)
+{
+    t += _124.uHue;
+    spvUnsafeArray<float3, 4> param;
+    param[0] = _124.uPA[0];
+    param[1] = _124.uPA[1];
+    param[2] = _124.uPA[2];
+    param[3] = _124.uPA[3];
+    float param_1 = t;
+    float3 c = palOf(param, param_1);
+    float3 _153;
+    if (_124.uPalMix > 0.0)
+    {
+        spvUnsafeArray<float3, 4> param_2;
+        param_2[0] = _124.uPB[0];
+        param_2[1] = _124.uPB[1];
+        param_2[2] = _124.uPB[2];
+        param_2[3] = _124.uPB[3];
+        float param_3 = t;
+        _153 = mix(c, palOf(param_2, param_3), float3(_124.uPalMix));
+    }
+    else
+    {
+        _153 = c;
+    }
+    return _153;
+}
+
+static inline __attribute__((always_inline))
+float3 neon(thread const float& t, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124)
+{
+    float param = t;
+    float3 _185 = pal(param, _124);
+    float3 c = fast::max(_185, float3(0.0));
+    float m = fast::max(c.x, fast::max(c.y, c.z));
+    float n = fast::min(c.x, fast::min(c.y, c.z));
+    return (c - float3(n * 0.800000011920928955078125)) / float3((m - (n * 0.800000011920928955078125)) + 0.039999999105930328369140625);
+}
+
+static inline __attribute__((always_inline))
+float3 fsunC(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124)
+{
+    float param = 0.100000001490116119384765625;
+    return mix(float3(1.0, 0.86000001430511474609375, 0.550000011920928955078125), neon(param, _124), float3(0.07999999821186065673828125)) * (((0.699999988079071044921875 + (0.3499999940395355224609375 * _124.uDyn)) + (0.300000011920928955078125 * _124.uBassS)) + (0.100000001490116119384765625 * _124.uHitS.x));
+}
+
+[[host_name("p057_vert_screen")]] vertex p057_vert_out p057_vert(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _124 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], sampler uSpecSmplr [[sampler(0)]], uint gl_VertexIndex [[vertex_id]])
+{
+    p057_vert_out out = {};
+    uint id = (uint(int(gl_VertexIndex)) * 4u) + 9u;
+    uint param = id;
+    float h1 = hashu(param);
+    uint param_1 = id + 1u;
+    float h2 = hashu(param_1);
+    uint param_2 = id + 2u;
+    float h3 = hashu(param_2);
+    uint param_3 = id + 3u;
+    float h4 = hashu(param_3);
+    float3 p = float3(mod((h1 * 26.0) + (_124.uWindT * (0.4000000059604644775390625 + (0.5 * h4))), 26.0) - 13.0, (0.300000011920928955078125 + (h2 * 9.0)) + (0.300000011920928955078125 * sin((_124.uTime * (0.300000011920928955078125 + h4)) + (h3 * 20.0))), 1.0 + (h3 * 30.0));
+    out.gl_Position = _124.uVP * float4(p, 1.0);
+    float d = fast::max(out.gl_Position.w, 0.0500000007450580596923828125);
+    float size = fast::max(1.5, (abs(d - _124.uFocus) / d) * 8.0) * _124.uDpr;
+    out.gl_PointSize = fast::min(size, 26.0);
+    float edge = smoothstep(0.0, 2.0, 13.0 - abs(p.x));
+    float param_4 = 0.60000002384185791015625 + (0.37999999523162841796875 * h4);
+    float tw = spec(param_4, uSpec, uSpecSmplr);
+    out.vCol = (((((fsunC(_124) * (0.5 + (1.5 * step(0.89999997615814208984375, h4)))) * (((0.119999997317790985107421875 + ((2.599999904632568359375 * tw) * tw)) + (0.4000000059604644775390625 * _124.uHit.z)) + (0.89999997615814208984375 * _124.uHitS.z))) * edge) * (2.0 / (size * size))) * (0.60000002384185791015625 + (0.4000000059604644775390625 * sin((_124.uTime * (1.0 + (h1 * 3.0))) + (h2 * 40.0))))) * exp((-d) * 0.02999999932944774627685546875);
+    return out;
+}
+
+
+}
+
+namespace p057_frag_scope {
+
+
+
+using namespace metal;
+
+struct p057_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+struct p057_frag_in
+{
+    float3 vCol [[user(locn0)]];
+};
+
+[[host_name("p057_frag")]] fragment p057_frag_out p057_frag(p057_frag_in in [[stage_in]], float2 gl_PointCoord [[point_coord]])
+{
+    p057_frag_out out = {};
+    float2 q = (gl_PointCoord * 2.0) - float2(1.0);
+    float d = dot(q, q);
+    if (d > 1.0)
+    {
+        discard_fragment();
+    }
+    out.o = float4(in.vCol * exp((-d) * 4.5), 1.0);
+    return out;
+}
+
+
+}
+
+namespace p058_vert_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p058_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p058_vert")]] vertex p058_vert_out p058_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p058_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    out.gl_Position.y = -(out.gl_Position.y);    // Invert Y-axis for Metal
+    return out;
+}
+
+
+}
+
+namespace p058_vert_screen_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+
+
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float2, 3> _18 = spvUnsafeArray<float2, 3>({ float2(-1.0), float2(3.0, -1.0), float2(-1.0, 3.0) });
+
+struct p058_vert_out
+{
+    float2 uv [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+[[host_name("p058_vert_screen")]] vertex p058_vert_out p058_vert(uint gl_VertexIndex [[vertex_id]])
+{
+    p058_vert_out out = {};
+    float2 q = _18[int(gl_VertexIndex)];
+    out.uv = (q * 0.5) + float2(0.5);
+    out.gl_Position = float4(q, 0.0, 1.0);
+    return out;
+}
+
+
+}
+
+namespace p058_frag_scope {
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+
+
+
+using namespace metal;
+
+struct _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock
+{
+    float uTime;
+    float uBass;
+    float uMid;
+    float uHigh;
+    float uLevel;
+    float uBassS;
+    float uMidS;
+    float uHighS;
+    float uLevelS;
+    float uKick;
+    float uKickL;
+    float uSnare;
+    float uDyn;
+    float uDrop;
+    float uAccent;
+    float uSlowHead;
+    float3 uHit;
+    float3 uHitS;
+    packed_float3 uBandE;
+    float uHue;
+    float uTravel;
+    float uHistHead;
+    float uTan;
+    float uAspect;
+    float uPalMix;
+    float uPx;
+    float4 uPulse[8];
+    float2 uRes;
+    float4x4 uVP;
+    float3 uEye;
+    float3 uCamR;
+    float3 uCamU;
+    float3 uCamF;
+    float3 uPA[4];
+    float3 uPB[4];
+    float4 uDr[14];
+};
+
+struct p058_frag_out
+{
+    float4 o [[color(0)]];
+};
+
+static inline __attribute__((always_inline))
+float3 viewRay(thread float4& gl_FragCoord, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _237)
+{
+    float2 q = ((gl_FragCoord.xy / _237.uRes) * 2.0) - float2(1.0);
+    return fast::normalize((_237.uCamF + (_237.uCamR * ((q.x * _237.uTan) * _237.uAspect))) + (_237.uCamU * (q.y * _237.uTan)));
+}
+
+static inline __attribute__((always_inline))
+float hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float _noise(thread const float3& x)
+{
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _147 = hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _152 = hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _160 = hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _165 = hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _176 = hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _181 = hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _189 = hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _194 = hash(param_7);
+    return mix(mix(mix(_147, _152, f.x), mix(_160, _165, f.x), f.y), mix(mix(_176, _181, f.x), mix(_189, _194, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float shoreAt(thread const float2& p, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _237)
+{
+    float al = dot(p, float2(0.92299997806549072265625, 0.3849999904632568359375));
+    float3 param = float3(al * 0.3499999940395355224609375, 3.0, 1.0);
+    return ((((-1.75) + (0.449999988079071044921875 * _noise(param))) + (0.180000007152557373046875 * sin(al * 1.2999999523162841796875))) - (0.1599999964237213134765625 * _237.uBassS)) - (0.0500000007450580596923828125 * sin((_237.uTime * 0.60000002384185791015625) + al));
+}
+
+static inline __attribute__((always_inline))
+float depthAt(thread const float2& p, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _237)
+{
+    float2 param = p;
+    float s = dot(p, float2(-0.3849999904632568359375, 0.92299997806549072265625)) - shoreAt(param, _237);
+    float3 param_1 = float3(p * 0.2199999988079071044921875, 2.0);
+    float3 param_2 = float3(p * 0.699999988079071044921875, 5.0);
+    return fast::clamp(((s * 0.36000001430511474609375) * (0.800000011920928955078125 + (0.5 * _noise(param_1)))) + ((0.119999997317790985107421875 * (_noise(param_2) - 0.5)) * smoothstep(0.0, 1.0, s)), -0.4000000059604644775390625, 2.599999904632568359375);
+}
+
+static inline __attribute__((always_inline))
+float2 wgrad(thread const float2& p, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _237)
+{
+    float2 g = float2(0.0);
+    float3 param = float3(p * 0.3499999940395355224609375, _237.uTime * 0.119999997317790985107421875);
+    float warp = _noise(param) * 5.0;
+    float amp = 0.100000001490116119384765625 + (0.2199999988079071044921875 * _237.uBassS);
+    float _366;
+    float _376;
+    for (int i = 0; i < 9; i++)
+    {
+        float fi = float(i);
+        float ang = (fi * 2.3989999294281005859375) + 0.60000002384185791015625;
+        float k = 1.7000000476837158203125 * powr(1.32000005245208740234375, fi);
+        float2 D = float2(cos(ang), sin(ang));
+        if (i < 3)
+        {
+            _366 = _237.uBandE[0u];
+        }
+        else
+        {
+            if (i < 6)
+            {
+                _376 = _237.uBandE[1u];
+            }
+            else
+            {
+                _376 = _237.uBandE[2u];
+            }
+            _366 = _376;
+        }
+        float e = _366;
+        g += ((D * ((0.01200000010430812835693359375 + (0.026000000536441802978515625 * amp)) + (0.05200000107288360595703125 * e))) * cos((((k * dot(D, p)) - ((sqrt(k * 4.0) * _237.uTime) * 0.62000000476837158203125)) + (warp * (0.60000002384185791015625 + (0.20000000298023223876953125 * fi)))) + (fi * 1.7000000476837158203125)));
+    }
+    for (int i_1 = 0; i_1 < 14; i_1++)
+    {
+        float sz = _237.uDr[i_1].z;
+        float a = _237.uDr[i_1].w - 0.02199999988079071044921875;
+        float life = 0.439999997615814208984375 + (0.839999973773956298828125 * sz);
+        bool _460 = (sz <= 0.0) || (a < 0.0);
+        bool _468;
+        if (!_460)
+        {
+            _468 = a > (life + 0.5);
+        }
+        else
+        {
+            _468 = _460;
+        }
+        if (_468)
+        {
+            continue;
+        }
+        float2 d = p - _237.uDr[i_1].xy;
+        float r = length(d) + 0.001000000047497451305389404296875;
+        float x = r - (a * 1.5);
+        float k_1 = 22.0 - (8.0 * sz);
+        float w = ((cos(x * k_1) * smoothstep(0.0, 0.0900000035762786865234375, a)) * (1.0 - smoothstep(life * 0.5, life, a))) * exp(((-x) * x) * (9.0 - (4.0 * sz)));
+        float a2 = a - 0.5;
+        float x2 = r - (a2 * 1.5);
+        if (a2 > 0.0)
+        {
+            w += ((((0.20000000298023223876953125 * cos(x2 * k_1)) * smoothstep(0.0, 0.119999997317790985107421875, a2)) * (1.0 - smoothstep(life * 0.300000011920928955078125, life * 0.699999988079071044921875, a2))) * exp(((-x2) * x2) * 9.0));
+        }
+        g += ((((d / float2(r)) * w) * (0.20000000298023223876953125 + (0.5 * sz))) / float2(1.0 + (r * 0.699999988079071044921875)));
+    }
+    return g;
+}
+
+static inline __attribute__((always_inline))
+float hash2(thread const float2& p)
+{
+    return fract(sin(dot(p, float2(127.09999847412109375, 311.70001220703125))) * 43758.546875);
+}
+
+static inline __attribute__((always_inline))
+float4 stoneAt(thread const float2& pf)
+{
+    float2 sg = pf * 1.25;
+    float2 sc = floor(sg);
+    float4 best = float4(9.0, 9.0, 0.0, 0.0);
+    for (int j = -1; j <= 1; j++)
+    {
+        for (int i = -1; i <= 1; i++)
+        {
+            float2 cc = sc + float2(float(i), float(j));
+            float2 param = cc + float2(0.699999988079071044921875);
+            float h = hash2(param);
+            if (h < 0.560000002384185791015625)
+            {
+                continue;
+            }
+            float2 param_1 = cc + float2(1.2999999523162841796875);
+            float2 param_2 = cc + float2(2.900000095367431640625);
+            float2 ctr = (cc + float2(0.25)) + (float2(hash2(param_1), hash2(param_2)) * 0.5);
+            float2 param_3 = cc + float2(4.0);
+            float2 d = (sg - ctr) * float2(1.0, 0.800000011920928955078125 + (0.5 * hash2(param_3)));
+            float r = 0.1500000059604644775390625 + ((0.3400000035762786865234375 * (h - 0.560000002384185791015625)) * 2.2000000476837158203125);
+            if ((length(d) / r) < length(best.xy))
+            {
+                best = float4(d / float2(r), r * 0.550000011920928955078125, h);
+            }
+        }
+    }
+    return best;
+}
+
+static inline __attribute__((always_inline))
+float2x2 rot(thread const float& a)
+{
+    float c = cos(a);
+    float s = sin(a);
+    return float2x2(float2(c, -s), float2(s, c));
+}
+
+static inline __attribute__((always_inline))
+float petal(thread const float2& p, thread float3& pc, constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _237)
+{
+    float2 q = p + float2(_237.uTime * 0.0500000007450580596923828125, _237.uTime * 0.0199999995529651641845703125);
+    float2 c = floor(q / float2(1.7000000476837158203125));
+    float2 param = c + float2(3.0);
+    float h = hash2(param);
+    float2 param_1 = c + float2(9.0);
+    pc = mix(float3(1.0, 0.819999992847442626953125, 0.86000001430511474609375), float3(1.0, 0.949999988079071044921875, 0.800000011920928955078125), float3(hash2(param_1)));
+    if (h < 0.62000000476837158203125)
+    {
+        return 0.0;
+    }
+    float param_2 = (h * 20.0) + ((_237.uTime * 0.100000001490116119384765625) * (h - 0.800000011920928955078125));
+    float2 param_3 = c + float2(5.0);
+    float2 param_4 = c + float2(7.0);
+    float2 l = rot(param_2) * (q - (((c + float2(0.300000011920928955078125)) + (float2(hash2(param_3), hash2(param_4)) * 0.4000000059604644775390625)) * 1.7000000476837158203125));
+    return smoothstep(0.0, -0.01200000010430812835693359375, (length(l * float2(1.0, 1.89999997615814208984375)) - 0.070000000298023223876953125) - (0.039999999105930328369140625 * h));
+}
+
+static inline __attribute__((always_inline))
+float spec(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).x;
+}
+
+static inline __attribute__((always_inline))
+float specS(thread const float& x, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    return uSpec.sample(uSpecSmplr, float2(fast::clamp(x, 0.0, 1.0), 0.5)).y;
+}
+
+static inline __attribute__((always_inline))
+float voice(thread const float& band, texture2d<float> uSpec, sampler uSpecSmplr)
+{
+    float param = band;
+    float fast = spec(param, uSpec, uSpecSmplr);
+    float param_1 = band;
+    float slow = specS(param_1, uSpec, uSpecSmplr);
+    return fast::clamp(((0.25 * fast) + (0.300000011920928955078125 * slow)) + (1.60000002384185791015625 * fast::max(0.0, fast - slow)), 0.0, 1.0);
+}
+
+[[host_name("p058_frag")]] fragment p058_frag_out p058_frag(constant _RESERVED_IDENTIFIER_FIXUP_gl_DefaultUniformBlock& _237 [[buffer(0)]], texture2d<float> uSpec [[texture(0)]], sampler uSpecSmplr [[sampler(0)]], float4 gl_FragCoord [[position]])
+{
+    p058_frag_out out = {};
+    float3 rd = viewRay(gl_FragCoord, _237);
+    float ts = (-_237.uEye.y) / rd.y;
+    float3 Ps = _237.uEye + (rd * ts);
+    float2 ps = Ps.xz;
+    float2 param = ps;
+    float d0 = depthAt(param, _237);
+    float wet = smoothstep(0.0, 0.25, d0);
+    float2 param_1 = ps;
+    float2 gs = wgrad(param_1, _237) * smoothstep(0.0, 0.3499999940395355224609375, d0);
+    float3 n = fast::normalize(float3(-gs.x, 1.0, -gs.y));
+    float3 rr = refract(rd, n, 0.75187969207763671875);
+    float path = fast::max(d0, 0.0) / fast::max(-rr.y, 0.25);
+    float2 pf = ps + (rr.xz * path);
+    float2 param_2 = pf;
+    float depth = fast::max(depthAt(param_2, _237), 0.0);
+    path = depth / fast::max(-rr.y, 0.25);
+    pf = ps + (rr.xz * path);
+    float3 param_3 = float3(pf * 1.10000002384185791015625, 4.0);
+    float rip = sin(((pf.x * 7.0) + (_noise(param_3) * 5.0)) + (pf.y * 1.5));
+    float3 param_4 = float3(pf * 42.0, 1.0);
+    float3 param_5 = float3(pf * 0.699999988079071044921875, 6.0);
+    float3 sand = (float3(0.62000000476837158203125, 0.560000002384185791015625, 0.4600000083446502685546875) * ((0.800000011920928955078125 + (0.100000001490116119384765625 * rip)) + (0.1599999964237213134765625 * _noise(param_4)))) * (0.85000002384185791015625 + (0.300000011920928955078125 * _noise(param_5)));
+    float2 param_6 = pf;
+    float4 st = stoneAt(param_6);
+    float dd = length(st.xy);
+    float _1007;
+    if (st.w > 0.0)
+    {
+        _1007 = smoothstep(1.0, 0.89999997615814208984375, dd);
+    }
+    else
+    {
+        _1007 = 0.0;
+    }
+    float stone = _1007;
+    float rim = (dd * dd) * stone;
+    float3 sn = fast::normalize(float3(-st.xy, sqrt(fast::max(1.0 - (dd * dd), 0.0)) + 0.20000000298023223876953125));
+    float shade = mix(mix(0.60000002384185791015625, 1.0, smoothstep(1.0, 1.60000002384185791015625, length(st.xy - float2(0.100000001490116119384765625, -0.119999997317790985107421875)))), 0.449999988079071044921875 + (0.75 * fast::clamp(dot(sn, float3(0.303045749664306640625, 0.50507628917694091796875, 0.80812203884124755859375)), 0.0, 1.0)), stone);
+    float3 param_7 = float3(pf * 68.0, st.w);
+    float3 stc = mix(float3(0.36000001430511474609375, 0.36000001430511474609375, 0.37999999523162841796875), float3(0.5, 0.4199999868869781494140625, 0.3400000035762786865234375), float3(fract(st.w * 7.30000019073486328125))) * (0.64999997615814208984375 + (0.550000011920928955078125 * _noise(param_7)));
+    float3 bed = mix(sand, stc, float3(stone)) * shade;
+    float proud = stone * smoothstep(-0.0199999995529651641845703125, 0.02999999932944774627685546875, (st.z * sqrt(fast::max(1.0 - (dd * dd), 0.0))) - depth);
+    float2 param_8 = pf;
+    float2 g0 = wgrad(param_8, _237);
+    float2 param_9 = pf + float2(0.0199999995529651641845703125, 0.0);
+    float2 gx = wgrad(param_9, _237);
+    float2 param_10 = pf + float2(0.0, 0.0199999995529651641845703125);
+    float2 gy = wgrad(param_10, _237);
+    float hxx = (gx.x - g0.x) / 0.0199999995529651641845703125;
+    float hxy = (gx.y - g0.y) / 0.0199999995529651641845703125;
+    float hyy = (gy.y - g0.y) / 0.0199999995529651641845703125;
+    float c = fast::min(depth, 1.2000000476837158203125) * 0.800000011920928955078125;
+    float3 cc3 = float3(0.939999997615814208984375, 1.0, 1.07000005245208740234375) * c;
+    float3 det = ((float3(1.0) - (cc3 * hxx)) * (float3(1.0) - (cc3 * hyy))) - (((cc3 * cc3) * hxy) * hxy);
+    float3 caus = mix(float3(1.0), fast::min(float3(1.0) / (abs(det) + float3(0.14000000059604644775390625)), float3(4.0)), float3(wet));
+    float2 param_11 = pf - ((float2(0.2800000011920928955078125, 0.810000002384185791015625) * depth) * 0.5);
+    float3 param_12;
+    float _1201 = petal(param_11, param_12, _237);
+    float3 pc = param_12;
+    float pshadow = _1201;
+    float3 hg = (_237.uHit * 0.300000011920928955078125) + (_237.uHitS * 0.699999988079071044921875);
+    float3 sun = float3(0.300000011920928955078125, 0.4199999868869781494140625, 0.660000026226043701171875) * ((0.550000011920928955078125 + (0.89999997615814208984375 * _237.uBassS)) + (0.60000002384185791015625 * _237.uHitS.x));
+    float3 col = (bed * float3(0.02999999932944774627685546875, 0.0419999994337558746337890625, 0.07500000298023223876953125)) + ((((bed * sun) * caus) * 0.1599999964237213134765625) * (1.0 - (0.60000002384185791015625 * pshadow)));
+    float2 cell = floor(pf / float2(2.7999999523162841796875));
+    float3 lanterns = float3(0.0);
+    float3 haze = float3(0.0);
+    float3 _1310;
+    float _1338;
+    float _1346;
+    for (int j = -1; j <= 1; j++)
+    {
+        for (int i = -1; i <= 1; i++)
+        {
+            float2 lc = cell + float2(float(i), float(j));
+            float2 param_13 = lc + float2(9.0);
+            float seed = hash2(param_13);
+            float2 param_14 = lc + float2(2.0);
+            float2 param_15 = lc + float2(4.0);
+            float2 pos = ((lc + float2(0.20000000298023223876953125)) + (float2(hash2(param_14), hash2(param_15)) * 0.60000002384185791015625)) * 2.7999999523162841796875;
+            float2 delta = pf - pos;
+            float r2 = dot(delta, delta);
+            if (seed < 0.4000000059604644775390625)
+            {
+                _1310 = float3(0.0199999995529651641845703125, 0.85000002384185791015625, 0.7200000286102294921875);
+            }
+            else
+            {
+                _1310 = select(float3(1.0, 0.4199999868869781494140625, 0.0900000035762786865234375), float3(0.3400000035762786865234375, 0.20000000298023223876953125, 0.980000019073486328125), bool3(seed < 0.7200000286102294921875));
+            }
+            float3 lamp = _1310;
+            float param_16 = 0.039999999105930328369140625 + (0.910000026226043701171875 * fract(seed * 7.309999942779541015625));
+            float local = voice(param_16, uSpec, uSpecSmplr);
+            if (seed < 0.4000000059604644775390625)
+            {
+                _1338 = hg.x;
+            }
+            else
+            {
+                if (seed < 0.7200000286102294921875)
+                {
+                    _1346 = hg.y;
+                }
+                else
+                {
+                    _1346 = hg.z;
+                }
+                _1338 = _1346;
+            }
+            float strike = _1338;
+            float ph = 0.5 + (0.5 * sin((seed * 40.0) + dot(pos, float2(0.699999988079071044921875, 0.4000000059604644775390625))));
+            float power = (0.0500000007450580596923828125 + (2.599999904632568359375 * local)) + ((1.7000000476837158203125 * strike) * (0.3499999940395355224609375 + (0.64999997615814208984375 * ph)));
+            lanterns += ((lamp * exp((-r2) * (1.60000002384185791015625 + (0.699999988079071044921875 * seed)))) * power);
+            haze += ((lamp * exp((-r2) * 0.550000011920928955078125)) * power);
+        }
+    }
+    float3 param_17 = float3(pf * 55.0, 2.0);
+    col += ((((lanterns * (float3(0.20000000298023223876953125) + (caus * 0.60000002384185791015625))) * ((0.36000001430511474609375 + (stone * 0.579999983310699462890625)) + (rim * 0.9900000095367431640625))) * (0.3499999940395355224609375 + (0.7799999713897705078125 * shade))) * (0.829999983310699462890625 + (0.2199999988079071044921875 * _noise(param_17))));
+    float3 dry = (bed * (float3(0.0500000007450580596923828125, 0.064999997615814208984375, 0.100000001490116119384765625) + (sun * 0.20000000298023223876953125))) + ((lanterns * 0.25) * (0.4000000059604644775390625 + rim));
+    float len = path + depth;
+    col *= exp(float3(-0.75, -0.23999999463558197021484375, -0.12999999523162841796875) * len);
+    col += ((float3(0.0040000001899898052215576171875, 0.0199999995529651641845703125, 0.0350000001490116119384765625) * (1.0 - exp((-len) * 0.800000011920928955078125))) + ((haze * 0.04500000178813934326171875) * (1.0 - exp((-len) * 1.39999997615814208984375))));
+    float3 rf = reflect(rd, n);
+    float cosv = fast::max(dot(n, -rd), 0.0);
+    float fr = 0.0199999995529651641845703125 + (0.980000019073486328125 * powr(1.0 - cosv, 5.0));
+    float3 sky = (float3(0.01200000010430812835693359375, 0.0240000002086162567138671875, 0.054999999701976776123046875) + ((float3(0.100000001490116119384765625, 0.1599999964237213134765625, 0.300000011920928955078125) * powr(fast::max(rf.y, 0.0), 0.60000002384185791015625)) * 0.5)) + ((float3(0.5, 0.62000000476837158203125, 0.89999997615814208984375) * exp((-acos(fast::clamp(dot(rf, float3(0.2800000011920928955078125, 0.5099999904632568359375, 0.810000002384185791015625)), -1.0, 1.0))) * 7.0)) * 0.5);
+    col = mix(col, sky, float3(fr * wet));
+    col += (((float3(0.63999998569488525390625, 0.800000011920928955078125, 1.0) * powr(fast::max(dot(rf, float3(0.2800000011920928955078125, 0.5099999904632568359375, 0.810000002384185791015625)), 0.0), 220.0)) * (1.5 + (1.60000002384185791015625 * hg.z))) * wet);
+    col = mix(col, dry, float3(fast::max(proud, 1.0 - smoothstep(-0.0199999995529651641845703125, 0.0199999995529651641845703125, d0))));
+    float3 param_18 = float3(ps * 9.0, _237.uTime * 0.5);
+    float edge = exp((-abs(d0)) * 38.0) * (0.5 + (0.5 * _noise(param_18)));
+    col += (((float3(0.4000000059604644775390625, 0.5, 0.62000000476837158203125) * edge) * (0.3499999940395355224609375 + (0.800000011920928955078125 * _237.uBassS))) + ((float3(0.0199999995529651641845703125, 0.02999999932944774627685546875, 0.0500000007450580596923828125) * smoothstep(0.300000011920928955078125, 0.0, abs(d0))) * smoothstep(-0.300000011920928955078125, 0.0, d0)));
+    float2 param_19 = ps + (gs * 0.300000011920928955078125);
+    float3 param_20;
+    float _1610 = petal(param_19, param_20, _237);
+    pc = param_20;
+    float pm = _1610 * wet;
+    col = mix(col, pc * (float3(0.119999997317790985107421875, 0.14000000059604644775390625, 0.189999997615814208984375) + (lanterns * 0.300000011920928955078125)), float3(pm));
+    float _1653;
+    for (int i_1 = 0; i_1 < 14; i_1++)
+    {
+        float sz = _237.uDr[i_1].z;
+        float a = _237.uDr[i_1].w;
+        if ((a > 0.522000014781951904296875) || (sz <= 0.0))
+        {
+            continue;
+        }
+        if (a < 0.02199999988079071044921875)
+        {
+            _1653 = (1.0 - (a / 0.02199999988079071044921875)) * 1.5;
+        }
+        else
+        {
+            _1653 = (((sz * 0.4199999868869781494140625) * 4.0) * ((a - 0.02199999988079071044921875) / 0.5)) * (1.0 - ((a - 0.02199999988079071044921875) / 0.5));
+        }
+        float up = _1653;
+        float rad = ((a < 0.02199999988079071044921875) ? 0.0280000008642673492431640625 : 0.0199999995529651641845703125) * (0.5 + (0.800000011920928955078125 * sz));
+        float sy = (a < 0.02199999988079071044921875) ? 4.0 : 1.2000000476837158203125;
+        float3 C = float3(_237.uDr[i_1].x, up + rad, _237.uDr[i_1].y);
+        float3 oc = (_237.uEye - C) * float3(1.0, 1.0 / sy, 1.0);
+        float3 dd_1 = fast::normalize(rd * float3(1.0, 1.0 / sy, 1.0));
+        float b = dot(oc, dd_1);
+        float h = ((b * b) - dot(oc, oc)) + (rad * rad);
+        if (h > 0.0)
+        {
+            float3 nn = fast::normalize((oc + (dd_1 * ((-b) - sqrt(h)))) * float3(1.0, 1.0 / sy, 1.0));
+            float e = 1.0 - fast::max(dot(nn, -rd), 0.0);
+            float3 dc = ((mix(float3(0.5, 0.660000026226043701171875, 0.819999992847442626953125), float3(0.949999988079071044921875, 0.980000019073486328125, 1.0), float3(smoothstep(-0.20000000298023223876953125, 0.800000011920928955078125, nn.y))) * (0.20999999344348907470703125 + (0.36000001430511474609375 * e))) + (lanterns * 0.3499999940395355224609375)) + ((sun * powr(fast::max(dot(reflect(rd, nn), float3(0.2800000011920928955078125, 0.5099999904632568359375, 0.810000002384185791015625)), 0.0), 40.0)) * 3.0);
+            col = mix(col, dc, float3(smoothstep(0.0, (rad * rad) * 0.4000000059604644775390625, h) * 0.89999997615814208984375));
+        }
+        float ai = a - 0.02199999988079071044921875;
+        if ((ai > 0.0) && (ai < 0.25))
+        {
+            float rr_1 = length(ps - _237.uDr[i_1].xy);
+            col += (((((sun * exp(-powr((rr_1 - (ai * 0.89999997615814208984375)) / 0.0199999995529651641845703125, 2.0))) * smoothstep(0.0, 0.0599999986588954925537109375, ai)) * (1.0 - (ai / 0.25))) * sz) * 1.2000000476837158203125);
+        }
+    }
+    out.o = float4(col, ts + path);
     return out;
 }
 

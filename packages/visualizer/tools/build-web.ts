@@ -1,13 +1,14 @@
 // bun packages/visualizer/tools/build-web.ts [--check]
 // The browser compiles this ordinary ES module with the rest of the application. Scene programs and
 // per-frame logic come from the same source as the native host. No runtime source evaluation or fetch.
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { rendererParts } from './renderer-parts';
 
 const root = join(import.meta.dir, '..');
 const scenes = join(root, 'scenes');
 const destination = join(root, 'web/renderer.js');
-const parts = readdirSync(scenes).filter(name => /^\d\d_.*\.js$/.test(name) && name !== '11_synth.js' && name !== '95_ui.js').sort();
+const parts = rendererParts(scenes);
 const output = [
   '// Generated from packages/visualizer/scenes by tools/build-web.ts.',
   "import { frameBudget } from './frame-budget';",

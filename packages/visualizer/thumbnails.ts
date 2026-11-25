@@ -11,6 +11,10 @@ export const thumbnails: Record<string, number> = {
   'silk': require('./thumbnails/silk.jpg'),
   'tunnel': require('./thumbnails/tunnel.jpg'),
   'aurora': require('./thumbnails/aurora.jpg'),
+  'wash': require('./thumbnails/wash.jpg'),
+  'ink': require('./thumbnails/ink.jpg'),
   'incense': require('./thumbnails/incense.jpg'),
   'leaves': require('./thumbnails/leaves.jpg'),
+  'forest': require('./thumbnails/forest.jpg'),
+  'shallows': require('./thumbnails/shallows.jpg'),
 };
