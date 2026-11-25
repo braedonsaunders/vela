@@ -3316,7 +3316,12 @@
         "duplicates": {
           "doc": "Duplicate recordings in a library and the preferred version of each (section-B duplicates block).",
           "parts": [],
-          "props": {},
+          "props": {
+            "libraryId": {
+              "doc": "The library; the experience's when absent.",
+              "type": "template"
+            }
+          },
           "templates": [],
           "tv": "Not offered on TV."
         },
@@ -3402,6 +3407,10 @@
               "default": "true",
               "doc": "Offer the visualizer (the header button and the Sound panel's switch) where env.canVisualize.",
               "type": "boolean"
+            },
+            "visualizerFlag": {
+              "doc": "The document state flag the header's visualizer button sets (the page then shows a full-screen visualizer block); no button without it.",
+              "type": "template"
             }
           },
           "templateScope": {
@@ -3416,38 +3425,34 @@
           "tv": "The transport row and the list beside it are focus guides; the play button takes focus first. A background template is drawn behind the stage and takes no focus."
         },
         "player": {
-          "doc": "The audio transport on its own (a Listen player; with `channel` the node is instead the muted live preview): scrubber with chapter marks, time, transport, and the quality and audio menus.",
+          "doc": "The mini player (a Listen player; with `channel` the node is instead the muted live preview): what plays, previous, play and pause, next (spoken word: 15 and 30 s skips), stop, and its bottom edge as the scrubber. Pressing it opens Now Playing.",
           "parts": [
-            "player.scrubber",
-            "player.transport",
-            "player.toggle",
-            "player.time",
-            "player.quality",
-            "player.menu"
+            "player.root",
+            "player.title",
+            "player.byline"
           ],
           "props": {
-            "menus": {
-              "default": "true",
-              "doc": "Show the quality and audio (speed, sleep) menus.",
-              "type": "boolean"
-            },
-            "size": {
-              "default": "large",
-              "doc": "The mini player's scale or Now Playing's.",
-              "type": "enum",
-              "values": [
-                "compact",
-                "large"
-              ]
+            "openFlag": {
+              "doc": "The document state flag set when it is pressed (the shell shows the nowPlaying block while it is set); the app's Now Playing opens without it.",
+              "type": "template"
             }
           },
           "templates": [],
-          "tv": "The scrubber is focusable (left and right seek); the toggle is the preferred focus."
+          "tv": "The open button is the focus target; the transport buttons follow it in the row."
         },
         "playlistImport": {
           "doc": "The playlist import flow over the local import: record (section-B import block).",
           "parts": [],
-          "props": {},
+          "props": {
+            "libraryId": {
+              "doc": "The library; the experience's when absent.",
+              "type": "template"
+            },
+            "nameState": {
+              "doc": "A document state value holding the playlist name as edited, for the page's heading.",
+              "type": "template"
+            }
+          },
           "templates": [],
           "tv": "Not offered on TV."
         },
@@ -3510,13 +3515,15 @@
             },
             "mode": {
               "default": "auto",
-              "doc": "auto collapses below 1180 px and keeps the viewer's choice.",
+              "doc": "auto collapses below 1180 px and keeps the viewer's choice; embedded is Your Library as a page (a phone, a TV); icons is a TV's icon rail; chips is a phone's Home, Search, Your Library and Rewind chips.",
               "type": "enum",
               "values": [
                 "auto",
                 "expanded",
                 "collapsed",
-                "embedded"
+                "embedded",
+                "icons",
+                "chips"
               ]
             }
           },
@@ -3526,7 +3533,27 @@
         "recap": {
           "doc": "Rewind: the listening recap for a period with its charts (section-B recap block).",
           "parts": [],
-          "props": {},
+          "props": {
+            "libraryId": {
+              "doc": "The library; the experience's when absent.",
+              "type": "template"
+            },
+            "period": {
+              "default": "month",
+              "doc": "The period shown first.",
+              "type": "enum",
+              "values": [
+                "week",
+                "month",
+                "year",
+                "all"
+              ]
+            },
+            "periodState": {
+              "doc": "A document state value holding the chosen period (`open name=value`), so the page's heading can read it.",
+              "type": "template"
+            }
+          },
           "templates": [],
           "tv": "As the Rewind page."
         },
@@ -3606,6 +3633,7 @@
             }
           },
           "templateScope": {
+            "trackTable.empty": [],
             "trackTable.row": [
               "index",
               "number",
@@ -3616,7 +3644,8 @@
             ]
           },
           "templates": [
-            "trackTable.row"
+            "trackTable.row",
+            "trackTable.empty"
           ],
           "tv": "Each row is one focus target (select plays, a long select opens the menu); nothing inside a row takes focus. Rows draw with the page; a list longer than 200 rows draws its first 200 and the rest as the viewer nears the end."
         },

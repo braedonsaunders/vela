@@ -76,13 +76,14 @@ templates, so the engine draws exactly as before.
 | --- | --- | --- |
 | `trackTable` | `track-table.tsx` (`TrackList`) | Block, parts, row template, multi-disc, web drag reorder in playlists, progressive rows |
 | `bar` | `bar.tsx` (`NowPlayingBar`, `BarPanelView`) | Block and parts |
-| `queue` | `queue.tsx` (`QueuePanel`) | Engine moved; block next |
-| `lyrics` | `lyrics.tsx` (`LyricsPanel`) | Engine moved; block next (word timing, translation) |
-| `rail` | `rail.tsx` (`Sidebar`, `NavItem`) | Engine moved; block next |
-| `nowPlaying`, `player` | `widgets/media/player.tsx` (`NowPlaying`, `MiniPlayer`) | Next |
-| `eq` | `blocks/sound` (`SoundBlock`, `EqBlock`) | Next |
-| `recap`, `playlistImport`, `duplicates` | `blocks/recap`, `blocks/import`, `blocks/duplicates` | Next |
-| `visualizer` | `apps/vela/src/visualizer`, `packages/visualizer` | The visualizer lead's, hosted by `nowPlaying`'s `nowPlaying.background` template |
+| `queue` | `queue.tsx` (`QueuePanel`) | Block, parts, row template, web drag to move upcoming rows |
+| `lyrics` | `lyrics.tsx` (`LyricsPanel`) | Block, parts, word timing, translation |
+| `rail` | `rail.tsx` (`Sidebar`, `RailIcons`, `RailChips`) | Block: expanded, collapsed, auto, embedded, TV icons, phone chips |
+| `nowPlaying` | `widgets/media/player.tsx` (`NowPlaying`) | Block, parts, `nowPlaying.background` template, visualizer button and switch |
+| `player` | `widgets/media/player.tsx` (`MiniPlayer`) | Block (the mini player), parts; the quality and audio menus are not in today's engine |
+| `eq` | `blocks/sound` (`SoundBlock`, `EqBlock`) | Block: the Sound panel or the bands |
+| `recap`, `playlistImport`, `duplicates` | `blocks/recap`, `blocks/import`, `blocks/duplicates` | Blocks (libraryId; period and name as document state) |
+| `visualizer` | `visualizer.tsx` over `apps/vela/src/visualizer` | Block; the stage comes from the app's host |
 
 ### Hosting a background (the visualizer)
 
@@ -91,15 +92,19 @@ and taking no focus, with `{part.playing}` and `{part.accent}` in scope. A docum
 visualizer there:
 
 ```jsonc
-{ "type": "nowPlaying", "partTemplates": { "nowPlaying.background":
-  { "type": "visualizer", "mode": "background", "when": [{ "if": "env.canVisualize" }] } } }
+{ "type": "nowPlaying", "props": { "closeFlag": "nowPlaying", "visualizerFlag": "visualizer" },
+  "partTemplates": { "nowPlaying.background": { "type": "visualizer", "mode": "background" } } }
 ```
 
-The visualizer block's own contract (agreed with its lead): props `mode`
-(`background | fullscreen`, required) and `sceneId`; a generic fallback; `env.canVisualize`;
-the `vela.setVisualizerScene` action; parts `visualizer.scenePicker`, `visualizer.sceneChip`,
-`visualizer.sceneChipActive`, `visualizer.caption`. The visualizer Off switch (the Sound panel)
-and the Sound header button stay in `nowPlaying`.
+The visualizer block (`visualizer.tsx`) re-hosts the shipped visualizer: the node's fields `mode`
+(`background | fullscreen`, required) and `sceneId`; its `fallback` where no stage can draw
+(`env.canVisualize` false, or no host); parts `visualizer.scenePicker`, `visualizer.sceneChip`,
+`visualizer.sceneChipActive`, `visualizer.caption`. The app hands the stage in through
+`VisualizerHostContext` (apps/vela/src/visualizer/host.tsx, provided at the app root), so the
+skin package never imports the app. The visualizer Off switch (Now Playing's Sound tab) and the
+Sound header button stay in `nowPlaying`; with `visualizerFlag`, the header's visualizer button
+sets that flag and the page shows a full-screen visualizer block while it is set (hide the
+background one meanwhile, `when: state.visualizer not`, so only one stage runs).
 
 ## TV and performance rules
 

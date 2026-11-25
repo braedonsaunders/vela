@@ -18,7 +18,7 @@ export function labDocument(styled: boolean): ScreenDocument {
   return {
     schema: 1, kind: 'screen', renderer: 20, owner: 'vela', experience: 'listen',
     screen: 'vela.listen', page: 'blocks-lab', version: '1', title: 'Listen blocks lab', presentation: 'section',
-    params: { album: { type: 'string', default: 'album-paper-boats' }, playlist: { type: 'string', default: '' } },
+    params: { album: { type: 'string', default: 'album-paper-boats' }, playlist: { type: 'string', default: '' }, mini: { type: 'string', default: '' } },
     sources: {
       album: { from: 'vela.title', id: '{param.album}' },
       tracks: { from: 'vela.children', id: '{param.album}', role: 'track' },
@@ -26,10 +26,14 @@ export function labDocument(styled: boolean): ScreenDocument {
     },
     ...(parts ? { parts } : {}),
     tree: {
-      type: 'box', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'background-color': '$ui.page' },
+      type: 'box', style: { display: 'flex', 'flex-direction': 'column', flex: '1', height: '100%', position: 'relative', 'background-color': '$ui.page' },
       children: [
         {
-          type: 'box', style: { flex: '1', 'overflow-y': 'auto', padding: '0px 28px 32px 28px' },
+          type: 'box', style: { display: 'flex', 'flex-direction': 'row', flex: '1', 'min-height': '0px' },
+          children: [
+        { type: 'box', style: { width: '316px', 'background-color': '$ui.raised', 'border-right': '1px solid $ui.glassEdge' }, children: [{ type: 'rail', props: { mode: 'expanded' } }] },
+        {
+          type: 'box', style: { flex: '1', 'min-width': '0px', 'overflow-y': 'auto', padding: '0px 28px 32px 28px' },
           children: [
             heading('{src.album.item.name}'),
             { type: 'trackTable', testId: 'lab-album', props: { tracks: '{src.tracks}', album: 'true', sourceId: '{param.album}', sourceName: '{src.album.item.name}', sourceKind: 'title', discs: 'true' } },
@@ -46,10 +50,21 @@ export function labDocument(styled: boolean): ScreenDocument {
               } } : undefined },
           ],
         },
+        { type: 'box', when: [{ test: 'state.queue' }], style: { width: '340px', 'background-color': '$ui.raised', 'border-left': '1px solid $ui.glassEdge' }, children: [{ type: 'queue', props: { closeFlag: 'queue' } }] },
+        { type: 'box', when: [{ test: 'state.sound' }], style: { width: '360px', 'background-color': '$ui.raised', 'border-left': '1px solid $ui.glassEdge' }, children: [{ type: 'eq', props: { closeFlag: 'sound' } }] },
+          ],
+        },
         { type: 'box', style: { height: '1px', 'background-color': '$ui.glassEdge' } },
-        { type: 'bar', props: {} },
-        { type: 'text', when: [{ test: 'state.queue' }], text: 'Queue flag set', testId: 'lab-queue-flag', style: { color: '$ui.inkSecondary', padding: '4px 28px' } },
-        { type: 'text', when: [{ test: 'state.sound' }], text: 'Sound flag set', testId: 'lab-sound-flag', style: { color: '$ui.inkSecondary', padding: '4px 28px' } },
+        { type: 'bar', when: [{ test: 'param.mini', not: true }], props: {} },
+        { type: 'player', when: [{ test: 'param.mini' }], props: { openFlag: 'nowPlaying' } },
+        // Now Playing over the page while state.nowPlaying, the visualizer behind it; full screen while state.visualizer.
+        { type: 'box', when: [{ test: 'state.nowPlaying' }], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-color': '$ui.page' },
+          children: [{ type: 'nowPlaying', props: { closeFlag: 'nowPlaying', visualizerFlag: 'visualizer' },
+            partTemplates: { 'nowPlaying.background': { type: 'visualizer', mode: 'background' } } }] },
+        { type: 'box', when: [{ test: 'state.visualizer' }], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-color': '$ui.page' },
+          children: [{ type: 'visualizer', mode: 'fullscreen' },
+            { type: 'box', press: { action: 'close', arg: 'visualizer' }, label: 'Close the visualizer', style: { position: 'absolute', top: '16px', left: '20px', padding: '10px 16px', 'border-radius': '20px', 'background-color': '$ui.popover' },
+              children: [{ type: 'text', text: 'Back', style: { color: '$ui.ink' } }] }] },
       ],
     },
   } as unknown as ScreenDocument;

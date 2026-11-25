@@ -4,24 +4,22 @@
 // listening.ts words each, and spoken.tsx draws spoken word's pages.
 import { memo, useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
-import { msg } from '@vela/core';
-import { useVela, useVelaState } from '@vela/core/react';
+import { useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
 import { headerInsetOf } from '../../resolve/inherit';
 import { useMediaLook } from '../media/parts';
 import { useMusic } from '../../blocks/listen/app';
 import { MusicLiked, MusicPlaylist } from './pages';
-import { Chip, FocusGroup } from '../../blocks/listen/parts';
 import { MusicRewind } from './rewind';
 import { MusicImport } from './import';
 import { MusicDuplicates } from './duplicates';
 import { ListeningHome, ListeningTitle } from './spoken';
 import { MINI_PLAYER_HEIGHT } from '../media/player';
 import { compactMusic, musicTV } from '../../blocks/listen/layout';
-import { samePlace, type MusicPlace } from '../../blocks/listen/place';
+import type { MusicPlace } from '../../blocks/listen/place';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from '../../blocks/listen/bar';
 import { QueuePanel } from '../../blocks/listen/queue';
-import { NavItem, Sidebar } from '../../blocks/listen/rail';
+import { RailChips, RailIcons, Sidebar } from '../../blocks/listen/rail';
 import { ListeningSearch } from './search';
 import { MusicAlbums } from './albums';
 import { PageScrollContext, usePageScroll } from './paging';
@@ -94,25 +92,14 @@ export const MusicShell = memo(function MusicShell({ queueOpen, onQueue }: { que
  * under the app's navigation, the page full width, and the floating mini player over it. */
 function CompactShell({ top }: { top: string }) {
   const app = useMusic();
-  const store = useVela();
   const m = useMediaLook();
   const page = app.place;
   const scroll = usePageScroll(pageKey(page));
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
-  useVelaState(state => state.home.load);
-  const recapAvailable = store.music.recapAvailable;
-  const tabs: { label: string; place: MusicPlace }[] = [
-    { label: msg('music.home'), place: { kind: 'home' } },
-    { label: msg('music.search'), place: { kind: 'search' } },
-    { label: msg('music.yourLibrary'), place: { kind: 'library' } },
-    ...(recapAvailable ? [{ label: msg('music.rewind'), place: { kind: 'rewind' as const } }] : []),
-  ];
   return (
     <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': top })]} testID="music-shell">
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }} accessibilityRole="tablist">
-        {tabs.map(tab => <Chip key={tab.label} label={tab.label} on={samePlace(page, tab.place)} onPress={() => app.go(tab.place)} />)}
-      </ScrollView>
+      <RailChips />
       <ScrollView key={pageKey(page)} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: queued ? MINI_PLAYER_HEIGHT + 48 : 32 }} testID="music-main" {...scroll.handlers}>
         <PageScrollContext.Provider value={scroll}>{page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
           : renderMusicPage(page, music)}</PageScrollContext.Provider>
@@ -126,27 +113,18 @@ function CompactShell({ top }: { top: string }) {
  * one focus target at a time; Back walks Now Playing → page → music Home → the app. */
 function TVShell({ top }: { top: string }) {
   const app = useMusic();
-  const store = useVela();
   const m = useMediaLook();
   const host = useHost();
   const page = app.place;
   const scroll = usePageScroll(pageKey(page));
   const music = app.listening === 'music';
   const queued = useVelaState(state => !!state.audio.queue);
-  useVelaState(state => state.home.load);
-  const recapAvailable = store.music.recapAvailable;
   // The page ends where the mini player begins, which the dock lifts above the bottom safe inset
   // (media/audio.tsx): Apple TV's inset is 60pt, and a fixed margin left the last rows under the bar.
   const dock = MINI_PLAYER_HEIGHT + Math.max(14, host.viewport.insets.bottom + 10) + 14;
   return (
     <View pointerEvents="box-none" style={[{ flex: 1, flexDirection: 'row' }, m.box({ 'padding-top': top })]} testID="music-shell">
-      <FocusGroup style={{ width: 96, paddingTop: 24, alignItems: 'center', gap: 10 }}>
-        <NavItem symbol="home" label={msg('music.home')} place={{ kind: 'home' }} rail />
-        <NavItem symbol="search" label={msg('music.search')} place={{ kind: 'search' }} rail />
-        <NavItem symbol="library" label={msg('music.yourLibrary')} place={{ kind: 'library' }} rail />
-        {recapAvailable ? <NavItem symbol="sparkles" label={msg('music.rewind')} place={{ kind: 'rewind' }} rail /> : null}
-        {music ? <NavItem symbol="heart-fill" label={msg('music.liked')} place={{ kind: 'liked' }} rail /> : null}
-      </FocusGroup>
+      <RailIcons />
       {/* The page ends above the floating mini player, so a focused row is never under it. */}
       <ScrollView key={pageKey(page)} style={{ flex: 1, marginBottom: queued ? dock : 0 }} contentContainerStyle={{ paddingBottom: 48, paddingRight: 32 }} testID="music-main" {...scroll.handlers}>
         <PageScrollContext.Provider value={scroll}>{page.kind === 'library' ? <Sidebar rail={false} onToggle={() => undefined} embedded />
