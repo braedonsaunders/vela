@@ -19,6 +19,13 @@ import { AudioMenu, qualityMenuRows, SpeedMenu, SubtitlesMenu, type MenuName } f
 import type { PlayerView } from './present';
 import { Scrubber } from './scrubber';
 import { Volume } from './volume';
+import type { Focusable } from '../../escape';
+
+/** TV: focus to a control once the one it replaces has left the tree. */
+function focusLater(target: { current: Focusable | null }): void {
+  if (!Platform.isTV) return;
+  requestAnimationFrame(() => target.current?.requestTVFocus?.());
+}
 
 export type Opened = MenuName | 'chapters' | null;
 /** Where a TV chrome's focus lands as it comes up. */
@@ -263,6 +270,9 @@ function Controls({
   const rewind = live.live && !!live.window?.seekable;
   const gap = look.size(look.small ? 4 : 8);
   const anchorRef = useRef<ComponentRef<typeof View>>(null);
+  // Back to live leaves as it takes the picture to the edge (the LIVE mark is not a control): focus
+  // goes to the play toggle, not wherever the engine finds next (the top bar's Close on Android TV).
+  const toggleRef = useRef<Focusable | null>(null);
   const names: Record<Exclude<Opened, null>, string> = {
     subtitles: msg('ui.subtitles'),
     audio: msg('ui.audio'),
@@ -310,6 +320,7 @@ function Controls({
         disabled={blocked}
         size={look.small ? 48 : 52}
         testID="player-toggle"
+        buttonRef={toggleRef}
         onPress={() => { if (view.playing) live.leftLive(); send({ type: view.playing ? 'pause' : 'play' }); }}
       />
       {timeline || rewind ? (
@@ -342,7 +353,7 @@ function Controls({
       {timeline ? null : <LiveZap look={look} watch={live} disabled={!live.canZap} />}
       {timeline || live.archive ? null : <LiveMultiview look={look} watch={live} />}
       <Volume look={look} view={view} send={send} onActive={onActive} />
-      {timeline && live.archive !== 'catchUp' ? null : <LiveMark look={look} watch={live} />}
+      {timeline && live.archive !== 'catchUp' ? null : <LiveMark look={look} watch={live} onLeave={() => focusLater(toggleRef)} />}
       <View style={cluster}>
         {look.small ? null : (
           <Text

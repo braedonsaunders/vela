@@ -3,12 +3,13 @@
 // tracks its own hover, focus and pressed states, so the same look works by pointer, keyboard,
 // the tvOS focus engine and a D-pad.
 import { FocusPressable as Pressable } from '../../focus';
+import type { Focusable } from '../../escape';
 import { BlurView } from 'expo-blur';
-import { useImperativeHandle, useState, type ReactNode, type Ref, type ComponentRef } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref, type ComponentRef } from 'react';
 import { Platform, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { useAuthLayout } from '../auth/layout-context';
 import { TextField } from './text-field';
-import { ownKeyboard, TvKeyboard } from './tv-keyboard';
+import { ownKeyboard, RETURN_FOCUS_MS, TvKeyboard } from './tv-keyboard';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { display, eyebrow, focusRing, pill } from '../../resolve/vela-base/look';
@@ -16,6 +17,7 @@ import { field as fieldRows } from '../../resolve/vela-base/auth';
 import { SYMBOLS } from '../../icons';
 import type { Css } from '../../translate';
 import { useLook } from './look';
+import { useFocusClaim } from './focus-claim';
 
 const web = Platform.OS === 'web';
 /** A pressable that runs the look's CSS transitions (background, scale) as a document box does. */
@@ -283,6 +285,8 @@ interface FieldProps {
   testID?: string;
   /** Android TV's own keyboard: the words on its done key (Done, Next by default for a username). */
   doneLabel?: string;
+  /** On a TV, the field takes focus as its step appears (the address, then the username). */
+  preferred?: boolean;
 }
 
 const KINDS = {
@@ -300,11 +304,23 @@ const OWN_KEYBOARD = ownKeyboard(Platform.OS, Platform.isTV);
 
 /** Android TV: the field is a button showing the text; selecting it opens Vela's keyboard
  * (tv-keyboard.tsx). `inputRef`'s focus() opens it too (a username's Next opens the password's). */
-function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef, doneLabel }: FieldProps) {
+function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef, doneLabel, preferred }: FieldProps) {
   const look = useLook();
   const { state, handlers } = useInteraction();
   const layout = useAuthLayout();
   const [typing, setTyping] = useState(false);
+  // The field takes focus back as its keyboard closes (Done or Back): Android otherwise restores
+  // whatever its window held before the sheet, or nothing.
+  const field = useRef<Focusable | null>(null);
+  // A step that appears with nothing focused (the address on launch, the sign-in after the address's
+  // Done closed its keyboard) puts focus on its field: Android TV gives a new page none.
+  const claim = useFocusClaim(preferred);
+  // Asked again once a keyboard that closed as the step appeared has handed focus back to the page.
+  useEffect(() => {
+    if (!preferred || !Platform.isTV) return;
+    const timer = setTimeout(() => field.current?.requestTVFocus?.(), RETURN_FOCUS_MS + 50);
+    return () => clearTimeout(timer);
+  }, []);
   useImperativeHandle(inputRef, () => ({ focus: () => setTyping(true) }) as unknown as ComponentRef<typeof TextField>, []);
   const rows = overlaid({ ...fieldRows, ...(layout?.tight ? { height: '44px' } : {}) } as Css, state, {
     hover: { 'border-color': '$ui.glassEdgeStrong' },
@@ -316,7 +332,9 @@ function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username'
     <View style={{ gap: layout?.tight ? 4 : 8 }}>
       {!layout?.minimal ? <Label>{label}</Label> : null}
       <Pressable
+        ref={field as never}
         focusable
+        hasTVPreferredFocus={claim}
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityValue={kind === 'password' ? undefined : { text: value }}
@@ -348,6 +366,7 @@ function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username'
             onSubmit?.();
           }}
           onClose={() => setTyping(false)}
+          returnFocus={field}
           testID={testID ? `${testID}-keyboard` : undefined}
         />
       ) : null}

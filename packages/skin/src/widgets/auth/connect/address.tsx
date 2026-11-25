@@ -73,6 +73,7 @@ export function AddressStep({
         kind="url"
         placeholder={msg('connect.addressHint')}
         testID="connect-address"
+        preferred
       />
       {checked.answer?.state === 'checking' ? <Waiting>{msg('connect.checking')}</Waiting> : null}
       {found ? (
