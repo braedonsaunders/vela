@@ -13,7 +13,7 @@ import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
 import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
-import { heroButtonRank, heroFocusCarry } from './hero-focus';
+import { heroButtonRank, heroEdgeKeyGate, heroFocusCarry } from './hero-focus';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -25,7 +25,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, Fragment, memo, cloneElement, startTransition, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, DeviceEventEmitter, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -755,12 +755,26 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
 
 /** The one focus the hero's buttons hand on (there is one focus, and one hero on show). */
 const heroFocus = heroFocusCarry<Focusable>();
+/** Android TV: hardware left/right key-down vs key-up focus gate (MainActivity velaAndroidTVKey). */
+const heroKeyGate = heroEdgeKeyGate();
+let androidHeroKeysSubscribed = false;
 
-/** Android TV: a press that turns the hero page must find focus already on the outermost button.
- * The press reaches the app as its key comes up, after the key going down moved focus, and the
- * focus report can arrive before or after it; so the press is judged once its focus report is in
- * (HERO_EDGE_WAIT_MS), and a button that took focus within HERO_EDGE_SETTLED_MS of the press is
- * where this press brought focus, not where it started (a longer hold is a long press). */
+function subscribeAndroidHeroKeys(): void {
+  if (androidHeroKeysSubscribed || Platform.OS !== 'android' || !Platform.isTV) return;
+  if (typeof DeviceEventEmitter?.addListener !== 'function') return;
+  androidHeroKeysSubscribed = true;
+  DeviceEventEmitter.addListener('velaAndroidTVKey', (event: { eventType?: string; eventKeyAction?: number; focus?: string }) => {
+    const direction = event?.eventType === 'left' ? -1 : event?.eventType === 'right' ? 1 : 0;
+    if (!direction) return;
+    if (event.eventKeyAction === 0) heroKeyGate.key(direction as -1 | 1, true, event.focus);
+    else if (event.eventKeyAction === 1) heroKeyGate.key(direction as -1 | 1, false, event.focus);
+  });
+}
+
+/** Android TV: a press that turns the hero page must find focus already on the outermost button
+ * and stay there from key-down to key-up (tracked via MainActivity's velaAndroidTVKey focus
+ * snapshots, with HERO_EDGE_SETTLED_MS fallback when unavailable). HERO_EDGE_WAIT_MS gives any
+ * late focus report time to settle before checking screen positions. */
 const HERO_EDGE_WAIT_MS = 120;
 const HERO_EDGE_SETTLED_MS = 300;
 /** A press reaches every focused control that listens; it turns the page once. */
@@ -780,7 +794,7 @@ function heroEdgePress(event: object, target: Focusable, direction: -1 | 1, turn
   const pressedAt = Date.now();
   setTimeout(() => {
     const held = heroFocus.current();
-    if (!held || pressedAt - held.since < HERO_EDGE_SETTLED_MS) return;
+    if (!held || !heroKeyGate.stayed(direction, pressedAt, held.since, HERO_EDGE_SETTLED_MS)) return;
     const buttons = heroFocus.targets();
     const xs = new Map<Focusable, number>();
     let waiting = buttons.length;
@@ -879,7 +893,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       heroEdgePress(event, buttonRef.current, direction as -1 | 1, () => {
         const count = env.home?.hero.length ?? 0;
         const target = count > 1 ? (env.heroIndex + direction + count) % count : null;
-        if (target !== null) host.dispatch('pickHero', String(target));
+        if (target !== null) {
+          heroFocus.turn(direction as -1 | 1);
+          host.dispatch('pickHero', String(target));
+        }
       });
       return;
     }
@@ -1139,7 +1156,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       if (!target) return;
       buttonRef.current = target;
       const heroRank = heroButton ? heroButtonRank(press!.action, fill(press!.arg, ctx, env)) : -1;
-      if (heroRank >= 0) heroFocus.add(target, heroRank);
+      if (heroRank >= 0) { subscribeAndroidHeroKeys(); heroFocus.add(target, heroRank); }
       const unregister = registerButton(target);
       const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
       const contextTarget = web && cardPrimary ? target as unknown as HTMLElement : undefined;
@@ -1230,7 +1247,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
-          if (heroButton && buttonRef.current) heroFocus.focused(buttonRef.current, true);
+          if (heroButton && buttonRef.current) { heroFocus.focused(buttonRef.current, true); heroKeyGate.focused(); }
           if (inHero || (heroControl && visible)) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
