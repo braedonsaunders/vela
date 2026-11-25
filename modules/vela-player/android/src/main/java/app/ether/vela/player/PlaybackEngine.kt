@@ -225,7 +225,7 @@ internal class Media3Engine(
     this.plan = plan
     originalUri = url.takeIf { plan?.selectedPath?.isOriginalFile == true }
     // Live windows have their own clock; never rebase them or move them to the edge.
-    timeline = MediaTimeline(if (plan?.live != true && plan?.selectedPath?.transport == "hls") plan?.selectedPath?.timelineOriginSeconds ?: 0.0 else 0.0)
+    timeline = MediaTimeline.of(plan)
     if (!preview) Log.i("vela-media3", "media timeline origin ${timeline.origin}s")
     state.position = position ?: 0.0
     refused = false
