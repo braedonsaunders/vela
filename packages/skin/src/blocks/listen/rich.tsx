@@ -6,7 +6,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { useHost, type ScreenPress } from '../../host';
-import { fill, type CssT, type RNode } from '../../resolve';
+import { fill, type RNode } from '../../resolve';
 import type { Arg } from '../../screen/holes';
 import { bind } from '../../screen/items';
 import { useScopedReads } from '../../screen/scoped-reads';
@@ -20,18 +20,8 @@ import { fillParts } from './part-style';
 import { barPresses, parseBool, parseEnum, propDefault, tableTracks } from './props';
 import { TrackList, type TrackListOptions } from './track-table';
 
-/** One part's styles as the resolver gives them. */
-export interface RichPart { style: CssT; hover?: CssT; focus?: CssT; active?: CssT }
-
-/** A rich block node as resolved (G2's `{ kind: 'rich' }` RNode). */
-export interface RichNode {
-  kind: 'rich';
-  block: string;
-  props: Record<string, Arg>;
-  parts: Record<string, RichPart>;
-  templates: Record<string, RNode>;
-  fallback?: RNode;
-}
+/** A rich block node as resolved (resolve.ts). */
+export type RichNode = Extract<RNode, { kind: 'rich' }>;
 
 /** A block's props read in its context: raw values, text, and the registry's defaults. */
 export interface Props {

@@ -82,6 +82,9 @@ export const VELA_SOURCES = {
     args: { q: id('The query; empty answers no items.', false), kind: id('A result kind the server offers (searchKinds).', false), library: id('Search within one library (its media class when the server cannot scope).', false) },
     doc: "Search results, paged: SearchValue (the audio app's search).",
   },
+  'vela.musicHome': { args: { library: id('The music library.') }, doc: "The music app's Home: MusicHomeValue (quick tiles, Vela's own recent shelves, the library's rows)." },
+  'vela.libraryInfo': { args: { id: id('The library.') }, doc: 'What a library holds and what the server offers for it: LibraryInfoValue.' },
+  'vela.viewer': { args: {}, doc: 'The signed-in viewer: ViewerValue.' },
   'vela.queue': { args: {}, live: true, doc: 'The audio queue: a reference to the `queue:current` record (QueueRecord).' },
   'vela.nowPlaying': { args: {}, live: true, doc: 'What plays now: a reference to `nowPlaying:current` (NowPlayingRecord), pushed about once a second while a page reads it.' },
   'vela.lyrics': { args: { id: id('The track.'), translate: id('A language to translate into, when the server offers it.', false) }, doc: 'LyricsValue.' },
@@ -171,6 +174,54 @@ export interface RowValue {
   plugin?: string;
 }
 export interface RowsValue { rows: RowValue[] }
+
+/** One quick tile on music Home: an item, Liked Songs (with its track count) or Rewind. */
+export type MusicQuickTile = { kind: 'item'; item: RecordRef } | { kind: 'liked'; total: number } | { kind: 'rewind' };
+
+/** `vela.musicHome`: what today's music Home draws, decided here so the document only lays it out. */
+export interface MusicHomeValue {
+  /** At most 8: Liked Songs, Rewind, what was played from most recently, the playlists, then Jump back in; each item once. */
+  quick: MusicQuickTile[];
+  /** Vela's own Recently played shelf (empty when the library's rows carry their own). */
+  recent: RecordRef[];
+  /** An older server's Jump back in row. */
+  jump: RecordRef[];
+  /** The library's rows drawn as shelves, in page order. `songs`: every item is a track, kept one per album
+   *  (a `tracks` layout row keeps every track and is drawn as a track list). */
+  shelves: (RowValue & { songs: boolean })[];
+  /** The first quick item's accent, for the page's wash ('' when none). */
+  accent: string;
+}
+
+/** `vela.libraryInfo`: a library and the music features the server offers (pages branch on these). */
+export interface LibraryInfoValue {
+  id: string;
+  name: string;
+  kind: string;
+  /** The library's media class ('video' for servers without classes). */
+  media: string;
+  /** How it opens: watch, listen, read, gallery, live (or an id this app does not know). */
+  experience: string;
+  /** What the listen experience draws it as: music, audiobook, podcast, or audio (mixed). */
+  listening: 'music' | 'audiobook' | 'podcast' | 'audio';
+  /** The library's tabs (its album view, say), as the server declares them. */
+  tabs: { id: string; label: string; kind: string; level?: string }[];
+  features: {
+    /** Likes listed by role (else the Favorites playlist). */
+    likedByRole: boolean;
+    playlists: boolean;
+    recent: boolean;
+    lyrics: boolean;
+    recap: boolean;
+    recapPeriods: string[];
+    playlistImport: boolean;
+    duplicates: boolean;
+    loudness: boolean;
+  };
+}
+
+/** `vela.viewer`. */
+export interface ViewerValue { id: string; name: string; avatar: string }
 
 export interface PlaylistValue extends ListValue {
   playlist: RecordRef;

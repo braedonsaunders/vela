@@ -17,7 +17,7 @@ import { useMusic } from './app';
 import { FocusGroup, FocusScope, Heart, IconButton, Surface, transition, type MenuOpen } from './parts';
 import { musicTV } from './layout';
 import { usePart, usePartStyler, useHasTemplate, useListenLook } from './look';
-import { discGroups, nextRowCount, playlistMove } from './props';
+import { discGroups, moveItem, nextRowCount, playlistMove } from './props';
 
 const web = Platform.OS === 'web';
 
@@ -40,7 +40,12 @@ export interface TrackListOptions {
   reorder?: boolean;
 }
 
-export function TrackList({ tracks, options = {} }: { tracks: Card[]; options?: TrackListOptions }) {
+export function TrackList({ tracks: given, options: givenOptions = {} }: { tracks: Card[]; options?: TrackListOptions }) {
+  // A dragged playlist row moves at once; the list read again from the server replaces it.
+  const [moved, setMoved] = useState<{ from: Card[]; tracks: Card[]; entryIds: string[] } | null>(null);
+  const local = moved && moved.from === given ? moved : null;
+  const tracks = local?.tracks ?? given;
+  const options = local && givenOptions.playlist ? { ...givenOptions, playlist: { ...givenOptions.playlist, entryIds: local.entryIds } } : givenOptions;
   const m = useMediaLook();
   const store = useVela();
   const wide = m.width >= 1100;
@@ -63,7 +68,9 @@ export function TrackList({ tracks, options = {} }: { tracks: Card[]; options?: 
   const drop = (to: number) => {
     const move = playlist && dragging >= 0 ? playlistMove(playlist.entryIds, dragging, to) : undefined;
     setDragging(-1); setOver(-1);
-    if (move && playlist) void store.playlists.moveEntry(playlist.id, move.entryId, move.afterEntryId);
+    if (!move || !playlist) return;
+    setMoved({ from: given, tracks: moveItem(tracks, dragging, to), entryIds: moveItem(playlist.entryIds, dragging, to) });
+    void store.playlists.moveEntry(playlist.id, move.entryId, move.afterEntryId);
   };
   const drag = reorder ? { dragging, over, start: setDragging, enter: setOver, drop, end: () => { setDragging(-1); setOver(-1); } } : undefined;
   return (

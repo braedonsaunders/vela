@@ -55,6 +55,7 @@ const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
 import { wireLocalSources } from './local-sources';
+import { useCanVisualize } from './visualizer/availability';
 import { useMediaAccess } from './media-access';
 import { useLiveController } from './live';
 import { useMultiviewController } from './multiview';
@@ -459,6 +460,9 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [searching, store]);
 
   const readEnvironment = useMemo(createEnvironmentReader, [state.auth.revision]);
+  // env.canVisualize: the shipped visualizer's own check for this device (it turns false if the
+  // renderer fails here), which the visualizer block reads.
+  const visualizes = useCanVisualize(true);
   // A pointer over (or focus on) a section's destination reads its first page ahead.
   const prefetch = useCallback<NonNullable<SkinHost['prefetch']>>((action, arg) => {
     if (action === 'library' && arg && !screenOf(arg)) void prefetchLibrary(store, arg).catch(() => {});
@@ -477,6 +481,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       skinCount: documents.length,
       skinName: resolved.doc.name,
       app: ABOUT_APP,
+      canVisualize: visualizes,
     });
     const key = `${route}:${entry}:${library ?? ''}`;
     const routeViewport = route === 'watch' ? viewport : contentViewport;
@@ -511,7 +516,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     };
     hosts.current.set(key, { inputs, host: result, libraries: state.libraries.value });
     return result;
-  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore, prefetch]);
+  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore, prefetch, visualizes]);
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(

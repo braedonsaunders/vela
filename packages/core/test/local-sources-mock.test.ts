@@ -4,11 +4,12 @@
 // never fetched from or read through Ether.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createVela, type Vela } from '../src/store';
+import { listenFrom } from '../src/audio/cards';
 import type { VelaPlatform } from '../src/store/platform';
 import type { ScreenDocument } from '../src/wire';
 import { launchMock, type RunningMock } from '../../../mock-server/test/launch';
 import { mediaChildren, mediaGroups } from '../../protocol/fixtures/media';
-import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue, GuideValue } from '../../protocol/vela-sources';
+import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue, GuideValue, MusicHomeValue, PlaylistValue } from '../../protocol/vela-sources';
 import { MemoryStore } from './helpers';
 
 let mock: RunningMock;
@@ -161,5 +162,86 @@ test('the guide answers a day of channels as channel records', async () => {
   expect(guide.day).toBe(0);
   expect(guide.channels.length).toBeGreaterThan(0);
   expect(store.screens.records.get(guide.channels[0]!.$record)?.value).toMatchObject({ id: expect.any(String), name: expect.any(String) });
+  handle.release();
+});
+
+test('a built-in page with nothing to read now (a shell) is ready at once', () => {
+  const shell: ScreenDocument = { ...albumPage, page: 'shell', params: {}, sources: { later: { from: 'vela.queue', lazy: true } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/shell' ? shell : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'shell' }, href: 'vela:listen/shell' });
+  expect(store.getState().screens.pages[handle.key]!.load).toBe('ready');
+  handle.release();
+  const none = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'shell2' }, href: 'vela:listen/shell2' });
+  expect(store.getState().screens.pages[none.key]!.load).toBe('failed');
+  none.release();
+});
+
+test('vela.play on a podcast show plays its newest unheard episode, as the app does', async () => {
+  const show = mediaGroups.shows[0]!;
+  // What today's app plays for it: core's listenFrom over the show's episodes as the store reads them.
+  await store.media.children(show.id);
+  await store.catalogue.title(show.id);
+  const expected = listenFrom(store.getState().titles[show.id]!.value!.title[0]!, store.getState().children[show.id]!.value!.items).items[0]!;
+  const handle = store.screens.open({ target, href: 'vela:listen/album', params: { id: album.id } });
+  await until(() => store.getState().screens.pages[handle.key]?.load === 'ready');
+  await store.screens.action(handle.key, { name: 'vela.play', args: { item: `item:${show.id}` } });
+  await until(() => !!store.getState().audio.queue);
+  const queue = store.getState().audio.queue!;
+  expect(queue.items.map(card => card.id)).toEqual([expected.id]);
+  expect(queue.source).toMatchObject({ id: show.id, kind: 'title' });
+  await store.audio.stop();
+  handle.release();
+});
+
+test('library info and the viewer answer what pages branch on', async () => {
+  const doc: ScreenDocument = { ...albumPage, page: 'info', params: {}, sources: { lib: { from: 'vela.libraryInfo', id: 'music' }, me: { from: 'vela.viewer' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/info' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'info' }, href: 'vela:listen/info' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors).toEqual({});
+  expect(page().sources.lib).toMatchObject({ id: 'music', media: 'music', experience: 'listen', listening: 'music', features: { likedByRole: false, playlists: expect.any(Boolean), recap: expect.any(Boolean) } });
+  expect((page().sources.me as { name: string }).name).toBe(store.getState().auth.viewer);
+  expect((page().sources.me as { name: string }).name).not.toBe('');
+  handle.release();
+});
+
+test('music Home answers quick tiles and the library\'s shelves', async () => {
+  const doc: ScreenDocument = { ...albumPage, page: 'home', params: {}, sources: { home: { from: 'vela.musicHome', library: 'music' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/home' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'home' }, href: 'vela:listen/home' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors).toEqual({});
+  const home = page().sources.home as MusicHomeValue;
+  expect(home.quick.length).toBeGreaterThan(0);
+  expect(home.quick.length).toBeLessThanOrEqual(8);
+  expect(home.shelves.length).toBeGreaterThan(0);
+  for (const shelf of home.shelves) for (const item of shelf.items) expect(store.screens.records.get(item.$record)).toBeDefined();
+  handle.release();
+});
+
+test('a param left out reads its default; a playlist reordered in the store is answered anew', async () => {
+  await store.playlists.load();
+  let list = store.getState().playlists.list.value!.find(item => !item.smart && item.itemCount >= 2);
+  if (!list) {
+    const id = await store.playlists.create('G1 order test', tracks[0]!.id);
+    await store.playlists.setMembership(tracks[1]!.id, id!, true);
+    await store.playlists.load();
+    list = store.getState().playlists.list.value!.find(item => item.id === id)!;
+  }
+  const doc: ScreenDocument = { ...albumPage, page: 'playlist', params: { id: { type: 'string', default: list.id } }, sources: { list: { from: 'vela.playlist', id: '{param.id}' } } };
+  store.screens.provideDocuments(href => (href === 'vela:listen/playlist' ? doc : undefined));
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'playlist' }, href: 'vela:listen/playlist' });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  expect(page().errors).toEqual({});
+  const before = (page().sources.list as PlaylistValue).entryIds;
+  expect(before.length).toBeGreaterThanOrEqual(2);
+  const last = before[before.length - 1]!;
+  await store.playlists.moveEntry(list.id, last, null);
+  await until(() => (page().sources.list as PlaylistValue).entryIds[0] === last);
+  expect(page().pending).toEqual({});
+  await store.playlists.moveEntry(list.id, last, before[before.length - 2]!);
   handle.release();
 });
