@@ -1,7 +1,10 @@
-// A tracklist: number (a play control on hover, a live meter on the track playing), cover, title
-// and artist, album, the heart, duration and the row's menu. Double-click or Enter plays from
-// that track; right-click or long-press opens the menu at the pointer, ⋯ opens it beside the row.
-import { useRef, type ComponentRef } from 'react';
+// The `trackTable` block's engine: a tracklist. Number (a play control on hover, a live meter on the
+// track playing), cover, title and artist, album, the heart, duration and the row's menu.
+// Double-click or Enter plays from that track; right-click or long-press opens the menu at the
+// pointer, ⋯ opens it beside the row. A document styles its parts (trackTable.*) and may replace
+// a row's drawing (the trackTable.row template); the row keeps its press, menu and focus. Long
+// lists draw their first rows with the page and the rest over the next frames.
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import { clock, msg, number, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -13,6 +16,8 @@ import { MediaGlyph } from '../../widgets/media/icons';
 import { useMusic } from './app';
 import { FocusGroup, FocusScope, Heart, IconButton, Surface, transition, type MenuOpen } from './parts';
 import { musicTV } from './layout';
+import { usePart, usePartStyler, useHasTemplate, useListenLook } from './look';
+import { discGroups, nextRowCount, playlistMove } from './props';
 
 const web = Platform.OS === 'web';
 
@@ -27,32 +32,102 @@ export interface TrackListOptions {
   source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
   /** Playlist entries: entry ids for Remove from this playlist. */
   playlist?: { id: string; entryIds: string[] };
+  /** Draw the column header (never on a phone). Default true. */
+  header?: boolean;
+  /** Group a multi-disc album under disc headings. */
+  discs?: boolean;
+  /** Drag rows to reorder the playlist (web pointer only). */
+  reorder?: boolean;
 }
 
 export function TrackList({ tracks, options = {} }: { tracks: Card[]; options?: TrackListOptions }) {
   const m = useMediaLook();
+  const store = useVela();
   const wide = m.width >= 1100;
+  const header = usePart('trackTable.header');
+  const headText = usePart('trackTable.header').text;
+  const discPart = usePart('trackTable.disc');
+  // Long lists: the first rows with the page, the rest over the following frames.
+  const [drawn, setDrawn] = useState(() => nextRowCount(0, tracks.length));
+  useEffect(() => {
+    if (drawn >= tracks.length) return;
+    const frame = requestAnimationFrame(() => setDrawn(n => nextRowCount(n, tracks.length)));
+    return () => cancelAnimationFrame(frame);
+  }, [drawn, tracks.length]);
+  const shown = drawn >= tracks.length ? tracks : tracks.slice(0, drawn);
+  const groups = options.discs ? discGroups(shown) : [{ disc: 0, indices: shown.map((_, i) => i) }];
+  const playlist = options.playlist;
+  const reorder = web && !musicTV() && !!options.reorder && !!playlist && playlist.entryIds.length === tracks.length;
+  const [dragging, setDragging] = useState(-1);
+  const [over, setOver] = useState(-1);
+  const drop = (to: number) => {
+    const move = playlist && dragging >= 0 ? playlistMove(playlist.entryIds, dragging, to) : undefined;
+    setDragging(-1); setOver(-1);
+    if (move && playlist) void store.playlists.moveEntry(playlist.id, move.entryId, move.afterEntryId);
+  };
+  const drag = reorder ? { dragging, over, start: setDragging, enter: setOver, drop, end: () => { setDragging(-1); setOver(-1); } } : undefined;
   return (
     <View testID="music-tracklist" accessibilityRole="list">
-      {m.small ? null : <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, height: 36, marginBottom: 8 }, m.box({ 'border-bottom': '1px solid $ui.glassEdge' })]}>
-        <Text style={[head(m), { width: 28, textAlign: 'center' }]}>#</Text>
-        <Text style={[head(m), { flex: 1 }]}>{msg('music.title')}</Text>
-        {options.album && wide && !musicTV() ? <Text style={[head(m), { flex: 0.8 }]}>{msg('media.ui.album')}</Text> : null}
+      {m.small || options.header === false ? null : <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, height: 36, marginBottom: 8 }, m.box({ 'border-bottom': '1px solid $ui.glassEdge' }), header.box]}>
+        <Text style={[head(m), { width: 28, textAlign: 'center' }, headText]}>#</Text>
+        <Text style={[head(m), { flex: 1 }, headText]}>{msg('music.title')}</Text>
+        {options.album && wide && !musicTV() ? <Text style={[head(m), { flex: 0.8 }, headText]}>{msg('media.ui.album')}</Text> : null}
         <View style={{ width: 32 }} />
         <View style={{ width: 52, alignItems: 'flex-end' }}><Glyph symbol="clock" size={16} color={m.ui.inkQuiet} /></View>
         <View style={{ width: 32 }} />
       </View>}
-      <FocusScope.Provider value={`tracks:${options.source?.id ?? ''}`}><FocusGroup>{tracks.map((track, i) => <TrackRow key={`${track.id}-${i}`} track={track} index={i} tracks={tracks} options={options} wide={wide} />)}</FocusGroup></FocusScope.Provider>
+      <FocusScope.Provider value={`tracks:${options.source?.id ?? ''}`}><FocusGroup>{groups.map(group => [
+        group.disc ? <View key={`disc-${group.disc}`} style={[{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 44, marginTop: 8 }, discPart.box]} accessibilityRole="header">
+          <Glyph symbol="album" size={16} color={m.ui.inkQuiet} />
+          <Text style={[m.text({ 'font-size': '14px', 'font-weight': '650', color: '$ui.inkSecondary' }), discPart.text]}>{msg('media.ui.disc', { disc: number(group.disc) })}</Text>
+        </View> : null,
+        ...group.indices.map(i => <TrackRow key={`${tracks[i]!.id}-${i}`} track={tracks[i]!} index={i} tracks={tracks} options={options} wide={wide} disc={group.disc} drag={drag} />),
+      ])}</FocusGroup></FocusScope.Provider>
     </View>
   );
+}
+
+interface RowDrag { dragging: number; over: number; start(index: number): void; enter(index: number): void; drop(index: number): void; end(): void }
+
+/** Web pointer reordering: the row's own element is draggable (HTML drag and drop), so the row's
+ * layout is unchanged; a line marks where it lands. */
+function useRowDrag(drag: RowDrag | undefined, index: number) {
+  const ref = useRef<ComponentRef<typeof View>>(null);
+  const live = useRef(drag);
+  live.current = drag;
+  const on = !!drag;
+  useEffect(() => {
+    const node = ref.current as unknown as HTMLElement | null;
+    if (!on || !node?.addEventListener) return;
+    node.setAttribute('draggable', 'true');
+    const start = (e: DragEvent) => { e.dataTransfer?.setData('text/plain', String(index)); live.current?.start(index); };
+    const over = (e: DragEvent) => { e.preventDefault(); if (live.current && live.current.over !== index) live.current.enter(index); };
+    const dropped = (e: DragEvent) => { e.preventDefault(); live.current?.drop(index); };
+    const end = () => live.current?.end();
+    node.addEventListener('dragstart', start);
+    node.addEventListener('dragover', over);
+    node.addEventListener('drop', dropped);
+    node.addEventListener('dragend', end);
+    return () => {
+      node.removeAttribute('draggable');
+      node.removeEventListener('dragstart', start);
+      node.removeEventListener('dragover', over);
+      node.removeEventListener('drop', dropped);
+      node.removeEventListener('dragend', end);
+    };
+  }, [on, index]);
+  return ref;
 }
 
 function head(m: ReturnType<typeof useMediaLook>) {
   return m.text({ 'font-size': '12px', 'font-weight': '650', 'letter-spacing': '0.08em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' });
 }
 
-function TrackRow({ track, index, tracks, options, wide }: { track: Card; index: number; tracks: Card[]; options: TrackListOptions; wide: boolean }) {
+function TrackRow({ track, index, tracks, options, wide, disc, drag }: { track: Card; index: number; tracks: Card[]; options: TrackListOptions; wide: boolean; disc: number; drag?: RowDrag }) {
   const app = useMusic();
+  const look = useListenLook();
+  const templated = useHasTemplate('trackTable.row');
+  const dragRef = useRowDrag(drag, index);
   const store = useVela();
   const m = useMediaLook();
   const nowId = useVelaState(s => currentInQueue(s.audio.queue)?.id);
@@ -77,14 +152,23 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
   // takes focus.
   const tv = musicTV();
   const touch = !tv && (!web || m.width < 980);
-  return (
+  const rowStyle = usePartStyler(['trackTable.row', current && 'trackTable.activeRow']);
+  const rowText = usePart(['trackTable.row', current && 'trackTable.activeRow']).text;
+  const numberPart = usePart('trackTable.number').text;
+  const titlePart = usePart('trackTable.title').text;
+  const artistPart = usePart('trackTable.artist').text;
+  const albumPart = usePart('trackTable.album').text;
+  const durationPart = usePart('trackTable.duration').text;
+  const marker = drag && drag.dragging >= 0 && drag.over === index && drag.dragging !== index ? (drag.dragging < index ? 'bottom' : 'top') : '';
+  const row = (
     <Surface onPress={touch || tv ? play : undefined} onDoubleClick={touch || tv ? undefined : play} onMenu={openMenu} focusId={track.id} testID={`music-track-${track.id}`} selected={current}
       label={[track.name, artist, track.media?.clockLabel].filter(Boolean).join(', ')}
       style={(lit, focus) => [{ height: tv ? 72 : options.covers ? 60 : 52, borderRadius: tv ? 12 : 8, backgroundColor: lit ? m.ui.control : current ? alpha(m.ui.accent, 0.1) : 'transparent',
         transform: [{ scale: tv && focus ? 1.02 : 1 }] },
-        focus ? (tv ? { borderWidth: 2, borderColor: m.ui.ink } : m.box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${m.ui.ink}` })) : tv ? { borderWidth: 2, borderColor: 'transparent' } : {}, transition('background-color, transform', 120)]}
+        focus ? (tv ? { borderWidth: 2, borderColor: m.ui.ink } : m.box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${m.ui.ink}` })) : tv ? { borderWidth: 2, borderColor: 'transparent' } : {}, transition('background-color, transform', 120),
+        rowStyle?.({ hover: lit, focus }), drag?.dragging === index ? { opacity: 0.5 } : null]}
       contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: touch ? 12 : 16, paddingHorizontal: touch ? 8 : 16 }}>
-      {lit => (
+      {lit => templated ? look.template!('trackTable.row', track, { index, number: numberLabel, active: current, playing, disc, lit }, index) : (
         <>
           <View style={{ width: 28, alignItems: 'center' }} pointerEvents="box-none">
             {lit && !tv ? (
@@ -92,17 +176,17 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
                 <MediaGlyph name={playing ? 'pause' : 'play'} size={16} color={m.ui.ink} />
               </Pressable>
             ) : playing ? <Meter /> : (
-              <Text style={m.text({ 'font-size': '15px', color: current ? m.ui.accent : '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>{numberLabel}</Text>
+              <Text style={[m.text({ 'font-size': '15px', color: current ? m.ui.accent : '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), numberPart]}>{numberLabel}</Text>
             )}
           </View>
           <View pointerEvents="none" style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             {options.covers ? <Cover uri={track.poster} shape="square" size={42} title={track.name} accent={track.accent} lift={0.3} /> : null}
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' })}>{track.name}</Text>
+              <Text numberOfLines={1} style={[m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' }), titlePart, rowText]}>{track.name}</Text>
               {artist || (duplicatesAvailable && recordingId && !m.small) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   {track.media?.facts.some(f => f.label === 'Explicit' && f.value !== 'false') ? <Explicit /> : null}
-                  {artist ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' })}>{artist}</Text> : null}
+                  {artist ? <Text numberOfLines={1} style={[m.text({ 'font-size': '13px', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' }), artistPart]}>{artist}</Text> : null}
                   {duplicatesAvailable && recordingId && lit && !m.small ? (
                     <Text numberOfLines={1} style={m.text({ 'font-size': '11px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>· {recordingId}</Text>
                   ) : null}
@@ -113,13 +197,13 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
           {options.album && wide && !tv ? (
             <View style={{ flex: 0.8, minWidth: 0 }} pointerEvents="box-none">
               <Pressable onPress={() => album && app.go({ kind: 'title', id: album.id })} accessibilityRole="link" style={[NO_RING, { alignSelf: 'flex-start', maxWidth: '100%' }]}>
-                <Text numberOfLines={1} style={m.text({ 'font-size': '14px', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' })}>{album?.name ?? ''}</Text>
+                <Text numberOfLines={1} style={[m.text({ 'font-size': '14px', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' }), albumPart]}>{album?.name ?? ''}</Text>
               </Pressable>
             </View>
           ) : null}
           {(m.small || tv) && !liked ? null : tv ? <View style={{ width: 32, alignItems: 'center' }} pointerEvents="none"><Glyph symbol="heart-fill" size={20} color={m.ui.accent} /></View> : <View style={{ width: 32, alignItems: 'center', opacity: lit || liked ? 1 : 0 }} pointerEvents={lit || liked ? 'box-none' : 'none'}><Heart card={track} size={32} iconSize={17} /></View>}
           <View pointerEvents="none" style={{ width: m.small ? 40 : 52, alignItems: 'flex-end' }}>
-            <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>{track.media?.clockLabel || (track.durationSeconds ? clock(track.durationSeconds) : '')}</Text>
+            <Text style={[m.text({ 'font-size': '14px', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), durationPart]}>{track.media?.clockLabel || (track.durationSeconds ? clock(track.durationSeconds) : '')}</Text>
           </View>
           {tv ? null : <View ref={more} style={{ width: 32, alignItems: 'center', opacity: lit || touch ? 1 : 0 }} pointerEvents={lit || touch ? 'box-none' : 'none'}>
             <IconButton symbol="more" label={msg('cardMenu.actionsFor', { title: track.name })} onPress={openFromMore} size={32} iconSize={18} testID={`music-track-more-${track.id}`} />
@@ -127,6 +211,14 @@ function TrackRow({ track, index, tracks, options, wide }: { track: Card; index:
         </>
       )}
     </Surface>
+  );
+  // Only a drag wraps the row: the music app as drawn today keeps its tree.
+  if (!drag) return row;
+  return (
+    <View ref={dragRef}>
+      {row}
+      {marker ? <View pointerEvents="none" style={{ position: 'absolute', left: 8, right: 8, height: 2, borderRadius: 1, backgroundColor: m.ui.accent, [marker]: -1 }} /> : null}
+    </View>
   );
 }
 
