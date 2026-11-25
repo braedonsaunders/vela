@@ -2,6 +2,11 @@ package app.ether.vela.player
 
 // Display matching, format naming, capability tokens and subtitle appearance, on a plain JVM.
 fun main() {
+  val translated = "Android Emulator OpenGL ES Translator (D3D12 (NVIDIA GeForce RTX 4080))"
+  check(!VisualizerTier.software(translated) && VisualizerTier.slowTvTranslation(translated, true))
+  check(!VisualizerTier.slowTvTranslation(translated, false))
+  check(!VisualizerTier.slowTvTranslation("Adreno (TM) 740", true))
+  check(VisualizerTier.software("ANGLE (SwiftShader Device (Subzero))"))
   // A mono analysis window at the heard clock sums two already-faded decks. Reading PCM preserves
   // the sink buffer, a gapless stream reset uses the new renderer offset, and a seek drops old data.
   val a = VisualizerAudio()

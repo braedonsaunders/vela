@@ -64,7 +64,7 @@ internal object VisualizerNative {
       return false
     }
     return manager.deviceConfigurationInfo.reqGlEsVersion >= 0x30000 && available &&
-      context.assets.list("vela-visualizer")?.contains("viz-native.js") == true && VisualizerEgl.hardwareRenderer()
+      context.assets.list("vela-visualizer")?.contains("viz-native.js") == true && VisualizerEgl.eligibleRenderer(tv)
   }
 
   external fun create(assets: AssetManager, width: Int, height: Int, id: String, artwork: String, accent: String): Long

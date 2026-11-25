@@ -21,7 +21,7 @@ internal object VisualizerEgl {
       intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE), 0)
 
   /** Probe one pixel once per process. A virtual device can use either real hardware or a CPU renderer. */
-  fun hardwareRenderer(): Boolean {
+  fun eligibleRenderer(tv: Boolean): Boolean {
     val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
     if (display == EGL14.EGL_NO_DISPLAY || !EGL14.eglInitialize(display, null, 0, null, 0)) return false
     var target = EGL14.EGL_NO_SURFACE
@@ -34,10 +34,10 @@ internal object VisualizerEgl {
         intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE), 0)
       if (target == EGL14.EGL_NO_SURFACE || !EGL14.eglMakeCurrent(display, target, target, context)) return false
       val name = GLES30.glGetString(GLES30.GL_RENDERER).orEmpty()
-      val software = listOf("swiftshader", "llvmpipe", "softpipe", "software rasterizer", "swrast")
-      val hardware = name.isNotBlank() && software.none { name.contains(it, ignoreCase = true) }
-      Log.i("VelaVisualizer", "hardwareRenderer=$hardware renderer=$name")
-      return hardware
+      val hardware = !VisualizerTier.software(name)
+      val eligible = hardware && !VisualizerTier.slowTvTranslation(name, tv)
+      Log.i("VelaVisualizer", "hardwareRenderer=$hardware visualizerEligible=$eligible tv=$tv renderer=$name")
+      return eligible
     } finally {
       EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
       if (target != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, target)
