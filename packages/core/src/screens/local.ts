@@ -7,15 +7,16 @@
 // current while some page reads them. Actions answer as plugin actions do (ScreenActionAnswer).
 import type * as V from '../wire';
 import type { SourceSpec } from '../../../protocol/screen';
-import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_LOCAL_RECORDS, VELA_SOURCES, type ImportRecord, type ListValue, type PlaylistValue, type TitleValue, type VelaActionName, type VelaSourceName } from '../../../protocol/vela-sources';
-import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasMusicLibrary, hasTitleChildren } from '../adapter/capabilities';
+import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_LOCAL_RECORDS, VELA_SOURCES, type ImportRecord, type LibraryInfoValue, type ListValue, type PlaylistValue, type TitleValue, type VelaActionName, type VelaSourceName } from '../../../protocol/vela-sources';
+import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasLiveTv, hasMusicLibrary, hasTitleChildren } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
-import { audioCardsOf } from '../audio/cards';
+import { audioCardsOf, playStart, resumePoint } from '../audio/cards';
 import { msg } from '../i18n';
-import type { Card, PlaylistModel } from '../models';
+import type { Card, PlaylistModel, Row } from '../models';
+import { libraryHomeTab } from '../library-presentation';
 import { childrenKey } from '../plugin-levels';
 import { sameJSON, type RecordStore } from './records';
-import { boolArg, cardList, lyricsLine, cardOf, cardValue, intArg, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, ref, rowsValue, sourceArgs, textArg, type LocalAnswer, type LocalRecords, type LocalScope } from './local-records';
+import { boolArg, cardList, lyricsLine, musicHomeValue, cardOf, cardValue, intArg, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, ref, rowsValue, sourceArgs, textArg, type LocalAnswer, type LocalRecords, type LocalScope } from './local-records';
 import type { Vela } from '../store';
 import { normalizeQuery, searchList } from '../store/search-list';
 import type { RecordRef } from '../../../protocol/screen';
@@ -25,7 +26,7 @@ import { libraryKey, type LibraryQuery } from '../store/catalogue';
 import { recapKey, type PlaylistImportModel } from '../store/music';
 
 /** The stores local answers wrap (the Vela store; a subset so tests can stand in). */
-export type LocalStores = Pick<Vela, 'getState' | 'subscribe' | 'catalogue' | 'media' | 'music' | 'playlists' | 'home' | 'audio' | 'musicSearch'>;
+export type LocalStores = Pick<Vela, 'getState' | 'subscribe' | 'catalogue' | 'media' | 'music' | 'playlists' | 'home' | 'audio' | 'musicSearch' | 'live'>;
 
 /** What the server says it offers, read after the session is ready. */
 export interface LocalServer {
@@ -166,6 +167,32 @@ export class LocalSources {
     };
   }
 
+  /**
+   * Call `changed` whenever what a (not live) source reads in the stores moves and has settled: a
+   * playlist's entries after a move or removal, the liked lists after a like, a title read again.
+   */
+  watch(spec: SourceSpec, scope: LocalScope, changed: () => void): () => void {
+    if (!isVelaSource(spec.from)) return () => {};
+    const select = storeSlices(spec.from, sourceArgs(spec, scope));
+    if (!select) return () => {};
+    let seen = select(this.stores.getState());
+    return this.stores.subscribe(() => {
+      const now = select(this.stores.getState());
+      if (now.length === seen.length && now.every((slice, at) => slice === seen[at])) return;
+      seen = now;
+      // Only settled values: a read under way answers when it lands.
+      if (now.some(slice => (slice as Loadable<unknown> | undefined)?.load === 'loading')) return;
+      changed();
+    });
+  }
+
+  /** The server's libraries, read once (a failed read is tried again). */
+  private async libraries(): Promise<void> {
+    const state = this.stores.getState().libraries;
+    if (state.load === 'idle' || (state.load === 'failed' && !state.value)) await this.stores.home.libraries();
+    await settled(this.stores, () => this.stores.getState().libraries);
+  }
+
   /** Whether a live source is followed now (tests, diagnostics). */
   following(from: string): boolean { return this.live.has(from); }
 
@@ -304,9 +331,9 @@ export class LocalSources {
           if (!args.libraryId) return { error: 'invalid_request' };
           const { adapter } = await this.features();
           if (!hasLibraryRecommendations(adapter as never)) return unsupported();
-          await stores.home.libraries();
+          await this.libraries();
           const library = stores.getState().libraries.value?.find(item => item.id === args.libraryId);
-          const rows = await stores.catalogue.libraryRecommendations(args.libraryId, (library?.kind ?? 'mixed') as V.Library['kind'], fresh, args.tab || undefined);
+          const rows = await stores.catalogue.libraryRecommendations(args.libraryId, (library?.kind ?? 'mixed') as V.Library['kind'], fresh, args.tab || libraryHomeTab(library?.tabs));
           if (!rows) return unsupported();
           return rowsValue(rows);
         }
@@ -386,6 +413,58 @@ export class LocalSources {
           return { kind: context.kind, item: ref(itemKey(context.card.id)), playedAt: context.playedAt };
         });
         return { value: { items }, records };
+      }
+      case 'vela.musicHome': {
+        await this.features();
+        await this.libraries();
+        const library = stores.getState().libraries.value?.find(item => item.id === args.library);
+        if (!library) return { error: 'not_found' };
+        const [rows] = await Promise.all([
+          stores.catalogue.libraryRecommendations(library.id, library.kind as V.Library['kind'], fresh, libraryHomeTab(library.tabs)).catch(() => [] as Row[]),
+          stores.music.recentAvailable ? stores.music.recent(fresh) : undefined,
+          stores.playlists.available && (fresh || stores.getState().playlists.list.load !== 'ready') ? stores.playlists.load() : undefined,
+        ]);
+        const all = stores.getState().playlists.list.value ?? [];
+        const favorites = all.find(item => item.name === 'Favorites');
+        let likedTotal = 0;
+        if (stores.music.likedAvailable) {
+          await stores.music.liked('track', false, fresh);
+          likedTotal = stores.getState().music.liked.track?.value?.total ?? 0;
+        } else if (favorites) {
+          await stores.playlists.open(favorites.id, false, fresh);
+          likedTotal = (stores.getState().collections[favorites.id]?.value?.items ?? []).filter(card => card.media?.class === 'music' && card.media?.role === 'track').length;
+        }
+        return musicHomeValue({
+          rows: rows ?? [], recentAvailable: stores.music.recentAvailable, recent: stores.getState().music.recent.value ?? [],
+          playlists: all.filter(item => item !== favorites).map(playlistCard), favoritesPlaylist: !!favorites, likedTotal,
+          recapAvailable: stores.music.recapAvailable,
+        });
+      }
+      case 'vela.libraryInfo': {
+        await this.features();
+        await this.libraries();
+        const loaded = await settled(stores, () => stores.getState().libraries);
+        const library = loaded?.value?.find(item => item.id === args.id);
+        if (!library) return { error: loaded?.value ? 'not_found' : loadableError(loaded) };
+        const media = library.media ?? 'video';
+        const value: LibraryInfoValue = {
+          id: library.id, name: library.name, kind: library.kind, media,
+          experience: library.experience ?? library.declaredExperience ?? 'watch',
+          listening: media === 'music' || media === 'audiobook' || media === 'podcast' ? media : 'audio',
+          tabs: (library.tabs ?? []).map(tab => ({ id: tab.id, label: tab.label, kind: tab.kind, ...(tab.level ? { level: tab.level } : {}) })),
+          features: {
+            likedByRole: stores.music.likedAvailable, playlists: stores.playlists.available, recent: stores.music.recentAvailable,
+            lyrics: stores.music.lyricsAvailable, recap: stores.music.recapAvailable, recapPeriods: stores.music.recapAvailable ? stores.music.recapPeriods : [],
+            playlistImport: stores.music.playlistImportAvailable, duplicates: stores.music.duplicatesAvailable, loudness: stores.music.loudnessAvailable,
+          },
+        };
+        return { value };
+      }
+      case 'vela.viewer': {
+        const auth = stores.getState().auth;
+        if (auth.phase !== 'signed-in') await this.features();
+        const now = stores.getState();
+        return { value: { id: now.auth.viewerId ?? '', name: now.auth.viewer ?? '', avatar: now.home.value?.viewerAvatar ?? '' } };
       }
       case 'vela.queue':
       case 'vela.nowPlaying':
@@ -495,9 +574,22 @@ export class LocalSources {
         const top = topMatch(items, q);
         return { value: { ...value, q, byDescription: list.byDescription, top: top ? ref(itemKey(top.id)) : null, groups }, records };
       }
-      case 'vela.guide':
-        // Not answered locally yet: documents hide these parts.
-        return unsupported();
+      case 'vela.guide': {
+        const { adapter } = await this.features();
+        if (!hasLiveTv(adapter as never)) return unsupported();
+        const day = Math.max(0, Math.min(6, intArg(args.day) ?? 0));
+        const held = stores.getState().live.guide[day];
+        if (fresh || !held?.value || held.load === 'failed') await stores.live.guide(day);
+        const loaded = await settled(stores, () => stores.getState().live.guide[day]);
+        const guide = loaded?.value;
+        if (!guide) return { error: loadableError(loaded) };
+        const records: LocalRecords = {};
+        const channels = guide.channels.map(channel => { records[`channel:${channel.id}`] = channel; return ref(`channel:${channel.id}`); });
+        return {
+          value: { channels, day: guide.day, dayLabel: guide.dayLabel, nowMinute: guide.nowMinute, minutes: guide.minutes, days: guide.days, guides: guide.guides },
+          records,
+        };
+      }
     }
   }
 
@@ -532,21 +624,31 @@ export class LocalSources {
     const { stores } = this;
     switch (name) {
       case 'vela.play': {
-        const { items, source } = await this.playContext(textArg(args.context), page);
+        const { items, source, container } = await this.playContext(textArg(args.context), page);
         const start = textArg(args.item);
         const shuffle = boolArg(args.shuffle) === true;
         if (!items.length) {
-          // No list: the item itself (a container plays its tracks).
+          // No list: the item itself. A container plays its tracks, a book or show where the viewer left it.
           const card = start ? await this.card(start) : undefined;
           if (!card) throw refusal('not_found');
           const cards = await audioCardsOf(stores as Vela, card);
           if (!cards.length) throw refusal('nothing_to_play');
           const leaf = cards.length === 1 && cards[0]!.id === card.id;
-          stores.audio.play({ items: cards, index: 0, shuffle, ...(leaf ? {} : { source: { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' : 'title' } }) });
+          if (leaf) { stores.audio.play({ items: cards, index: 0, shuffle, positionSeconds: resumePoint(card) }); return { answer: {} }; }
+          const from = playStart(card, cards);
+          if (!from.items.length) throw refusal('nothing_to_play');
+          stores.audio.play({ ...from, shuffle, source: { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' : 'title' } });
           return { answer: {} };
         }
-        const index = start ? items.findIndex(card => card.id === itemId(start)) : 0;
-        stores.audio.play({ items, index: Math.max(0, index), shuffle, ...(source ? { source } : {}) });
+        if (!start) {
+          // The whole list: a book's parts or a show's episodes from where the viewer left them.
+          const from = container && !shuffle ? playStart(container, items) : { items, index: 0 };
+          if (!from.items.length) throw refusal('nothing_to_play');
+          stores.audio.play({ ...from, shuffle, ...(source ? { source } : {}) });
+          return { answer: {} };
+        }
+        const index = Math.max(0, items.findIndex(card => card.id === itemId(start)));
+        stores.audio.play({ items, index, shuffle, positionSeconds: resumePoint(items[index]!), ...(source ? { source } : {}) });
         return { answer: {} };
       }
       case 'vela.playNext':
@@ -656,23 +758,26 @@ export class LocalSources {
   }
 
   /** What `vela.play {context}` plays through: a list source on the page, or a container item. */
-  private async playContext(context: string, page: LocalActionPage): Promise<{ items: Card[]; source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' } }> {
+  private async playContext(context: string, page: LocalActionPage): Promise<{ items: Card[]; container?: Card; source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' } }> {
     if (!context) return { items: [] };
     const spec = page.specs[context];
     const value = page.values[context] as Partial<ListValue> | undefined;
     if (spec && Array.isArray(value?.items)) {
       const items = value.items.map(item => cardOf(this.records.get(item.$record)?.value)).filter((card): card is Card => !!card && !!card.media?.audio);
       const args = LocalSources.isLocal(spec) ? sourceArgs(spec, page.scope) : {};
-      const named = (id: string) => cardOf(this.records.get(itemKey(id))?.value)?.name ?? '';
-      if (spec.from === 'vela.children' && args.id) return { items, source: { id: itemId(args.id), name: named(args.id), kind: 'title' } };
-      if (spec.from === 'vela.playlist' && args.id) return { items, source: { id: itemId(args.id), name: named(args.id), kind: 'playlist' } };
+      const known = (id: string) => cardOf(this.records.get(itemKey(id))?.value);
+      if (spec.from === 'vela.children' && args.id) {
+        const container = known(args.id) ?? await this.card(args.id).catch(() => undefined);
+        return { items, ...(container ? { container } : {}), source: { id: itemId(args.id), name: container?.name ?? '', kind: 'title' } };
+      }
+      if (spec.from === 'vela.playlist' && args.id) return { items, source: { id: itemId(args.id), name: known(args.id)?.name ?? '', kind: 'playlist' } };
       if (spec.from === 'vela.favorites' && args.role) return { items, source: { id: args.role, name: msg('music.liked'), kind: 'favorites' } };
       return { items };
     }
     const card = await this.card(context);
     if (!card) throw refusal('not_found');
     const items = await audioCardsOf(this.stores as Vela, card);
-    return { items, source: { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' : 'title' } };
+    return { items, container: card, source: { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' : 'title' } };
   }
 
   private pollImport(id: string, run: number): void {
@@ -700,6 +805,28 @@ export function topMatch(items: readonly Card[], query: string): Card | undefine
   const rank = (card: Card) => { const at = TOP_ORDER.indexOf(card.kind === 'playlist' ? 'playlist' : card.media?.role ?? ''); return at < 0 ? TOP_ORDER.length : at; };
   const exact = items.filter(card => q && normalizeQuery(card.name) === q).sort((a, b) => rank(a) - rank(b));
   return exact[0] ?? items[0];
+}
+
+type StoreState = ReturnType<LocalStores['getState']>;
+
+/** The store slices a source's answer is made from (compared by identity), or undefined when it
+ * follows none (live sources follow on their own; search and guide are read on demand). */
+function storeSlices(from: VelaSourceName, args: Record<string, string>): ((state: StoreState) => unknown[]) | undefined {
+  const id = args.id ? itemId(args.id) : '';
+  switch (from) {
+    case 'vela.title': case 'vela.readingProgress': return state => [state.titles[id]];
+    case 'vela.children': return state => [state.children[childrenKey(id, args.role || undefined)], state.children[childrenKey(id)]];
+    case 'vela.playlist': return state => [state.collections[id]];
+    case 'vela.playlists': return state => [state.playlists.list];
+    case 'vela.favorites': return state => [state.music.liked[args.role ?? ''], state.playlists.list, state.collections];
+    case 'vela.recent': return state => [state.music.recent];
+    case 'vela.duplicates': return state => [state.music.duplicates[args.libraryId ?? '']];
+    case 'vela.recording': return state => [state.music.recordings[id]];
+    case 'vela.rows': return args.placement === 'home' ? state => [state.home.value] : args.placement === 'title' ? state => [state.related[itemId(args.titleId ?? '')]] : undefined;
+    case 'vela.musicHome': return state => [state.music.recent, state.playlists.list, state.music.liked.track];
+    case 'vela.libraryInfo': return state => [state.libraries];
+    default: return undefined;
+  }
 }
 
 /** The names of the page's sources reading any of `froms`. */

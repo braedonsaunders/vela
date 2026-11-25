@@ -2,7 +2,8 @@
 // half of the local answers. Core's models (cards, rows, the audio queue) become `{$record}` values
 // and the records they point at; a document's source arguments are filled from the page's params
 // and context; action arguments are read in their declared types. No store, no adapter here.
-import type { Card, Row } from '../models';
+import type { Card, PlaylistModel, Row } from '../models';
+import type { RecentContext } from '../store/music';
 import type { AudioQueue } from '../audio/queue';
 import type * as P from '../../../protocol/vela-sources';
 import type { RecordRef, SourceSpec } from '../../../protocol/screen';
@@ -242,4 +243,69 @@ export function lyricsLine(line: unknown): P.LyricsLine | undefined {
   const romanised = typeof raw.romanised === 'string' ? raw.romanised : typeof raw.romanized === 'string' ? raw.romanized : '';
   if (romanised) out.romanised = romanised;
   return out;
+}
+
+/** What music Home is made from: the library's rows and the viewer's music state. */
+export interface MusicHomeInput {
+  rows: readonly Row[];
+  recentAvailable: boolean;
+  recent: readonly RecentContext[];
+  /** The viewer's playlists without the marked Favorites list, and whether that list exists. */
+  playlists: readonly Card[];
+  favoritesPlaylist: boolean;
+  likedTotal: number;
+  recapAvailable: boolean;
+}
+
+/** Each song's album once (a row of songs reads as the albums the viewer came back to). */
+function oneTrackPerAlbum(items: readonly Card[]): Card[] {
+  const seen = new Set<string>();
+  return items.filter(item => { const album = item.media?.parent?.id ?? item.id; if (seen.has(album)) return false; seen.add(album); return true; });
+}
+
+/**
+ * Music Home as today's app draws it. The page's own play-contexts row (purpose recentContexts)
+ * replaces Vela's Recently played and Jump back in, and its own liked row (purpose liked) the Liked
+ * Songs tile; an older plugin's rows named by id stand in only without them. Quick tiles: Liked
+ * Songs, Rewind, what was played from most recently, the playlists, Jump back in; each item once, 8 at most.
+ */
+export function musicHomeValue(input: MusicHomeInput): { value: P.MusicHomeValue; records: LocalRecords } {
+  const { rows } = input;
+  const ownRecent = rows.some(row => row.purpose === 'recentContexts');
+  const ownLiked = rows.some(row => row.purpose === 'liked');
+  const legacyJump = (row: Row) => !ownRecent && row.id.endsWith(':jump-back-in');
+  const legacyRecent = (row: Row) => !ownRecent && input.recentAvailable && row.id.endsWith(':recently-played');
+  const jump = rows.find(legacyJump)?.items ?? [];
+  const shelves = rows.filter(row => !row.surface && row.items.length > 0 && !legacyJump(row) && !legacyRecent(row));
+  const recentCards = ownRecent ? [] : input.recent.flatMap(item => (item.kind === 'favorites' ? [] : [item.card]));
+  const likedRecently = input.recent.some(item => item.kind === 'favorites');
+  const records: LocalRecords = {};
+  const keep = (card: Card) => { records[itemKey(card.id)] = cardValue(card); return ref(itemKey(card.id)); };
+  const seen = new Set<string>();
+  const quick: P.MusicQuickTile[] = [];
+  let accent = '';
+  if (!ownLiked && (input.favoritesPlaylist || likedRecently)) quick.push({ kind: 'liked', total: input.likedTotal });
+  if (input.recapAvailable) quick.push({ kind: 'rewind' });
+  for (const card of [...recentCards, ...input.playlists, ...jump]) {
+    if (quick.length >= 8) break;
+    if (seen.has(card.id)) continue;
+    seen.add(card.id);
+    if (!accent && quick.every(tile => tile.kind !== 'item')) accent = card.accent ?? '';
+    quick.push({ kind: 'item', item: keep(card) });
+  }
+  const shelfValues = rowsValue(shelves.map(row => {
+    const songs = row.layout !== 'tracks' && row.items.every(item => item.media?.role === 'track');
+    return songs ? { ...row, items: oneTrackPerAlbum(row.items) } : row;
+  }));
+  Object.assign(records, shelfValues.records);
+  return {
+    value: {
+      quick: quick.slice(0, 8),
+      recent: recentCards.map(keep),
+      jump: jump.map(keep),
+      shelves: shelfValues.value.rows.map((row, at) => ({ ...row, songs: shelves[at]!.layout !== 'tracks' && shelves[at]!.items.every(item => item.media?.role === 'track') })),
+      accent,
+    },
+    records,
+  };
 }

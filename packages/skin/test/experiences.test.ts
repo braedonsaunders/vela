@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RENDERER_VERSION, fill, type RNode } from '../src/resolve';
-import { checkScreenDocument, formFactor, resolveScreenDocument, velaUseProblems, type ScreenViewport } from '../src/resolve/screen';
+import { checkExperienceOverrides, checkScreenDocument, formFactor, resolveScreenDocument, velaUseProblems, type ScreenViewport } from '../src/resolve/screen';
 import { builtinDocument, builtinIndex, builtinScreenId } from '../src/resolve/builtin';
 import { platformOf } from '../src/screen/platform-of';
 import { slotContext, slotSurfaces } from '../src/surfaces/model';
@@ -42,7 +42,8 @@ describe('renderer 20 and the renderer-bump rule', () => {
   });
   test('every renderer-19 plugin document (Sports, the news desk) still resolves unchanged in shape', () => {
     const fixtures = join(import.meta.dir, '../../protocol/fixtures/screens');
-    const files = readdirSync(fixtures, { recursive: true }).map(String).filter(f => f.endsWith('.json') && !/(^|\/)data/.test(f));
+    // Sports' and the news desk's (the mock music plugin's slot panel is a renderer-20 document).
+    const files = readdirSync(fixtures, { recursive: true }).map(String).filter(f => f.endsWith('.json') && !/(^|\/)data/.test(f) && /^(sports|news)\//.test(f));
     expect(files.length).toBeGreaterThan(5);
     for (const file of files) {
       const doc = JSON.parse(readFileSync(join(fixtures, file), 'utf8')) as ScreenDocument;
@@ -321,5 +322,59 @@ describe('slots', () => {
   });
   test('a slot\'s context: server keys go to Ether (a title as its item: key), the rest stay local', () => {
     expect(slotContext({ title: 'a1', titleKind: 'album', kind: 'title', chrome: 'true', empty: '' })).toEqual({ server: { title: 'item:a1', kind: 'title' }, local: { chrome: 'true' } as never });
+  });
+});
+
+describe('checking a skin\'s overrides', () => {
+  const pages = (experience: string): Record<string, ScreenDocument> => (experience === 'listen' ? { album: builtIn({ type: 'text', text: 'album' }), shell: builtIn({ type: 'box' }, { page: 'shell' }) } : {});
+  test('a sound override passes', () => {
+    expect(checkExperienceOverrides({ experiences: { listen: { pages: { album: { type: 'text', text: '{src.album.name}' } }, shell: { tv: { type: 'box' } } } } }, pages)).toEqual([]);
+  });
+  test('an unknown page or experience, a broken override and an unknown part are reported', () => {
+    const findings = checkExperienceOverrides({ experiences: {
+      listen: { pages: { nowhere: { type: 'box' }, album: { type: 'use', template: 'missing' } }, parts: { 'queue.bogus': { color: 'white' } } },
+      read: { pages: { index: { type: 'box' } } },
+      'Not An Id': {},
+    } }, pages);
+    const errors = findings.filter(f => f.level === 'error').map(f => `${f.experience}/${f.page}: ${f.message}`);
+    expect(errors).toContain('listen/nowhere: listen has no built-in page nowhere');
+    expect(errors).toContain('read/index: read has no built-in page index');
+    expect(errors).toContain('Not An Id/: Not An Id is not an experience id');
+    expect(errors.some(e => e.startsWith('listen/album: Unknown template missing'))).toBe(true);
+  });
+});
+
+describe('the shell\'s children slot', () => {
+  test('outside a template it is the host\'s slot (the page draws there); inside one, the use\'s children', () => {
+    const shell = builtIn({ type: 'box', children: [{ type: 'slot', slot: 'children' }, { type: 'use', template: 'frame' }] }, {
+      page: 'shell', templates: { frame: { type: 'box', children: [{ type: 'slot', slot: 'children' }] } },
+    });
+    const [slot, frame] = children(resolveScreenDocument(shell, at()).tree);
+    expect(slot!.kind).toBe('slot');
+    expect((slot as Extract<RNode, { kind: 'slot' }>).slot).toBe('children');
+    expect(children(frame!)).toEqual([]);
+  });
+});
+
+describe('words in built-in documents', () => {
+  const words = (text: string, sources: Record<string, unknown> = {}, owned = true) => {
+    const doc = owned ? builtIn({ type: 'text', text }) : plugin({ type: 'text', text }, { strings: { 'n.one': '{arg.count} goal', 'n.other': '{arg.count} goals' } });
+    return textOf(resolveScreenDocument(doc, at()).tree, root(sources));
+  };
+  test('{s:key} falls back to Vela\'s locale tables for owner vela, with: fills their placeholders', () => {
+    expect(words('{s:music.liked}')).toBe('Liked Songs');
+    expect(words('{s:no.such.key}')).toBe('');
+    expect(words('{s:music.moreBy|with:name=src.a.name}', { a: { name: 'Nina' } })).toBe('More by Nina');
+    expect(words('{s:music.liked}', {}, false)).toBe('');
+  });
+  test('the document\'s own strings win over the tables', () => {
+    const doc = builtIn({ type: 'text', text: '{s:music.liked}' }, { strings: { 'music.liked': 'Hearts' } });
+    expect(textOf(resolveScreenDocument(doc, at()).tree)).toBe('Hearts');
+  });
+  test('plural: picks the form for the number and fills {count}', () => {
+    expect(words('{src.a.n|plural:media.count.tracks}', { a: { n: 1 } })).toBe('1 song');
+    expect(words('{src.a.n|plural:media.count.tracks}', { a: { n: 12 } })).toBe('12 songs');
+    expect(words('{src.a.n|plural:n}', { a: { n: 2 } }, false)).toBe('2 goals');
+    expect(words('{src.a.n|plural:n}', { a: { n: 1 } }, false)).toBe('1 goal');
   });
 });

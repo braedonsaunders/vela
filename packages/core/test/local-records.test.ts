@@ -1,7 +1,7 @@
 // Vela's own sources as records: lists of references, the queue and Now Playing records, source
 // arguments filled from a page's params, and action arguments read in their declared types.
 import { describe, expect, test } from 'bun:test';
-import { boolArg, cardList, cardOf, intsArg, lyricsLine, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, rowsValue, sourceArgs } from '../src/screens/local-records';
+import { boolArg, cardList, cardOf, intsArg, lyricsLine, musicHomeValue, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, rowsValue, sourceArgs } from '../src/screens/local-records';
 import { importRecord, libraryQuery, LocalSources, playlistCard } from '../src/screens/local';
 import { createQueue, enqueue } from '../src/audio/queue';
 import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_SOURCES } from '../../protocol/vela-sources';
@@ -128,5 +128,45 @@ describe('lyrics lines', () => {
       .toEqual({ startMs: 1000, endMs: 2000, text: 'Hola mundo', translation: 'Hello world', romanised: 'Hola mundo',
         words: [{ startMs: 1000, text: 'Hola' }, { startMs: 1500, endMs: 2000, text: 'mundo' }] });
     expect(lyricsLine({ startMs: 5 })).toBeUndefined();
+  });
+});
+
+describe('music Home', () => {
+  const row = (id: string, items: Card[], extra: Partial<Row> = {}) => ({ id, name: id, purpose: 'recommended', items, nextCursor: '', continuation: 'exhausted', layout: 'standard', presentation: '', receipt: '', previewOnFocus: false, personal: false, ...extra }) as unknown as Row;
+  const track = (id: string, album: string) => card(id, { media: { role: 'track', parent: { id: album } } as never });
+  const base = { rows: [] as Row[], recentAvailable: true, recent: [], playlists: [] as Card[], favoritesPlaylist: false, likedTotal: 0, recapAvailable: false };
+
+  test('quick tiles: Liked Songs, Rewind, recent, playlists, each once, at most 8; the first item gives the accent', () => {
+    const recent = [{ kind: 'title' as const, card: card('a', { accent: '#123456' }), playedAt: '' }, { kind: 'favorites' as const, role: 'track', playedAt: '' }];
+    const playlists = ['a', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'].map(id => card(id));
+    const { value } = musicHomeValue({ ...base, recent, playlists, likedTotal: 12, recapAvailable: true });
+    expect(value.quick[0]).toEqual({ kind: 'liked', total: 12 });
+    expect(value.quick[1]).toEqual({ kind: 'rewind' });
+    expect(value.quick.slice(2).map(tile => tile.kind === 'item' ? tile.item.$record : '')).toEqual(['item:a', 'item:p1', 'item:p2', 'item:p3', 'item:p4', 'item:p5']);
+    expect(value.accent).toBe('#123456');
+    expect(value.recent).toEqual([{ $record: 'item:a' }]);
+  });
+
+  test("the page's own recent and liked rows replace Vela's; songs keep one per album; legacy jump rows apart", () => {
+    const rows = [
+      row('ctx', [card('x')], { purpose: 'recentContexts' as never }),
+      row('liked', [card('y')], { purpose: 'liked' as never }),
+      row('songs', [track('t1', 'al1'), track('t2', 'al1'), track('t3', 'al2')]),
+      row('list', [track('t4', 'al1'), track('t5', 'al1')], { layout: 'tracks' as never }),
+      row('surface', [], { surface: 's' }),
+    ];
+    const { value } = musicHomeValue({ ...base, rows, recent: [{ kind: 'title', card: card('r'), playedAt: '' }], favoritesPlaylist: true });
+    expect(value.recent).toEqual([]);
+    expect(value.quick.some(tile => tile.kind === 'liked')).toBe(false);
+    const songs = value.shelves.find(shelf => shelf.id === 'songs')!;
+    expect(songs.songs).toBe(true);
+    expect(songs.items.map(item => item.$record)).toEqual(['item:t1', 'item:t3']);
+    const list = value.shelves.find(shelf => shelf.id === 'list')!;
+    expect(list.songs).toBe(false);
+    expect(list.items).toHaveLength(2);
+    expect(value.shelves.some(shelf => shelf.id === 'surface')).toBe(false);
+    const legacy = musicHomeValue({ ...base, rows: [row('p:jump-back-in', [card('j')]), row('p:recently-played', [card('k')])] }).value;
+    expect(legacy.jump).toEqual([{ $record: 'item:j' }]);
+    expect(legacy.shelves).toEqual([]);
   });
 });

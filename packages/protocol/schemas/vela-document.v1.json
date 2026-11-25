@@ -8500,13 +8500,12 @@
         },
         "vela.guide": {
           "args": {
-            "window": {
-              "doc": "hours ahead (default 3).",
-              "required": false,
-              "type": "string"
+            "day": {
+              "doc": "Days from today (0 when absent; the guide reaches a week ahead).",
+              "type": "int"
             }
           },
-          "doc": "The Live TV guide window: GuideValue."
+          "doc": "One day of the Live TV guide: GuideValue, channels as `channel:` records."
         },
         "vela.import": {
           "args": {},
@@ -8573,6 +8572,16 @@
           },
           "doc": "A library listing, paged: ListValue."
         },
+        "vela.libraryInfo": {
+          "args": {
+            "id": {
+              "doc": "The library.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "What a library holds and what the server offers for it: LibraryInfoValue."
+        },
         "vela.lyrics": {
           "args": {
             "id": {
@@ -8587,6 +8596,16 @@
             }
           },
           "doc": "LyricsValue."
+        },
+        "vela.musicHome": {
+          "args": {
+            "library": {
+              "doc": "The music library.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "The music app's Home: MusicHomeValue (quick tiles, Vela's own recent shelves, the library's rows)."
         },
         "vela.nowPlaying": {
           "args": {},
@@ -8720,6 +8739,10 @@
             }
           },
           "doc": "One title: TitleValue. Its `item:` record carries the card; the source adds what only a detail read knows."
+        },
+        "vela.viewer": {
+          "args": {},
+          "doc": "The signed-in viewer: ViewerValue."
         },
         "vela.visualizer": {
           "args": {},
