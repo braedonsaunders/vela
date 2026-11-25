@@ -8,10 +8,6 @@
     "name": "Basalt Ridge"
   },
   {
-    "id": "contour",
-    "name": "Neon Cartography"
-  },
-  {
     "id": "sea",
     "name": "Mercury Tide"
   },
@@ -48,27 +44,11 @@
     "name": "Aurora"
   },
   {
-    "id": "wash",
-    "name": "Watercolour"
-  },
-  {
-    "id": "ink",
-    "name": "Ink in Water"
-  },
-  {
     "id": "incense",
     "name": "Incense"
   },
   {
     "id": "leaves",
     "name": "Falling Leaves"
-  },
-  {
-    "id": "forest",
-    "name": "Deep Forest"
-  },
-  {
-    "id": "shallows",
-    "name": "Shallows"
   }
 ]

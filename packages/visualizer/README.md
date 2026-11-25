@@ -42,14 +42,14 @@ tools glslang and SPIRV-Cross.
 packages/visualizer/tools/build-release.sh
 ```
 
-This links every scene against the recorder, captures shader sources and bakes
-the map data. It regenerates the WebGL module, native JavaScript, Metal shader
+This links every release scene against the recorder and captures its shaders.
+It regenerates the WebGL module, native JavaScript, Metal shader
 table and library source, scene manifest and static thumbnail imports. The
 Apple pod uses Xcode's Metal toolchain to compile a device- or simulator-specific
 `viz-shaders.metallib` into its resource bundle. Android packages the same
 JavaScript as Apple. The authoring tools run only when changing scene assets.
-For atlas orientation, sampling, provenance and regeneration, see the
-[map assets](assets/README.md).
+The [archived map assets](assets/README.md) reproduce the Cartography spike.
+The production scene set excludes its geography, label atlas and thumbnail.
 
 The [Listen contract](spike/listen/README.md) records the approved future
 document wrapper and generic block fallback. The [TV performance harness](../../tools/perf/README.md)

@@ -7,6 +7,19 @@ import source from '../review.json';
 import scenes from '../scenes.json';
 import { metalLibrary } from '../tools/metal-library';
 
+test('the release omits retired Cartography assets and packages only current picker previews', () => {
+  const release = resolve(import.meta.dir, '..');
+  const native = join(release, '../../modules/vela-player/ios/VisualizerAssets');
+  const ids = scenes.map(scene => scene.id).sort();
+  const previews = readdirSync(join(release, 'thumbnails')).filter(name => name.endsWith('.jpg'));
+  expect(ids).not.toContain('contour');
+  expect(previews.sort()).toEqual(ids.map(id => id + '.jpg'));
+  for (const file of [join(release, 'web/renderer.js'), join(native, 'viz-native.js'),
+    join(native, 'apple-shaders.json'), join(native, 'viz-shaders.metal')]) {
+    expect(readFileSync(file, 'utf8')).not.toMatch(/\b(?:worldMapTexture|hydroTexture|__mapAtlas|uHydro)\b/);
+  }
+});
+
 test('the shipped scene sources reproduce the reviewed standalone page byte for byte', () => {
   const directory = join(import.meta.dir, '../scenes');
   const parts = readdirSync(directory).filter(file => /^[1-9]\d_.*\.js$/.test(file)).sort();

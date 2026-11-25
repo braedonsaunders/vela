@@ -9,19 +9,19 @@ test('selection belongs to a profile on one server and survives reopening', () =
   const second = visualizerProfile('two', 'viewer');
   let updates = 0;
   const remove = settings.subscribe(() => updates++);
-  expect(settings.get(first, 'ink')).toBe('ink');
+  expect(settings.get(first, 'incense')).toBe('incense');
   settings.set(first, 'leaves');
   settings.set(first, 'unknown');
-  expect(sceneSelection(storage).get(first, 'ink')).toBe('leaves');
-  expect(settings.get(second, 'ink')).toBe('ink');
-  expect(settings.get(visualizerProfile('one', 'another'), 'ink')).toBe('ink');
+  expect(sceneSelection(storage).get(first, 'incense')).toBe('leaves');
+  expect(settings.get(second, 'incense')).toBe('incense');
+  expect(settings.get(visualizerProfile('one', 'another'), 'incense')).toBe('incense');
   expect(updates).toBe(1);
   remove();
-  settings.set(first, 'ink');
+  settings.set(first, 'incense');
   expect(updates).toBe(1);
 });
 test('retired IDs fall back to the document default or first scene; remote changes wrap', () => {
-  const settings = sceneSelection({ get: () => 'retired', set() {} });
+  const settings = sceneSelection({ get: () => 'contour', set() {} });
   expect(settings.get('profile', 'leaves')).toBe('leaves');
   expect(settings.get('profile', 'missing')).toBe(scenes[0]!.id);
   expect(adjacentScene(scenes[0]!.id, -1)).toBe(scenes.at(-1)!.id);

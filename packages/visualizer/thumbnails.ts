@@ -2,7 +2,6 @@
 export const thumbnails: Record<string, number> = {
   'wire': require('./thumbnails/wire.jpg'),
   'basalt': require('./thumbnails/basalt.jpg'),
-  'contour': require('./thumbnails/contour.jpg'),
   'sea': require('./thumbnails/sea.jpg'),
   'hex': require('./thumbnails/hex.jpg'),
   'geo': require('./thumbnails/geo.jpg'),
@@ -12,10 +11,6 @@ export const thumbnails: Record<string, number> = {
   'silk': require('./thumbnails/silk.jpg'),
   'tunnel': require('./thumbnails/tunnel.jpg'),
   'aurora': require('./thumbnails/aurora.jpg'),
-  'wash': require('./thumbnails/wash.jpg'),
-  'ink': require('./thumbnails/ink.jpg'),
   'incense': require('./thumbnails/incense.jpg'),
   'leaves': require('./thumbnails/leaves.jpg'),
-  'forest': require('./thumbnails/forest.jpg'),
-  'shallows': require('./thumbnails/shallows.jpg'),
 };
