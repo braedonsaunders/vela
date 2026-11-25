@@ -8511,6 +8511,10 @@
               "required": false,
               "type": "string"
             },
+            "limit": {
+              "doc": "Titles per page (1 to 100; the server's default when absent).",
+              "type": "int"
+            },
             "played": {
               "enum": [
                 "true",
@@ -8525,7 +8529,12 @@
               "type": "string"
             },
             "sort": {
-              "doc": "A sort the library offers (name, added, year, …).",
+              "doc": "A sort the library offers (title, added, year, …).",
+              "required": false,
+              "type": "string"
+            },
+            "tab": {
+              "doc": "One of the library's tabs (its album view, say).",
               "required": false,
               "type": "string"
             },
@@ -8656,22 +8665,22 @@
         "vela.search": {
           "args": {
             "kind": {
-              "doc": "A result kind (track, album, artist, playlist, …).",
+              "doc": "A result kind the server offers (searchKinds).",
               "required": false,
               "type": "string"
             },
             "library": {
-              "doc": "Search within one library.",
+              "doc": "Search within one library (its media class when the server cannot scope).",
               "required": false,
               "type": "string"
             },
             "q": {
               "doc": "The query; empty answers no items.",
-              "required": true,
+              "required": false,
               "type": "string"
             }
           },
-          "doc": "Search results, paged: ListValue."
+          "doc": "Search results, paged: SearchValue (the audio app's search)."
         },
         "vela.title": {
           "args": {
