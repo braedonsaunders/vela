@@ -108,6 +108,8 @@ export const Unfocusable = createContext(false);
 export interface SurfaceSlotViews {
   row?: ComponentType<{ id: string; surface: string }>;
   titlePanels?: ComponentType<{ id: string; kind: string }>;
+  /** Renderer 20: a published plugin slot in a built-in page (`plugin:<slot id>`), with its context filled. */
+  slot?: ComponentType<{ slot: string; context: Record<string, string>; limit?: number }>;
 }
 export const SurfaceSlots = createContext<SurfaceSlotViews | null>(null);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
@@ -1863,8 +1865,20 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   const Frame = frameFor(node);
+  const surfaceSlots = useContext(SurfaceSlots);
   // Apple TV searches on the system's search screen (the shell's Search opens it): no field here.
   if (fx.hidden || (node.slot === 'searchField' && SYSTEM_SEARCH)) return null;
+  if (node.slot !== 'children' && node.slot !== 'searchField') {
+    // A plugin slot draws the surfaces filling it (the app's view), or nothing.
+    const Surfaces = surfaceSlots?.slot;
+    if (!Surfaces) return null;
+    const context = Object.fromEntries(Object.entries(node.context ?? {}).map(([name, value]) => [name, fill(value, ctx, host.env)]));
+    return (
+      <Inherited.Provider value={text}>
+        <Frame style={style as ViewStyle}><View style={inner as ViewStyle}><Surfaces slot={node.slot.slice('plugin:'.length)} context={context} limit={node.limit} /></View></Frame>
+      </Inherited.Provider>
+    );
+  }
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
   const box = <View style={inner as ViewStyle}>{content}</View>;
   // The search field is centred and narrower than the page; the TV focus engine only moves to

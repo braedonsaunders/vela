@@ -1,13 +1,22 @@
 /**
- * The JSON Schema of plugin screen and surface documents (docs/plugin-screens.md: Versioning),
- * generated from the TypeScript that Vela draws them with: packages/protocol/screen.ts and the
- * node language in packages/protocol/skin.ts. Ether validates plugin documents against it
- * (its schemas/plugin-screen.v1.json); action answers' `navigate` is `#/$defs/NavigateAction`.
- * The generated file and its digest (SCREEN_SCHEMA_DIGEST, beside RENDERER_VERSION) are
- * committed; `check` fails when either no longer matches the types, so a change to the language
- * cannot reach one side without the other.
+ * The JSON Schema of Vela documents, vela-document.v1.json (docs/experiences.md: Versioned schema;
+ * docs/plugin-screens.md: Versioning), generated from the TypeScript that Vela draws them with:
+ * packages/protocol/screen.ts (the page and surface envelope), skin.ts (the node language and skin
+ * documents) and experiences.ts. Its root is the page document (`kind: "screen"`), which Ether
+ * validates plugin documents against; skins validate against `#/$defs/SkinDocument`, and action
+ * answers' `navigate` is `#/$defs/NavigateAction`. Published lists are data in `$defs`, each a
+ * `{ const: [...] }`: `Slots` (the slot list), `RichBlocks` (each rich block's props and parts),
+ * `VelaSources` and `VelaActions` (the `vela.*` names Ether accepts), and `Renderer` (the
+ * RENDERER_VERSION it describes).
  *
- *   bun tools/screen-schema.ts write    regenerate packages/protocol/schemas/plugin-screen.v1.json and the digest
+ * Also written: the index of built-in page documents (packages/protocol/fixtures/experiences/
+ * index.ts), which bundles every `<experience>/<page>.json` there.
+ *
+ * The generated files and the digest (VELA_DOCUMENT_SCHEMA_DIGEST, beside RENDERER_VERSION) are
+ * committed; `check` fails when any no longer matches, so a change to the language cannot reach one
+ * side without the other.
+ *
+ *   bun tools/screen-schema.ts write    regenerate the schema, the digest and the built-in index
  *   bun tools/screen-schema.ts check    fail on drift (run by the tests)
  *   bun tools/screen-schema.ts print    the schema on stdout
  */
@@ -15,16 +24,37 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import ts from 'typescript';
+import { SLOTS } from '../packages/protocol/experiences';
+import { RICH_BLOCKS } from '../packages/protocol/rich-blocks';
+import { VELA_ACTIONS, VELA_SOURCES } from '../packages/protocol/vela-sources';
+import { RENDERER_VERSION } from '../packages/skin/src/resolve/version';
 
 const root = resolve(import.meta.dir, '..');
-export const SCHEMA_FILE = join(root, 'packages/protocol/schemas/plugin-screen.v1.json');
+export const SCHEMA_NAME = 'vela-document.v1.json';
+export const SCHEMA_FILE = join(root, 'packages/protocol/schemas', SCHEMA_NAME);
 const DIGEST_FILE = join(root, 'packages/skin/src/resolve/screen-schema-digest.ts');
 const SOURCE = join(root, 'packages/protocol/screen.ts');
 const PROTOCOL = join(root, 'packages/protocol') + '/';
+const EXPERIENCES = join(root, 'packages/protocol/fixtures/experiences');
+export const BUILTIN_INDEX = join(EXPERIENCES, 'index.ts');
 
-/** Wire shapes beside the document, each a named definition (Ether validates answers and frames too). */
-const DEFINITIONS = ['ScreenDocument', 'NavigateAction', 'ScreenData', 'ScreenActionRequest', 'ScreenActionAnswer', 'StreamRecords', 'StreamSource',
-  'SurfaceContribution', 'SurfaceContext', 'AlertFrame', 'ScreenNavigationEntry', 'SurfaceRow'];
+/** Wire shapes beside the document, each a named definition (Ether validates answers and frames too),
+ * by the protocol module that exports them. */
+const DEFINITIONS: Record<string, string[]> = {
+  'screen.ts': ['ScreenDocument', 'NavigateAction', 'ScreenData', 'ScreenActionRequest', 'ScreenActionAnswer', 'StreamRecords', 'StreamSource',
+    'SurfaceContribution', 'SurfaceContext', 'AlertFrame', 'ScreenNavigationEntry', 'SurfaceRow'],
+  'skin.ts': ['SkinDocument'],
+  'experiences.ts': ['ExperienceOverride', 'SlotSpec'],
+};
+
+/** Published lists, as data (`{ const }`) so the schema stays a valid JSON Schema. */
+const DATA: Record<string, { description: string; value: unknown }> = {
+  Renderer: { description: 'The RENDERER_VERSION this schema describes.', value: RENDERER_VERSION },
+  Slots: { description: 'The published slots (experiences.ts SLOTS): a slot surface fills one by id; context names its {context.*} values; cap bounds surfaces per plugin and per slot.', value: SLOTS },
+  RichBlocks: { description: 'Each rich block\'s props, the parts a document may style and the parts whose template it may replace (rich-blocks.ts).', value: RICH_BLOCKS },
+  VelaSources: { description: 'The vela.* sources the client answers (vela-sources.ts). Ether accepts `from: "vela.<name>"` only for these, and in a plugin document only {context.*} holes as their arguments.', value: VELA_SOURCES },
+  VelaActions: { description: 'The vela.* local actions (press `plugin` with `name: "vela.<name>"`), answered by the client; built-in documents only.', value: VELA_ACTIONS },
+};
 
 type Schema = Record<string, unknown>;
 
@@ -37,7 +67,7 @@ function sorted(value: unknown): unknown {
 
 /** The schema generated from the protocol's types. */
 export function generateSchema(): Schema {
-  const program = ts.createProgram([SOURCE], { strict: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, noEmit: true, skipLibCheck: true });
+  const program = ts.createProgram([SOURCE, join(PROTOCOL, 'experiences.ts')], { strict: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, noEmit: true, skipLibCheck: true });
   const checker = program.getTypeChecker();
   const file = program.getSourceFile(SOURCE);
   if (!file) throw new Error(`Cannot read ${SOURCE}`);
@@ -51,7 +81,7 @@ export function generateSchema(): Schema {
   // Aliases the protocol declares (Style is Partial<Record<…>>, which the compiler otherwise names
   // Partial), by the type each stands for, so they are one definition each.
   const aliases = new Map<ts.Type, string>();
-  for (const source of [SOURCE, join(PROTOCOL, 'skin.ts')]) {
+  for (const source of [SOURCE, join(PROTOCOL, 'skin.ts'), join(PROTOCOL, 'experiences.ts')]) {
     const module = checker.getSymbolAtLocation(program.getSourceFile(source)!);
     for (const symbol of module ? checker.getExportsOfModule(module) : []) {
       if (!(symbol.flags & ts.SymbolFlags.TypeAlias)) continue;
@@ -59,6 +89,9 @@ export function generateSchema(): Schema {
       if (declared.flags & ts.TypeFlags.Object || declared.isUnion()) aliases.set(declared, symbol.name);
     }
   }
+
+  const unionKey = (members: readonly ts.Type[]) => members.map(t => (t as { id?: number }).id).sort().join(',');
+  const unionAliases = new Map<string, ts.Type>([...aliases.keys()].filter(t => t.isUnion()).map(t => [unionKey((t as ts.UnionType).types), t]));
 
   /** A named definition for an interface or a non-generic alias declared in the protocol. */
   function nameOf(type: ts.Type): string | undefined {
@@ -94,6 +127,9 @@ export function generateSchema(): Schema {
     if (f & ts.TypeFlags.BooleanLiteral) return { const: checker.typeToString(type) === 'true' };
     if (type.isUnion()) {
       const members = type.types.filter(t => !(t.flags & ts.TypeFlags.Undefined));
+      // An optional field of a named union (`tree?: Node`) refers to its definition.
+      const named = members.length > 1 && members.length < type.types.length ? unionAliases.get(unionKey(members)) : undefined;
+      if (named) return convert(named, seen);
       if (members.every(t => t.flags & ts.TypeFlags.StringLiteral)) return { enum: members.map(t => (t as ts.StringLiteralType).value).sort() };
       if (members.length === 2 && members.every(t => t.flags & ts.TypeFlags.BooleanLiteral)) return { type: 'boolean' };
       const nonBool = members.filter(t => !(t.flags & ts.TypeFlags.BooleanLiteral));
@@ -128,18 +164,25 @@ export function generateSchema(): Schema {
     throw new Error(`No schema for type ${checker.typeToString(type)}`);
   }
 
-  const exported = new Map(checker.getExportsOfModule(checker.getSymbolAtLocation(file)!).map(s => [s.name, s]));
-  for (const name of DEFINITIONS) {
-    const symbol = exported.get(name);
-    if (!symbol) throw new Error(`packages/protocol/screen.ts exports no ${name}`);
-    convert(checker.getDeclaredTypeOfSymbol(symbol));
+  for (const [module, names] of Object.entries(DEFINITIONS)) {
+    const source = program.getSourceFile(join(PROTOCOL, module));
+    const exported = new Map(checker.getExportsOfModule(checker.getSymbolAtLocation(source!)!).map(s => [s.name, s]));
+    for (const name of names) {
+      const symbol = exported.get(name);
+      if (!symbol) throw new Error(`packages/protocol/${module} exports no ${name}`);
+      convert(checker.getDeclaredTypeOfSymbol(symbol));
+    }
   }
   if (!defs.NavigateAction) throw new Error('The schema has no $defs/NavigateAction');
+  for (const [name, { description, value }] of Object.entries(DATA)) {
+    if (defs[name]) throw new Error(`$defs/${name} is both a type and a published list`);
+    defs[name] = { description, const: JSON.parse(JSON.stringify(value)) };
+  }
   return sorted({
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: 'https://vela.app/schemas/plugin-screen.v1.json',
-    title: 'Vela plugin screen document',
-    description: 'Generated by tools/screen-schema.ts from packages/protocol/screen.ts and skin.ts. Do not edit.',
+    $id: `https://vela.app/schemas/${SCHEMA_NAME}`,
+    title: 'Vela document',
+    description: 'Generated by tools/screen-schema.ts from packages/protocol/screen.ts, skin.ts and experiences.ts. Do not edit. The root is a page document (kind "screen": plugin and built-in pages); skins are #/$defs/SkinDocument.',
     $ref: '#/$defs/ScreenDocument',
     $defs: defs,
   }) as Schema;
@@ -196,7 +239,7 @@ export const digestOf = (text: string) => createHash('sha256').update(text).dige
 /** The digest recorded beside RENDERER_VERSION. */
 export async function recordedDigest(): Promise<string> {
   const text = await readFile(DIGEST_FILE, 'utf8').catch(() => '');
-  return /SCREEN_SCHEMA_DIGEST = '([0-9a-f]{64})'/.exec(text)?.[1] ?? '';
+  return /VELA_DOCUMENT_SCHEMA_DIGEST = '([0-9a-f]{64})'/.exec(text)?.[1] ?? '';
 }
 
 /** Drift: what no longer matches (empty when the committed schema and digest follow the types). */
@@ -204,17 +247,38 @@ export async function drift(): Promise<string[]> {
   const text = schemaText(generateSchema());
   const committed = await readFile(SCHEMA_FILE, 'utf8').catch(() => '');
   const problems: string[] = [];
-  if (committed !== text) problems.push(`${SCHEMA_FILE} does not match packages/protocol/screen.ts and skin.ts`);
-  if (await recordedDigest() !== digestOf(text)) problems.push(`SCREEN_SCHEMA_DIGEST in ${DIGEST_FILE} is not the schema's digest`);
-  // Every screen fixture is a valid document.
+  if (committed !== text) problems.push(`${SCHEMA_FILE} does not match packages/protocol/screen.ts, skin.ts and experiences.ts`);
+  if (await recordedDigest() !== digestOf(text)) problems.push(`VELA_DOCUMENT_SCHEMA_DIGEST in ${DIGEST_FILE} is not the schema's digest`);
+  if ((await readFile(BUILTIN_INDEX, 'utf8').catch(() => '')) !== builtinIndexText()) problems.push(`${BUILTIN_INDEX} does not list the built-in documents beside it`);
+  // Every screen fixture and built-in document is a valid document.
   const schema = JSON.parse(text) as Schema;
-  const fixtures = join(root, 'packages/protocol/fixtures/screens');
-  for (const path of new Bun.Glob('**/*.json').scanSync(fixtures)) {
-    if (/(^|\/)data/.test(path)) continue;
-    const errors = validate(schema, JSON.parse(await readFile(join(fixtures, path), 'utf8')));
-    if (errors.length) problems.push(`fixtures/screens/${path} is not a valid document: ${errors.slice(0, 5).join('; ')}`);
+  for (const dir of ['screens', 'experiences']) {
+    const fixtures = join(root, 'packages/protocol/fixtures', dir);
+    for (const path of new Bun.Glob('**/*.json').scanSync(fixtures)) {
+      if (/(^|\/)data/.test(path)) continue;
+      const errors = validate(schema, JSON.parse(await readFile(join(fixtures, path), 'utf8')));
+      if (errors.length) problems.push(`fixtures/${dir}/${path} is not a valid document: ${errors.slice(0, 5).join('; ')}`);
+    }
   }
   return problems;
+}
+
+/** The built-in page documents beside the index: `<experience>/<page>.json`, sorted. */
+export function builtinFiles(): string[] {
+  return [...new Bun.Glob('*/*.json').scanSync(EXPERIENCES)].filter(path => !/(^|\/)data/.test(path)).sort();
+}
+
+/** The index bundling every built-in page document (Metro needs each import written out). */
+export function builtinIndexText(): string {
+  const files = builtinFiles();
+  const name = (path: string) => `doc_${path.replace(/\.json$/, '').replace(/[^A-Za-z0-9]/g, '_')}`;
+  return `// Written by \`bun tools/screen-schema.ts write\`: every built-in page document beside this file
+// (<experience>/<page>.json), bundled with the app. packages/skin/src/resolve/builtin.ts addresses them as
+// vela:<experience>/<page>. Do not edit; add or remove a JSON file and run the tool.
+import type { ScreenDocument } from '../../screen';
+${files.map(path => `import ${name(path)} from './${path}';`).join('\n')}${files.length ? '\n' : ''}
+export const BUILTIN_DOCUMENTS: readonly ScreenDocument[] = [${files.map(path => `\n  ${name(path)} as unknown as ScreenDocument,`).join('')}${files.length ? '\n' : ''}];
+`;
 }
 
 async function write(): Promise<string> {
@@ -222,23 +286,27 @@ async function write(): Promise<string> {
   const digest = digestOf(text);
   await mkdir(dirname(SCHEMA_FILE), { recursive: true });
   await writeFile(SCHEMA_FILE, text);
-  await writeFile(DIGEST_FILE, `// Written by tools/screen-schema.ts: the SHA-256 of packages/protocol/schemas/plugin-screen.v1.json,
-// the JSON Schema Ether validates plugin screen documents with. It changes with the document
-// language; \`bun tools/screen-schema.ts check\` fails when it no longer matches the types.
-export const SCREEN_SCHEMA_DIGEST = '${digest}';
+  await writeFile(DIGEST_FILE, `// Written by tools/screen-schema.ts: the SHA-256 of packages/protocol/schemas/${SCHEMA_NAME},
+// the JSON Schema of Vela documents (Ether validates plugin documents with it). It changes with the
+// document language; \`bun tools/screen-schema.ts check\` fails when it no longer matches the types.
+export const VELA_DOCUMENT_SCHEMA_DIGEST = '${digest}';
+/** The name the plugin-screens release used. */
+export const SCREEN_SCHEMA_DIGEST = VELA_DOCUMENT_SCHEMA_DIGEST;
 `);
+  await mkdir(EXPERIENCES, { recursive: true });
+  await writeFile(BUILTIN_INDEX, builtinIndexText());
   return digest;
 }
 
 if (import.meta.main) {
   const command = process.argv[2];
-  if (command === 'write') console.log(`plugin-screen.v1.json ${await write()}`);
+  if (command === 'write') console.log(`${SCHEMA_NAME} ${await write()}`);
   else if (command === 'print') process.stdout.write(schemaText(generateSchema()));
   else if (command === 'check') {
     const problems = await drift();
     for (const p of problems) console.log(`FAIL ${p}; run: bun tools/screen-schema.ts write`);
     if (problems.length) process.exit(1);
-    console.log(`pass plugin-screen.v1.json ${await recordedDigest()}`);
+    console.log(`pass ${SCHEMA_NAME} ${await recordedDigest()}`);
   } else {
     console.error('Usage: bun tools/screen-schema.ts write | check | print');
     process.exit(1);
