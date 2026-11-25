@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RENDERER_VERSION, fill, type RNode } from '../src/resolve';
-import { checkScreenDocument, formFactor, resolveScreenDocument, velaUseProblems, type ScreenViewport } from '../src/resolve/screen';
+import { checkExperienceOverrides, checkScreenDocument, formFactor, resolveScreenDocument, velaUseProblems, type ScreenViewport } from '../src/resolve/screen';
 import { builtinDocument, builtinIndex, builtinScreenId } from '../src/resolve/builtin';
 import { platformOf } from '../src/screen/platform-of';
 import { slotContext, slotSurfaces } from '../src/surfaces/model';
@@ -321,5 +321,24 @@ describe('slots', () => {
   });
   test('a slot\'s context: server keys go to Ether (a title as its item: key), the rest stay local', () => {
     expect(slotContext({ title: 'a1', titleKind: 'album', kind: 'title', chrome: 'true', empty: '' })).toEqual({ server: { title: 'item:a1', kind: 'title' }, local: { chrome: 'true' } as never });
+  });
+});
+
+describe('checking a skin\'s overrides', () => {
+  const pages = (experience: string) => (experience === 'listen' ? { album: builtIn({ type: 'text', text: 'album' }), shell: builtIn({ type: 'box' }, { page: 'shell' }) } : {});
+  test('a sound override passes', () => {
+    expect(checkExperienceOverrides({ experiences: { listen: { pages: { album: { type: 'text', text: '{src.album.name}' } }, shell: { tv: { type: 'box' } } } } }, pages)).toEqual([]);
+  });
+  test('an unknown page or experience, a broken override and an unknown part are reported', () => {
+    const findings = checkExperienceOverrides({ experiences: {
+      listen: { pages: { nowhere: { type: 'box' }, album: { type: 'use', template: 'missing' } }, parts: { 'queue.bogus': { color: 'white' } } },
+      read: { pages: { index: { type: 'box' } } },
+      'Not An Id': {},
+    } }, pages);
+    const errors = findings.filter(f => f.level === 'error').map(f => `${f.experience}/${f.page}: ${f.message}`);
+    expect(errors).toContain('listen/nowhere: listen has no built-in page nowhere');
+    expect(errors).toContain('read/index: read has no built-in page index');
+    expect(errors).toContain('Not An Id/: Not An Id is not an experience id');
+    expect(errors.some(e => e.startsWith('listen/album: Unknown template missing'))).toBe(true);
   });
 });
