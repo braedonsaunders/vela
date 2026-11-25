@@ -5,12 +5,13 @@
 // Each draws today's engine (pages.tsx, parts.tsx, spoken.tsx, search.tsx, albums.tsx) from its
 // props; with the same data it draws the same pixels.
 import type { ReactNode } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import { msg, type Card } from '@vela/core';
 import type { RecordReader } from '../../screen/scope';
 import { useMediaLook } from '../../widgets/media/parts';
 import { DuplicatesCover } from '../duplicates';
-import { ImportCover } from '../import';
+import { ImportCover, usePlaylistImport } from '../import';
+import { importSubtitle } from '../import-copy';
 import { RewindCover } from '../recap';
 import { MusicAlbums } from './albums';
 import { useMusic } from './app';
@@ -31,7 +32,7 @@ import { Cover } from '../../widgets/media/parts';
 
 export const PAGE_BLOCKS = ['wash', 'collectionHeader', 'cover', 'actionBar', 'byline', 'musicShelf', 'quickTiles', 'homeShelves', 'genres',
   'artistHero', 'artistLiked', 'discography', 'listenSearch', 'spokenHome', 'spokenTitle', 'albumsGrid',
-  'searchField', 'recentSearches', 'searchResults', 'tileGrid', 'continueListening', 'spokenCredits', 'spokenFacts', 'spokenProgress', 'spokenPlay', 'spokenItems', 'spokenAbout'] as const;
+  'importSubtitle', 'searchField', 'recentSearches', 'searchResults', 'tileGrid', 'continueListening', 'spokenCredits', 'spokenFacts', 'spokenProgress', 'spokenPlay', 'spokenItems', 'spokenAbout'] as const;
 export type PageBlockName = (typeof PAGE_BLOCKS)[number];
 
 export function isPageBlock(name: string): name is PageBlockName {
@@ -57,6 +58,7 @@ export function PageBlock({ name, props, read, template, press }: { name: PageBl
     case 'spokenHome': return <ListeningHome />;
     case 'spokenTitle': return <ListeningTitle id={props.text('id')} />;
     case 'albumsGrid': return <MusicAlbums query={props.text('query')} />;
+    case 'importSubtitle': return <ImportSubtitle />;
     case 'searchField': return <SearchField />;
     case 'recentSearches': return <RecentSearches />;
     case 'searchResults': return <SearchResults />;
@@ -189,4 +191,12 @@ function ContinueBlock({ props, read }: { props: Props; read: RecordReader }) {
   const items = cardsOf(raw, read);
   const name = raw && typeof raw === 'object' ? String((raw as { name?: unknown }).name ?? '') : '';
   return items.length ? <ContinueListening row={{ name: props.text('title') || name, items }} /> : null;
+}
+
+/** The import page's line under its title: the job's description, else what can be imported
+ * (the advertised sources, which are not a vela.* source). */
+function ImportSubtitle() {
+  const m = useMediaLook();
+  const { job, sources } = usePlaylistImport({ poll: false });
+  return <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary', 'max-width': '680px' })}>{job?.description || importSubtitle(sources)}</Text>;
 }

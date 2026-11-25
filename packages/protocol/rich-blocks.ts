@@ -300,6 +300,7 @@ export const RICH_BLOCKS = {
   searchField: { doc: 'The audio app\'s search field: focused as the page opens, Escape clears it, Vela\'s or the system\'s keyboard on a TV. Its query is the store\'s, shared with recentSearches and searchResults.', props: {}, parts: [], templates: [], tv: 'One focus target that opens the keyboard; the clear button beside it.' },
   recentSearches: { doc: 'This library\'s recent searches (or the intro) while the field is empty; nothing once something is typed.', props: {}, parts: [], templates: [], tv: 'Rows are focus targets.' },
   searchResults: { doc: 'The results for what is typed, grouped by what the library holds (top result, songs, albums, artists, people, playlists), with loading, failed and empty states; nothing while the field is empty.', props: {}, parts: [], templates: [], tv: 'As the page.' },
+  importSubtitle: { doc: 'The import page\'s line under its title: the import\'s description, else what can be imported from (the advertised sources).', props: {}, parts: [], templates: [], tv: 'No focus.' },
 } as const satisfies Record<string, RichBlockSpec>;
 
 export type RichBlockName = keyof typeof RICH_BLOCKS;
