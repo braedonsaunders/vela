@@ -79,10 +79,12 @@ describe('Plex versions', () => {
 
   test('a start with the second version plays that file, and its stream asks for that media', async () => {
     route();
-    const plan = await plex().startPlayback({ titleId: '5', client, idempotencyKey: 'b', versionId: '52' } as never);
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '5', client, idempotencyKey: 'b', versionId: '52' } as never);
     expect(plan.selectedPathId).toBe('original');
     expect(original(plan)).toBe('/library/parts/521/1/file.mp4');
-    expect(hls(plan).get('mediaIndex')).toBe('1');
+    const streamed = await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'plex-hls', atSeconds: 0, idempotencyKey: 'b1', sourceGeneration: 0, seekGeneration: 0 });
+    expect(hls(streamed).get('mediaIndex')).toBe('1');
     expect(plan.audioTracks.map(t => t.id)).toEqual(['5212']);
     expect(plan.selectedVersionId).toBe('52');
   });
@@ -100,24 +102,29 @@ describe('Plex versions', () => {
     const next = await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '52', positionSeconds: 42, idempotencyKey: 'v', sourceGeneration: 0, seekGeneration: 0 });
     const stops = seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop');
     expect(stops.map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId]);
-    // The new stream's decision is asked for that file in the new transcode session, before the old one stops.
-    const decision = seen[at(seen, 'decision', `${plan.sessionId}-1`)]!;
-    expect(decision.url.searchParams.get('mediaIndex')).toBe('1');
-    expect(at(seen, 'decision', `${plan.sessionId}-1`)).toBeLessThan(at(seen, 'stop'));
+    // The new file plays as it is: its stream is offered, and decided only if it is switched to.
+    expect(at(seen, 'decision', `${plan.sessionId}-1`)).toBe(-1);
     expect([next.sessionId, next.sourceGeneration, next.positionSeconds, next.selectedVersionId]).toEqual([plan.sessionId, 1, 42, '52']);
     expect(next.selectedPathId).toBe('original');
     expect(original(next)).toBe('/library/parts/521/1/file.mp4');
-    expect([hls(next).get('mediaIndex'), hls(next).get('session')]).toEqual(['1', `${plan.sessionId}-1`]);
+    expect(next.paths.find(p => p.id === 'plex-hls')?.readiness).toBe('on-demand');
     expect(next.audioTracks.map(t => t.id)).toEqual(['5212']);
     expect(next.selectedAudioTrackId).toBe('5212');
     expect((await adapter.sessionSnapshot(plan.sessionId)).plan).toEqual(next);
+    // Chosen, the stream is asked for that file in the new transcode session.
+    const streamed = await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'plex-hls', atSeconds: 42, idempotencyKey: 'v1', sourceGeneration: 1, seekGeneration: 0 });
+    expect([seen[at(seen, 'decision', `${plan.sessionId}-1`)]?.url.searchParams.get('mediaIndex'), hls(streamed).get('mediaIndex'), hls(streamed).get('session')]).toEqual(['1', '1', `${plan.sessionId}-1`]);
 
-    // Back to the remux from the file: no stream was running, and the position defaults to the session's.
-    const back = await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '51', idempotencyKey: 'w', sourceGeneration: 1, seekGeneration: 0 });
-    expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop')).toHaveLength(1);
-    expect([back.sourceGeneration, back.positionSeconds, back.selectedVersionId, back.selectedPathId]).toEqual([2, 42, '51', 'plex-hls']);
-    expect([hls(back).get('mediaIndex'), hls(back).get('session')]).toEqual(['0', `${plan.sessionId}-2`]);
+    // Back to the remux; the position defaults to the session's.
+    const back = await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '51', idempotencyKey: 'w', sourceGeneration: 2, seekGeneration: 0 });
+    expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId, `${plan.sessionId}-1`]);
+    expect([back.sourceGeneration, back.positionSeconds, back.selectedVersionId, back.selectedPathId]).toEqual([3, 42, '51', 'plex-hls']);
+    expect([hls(back).get('mediaIndex'), hls(back).get('session')]).toEqual(['0', `${plan.sessionId}-3`]);
     expect(back.audioTracks.map(t => t.id)).toEqual(['5112']);
+    // To the MP4 and straight away again: its stream was never chosen, so nothing is stopped for it.
+    await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '52', idempotencyKey: 'y', sourceGeneration: 3, seekGeneration: 0 });
+    await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '51', idempotencyKey: 'z', sourceGeneration: 4, seekGeneration: 0 });
+    expect(seen.filter(r => r.url.pathname === '/video/:/transcode/universal/stop').map(r => r.url.searchParams.get('session'))).toEqual([plan.sessionId, `${plan.sessionId}-1`, `${plan.sessionId}-3`]);
   });
 
   test('a switch from the file after watching the server\'s stream still stops that stream', async () => {
@@ -179,7 +186,8 @@ describe('Plex versions', () => {
     expect((await adapter.sessionSnapshot(plan.sessionId)).plan).toEqual(plan);
     const next = await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '52', idempotencyKey: 'j', sourceGeneration: 0, seekGeneration: 0 });
     expect(original(next)).toBe('/library/parts/521/1/file.mp4');
-    expect([hls(next).get('mediaIndex'), seen[at(seen, 'decision', `${plan.sessionId}-1`)]!.url.searchParams.get('mediaIndex')]).toEqual(['2', '2']);
+    const streamed = await adapter.switchPath(plan.sessionId, { kind: 'switch', pathId: 'plex-hls', atSeconds: 0, idempotencyKey: 'k', sourceGeneration: 1, seekGeneration: 0 });
+    expect([hls(streamed).get('mediaIndex'), seen[at(seen, 'decision', `${plan.sessionId}-1`)]!.url.searchParams.get('mediaIndex')]).toEqual(['2', '2']);
   });
 
   test('switching to an unknown version fails and leaves the session as it was', async () => {
