@@ -21,8 +21,7 @@
   },
   "home": {
    "from": "vela.musicHome",
-   "library": "{param.library}",
-   "lazy": true
+   "library": "{param.library}"
   },
   "rows": {
    "from": "vela.rows",
@@ -32,13 +31,18 @@
   }
  },
  "tree": {
-  "type": "box",
+  "type": "sections",
   "style": {
-   "flex": "1"
+   "padding-bottom": "32px"
   },
+  "tv": {
+   "padding-bottom": "48px",
+   "padding-right": "32px"
+  },
+  "testId": "music-main",
   "children": [
    {
-    "type": "sections",
+    "type": "box",
     "needs": [
      "home"
     ],
@@ -49,9 +53,6 @@
       "value": "music"
      }
     ],
-    "style": {
-     "padding-bottom": "32px"
-    },
     "children": [
      {
       "type": "box",
@@ -119,12 +120,7 @@
        }
       ]
      }
-    ],
-    "testId": "music-main",
-    "tv": {
-     "padding-bottom": "48px",
-     "padding-right": "32px"
-    }
+    ]
    },
    {
     "type": "box",
@@ -141,8 +137,7 @@
     "testId": "listen-home-spoken",
     "children": [
      {
-      "type": "sections",
-      "testId": "music-main",
+      "type": "box",
       "children": [
        {
         "type": "box",
