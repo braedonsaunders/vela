@@ -38,7 +38,8 @@
      "mode": "embedded"
     }
    }
-  ]
+  ],
+  "testId": "music-main"
  },
  "forms": {
   "wide": {
@@ -129,7 +130,8 @@
         }
        ]
       }
-     ]
+     ],
+     "testId": "music-main"
     },
     {
      "type": "box",

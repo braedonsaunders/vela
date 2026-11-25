@@ -384,6 +384,12 @@ function CollectionItems({ card }: { card: Card }) {
   return playable.length === items.length && items.length ? <ItemList role="part" items={items} source={source} /> : null;
 }
 
+/** A collection whose items do not all play: them as a shelf (else nothing). */
+export function SpokenCollectionShelf({ card }: { card: Card }) {
+  const { items, playable } = useCollection(card);
+  return playable.length !== items.length && items.length ? <View style={{ paddingHorizontal: 16 }}><Shelf title="">{items.map(item => <MusicTile key={item.id} card={item} size={168} />)}</Shelf></View> : null;
+}
+
 /** About: the summary and the facts table (a show's summary sits above its episodes instead). */
 export function SpokenAbout({ card }: { card: Card }) {
   return <About card={spokenMode(card) === 'show' ? { ...card, summary: '' } : card} />;
@@ -451,7 +457,7 @@ export function CollectionView({ card }: { card: Card }) {
         <SpokenPlay card={card} />
         <SpokenItems card={card} />
       </View>
-      {playable.length !== items.length && items.length ? <View style={{ paddingHorizontal: 16 }}><Shelf title="">{items.map(item => <MusicTile key={item.id} card={item} size={168} />)}</Shelf></View> : null}
+      <SpokenCollectionShelf card={card} />
       <View style={{ paddingHorizontal: pad(m) }}><About card={card} /></View>
     </View>
   );

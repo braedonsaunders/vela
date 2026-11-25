@@ -26,6 +26,7 @@ import { LyricsPanel } from './lyrics';
 import { QueuePanel } from './queue';
 import { RailChips, RailIcons, Sidebar } from './rail';
 import { openNowPlaying } from './hub';
+import { useListenDock } from './dock';
 import { isPageBlock, PageBlock } from './page-blocks';
 import { useVisualizerHost, VisualizerBlock, type VisualizerSwitch } from './visualizer';
 import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '../../widgets/media/player';
@@ -260,12 +261,15 @@ function NowPlayingBlock({ props, press, background }: { props: Props; press?(p:
   const offered = props.bool('visualizer') && host.env.canVisualize !== false;
   const flag = props.text('visualizerFlag');
   const panel = props.text('panel');
-  const onClose = closer(props.text('closeFlag'), press) ?? (() => undefined);
-  const onOpenVisualizer = offered && flag && visualizerSwitch?.on && press ? () => press({ action: 'open', arg: flag, args: {}, control: 'now-playing-visualizer' }) : undefined;
+  // Inside the app's audio dock the dock closes Now Playing and opens the visualizer.
+  const dock = useListenDock();
+  const onClose = dock?.close ?? closer(props.text('closeFlag'), press) ?? (() => undefined);
+  const onOpenVisualizer = dock ? dock.openVisualizer
+    : offered && flag && visualizerSwitch?.on && press ? () => press({ action: 'open', arg: flag, args: {}, control: 'now-playing-visualizer' }) : undefined;
   return (
     <View style={{ flex: 1, minHeight: 0 }} testID="listen-now-playing">
-      <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined}
-        visualizer={offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer}
+      <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined} hidden={dock?.hidden}
+        visualizer={dock ? dock.visualizer : offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer}
         background={background && item ? background(item, { playing, accent: item.accent }) : undefined} />
     </View>
   );
