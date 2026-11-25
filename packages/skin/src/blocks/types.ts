@@ -60,6 +60,9 @@ export interface ScreenBlockRuntime {
   /** Optional screen title for the hidden web `<h1>` inside `sections`, and presentation mode (`section` | `page`). */
   pageTitle?: string;
   presentation?: 'section' | 'page';
+  /** Renderer 20, a page in an experience's shell: the page's key, under which `sections` keeps and
+   * restores its scroll (screen/scroll-memory.ts). */
+  scrollKey?: string;
 }
 
 const ScreenBlockRuntimeContext = createContext<ScreenBlockRuntime | null>(null);
@@ -78,6 +81,7 @@ export function createScreenBlockRuntime(
     resolveItemCard?(itemKey: string, ctx: Ctx): Card | undefined;
     pageTitle?: string;
     presentation?: 'section' | 'page';
+    scrollKey?: string;
   } = {},
 ): ScreenBlockRuntime {
   return {

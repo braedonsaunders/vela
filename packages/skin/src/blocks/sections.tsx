@@ -10,8 +10,9 @@
 // - Wraps each section with focusable children in a TV `FocusBand` (`TVFocusGuideView autoFocus`)
 //   for per-section focus memory, and in `ScopedRecordNode` so a record push only re-renders the
 //   section reading that record.
-import { Component, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Platform, ScrollView, Text, View, type TextStyle } from 'react-native';
+import { Component, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { Platform, ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle } from 'react-native';
+import { pageScrollMemory } from '../screen/scroll-memory';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { InheritedContext, useHost } from '../host';
 import { fill, holds, type Template } from '../resolve';
@@ -171,6 +172,23 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
     if (needed.size > 0) runtime.requestNeeds([...needed]);
   }, [runtime, visibleChildren.length, mountedCount, node.children]);
 
+  // A page in an experience's shell keeps its scroll by its key and is put back where it was once its
+  // content is tall enough (a drag first leaves it where the viewer takes it).
+  const scrollKey = runtime?.scrollKey;
+  const resume = useRef(scrollKey ? pageScrollMemory.resume(scrollKey) : 0);
+  const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
+  const keep = (event: NativeSyntheticEvent<NativeScrollEvent>) => { if (scrollKey) pageScrollMemory.keep(scrollKey, event.nativeEvent.contentOffset.y); };
+  const memory = scrollKey ? {
+    ref: scroller,
+    onScrollBeginDrag: () => { resume.current = 0; },
+    onScrollEndDrag: keep,
+    onMomentumScrollEnd: keep,
+    onContentSizeChange: (_width: number, height: number) => {
+      if (resume.current > 0 && height > resume.current) { scroller.current?.scrollTo({ y: resume.current, animated: false }); resume.current = 0; }
+    },
+    scrollEventThrottle: 64,
+  } : {};
+
   if (!runtime) return null;
 
   const title = runtime.pageTitle;
@@ -188,6 +206,7 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
           gap,
         }}
         showsVerticalScrollIndicator={!Platform.isTV}
+        {...memory}
       >
         {Platform.OS === 'web' && title ? (
           <Text accessibilityRole="header" {...{ 'aria-level': 1 }} style={HIDDEN_H1}>
