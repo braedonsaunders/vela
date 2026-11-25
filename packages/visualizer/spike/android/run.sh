@@ -6,6 +6,8 @@
 #   run.sh install               install the APK, push the track (never committed), mute the music stream
 #   run.sh measure <scene> <s> [gpuFinish]   run one scene for <s> seconds, save its logcat and a screenshot
 #   run.sh stop                  stop the owned emulator and this spike's adb server
+# For the map labels, use `run.sh build contour`, run the emulator and install steps,
+# then `run.sh measure contour 45` and `run.sh stop`.
 # Everything bulky lives under ~/.scratch/tmp/$TASK on both machines.
 set -euo pipefail
 HOST=${VIZ_HOST:?Set VIZ_HOST to the SSH destination}
