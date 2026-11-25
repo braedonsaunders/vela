@@ -77,7 +77,8 @@ export const LISTEN_VIEWS: ListenView[] = [
     steps: [{ fill: 'music-search-input', text: 'lantern' }, { wait: 1500 }], settled: 'music-search-results' },
   { name: 'liked', description: 'Liked Songs: header and track table', place: 'liked', ready: 'music-tracklist' },
   { name: 'library', description: 'Your Library as its own page (compact) / beside Home (wide)', place: 'library', ready: 'music-library' },
-  { name: 'library-albums', description: 'Your Library filtered to Albums', place: 'library', ready: 'music-library', steps: [{ click: 'text:Albums' }, { wait: 800 }] },
+  { name: 'library-albums', description: 'Your Library filtered to Albums', place: 'library', ready: 'music-library', steps: [{ click: 'text:Albums' }, { wait: 800 }],
+    only: ['web-1440', 'web-1920', 'web-390', 'web-466'] }, // under 1180 px the wide shell's library is the rail, without its filter chips
   { name: 'rail-collapsed', description: 'Your Library collapsed to the rail (wide)', place: '', ready: 'music-library-collapse', steps: [{ click: 'music-library-collapse' }, { wait: 800 }], only: ['web-1440', 'web-1920'] },
   { name: 'artist', description: 'Artist page: header, Follow, popular tracks, discography', place: 'title:artist-hollow-lanterns', ready: 'music-discography' },
   { name: 'artist-lower', description: 'Artist page scrolled to the discography', place: 'title:artist-hollow-lanterns', ready: 'music-discography', scrollTo: 'music-discography' },
