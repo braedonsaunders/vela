@@ -62,7 +62,7 @@ const cxx = Bun.which('c++');
   const scratch = await mkdtemp(join(scratchRoot, 'vela-android-spectrum-'));
   try {
     const native = join(import.meta.dir, '../android/visualizer');
-    const exe = join(scratch, 'spectrum');
+    const exe = join(scratch, process.platform === 'win32' ? 'spectrum.exe' : 'spectrum');
     const compile = Bun.spawn([cxx!, '-std=c++17', '-I', native, join(native, 'analyser.cpp'),
       join(import.meta.dir, 'fixtures/android/VisualizerSpectrum.cpp'), '-o', exe], { stderr: 'pipe' });
     expect(await compile.exited, await new Response(compile.stderr).text()).toBe(0);

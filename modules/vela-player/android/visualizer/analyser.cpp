@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+namespace { constexpr double pi = 3.14159265358979323846; }
+
 void bandBins(int rate, int bands, int bins, int* binOf) {
   const double ny = rate / 2.0;
   for (int i = 0; i <= bands; i++) {
@@ -33,8 +35,8 @@ Analyser::Analyser()
   // Blackman, alpha 0.16, exactly as the Web Audio spec writes it (n / N, not n / (N - 1)).
   const double a0 = 0.42, a1 = 0.5, a2 = 0.08;
   for (int n = 0; n < N; n++)
-    window_[n] = float(a0 - a1 * std::cos(2 * M_PI * n / N) + a2 * std::cos(4 * M_PI * n / N));
-  for (int k = 0; k < N / 2; k++) { cos_[k] = float(std::cos(2 * M_PI * k / N)); sin_[k] = float(-std::sin(2 * M_PI * k / N)); }
+    window_[n] = float(a0 - a1 * std::cos(2 * pi * n / N) + a2 * std::cos(4 * pi * n / N));
+  for (int k = 0; k < N / 2; k++) { cos_[k] = float(std::cos(2 * pi * k / N)); sin_[k] = float(-std::sin(2 * pi * k / N)); }
   int bits = 0;
   while ((1 << bits) < N) bits++;
   for (int i = 0; i < N; i++) {
