@@ -4,7 +4,8 @@
   "workspaces": [
     "apps/vela",
     "packages/*",
-    "modules/*"
+    "modules/*",
+    "tests/e2e"
   ],
   "scripts": {
     "test": "bun test ./packages ./modules ./mock-server ./apps/vela-desktop/test ./tools/parity ./tools/perf",

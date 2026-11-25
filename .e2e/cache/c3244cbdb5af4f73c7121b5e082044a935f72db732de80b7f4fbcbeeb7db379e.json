@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "trace-1",
+  "createdAt": "2026-11-25T16:02:06.837Z",
+  "payload": {
+    "actions": [
+      {
+        "name": "typeSecret",
+        "summary": "fill secret \"viewerUsername\" into textbox \"Username\"",
+        "target": {
+          "role": "textbox",
+          "name": "Username",
+          "testId": "connect-username",
+          "inputPurpose": "username"
+        },
+        "secret": "viewerUsername"
+      },
+      {
+        "name": "typeSecret",
+        "summary": "fill secret \"viewerPassword\" into textbox \"Password\"",
+        "target": {
+          "role": "textbox",
+          "name": "Password",
+          "testId": "connect-password",
+          "inputPurpose": "password"
+        },
+        "secret": "viewerPassword"
+      },
+      {
+        "name": "tap",
+        "summary": "tap button \"Sign in\"",
+        "target": {
+          "role": "button",
+          "name": "Sign in",
+          "testId": "connect-sign-in"
+        }
+      }
+    ],
+    "executor": {
+      "name": "codex",
+      "version": "1"
+    },
+    "recordedFor": {
+      "testId": "tests/e2e/specs/home.e2e.ts::Home%20release%20gate::a%20fresh%20sign-in%20opens%20Home",
+      "targetId": "webkit",
+      "instructionDigest": "f5afe4ed2e59d22fdbb2ae0d6e05c5041e3731698adb33748abe3d8ca8c01b7b",
+      "paramsDigest": "27b437493d0385e1220ec9afaee64364c1f33af4aded6ec94a958763e87c73fb",
+      "callIndex": 0,
+      "agent": "default"
+    },
+    "summary": "Signed in with the dedicated viewer credentials. Vela navigated to /vela/ and shows the signed-in viewer profile and Home navigation; titles are loading. No playback was started.",
+    "startPath": "/vela",
+    "endPath": "/vela/",
+    "endAnchors": [
+      {
+        "text": "Skip to content"
+      },
+      {
+        "role": "link",
+        "name": "Vela home"
+      },
+      {
+        "role": "link",
+        "name": "Home",
+        "testId": "nav-Home"
+      },
+      {
+        "role": "link",
+        "name": "Movies",
+        "testId": "nav-Movies"
+      },
+      {
+        "role": "link",
+        "name": "TV Shows",
+        "testId": "nav-TV Shows"
+      },
+      {
+        "role": "link",
+        "name": "Adult",
+        "testId": "nav-Adult"
+      },
+      {
+        "role": "link",
+        "name": "Music",
+        "testId": "nav-Music"
+      },
+      {
+        "role": "link",
+        "name": "Books",
+        "testId": "nav-Books"
+      }
+    ],
+    "goneAnchors": [
+      {
+        "role": "document",
+        "name": "Vela"
+      }
+    ],
+    "endWaitMs": 17589,
+    "keyedBy": {
+      "cacheSchema": "trace-1",
+      "policyVersion": "conservative/6",
+      "project": "769c92cd99b2875d8ce23022f91331adf266b6635d4423092dc3944eb404282d",
+      "platform": "web",
+      "engineName": "web",
+      "engineSpiVersion": 1,
+      "appIdentity": "af7a8d8dbf0edee7cac4fbbd36dbc0c1ebf040af38d51632810989f8237b795b",
+      "agentContextDigest": "bf51f552eed392105942995a1f992d46da2fa7179329ba01d5060c54fd47319b"
+    }
+  }
+}
