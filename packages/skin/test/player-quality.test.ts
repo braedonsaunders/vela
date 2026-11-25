@@ -51,6 +51,12 @@ test('an unnamed Plex stream can be selected separately from numbered qualities'
   expect(present(source, null).serverStream).toBeUndefined();
 });
 
+test('a Plex stream that copies the video is still the unnamed stream', () => {
+  const source = plan(); source.paths = source.paths.slice(0, 1); source.selectedPathId = 'primary';
+  source.paths.push({ id: 'plex-hls', kind: 'remux', transport: 'hls', readiness: 'ready', url: '', mimeType: 'application/vnd.apple.mpegurl', sourceId: 'file', timelineId: 'timeline', edition: '1080p release', qualities: [], boundaries: [] });
+  expect(present(source, null).serverStream).toEqual({ choice: 'path:plex-hls', selected: false });
+});
+
 test('a probed Plex/Jellyfin HLS ladder can supply choices missing from the plan', () => {
   const source = plan(); source.paths = source.paths.slice(0, 2); source.paths[1]!.qualities = [];
   const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', backend: 'mse', renditionId: 'probe-720', lockedQuality: 'probe-720', throughputHistory: [], capabilities: {},
