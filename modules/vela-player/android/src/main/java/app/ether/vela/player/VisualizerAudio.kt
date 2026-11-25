@@ -5,7 +5,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.math.roundToLong
 
 /** One music deck's post-EQ, post-fade PCM in the sink's (continuous across items) clock.
- * Both ends may skip work. The playback thread never waits for the visualizer. */
+ * The playback thread never waits for the visualizer. A skipped buffer contributes silence. */
 internal class VisualizerAudio {
   companion object {
     const val RATE = 48_000
@@ -15,13 +15,22 @@ internal class VisualizerAudio {
   private val mono = FloatArray(1 shl 18)
   private var first = 0L
   private var end = 0L
+  private var skipped = false // playback thread only
 
   fun write(output: ByteBuffer, frames: Int, channels: Int, rate: Int, float: Boolean, itemFrame: Double, offsetUs: Long) {
-    if (!lock.tryLock()) return
+    if (!lock.tryLock()) {
+      skipped = true
+      return
+    }
     try {
       val start = (itemFrame * RATE / rate + offsetUs * (RATE / 1e6)).roundToLong()
       val stop = ((itemFrame + frames) * RATE / rate + offsetUs * (RATE / 1e6)).roundToLong()
-      if (start != end) first = start
+      if (start != end) {
+        if (skipped && start > end && start - end < mono.size) {
+          for (frame in end until start) mono[frame.toInt() and (mono.size - 1)] = 0f
+        } else first = start
+      }
+      skipped = false
       val bytes = if (float) 4 else 2
       for (frame in start until stop) {
         val source = (((frame - start) * rate / RATE).toInt().coerceAtMost(frames - 1)) * channels * bytes
@@ -38,7 +47,7 @@ internal class VisualizerAudio {
   }
 
   fun add(heardUs: Long, dest: FloatArray) {
-    if (!lock.tryLock()) return
+    lock.lock() // Only the renderer waits for an in-progress write.
     try {
       val pos = (heardUs * (RATE / 1e6)).roundToLong() - dest.size
       for (i in maxOf(first - pos, 0L) until minOf(end - pos, dest.size.toLong())) {
