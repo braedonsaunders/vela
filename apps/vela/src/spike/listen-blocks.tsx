@@ -18,14 +18,14 @@ import { useAppScreenActions } from '../screen-actions';
 export default function ListenBlocksLab() {
   const vela = useVela();
   const store = vela.store;
-  const params = useLocalSearchParams<{ album?: string; playlist?: string; style?: string }>();
+  const params = useLocalSearchParams<{ album?: string; playlist?: string; style?: string; mini?: string }>();
   const styled = params.style === '1';
   const host = vela.host('screen', 'vela.listen');
   const doc = useMemo(() => labDocument(styled), [styled]);
   useEffect(() => {
     store.screens.provideDocuments(href => (href === HREF ? doc : builtinDocument(href)));
   }, [store, doc]);
-  const pageParams = useMemo(() => ({ album: params.album || 'album-paper-boats', ...(params.playlist ? { playlist: params.playlist } : {}) }), [params.album, params.playlist]);
+  const pageParams = useMemo(() => ({ album: params.album || 'album-paper-boats', ...(params.playlist ? { playlist: params.playlist } : {}), ...(params.mini ? { mini: params.mini } : {}) }), [params.album, params.playlist, params.mini]);
   const back = useCallback(() => router.back(), []);
   const setParams = useCallback((next: Record<string, string>) => router.setParams(next), []);
   const actions = useAppScreenActions({ host, back, setParams });

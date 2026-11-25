@@ -25,6 +25,9 @@ import { placeOf, useMusic } from './app';
 import { LyricsPanel } from './lyrics';
 import { QueuePanel } from './queue';
 import { RailChips, RailIcons, Sidebar } from './rail';
+import { openNowPlaying } from './hub';
+import { useVisualizerHost, VisualizerBlock, type VisualizerSwitch } from './visualizer';
+import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '../../widgets/media/player';
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
 import { ListenLookProvider, usePart, type ListenLook } from './look';
 import { fillParts } from './part-style';
@@ -99,6 +102,10 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
     case 'recap': drawn = <RecapRichBlock props={props} ctx={scoped} press={host.screenPress} />; break;
     case 'playlistImport': drawn = <ImportRichBlock props={props} press={host.screenPress} />; break;
     case 'duplicates': drawn = <DuplicatesRichBlock props={props} />; break;
+    case 'nowPlaying': drawn = <NowPlayingBlock props={props} press={host.screenPress} background={look.template && look.templates?.has('nowPlaying.background') ? (item, part) => look.template!('nowPlaying.background', item, part, 0) : undefined} />; break;
+    case 'player': drawn = <PlayerRichBlock props={props} press={host.screenPress} />; break;
+    case 'visualizer': drawn = <VisualizerBlock mode={props.enum('mode', ['background', 'fullscreen'] as const)} sceneId={props.text('sceneId') || undefined}
+      fallback={node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : undefined} />; break;
     default: drawn = node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;
   }
   return <ListenLookProvider look={look}>{drawn}</ListenLookProvider>;
@@ -226,5 +233,40 @@ function DuplicatesRichBlock({ props }: { props: Props }) {
     <DuplicatesBlock libraryId={props.text('libraryId') || app.libraryId || 'music'}
       onPlayRelease={(release, source) => app.play([release], 0, source)}
       onOpenAlbum={albumId => app.go({ kind: 'title', id: albumId })} />
+  );
+}
+
+// ——— nowPlaying, player ————————————————————————————————————————————————————————————
+
+const noSwitch = (): VisualizerSwitch | undefined => undefined;
+
+function NowPlayingBlock({ props, press, background }: { props: Props; press?(p: ScreenPress): void; background?: (item: unknown, part: Record<string, unknown>) => ReactNode }) {
+  const host = useHost();
+  const visualizer = useVisualizerHost();
+  // The app's hook, the same one every draw (the host is a constant).
+  const visualizerSwitch = (visualizer?.useSwitch ?? noSwitch)();
+  const item = useVelaState(s => currentInQueue(s.audio.queue));
+  const playing = useVelaState(s => s.audio.phase === 'playing' || s.audio.phase === 'buffering' || s.audio.phase === 'loading');
+  const offered = props.bool('visualizer') && host.env.canVisualize !== false;
+  const flag = props.text('visualizerFlag');
+  const panel = props.text('panel');
+  const onClose = closer(props.text('closeFlag'), press) ?? (() => undefined);
+  const onOpenVisualizer = offered && flag && visualizerSwitch?.on && press ? () => press({ action: 'open', arg: flag, args: {}, control: 'now-playing-visualizer' }) : undefined;
+  return (
+    <View style={{ flex: 1, minHeight: 0 }} testID="listen-now-playing">
+      <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined}
+        visualizer={offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer}
+        background={background && item ? background(item, { playing, accent: item.accent }) : undefined} />
+    </View>
+  );
+}
+
+function PlayerRichBlock({ props, press }: { props: Props; press?(p: ScreenPress): void }) {
+  const flag = props.text('openFlag');
+  const open = () => (flag && press ? press({ action: 'open', arg: flag, args: {}, control: 'mini-player-open' }) : openNowPlaying());
+  return (
+    <View style={{ height: MINI_PLAYER_HEIGHT + 4 }} pointerEvents="box-none" testID="listen-player">
+      <MiniPlayer onOpen={open} bottom={0} />
+    </View>
   );
 }

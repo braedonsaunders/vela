@@ -1,11 +1,3 @@
-import { createContext } from 'react';
-import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
-
-/** The host can supply resolved skin styles without changing the block's two props. */
-export interface VisualizerParts {
-  'visualizer.scenePicker'?: StyleProp<ViewStyle>;
-  'visualizer.sceneChip'?: StyleProp<ViewStyle>;
-  'visualizer.sceneChipActive'?: StyleProp<ViewStyle>;
-  'visualizer.caption'?: StyleProp<TextStyle>;
-}
-export const VisualizerPartsContext = createContext<VisualizerParts>({});
+// The visualizer's parts live with its rich block (packages/skin/src/blocks/listen/visualizer.tsx),
+// which fills them from a document; the stage and scene picker read them here.
+export { VisualizerPartsContext, type VisualizerParts } from '@vela/skin/src/blocks/listen/visualizer';

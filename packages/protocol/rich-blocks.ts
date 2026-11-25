@@ -95,6 +95,7 @@ export const RICH_BLOCKS = {
       panel: { type: 'enum', values: ['queue', 'chapters', 'lyrics', 'sound'], doc: 'The list shown first.' },
       closeFlag: { type: 'template', doc: 'The document state flag the close button clears; no close button without it.' },
       visualizer: flag('Offer the visualizer (the header button and the Sound panel\'s switch) where env.canVisualize.', 'true'),
+      visualizerFlag: { type: 'template', doc: 'The document state flag the header\'s visualizer button sets (the page then shows a full-screen visualizer block); no button without it.' },
     },
     parts: ['nowPlaying.stage', 'nowPlaying.artwork', 'nowPlaying.title', 'nowPlaying.byline', 'nowPlaying.tint', 'nowPlaying.tabs', 'nowPlaying.header'],
     templates: ['nowPlaying.background'],
@@ -102,14 +103,13 @@ export const RICH_BLOCKS = {
     tv: 'The transport row and the list beside it are focus guides; the play button takes focus first. A background template is drawn behind the stage and takes no focus.',
   },
   player: {
-    doc: 'The audio transport on its own (a Listen player; with `channel` the node is instead the muted live preview): scrubber with chapter marks, time, transport, and the quality and audio menus.',
+    doc: 'The mini player (a Listen player; with `channel` the node is instead the muted live preview): what plays, previous, play and pause, next (spoken word: 15 and 30 s skips), stop, and its bottom edge as the scrubber. Pressing it opens Now Playing.',
     props: {
-      size: { type: 'enum', values: ['compact', 'large'], default: 'large', doc: 'The mini player\'s scale or Now Playing\'s.' },
-      menus: flag('Show the quality and audio (speed, sleep) menus.', 'true'),
+      openFlag: { type: 'template', doc: 'The document state flag set when it is pressed (the shell shows the nowPlaying block while it is set); the app\'s Now Playing opens without it.' },
     },
-    parts: ['player.scrubber', 'player.transport', 'player.toggle', 'player.time', 'player.quality', 'player.menu'],
+    parts: ['player.root', 'player.title', 'player.byline'],
     templates: [],
-    tv: 'The scrubber is focusable (left and right seek); the toggle is the preferred focus.',
+    tv: 'The open button is the focus target; the transport buttons follow it in the row.',
   },
   eq: {
     doc: 'Sound: AutoMix, volume levelling and the equalizer, or only the equalizer bands (`bands`).',
