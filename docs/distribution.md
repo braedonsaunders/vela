@@ -196,7 +196,9 @@ errors (ITMS-*) are in `<build dir>/<platform>-export.log`.
 The tvOS build embeds the Top Shelf extension (`modules/vela-top-shelf`), bundle ID
 `app.ether.vela.topshelf`, in `Vela.app/PlugIns`. The app and the extension share the App Group
 `group.app.ether.vela`. The script gives the extension the app's version and build number, which
-App Store validation requires. Verify both provisioning profiles include that group before
+App Store validation requires. Validation also refuses an arm64 extension that does not list `arm64` in
+`UIRequiredDeviceCapabilities`; the config plugin writes it, and the script stops before export when an
+embedded extension lacks it, because a `--no-upload` export does not run that check. Verify both provisioning profiles include that group before
 uploading. If the archive reports an application-groups entitlement mismatch, an Account
 Holder or Admin can register `group.app.ether.vela` in Certificates, Identifiers & Profiles,
 then enable App Groups and assign that group on both `app.ether.vela` and

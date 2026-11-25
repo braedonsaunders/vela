@@ -121,6 +121,8 @@ describe('the config plugin', () => {
     expect(plist).toContain('<string>com.apple.tv-top-shelf</string>');
     expect(plist).toContain('<string>group.app.ether.vela</string>');
     expect(plist).toContain('<string>0.2.63</string>');
+    // App Store validation refuses an arm64 extension that does not require arm64 (as the app does).
+    expect(require('@expo/plist').default.parse(plist).UIRequiredDeviceCapabilities).toEqual(['arm64']);
     expect(readFileSync(join(dir, 'VelaTopShelfExtension/VelaTopShelfExtension.entitlements'), 'utf8')).toContain('<string>group.app.ether.vela</string>');
     expect(readFileSync(join(dir, 'VelaTopShelfExtension/VelaTopShelfExtension.swift'), 'utf8')).toContain('class ContentProvider: TVTopShelfContentProvider');
   });
