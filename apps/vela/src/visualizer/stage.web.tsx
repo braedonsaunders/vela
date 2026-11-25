@@ -1,20 +1,23 @@
 import { useEffect, useRef } from 'react';
+import { entryBudget, softwareRenderer } from '../../../../packages/visualizer/web/frame-budget';
 import type { SceneRenderer } from '../../../../packages/visualizer/web/renderer';
 import { musicOutput, observeMusicOutput, subscribeMusicOutput } from './music-output.web';
 import type { StageProps } from './stage-types';
 
 let gpuUnavailable = false;
 const gpuListeners = new Set<() => void>();
+const overEntryBudget = entryBudget();
 export function canVisualize() {
   return typeof WebGL2RenderingContext !== 'undefined' && !gpuUnavailable && musicOutput().kind === 'ready';
 }
+export const canOpenVisualizer = canVisualize;
 export function subscribeVisualizerAvailability(listener: () => void) {
   const unsubscribe = subscribeMusicOutput(listener);
   gpuListeners.add(listener);
   return () => { unsubscribe(); gpuListeners.delete(listener); };
 }
 
-type Surface = { canvas: HTMLCanvasElement; renderer: SceneRenderer; close(): void };
+type Surface = { canvas: HTMLCanvasElement; renderer: SceneRenderer; cancelEntry(): void; close(): void };
 let diagnostics: (() => unknown) | undefined;
 function webVisualizerDiagnostics() { return diagnostics?.() ?? null; }
 
@@ -23,11 +26,41 @@ function tint(value?: string) {
   return [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255);
 }
 
+/** Poll without blocking the application thread. Page suspension or loss of visibility invalidates
+ * the measurement. The clock starts after the scene module is in memory. */
+function timeFirstFrame(gl: WebGL2RenderingContext, started: number, visible: () => boolean, measured: (ms: number) => void) {
+  const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  if (!fence) return () => {};
+  gl.flush();
+  let id = 0, last = performance.now(), finished = false;
+  function cancel() {
+    if (finished) return;
+    finished = true;
+    cancelAnimationFrame(id);
+    gl.deleteSync(fence);
+  }
+  function poll() {
+    const now = performance.now();
+    if (!visible() || now - last > 250) { cancel(); return; }
+    last = now;
+    const state = gl.clientWaitSync(fence!, 0, 0);
+    const elapsed = now - started;
+    if (state === gl.TIMEOUT_EXPIRED && elapsed <= 1600) {
+      id = requestAnimationFrame(poll);
+      return;
+    }
+    cancel();
+    if (state !== gl.WAIT_FAILED) measured(elapsed);
+  }
+  id = requestAnimationFrame(poll);
+  return cancel;
+}
+
 function attachStage(container: HTMLDivElement, options: StageProps) {
   let closed = false;
   let current: Surface | undefined, retiring: Surface | undefined;
   let frame = 0, finish = 0, previous = 0, generation = 0;
-  let creating = false, failed = false, onscreen = true;
+  let creating = false, failed = false, onscreen = true, suspended = false;
   let tap: ReturnType<typeof observeMusicOutput> | undefined, tapped: AudioNode | null = null;
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const coarse = matchMedia('(pointer: coarse)');
@@ -68,7 +101,7 @@ function attachStage(container: HTMLDivElement, options: StageProps) {
     }
     frame = requestAnimationFrame(tick);
   }
-  const visible = () => options.active && !document.hidden && onscreen && rect.width > 1 && rect.height > 1;
+  const visible = () => options.active && !document.hidden && !suspended && onscreen && rect.width > 1 && rect.height > 1;
   function retire() {
     clearTimeout(finish); retiring?.close(); retiring = undefined;
   }
@@ -84,16 +117,22 @@ function attachStage(container: HTMLDivElement, options: StageProps) {
     try {
       const { createRenderer } = await import('../../../../packages/visualizer/web/renderer');
       if (closed || token !== generation || !visible()) return;
-      gl = canvas.getContext('webgl2', { antialias: false, alpha: false, powerPreference: constrained() ? 'low-power' : 'high-performance' });
+      const started = performance.now();
+      gl = canvas.getContext('webgl2', { antialias: false, alpha: false, failIfMajorPerformanceCaveat: true, powerPreference: constrained() ? 'low-power' : 'high-performance' });
       if (!gl || !gl.getExtension('EXT_color_buffer_float') || !gl.getExtension('OES_texture_float_linear')) {
         throw new Error('WebGL2 floating-point targets unavailable');
       }
+      const adapter = gl.getExtension('WEBGL_debug_renderer_info');
+      if (adapter && softwareRenderer(String(gl.getParameter(adapter.UNMASKED_RENDERER_WEBGL)))) throw new Error('Software rendering');
       const [width, height] = size();
       const renderer = createRenderer(canvas, gl, { width, height, sceneId: options.sceneId, constrained: constrained(),
         measure: typeof __DEV__ !== 'undefined' && __DEV__, analysisRange: { minDecibels: -92, maxDecibels: -18 } });
       renderer.tint(tint(options.artworkTint) ?? tint(options.accent));
       renderer.frame(1 / 60, null, period() / 1000);
-      current = { canvas, renderer, close() { canvas.removeEventListener('webglcontextlost', lost); canvas.remove(); lose(); } };
+      const cancelEntry = timeFirstFrame(gl, started, visible, milliseconds => {
+        if (current?.canvas === canvas && overEntryBudget(milliseconds)) report();
+      });
+      current = { canvas, renderer, cancelEntry, close() { cancelEntry(); canvas.removeEventListener('webglcontextlost', lost); canvas.remove(); lose(); } };
       canvas.addEventListener('webglcontextlost', lost);
       container.appendChild(canvas);
       if (retiring && !options.still && !motion.matches) {
@@ -106,7 +145,7 @@ function attachStage(container: HTMLDivElement, options: StageProps) {
   function sync() {
     if (closed || failed) return;
     const output = musicOutput();
-    if (!visible() || output.kind !== 'ready') { stop(); return; }
+    if (!visible() || output.kind !== 'ready') { current?.cancelEntry(); stop(); return; }
     if (!current) { if (!creating) void create(); return; }
     if (options.still || motion.matches || !output.playing || !output.node) { stop(); return; }
     if (tapped !== output.node) {
@@ -133,6 +172,10 @@ function attachStage(container: HTMLDivElement, options: StageProps) {
   }) : null;
   intersection?.observe(container);
   window.addEventListener('resize', resize);
+  const suspend = () => { suspended = true; sync(); };
+  const resume = () => { suspended = false; sync(); };
+  document.addEventListener('freeze', suspend);
+  document.addEventListener('resume', resume);
   document.addEventListener('visibilitychange', sync);
   motion.addEventListener('change', sync);
   const unsubscribe = subscribeMusicOutput(sync);
@@ -148,7 +191,7 @@ function attachStage(container: HTMLDivElement, options: StageProps) {
       options = next;
       if (changed) {
         generation++; creating = false; failed = false; limit30 = false; stop();
-        if (current) { retire(); retiring = current; current = undefined; }
+        if (current) { current.cancelEntry(); retire(); retiring = current; current = undefined; }
       } else if (recolor && current) {
         current.renderer.tint(tint(options.artworkTint) ?? tint(options.accent));
         if (!frame && visible()) current.renderer.frame(0, null, period() / 1000);
@@ -159,6 +202,7 @@ function attachStage(container: HTMLDivElement, options: StageProps) {
       closed = true; generation++;
       unsubscribe(); observer?.disconnect(); intersection?.disconnect();
       window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', sync);
+      document.removeEventListener('freeze', suspend); document.removeEventListener('resume', resume);
       motion.removeEventListener('change', sync);
       stop(); retire(); current?.close(); current = undefined;
       if (diagnostics === stats) {

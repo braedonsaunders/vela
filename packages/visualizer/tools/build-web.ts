@@ -56,7 +56,7 @@ const SAMPLES = Array.from(colorSamples).find(n => n <= (stage.constrained ? 2 :
     for (const [suffix, value] of [['W', 256], ['H', 160], ['DW', 1024], ['DH', 640]] as const)
       code = replace(code, prefix + '_' + suffix + ' = ' + value, prefix + '_' + suffix + ' = stage.constrained ? ' + value / 2 + ' : ' + value);
   }
-  if (name === '64_wheat.js') code = replace(code, 'WHEAT_N = 72000', 'WHEAT_N = stage.constrained ? 18000 : 72000');
+  if (code.includes("scene({ id: 'wheat'")) code = replace(code, 'WHEAT_N = 72000', 'WHEAT_N = stage.constrained ? 18000 : 72000');
   if (name === '90_engine.js') {
     code = replace(code, "addEventListener('resize', resize); resize();", 'resize();');
     code = replace(code, "QS.has('perf')", 'stage.measure');

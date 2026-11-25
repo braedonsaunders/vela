@@ -20,3 +20,18 @@ export function frameBudget() {
     },
   };
 }
+
+/** A cold compiler may miss one 400 ms entry. Repeated foreground misses, or one entry over four
+ * times the budget, return the device to artwork. Asset fetch time is excluded by the caller. */
+export function entryBudget() {
+  let consecutiveMisses = 0;
+  return (milliseconds: number) => {
+    consecutiveMisses = milliseconds > 400 ? consecutiveMisses + 1 : 0;
+    return milliseconds > 1600 || consecutiveMisses >= 2;
+  };
+}
+
+/** The debug extension is optional. Unidentified GPUs still receive the measured budget checks. */
+export function softwareRenderer(name: string): boolean {
+  return /swiftshader|llvmpipe|softpipe|lavapipe|microsoft basic render driver|\bwarp\b|software rasterizer/i.test(name);
+}
