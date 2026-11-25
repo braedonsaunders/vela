@@ -35,7 +35,7 @@ tasks.named('preBuild').configure { dependsOn(visualizerAssets) }
 
 android {
   buildFeatures { prefab true }
-  sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/visualizerAssets'))
+  sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/visualizerAssets').get().asFile)
   namespace 'app.ether.vela.player'
   defaultConfig {
     versionCode 1
