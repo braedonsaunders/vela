@@ -13,7 +13,17 @@ import android.util.Log
 import android.view.Surface
 
 /** EGL, Hermes, the recorder and the FFT all live on this view's worker, separate from React and Media3. */
-internal class VisualizerRenderer(private val texture: SurfaceTexture, private val assets: AssetManager) {
+internal class VisualizerRenderer private constructor(private var texture: SurfaceTexture, private val assets: AssetManager) {
+  companion object {
+    private var warm: VisualizerRenderer? = null // Main thread only.
+
+    fun acquire(texture: SurfaceTexture, assets: AssetManager): VisualizerRenderer {
+      val old = warm ?: return VisualizerRenderer(texture, assets)
+      warm = null
+      old.retarget(texture)
+      return old
+    }
+  }
   private val worker = HandlerThread("VelaVisualizer").apply { start() }
   private val gl = Handler(worker.looper)
   private val main = Handler(Looper.getMainLooper())
@@ -34,6 +44,36 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
   private var height = 0
   private val pcm = FloatArray(VisualizerAudio.WINDOW)
   @Volatile private var generation = 0
+  @Volatile private var parked = false
+
+  /** React can reparent a TextureView when the picker joins the hierarchy. Keep the existing
+   * GPU context and scene for the explicit background-to-fullscreen transition only. */
+  fun offerForFullscreen() {
+    warm?.close()
+    warm = this
+    main.postDelayed({
+      if (warm === this) { warm = null; close() }
+    }, 400)
+  }
+
+  private fun retarget(next: SurfaceTexture) {
+    generation++
+    gl.post {
+      if (texture !== next) {
+        detachTarget()
+        texture.release()
+        texture = next
+      }
+      presentedTicket = -1L
+    }
+  }
+
+  private fun detachTarget() {
+    if (target == EGL14.EGL_NO_SURFACE) return
+    EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
+    EGL14.eglDestroySurface(display, target)
+    target = EGL14.EGL_NO_SURFACE
+  }
 
   private fun configure(w: Int, h: Int) {
     if (context == EGL14.EGL_NO_CONTEXT) {
@@ -44,11 +84,7 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
       check(context != EGL14.EGL_NO_CONTEXT)
     }
     if (w == width && h == height && target != EGL14.EGL_NO_SURFACE) return
-    if (target != EGL14.EGL_NO_SURFACE) {
-      EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-      EGL14.eglDestroySurface(display, target)
-      target = EGL14.EGL_NO_SURFACE
-    }
+    detachTarget()
     texture.setDefaultBufferSize(w, h)
     val surface = Surface(texture)
     try {
@@ -61,6 +97,7 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
   }
 
   fun draw(w: Int, h: Int, id: String, artwork: String, accent: String, presentationTicket: Long, decks: List<VisualizerDeck>, done: (Boolean) -> Unit) {
+    parked = false
     val ticket = generation
     gl.post {
       if (ticket != generation) return@post
@@ -129,10 +166,13 @@ internal class VisualizerRenderer(private val texture: SurfaceTexture, private v
     height = 0
   }
 
-  fun suspendRendering() {
+  fun suspendRendering(transition: Boolean) {
     presentedTicket = -1L
-    generation++
-    gl.post { release() }
+    parked = true
+    val ticket = ++generation
+    if (transition) {
+      gl.postDelayed({ if (parked && ticket == generation) release() }, 400)
+    } else gl.post { release() }
   }
 
   fun close() {

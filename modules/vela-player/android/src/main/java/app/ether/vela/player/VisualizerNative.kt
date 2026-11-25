@@ -20,7 +20,9 @@ internal object VisualizerNative {
   private var probing = false
   @Volatile private var preparedViews = 0
   private val fullscreenAction = AtomicLong(0)
+  val entryBudget = VisualizerEntryBudget()
   val canOpen get() = !rendererFailed && preparedViews > 0 && AudioPlayback.visualizerPcm
+  val openingFullscreen get() = fullscreenAction.get().let { it > 0 && SystemClock.uptimeMillis() - it <= 1600 }
 
   fun beginFullscreen() { fullscreenAction.set(SystemClock.uptimeMillis()) }
   fun takeFullscreenAction() = fullscreenAction.getAndSet(0)

@@ -7,6 +7,10 @@ fun main() {
   check(!VisualizerTier.slowTvTranslation(translated, false))
   check(!VisualizerTier.slowTvTranslation("Adreno (TM) 740", true))
   check(VisualizerTier.software("ANGLE (SwiftShader Device (Subzero))"))
+  val entry = VisualizerEntryBudget()
+  check(!entry.exceeded(401) && !entry.exceeded(400))
+  check(!entry.exceeded(401) && entry.exceeded(450))
+  check(VisualizerEntryBudget().exceeded(1601))
   // A mono analysis window at the heard clock sums two already-faded decks. Reading PCM preserves
   // the sink buffer, a gapless stream reset uses the new renderer offset, and a seek drops old data.
   val a = VisualizerAudio()

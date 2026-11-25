@@ -11,3 +11,12 @@ internal object VisualizerTier {
   fun slowTvTranslation(name: String, tv: Boolean) =
     tv && name.startsWith("Android Emulator OpenGL ES Translator (D3D12 (", ignoreCase = true)
 }
+
+/** Only sample an explicit foreground fullscreen action. A single cold driver stall can recover. */
+internal class VisualizerEntryBudget {
+  private var misses = 0
+  fun exceeded(elapsedMs: Long): Boolean {
+    misses = if (elapsedMs > 400) misses + 1 else 0
+    return elapsedMs > 1600 || misses >= 2
+  }
+}

@@ -52,7 +52,10 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
   private var started = false
   private val displayTick = Choreographer.FrameCallback { scheduled = false; drawFrame() }
   private val stateChanged: () -> Unit = { schedule() }
-  private val lifecycleChanged = LifecycleEventObserver { _, _ -> schedule() }
+  private val lifecycleChanged = LifecycleEventObserver { _, event ->
+    if (event == Lifecycle.Event.ON_PAUSE) VisualizerNative.takeFullscreenAction()
+    schedule()
+  }
 
   init {
     texture.surfaceTextureListener = this
@@ -124,7 +127,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     observe(false)
     setPrepared(false)
     if (started) {
-      renderer?.suspendRendering()
+      renderer?.suspendRendering(VisualizerNative.openingFullscreen)
       openingScene = ""
       opened = 0
     }
@@ -178,7 +181,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     if (!visible()) { park(); return }
     if (!VisualizerNative.supported(context)) { unavailable(); return }
     val surface = texture.surfaceTexture ?: return
-    val host = renderer ?: VisualizerRenderer(surface, context.assets).also { renderer = it }
+    val host = renderer ?: VisualizerRenderer.acquire(surface, context.assets).also { renderer = it }
     started = true
     if (measuredScene != sceneId) {
       measuredScene = sceneId
@@ -227,7 +230,14 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
       val metric = if (fullscreen) "firstFrame" else "backdropFrame"
       val action = if (fullscreen) VisualizerNative.takeFullscreenAction() else 0L
       val start = if (action > 0) minOf(action, opened) else opened
-      Log.i("VelaVisualizer", "$metric scene=$openingScene elapsedMs=${SystemClock.uptimeMillis() - start}")
+      val elapsed = SystemClock.uptimeMillis() - start
+      val kind = if (action > 0) "entry" else if (fullscreen) "scene" else "backdrop"
+      Log.i("VelaVisualizer", "$metric scene=$openingScene elapsedMs=$elapsed kind=$kind")
+      if (action > 0 && VisualizerNative.entryBudget.exceeded(elapsed)) {
+        Log.w("VelaVisualizer", "Foreground fullscreen entry budget exceeded")
+        unavailable()
+        return
+      }
       setPrepared(true)
       opened = -1
     }
@@ -236,7 +246,7 @@ internal class VelaVisualizerView(context: Context, appContext: AppContext) : Ex
     park()
     val host = renderer ?: return true
     renderer = null
-    host.close()
+    if (VisualizerNative.openingFullscreen) host.offerForFullscreen() else host.close()
     return false // The GL worker releases the texture after its pending frame.
   }
 }
