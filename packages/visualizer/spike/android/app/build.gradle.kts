@@ -23,6 +23,7 @@ android {
     externalNativeBuild {
       cmake {
         arguments += listOf("-DANDROID_STL=c++_shared", "-DRN_NATIVE=" + layout.buildDirectory.dir("rn-native").get().asFile.path)
+        project.findProperty("vizShared")?.let { arguments += "-DVELA_VISUALIZER_DIR=$it" }
         cppFlags += listOf("-std=c++20", "-fexceptions", "-frtti")
       }
     }

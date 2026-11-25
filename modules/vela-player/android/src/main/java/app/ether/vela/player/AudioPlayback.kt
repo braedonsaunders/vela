@@ -44,6 +44,7 @@ internal object AudioPlayback : SessionOwner {
   private class Deck(val number: Int, val sound: VelaSoundProcessor) {
     lateinit var player: ExoPlayer
     lateinit var sink: VelaSoundSink
+    val decodedPcm get() = !::sink.isInitialized || sink.decodedPcm
     @Volatile var grant: MediaAccess? = null
   }
 
@@ -58,6 +59,42 @@ internal object AudioPlayback : SessionOwner {
   private val main = Handler(Looper.getMainLooper())
   private var context: Context? = null
   private var decks = 0
+  private var visualizerUsers = 0
+  @Volatile var visualizerPcm = true
+    private set
+  @Volatile var onVisualizerAvailability: (() -> Unit)? = null
+
+  /** Sink configuration can change when an external receiver takes encoded passthrough. */
+  fun visualizerFormatChanged() { main.post { updateVisualizerAvailability() } }
+
+  private fun updateVisualizerAvailability() {
+    val available = active?.decodedPcm != false
+    if (visualizerPcm == available) return
+    visualizerPcm = available
+    onVisualizerAvailability?.invoke()
+  }
+
+  val visualizerListeners = mutableSetOf<() -> Unit>()
+  val visualizerPlaying: Boolean get() = visualizerPcm && !spoken && active?.player?.isPlaying == true
+
+  /** Main thread. Allocate taps only while at least one foreground music surface needs PCM. */
+  fun observeVisualizer(start: Boolean) {
+    visualizerUsers += if (start) 1 else -1
+    if ((start && visualizerUsers != 1) || (!start && visualizerUsers != 0)) return
+    for (deck in listOfNotNull(active, fading, spare, crossfade?.deck).distinct()) {
+      deck.sound.visualizer = if (start) VisualizerAudio() else null
+    }
+  }
+
+  fun visualizerDecks(): List<VisualizerDeck> {
+    if (spoken) return emptyList()
+    return listOfNotNull(active, fading).mapNotNull { deck ->
+      val audio = deck.sound.visualizer
+      if (audio == null || !deck.player.isPlaying) null
+      else VisualizerDeck(audio, deck.sink, deck.player.playbackParameters.speed.toDouble())
+    }
+  }
+
   /** The deck JavaScript and the media session follow. */
   private var active: Deck? = null
   /** The outgoing deck while it fades out. */
@@ -91,6 +128,7 @@ internal object AudioPlayback : SessionOwner {
     this.context = context
     val number = decks++
     val deck = Deck(number, VelaSoundProcessor(number))
+    if (visualizerUsers > 0) deck.sound.visualizer = VisualizerAudio()
     // Every request (and redirect, and seek) goes through the grant scope; Ether's URLs need no headers.
     val sources = DataSource.Factory { ScopedMediaDataSource(deck.grant) }
     // Platform decoders first, the LGPL FFmpeg extension for the rest (ALAC; Opus, Vorbis and FLAC where
@@ -411,6 +449,7 @@ internal object AudioPlayback : SessionOwner {
     incoming.player.play()
     endFade()
     active = incoming
+    updateVisualizerAvailability()
     loadId = plan.id
     failure = null
     lastState = ""
@@ -505,6 +544,7 @@ internal object AudioPlayback : SessionOwner {
 
   /** Reports the state to JavaScript when it changed, and every half second while playing. */
   private fun publish(tick: Boolean = false) {
+    if (!tick) for (listener in visualizerListeners) listener()
     val player = active?.player ?: return
     val state = state(player)
     if (state == "idle") return

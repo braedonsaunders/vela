@@ -2,6 +2,30 @@ package app.ether.vela.player
 
 // Display matching, format naming, capability tokens and subtitle appearance, on a plain JVM.
 fun main() {
+  // A mono analysis window at the heard clock sums two already-faded decks. Reading PCM preserves
+  // the sink buffer, a gapless stream reset uses the new renderer offset, and a seek drops old data.
+  val a = VisualizerAudio()
+  val b = VisualizerAudio()
+  val stereo = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+  repeat(4) { stereo.putShort(8192).putShort(24576) }
+  stereo.flip()
+  val raw = stereo.array().copyOf()
+  a.write(stereo, 4, 2, 48000, false, 0.0, 1000)
+  check(stereo.position() == 0 && stereo.array().contentEquals(raw))
+  val other = java.nio.ByteBuffer.allocate(8).order(java.nio.ByteOrder.nativeOrder())
+  other.putFloat(-0.125f).putFloat(-0.125f).flip()
+  b.write(other, 2, 1, 24000, true, 0.0, 1000)
+  val seenPcm = FloatArray(4)
+  a.add(1083, seenPcm); b.add(1083, seenPcm)
+  check(seenPcm.all { it == 0.375f })
+  a.write(stereo, 4, 2, 48000, false, 0.0, 1083)
+  val joined = FloatArray(8)
+  a.add(1167, joined)
+  check(joined.all { it == 0.5f })
+  a.write(stereo, 4, 2, 48000, false, 9600.0, 1083)
+  val past = FloatArray(8)
+  a.add(1167, past)
+  check(past.all { it == 0f })
   // 23.976 is not 24: a 24 Hz mode drops a frame every 42 seconds.
   check(DisplayModes.cadence(24.0, 23.976) == null)
   check(DisplayModes.cadence(23.976025f.toDouble(), 23.976) == 1)

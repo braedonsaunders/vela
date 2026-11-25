@@ -29,9 +29,10 @@ case "${1:-}" in
     scenes=${2:-ink,tunnel}
     [[ "$scenes" =~ ^(ink|tunnel|contour)(,(ink|tunnel|contour))*$ ]] || exit 2
     bun "$VIZ/tools/build.ts" --scenes "$scenes" --out "$HERE/app/src/main/assets"
-    ssh "$HOST" "mkdir -p $R/vizspike $R/media"
+    ssh "$HOST" "mkdir -p $R/vizspike $R/media $R/shared"
+    rsync -az "$VIZ/../../modules/vela-player/android/visualizer/"{analyser,executor}.{h,cpp} "$HOST:$R/shared/"
     rsync -az --delete --exclude .gradle --exclude build --exclude app/build --exclude app/.cxx --exclude local.properties "$HERE/" "$HOST:$R/vizspike/"
-    remote "cd $R/vizspike && echo sdk.dir=\$ANDROID_HOME > local.properties && \$HOME/.gradle/wrapper/dists/gradle-9.4.1-bin/*/gradle-9.4.1/bin/gradle --no-daemon -q -PvizAbis=$ABIS assembleRelease"
+    remote "cd $R/vizspike && echo sdk.dir=\$ANDROID_HOME > local.properties && \$HOME/.gradle/wrapper/dists/gradle-9.4.1-bin/*/gradle-9.4.1/bin/gradle --no-daemon -q -PvizAbis=$ABIS -PvizShared=\$HOME/$R/shared assembleRelease"
     ;;
   emulator)
     # A fresh server and console port keep this run isolated from other workers.
