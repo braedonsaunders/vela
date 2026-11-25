@@ -14,6 +14,7 @@ import { focusElement } from '@vela/skin/src/escape';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
 import { useCanVisualize } from '../visualizer/availability';
 import { Visualizer } from '../visualizer/visualizer';
+import { inVisualizerHistory, popVisualizerHistory, pushVisualizerHistory } from '../visualizer/page-history';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useVelaState } from '@vela/core/react';
 import { currentInQueue, msg, soundSettings, type Vela as Store } from '@vela/core';
@@ -138,12 +139,29 @@ export function AudioDock() {
   const playing = !!audio.queue && !covered;
   const visuals = useCanVisualize(playing && open && currentInQueue(audio.queue)?.media?.class === 'music');
   const fullscreen = visuals && expanded;
-  useEffect(() => { if (!visuals) setExpanded(false); }, [visuals]);
-  const openVisualizer = useCallback(() => setExpanded(true), []);
+  useEffect(() => {
+    if (visuals || !expanded) return;
+    setExpanded(false);
+    if (Platform.OS === 'web') popVisualizerHistory(window.history);
+  }, [visuals, expanded]);
+  const openVisualizer = useCallback(() => {
+    if (Platform.OS === 'web') pushVisualizerHistory(window.history);
+    setExpanded(true);
+  }, []);
   const leaveVisualizer = useCallback(() => {
+    if (Platform.OS === 'web') popVisualizerHistory(window.history);
     setExpanded(false);
     if (Platform.isTV || Platform.OS === 'web') requestAnimationFrame(() => focusElement('now-playing-visualizer'));
   }, []);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !visuals) return;
+    const restore = () => {
+      if (inVisualizerHistory(window.history)) setExpanded(true);
+      else if (expanded) leaveVisualizer();
+    };
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, [visuals, expanded, leaveVisualizer]);
   useEffect(() => playing && open ? holdBack(() => {
     if (fullscreen) leaveVisualizer(); else close();
     return true;
