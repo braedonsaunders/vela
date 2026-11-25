@@ -17,22 +17,23 @@ Lyrics stays an independent overlay above the visualizer. Give the active line a
 
 **TV idle mode.** Offer an opt-in timeout in Now Playing, with a proposed default interval of one minute. Enter only while music is playing and the screen is visible, with no picker, lyrics interaction, accessibility focus session or system overlay active. Hide transport and artwork, retain the scene and let a directional press reveal controls without performing a second action. Back and Menu retain their host behavior. Dedicated media keys still take effect. Pause, end of queue or leaving Listen exits idle. Respect system sleep and screen saver policy. With Reduce Motion, use static artwork or a still frame and disable automatic transitions.
 
-## Proposed block contract for schema review
+## Approved block contract
 
-L2 reserves the optional Now Playing background and a hidden full-screen page entry. L1 will publish the Listen contract. The declaration below is a proposal for the experiences lead and G2 to check against `vela-document.v1.json`. It follows [Building blocks](../../../../docs/plugin-screens.md#building-blocks) and [One renderer for everything](../../../../docs/experiences.md#2-one-renderer-for-everything).
+L2 reserves the optional Now Playing background and a hidden full-screen page entry. L1 will publish the Listen contract. The experiences lead approved these fields for G2’s generated schema. Today’s music app hosts the component directly until Listen ships. It follows [Building blocks](../../../../docs/plugin-screens.md#building-blocks) and [One renderer for everything](../../../../docs/experiences.md#2-one-renderer-for-everything).
 
 | Node field | Type | Behavior |
 | --- | --- | --- |
 | `type` | `"visualizer"` | Identifies the built-in rich block. |
 | `mode` | `"background" \| "fullscreen"` | Required. The background ignores pointer events and never takes focus. Fullscreen owns one focus region for the stage and picker. |
 | `sceneId?` | `Template` | Initial built-in scene ID when the viewer has no supported saved choice. Resolve the template and check the ID against the installed, device-supported manifest. If neither choice is usable, use the first supported scene. |
-| `fallback?` | `Node` | Now Playing supplies its current artwork tint. An older renderer encountering the optional block draws this node. The capable host also restores the tint on renderer or analysis failure. |
+
+All block types share the generic `fallback` field. A renderer draws this node for an unknown or unavailable block. Now Playing supplies its ambient artwork tint.
 
 Declare the node in `BlockNode` in `packages/protocol/skin.ts`, resolve it to an `RNode` of kind `visualizer`, and draw it through a component in `packages/skin/src/blocks/` using `ScreenBlockRuntime`. The block fills its allocated area. The surrounding layout owns sizing and uses `PerClass` for responsive dimensions (`default`, `small`, `wide`, `tv`). Document-level `presentation` keeps its existing meaning.
 
-**Availability.** The full-screen document declares `requires: ["visualizer"]`. The Now Playing document keeps the block optional so older clients can still open the page. Propose `env.canVisualize` to G2 as the shell entry's `when` condition. The host enables it when the device supports a built-in scene and its rendering budget. Keep the entry hidden on budget TV devices until the floor measurements pass.
+**Availability.** The full-screen document declares `requires: ["visualizer"]`. The Now Playing document keeps the block optional so older clients can still open the page. G2 reserved `env.canVisualize` as the shell entry's `when` condition. The host enables it when the device supports a built-in scene and its rendering budget. Keep the entry hidden on budget TV devices until the floor measurements pass.
 
-**Selection and trust.** Propose `vela.setVisualizerScene {id}` for G1's local-action list. A valid selection updates the active block and the viewer's local preference. Ignore an unsupported ID and retain the current choice. Both modes share the preference. Local storage is sufficient. Documents and plugins may name only compiled Vela scenes by ID. The schema accepts no shader source, script, samples or analysis records. The block privately observes the active music engine through a read-only tap. Opening it preserves the existing audio route, transport and queue.
+**Selection and trust.** G1 reserved the local action `vela.setVisualizerScene {id}`. A valid selection updates the active block and the viewer's local preference. Ignore an unsupported ID and retain the current choice. Both modes share the preference. The choice stays on this device, scoped to the server and viewer profile. Documents and plugins may name only compiled Vela scenes by ID. The schema accepts no shader source, script, samples or analysis records. The block privately observes the active music engine through a read-only tap. Opening it preserves the existing audio route, transport and queue.
 
 **Parts and motion.** Publish `visualizer.scenePicker`, `visualizer.sceneChip`, `visualizer.sceneChipActive` and `visualizer.caption` through G2's parts API. Documents style these with `$ui` tokens. The engine owns scene colors and derives its default tint from `$ui.accent` and the artwork tint already available on the stage. With `env.still`, display a still and disable automatic scene transitions.
 

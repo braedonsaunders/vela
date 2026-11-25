@@ -207,7 +207,9 @@ function Chip({ label, selected, onPress, testID }: { label: string; selected: b
 function rateLabel(rate: number): string { return `${number(rate, { maximumFractionDigits: 2, minimumFractionDigits: rate % 1 ? 1 : 1 })}×`; }
 
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel?: 'queue' | 'lyrics' | 'sound' }) {
+export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, hidden = false }: {
+  onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; hidden?: boolean;
+}) {
   const host = useHost();
   const m = useMediaLook();
   const store = useVela();
@@ -227,7 +229,7 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   useEffect(() => { if (opening) setList(opening === 'sound' ? 'sound' : opening === 'lyrics' && music ? 'lyrics' : 'queue'); }, [opening, music]);
   // Space plays and pauses; Escape closes (web).
   useEffect(() => {
-    if (!web || typeof window === 'undefined') return;
+    if (hidden || !web || typeof window === 'undefined') return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (event.defaultPrevented || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
@@ -236,8 +238,8 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose, store]);
-  if (!item || !audio.queue) return null;
+  }, [onClose, store, hidden]);
+  if (!item || !audio.queue || hidden) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
   const sideBySide = nowPlayingSideBySide(m.width, m.height);
   const coverSize = sideBySide ? Math.min(480, m.height - 360, (m.width - m.gutter * 2) * 0.42) : Math.min(m.width - m.gutter * 2 - 24, m.height * 0.42, 420);
@@ -315,11 +317,11 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
   );
   const top = Math.max(14, host.viewport.insets.top + 10);
   return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: onOpenVisualizer ? 'transparent' : m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' }}>
         {/* Native image blur (expo-image on Android and iOS) stops far short of 90: the cover's own
             lettering showed through behind the title and transport. There the wash is the colour alone. */}
-        {item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
+        {!onOpenVisualizer && item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
         <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.3)} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` })]} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }}>
@@ -334,7 +336,8 @@ export function NowPlaying({ onClose, panel: opening }: { onClose(): void; panel
             {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
           </View>
         </Pressable>
-        <View style={{ width: 42 }} />
+        {onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
+          nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={42} /> : <View style={{ width: 42 }} />}
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: m.gutter, paddingTop: 18, paddingBottom: 48, minHeight: '100%' as never }}>
         {sideBySide ? (

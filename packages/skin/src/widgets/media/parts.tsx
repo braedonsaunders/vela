@@ -1,3 +1,4 @@
+import { focusTarget } from '../../escape';
 // The pieces media pages are built from (docs/media-kinds.md): covers in their shapes (a square
 // sleeve, a round portrait, a bound book with its spine and page edges), pill buttons, tracklist
 // rows, cover tiles and section headings. Everything takes the active document's `ui` look, so
@@ -122,7 +123,7 @@ export function RoundButton({ icon, label, onPress, size = 44, active = false, t
   const { state, handlers } = useInteraction();
   const lit = state.hover || state.focus;
   return (
-    <Pressable {...handlers} onPress={onPress} testID={testID} nativeID={nativeID} accessibilityRole="button" accessibilityLabel={label}
+    <Pressable {...handlers} ref={focusTarget(nativeID)} onPress={onPress} testID={testID} nativeID={nativeID} accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ selected: active }}
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center',
         backgroundColor: lit ? ui.controlHover : ui.control, transform: [{ scale: state.pressed ? 0.94 : 1 }] },

@@ -12,8 +12,9 @@ const args = process.argv.slice(2);
 const opt = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
 const out = path.resolve(opt('--out') ?? path.join(root, 'dist'));
 const only = opt('--scenes')?.split(',');
+const production = args.includes('--production');
 
-const fw = path.resolve(opt('--framework') ?? path.join(root, 'framework'));
+const fw = path.resolve(opt('--framework') ?? path.join(root, production ? 'scenes' : 'framework'));
 const parts = fs.readdirSync(fw).filter(f => /^[1-9]\d_.*\.js$/.test(f) && f !== '95_ui.js' && f !== '11_synth.js').sort()
   .filter(f => {
     if (!only || !/^[3-6]\d_/.test(f)) return true;
@@ -33,6 +34,7 @@ const bundle = [
   read(path.join(root, 'runtime/host-prelude.js')).replace(/^'use strict';/, ''),
   read(path.join(root, 'runtime/analyse-split.js')).replace(/^if \(typeof module.*$/m, ''),
   ...frameworkParts,
+  production ? 'warm = true; time = 1; // Start with the selected scene visible, including a reduced-motion still.' : '',
   contour ? mapAtlasSource(mapAtlasVariant(contour)) : '',
   read(path.join(root, 'runtime/host-epilogue.js')),
 ].join('\n');
@@ -63,6 +65,7 @@ const host: any = {
 };
 const run = new Function('__host', bundle + '\n;return __viz;');
 const viz = run(host);
+fs.writeFileSync(path.join(out, 'scenes.json'), JSON.stringify(viz.scenes.map(({ id, name }: { id: string; name: string }) => ({ id, name })), null, 2) + '\n');
 for (let i = 0; i < 200; i++) viz.frame(clock = i * 16.7);          // warms every scene in the bundle
 for (let s = 0; s < viz.scenes.length; s++) { viz.setScene(s); for (let i = 0; i < 90; i++) viz.frame(clock = 3400 + s * 1600 + i * 16.7); }
 const broken = viz.stats().broken;
