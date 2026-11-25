@@ -113,8 +113,8 @@ slot. `0` means no connection-slot wait. An absent header means the wait is
 unknown; clients must preserve that conservative unknown state rather than treat
 absence as zero.
 
-Subtitle `Track.delivery` optionally describes an external `webvtt` or
-`webvtt-window` URL, an `embedded` source track, or `burn-in` delivery. Omission
+Subtitle `Track.delivery` optionally describes an external `webvtt`,
+`webvtt-window` or `ass` URL, an `embedded` source track, or `burn-in` delivery. Omission
 makes no delivery claim. `Track.streamIndex` remains the full source stream index;
 embedded/burn-in PGS retains codec `pgs`, while converted external text may report
 `webvtt`. The existing `Track.url` remains available for external VTT. Windowed VTT
@@ -122,6 +122,13 @@ uses `from_ms` in absolute title milliseconds; cue timestamps also remain absolu
 title time, including after seeking. These resources use the same broker grants
 and policy checks as other media. This field does not change quality codec
 readiness, audio selection or client capability declarations.
+
+External `ass` is an ASS or SSA sidecar delivered as the authored file, so its
+styles, positions, fonts and effects survive (the client draws it with libass or
+its own SSA renderer). Offer it only when the track's codec is `ass` or `ssa` and
+the client's `subtitleFormats` names that codec; otherwise deliver the same
+track as `webvtt`. The track keeps codec `ass`/`ssa` and carries no `Track.url`
+(which stays WebVTT-only for older readers).
 
 ### Theme music
 
@@ -420,6 +427,24 @@ an offer's track once per session: a post while it prepares joins that work, and
 it is ready answers the plan with the existing track selected.
 An offer the session was not shown is 404 `offer_not_found` (search again); an ended
 session is 409 `session_ended`.
+
+### Skip markers (intro and credits)
+
+`PlaybackPlan.markers?: {kind: 'intro' | 'credits', startSeconds, endSeconds,
+final?}[]` names the stretches of the title a viewer may skip: the opening titles
+and the credits. Times are plan-timeline seconds (a multi-part title's own
+timeline), sorted by start; `endSeconds` is after `startSeconds`. A title may have
+several credits ranges (a scene between them); `final` marks only the last one,
+the tail credits that run to the end of the title. The field is never an empty
+array: omission makes no claim (unknown, live, extras and audio-only plans omit
+it). It is carried by the playback answer, by a version switch's plan, and by
+snapshots and full plan events like the rest of the plan.
+
+While the position is inside a range the client offers Skip intro or Skip credits,
+which seeks to the range's end. On the `final` credits of an episode that has a next
+episode it offers Next episode instead, which starts that episode. The next episode
+is the client's own reading of the series (the episode's season, then the next
+season), not a server field; nothing starts it automatically.
 
 ### Scrub thumbnails (trickplay)
 

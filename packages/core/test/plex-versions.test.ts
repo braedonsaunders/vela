@@ -199,3 +199,46 @@ describe('Plex versions', () => {
     expect([plan.versions, plan.selectedVersionId]).toEqual([undefined, undefined]);
   });
 });
+
+describe('Plex versions with markers, thumbnails and sidecars', () => {
+  // Each file has its own ASS sidecar and its own thumbnail index; the markers are the title's.
+  const sidecar = (id: number) => ({ id, index: 3, streamType: 3, codec: 'ass', key: `/library/streams/${id}`, languageCode: 'jpn' });
+  const withSidecar = (media: typeof remux, id: number) => ({ ...media, Part: [{ ...media.Part[0]!, Stream: [...media.Part[0]!.Stream, sidecar(id)] }] });
+  const titled = { ...movie, ratingKey: '9', Marker: [{ type: 'intro', startTimeOffset: 5000, endTimeOffset: 20000 }], Media: [withSidecar(remux, 5113), withSidecar(optimized, 5213)] };
+  const assClient = { ...(client as object), subtitleFormats: ['webvtt', 'ass'] } as never;
+  /** A one-frame BIF whose image is `width` wide, served by range. */
+  const bif = (width: number) => {
+    const image = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x5a, width >> 8, width & 255, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9]);
+    const out = new Uint8Array(64 + 16 + image.length), view = new DataView(out.buffer);
+    out.set([0x89, 0x42, 0x49, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]);
+    view.setUint32(12, 1, true); view.setUint32(16, 1000, true);
+    view.setUint32(64, 0, true); view.setUint32(68, 80, true); view.setUint32(72, 0xffffffff, true); view.setUint32(76, 80 + image.length, true);
+    out.set(image, 80);
+    return out;
+  };
+  const ranged = (bytes: Uint8Array) => (r: Seen) => {
+    const m = /bytes=(\d+)-(\d+)/.exec(r.headers.get('range') ?? '')!;
+    return new Response(new Blob([bytes.slice(Number(m[1]), Number(m[2]) + 1)]), { status: 206 });
+  };
+
+  test('a switch keeps the title\'s markers, reads the new file\'s thumbnails, and delivers its ASS sidecar as ASS', async () => {
+    const seen = routeFetch({
+      'GET /library/metadata/9': { MediaContainer: { Metadata: [titled] } },
+      'GET /video/:/transcode/universal/decision': { MediaContainer: {} },
+      'GET /video/:/transcode/universal/stop': {},
+      'GET /library/parts/511/indexes/sd': ranged(bif(320)),
+      'GET /library/parts/521/indexes/sd': ranged(bif(240)),
+    });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '9', client: assClient, idempotencyKey: 's' } as never);
+    expect(plan.markers).toEqual([{ kind: 'intro', startSeconds: 5, endSeconds: 20 }]);
+    expect(plan.subtitleTracks[0]?.delivery).toEqual({ kind: 'external', format: 'ass', url: `${ORIGIN}/library/streams/5113.ass?encoding=utf-8` });
+    expect((await adapter.trickplayOffer(plan.sessionId))?.width).toBe(320);
+    const next = await adapter.switchVersion(plan.sessionId, { kind: 'version', versionId: '52', idempotencyKey: 'v', sourceGeneration: 0, seekGeneration: 0 });
+    expect(next.markers).toEqual(plan.markers);
+    expect(next.subtitleTracks[0]?.delivery).toEqual({ kind: 'external', format: 'ass', url: `${ORIGIN}/library/streams/5213.ass?encoding=utf-8` });
+    // The other file's index, measured afresh.
+    expect((await adapter.trickplayOffer(plan.sessionId))?.width).toBe(240);
+    expect(seen.some(r => r.url.pathname === '/library/parts/521/indexes/sd')).toBe(true);
+  });
+});

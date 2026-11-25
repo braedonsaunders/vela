@@ -3,7 +3,8 @@
 export { PlayerChrome } from './chrome';
 export { WatchSurface } from './surface';
 export { usePlaybackSession, type PlaybackSession } from './session';
-export type { CommandInput, PlayerChromeState, StartFailure } from './context';
+export { episodeLabel, useNextEpisode } from './next-episode';
+export type { CommandInput, NextEpisode, PlayerChromeState, StartFailure } from './context';
 // While a player menu is open, Back (Menu on tvOS) closes it: the watch route keeps the native
 // stack from popping meanwhile.
 export { backFromNavigation, useBackHeld } from '../../menu-key';

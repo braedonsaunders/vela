@@ -1,7 +1,7 @@
 // The playing session's scrub thumbnails: its sprite sheets read on demand, as the viewer scrubs,
 // and held as image URIs for the renderer. A few sheets are kept (each covers a hundred
-// thumbnails); a new session or source generation drops them all, and a sheet the server has
-// republished (a new offer revision) or that has aged is read again with its ETag while the copy
+// thumbnails; of single-image sheets, about as many thumbnails); a new session or source
+// generation drops them all, and a sheet the server has republished (a new offer revision) or that has aged is read again with its ETag while the copy
 // held stays on screen. A sheet the server lacks or a failed read is asked again only later.
 import type * as V from '../wire';
 import type { TrickplaySheet } from '../adapter/capabilities';
@@ -9,6 +9,8 @@ import { sheetURI, trickplayCell, type TrickplayFrame } from '../protocol/trickp
 
 /** Sheets held at once (a sheet is about 3200 by 1800 pixels). */
 const KEEP = 4;
+/** Thumbnails held at once when sheets are small (a server that sends one image per sheet). */
+const KEEP_THUMBNAILS = 120;
 /** A missing sheet or failed read is asked again after this long. */
 const RETRY_MS = 15_000;
 /** A held sheet is revalidated when used after this long: frames can arrive under one revision. */
@@ -30,6 +32,7 @@ interface Sheet {
 
 export class TrickplayCache {
   private owner = '';
+  private keep = KEEP;
   private sheets = new Map<number, Sheet>();
   private abort = new AbortController();
   private listeners = new Set<() => void>();
@@ -48,7 +51,10 @@ export class TrickplayCache {
    */
   frame(sessionId: string, sourceGeneration: number, offer: V.TrickplayMetadata, seconds: number, read: SheetRead): TrickplayFrame | null {
     const owner = `${sessionId}\n${sourceGeneration}\n${offer.width}x${offer.height}/${offer.cols}x${offer.rows}/${offer.intervalMs}`;
-    if (owner !== this.owner) this.reset(owner);
+    if (owner !== this.owner) {
+      this.reset(owner);
+      this.keep = Math.max(KEEP, Math.floor(KEEP_THUMBNAILS / Math.max(1, offer.cols * offer.rows)));
+    }
     const cell = trickplayCell(offer, seconds);
     if (!cell) return null;
     const now = this.now();
@@ -105,8 +111,8 @@ export class TrickplayCache {
 
   /** Keep the most recently used sheets. */
   private trim(): void {
-    if (this.sheets.size <= KEEP) return;
+    if (this.sheets.size <= this.keep) return;
     const oldest = [...this.sheets.entries()].filter(([, sheet]) => !sheet.loading).sort((a, b) => a[1].usedAt - b[1].usedAt);
-    for (const [index] of oldest.slice(0, this.sheets.size - KEEP)) this.sheets.delete(index);
+    for (const [index] of oldest.slice(0, this.sheets.size - this.keep)) this.sheets.delete(index);
   }
 }

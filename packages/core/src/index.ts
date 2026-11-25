@@ -26,6 +26,8 @@ export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } 
 export { namesTitle, normalizeQuery, readsAsDescription, searchList, wantsDescription, type SearchList } from './store/search-list';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
 export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protocol/trickplay';
+export { skipAction, type SkipAction } from './protocol/markers';
+export type { EpisodeRef } from './adapter/series';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
