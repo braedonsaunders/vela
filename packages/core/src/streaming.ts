@@ -53,12 +53,16 @@ export function cappedClient(client: ClientCapabilities, limit: StreamingLimit |
 /**
  * Whether a file fits the client's streaming cap. A declared maxBitrate is the viewer's cap (no
  * player declares one), and the box declared with it is part of the cap; a device's decoder size
- * alone does not refuse an original here. `bitrate` is in bits per second; unknown fits.
+ * alone does not refuse an original here. `bitrate` is in bits per second; unknown fits. The box is a
+ * resolution class: widescreen pictures are judged by height.
  */
 export function withinStreamingCap(file: { bitrate?: number; width?: number; height?: number }, client: Pick<ClientCapabilities, 'maxBitrate' | 'maxWidth' | 'maxHeight'>): boolean {
   if (!client.maxBitrate) return true;
   if (file.bitrate && file.bitrate > client.maxBitrate) return false;
   if (client.maxHeight && file.height && file.height > client.maxHeight) return false;
-  if (client.maxWidth && file.width && file.width > client.maxWidth) return false;
+  // A picture wider than the box is held to its height, as servers size it (720p scope is 1728×720,
+  // not 1280×533); only a picture no wider than the box is also held to the box's width.
+  const wider = !!(client.maxWidth && client.maxHeight && file.width && file.height && file.width / file.height > client.maxWidth / client.maxHeight);
+  if (!wider && client.maxWidth && file.width && file.width > client.maxWidth) return false;
   return true;
 }

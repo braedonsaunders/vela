@@ -47,6 +47,17 @@ describe('streaming settings', () => {
     expect(withinStreamingCap({}, cap)).toBe(true);
   });
 
+  test('a widescreen picture is judged by its height: Plex sizes a 720p scope film 1728×720', () => {
+    const cap = { maxBitrate: 4_000_000, maxWidth: 1280, maxHeight: 720 };
+    expect(withinStreamingCap({ width: 1728, height: 720, bitrate: 3_500_000 }, cap)).toBe(true);
+    expect(withinStreamingCap({ width: 1920, height: 800, bitrate: 3_500_000 }, cap)).toBe(false);
+    expect(withinStreamingCap({ width: 1280, height: 720, bitrate: 3_500_000 }, cap)).toBe(true);
+    // A picture no wider than the box is still held to its width: 4:3 at 1080 is over a 720p cap.
+    expect(withinStreamingCap({ width: 960, height: 720 }, cap)).toBe(true);
+    expect(withinStreamingCap({ width: 1440, height: 1080 }, cap)).toBe(false);
+    expect(withinStreamingCap({ width: 1728, height: 720, bitrate: 5_000_000 }, cap)).toBe(false);
+  });
+
   test('the network in use decides which cap the next start declares', () => {
     const limits: unknown[] = [];
     const box = new StateBox({ playerSettings: initialPlayerSettings } as VelaState);
