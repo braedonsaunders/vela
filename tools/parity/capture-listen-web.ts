@@ -7,7 +7,8 @@
 // mock app (EXPO_PUBLIC_VELA_MOCK=1) so the parity hook sets the listening state. Run a fresh mock
 // per capture set: playing a queue records progress on the server, so two sets compare only when
 // they ran the same views in the same order from the same start. The browser clock is pinned to
-// LISTEN_NOW. Each view is captured twice, 700 ms apart, for the moving-region mask.
+// LISTEN_NOW. The document variant needs a Metro built with EXPO_PUBLIC_VELA_LISTEN=documents (the
+// legacy one without it). Each view is captured twice, 700 ms apart, for the moving-region mask.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';

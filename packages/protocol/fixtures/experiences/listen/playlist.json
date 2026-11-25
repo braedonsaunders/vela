@@ -3,23 +3,23 @@
   "screen": "listen", "page": "playlist", "version": "1",
   "title": "{src.playlist.playlist.name}", "presentation": "section",
   "params": { "id": { "type": "string" }, "library": { "type": "string" } },
-  "sources": { "playlist": { "from": "vela.playlist", "id": "{param.id}" }, "viewer": { "from": "viewer" } },
+  "sources": { "playlist": { "from": "vela.playlist", "id": "{param.id}" }, "me": { "from": "vela.viewer" } },
   "tree": {
     "type": "sections", "style": { "padding-bottom": "32px" },
     "children": [
       { "type": "box", "children": [
         { "type": "wash", "props": { "accent": "{src.playlist.items.0.accent}", "image": "{src.playlist.items.0.poster}" } },
-        { "type": "box", "style": { "padding-horizontal": "28px" }, "small": { "padding-horizontal": "16px" }, "children": [
+        { "type": "box", "style": { "padding-left": "28px", "padding-right": "28px" }, "small": { "padding-left": "16px", "padding-right": "16px" }, "children": [
           { "type": "collectionHeader", "props": { "eyebrow": "{s:music.playlist}", "title": "{src.playlist.playlist.name}" },
             "partTemplates": {
               "collectionHeader.cover": { "type": "cover", "props": { "kind": "mosaic", "tracks": "{src.playlist.items}", "item": "{src.playlist.playlist}" } },
               "collectionHeader.byline": { "type": "box", "style": { "gap": "10px" }, "children": [
-                { "type": "text", "when": [{ "test": "src.playlist.summary" }], "text": "{src.playlist.summary}", "style": { "font-size": "15px", "color": "$ui.inkSecondary", "max-lines": "2" } },
+                { "type": "text", "when": [{ "test": "src.playlist.summary" }], "text": "{src.playlist.summary}", "style": { "font-size": "15px", "color": "$ui.inkSecondary", "line-clamp": "2" } },
                 { "type": "box", "style": { "flex-direction": "row", "align-items": "center", "gap": "8px" }, "children": [
                   { "type": "box", "style": { "width": "24px", "height": "24px", "border-radius": "12px", "background-color": "$ui.accent", "align-items": "center", "justify-content": "center" }, "children": [
-                    { "type": "text", "text": "{env.viewer|initials}", "style": { "font-size": "12px", "font-weight": "800", "color": "$ui.onAccent" } } ] },
-                  { "type": "text", "text": "{env.viewer}", "style": { "font-size": "15px", "font-weight": "700", "color": "$ui.ink" } },
-                  { "type": "text", "text": "· {src.playlist.items|tracksTotal}", "style": { "font-size": "15px", "color": "$ui.inkSecondary" } }
+                    { "type": "text", "text": "{src.me.name|initials}", "style": { "font-size": "12px", "font-weight": "800", "color": "$ui.onAccent" } } ] },
+                  { "type": "text", "text": "{src.me.name}", "style": { "font-size": "15px", "font-weight": "700", "color": "$ui.ink" } },
+                  { "type": "text", "text": "· {src.playlist.items|totalLabel}", "style": { "font-size": "15px", "color": "$ui.inkSecondary" } }
                 ] }
               ] }
             } },

@@ -2,7 +2,7 @@
 // given the app's router, player and the card menu, worded for what the library holds (music,
 // audiobooks, podcasts). The page in view lives in the address (`?m=`).
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { audioCardsOf, type Card } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
@@ -16,6 +16,11 @@ import { forgetSearch, readRecent, rememberSearch } from '@vela/skin/src/blocks/
 import { preferences } from '../data/preferences';
 import { useVela } from '../vela';
 import { useMusicKeys } from './keys';
+import { ExperienceView, hasExperience } from '@vela/skin/src/screen/experience';
+import { addressOfPlace, placeOfAddress, type ExperiencePlace } from '@vela/skin/src/screen/experience-route';
+import type { ScreenStateHandle } from '@vela/skin/src/screen/host';
+import { useAppScreenActions } from '../screen-actions';
+import { config } from '../data/config';
 import { MusicKeysSheet } from './keys-sheet';
 
 /** Titles the audio app opens in place: its roles (and the card kinds media titles carry). */
@@ -115,7 +120,13 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     dropSearch: (query?: string) => keepSearches(list => (query === undefined ? [] : forgetSearch(list, query))),
   }), [libraryId, listening, place, go, store, setLike, likes, likedIds, searches, keepSearches]);
 
-  const keyActions = useMemo(() => ({ toggleQueue: () => setQueueOpen(open => !open), help: () => setKeysOpen(true) }), []);
+  // Until the hard cut the listen documents draw only in builds that ask for them (parity captures).
+  const documents = config.listen === 'documents' && hasExperience('listen');
+  const shell = useRef<ScreenStateHandle | null>(null);
+  const keyActions = useMemo(() => ({
+    toggleQueue: () => (documents ? shell.current?.toggle('queue', { clear: ['sound'] }) : setQueueOpen(open => !open)),
+    help: () => setKeysOpen(true),
+  }), [documents]);
   useMusicKeys(store, app, keyActions);
 
   // In the music app a title opens in place, not as the title page above it.
@@ -129,6 +140,14 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
       base.dispatch(action as never, arg);
     },
   } : null, [base, go]);
+  const goPlace = useCallback((next: ExperiencePlace, options?: { replace?: boolean }) => {
+    const { m, rest } = addressOfPlace(next);
+    const to = { pathname: '/library/[id]' as const, params: { id: libraryId, m, ...rest } };
+    if (options?.replace) router.replace(to); else router.push(to);
+  }, [libraryId]);
+  const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/')), []);
+  const setParams = useCallback((next: Record<string, string>) => router.setParams(next), []);
+  const screenActions = useAppScreenActions({ host, back, setParams });
   const closeDrawer = useCallback(() => setDrawer(null), []);
   const closeKeys = useCallback(() => setKeysOpen(false), []);
   if (!host) return null;
@@ -138,7 +157,9 @@ export function MusicSection({ libraryId, at }: { libraryId: string; at: string 
     <TrackedHost host={host}>
       <MusicContext.Provider value={app}>
         <View pointerEvents="box-none" style={{ flex: 1 }}>
-          <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />
+          {documents
+            ? <ExperienceView experience="listen" libraryId={libraryId} place={placeOfAddress(at)} go={goPlace} host={host} active actions={screenActions} shell={shell} />
+            : <MusicShell queueOpen={queueOpen} onQueue={setQueueOpen} />}
           <PlaylistDrawer request={drawer} close={closeDrawer} />
           <MusicKeysSheet open={keysOpen} close={closeKeys} listening={listening} />
           {menu ? (
