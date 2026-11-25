@@ -15,13 +15,18 @@ Installed as the global `__host` before `viz-native.js` (from `tools/build.ts`) 
 | `flush(words)` | execute words `[1, words)` of `commandBuffer` now, synchronously. Called at the end of each frame and before every `link` |
 | `link(id, vs, fs)` | `{ ok, log, uniforms: [{ name, type, size }] }` for the program's active uniforms (GL type enums, array size, names without `[0]`). The index in `uniforms` is the location id used by `UNIFORM`. GLES: compile now. Metal: look the pair up in the build-time table |
 | `bandDb: Float32Array(256)`, `wave: Float32Array(512)` | the reduced spectrum and aligned waveform for this frame (see DSP below), written before `__viz.frame` |
+| `fastFreq: Float32Array(512)` | Unsmoothed Blackman spectrum of the last 1024 heard samples, in dB. `analyseHits(dt)` reads it once per rendered frame to update the three onset bands. |
+| `artworkTint?`, `accent?` | Initial artwork and skin RGB colors. The renderer applies a small tint to the scene's authored palette. |
 | `now()` | milliseconds, monotonic |
 | `width`, `height`, `dpr`, `sampleRate`, `scene?` | initial values; later changes go through `__viz.resize(w, h, dpr)` and `__viz.audioFormat(rate)` |
 | `log(s)` | |
 | `canvasImage(c)` | Reserved for opaque host images. The map label atlas uses the standard byte upload. |
 
 The script defines `__viz`: `frame(nowMs)`, `setScene(i | id)`, `setPalette(i)`, `resize(w, h, dpr)`,
-`audioFormat(rate)`, `scenes`, `stats()`.
+`audioFormat(rate)`, `tint(artworkTint, accent)`, `scenes`, `stats()`.
+An optional second argument to `setScene` selects an immediate transition for a still.
+The production bundle initializes only the selected scene. Each host releases
+its previous scene resources on a change.
 
 ## Buffer layout
 
