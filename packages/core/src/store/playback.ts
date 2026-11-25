@@ -634,7 +634,11 @@ export class Playback {
       const connection = await this.session.ready();
       const plan = await this.send(connection, sessionId, command, origin);
       answered(plan);
-      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
+        // An accepted seek is the viewer's place, even before the engine presents it.
+        if (command.kind === 'seek') this.cursor = plan.positionSeconds ?? command.positionSeconds;
+        this.patch({ plan: connection.plan(plan) });
+      }
     } catch (error) {
       answered(null);
       const words = commandFailure(command, error, origin);
@@ -760,8 +764,10 @@ export class Playback {
   snapshot(snapshot: LiveObservation & StallSample & { audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
-    if (snapshot.position !== undefined) this.cursor = snapshot.position;
-    if (snapshot.state === 'playing' || snapshot.state === 'paused') {
+    const presenting = snapshot.state === 'playing' || snapshot.state === 'paused';
+    // An engine (re)loading a source reports a reset clock of zero before it presents: not the viewer's place.
+    if (snapshot.position !== undefined && (snapshot.position > 0 || presenting)) this.cursor = snapshot.position;
+    if (presenting) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
     }
