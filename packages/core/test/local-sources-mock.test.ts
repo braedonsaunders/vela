@@ -8,7 +8,7 @@ import type { VelaPlatform } from '../src/store/platform';
 import type { ScreenDocument } from '../src/wire';
 import { launchMock, type RunningMock } from '../../../mock-server/test/launch';
 import { mediaChildren, mediaGroups } from '../../protocol/fixtures/media';
-import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue } from '../../protocol/vela-sources';
+import type { NowPlayingRecord, QueueRecord, TitleValue, ListValue, RowsValue, SearchValue } from '../../protocol/vela-sources';
 import { MemoryStore } from './helpers';
 
 let mock: RunningMock;
@@ -29,9 +29,14 @@ const albumPage: ScreenDocument = {
     liked: { from: 'vela.favorites', role: 'track' },
     queue: { from: 'vela.queue' },
     now: { from: 'vela.nowPlaying' },
-    nothing: { from: 'vela.search', q: 'x', lazy: true },
+    nothing: { from: 'vela.notPublished', lazy: true },
   },
   tree: { type: 'box' } as never,
+};
+
+const searchPage: ScreenDocument = {
+  ...albumPage, page: 'search', params: { q: { type: 'string' } },
+  sources: { found: { from: 'vela.search', q: '{param.q}', library: 'music' } },
 };
 
 beforeAll(async () => {
@@ -46,7 +51,7 @@ beforeAll(async () => {
   store = createVela({ etherOrigin: mock.url, secrets: new MemoryStore(), device, appVersion: '0.2.9', rendererVersion: 19,
     media: { containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: { native: false, fmp4: false, mpegTs: false }, mse: false } as never,
     page: { origin: mock.url, webCode: code }, artWidth: 640 } as VelaPlatform & { rendererVersion: number });
-  store.screens.provideDocuments(href => (href === 'vela:listen/album' ? albumPage : undefined));
+  store.screens.provideDocuments(href => (href === 'vela:listen/album' ? albumPage : href === 'vela:listen/search' ? searchPage : undefined));
   await store.auth.start();
 });
 afterAll(async () => { await store?.audio.stop().catch(() => undefined); await mock?.stop(); });
@@ -126,4 +131,21 @@ test('a built-in page this app does not have fails as not found, without asking 
   expect(page.failure).toBe('not_found');
   handle.release();
   expect(etherScreenCalls).toEqual([]);
+});
+
+test('search reads the audio app\'s search, with the exact name as the top match', async () => {
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'search' }, href: 'vela:listen/search', params: { q: album.name } });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+  const found = page().sources.found as SearchValue;
+  expect(found.q).toBe(album.name);
+  expect(found.items.length).toBeGreaterThan(0);
+  expect(found.top).toEqual({ $record: `item:${album.id}` });
+  expect(found.groups.album).toContainEqual({ $record: `item:${album.id}` });
+  // A param change re-reads it; an empty query answers nothing without searching.
+  handle.release();
+  const empty = store.screens.open({ target: { kind: 'screen', id: 'vela.listen', page: 'search' }, href: 'vela:listen/search', params: { q: '' } }, handle.key);
+  await until(() => Object.keys(store.getState().screens.pages[empty.key]?.pending ?? { x: 1 }).length === 0);
+  expect(store.getState().screens.pages[empty.key]!.sources.found).toMatchObject({ items: [], top: null });
+  empty.release();
 });

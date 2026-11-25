@@ -17,13 +17,15 @@ import { childrenKey } from '../plugin-levels';
 import { sameJSON, type RecordStore } from './records';
 import { boolArg, cardList, lyricsLine, cardOf, cardValue, intArg, intsArg, itemId, itemKey, missingArgs, nowPlayingRecord, pairsArg, queueRecord, ref, rowsValue, sourceArgs, textArg, type LocalAnswer, type LocalRecords, type LocalScope } from './local-records';
 import type { Vela } from '../store';
+import { normalizeQuery, searchList } from '../store/search-list';
+import type { RecordRef } from '../../../protocol/screen';
 import type { Loadable } from '../store/state';
 import { MAX_CHILDREN } from '../store/media';
 import { libraryKey, type LibraryQuery } from '../store/catalogue';
 import { recapKey, type PlaylistImportModel } from '../store/music';
 
 /** The stores local answers wrap (the Vela store; a subset so tests can stand in). */
-export type LocalStores = Pick<Vela, 'getState' | 'subscribe' | 'catalogue' | 'media' | 'music' | 'playlists' | 'home' | 'audio'>;
+export type LocalStores = Pick<Vela, 'getState' | 'subscribe' | 'catalogue' | 'media' | 'music' | 'playlists' | 'home' | 'audio' | 'musicSearch'>;
 
 /** What the server says it offers, read after the session is ready. */
 export interface LocalServer {
@@ -468,11 +470,52 @@ export class LocalSources {
         const list = cardList(loaded.value.cards, false);
         return { value: { recordingId: loaded.value.recordingId, items: list.value.items, preferred: loaded.value.preferredTitleId ? ref(itemKey(loaded.value.preferredTitleId)) : null }, records: list.records };
       }
-      case 'vela.search':
+      case 'vela.search': {
+        const q = (args.q ?? '').trim();
+        if (!q) return { value: { q: '', items: [], more: false, byDescription: false, top: null, groups: {} } };
+        const search = stores.musicSearch;
+        search.scopeTo(args.library || undefined);
+        if ((args.kind || undefined) !== stores.getState().musicSearch.kind) search.setOptions({ kind: (args.kind || undefined) as V.SearchOptions['kind'] });
+        const before = stores.getState().musicSearch;
+        if (before.query !== q || fresh || before.fast.status === 'failed') search.setQuery(q, true);
+        let state = await this.searched(q);
+        for (let pages = 1; state && searchList(state).more && pages < 1 + extraPages; pages++) {
+          search.more();
+          state = await this.searched(q, true);
+        }
+        if (!state) return { error: 'unavailable' };
+        const list = searchList(state);
+        if (list.state === 'failed') return { error: 'unavailable' };
+        // A server that cannot keep search to a library answers its whole catalogue: keep the library's class.
+        const cls = args.library && state.library !== args.library ? stores.getState().libraries.value?.find(item => item.id === args.library)?.media : undefined;
+        const items = cls ? list.items.filter(card => (card.kind === 'playlist' ? cls === 'music' : card.media?.class === cls)) : list.items;
+        const { value, records } = cardList(items, !!list.more);
+        const groups: Record<string, RecordRef[]> = {};
+        items.forEach((card, at) => { const role = card.kind === 'playlist' ? 'playlist' : card.media?.role || card.kind; (groups[role] ??= []).push(value.items[at]!); });
+        const top = topMatch(items, q);
+        return { value: { ...value, q, byDescription: list.byDescription, top: top ? ref(itemKey(top.id)) : null, groups }, records };
+      }
       case 'vela.guide':
         // Not answered locally yet: documents hide these parts.
         return unsupported();
     }
+  }
+
+  /** The audio app's search once the list for `q` has answered (or another query took over: undefined). */
+  private searched(q: string, paging = false): Promise<import('../store/search').SearchState | undefined> {
+    const read = () => this.stores.getState().musicSearch;
+    return new Promise(resolve => {
+      const check = () => {
+        const state = read();
+        if (state.query.trim() !== q) { resolve(undefined); return true; }
+        const list = searchList(state);
+        if (list.state === 'loading' || (paging && (state.fast.loadingMore || state.descriptive.loadingMore))) return false;
+        resolve(state);
+        return true;
+      };
+      if (check()) return;
+      const off = this.stores.subscribe(() => { if (check()) off(); });
+    });
   }
 
   // Actions
@@ -646,6 +689,17 @@ export class LocalSources {
     if (this.importTimer) clearTimeout(this.importTimer);
     this.importTimer = undefined;
   }
+}
+
+/** Containers before leaves when two share the query's name exactly (the album over the song). */
+const TOP_ORDER = ['artist', 'album', 'playlist', 'audiobook', 'book', 'series', 'show', 'track', 'part', 'episode'];
+
+/** The best match: a title named exactly what was typed (containers first), else the server's first. */
+export function topMatch(items: readonly Card[], query: string): Card | undefined {
+  const q = normalizeQuery(query);
+  const rank = (card: Card) => { const at = TOP_ORDER.indexOf(card.kind === 'playlist' ? 'playlist' : card.media?.role ?? ''); return at < 0 ? TOP_ORDER.length : at; };
+  const exact = items.filter(card => q && normalizeQuery(card.name) === q).sort((a, b) => rank(a) - rank(b));
+  return exact[0] ?? items[0];
 }
 
 /** The names of the page's sources reading any of `froms`. */
