@@ -4,8 +4,8 @@
 // it is then kept to the library's own class here. Recent searches are this library's, local.
 // Pure: the page (search.tsx) draws what this returns.
 import { normalizeQuery, type Card, type LibraryModel } from '@vela/core';
-import type { Listening } from '../../blocks/listen/listening';
-import type { MusicPlace } from '../../blocks/listen/place';
+import type { Listening } from './listening';
+import type { MusicPlace } from './place';
 
 /** A person a book credits whose name the query matches, with how many of the books found credit them. */
 export interface ResultPerson { name: string; personId: string; role: 'author' | 'narrator'; count: number }

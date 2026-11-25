@@ -171,6 +171,102 @@ export const RICH_BLOCKS = {
     templates: [],
     tv: 'Not offered on TV.',
   },
+  // ——— Page-level blocks: the pieces of today's music pages a page document arranges ———
+  wash: {
+    doc: 'The wash behind a page\'s top: the artwork\'s colour (and the artwork, blurred, on the web) fading into the page.',
+    props: {
+      accent: { type: 'template', doc: 'The colour; the skin\'s accent when empty.' },
+      image: { type: 'template', doc: 'The artwork drawn blurred under it (web).' },
+      height: { type: 'number', default: '420', doc: 'Its height, px.' },
+    },
+    parts: [], templates: [], tv: 'No focus; no motion.',
+  },
+  collectionHeader: {
+    doc: 'A collection page\'s header: the cover, the eyebrow, the display title sized by its length, and a byline under it; stacked and centred on a phone.',
+    props: {
+      eyebrow: { type: 'template', doc: 'The line above the title (Album, Playlist).' },
+      title: { type: 'template', required: true, doc: 'The title.' },
+    },
+    parts: [], templates: ['collectionHeader.cover', 'collectionHeader.byline'],
+    templateScope: { 'collectionHeader.cover': [], 'collectionHeader.byline': [] },
+    tv: 'No focus of its own; links in the byline template are focusable.',
+  },
+  cover: {
+    doc: 'A cover: a title\'s artwork (square, round for artists, book), Liked Songs\' heart, a playlist\'s mosaic, or Rewind\'s, import\'s or duplicates\' covers.',
+    props: {
+      kind: { type: 'enum', values: ['square', 'round', 'book', 'liked', 'mosaic', 'rewind', 'import', 'duplicates'], default: 'square', doc: 'What it draws.' },
+      item: { type: 'value', doc: 'The title (an item: record or a vela.title value).' },
+      tracks: { type: 'value', doc: 'mosaic: the tracks whose album covers fill it.' },
+      poster: { type: 'template', doc: 'mosaic: the playlist\'s own artwork, drawn instead when present.' },
+      size: { type: 'number', default: '0', doc: 'px; 0 is the page cover\'s size for the window.' },
+      lift: { type: 'number', default: '2', doc: 'Its shadow.' },
+    },
+    parts: [], templates: [], tv: 'No focus.',
+  },
+  actionBar: {
+    doc: 'A page\'s action bar: play and pause (lit while playing from this source), shuffle, the heart, Follow, the title\'s menu, a playlist\'s Edit details.',
+    props: {
+      buttons: { type: 'template', required: true, doc: 'A comma list of play, shuffle, heart, follow, more, edit, in order.' },
+      item: { type: 'value', doc: 'The title the heart, Follow and the menu act on.' },
+      tracks: { type: 'value', doc: 'What play and shuffle play.' },
+      sourceId: { type: 'template', doc: 'Where they play from; the item when empty.' },
+      sourceName: { type: 'template', doc: 'Its name.' },
+      sourceKind: { type: 'enum', values: ['title', 'playlist', 'favorites'], default: 'title', doc: 'Its kind.' },
+      playlist: { type: 'template', doc: 'edit: the playlist id.' },
+      summary: { type: 'template', doc: 'edit: the playlist\'s description.' },
+    },
+    parts: [], templates: [], tv: 'One focus row; play takes focus first when the page opens.',
+  },
+  byline: {
+    doc: 'A title\'s byline: the artist (opening their page) and facts after it.',
+    props: {
+      item: { type: 'value', required: true, doc: 'The title.' },
+      facts: { type: 'value', doc: 'Facts after the artist: a list, or text with | between them.' },
+    },
+    parts: [], templates: [], tv: 'The artist link is focusable.',
+  },
+  musicShelf: {
+    doc: 'A shelf of music tiles (cover, title, a line under it) with previous and next arrows on pointers.',
+    props: {
+      title: { type: 'template', doc: 'Its heading.' },
+      detail: { type: 'template', doc: 'A line beside the heading.' },
+      items: { type: 'value', required: true, doc: 'The titles: a list source or a list of item: records.' },
+      tileSize: { type: 'number', default: '176', doc: 'px (smaller on a phone).' },
+      subtitle: { type: 'enum', values: ['none', 'year', 'byline', 'release', 'playlist'], default: 'none', doc: 'The line under each tile.' },
+      dedupeAlbums: flag('Show each song\'s album once.', 'false'),
+    },
+    parts: [], templates: [], tv: 'One focus row that remembers its position.',
+  },
+  quickTiles: { doc: 'Music Home\'s quick tiles: what was played from most recently (Liked Songs and Rewind among it), then the playlists.', props: {}, parts: [], templates: [], tv: 'A focus grid.' },
+  homeShelves: { doc: 'Music Home\'s shelves: Recently played, Jump back in, and the library\'s rows (rows laid out as tracks draw as track lists).', props: {}, parts: [], templates: [], tv: 'One focus row per shelf.' },
+  genres: { doc: 'The library\'s genres as coloured tiles.', props: {}, parts: [], templates: [], tv: 'No focus (not pressable today).' },
+  artistHero: {
+    doc: 'An artist page\'s image band: the eyebrow, the name sized by its length, the releases and genres.',
+    props: { item: { type: 'value', required: true, doc: 'The artist.' } },
+    parts: [], templates: [], tv: 'No focus.',
+  },
+  artistLiked: {
+    doc: '"You\'ve liked N songs" by the artist, opening Liked Songs; nothing when none.',
+    props: { item: { type: 'value', required: true, doc: 'The artist.' } },
+    parts: [], templates: [], tv: 'One focus target.',
+  },
+  discography: {
+    doc: 'An artist\'s discography: the heading with Albums / Singles and EPs chips, a shelf with Show all, the grid it opens, and a loading line while pages arrive.',
+    props: { item: { type: 'value', required: true, doc: 'The artist.' } },
+    parts: [], templates: [], tv: 'The chips are a focus row; the grid moves by D-pad.',
+  },
+  listenSearch: { doc: 'The audio app\'s search page, whole (field, recent searches, results by kind).', props: {}, parts: [], templates: [], tv: 'The TV keyboard and results.' },
+  spokenHome: { doc: 'Home for the library (music Home, or spoken word\'s Home for audiobooks and podcasts), whole.', props: {}, parts: [], templates: [], tv: 'As the page.' },
+  spokenTitle: {
+    doc: 'A title page in the audio app (an album or artist for music; a book, show or collection for spoken word), whole.',
+    props: { id: { type: 'template', required: true, doc: 'The title id.' } },
+    parts: [], templates: [], tv: 'As the page.',
+  },
+  albumsGrid: {
+    doc: 'The albums grid (a Show all of albums), paged as the viewer nears its end.',
+    props: { query: { type: 'template', doc: 'The albums query (the place\'s).' } },
+    parts: [], templates: [], tv: 'A focus grid.',
+  },
 } as const satisfies Record<string, RichBlockSpec>;
 
 export type RichBlockName = keyof typeof RICH_BLOCKS;

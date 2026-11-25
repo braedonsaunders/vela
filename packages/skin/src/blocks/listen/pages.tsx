@@ -9,17 +9,18 @@ import { useVela, useVelaState } from '@vela/core/react';
 import { currentInQueue } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { useHost } from '../../host';
-import { NO_RING, Glyph, useInteraction } from '../common/controls';
-import { alpha, Cover, useMediaLook, type MediaLook } from '../media/parts';
-import { placeOf, useMusic } from '../../blocks/listen/app';
-import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from '../../blocks/listen/data';
+import { NO_RING, Glyph, useInteraction } from '../../widgets/common/controls';
+import { alpha, Cover, useMediaLook, type MediaLook } from '../../widgets/media/parts';
+import { placeOf, useMusic } from './app';
+import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
 type FacetValue = { id: string; label: string; count: number };
-import { Chip, LikedCover, playlistCard, Byline, FocusGroup, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from '../../blocks/listen/parts';
-import { listeningWords } from '../../blocks/listen/listening';
-import { TrackList } from '../../blocks/listen/track-table';
-import { compactMusic, musicTV } from '../../blocks/listen/layout';
-import { RewindCover } from './rewind';
+import { Chip, LikedCover, playlistCard, Byline, FocusGroup, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
+import { listeningWords } from './listening';
+import { TrackList } from './track-table';
+import { compactMusic, musicTV } from './layout';
+import { RewindCover } from '../recap';
 import { musicHomeRows } from './home-rows';
+import { dedupeAlbums } from './props';
 export { compactMusic };
 
 /** A page's side margin: tighter on a phone. */
@@ -84,10 +85,10 @@ export function greeting(): string {
   return msg(hour < 5 ? 'music.greeting.night' : hour < 12 ? 'music.greeting.morning' : hour < 18 ? 'music.greeting.afternoon' : 'music.greeting.evening');
 }
 
-export function MusicHome() {
+/** Music Home's reads: the quick tiles, the recent and Jump back in shelves, the row shelves. */
+function useMusicHome() {
   const app = useMusic();
   const store = useVela();
-  const m = useMediaLook();
   const { rows } = useLibraryRows(app.libraryId);
   const { playlists, liked } = usePlaylists();
   const likedTotal = useLiked().trackTotal;
@@ -96,7 +97,6 @@ export function MusicHome() {
   const { ownRecent, ownLiked, jump, shelves } = musicHomeRows(rows, recent.available);
   useVelaState(s => s.home.load);
   const recapAvailable = store.music.recapAvailable;
-  const [quickWidth, setQuickWidth] = useState(0);
   const recentCards = ownRecent ? [] : recent.items.flatMap(item => (item.kind === 'favorites' ? [] : [item.card]));
   const likedRecently = recent.items.some(item => item.kind === 'favorites');
   // Quick tiles: what you played from most recently (Liked Songs and Rewind among it), then your playlists.
@@ -109,12 +109,34 @@ export function MusicHome() {
     ...jump,
   ].filter(item => (item === 'liked' || item === 'rewind' ? true : !seen.has(item.id) && !!seen.add(item.id))).slice(0, 8);
   const firstCard = quick.find((x): x is Card => typeof x === 'object');
-  const accent = firstCard?.accent ?? '';
+  return { quick, recentCards, jump, shelves, likedTotal, accent: firstCard?.accent ?? '' };
+}
+
+export function MusicHome() {
+  const m = useMediaLook();
+  const { accent } = useMusicHome();
   return (
     <View>
       <Wash accent={accent} height={360} />
       <View style={{ paddingHorizontal: m.small ? 16 : 20, paddingTop: m.small ? 16 : 28 }}>
         <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '30px' : '38px', color: '$ui.ink', 'letter-spacing': '-0.01em' }), { marginBottom: m.small ? 14 : 20 }]}>{greeting()}</Text>
+        <QuickTiles />
+      </View>
+      <View style={{ paddingHorizontal: m.small ? 4 : 8 }}>
+        <HomeShelves />
+        <Genres />
+      </View>
+    </View>
+  );
+}
+
+/** Music Home's quick tiles: what you played from most recently (Liked Songs and Rewind among it), then your playlists. */
+export function QuickTiles() {
+  const app = useMusic();
+  const m = useMediaLook();
+  const { quick, likedTotal } = useMusicHome();
+  const [quickWidth, setQuickWidth] = useState(0);
+  return (
         <FocusScope.Provider value="quick"><QuickColumns.Provider value={quickColumns(quickWidth || m.width)}><View onLayout={e => setQuickWidth(e.nativeEvent.layout.width)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: m.small ? 8 : 10, marginBottom: m.small ? 24 : 36 }} testID="music-quick">
           {quick.map(item => item === 'liked'
             ? <QuickTile key="liked" title={msg('music.liked')} subtitle={msg(`media.count.tracks.${likedTotal === 1 ? 'one' : 'other'}`, { count: number(likedTotal) })} cover={<LikedCover size={musicTV() ? 72 : m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'liked' })} />
@@ -122,14 +144,18 @@ export function MusicHome() {
               ? <QuickTile key="rewind" focusKey="rewind" title={msg('music.rewind')} subtitle={msg('music.rewind.eyebrow')} cover={<RewindCover size={musicTV() ? 72 : m.small ? 52 : 64} />} onPress={() => app.go({ kind: 'rewind' })} />
               : <QuickTile key={item.id} card={item} title={item.name} cover={<Cover uri={item.poster} shape="square" size={musicTV() ? 72 : m.small ? 52 : 64} title={item.name} accent={item.accent} lift={0.2} />} onPress={() => app.go(placeOf(item))} />)}
         </View></QuickColumns.Provider></FocusScope.Provider>
-      </View>
-      <View style={{ paddingHorizontal: m.small ? 4 : 8 }}>
+  );
+}
+
+/** Music Home's shelves: Recently played, Jump back in, and the library's rows. */
+export function HomeShelves() {
+  const { recentCards, jump, shelves } = useMusicHome();
+  return (
+      <>
         {recentCards.length ? <Shelf title={msg('music.recentlyPlayed')}>{recentCards.map(card => <MusicTile key={card.id} card={card} size={176} subtitle={card.kind === 'playlist' ? msg('music.playlist') : undefined} />)}</Shelf> : null}
         {jump.length ? <Shelf title={msg('music.jumpBackIn')}>{jump.map(card => <MusicTile key={card.id} card={card} size={176} />)}</Shelf> : null}
         {shelves.map(row => <RowShelf key={row.id} row={row} />)}
-        <Genres />
-      </View>
-    </View>
+      </>
   );
 }
 
@@ -146,10 +172,6 @@ function RowShelf({ row }: { row: Row }) {
   return <Shelf title={row.name}>{items.map(card => <MusicTile key={card.id} card={card} size={176} subtitle={tracks ? card.media?.byline : undefined} />)}</Shelf>;
 }
 
-function dedupeAlbums(items: Card[]): Card[] {
-  const seen = new Set<string>();
-  return items.filter(item => { const album = item.media?.parent?.id ?? item.id; if (seen.has(album)) return false; seen.add(album); return true; });
-}
 
 
 /** How many quick tiles fit a row of the page's measured width. */
@@ -272,42 +294,17 @@ function MoreBy({ artistId, name, exclude }: { artistId: string; name: string; e
 function ArtistView({ card }: { card: Card }) {
   const app = useMusic();
   const m = useMediaLook();
-  const host = useHost();
-  // The whole discography, page after page: the first page draws at once and the rest join it.
-  const children = useChildren(card.id, true);
   const rows = useDetailRows(card.id);
   const top = rows.find(r => r.id.endsWith(':top'))?.items ?? [];
   const related = rows.find(r => r.id.endsWith(':related'));
   const similar = (related?.items ?? []).filter(a => a.media?.role === 'artist').slice(0, 20);
   const [more, setMore] = useState(false);
-  const albums = (children?.value?.items ?? []).filter(i => i.media?.role === 'album');
-  // S0: release type by length until the plugin's releaseType reaches the wire (plan §2.6).
-  const full = albums.filter(a => (a.media?.childCount ?? 0) > 6);
-  const short = albums.filter(a => (a.media?.childCount ?? 0) <= 6);
-  const [section, setSection] = useState<'albums' | 'singles'>('albums');
-  const shown = section === 'albums' && full.length ? full : short.length ? short : full;
-  // "Show all" lays the section out as a grid (on a TV, the D-pad moves through it).
-  const [grid, setGrid] = useState(false);
-  const reading = !!children?.value?.more && children.load === 'loading';
-  // While pages are still landing, the count is the artist's own (the server's), not what has arrived.
-  const releases = reading ? Math.max(albums.length, card.media?.childCounts?.album ?? card.media?.childCount ?? 0) : albums.length;
-  const releaseLine = (a: Card) => [a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ');
-  const liked = useLiked().tracks.filter(t => t.media?.byline === card.name);
   const playing = usePlayingFrom(card.id);
   const source = { id: card.id, name: card.name, kind: 'title' as const };
-  const art = card.backdrop || card.poster;
   const following = app.liked(card.id);
   return (
     <View>
-      <View style={{ height: m.small ? 300 : 360, overflow: 'hidden', justifyContent: 'flex-end' }}>
-        {art ? <Image source={host.image(art)} contentFit="cover" contentPosition="top" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as never} /> : null}
-        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(m.ui.page, 0)} 30%, ${alpha(card.accent || m.ui.page, 0.35)} 70%, ${m.ui.page} 100%)` })]} />
-        <View style={{ paddingHorizontal: pad(m), paddingBottom: 22 }}>
-          <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{msg('media.ui.artist')}</Text>
-          <Text accessibilityRole="header" numberOfLines={1} style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? (card.name.length > 14 ? '40px' : '54px') : card.name.length > 18 ? '64px' : '96px', 'line-height': '1', 'letter-spacing': '-0.03em', color: '$ui.ink' })}>{card.name}</Text>
-          <Text style={[m.text({ 'font-size': '15px', color: '$ui.inkSecondary' }), { marginTop: 10 }]}>{[releases ? msg('music.releasesCount', { count: number(releases) }) : '', card.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</Text>
-        </View>
-      </View>
+      <ArtistHero card={card} />
       <View style={{ paddingHorizontal: pad(m) }}>
         <ActionBar>
           <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(top, 0, source))} testID="music-play" opensPage />
@@ -325,43 +322,11 @@ function ArtistView({ card }: { card: Card }) {
               </Pressable>
             ) : null}
           </View>
-          {liked.length ? (
-            <View style={m.small ? { alignSelf: 'stretch' } : { flex: 1, minWidth: 260, maxWidth: 380 }}>
-              <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginBottom: 14 }]}>{msg('music.likedSongs')}</Text>
-              <Pressable onPress={() => app.go({ kind: 'liked' })} accessibilityRole="link" style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 14 }]}>
-                <View><Cover uri={card.poster} shape="round" size={72} title={card.name} accent={card.accent} />
-                  <View style={{ position: 'absolute', right: -4, bottom: -2, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: m.ui.accent }}><Glyph symbol="heart-fill" size={15} color={m.ui.onAccent} /></View></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={m.text({ 'font-size': '15px', 'font-weight': '700', color: '$ui.ink' })}>{msg('music.youLiked', { count: number(liked.length) })}</Text>
-                  <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('music.byArtist', { name: card.name })}</Text>
-                </View>
-              </Pressable>
-            </View>
-          ) : null}
+          <ArtistLiked card={card} />
         </View>
-        <View style={{ marginTop: 34 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginRight: 12 }]}>{msg('music.discography')}</Text>
-            {full.length ? <Chip label={msg('music.albums')} on={section === 'albums'} onPress={() => setSection('albums')} /> : null}
-            {short.length ? <Chip label={msg('music.singlesEps')} on={section === 'singles' || !full.length} onPress={() => setSection('singles')} /> : null}
-            {grid ? <Chip label={msg('music.showLess')} on={false} onPress={() => setGrid(false)} /> : null}
-          </View>
-        </View>
+        <DiscographyHeading card={card} />
       </View>
-      <View style={{ paddingHorizontal: 16 }} testID="music-discography">
-        {grid ? (
-          <FocusScope.Provider value={`discography:${section}`}>
-            <FocusGroup style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 28 }}>
-              {shown.map((a, index) => <MusicTile key={a.id} card={a} size={168} subtitle={releaseLine(a)} preferred={index === 0} testID={`music-discography-${a.id}`} />)}
-            </FocusGroup>
-          </FocusScope.Provider>
-        ) : (
-          <Shelf title="" onMore={shown.length > 6 ? () => setGrid(true) : undefined} moreTestID="music-discography-all">
-            {shown.map(a => <MusicTile key={a.id} card={a} size={168} subtitle={releaseLine(a)} />)}
-          </Shelf>
-        )}
-        {reading ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginTop: -16, marginBottom: 24 }]} testID="music-discography-loading">{msg('music.loadingMore')}</Text> : null}
-      </View>
+      <DiscographyShelf card={card} />
       {similar.length ? (
         <View style={{ paddingHorizontal: m.small ? 4 : 16 }}>
           <Shelf title={related?.name || msg('music.fansAlsoLike')}>{similar.map(a => <MusicTile key={a.id} card={a} size={168} />)}</Shelf>
@@ -377,7 +342,122 @@ function ArtistView({ card }: { card: Card }) {
   );
 }
 
-function FollowButton({ on, onPress }: { on: boolean; onPress(): void }) {
+
+/** An artist's discography split (albums, singles and EPs), the section chosen and Show all, shared
+ * by the heading's chips and the shelf below it (a page draws them apart). */
+const discographyChoice = new Map<string, { section: 'albums' | 'singles'; grid: boolean; listeners: Set<() => void> }>();
+function useDiscographyChoice(id: string) {
+  const entry = discographyChoice.get(id) ?? { section: 'albums' as const, grid: false, listeners: new Set<() => void>() };
+  if (!discographyChoice.has(id)) discographyChoice.set(id, entry);
+  // A page opened afresh starts on Albums, as a shelf (the choice lives only while the page shows).
+  const fresh = useRef(entry.listeners.size === 0);
+  if (fresh.current) { fresh.current = false; if (entry.listeners.size === 0) { entry.section = 'albums'; entry.grid = false; } }
+  const [, bump] = useState(0);
+  useEffect(() => { const l = () => bump(n => n + 1); entry.listeners.add(l); return () => { entry.listeners.delete(l); }; }, [entry]);
+  const set = (patch: Partial<{ section: 'albums' | 'singles'; grid: boolean }>) => { Object.assign(entry, patch); for (const l of entry.listeners) l(); };
+  return { section: entry.section, grid: entry.grid, setSection: (section: 'albums' | 'singles') => set({ section }), setGrid: (grid: boolean) => set({ grid }) };
+}
+
+function useDiscography(card: Card) {
+  // The whole discography, page after page: the first page draws at once and the rest join it.
+  const children = useChildren(card.id, true);
+  const albums = (children?.value?.items ?? []).filter(i => i.media?.role === 'album');
+  // S0: release type by length until the plugin's releaseType reaches the wire (plan §2.6).
+  const full = albums.filter(a => (a.media?.childCount ?? 0) > 6);
+  const short = albums.filter(a => (a.media?.childCount ?? 0) <= 6);
+  const reading = !!children?.value?.more && children.load === 'loading';
+  // While pages are still landing, the count is the artist's own (the server's), not what has arrived.
+  const releases = reading ? Math.max(albums.length, card.media?.childCounts?.album ?? card.media?.childCount ?? 0) : albums.length;
+  return { full, short, reading, releases };
+}
+
+const releaseLine = (a: Card) => [a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ');
+
+/** The artist's image band: the eyebrow, the name, the releases and genres. */
+export function ArtistHero({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const host = useHost();
+  const { releases } = useDiscography(card);
+  const art = card.backdrop || card.poster;
+  return (
+      <View style={{ height: m.small ? 300 : 360, overflow: 'hidden', justifyContent: 'flex-end' }}>
+        {art ? <Image source={host.image(art)} contentFit="cover" contentPosition="top" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as never} /> : null}
+        <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${alpha(m.ui.page, 0)} 30%, ${alpha(card.accent || m.ui.page, 0.35)} 70%, ${m.ui.page} 100%)` })]} />
+        <View style={{ paddingHorizontal: pad(m), paddingBottom: 22 }}>
+          <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{msg('media.ui.artist')}</Text>
+          <Text accessibilityRole="header" numberOfLines={1} style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? (card.name.length > 14 ? '40px' : '54px') : card.name.length > 18 ? '64px' : '96px', 'line-height': '1', 'letter-spacing': '-0.03em', color: '$ui.ink' })}>{card.name}</Text>
+          <Text style={[m.text({ 'font-size': '15px', color: '$ui.inkSecondary' }), { marginTop: 10 }]}>{[releases ? msg('music.releasesCount', { count: number(releases) }) : '', card.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</Text>
+        </View>
+      </View>
+  );
+}
+
+/** "You've liked N songs" by this artist, opening Liked Songs. */
+export function ArtistLiked({ card }: { card: Card }) {
+  const app = useMusic();
+  const m = useMediaLook();
+  const liked = useLiked().tracks.filter(t => t.media?.byline === card.name);
+  return (
+    <>
+          {liked.length ? (
+            <View style={m.small ? { alignSelf: 'stretch' } : { flex: 1, minWidth: 260, maxWidth: 380 }}>
+              <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginBottom: 14 }]}>{msg('music.likedSongs')}</Text>
+              <Pressable onPress={() => app.go({ kind: 'liked' })} accessibilityRole="link" style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 14 }]}>
+                <View><Cover uri={card.poster} shape="round" size={72} title={card.name} accent={card.accent} />
+                  <View style={{ position: 'absolute', right: -4, bottom: -2, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: m.ui.accent }}><Glyph symbol="heart-fill" size={15} color={m.ui.onAccent} /></View></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={m.text({ 'font-size': '15px', 'font-weight': '700', color: '$ui.ink' })}>{msg('music.youLiked', { count: number(liked.length) })}</Text>
+                  <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('music.byArtist', { name: card.name })}</Text>
+                </View>
+              </Pressable>
+            </View>
+          ) : null}
+    </>
+  );
+}
+
+/** The Discography heading with its Albums / Singles and EPs chips (and Show less in a grid). */
+export function DiscographyHeading({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const { full, short } = useDiscography(card);
+  const { section, grid, setSection, setGrid } = useDiscographyChoice(card.id);
+  return (
+        <View style={{ marginTop: 34 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '26px', color: '$ui.ink' }), { marginRight: 12 }]}>{msg('music.discography')}</Text>
+            {full.length ? <Chip label={msg('music.albums')} on={section === 'albums'} onPress={() => setSection('albums')} /> : null}
+            {short.length ? <Chip label={msg('music.singlesEps')} on={section === 'singles' || !full.length} onPress={() => setSection('singles')} /> : null}
+            {grid ? <Chip label={msg('music.showLess')} on={false} onPress={() => setGrid(false)} /> : null}
+          </View>
+        </View>
+  );
+}
+
+/** The discography's releases: a shelf with Show all, or the grid it opens. */
+export function DiscographyShelf({ card }: { card: Card }) {
+  const m = useMediaLook();
+  const { full, short, reading } = useDiscography(card);
+  const { section, grid, setGrid } = useDiscographyChoice(card.id);
+  const shown = section === 'albums' && full.length ? full : short.length ? short : full;
+  return (
+      <View style={{ paddingHorizontal: 16 }} testID="music-discography">
+        {grid ? (
+          <FocusScope.Provider value={`discography:${section}`}>
+            <FocusGroup style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 28 }}>
+              {shown.map((a, index) => <MusicTile key={a.id} card={a} size={168} subtitle={releaseLine(a)} preferred={index === 0} testID={`music-discography-${a.id}`} />)}
+            </FocusGroup>
+          </FocusScope.Provider>
+        ) : (
+          <Shelf title="" onMore={shown.length > 6 ? () => setGrid(true) : undefined} moreTestID="music-discography-all">
+            {shown.map(a => <MusicTile key={a.id} card={a} size={168} subtitle={releaseLine(a)} />)}
+          </Shelf>
+        )}
+        {reading ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), { paddingHorizontal: 12, marginTop: -16, marginBottom: 24 }]} testID="music-discography-loading">{msg('music.loadingMore')}</Text> : null}
+      </View>
+  );
+}
+
+export function FollowButton({ on, onPress }: { on: boolean; onPress(): void }) {
   const m = useMediaLook();
   const { state, handlers } = useInteraction();
   const lit = state.hover || state.focus;
