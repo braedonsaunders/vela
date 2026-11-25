@@ -224,6 +224,27 @@ describe('media kinds', () => {
   });
 });
 
+test('the playback start faults: preparation_pending once, then the retry plays; a stopped session handed back', async () => {
+  const faults = (body: object) => fetch(`${mock.url}/__admin/faults`, { method: 'POST', body: JSON.stringify(body) });
+  await faults({ audioStartPending: 1 });
+  const request = { titleId: 'track-paper-boats-1-01', client, idempotencyKey: key() };
+  const refused = await post('/playback', request);
+  expect(refused.status).toBe(503);
+  expect(refused.headers.get('Retry-After')).toBe('1');
+  expect((await refused.json() as V.ErrorResponse).error).toMatchObject({ class: 'transient', code: 'preparation_pending', retry: { allowed: true, afterSeconds: 1 } });
+  // The retry, under the same key, is answered with a session.
+  const plan = await (await post('/playback', request)).json() as V.PlaybackPlan;
+  expect(plan.state).toBe('ready');
+  await post(`/sessions/${plan.sessionId}/commands`, { kind: 'stop', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration, idempotencyKey: key() });
+  // Ether rc.15's broker: a new start, under a new key, answered with the session just stopped.
+  await faults({ startStoppedSession: 1 });
+  const replayed = await (await post('/playback', { ...request, idempotencyKey: key() })).json() as V.PlaybackPlan;
+  expect(replayed).toMatchObject({ sessionId: plan.sessionId, state: 'ready' });
+  const fresh = await (await post('/playback', { ...request, idempotencyKey: key() })).json() as V.PlaybackPlan;
+  expect(fresh.sessionId).not.toBe(plan.sessionId);
+  expect(await (await fetch(`${mock.url}/__admin/faults`)).json()).toMatchObject({ audioStartPending: 0, videoStartPending: 0, startStoppedSession: 0 });
+});
+
 test('an older server (VELA_MOCK_OLD=1) has no media libraries or flags', async () => {
   const old = await launchMock({ VELA_MOCK_OLD: '1' });
   try {

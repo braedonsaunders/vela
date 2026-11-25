@@ -105,7 +105,12 @@ interface Intent {
   run: object;
   target: PlaybackTarget;
   key: string;
+  /** Asked again under a new key after the server answered with a session that had already ended. */
+  fresh?: boolean;
 }
+
+/** How many sessions this client stopped are remembered (`stoppedSessions`). */
+const STOPPED_REMEMBERED = 32;
 
 const MAX_PREPARATIONS = 30;
 const POLL_SECONDS = 5;
@@ -123,6 +128,11 @@ export class Playback {
   private established = false;
   /** Backoff for asking the server again while a recovery's start requests fail. */
   private recoveryAttempt = 0;
+  /**
+   * Sessions this client stopped, newest last. A start the server answers with one of them (Ether
+   * replayed a just-stopped session, state still `ready`, to a recovery's fresh key) has no session.
+   */
+  private readonly stoppedSessions: string[] = [];
   /** Progress of the current session (stall.ts): when it is stalled, and how many restarts it has had. */
   private stall: StallWatch | undefined;
   /**
@@ -266,6 +276,7 @@ export class Playback {
       // Navigation or a replacement start can finish before the plan request. Release the
       // session it allocated; dropping the reply alone leaks a server playback slot.
       if ('sessionId' in reply) {
+        this.stopped(reply.sessionId);
         try { await connection.adapter.command(reply.sessionId, { kind: 'stop', sourceGeneration: reply.sourceGeneration, seekGeneration: reply.seekGeneration, idempotencyKey: `cancel-${intent.key}` }); } catch { /* Already gone. */ }
       }
       return;
@@ -281,6 +292,10 @@ export class Playback {
       return;
     }
     let plan = connection.plan(reply as V.PlaybackPlan);
+    if (this.deadSession(plan)) {
+      this.startedDead(intent, plan, attempt, preparation);
+      return;
+    }
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried.
@@ -303,6 +318,7 @@ export class Playback {
         plan = this.withLocalTracks(plan);
       }
       if (this.run !== run) {
+        this.stopped(plan.sessionId);
         void connection.adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
           seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {});
         return;
@@ -352,6 +368,38 @@ export class Playback {
       retryAttempt: seconds > 0 ? attempt + 1 : 0,
     });
     if (seconds > 0) this.timer = setTimeout(() => void this.request(intent, attempt + 1, preparation), seconds * 1000);
+  }
+
+  /** A start answered with a session that has already ended, or that this client stopped. */
+  private deadSession(plan: V.PlaybackPlan): boolean {
+    return plan.state === 'ended' || this.stoppedSessions.includes(plan.sessionId);
+  }
+
+  /** Remember a session this client stops (before the stop is sent: it may land unanswered). */
+  private stopped(sessionId: string): void {
+    if (!sessionId || this.stoppedSessions.includes(sessionId)) return;
+    this.stoppedSessions.push(sessionId);
+    if (this.stoppedSessions.length > STOPPED_REMEMBERED) this.stoppedSessions.shift();
+  }
+
+  /**
+   * The server answered a start with a session that cannot play (`deadSession`): no playable session
+   * was started. It is asked once more under a new key; a second such answer is the start's failure,
+   * a recovery's included (no further restarts), and the viewer is told.
+   */
+  private startedDead(intent: Intent, plan: V.PlaybackPlan, attempt: number, preparation: number): void {
+    console.warn(`Vela playback: the server answered a start with session ${plan.sessionId}, which has already ended${intent.fresh ? '; giving up' : '; asking again'}`);
+    if (!intent.fresh) {
+      void this.request({ ...intent, key: `${intent.key}-fresh`, fresh: true }, attempt, preparation);
+      return;
+    }
+    this.recovering = false;
+    this.established = false;
+    this.abandoned = null;
+    this.stall = undefined;
+    this.watch = undefined;
+    this.patch({ phase: 'failed', plan: null, sessionId: '', error: 'The server answered with a session that had already ended',
+      errorCode: 'session_ended', errorClass: 'transient', retryAfterSeconds: 0, retryAttempt: 0, versions: null, live: null });
   }
 
   /** Follow the session until it ends or playback stops: events when the server streams them, else snapshots. */
@@ -460,6 +508,7 @@ export class Playback {
         return;
       }
       if (old) {
+        this.stopped(old.sessionId);
         try {
           const connection = await this.session.ready();
           if (this.run !== intent.run) return;
@@ -726,6 +775,7 @@ export class Playback {
     });
     if (!('sessionId' in reply)) return null;
     const plan = connection.plan(reply as V.PlaybackPlan);
+    if (this.deadSession(plan)) return null;
     if (epoch !== this.session.epoch) { this.release(plan); return null; }
     return plan;
   }
@@ -742,6 +792,7 @@ export class Playback {
 
   /** Give back a prepared plan that will not play: the server releases its session. */
   release(plan: V.PlaybackPlan): void {
+    this.stopped(plan.sessionId);
     void (async () => {
       const connection = await this.session.ready();
       await connection.adapter.command(plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
@@ -839,6 +890,7 @@ export class Playback {
       const connection = await this.session.ready();
       const endedOnHandover = handedOver && last?.ended && ack?.accepted;
       if (!endedOnHandover) {
+        this.stopped(plan.sessionId);
         await connection.adapter.command(plan.sessionId, {
           kind: 'stop',
           sourceGeneration: plan.sourceGeneration,
