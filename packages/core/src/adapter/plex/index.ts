@@ -1071,7 +1071,12 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     // Without its own post it is answered by the timeline post that carries its progress, or as accepted once
     // pagehide ends the session's work, also while that post is still pending.
     const work = sent.then(async posts => {
-      if (!posts && !signal.aborted) await Promise.race([slot!.by, new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))]);
+      if (!posts && !signal.aborted) {
+        let onAbort = () => {};
+        const aborted = new Promise<void>(resolve => { onAbort = () => resolve(); signal.addEventListener('abort', onAbort, { once: true }); });
+        // Detach on settle: the session's signal lives as long as the session and would otherwise collect one listener per folded report.
+        try { await Promise.race([slot!.by, aborted]); } finally { signal.removeEventListener('abort', onAbort); }
+      }
       return ack;
     }).catch(error => {
       if (signal.aborted) return ack;

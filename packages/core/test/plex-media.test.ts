@@ -1296,6 +1296,41 @@ describe('Plex progress beside commands on a slow server', () => {
     expect(posts()).toEqual(['playing 17']);
   });
 
+  test('a report folded into a command leaves no abort listener behind once it settles', async () => {
+    const add = AbortSignal.prototype.addEventListener, remove = AbortSignal.prototype.removeEventListener;
+    let live = 0;
+    AbortSignal.prototype.addEventListener = function (this: AbortSignal, type: string, ...rest: unknown[]) {
+      if (type === 'abort') live++;
+      return (add as (...a: unknown[]) => void).call(this, type, ...rest);
+    } as typeof add;
+    AbortSignal.prototype.removeEventListener = function (this: AbortSignal, type: string, ...rest: unknown[]) {
+      if (type === 'abort') live--;
+      return (remove as (...a: unknown[]) => void).call(this, type, ...rest);
+    } as typeof remove;
+    try {
+      const { server } = slow();
+      const adapter = plex();
+      const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'l', positionSeconds: 0 } as never);
+      let before = -1;
+      for (let i = 0; i < 4; i++) {
+        const first = adapter.reportObservation(plan.sessionId, at(3 * i + 1, 17 + i));
+        await settle();
+        if (before < 0) before = live;
+        const folded = adapter.reportObservation(plan.sessionId, at(3 * i + 2, 18 + i));
+        const resumed = adapter.command(plan.sessionId, { kind: 'resume', idempotencyKey: `l${i}`, sourceGeneration: 0, seekGeneration: 0 });
+        server.release();
+        expect(await first).toEqual({ accepted: true });
+        expect(await folded).toEqual({ accepted: true });
+        await resumed;
+        await settle();
+      }
+      expect(live).toBeLessThanOrEqual(before);
+    } finally {
+      AbortSignal.prototype.addEventListener = add;
+      AbortSignal.prototype.removeEventListener = remove;
+    }
+  });
+
   test('a report taken over by a pause is accepted when the page is unloaded during the pause\'s post', async () => {
     const { server, posts } = slow();
     const adapter = plex();
