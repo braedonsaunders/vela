@@ -5,6 +5,7 @@ import { ScreenActive, type SkinHost } from '@vela/skin';
 import { HostContext, useHost } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/blocks/media/context';
 import { MediaFrame } from '@vela/skin/src/blocks/media/title';
+import { readTitleBackdrop } from '@vela/skin/src/blocks/read/book-layout';
 import { inlineMediaTitleCloseTargets } from '@vela/skin/src/resolve/media-title';
 import { readTitleOpeningFocus } from '@vela/skin/src/route-focus-policy';
 import { FocusBoundary } from '../focus-boundary';
@@ -59,7 +60,7 @@ function ReadTitlePage({ framed, ...props }: Props & { framed: boolean }) {
   const pageHost = useMemo(() => host.children === undefined ? host : { ...host, children: undefined }, [host]);
   const card = useVelaState(state => state.titles[props.id]?.value?.title[0]);
   return (
-    <MediaFrame framed={framed} accent={card?.accent ?? ''} backdrop={card?.poster ?? ''} wideArt={false}>
+    <MediaFrame framed={framed} accent={card?.accent ?? ''} backdrop={readTitleBackdrop(props.page, Platform.isTV, card?.poster)} wideArt={false}>
       <ReadDocument {...props} host={pageHost} />
     </MediaFrame>
   );
