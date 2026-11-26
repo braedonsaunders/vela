@@ -19,6 +19,9 @@
    "from": "vela.queue"
   }
  },
+ "focus": {
+  "initial": "music-nav-home"
+ },
  "tokens": {
   "hairline": "$ui.glassEdge"
  },
