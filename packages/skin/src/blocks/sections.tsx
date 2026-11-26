@@ -150,8 +150,11 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   const gap = parsePoints(node.gap, px, defaultGap);
   // An embedded page's own padding rows pad its scroll content (so the end space counts in the scroll,
   // as the music pages' contentContainerStyle did).
+  // The style in force: the viewport, TV, fold and platform variants are already in it; the first
+  // state that holds replaces it (a compact shell with a queue pads for its mini player).
+  const inForce = (embedded ? node.states?.find(state => holds(state.when, ctx, host.env))?.layer.style : undefined) ?? node.base.style;
   const own = (row: string) => {
-    const raw = node.base.style?.[row];
+    const raw = inForce?.[row];
     return embedded && raw !== undefined ? parsePoints(fill(raw, ctx, host.env), px, 0) : undefined;
   };
   const padAll = own('padding');

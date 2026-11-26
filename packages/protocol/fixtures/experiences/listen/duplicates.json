@@ -18,6 +18,9 @@
   "duplicates": {
    "from": "vela.duplicates",
    "libraryId": "{param.library}"
+  },
+  "queue": {
+   "from": "vela.queue"
   }
  },
  "tree": {
@@ -116,6 +119,30 @@
      }
     ],
     "testId": "music-duplicates-page"
+   }
+  ],
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "tv": {
+   "padding-bottom": "48px",
+   "padding-right": "32px"
+  },
+  "states": [
+   {
+    "when": [
+     {
+      "test": "env.form",
+      "is": "eq",
+      "value": "small"
+     },
+     {
+      "test": "src.queue.current"
+     }
+    ],
+    "style": {
+     "padding-bottom": "110px"
+    }
    }
   ]
  }

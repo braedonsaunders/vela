@@ -24,6 +24,9 @@
    "view": "albums",
    "q": "{param.query}",
    "limit": "50"
+  },
+  "queue": {
+   "from": "vela.queue"
   }
  },
  "tree": {
@@ -181,6 +184,30 @@
     ]
    }
   ],
-  "testId": "music-main"
+  "testId": "music-main",
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "tv": {
+   "padding-bottom": "48px",
+   "padding-right": "32px"
+  },
+  "states": [
+   {
+    "when": [
+     {
+      "test": "env.form",
+      "is": "eq",
+      "value": "small"
+     },
+     {
+      "test": "src.queue.current"
+     }
+    ],
+    "style": {
+     "padding-bottom": "110px"
+    }
+   }
+  ]
  }
 }

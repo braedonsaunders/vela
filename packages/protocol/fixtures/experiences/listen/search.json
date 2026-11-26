@@ -1,20 +1,92 @@
 {
-  "schema": 1, "kind": "screen", "renderer": 20, "owner": "vela", "experience": "listen",
-  "screen": "listen", "page": "search", "version": "1",
-  "title": "{s:music.search}", "presentation": "section",
-  "params": { "library": { "type": "string" }, "query": { "type": "string" } },
-  "sources": {},
-  "tree": {
-    "type": "sections", "testId": "music-main",
-    "children": [{
-      "type": "box", "testId": "music-search",
-      "style": { "padding-left": "28px", "padding-right": "28px", "padding-top": "24px", "padding-bottom": "24px" },
-      "small": { "padding-left": "16px", "padding-right": "16px", "padding-top": "12px" },
-      "children": [
-        { "type": "searchField" },
-        { "type": "box", "style": { "margin-top": "26px" }, "small": { "margin-top": "18px" },
-          "children": [{ "type": "searchResults" }, { "type": "recentSearches" }] }
-      ]
-    }]
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "search",
+ "version": "1",
+ "title": "{s:music.search}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  },
+  "query": {
+   "type": "string"
   }
+ },
+ "sources": {
+  "queue": {
+   "from": "vela.queue"
+  }
+ },
+ "tree": {
+  "type": "sections",
+  "testId": "music-main",
+  "children": [
+   {
+    "type": "box",
+    "testId": "music-search",
+    "style": {
+     "padding-left": "28px",
+     "padding-right": "28px",
+     "padding-top": "24px",
+     "padding-bottom": "24px"
+    },
+    "small": {
+     "padding-left": "16px",
+     "padding-right": "16px",
+     "padding-top": "12px"
+    },
+    "children": [
+     {
+      "type": "searchField"
+     },
+     {
+      "type": "box",
+      "style": {
+       "margin-top": "26px"
+      },
+      "small": {
+       "margin-top": "18px"
+      },
+      "children": [
+       {
+        "type": "searchResults"
+       },
+       {
+        "type": "recentSearches"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "tv": {
+   "padding-bottom": "48px",
+   "padding-right": "32px"
+  },
+  "states": [
+   {
+    "when": [
+     {
+      "test": "env.form",
+      "is": "eq",
+      "value": "small"
+     },
+     {
+      "test": "src.queue.current"
+     }
+    ],
+    "style": {
+     "padding-bottom": "110px"
+    }
+   }
+  ]
+ }
 }
