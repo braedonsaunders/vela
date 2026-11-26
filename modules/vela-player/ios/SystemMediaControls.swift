@@ -1,8 +1,9 @@
 // The system's media controls for the one player that owns them: MPRemoteCommandCenter (the Siri
-// Remote's and Control Center's play, pause, skip and scrub) and MPNowPlayingInfoCenter (what is playing,
-// where, at what rate). Ambient players and previews never claim them. A command arrives at the owner
-// as one of the contract's commands, so it takes the same path as the chrome's (a skip on a server path
-// is still a session command).
+// Remote's and Control Center's play, pause, skip, scrub and language selection) and
+// MPNowPlayingInfoCenter (what is playing, where, at what rate, and available/current languages).
+// Ambient players and previews never claim them. A command arrives at the owner as one of the
+// contract's commands, so it takes the same path as the chrome's (a skip or track change on a
+// server path is still a session command).
 import Foundation
 import MediaPlayer
 import UIKit
@@ -30,8 +31,13 @@ final class SystemMediaControls {
     /// Makes `owner` the player the system's controls reach, with the commands its style takes. An owner
     /// whose style changed (music, then an audiobook) claims again to swap them.
     func claim(_ owner: SystemMediaOwner) {
+        let changedOwner = ownerID != ObjectIdentifier(owner)
         self.owner = owner
         ownerID = ObjectIdentifier(owner)
+        if changedOwner {
+            published = nil
+            artworkFor = nil
+        }
         let style = owner.systemMediaStyle
         if registeredStyle == style, !registrations.isEmpty {
             return
@@ -58,6 +64,24 @@ final class SystemMediaControls {
             center.skipBackwardCommand.preferredIntervals = [NSNumber(value: skips.back)]
             register(center.skipForwardCommand) { _ in .skip(seconds: skips.forward) }
             register(center.skipBackwardCommand) { _ in .skip(seconds: -skips.back) }
+        }
+        if style == .video {
+            register(center.enableLanguageOptionCommand) { [weak self] event in
+                guard let event = event as? MPChangeLanguageOptionCommandEvent,
+                      let languages = self?.published?.languages
+                else {
+                    return nil
+                }
+                return NowPlayingLanguageOptions.enableCommand(for: event.languageOption, in: languages)
+            }
+            register(center.disableLanguageOptionCommand) { [weak self] event in
+                guard let event = event as? MPChangeLanguageOptionCommandEvent,
+                      let languages = self?.published?.languages
+                else {
+                    return nil
+                }
+                return NowPlayingLanguageOptions.disableCommand(for: event.languageOption, in: languages)
+            }
         }
         if style != .video {
             register(center.nextTrackCommand) { _ in .next }
@@ -108,6 +132,7 @@ final class SystemMediaControls {
         info[MPMediaItemPropertyArtist] = state.subtitle
         info[MPMediaItemPropertyAlbumTitle] = state.album
         info[MPMediaItemPropertyPlaybackDuration] = state.duration
+        NowPlayingLanguageOptions.apply(to: &info, state: state)
         let shownArtwork = MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork]
         if let shownArtwork, artworkFor == state.artworkURL {
             info[MPMediaItemPropertyArtwork] = shownArtwork
@@ -119,13 +144,9 @@ final class SystemMediaControls {
         }
     }
 
-    /// A change of title, rate or duration, or a jump the system's extrapolation would not reach.
-    private static func differs(_ old: NowPlayingState, _ new: NowPlayingState, elapsed: TimeInterval) -> Bool {
-        let expected = old.position + (old.playing && old.clockRunning ? elapsed * old.rate : 0)
-        return old.title != new.title || old.subtitle != new.subtitle || old.album != new.album || old.artworkURL != new.artworkURL
-            || old.duration != new.duration || old.playing != new.playing || old.rate != new.rate || old.audio != new.audio
-            || old.clockRunning != new.clockRunning
-            || abs(new.position - expected) > (new.audio ? 2 : 5)
+    /// A change of title, rate, duration or language choices, or a jump the system's extrapolation would not reach.
+    static func differs(_ old: NowPlayingState, _ new: NowPlayingState, elapsed: TimeInterval) -> Bool {
+        NowPlayingState.differs(old, new, elapsed: elapsed)
     }
 
     private func loadArtwork(_ url: URL) {
@@ -161,15 +182,17 @@ final class SystemMediaControls {
     ) {
         command.isEnabled = true
         let target = command.addTarget { [weak self] event in
-            guard let owner = self?.owner, let action = translate(event) else {
+            guard let owner = self?.owner else {
                 return .noActionableNowPlayingItem
+            }
+            guard let action = translate(event) else {
+                return .commandFailed
             }
             if let claim = self?.playPauseClaim, Self.playPauseButton(action) {
                 claim()
                 return .success
             }
-            owner.systemMediaCommand(action)
-            return .success
+            return owner.systemMediaCommand(action) ? .success : .commandFailed
         }
         registrations.append((command, target))
     }

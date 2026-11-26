@@ -8,12 +8,12 @@ import { pluginLevelsOf, type PluginLevels } from '../plugin-levels';
 import { VelaError } from '../adapter/errors';
 import { hasTitleManagement } from '../adapter/capabilities';
 import { capabilitiesOf } from '../adapter/advertise';
-import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography, hasVersions } from '../adapter/capabilities';
+import { hasLibraryFacets, hasLibraryJumpIndex, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography, hasVersions } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow, libraryLiveCard, withDateDisplay } from '../discovery/models';
 import { detailCard, detailWatched, recorded, type Watched } from '../discovery/progress';
-import type { Card, Choice, CollectionModel, DetailModel, LibraryLiveModel, LibraryModel, Row } from '../models';
+import type { Card, Choice, CollectionModel, DetailModel, LibraryJumpBucket, LibraryLiveModel, LibraryModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
 import { msg } from '../i18n';
 import { Lane } from './lane';
@@ -37,18 +37,27 @@ export interface LibraryQuery {
   year?: number;
   played?: boolean;
   favorite?: boolean;
+  /** Zero-based starting offset for a letter-jumped library window (absent or 0 from the start). */
+  start?: number;
   /** Titles per page, when the view asks other than 100 (the music app's albums asks 50). */
   limit?: number;
+}
+
+function normalizedStart(start: number | undefined): number | undefined {
+  return typeof start === 'number' && Number.isSafeInteger(start) && start > 0 ? start : undefined;
 }
 
 /** The key a library view is kept under in state (`state.library`). */
 export function libraryKey(id: string, query: LibraryQuery): string {
   const { tab, sort, direction, kind, genre, year, played, favorite, collectionId, limit } = query;
+  const start = normalizedStart(query.start);
   const facets = Object.entries(query.facets ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([field, values]) => [field, [...new Set(values)].sort()]);
   const key = [id, tab, sort, direction, kind, genre, year, played, favorite, collectionId, query.query, facets];
-  return JSON.stringify(limit === undefined ? key : [...key, limit]);
+  if (limit !== undefined || start !== undefined) key.push(limit);
+  if (start !== undefined) key.push(start);
+  return JSON.stringify(key);
 }
 
 const PAGE = 100;
@@ -168,10 +177,15 @@ export class Catalogue {
     try { return hasLibraryRecommendations(this.session.selected().adapter); }
     catch { return false; }
   }
+  /** Whether the selected adapter can supply first-character jump buckets for a title-sorted library. */
+  get libraryJumpIndexAvailable(): boolean {
+    try { return hasLibraryJumpIndex(this.session.selected().adapter); }
+    catch { return false; }
+  }
   private readonly libraryReads = new Map<string, { pages: number; promise: Promise<void> }>();
   /** Each library part's last answer in this session (a few dozen at most), so a section drawn
    * again or prefetched shows it at once. Recommendations carry the progress revision they were
-   * read at; collections and genres stand for the session unless the viewer asks again. */
+   * read at; collections, genres and jump indices stand for the session unless the viewer asks again. */
   private readonly partsHeld = new Map<string, { epoch: number; progressRevision: number; value: unknown }>();
   /** Part reads in flight, shared by a prefetch and the page that then opens. A shared read stops
    * retrying only once every reader that joined it has left (`join`). */
@@ -210,6 +224,10 @@ export class Catalogue {
   /** The session's genres for a library. */
   cachedLibraryGenres(id: string): Choice[] | undefined {
     return this.heldPart<Choice[]>(partKey('genres', id))?.value;
+  }
+  /** The session's first-character jump buckets for a library. */
+  cachedLibraryJumpIndex(id: string): LibraryJumpBucket[] | undefined {
+    return this.heldPart<LibraryJumpBucket[]>(partKey('jump', id))?.value;
   }
   private heldPart<T>(key: string): { progressRevision: number; value: T } | undefined {
     const held = this.partsHeld.get(key);
@@ -409,10 +427,20 @@ export class Catalogue {
     });
   }
 
+  /** A library's first-character jump buckets for title-ascending browsing, held for the session. */
+  async libraryJumpIndex(id: string, refresh = false, signal?: AbortSignal): Promise<LibraryJumpBucket[] | undefined> {
+    return this.part('jump', partKey('jump', id), 0, refresh, signal, async (connection, shared) => {
+      const adapter = connection.adapter;
+      return hasLibraryJumpIndex(adapter)
+        ? this.retrying(() => adapter.libraryJumpIndex(id, { sort: 'title', direction: 'asc' }), shared)
+        : undefined;
+    });
+  }
+
   /** One part read, shared while in flight and held once answered. A failure is not held. The
    * read's own signal aborts (no further retry) once every reader's `signal` has; a reader
    * without one keeps it going. */
-  private async part<T>(name: 'rows' | 'collections' | 'genres', key: string, progressRevision: number, refresh: boolean, signal: AbortSignal | undefined,
+  private async part<T>(name: 'rows' | 'collections' | 'genres' | 'jump', key: string, progressRevision: number, refresh: boolean, signal: AbortSignal | undefined,
     work: (connection: Connection, signal: AbortSignal) => Promise<T | undefined>): Promise<T | undefined> {
     const epoch = this.session.epoch;
     const held = this.heldPart<T>(key);
@@ -500,11 +528,13 @@ export class Catalogue {
     const extend = !background && held && held.pages < pages && snapshot?.cursor ? { held, snapshot } : undefined;
     const reading = this.read('library', key, async connection => {
       const api = connection.adapter;
-      const browse: V.LibraryBrowseQuery = { ...query, limit: query.limit ?? PAGE };
+      const { start, ...browseQuery } = query;
+      const startOffset = normalizedStart(start);
+      const browse: V.LibraryBrowseQuery = { ...browseQuery, limit: browseQuery.limit ?? PAGE };
       const load = async (previous: typeof extend, fresh: boolean) => {
         const seen = new Set(previous?.snapshot.seen);
         const entries = new Map<string, V.RowEntry>();
-        let cursor = previous?.snapshot.cursor;
+        let cursor = previous?.snapshot.cursor ?? (startOffset !== undefined ? String(startOffset) : undefined);
         let read = previous?.held.pages ?? 0;
         let result: V.LibraryContents;
         do {
@@ -628,6 +658,7 @@ function libraryModel(
     return libraryCardArtwork(card, library.presentation?.card);
   });
   const media = mediaClass(library.media);
+  const startOffset = normalizedStart(query.start);
   return {
     presentation: library.presentation ?? (media === 'music' || media === 'audiobook' || media === 'podcast' ? { card: 'square' } : undefined),
     media,
@@ -657,6 +688,7 @@ function libraryModel(
     items: cards,
     more: result.continuation === 'more',
     ...(Number.isSafeInteger(result.total) && result.total! >= 0 ? { total: result.total } : {}),
+    ...(startOffset ? { startOffset } : {}),
     pages,
   };
 }
@@ -686,7 +718,7 @@ export interface CollectionPage { items: Card[]; cursor: string }
 const PARTS_HELD = 48;
 /** Collections reads running at once; more wait in the side lane. */
 const SIDE_READS = 2;
-function partKey(part: 'rows' | 'collections' | 'genres', id: string, tab?: string, search?: string): string {
+function partKey(part: 'rows' | 'collections' | 'genres' | 'jump', id: string, tab?: string, search?: string): string {
   if (part === 'collections') return `${part}\u0000${id}\u0000${tab ?? ''}\u0000${search ?? ''}`;
   // Rows: one key per recommended tab that has its own (recommendationTab()); the library's own otherwise.
   return part === 'rows' && tab ? `${part}\u0000${id}\u0000${tab}` : `${part}\u0000${id}`;
