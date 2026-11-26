@@ -1,5 +1,6 @@
 import type { Row } from '../models';
 import { feedRow } from '../discovery/models';
+import type { Connection } from '../adapter/connection';
 import type { VelaState } from './index';
 import type { Session } from './session';
 import { failed, loading, ready, type StateBox } from './state';
@@ -62,13 +63,15 @@ export class Rows {
     const value = previous?.value;
     if (more && (!value || !value.nextCursor || value.continuation === 'exhausted')) return;
     const epoch = this.session.epoch;
+    const signal = this.resets.signal;
     this.box.update('rows', rows => ({ ...rows, [id]: loading(previous) }));
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       const read = async (wire: string, cursor?: string) => {
-        const page = await connection.adapter.row(wire, cursor, 60);
+        const page = await connection!.adapter.row(wire, cursor, 60);
         if (page.id !== wire) throw new Error('Wrong row returned');
-        return feedRow(page, await connection.images(), this.width());
+        return feedRow(page, await connection!.images(), this.width());
       };
       let wire = this.resolved.get(id) ?? id;
       let mapped: Row;
@@ -102,6 +105,8 @@ export class Rows {
       this.cursors.set(id, seen);
       this.box.update('rows', rows => ({ ...rows, [id]: ready(result) }));
     } catch (error) {
+      if (epoch !== this.session.epoch) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error, signal)) return;
       if (epoch === this.session.epoch) this.box.update('rows', rows => ({ ...rows, [id]: failed(error, previous) }));
     }
   }

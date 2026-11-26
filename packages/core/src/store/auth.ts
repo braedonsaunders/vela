@@ -115,6 +115,7 @@ export class Auth {
   private readonly plexHomes = new Map<string, boolean | Promise<boolean>>();
   private starting: Promise<void> | undefined;
   private retrying: Promise<void> | undefined;
+  private resetRefresh: Promise<void> | undefined;
   private linkError = '';
   /** Each server's version as it last stated it, by server id. */
   private readonly versions = new Map<string, string>();
@@ -139,7 +140,11 @@ export class Auth {
       this.cancelReconnect();
       this.cancelPlex();
       // A session the server refused ends here, whichever read found it: the viewer is told why.
-      if (this.box.get().auth.phase !== 'redeeming') void this.refresh(refused ? msg('server.sessionEnded') : '').catch(() => {});
+      if (this.box.get().auth.phase !== 'redeeming') {
+        const pending = this.refresh(refused ? msg('server.sessionEnded') : '').catch(() => {});
+        this.resetRefresh = pending;
+        void pending.finally(() => { if (this.resetRefresh === pending) this.resetRefresh = undefined; });
+      }
     });
   }
 
@@ -189,15 +194,20 @@ export class Auth {
   // A late answer cannot repaint the offline state or a subsequent sign-in.
   private async restoreSession(): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
     this.restoringViewer = undefined;
     if (this.box.get().auth.phase === 'offline') this.patch({ restoring: true, retryAt: 0 });
-    const restoring = this.startSession();
+    const restoring = this.startSession(controller.signal);
     const generation = this.linkGeneration;
     try {
       await Promise.race([
         restoring,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(msg('server.unreachable'))), SESSION_RESTORE_TIMEOUT_MS);
+          timer = setTimeout(() => {
+            const timeout = new Error(msg('server.unreachable'));
+            controller.abort(timeout);
+            reject(timeout);
+          }, SESSION_RESTORE_TIMEOUT_MS);
         }),
       ]);
     } catch (error) {
@@ -222,7 +232,7 @@ export class Auth {
     }
   }
 
-  private async startSession(): Promise<void> {
+  private async startSession(signal?: AbortSignal): Promise<void> {
     if (this.box.get().auth.phase !== 'offline') this.patch({ phase: 'starting', error: '' });
     if (!this.session.hasServer()) return this.noServer();
     const code = !this.session.servers.standalone ? this.platform.page?.webCode : undefined;
@@ -233,21 +243,28 @@ export class Auth {
     }
     const connection = this.session.selected();
     const generation = this.linkGeneration;
+    const epoch = this.session.epoch;
     let knownViewerId = '';
     try {
       if (this.session.demoSignIn(connection)) await this.session.ready();
       const stored = await this.session.tokens(connection);
-      if (generation !== this.linkGeneration) return;
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch) return;
       if (stored) {
         knownViewerId = stored.viewer.id;
         this.restoringViewer = { viewer: stored.viewer.name, viewerId: stored.viewer.id };
         await this.session.validate(connection, stored);
       }
-      if (generation !== this.linkGeneration) return;
-      await this.refresh();
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch) return;
+      await this.refresh('', undefined, signal);
     } catch (error) {
-      if (generation !== this.linkGeneration) return;
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch || signal?.aborted) return;
       const stillSignedIn = !!(await this.session.tokens(connection));
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch || signal?.aborted) return;
+      if (stillSignedIn && await this.session.relocatePlex?.(connection, epoch, error, signal)) {
+        if (this.resetRefresh) await this.resetRefresh;
+        return;
+      }
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch || signal?.aborted) return;
       // A transient failure is not sign-out: the stored session stays and the app says it is offline.
       // A session the server no longer accepts was dropped: the viewer is asked to sign in again
       // rather than shown the server's own wording ("Refresh invalid").
@@ -318,7 +335,7 @@ export class Auth {
   }
 
   /** Re-read the selected server's sign-in options and session into state. */
-  async refresh(error = '', phase?: AuthPhase): Promise<void> {
+  async refresh(error = '', phase?: AuthPhase, signal?: AbortSignal): Promise<void> {
     error ||= this.linkError;
     if (!this.session.hasServer()) return this.noServer();
     const connection = this.session.selected();
@@ -327,12 +344,19 @@ export class Auth {
     const tokens = await this.session.tokens(connection);
     let options = { passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, secureOrigin: '' };
     let reachable = true;
+    let optionsError: unknown;
     try {
       options = await this.options(connection);
-    } catch {
+    } catch (cause) {
       reachable = false;
+      optionsError = cause;
     }
     // An older option/session read must never repaint a viewer after a new handoff.
+    if (epoch !== this.session.epoch || generation !== this.linkGeneration) return;
+    if (!reachable && tokens && !phase && await this.session.relocatePlex?.(connection, epoch, optionsError, signal)) {
+      if (this.resetRefresh) await this.resetRefresh;
+      return;
+    }
     if (epoch !== this.session.epoch || generation !== this.linkGeneration) return;
     let settled: AuthPhase = tokens ? 'signed-in' : 'signed-out';
     if (phase) settled = phase;

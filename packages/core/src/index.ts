@@ -73,6 +73,8 @@ export { AUDIO_RATES, chapterEnd, preloadLead, type AudioEngine, type AudioEngin
 export { AWAKE, holdsNext, sleepDue, sleepFrom, sleepLeftMs, type Sleep } from './sleep';
 export { DEFAULT_STREAMING, STREAMING_LIMITS, STREAMING_QUALITIES, streamingSettings, type StreamingQuality, type StreamingSettings } from './streaming';
 export { storedPlayerSettings, type PictureFit, type PlayerSettingsState, type StoredPlayerSettings } from './store/player-settings';
+export { matchSeriesTracks, matchTrack, MAX_SERIES_TRACKS, parseSeriesTrackKey, pruneSeriesTracks, removeServerSeriesTracks, seriesTrackKey, storedSeriesTracks, trackChoiceOf, trackCodecFamily, type SeriesTrackChoice, type SeriesTrackMap, type SeriesTrackMatch, type SeriesTrackPreference } from './series-tracks';
+export type { SeriesTracksState } from './store/series-tracks';
 export { autoplayNext, current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf } from './audio/cards';
 export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, recapLabels, recapStatCards, type DuplicateGroupModel, type DuplicateGroupsList, type HistoryRecapModel, type LikedList, type Lyrics as MusicLyrics, type PlaylistImportMatchModel, type PlaylistImportModel, type PlaylistImportUnmatchedModel, type RecapChartBucket, type RecapEntryModel, type RecapLabels, type RecentContext, type RecordingReleasesModel } from './store/music';

@@ -6,6 +6,8 @@ import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescripti
 import type { DownloadResolution, DownloadSidecar, LibraryRecommendations, LiveTv, MediaDownloads, PathSwitching, ResolveDownloadOptions, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
+import { fetchTextBounded } from '../../protocol/timeout';
+import { markPlexUnreachable, PLEX_VALIDATE_TIMEOUT_MS } from './relocate';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 import { withinStreamingCap } from '../../streaming';
@@ -166,18 +168,29 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     url.searchParams.set('X-Plex-Token', await this.transientToken());
     return url.href;
   }
-  private async request(path: string, query: Record<string, unknown> = {}, method = 'GET', auth = true, signal?: AbortSignal): Promise<Node> {
+  private async request(path: string, query: Record<string, unknown> = {}, method = 'GET', auth = true, signal?: AbortSignal, timeoutMs?: number): Promise<Node> {
     const u = new URL(path, this.origin);
     if (u.origin !== this.origin || u.username || u.password) fail('Plex request outside selected server');
     for (const [k, v] of Object.entries(query)) if (v !== undefined) u.searchParams.set(k, String(v));
     const headers = auth ? { ...plexHeaders(this.device), 'X-Plex-Token': await this.token() } : plexHeaders(this.device);
     signal?.throwIfAborted();
-    const response = await fetch(u.href, { method, headers, signal, redirect: 'error', credentials: 'omit' });
+    let response: Response;
+    let text = '';
+    try {
+      if (timeoutMs !== undefined || signal !== undefined) {
+        ({ response, text } = await fetchTextBounded(u.href, { method, headers, redirect: 'error', credentials: 'omit' }, timeoutMs, signal));
+      } else {
+        response = await fetch(u.href, { method, headers, redirect: 'error', credentials: 'omit' });
+        if (response.ok && response.status !== 204) text = await response.text();
+      }
+    } catch (error) {
+      if (!signal?.aborted) markPlexUnreachable(error);
+      throw error;
+    }
     if (response.status === 401) this.rotateTransientToken();
     if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : response.status === 404 ? 'not-found' : 'source',
       code: 'plex_http', message: `Plex request failed (${response.status})`, retry: { allowed: false } }, response.status);
     if (response.status === 204) return {};
-    const text = await response.text();
     if (!text.trim()) return {};
     // Timeline/scrobble responses can be an empty XML envelope even with JSON Accept.
     if (text.trim().startsWith('<') && path.startsWith('/:/')) return {};
@@ -188,7 +201,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async validateSession(): Promise<V.Tokens | null> {
     const tokens = await this.config.credentials.get();
     if (!tokens) return null;
-    try { await this.request('/library/sections'); }
+    try { await this.request('/library/sections', {}, 'GET', true, undefined, PLEX_VALIDATE_TIMEOUT_MS); }
     catch (error) {
       if (!(error instanceof VelaError) || error.status !== 401) throw error;
       const latest = await this.config.credentials.get();
@@ -197,24 +210,24 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     }
     return tokens;
   }
-  async describe(): Promise<ServerDescription> {
-    const root = await this.request('/identity', {}, 'GET', false);
+  async describe(signal?: AbortSignal): Promise<ServerDescription> {
+    const root = await this.request('/identity', {}, 'GET', false, signal);
     let live: V.Feature = no('No accessible Plex DVR');
     this.liveConfig = undefined;
     // /identity carries no name (PMS and Ether alike): the server's name is its root container's.
     let name = '';
     if (await this.config.credentials.get()) {
       try {
-        const container = await this.request('/');
+        const container = await this.request('/', {}, 'GET', true, signal);
         name = container.friendlyName || '';
         if (container.allowSync !== undefined) {
           this.allowSync = container.allowSync === true || container.allowSync === 1 || container.allowSync === '1';
         }
       } catch { /* the name the server was added under stands */ }
       try {
-        const dvrs = await this.request('/livetv/dvrs');
+        const dvrs = await this.request('/livetv/dvrs', {}, 'GET', true, signal);
         if (dvrs.Dvr?.length) {
-          const providers = await this.request('/media/providers');
+          const providers = await this.request('/media/providers', {}, 'GET', true, signal);
           const provider = (providers.MediaProvider || []).find((p: Node) => (p.Feature || []).some((f: Node) => f.type === 'grid' && f.key));
           const grid = provider?.Feature.find((f: Node) => f.type === 'grid')?.key;
           if (grid) {
@@ -323,18 +336,18 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const purpose: V.Row['purpose'] = /continue/i.test(key) ? 'continue' : /onDeck|nextUp/i.test(key) ? 'nextUp' : /recentlyAdded/i.test(key) ? 'recentlyAdded' : 'recommendation';
     return { id: key, name: h.title || '', purpose, receiptToken: '', ...page(this.nodes(h).filter(n => SHOWN.includes(n.type)).map(n => this.entry(n)), Number(h.offset || 0), pageable ? h.totalSize ?? (h.more ? Number(h.offset || 0) + this.nodes(h).length + 1 : h.size) : this.nodes(h).length) };
   }
-  async home(): Promise<Home> {
+  async home(_fresh?: boolean, signal?: AbortSignal): Promise<Home> {
     this.rotateTransientToken();
     const tokens = await this.config.credentials.get(); if (!tokens) fail('Sign in required', 'auth');
-    const [capabilities, rows] = await Promise.all([this.describe(), this.rows({})]);
+    const [capabilities, rows] = await Promise.all([this.describe(signal), this.rows({}, false, signal)]);
     // The artwork stays the server's own path: the connection's image service sizes it through
     // /photo/:/transcode with the transient token, and refuses a URL that is already a transcode.
     const featured = homeHeroes(rows.items, 'plex', url => url);
     return { viewer: tokens.viewer, capabilities, defaultSkinId: 'cinematic', ...featured };
   }
-  async rows(q: V.RowsQuery): Promise<V.Page<V.Row>> {
+  async rows(q: V.RowsQuery, _fresh?: boolean, signal?: AbortSignal): Promise<V.Page<V.Row>> {
     const path = q.placement === 'detail' && q.titleId ? `/library/metadata/${enc(q.titleId)}/related` : '/hubs';
-    const c = await this.request(path, { count: q.limit || 20 });
+    const c = await this.request(path, { count: q.limit || 20 }, 'GET', true, signal);
     // PMS lists every hub type, including ones with nothing in them; an empty, finished hub is not a row.
     const hubs = (c.Hub || []).map((h: Node) => this.hub(h)).filter((row: V.Row) => row.items.length > 0 || row.continuation === 'more');
     // Home: the account's plex.tv watchlist, as far as this server holds it, after Continue Watching.
