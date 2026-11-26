@@ -403,8 +403,8 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
           <View style={[{ alignItems: 'center', maxWidth: '100%' },
             Platform.isTV ? { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2, borderWidth: 2, borderColor: source.state.focus ? m.ui.ink : 'transparent' } : undefined,
             web && source.state.focus ? { borderRadius: 8, outlineColor: m.ui.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 3 } as ViewStyle : undefined]}>
-            <Text numberOfLines={1} style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{msg('media.player.nowPlaying')}</Text>
-            {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: '$ui.ink' })}>{audio.queue.source.name}</Text> : null}
+            <Text numberOfLines={1} style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>{msg('media.player.nowPlaying')}</Text>
+            {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
           </View>
         </Pressable>
         <View style={{ width: headerSide, flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
