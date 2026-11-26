@@ -278,6 +278,7 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
     if (scrollKey && resolved && resolved.tree.kind !== 'sections') console.warn(`${href}: an experience page's root is a sections block (this one is ${resolved.tree.kind}); its column will not scroll as one`);
   }, [scrollKey, resolved, href]);
     const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
+  const firstFocus = resolved?.focusInitial && ctx && Platform.isTV ? fill(resolved.focusInitial, ctx, screenHost.env) : '';
   const runtime = useMemo<ScreenBlockRuntime>(() => createScreenBlockRuntime(
     (node, at) => <SkinNodeFor node={node as RNode} ctx={at} />,
     {
@@ -285,8 +286,10 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
       pageTitle: title,
       presentation: doc?.presentation === 'page' ? 'page' : 'section',
       ...(scrollKey ? { scrollKey } : {}),
+      // Blocks that hold the named element make it the preferred focus from their first frame.
+      ...(firstFocus ? { focusInitial: firstFocus } : {}),
     },
-  ), [pageKey, vela, title, doc?.presentation, scrollKey]);
+  ), [pageKey, vela, title, doc?.presentation, scrollKey, firstFocus]);
 
   // The element the document names first (focus.initial) takes focus once the page draws; without
   // it (a final game has no Watch button) route focus gives the first control or reading stop.

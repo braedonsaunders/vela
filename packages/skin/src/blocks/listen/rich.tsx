@@ -24,7 +24,7 @@ import { EqBlock, SoundBlock } from '../sound';
 import { placeOf, useMusic } from './app';
 import { LyricsPanel } from './lyrics';
 import { QueuePanel } from './queue';
-import { RailChips, RailIcons, Sidebar } from './rail';
+import { RailChips, RailFirstFocus, RailIcons, Sidebar } from './rail';
 import { openNowPlaying } from './hub';
 import { useListenDock } from './dock';
 import { isPageBlock, PageBlock } from './page-blocks';
@@ -100,7 +100,7 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
     case 'queue': drawn = <QueuePanel onClose={closer(props.text('closeFlag'), host.screenPress)} options={{ header: props.bool('header'), limit: props.num('limit', 1, 200) }} />; break;
     case 'lyrics': drawn = <LyricsBlock props={props} ctx={scoped} />; break;
     case 'eq': drawn = <EqRichBlock props={props} press={host.screenPress} />; break;
-    case 'rail': drawn = <RailBlock props={props} ctx={scoped} press={host.screenPress} />; break;
+    case 'rail': drawn = <RailFirstFocus.Provider value={runtime?.focusInitial ?? ''}><RailBlock props={props} ctx={scoped} press={host.screenPress} /></RailFirstFocus.Provider>; break;
     case 'recap': drawn = <RecapRichBlock props={props} ctx={scoped} press={host.screenPress} />; break;
     case 'playlistImport': drawn = <ImportRichBlock props={props} press={host.screenPress} />; break;
     case 'duplicates': drawn = <DuplicatesRichBlock props={props} />; break;

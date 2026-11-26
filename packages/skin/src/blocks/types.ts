@@ -59,6 +59,8 @@ export interface ScreenBlockRuntime {
   resolveItemCard?(itemKey: string, ctx: Ctx): Card | undefined;
   /** Optional screen title for the hidden web `<h1>` inside `sections`, and presentation mode (`section` | `page`). */
   pageTitle?: string;
+  /** The document's focus.initial, filled (a TV's first focus, named by an element id). */
+  focusInitial?: string;
   presentation?: 'section' | 'page';
   /** Renderer 20, a page in an experience's shell: the page's key, under which `sections` keeps and
    * restores its scroll (screen/scroll-memory.ts). */
@@ -80,6 +82,7 @@ export function createScreenBlockRuntime(
     requestNeeds?(sources: readonly string[]): void;
     resolveItemCard?(itemKey: string, ctx: Ctx): Card | undefined;
     pageTitle?: string;
+    focusInitial?: string;
     presentation?: 'section' | 'page';
     scrollKey?: string;
   } = {},

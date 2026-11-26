@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode,
 import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import type { CardMenuAnchor, CardMenuOpenMode } from '../../widgets/card-context-menu';
 import type { Focusable } from '../../escape';
-import { placeParam } from './place';
+import { placeParam, type MusicPlace } from './place';
 import { useFocusedTVKeys } from '../../tv-keys';
 import { musicTV } from './layout';
 import { msg, type Card } from '@vela/core';
@@ -109,6 +109,11 @@ export function Surface({ onPress, onMenu, onDoubleClick, label, testID, style, 
       <View pointerEvents="box-none" style={contentStyle}>{children(lit)}</View>
     </View>
   );
+}
+
+/** Whether the viewer has a spot to come back to on this page (a TV restores it). */
+export function hasRememberedSpot(place: MusicPlace): boolean {
+  return remembered.has(placeParam(place));
 }
 
 /** A TV focus guide that remembers its last focused child (a shelf, a tracklist, the rail);
