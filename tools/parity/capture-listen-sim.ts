@@ -73,7 +73,19 @@ function run(command: string[]): Buffer {
 const simctl = (...args: string[]) => run(['xcrun', 'simctl', ...args]);
 const adb = (...args: string[]) => run([process.env.ADB ?? 'adb', '-s', udid, ...args]);
 const axe = (...args: string[]) => run(['axe', ...args, '--udid', udid]);
-const tapReader = () => axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
+async function tapReader() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
+      return;
+    } catch (error) {
+      // AXe can refuse input while Duo is changing its active window. A refused
+      // tap sends no input, so retry without toggling the controls twice.
+      if (attempt === 2 || !String(error).includes('No input was sent')) throw error;
+      await Bun.sleep(500);
+    }
+  }
+}
 const readerHasControl = (id: string) => new RegExp(`"AXUniqueId"\\s*:\\s*"${id}"`).test(axe('describe-ui', '--minimal-keys').toString());
 
 interface Device { relaunch(): void; shoot(file: string): void; keys?(codes: number[]): Promise<void> }
@@ -213,7 +225,7 @@ async function captureRead(): Promise<void> {
             await settledFrames(take, () => Bun.sleep(700), { reader });
             for (let i = 0; i < 10 && !readerHasControl('reader-hint'); i++) await Bun.sleep(300);
             if (!readerHasControl('reader-hint')) throw new Error('reader controls did not auto-hide');
-            tapReader();
+            await tapReader();
           }
           if (phone && (view.name === 'reader-contents' || view.name === 'reader-appearance')) {
             await settledFrames(take, () => Bun.sleep(700), { reader });
@@ -222,7 +234,7 @@ async function captureRead(): Promise<void> {
               axe('tap', '--id', button);
             } catch (error) {
               if (!String(error).includes('No accessibility element matched')) throw error;
-              tapReader();
+              await tapReader();
               axe('tap', '--id', button);
             }
             await Bun.sleep(2000);

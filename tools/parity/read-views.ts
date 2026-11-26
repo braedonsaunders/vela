@@ -54,6 +54,7 @@ export const READ_VIEWS: ReadView[] = [
 
 export const READ_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [
   { viewports: /^androidtv$/, views: ['standalone'], reason: 'Android TV sometimes paints the Close focus ring after consecutive title deep links. The ring accounts for the entire difference.' },
+  { viewports: /^ios-fold$/, views: ['reader-pdf-chrome'], reason: 'The freshly unfolded Duo briefly draws its status and Wi-Fi symbols over the PDF toolbar on the inner display.' },
 ];
 
 export function readReviewed(view: { name: string; review?: string }, viewport: string): string | undefined {
