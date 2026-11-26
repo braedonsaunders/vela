@@ -468,6 +468,52 @@ test('a seek reply behind the shown plan only on revision still moves the restar
   }, 1800);
 });
 
+test('a pause reply arriving after a resume and a newer plan that only moved the clock does not pause the session again', async () => {
+  await watch(async ({ playback, sessionId, publish, plan, adapter }) => {
+    const send = adapter.command;
+    const release: Record<string, () => void> = {};
+    // The server accepts the pause at revision 3 and the resume at 4; both replies are held.
+    adapter.command = (id, c) => c.kind === 'pause' || c.kind === 'resume'
+      ? new Promise<PlaybackPlan>(resolve => { release[c.kind] = () => resolve({ ...plan()!, sessionId: id, state: c.kind === 'pause' ? 'paused' : 'playing', revision: c.kind === 'pause' ? 3 : 4 } as PlaybackPlan); })
+      : send(id, c);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    // Playing is shown at revision 2 (a subtitle added, so not a clock-only plan).
+    const shownAt2 = { revision: 2, subtitleTracks: [{ id: 'found' }] } as Partial<PlaybackPlan>;
+    await publish(1, 1800, shownAt2);
+    expect(plan()?.revision).toBe(2);
+    const paused = playback.command(sessionId(), { kind: 'pause', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'pause' });
+    const resumed = playback.command(sessionId(), { kind: 'resume', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'resume' });
+    await flush();
+    // The poll hears the session playing at revision 5, its clock alone moved: the plan on screen stays at 2.
+    await publish(1, 1805, { ...shownAt2, revision: 5 });
+    expect(plan()?.revision).toBe(2);
+    release.pause!(); await paused;
+    expect(plan()?.state).toBe('playing');
+    release.resume!(); await resumed;
+    adapter.command = send;
+    expect(plan()?.state).toBe('playing');
+  }, 1800);
+});
+
+test('a pause reply with no newer plan heard pauses the session', async () => {
+  await watch(async ({ playback, sessionId, publish, plan, adapter }) => {
+    const send = adapter.command;
+    let release = () => {};
+    adapter.command = (id, c) => c.kind === 'pause'
+      ? new Promise<PlaybackPlan>(resolve => { release = () => resolve({ ...plan()!, sessionId: id, state: 'paused', revision: 3 } as PlaybackPlan); })
+      : send(id, c);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    await publish(1, 1800, { revision: 2, subtitleTracks: [{ id: 'found' }] } as Partial<PlaybackPlan>);
+    expect(plan()?.revision).toBe(2);
+    const paused = playback.command(sessionId(), { kind: 'pause', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'pause' });
+    await flush();
+    release(); await paused;
+    adapter.command = send;
+    expect(plan()?.state).toBe('paused');
+    expect(plan()?.revision).toBe(3);
+  }, 1800);
+});
+
 test('a version switch ends the old source\'s published seek: its late reply leaves the restart at the new version', async () => {
   await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
     const { held, restore } = holdReplies(adapter);

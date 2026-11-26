@@ -1027,7 +1027,8 @@ export class Playback {
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
         // A late reply behind the plan already shown on its generations (a newer seek's, a version switch's)
         // is not published, though an accepted seek's evidence was offered above. One behind it only on revision
-        // is not published either, but what it confirms (its seek, its tracks) still counts.
+        // is not published either, but what it confirms (its seek, its tracks) still counts. The revision is the
+        // newest heard, a plan held back for moving only the clock included.
         const shown = this.box.get().playback.plan;
         let nextPlan = connection.plan(plan);
         // A track reply on the shown plan's source records its selection even when its seek generation is behind.
@@ -1040,7 +1041,7 @@ export class Playback {
         }
         if (origin === 'viewer' && command.kind === 'goLive') this.resetRestartBudget(sessionId);
         if (shown && olderPlan(plan, shown, false)) return true;
-        const newer = shown && olderPlan(plan, shown) ? shown : undefined;
+        const newer = olderThanShown(plan, this.newestShown()) ? shown : undefined;
         // A reply naming the version a switch still waits for brings it, as a published plan would.
         if (this.tookVersion(nextPlan)) this.taken(nextPlan);
         this.expire(plan.sourceGeneration);
