@@ -13,7 +13,7 @@ import { markPlexUnreachable, PLEX_VALIDATE_TIMEOUT_MS } from './relocate';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 import { withinStreamingCap } from '../../streaming';
-import { copiesVideo, decidedMedia, decidedQuality, deliversProfile, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, mediaId, partAt, partOffsets, playingAudio, plexAudioMime, plexMarkers, plexProjection, plexSidecar, plexStreamProfiles, plexVersion, refusesStream } from './media';
+import { copiesVideo, decidedMedia, decidedQuality, decidedStreams, deliversProfile, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, mediaId, partAt, partOffsets, playingAudio, plexAudioMime, plexMarkers, plexProjection, plexSidecar, plexStreamProfiles, plexVersion, refusesStream } from './media';
 import { bifFrameAt, bifFrames, bifHeader, bifInterval, bifOffer, bifTableRange, BIF_HEADER_BYTES, jpegSize, type BifFrame } from './bif';
 export * from './auth';
 
@@ -812,19 +812,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const part = stacked ? parts[at.index]! : parts[0]!;
     if (stacked && (r.allowTranscode === false || !(r.client.hls || r.client.mse))) fail('This title is in several parts, which play through the server\'s stream', 'playback');
     const streams: Node[] = part.Stream || [];
-    const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => {
-      const external = !!s.key && isTextSidecar(s.codec) ? plexSidecar(new URL(this.mediaURL(s.key)), s.codec, r.client.subtitleFormats ?? []) : undefined;
-      return { id: String(s.id), streamIndex: s.index,
-        kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
-        default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
-        ...(type === 3 ? external
-          ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
-          // A native-HLS-only web page cannot read subtitle packets from the original file. Mark
-          // its embedded tracks server-rendered so a later selection switches to Plex HLS and
-          // requests a burn instead of presenting an unusable local track.
-          : { delivery: s.key || !r.client.originalPlayback ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
-    });
-    const audioTracks = tracks(2), subtitleTracks = tracks(3);
+    const { audioTracks, subtitleTracks } = this.videoTracks(streams, r.client);
     const audio = r.audioTrackId || audioTracks.find(t => t.default)?.id;
     const subtitle = r.subtitleTrackId === undefined ? subtitleTracks.find(t => t.default)?.id || null : r.subtitleTrackId;
     if (audio && !audioTracks.some(t => t.id === audio) || subtitle && !subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex track');
@@ -856,6 +844,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         const stream = await this.serverStream(query, r.client, !!direct, signal);
         if (stream && direct) paths.unshift({ ...hls, readiness: 'ready', ...stream.path });
         else if (stream) paths.push({ ...hls, readiness: 'ready', ...stream.path });
+        if (stream) this.videoTracks(stream.streams, r.client, { audioTracks, subtitleTracks });
         streamed = stream?.session;
       }
     }
@@ -868,9 +857,32 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const hls = paths.find(p => p.id === 'plex-hls');
     // The track admission judged (an inferred default or first one too) is the one the player opens. A stacked
     // title's parts have their own stream ids, so an inferred one stays out of its plan and its part restarts.
-    return { part, partAudio: audio, plan: { paths, selectedPathId: paths[0]!.id, audioTracks, subtitleTracks, selectedAudioTrackId: stacked ? audio : audio ?? playing.id, selectedSubtitleTrackId: subtitle },
+    const selectedAudioTrackId = stacked ? audio : audio ?? playing.id ?? audioTracks.find(t => t.default)?.id ?? audioTracks[0]?.id;
+    return { part, partAudio: audio, plan: { paths, selectedPathId: paths[0]!.id, audioTracks, subtitleTracks, selectedAudioTrackId, selectedSubtitleTrackId: subtitle },
       ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}), ...(deferred ? { deferred } : {}),
       ...(streamed ? { transcodeId: streamed } : {}) };
+  }
+  /** Metadata tracks are added first so their labels and source codecs survive the decision. */
+  private videoTracks(streams: Node[], client: V.ClientCapabilities,
+    plan: Pick<V.PlaybackPlan, 'audioTracks' | 'subtitleTracks'> = { audioTracks: [], subtitleTracks: [] }) {
+    for (const s of streams) {
+      const type = Number(s.streamType);
+      if ((type !== 2 && type !== 3) || s.id == null || s.id === '') continue;
+      const tracks = type === 2 ? plan.audioTracks : plan.subtitleTracks;
+      const id = String(s.id);
+      if (tracks.some(track => track.id === id)) continue;
+      const external = !!s.key && isTextSidecar(s.codec) ? plexSidecar(new URL(this.mediaURL(s.key)), s.codec, client.subtitleFormats ?? []) : undefined;
+      tracks.push({ id, streamIndex: s.index,
+        kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
+        default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
+        ...(type === 3 ? external
+          ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
+          // A native-HLS-only web page cannot read subtitle packets from the original file. Mark
+          // its embedded tracks server-rendered so a later selection switches to Plex HLS and
+          // requests a burn instead of presenting an unusable local track.
+          : { delivery: s.key || !client.originalPlayback ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) });
+    }
+    return plan;
   }
   /**
    * Another of the playing title's files, in the same session from the given position (else the
@@ -937,6 +949,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     // Another part has its own stream ids: the audio known on it is only the one asked for it (the selection read at
     // the start may since have changed).
     if (index !== stack.index) s.partAudio = overrides.audioStreamID;
+    else this.videoTracks(stream.streams, s.request!.client, s.plan);
     stack.index = index;
     s.part = stack.parts[index]!;
     s.transcodeId = stream.session;
@@ -985,7 +998,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
    * not stream it (and, `optional`, when it refuses the request).
    */
   private async serverStream(query: Record<string, string>, client: V.ClientCapabilities, optional = false, signal?: AbortSignal):
-    Promise<{ session: string; query: Record<string, string>; path: { url: string; kind: 'remux' | 'transcode'; quality?: V.QualityTarget } } | null> {
+    Promise<{ session: string; query: Record<string, string>; streams: Node[]; path: { url: string; kind: 'remux' | 'transcode'; quality?: V.QualityTarget } } | null> {
     const profiles = query.segmentContainer === 'mpegts' ? [] : plexStreamProfiles(client);
     const attempts = profiles.length ? profiles : [{}];
     for (const [i, profile] of attempts.entries()) {
@@ -1004,7 +1017,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       }
       if (!refusesStream(decided) && deliversProfile(decided, asked) && fitsStreamingCap(decidedMedia(decided), client)) {
         const quality = decidedQuality(decided);
-        return { session: asked.session!, query: asked, path: { url: u.href, kind: copiesVideo(decided, Number(asked.partIndex) || 0) ? 'remux' : 'transcode', ...(quality ? { quality } : {}) } };
+        const index = Number(asked.partIndex) || 0;
+        return { session: asked.session!, query: asked, streams: decidedStreams(decided, index), path: { url: u.href, kind: copiesVideo(decided, index) ? 'remux' : 'transcode', ...(quality ? { quality } : {}) } };
       }
     }
     return null;
@@ -1142,8 +1156,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const subtitle = r.subtitleTrackId === undefined ? s.plan.selectedSubtitleTrackId : r.subtitleTrackId;
       if (audio !== undefined && !s.plan.audioTracks.some(t => t.id === audio)) fail('Unknown Plex audio track');
       if (subtitle != null && !s.plan.subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex subtitle track');
-      const burn = s.plan.subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind === 'burn-in';
+      const delivery = s.plan.subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind;
       const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
+      const burn = delivery === 'burn-in' || (delivery === 'embedded' && path?.id === 'plex-hls');
       const restart = path?.kind !== 'direct' || burn || !this.audible(s, audio);
       const hls = s.plan.paths.find(p => p.id === 'plex-hls');
       if (restart && (!hls || !hls.url && !s.deferred)) fail('Selected Plex tracks require an unavailable transcode');
@@ -1175,6 +1190,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
               const { quality: _, ...rest } = p;
               return { ...rest, readiness: 'ready' as const, ...stream.path, timelineOriginSeconds: s.plan.positionSeconds };
             });
+            this.videoTracks(stream.streams, s.request!.client, s.plan);
             s.plan.selectedPathId = hls.id;
             s.plan.sourceGeneration++;
             s.transcodeId = stream.session;
@@ -1225,6 +1241,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
           const { quality: _, ...rest } = p;
           return { ...rest, readiness: 'ready' as const, ...stream.path };
         });
+        this.videoTracks(stream.streams, s.request!.client, s.plan);
         s.transcodeId = stream.session;
         delete s.deferred;
       }

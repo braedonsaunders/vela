@@ -204,6 +204,38 @@ describe('Plex transcode decisions', () => {
     expect(decision.headers.get('X-Plex-Token')).toBe('token-1');
   });
 
+  test('the accepted decision fills sparse track menus and the new ASS track can be burned in', async () => {
+    const media = single.Media[0]!;
+    const part = media.Part[0]!;
+    const metadataAudio = { id: 31, index: 1, streamType: 2, codec: 'ac3', displayTitle: 'Japanese (metadata)' };
+    const ass = { id: 33, index: 3, streamType: '3', codec: 'ass', displayTitle: 'English (ASS)' };
+    const decisionPath = '/video/:/transcode/universal/decision';
+    const seen = routeFetch({
+      'GET /library/metadata/3': { MediaContainer: { Metadata: [{ ...single, Media: [{ ...media, Part: [{ ...part, Stream: [metadataAudio, { ...metadataAudio, id: '31' }] }] }] }] } },
+      [`GET ${decisionPath}`]: { MediaContainer: { Metadata: [{ Media: [{ Part: [{ Stream: [
+        { ...metadataAudio, codec: 'aac', displayTitle: 'Japanese (decision)' },
+        { id: '32', index: 2, streamType: '2', codec: 'aac', displayTitle: 'English audio' },
+        ass, { ...ass, id: '33', displayTitle: 'Duplicate' },
+        { streamType: 3, codec: 'ass' },
+      ] }] }] }] } },
+      'PUT /library/parts/3': {}, 'GET /video/:/transcode/universal/stop': {},
+    });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'tracks' } as never);
+    expect(plan.audioTracks.map(t => [t.id, t.name, t.codec])).toEqual([
+      ['31', 'Japanese (metadata)', 'ac3'], ['32', 'English audio', 'aac'],
+    ]);
+    expect(plan.subtitleTracks).toMatchObject([{ id: '33', name: 'English (ASS)', codec: 'ass', delivery: { kind: 'burn-in' } }]);
+    expect(plan.subtitleTracks).toHaveLength(1);
+    expect(plan.selectedSubtitleTrackId).toBeNull();
+
+    const updated = await adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '33', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'burn' });
+    expect(updated.selectedSubtitleTrackId).toBe('33');
+    expect(updated.subtitleTracks).toEqual(plan.subtitleTracks);
+    const requests = seen.filter(r => r.url.pathname === decisionPath);
+    expect(requests.map(r => [r.url.searchParams.get('subtitleStreamID'), r.url.searchParams.get('subtitles')])).toEqual([['0', 'auto'], ['33', 'burn']]);
+  });
+
   test('a refused decision fails the start, unless the original file can play instead', async () => {
     routeFetch({ 'GET /library/metadata/3': { MediaContainer: { Metadata: [single] } }, 'GET /video/:/transcode/universal/decision': new Response('', { status: 400 }) });
     await expect(plex().startPlayback({ titleId: '3', client, idempotencyKey: 'r' } as never)).rejects.toThrow('Plex request failed (400)');
