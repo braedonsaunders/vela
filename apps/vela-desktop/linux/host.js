@@ -63,6 +63,8 @@ async function create({ window, emit }) {
   let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {}, activeEntry = null;
   let rect = { x:0, y:0, width:0, height:0, scaleFactor:1 }, chain = Promise.resolve();
   let renderer = '', facts = null, described = 0, subtitleAppearance = '';
+  let subtitlePosition = 100, captionLift = 0;
+  const updateSubtitlePosition = () => cmd('set_property', 'sub-pos', Math.min(subtitlePosition, 100 - captionLift)).catch(() => {});
   // Live timeshift: when the plan arrived (its edge grows from then), the behind-live verdict held between
   // snapshots, and a local live seek in flight ({ target, at }, on the axis of the reported position).
   let planReceivedAt = 0, liveBehind = false, liveSeek = null;
@@ -208,7 +210,10 @@ async function create({ window, emit }) {
       const appearance = JSON.stringify(props.subtitleAppearance ?? null);
       if (appearance !== subtitleAppearance) {
         subtitleAppearance = appearance;
-        for (const [name, value] of subtitleProperties(props.subtitleAppearance)) await cmd('set_property', name, value).catch(() => {});
+        for (const [name, value] of subtitleProperties(props.subtitleAppearance)) {
+          if (name === 'sub-pos') { subtitlePosition = value; await updateSubtitlePosition(); }
+          else await cmd('set_property', name, value).catch(() => {});
+        }
       }
       if (!acceptPlan(plan, props.plan)) return;
       const next = props.plan, selected = next.paths.find(p => p.id === next.selectedPathId);
@@ -262,6 +267,15 @@ async function create({ window, emit }) {
       }
   };
   return {
+    async setCaptionInsets(_insets, layout) {
+      if (!layout || !Number.isFinite(layout.lift) || !Number.isFinite(layout.margin)) return;
+      captionLift = Math.max(0, Math.min(100, layout.lift));
+      await Promise.all([
+        updateSubtitlePosition(),
+        cmd('set_property', 'sub-margin-x', Math.max(19, Math.min(4096, Math.round(layout.margin)))).catch(() => {}),
+        cmd('set_property', 'sub-align-x', ['left', 'right'].includes(layout.align) ? layout.align : 'center').catch(() => {}),
+      ]);
+    },
     setBounds(value) { rect = value; bounds(); },
     setAccess(grant) {
       const generation = ++accessGeneration; activeEntry=null; source=''; proxy?.close(); proxy=null;

@@ -42,7 +42,10 @@ export function retainedSeekPosition(context: HostContext, session: PlaybackSess
   if (source.original && source.delivery === 'file' && original.retainsSource) return position;
   // A rolling playlist keeps its segments on a seek. A changed archive or a position beyond the
   // loaded playlist must open the latest source instead.
-  const live = session.live && source.delivery === 'hls' && original.live;
+  // Converted VOD can reuse filenames with new bytes after a seek. Only a DVR playlist
+  // advertised by the same live session can retain its reader here.
+  const live = session.live && previous.live && (session.timeshift || session.startOver)
+    && (previous.timeshift || previous.startOver) && source.delivery === 'hls' && original.live;
   if (!live) return null;
   if (session.liveEdge !== undefined && position >= session.liveEdge && live.edgeSeconds > live.startSeconds) {
     return Math.max(live.startSeconds, live.edgeSeconds - context.live.targetSeconds);

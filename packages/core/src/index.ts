@@ -27,12 +27,15 @@ export { namesTitle, normalizeQuery, readsAsDescription, searchList, wantsDescri
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
 export { sendKeepalive, stopSessionsOnPageHide } from './store/unload';
 export { hasUnloadStop, type UnloadRequest, type UnloadStop } from './adapter/capabilities';
+export { hasMediaDownloads, hasOfflineProgress, type DownloadResolution, type DownloadSidecar, type MediaDownloads, type OfflineProgress, type OfflineProgressEntry, type ResolveDownloadOptions } from './adapter/capabilities';
+export { allowsOfflineRoute, checkDownloadSpace, DEFAULT_DOWNLOAD_SETTINGS, downloadedDetailModel, downloadNeedsReplacement, downloadPercent, formatDownloadBytes, FREE_SPACE_RESERVE_BYTES, initialDownloads, isPlayableDownload, localPlaybackPlan, resolveDownloadFileUrl, storedDownloadSettings, totalDownloadedBytes, visibleDownloads, type DownloadErrorCode, type DownloadRecord, type DownloadsPort, type DownloadsSettings, type DownloadsSnapshot, type DownloadsState, type DownloadStatus, type DownloadTransferProgress, type DownloadTransferRequest, type SpaceCheckResult, type VerifiedDownloadCopy } from './store/downloads';
 export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protocol/trickplay';
 export { skipAction, type SkipAction } from './protocol/markers';
 export type { EpisodeRef } from './adapter/series';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
 export { playingRelease, withPlaying } from './store/playing-release';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
+export { isUnreleased, releaseLabel, unreleasedMessage } from './release-date';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
 export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse, HistoryRecapPeriod, PlaylistImportFormat, ImportSource, PlaylistImportUnmatched } from './wire';
 export type { LiveState, LiveTvAccess } from './store/live';
@@ -80,3 +83,5 @@ export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, 
 export { biquad, biquadResponseDb, chainResponseDb, crossfadeGains, eqChain, EQ_Q, type Biquad, type EqChain, type EqFilter, type FilterType } from './audio/eq';
 export { albumInOrder, DEFAULT_SOUND, EQ_BANDS_HZ, EQ_PRESETS, EQ_RANGE_DB, LEVELLING_MODES, levellingGain, loudnessOf, PREAMP_RANGE_DB, presetOf, soundSettings, transitionBetween, TRANSITION_LENGTHS, withBand, withPreset, type LevellingMode, type Levelling, type SoundSettings, type Transition, type TransitionLength } from './audio/sound';
 export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, childSectionsWait, recommendationTabWaits, settledPluginLevels, videoRoleLabel, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';
+
+export { resultKey, searchServers, type SearchSection, type SearchResult } from './store/multi-search';

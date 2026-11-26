@@ -103,6 +103,7 @@ export class SubtitleSession {
   private frame = 0;
   private disposed = false;
   private preferences = readSubtitlePreferences();
+  private appearanceRevision = 0;
   private documents = new Map<string, Uint8Array>();
   /** Described after the session was created (see describe), and whether it has listed its tracks. */
   private added: SubtitleDescription[] = [];
@@ -226,12 +227,16 @@ export class SubtitleSession {
     await this.activate(trackId, position - this.preferences.offsetSeconds);
   }
   setPreferences(value: SubtitlePreferences | string): void {
+    const offset = this.preferences.offsetSeconds;
     this.preferences =
       typeof value === 'string'
         ? updateSubtitlePreference(this.preferences, value)
         : validateSubtitlePreferences(value);
+    // Restyling only repaints the current cue. Reacquiring it would blank the canvas and briefly
+    // report a deselected track, including while a paused viewer is choosing a size or background.
+    this.appearanceRevision++;
     const id = this.pending ?? this.selected;
-    if (id !== null) void this.activate(id);
+    if (id !== null && offset !== this.preferences.offsetSeconds) void this.activate(id);
     this.changed();
   }
   private now() {
@@ -269,9 +274,9 @@ export class SubtitleSession {
         y: 0,
         width: rect.width,
         height: rect.height,
-        bottomInset: 0,
+        pictureHeight: rect.height,
       };
-    if (![v.x, v.y, v.width, v.height, v.bottomInset].every(Number.isFinite) || v.width <= 0 || v.height <= 0)
+    if (![v.x, v.y, v.width, v.height, v.pictureHeight].every(Number.isFinite) || v.width <= 0 || v.height <= 0)
       throw new Error('Subtitle viewport is unavailable');
     return v;
   }
@@ -287,6 +292,7 @@ export class SubtitleSession {
       top: '0',
     });
     let geometry = '';
+    let origin: { x: number; y: number } | undefined;
     let viewport: SubtitleViewport;
     const resize = () => {
       const v = this.viewport(),
@@ -295,35 +301,41 @@ export class SubtitleSession {
       const width = ass ? v.width : rect.width,
         height = ass ? v.height : rect.height,
         scale = Math.min(dpr, 4096 / width, 2160 / height),
-        key = [v.x, v.y, width, height, scale].join(':');
+        key = [width, height, scale].join(':');
+      const previous = viewport;
       viewport = ass
         ? {
             x: 0,
             y: 0,
             width: Math.round(width * scale),
             height: Math.round(height * scale),
-            bottomInset: v.bottomInset * scale,
+            pictureHeight: v.pictureHeight * scale,
           }
         : {
             x: v.x * scale,
             y: v.y * scale,
             width: v.width * scale,
             height: v.height * scale,
-            bottomInset: v.bottomInset * scale,
+            pictureHeight: v.pictureHeight * scale,
           };
+      if (ass && (origin?.x !== v.x || origin?.y !== v.y)) {
+        origin = { x: v.x, y: v.y };
+        canvas.style.left = `${v.x}px`;
+        canvas.style.top = `${v.y}px`;
+      }
       if (key !== geometry) {
         geometry = key;
         canvas.width = Math.max(1, Math.round(width * scale));
         canvas.height = Math.max(1, Math.round(height * scale));
         Object.assign(canvas.style, {
-          left: `${ass ? v.x : 0}px`,
-          top: `${ass ? v.y : 0}px`,
           width: `${width}px`,
           height: `${height}px`,
         });
         return true;
       }
-      return false;
+      return !previous || previous.x !== viewport.x || previous.y !== viewport.y ||
+        previous.width !== viewport.width || previous.height !== viewport.height ||
+        previous.pictureHeight !== viewport.pictureHeight;
     };
     resize();
     return { canvas, resize, viewport: () => viewport };
@@ -496,16 +508,17 @@ export class SubtitleSession {
       const index = new SubtitleCueIndex(cues.sort((a, b) => a.start - b.start || a.end - b.end));
       draw = (stamp) => paintText(context, index.active(stamp), this.preferences, surface.viewport());
     }
-    let last = NaN;
+    let last = NaN, appearance = -1;
     return {
       canvas: surface.canvas,
       end,
       render: (stamp) => {
         const resized = surface.resize();
-        if (stamp !== last || resized) {
+        if (stamp !== last || resized || appearance !== this.appearanceRevision) {
           context.clearRect(0, 0, surface.canvas.width, surface.canvas.height);
           draw(stamp);
           last = stamp;
+          appearance = this.appearanceRevision;
         }
       },
       dispose: () => surface.canvas.remove(),
@@ -525,6 +538,7 @@ export class SubtitleSession {
       complete = false,
       revision = 0,
       lastRevision = -1,
+      appearance = -1,
       last = NaN;
     const cues = new Map<string, SubtitleTextCue>();
     let index = new SubtitleCueIndex([]);
@@ -583,11 +597,12 @@ export class SubtitleSession {
       render: (stamp) => {
         poll(stamp);
         const resized = surface.resize();
-        if (last !== stamp || resized || lastRevision !== revision) {
+        if (last !== stamp || resized || lastRevision !== revision || appearance !== this.appearanceRevision) {
           context.clearRect(0, 0, surface.canvas.width, surface.canvas.height);
           paintText(context, index.active(stamp), this.preferences, surface.viewport());
           last = stamp;
           lastRevision = revision;
+          appearance = this.appearanceRevision;
         }
       },
       dispose: () => {

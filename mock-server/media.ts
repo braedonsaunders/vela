@@ -72,13 +72,18 @@ export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery:
 let segmentCount = 0;
 let rangeFailureUntil = 0;
 let rangeFailureSetting = 0;
-export async function serveMedia(req: Request, resource: string, truncateOriginal = false): Promise<Response> {
+export async function serveMedia(req: Request, resource: string, truncateOriginal = false, etag?: string): Promise<Response> {
   if (faults.rangeFailSeconds !== rangeFailureSetting) {
     rangeFailureSetting = faults.rangeFailSeconds;
     rangeFailureUntil = Date.now() + rangeFailureSetting * 1000;
   }
   if (req.headers.has('range') && rangeFailureSetting > 0 && Date.now() < rangeFailureUntil)
     return new Response('Injected temporary range failure', { status: 503 });
+  if (resource === 'version-subtitles.vtt') {
+    return new Response(req.method === 'HEAD' ? null : 'WEBVTT\n\n00:00:00.000 --> 00:03:00.000\nVela cached edition subtitle.\n', {
+      headers: { 'Content-Type': 'text/vtt', 'Cache-Control': 'no-store' },
+    });
+  }
   if (resource.startsWith('audio/')) return serveAudioFixture(req, resource.slice(6));
   const original = /^original\/(.+)$/.exec(resource)?.[1];
   if (original !== undefined && !originalFixtureName.test(original)) return new Response('Not found', { status: 404 });
@@ -96,7 +101,10 @@ export async function serveMedia(req: Request, resource: string, truncateOrigina
   const audio = resource.startsWith('a_');
   const headers = new Headers({ 'Content-Type': original ? originalTypes[original.slice(original.lastIndexOf('.') + 1)]! : resource.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : resource.endsWith('.vtt') ? 'text/vtt' : resource.endsWith('.ts') ? 'video/mp2t' : resource.endsWith('.m4s') ? (audio ? 'audio/iso.segment' : 'video/iso.segment') : (audio ? 'audio/mp4' : 'video/mp4'), 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
   let start = 0, end = file.size - 1, status = 200;
-  const range = req.headers.get('range');
+  if (etag) headers.set('ETag', etag);
+  const ifRange = req.headers.get('if-range');
+  const ignoreRange = !!(etag && ifRange && ifRange !== etag);
+  const range = ignoreRange ? null : req.headers.get('range');
   if (range) {
     const m = /^bytes=(\d*)-(\d*)$/.exec(range);
     if (!m || (!m[1] && !m[2])) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${file.size}` } });
@@ -109,7 +117,9 @@ export async function serveMedia(req: Request, resource: string, truncateOrigina
   headers.set('Content-Length', String(length));
   if (req.method === 'HEAD') return new Response(null, { status, headers });
   const truncate = truncateOriginal || (segment && f.truncateEvery > 0 && count % f.truncateEvery === 0);
-  if (!f.bandwidthBps && !f.stallMs && !truncate) return new Response(file.slice(start, end + 1), { status, headers });
+  // Bun automatically applies Range to a file-backed response. Use the chunk reader below
+  // when If-Range rejected the client's validator and the full original must be sent.
+  if (!ignoreRange && !f.bandwidthBps && !f.stallMs && !truncate) return new Response(file.slice(start, end + 1), { status, headers });
   const stop = truncate ? start + Math.floor(length / 2) : end + 1;
   let pos = start, first = true, cancelled = false;
   const wait = (ms: number) => new Promise<void>(resolve => { const timer = setTimeout(done, ms); function done() { clearTimeout(timer); req.signal.removeEventListener('abort', done); resolve(); } req.signal.addEventListener('abort', done, { once: true }); if (req.signal.aborted) done(); });

@@ -48,10 +48,29 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
   const restore = seeThrough(node);
   let browser: WebPlayerHost | undefined;
   let revision = 0;
+  const publishCaptionInsets = () => {
+    const { width, height } = node.getBoundingClientRect();
+    if (!width || !height) return;
+    const insets = props.captionInsets;
+    // mpv's text margins are symmetric, in units of a 720px reference height.
+    // Align toward the unoccluded side when the column is narrower on one edge.
+    const left = insets?.left ?? 0, right = insets?.right ?? 0;
+    const margin = Math.min(width * 0.46, Math.max(left, right)) * 720 / height;
+    send({ kind: 'caption-insets', id, insets: insets ?? {}, mpv: {
+      align: right > left ? 'left' : left > right ? 'right' : 'center',
+      margin: Math.max(19, Math.ceil(margin)),
+      lift: Math.min(100, (insets?.bottom ?? 0) * 100 / height),
+    } });
+  };
   const publish = (kind: 'mount' | 'update') => {
     const version = ++revision;
     const next = props;
-    if (!isDesktopNativeHost()) { send({ kind, id, props: serializable(next, subtitles) }); return; }
+    if (!isDesktopNativeHost()) {
+      send({ kind, id, props: serializable(next, subtitles) });
+      mounted = true;
+      publishCaptionInsets();
+      return;
+    }
     void desktopMediaAuthorization(next).then(attachment => {
       if (disposed || browser || version !== revision || !attachment) return;
       send({ kind: mounted ? 'update' : 'mount', id, props: { ...serializable(next, subtitles), ...attachment } });
@@ -62,9 +81,12 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
   let mounted = false;
   let disposed = false;
   const bounds = () => {
-    if (!isDesktopNativeHost() || disposed || browser) return;
-    const rect = node.getBoundingClientRect();
-    send({ kind: 'bounds', id, bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scaleFactor: window.devicePixelRatio } });
+    if (disposed || browser) return;
+    if (isDesktopNativeHost()) {
+      const rect = node.getBoundingClientRect();
+      send({ kind: 'bounds', id, bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scaleFactor: window.devicePixelRatio } });
+    }
+    if (mounted) publishCaptionInsets();
   };
   const observer = new ResizeObserver(bounds);
   observer.observe(node);
@@ -96,8 +118,12 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
   bounds();
   return {
     update(next) {
+      const captionOnly = next.captionInsets !== props.captionInsets &&
+        next.plan === props.plan && next.command === props.command &&
+        next.active === props.active && next.serverError === props.serverError && next.metadata === props.metadata;
       props = next;
       if (browser) { browser.update(next); return; }
+      if (captionOnly) { publishCaptionInsets(); return; }
       if (next.command?.type === 'fullscreen' && next.command.id > fullscreenId) {
         fullscreenId = next.command.id;
         toggleFullscreen();

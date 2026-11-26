@@ -91,6 +91,8 @@ export interface ServerCapabilities {
     duplicates?: Feature;
     /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
     mediaClasses?: Feature & { classes: MediaClass[] };
+    /** Viewer policy for downloading original video files. */
+    downloads?: { enabled: boolean; maxPerDay?: number; remainingToday?: number };
     /** POST /titles/:id/read and reading progress, for these formats. */
     reading?: Feature & { formats: ReadingFormat[] };
     /** Audio-only plans (PlaybackPlan.media = 'audio'). */
@@ -461,6 +463,16 @@ export interface ChildrenPage extends Page<Title>, PartialAnswer {}
 /** One-use console Watch hand-off; redeem against the same Ether instance. */
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
 
+export interface DownloadRequest extends Mutation { versionId?: ID }
+export interface DownloadGrant {
+  url: string; mimeType: string; container: string; byteLength?: number;
+  /** Stable file identity, shared by fresh tickets for the same original. */
+  etag: string; expiresAt: Timestamp; sourceId?: ID; originalVideo?: OriginalVideo;
+  audioTracks: Track[]; subtitleTracks: Track[]; chapters: Chapter[]; markers?: SkipMarker[];
+}
+export interface OfflineWatchRequest extends Mutation {
+  positionSeconds: number; observedAt: Timestamp; offline: true; played?: true;
+}
 export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }
 
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[];

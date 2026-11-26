@@ -16,6 +16,7 @@ import { card } from '../discovery/models';
 import { liveSearch } from '../live/search';
 import { randomId } from '../protocol/id';
 import type { Card } from '../models';
+import { resultKey, resultViewer, searchDeadline, searchServer, searchServers, SearchTimeout, type SearchSection } from './multi-search';
 import { searchList, wantsDescription } from './search-list';
 import type { Session } from './session';
 import { message, type Load, type StateBox } from './state';
@@ -40,6 +41,7 @@ export interface SearchState extends V.SearchOptions {
   searchKinds?: V.SearchKindCapability[];
   searchLibraries?: boolean;
   query: string;
+  sections?: SearchSection[];
   generation: number;
   fast: SearchLane & { liveChannels: LiveChannelResult[]; liveProgrammes: LiveProgrammeResult[] };
   /** While the server is still working, it is asked again on its terms; after a failure it
@@ -93,6 +95,8 @@ export class Search {
    */
   private scope = randomId();
   /** The library every query is kept to (scopeTo), where the server can restrict search to one. */
+  private all = false;
+  private openReturn?: { query: string; epoch: number; focus: string };
   private scoped: string | undefined;
 
   constructor(
@@ -106,10 +110,98 @@ export class Search {
   ) {
     session.onReset(() => {
       this.controller.abort();
+      this.all = false;
+      this.openReturn = undefined;
       this.stopTimers();
       this.scope = randomId();
       this.box.update(this.slice, () => initialSearch);
     });
+    if (slice === 'search') session.onServerSessionChange?.(id => {
+      this.box.update('search', state => {
+        const sections = state.sections?.filter(section => section.id !== id);
+        return sections?.length !== state.sections?.length ? { ...state, sections } : state;
+      });
+    });
+  }
+
+  setAll(all: boolean): void {
+    if (this.all === all) return;
+    this.all = all;
+    this.setQuery(this.box.get()[this.slice].query, true);
+  }
+
+  /** Validate the press against the live query and both stored identities before changing server. */
+  async openResult(ref: string, open: (card: Card) => void): Promise<void> {
+    const state = this.box.get().search;
+    const section = state.sections?.find(group => group.results.some(result => result.ref === ref));
+    const result = section?.results.find(result => result.ref === ref);
+    if (!section || !result) return;
+    try {
+      const epoch = this.session.epoch;
+      const source = this.session.selected();
+      const target = this.session.connection(section.id);
+      const [sourceTokens, targetTokens] = await Promise.all([this.session.tokens(source), this.session.tokens(target)]);
+      const now = this.box.get();
+      if (epoch !== this.session.epoch || source !== this.session.selected() || target !== this.session.connection(section.id)
+        || now.auth.revision !== epoch || sourceTokens?.viewer.id !== now.auth.viewerId
+        || !searchServers(now).some(server => server.id === section.id) || !resultViewer(result, targetTokens?.viewer)
+        || !now.search.sections?.some(group => group.results.includes(result))) return;
+      if (source !== target) {
+        this.session.select(section.id);
+        this.openReturn = { query: state.query, epoch: this.session.epoch, focus: resultKey(section.id, result) };
+      }
+      open(result.card);
+    } catch { /* A server or session was removed while opening. */ }
+  }
+
+  /** The search screen calls this when it is visible again after opening a title. */
+  returnToResults(): string | undefined {
+    const saved = this.openReturn;
+    const state = this.box.get();
+    if (!saved || saved.epoch !== this.session.epoch || state.auth.revision !== saved.epoch || state.auth.phase !== 'signed-in') return;
+    this.openReturn = undefined;
+    this.all = true;
+    this.setQuery(saved.query, true);
+    return this.box.get().search.sections ? saved.focus : undefined;
+  }
+
+  serverPage(id: string): void {
+    const state = this.box.get().search;
+    const section = state.sections?.find(group => group.id === id);
+    if (!section || section.status === 'loading' || (section.status === 'ready' && !section.nextCursor)) return;
+    void this.searchSection(section, state.query.trim(), state.generation);
+  }
+
+  private async searchSection(section: SearchSection, query: string, generation: number): Promise<void> {
+    const signal = this.controller.signal;
+    const epoch = this.session.epoch;
+    const patch = (change: Partial<SearchSection>) => {
+      if (signal.aborted || this.session.epoch !== epoch || !this.current(generation)) return;
+      this.box.update('search', state => ({ ...state, sections: state.sections?.map(group =>
+        group.id === section.id ? { ...group, ...change } : group) }));
+    };
+    patch({ status: 'loading' });
+    try {
+      const connection = this.session.connection(section.id);
+      const { page, images, viewer, policy } = await searchDeadline(signal, 5000, request =>
+        searchServer(connection, query, generation, this.session.key(), section.nextCursor, request));
+      if (this.session.connection(section.id) !== connection) return;
+      if (section.results.some(result => result.viewer !== viewer || result.policy !== policy)) {
+        patch({ status: 'failed', results: [], nextCursor: undefined });
+        return;
+      }
+      const seen = new Set(section.results.map(result => resultKey(section.id, result)));
+      const results = [...section.results];
+      for (const title of page.items) {
+        const result = { ref: randomId(), card: card(title, '', images, this.artWidth()), viewer, policy };
+        const key = resultKey(section.id, result);
+        if (!seen.has(key)) results.push(result);
+        seen.add(key);
+      }
+      patch({ status: 'ready', results, nextCursor: page.nextCursor });
+    } catch (error) {
+      patch({ status: error instanceof SearchTimeout ? 'timed-out' : 'failed' });
+    }
   }
 
   /** A new query: a new generation, with every lane started again. An empty query clears search.
@@ -127,6 +219,26 @@ export class Search {
       this.box.update(this.slice, () => ({ ...initialSearch, ...options, library: undefined, ...caps, query, generation }));
       return;
     }
+    const current = this.box.get();
+    const servers = this.slice === 'search' && this.all && !options.library
+      && current.auth.revision === this.session.epoch ? searchServers(current) : [];
+    if (servers.length >= 2) {
+      const sections: SearchSection[] = servers.map(({ id, name, origin }) => ({
+        id,
+        name: servers.some(other => other.id !== id && other.name === name) ? `${name} · ${new URL(origin).host}` : name,
+        status: 'loading',
+        results: [],
+      }));
+      this.box.update('search', () => ({ ...initialSearch, ...options, ...caps, query, generation, sections }));
+      const send = () => {
+        this.typing = undefined;
+        for (const section of sections) void this.searchSection(section, text, generation);
+      };
+      if (immediate || this.typingMs <= 0) send();
+      else this.typing = setTimeout(send, this.typingMs);
+      return;
+    }
+    this.all = false;
     // A lane the server does not offer says so at once; one it offers waits for typing to pause
     // and for the list to need it.
     const unified = this.offersUnified();
@@ -223,6 +335,7 @@ export class Search {
   }
 
   clear(): void {
+    this.openReturn = undefined;
     this.setQuery('');
   }
 

@@ -163,6 +163,8 @@ async function probe(signal: AbortSignal): Promise<PlayerCapabilities> {
     videoCodecs: videoFormats.filter(([name, mime]) => name === 'h264' && supports(mime)).map(([name]) => name),
     audioCodecs: audioFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
     subtitleFormats: [...new Set([...(typeof VTTCue === 'function' ? ['webvtt'] : []), ...overlays])],
+    // The web engine does not probe or negotiate Dolby Vision output.
+    dolbyVisionProfiles: [],
     hls: supports('application/vnd.apple.mpegurl'),
     mse: !!mediaSource && videoFormats.some(([, mime]) => mediaSource.isTypeSupported(mime)),
   };

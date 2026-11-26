@@ -49,6 +49,7 @@ exports.create = async ({ window, emit }) => {
   return {
     update: props => call('update', props),
     setAccess: access => call('access', access),
+    setCaptionInsets: insets => call('caption-insets', insets),
     setBounds: bounds => call('bounds', bounds),
     diagnostics: () => call('diagnostics'),
     destroy,

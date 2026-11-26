@@ -1,6 +1,6 @@
 // The Vela store: the app's data state and the actions that change it, framework-free. What
 // each source does lives in a slice (auth, servers, home, catalogue, search, playback, live,
-// appearance, receipts, previews), and React reads the state through `@vela/core/react`.
+// appearance, receipts, previews, downloads), and React reads the state through `@vela/core/react`.
 import type { AppearanceModel } from '../appearance';
 import type { GuideModel } from '../live/guide';
 import type { CollectionModel, Destination, DetailModel, LibraryModel, Row } from '../models';
@@ -10,6 +10,7 @@ import { Appearance } from './appearance';
 import { Auth, initialAuth, type AuthState } from './auth';
 import { Rows } from './rows';
 import { Catalogue } from './catalogue';
+import { Downloads, initialDownloads, type DownloadsState } from './downloads';
 import { Home, initialHome, reconcilesHome, type HomeState } from './home';
 import { initialLive, Live, type LiveState } from './live';
 import { initialPlayback, Playback, type PlaybackState } from './playback';
@@ -63,6 +64,8 @@ export interface VelaState {
   playerSettings: PlayerSettingsState;
   /** Remembered per-series audio and subtitle choices on this device, keyed by (server, viewer, show). */
   seriesTracks: SeriesTracksState;
+  /** Offline original-file downloads and their progress outbox (iPhone and iPad). */
+  downloads: DownloadsState;
 }
 
 export interface VelaOptions extends VelaPlatform {
@@ -104,6 +107,7 @@ export interface Vela {
   audio: Audio;
   playerSettings: PlayerSettings;
   seriesTracks: SeriesTracks;
+  downloads: Downloads;
 }
 
 const initialState: VelaState = {
@@ -129,6 +133,7 @@ const initialState: VelaState = {
   previews: initialPreviews,
   playerSettings: initialPlayerSettings,
   seriesTracks: initialSeriesTracks,
+  downloads: initialDownloads,
 };
 
 /** Art widths come in steps, so a window resized by a few pixels reads the same images; never wider than 4K. */
@@ -142,8 +147,9 @@ export function createVela(options: VelaOptions): Vela {
   session.setRelocator(new PlexRelocator(box, session));
   let artWidth = bucket(options.artWidth);
   const width = () => artWidth;
-  const auth = new Auth(box, session, options);
-  const servers = new Servers(box, session, options);
+  const downloads = new Downloads(box, session, options);
+  const auth = new Auth(box, session, options, downloads);
+  const servers = new Servers(box, session, options, downloads);
   const previews = new Previews(box, session);
   const home = new Home(box, session, width);
   const catalogue = new Catalogue(box, session, width);
@@ -165,6 +171,7 @@ export function createVela(options: VelaOptions): Vela {
       if (reconcilesHome(media)) void home.reconcile(watched);
     },
     seriesTracks,
+    downloads,
   );
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);
   const audio = new Audio(box, session, playback);
@@ -174,7 +181,7 @@ export function createVela(options: VelaOptions): Vela {
     getState: box.get,
     subscribe: box.subscribe,
     async start() {
-      await auth.start();
+      await Promise.all([auth.start(), downloads.hydrate()]);
       const serverStatus = servers.refresh().catch(() => {});
       if (box.get().auth.phase === 'offline') { await serverStatus; return; }
       await Promise.all([serverStatus, appearance.load()]);
@@ -209,10 +216,10 @@ export function createVela(options: VelaOptions): Vela {
     audio,
     playerSettings: new PlayerSettings(box, session),
     seriesTracks,
+    downloads,
   };
   // Vela's own pages read `vela.*` sources through these same stores and the active server.
   screens.attachLocal(vela, { ready: () => session.ready(), features: () => session.features });
   return vela;
 }
-
-export type { AppearanceModel, GuideModel };
+export type { GuideModel };

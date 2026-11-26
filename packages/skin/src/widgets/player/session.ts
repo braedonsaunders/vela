@@ -45,6 +45,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const pictureChoice = PICTURE_CHOICE || webPicture;
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
+  const airDate = useVelaState(state => target.kind === 'title' ? state.titles[target.id]?.value?.title[0]?.airDate : undefined);
   const settings = useVelaState(state => state.playerSettings);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -409,7 +410,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       snapshot: playback.phase === 'preparing' ? null : snapshot,
       startFailure: owner
         ? ownedStartFailure(owned?.failure ?? null, playback, chromeTarget)
-        : startFailure(playback, chromeTarget),
+        : startFailure(playback, chromeTarget, airDate),
       retrying: owner
         ? (owned && !owned.failure ? owned.retrying : null)
         : startRetrying(playback),

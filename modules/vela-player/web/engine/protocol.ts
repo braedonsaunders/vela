@@ -14,6 +14,7 @@ export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location
     serverState: plan.state,
     serverControlled: true,
     selectedSourceId: plan.selectedPathId,
+    selectedVersionId: plan.selectedVersionId ?? undefined,
     mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? plan.liveItemId ?? '',
     edition,
     position: plan.positionSeconds,
@@ -21,6 +22,7 @@ export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location
     // A Live TV channel, or a library's live stream, which has no channel.
     live: !!plan.channelId || !!plan.live,
     startOver: plan.live?.mode === 'startOver',
+    timeshift: !!plan.live?.timeshift,
     livePolicy: plan.livePolicy,
     liveWindowStart: plan.live?.windowStartSeconds,
     liveEdge: plan.live?.liveEdgeSeconds,
@@ -139,7 +141,8 @@ export function observation(snapshot: Snapshot, sequence: number): PlayerObserva
     ...(snapshot.audioTrackId === null || snapshot.audioClientOnly
       ? {}
       : { audioTrackId: snapshot.audioTrackId }),
-    ...(snapshot.subtitleClientOnly
+    // A sidecar still opening must not report Off and clear the server selection.
+    ...(snapshot.subtitleClientOnly || (snapshot.subtitleTrackId === null && snapshot.pendingSubtitleTrackId)
       ? {}
       : { subtitleTrackId: snapshot.subtitleReportingId ?? snapshot.subtitleTrackId }),
     ...(snapshot.failure

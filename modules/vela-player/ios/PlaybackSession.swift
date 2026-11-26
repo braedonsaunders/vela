@@ -53,6 +53,7 @@ final class PlaybackSession {
     /// One tile of a multiview grid (`tile`): audible only by a mute command, never the system's media owner.
     private var tile: Int?
     private var videoFill = false
+    private var captionInsets = CaptionInsets()
     private var hasMuteCommand = false
     private var loggedOutput = false
     private var refreshAsked = ""
@@ -147,6 +148,13 @@ final class PlaybackSession {
     }
 
     /// The viewer fills the screen with a full-screen watch's picture (cropping) instead of fitting it.
+    func setCaptionInsets(_ fields: [String: Any]?) {
+        let insets = CaptionInsets(fields)
+        guard insets != captionInsets else { return }
+        captionInsets = insets
+        player?.setCaptionInsets(insets)
+    }
+
     func setVideoFill(_ value: Bool) {
         videoFill = value
         if !ambient, tile == nil { player?.setAspectFill(value) }
@@ -357,6 +365,7 @@ final class PlaybackSession {
                                     muted: hasMuteCommand || tile != nil ? report.muted : ambient, aspectFill: videoFill && !ambient && tile == nil,
                                     isLive: plan.isLive, remoteHLS: path.transport == "hls", retainPausedPicture: ambient, tile: tile)
         player = client
+        client.setCaptionInsets(captionInsets)
         client.set("volume", double: report.volume * 100)
         client.set("speed", double: plan.isLive ? 1 : report.speed)
         report.pip = false

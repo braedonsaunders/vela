@@ -42,6 +42,12 @@ function attachNativePlayer(window, adapter) {
         await mount.host.update(message.props); return;
       }
       if (!current || message.id !== current.id) return;
+      if (message.kind === 'caption-insets') {
+        const zoom = window.webContents.getZoomFactor?.() ?? 1;
+        const insets = Object.fromEntries(['left', 'right', 'top', 'bottom'].map(key =>
+          [key, Math.max(0, Number(message.insets?.[key]) || 0) * zoom]));
+        await current.host.setCaptionInsets?.(insets, message.mpv);
+      }
       if (message.kind === 'update') await current.host.update(message.props);
       if (message.kind === 'bounds') {
         const rect = message.bounds;

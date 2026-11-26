@@ -9,6 +9,7 @@ import { probeEther, probeServer } from '../adapter/probe';
 import type * as V from '../wire';
 import { ServerCredentials, type ServerKind, type ServerRecord } from '../session/servers';
 import { msg, time } from '../i18n';
+import type { Downloads } from './downloads';
 import { pageSecure, type VelaPlatform } from './platform';
 import type { Session } from './session';
 import { endSession, signInFailure, type QuickCode } from './auth';
@@ -110,19 +111,25 @@ export class Servers {
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly platform: VelaPlatform,
+    private readonly downloads?: Downloads,
   ) {
     session.onReset(() => void this.refresh().catch(() => {}));
   }
 
+  private refreshRun = 0;
+
   /** Re-read every server's status. Other servers' sessions are checked with a bounded wait. */
   async refresh(): Promise<void> {
+    const run = ++this.refreshRun;
     if (!this.session.hasServer()) {
       this.patch({ list: [], selectedId: '' });
       return;
     }
     const selected = this.session.selected();
     const registry = this.session.servers.read();
+    this.patch({ selectedId: registry.selectedId });
     const rows = await Promise.all(registry.servers.map(record => this.row(record, selected, registry.selectedId)));
+    if (run !== this.refreshRun) return;
     this.patch({ list: rows, selectedId: registry.selectedId });
   }
 
@@ -217,6 +224,7 @@ export class Servers {
         // Unreachable: the local session is still forgotten.
       }
       await connection.credentials.set(null);
+      await this.downloads?.removeServer(id);
       this.session.servers.remove(id);
       this.session.forget(id);
       this.session.selected();
@@ -231,9 +239,15 @@ export class Servers {
     try {
       const connection = this.session.connection(id);
       const epoch = this.session.epoch;
+      const stored = await this.session.tokens(connection);
+      const viewerId = stored?.viewer.id || (connection === this.session.selected() ? this.box.get().auth.viewerId : '');
       await endSession(connection, this.session);
+      if (viewerId) await this.downloads?.removeViewer(id, viewerId);
       if (connection === this.session.selected() && epoch === this.session.epoch) this.session.resetSession();
-      else await this.refresh();
+      else {
+        this.session.serverSessionChanged?.(id);
+        await this.refresh();
+      }
       return { id, error: '' };
     } catch (error) {
       return { id: '', error: signInFailure(error, 'Sign out failed') };

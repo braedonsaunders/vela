@@ -38,6 +38,9 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   }
   private val video = SurfaceView(context)
   private val subtitleLayer = androidx.media3.ui.SubtitleView(context)
+  private var captionInsets = Rect()
+  private val captionPicture = Rect()
+  private var captionTextFraction = SubtitleLook().textFraction
   private val assLayer = AssOverlay(context)
   private val previewVideo = TextureView(context)
   private val previewPaint = Paint()
@@ -292,13 +295,35 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       val shownY = maxOf(0, y)
       val shownWidth = minOf(width, videoWidth)
       val shownHeight = minOf(height, videoHeight)
-      subtitleLayer.measure(MeasureSpec.makeMeasureSpec(shownWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(shownHeight, MeasureSpec.EXACTLY))
-      subtitleLayer.layout(shownX, shownY, shownX + shownWidth, shownY + shownHeight)
-      assLayer.measure(MeasureSpec.makeMeasureSpec(shownWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(shownHeight, MeasureSpec.EXACTLY))
-      assLayer.layout(shownX, shownY, shownX + shownWidth, shownY + shownHeight)
+      captionPicture.set(shownX, shownY, shownX + shownWidth, shownY + shownHeight)
     } else {
-      subtitleLayer.layout(0, 0, width, height)
-      assLayer.layout(0, 0, width, height)
+      captionPicture.set(0, 0, width, height)
+    }
+    placeCaptions(width, height)
+  }
+
+  fun setCaptionInsets(fields: Map<String, Double>?) {
+    fun pixels(key: String): Int {
+      val points = fields?.get(key) ?: 0.0
+      return if (points.isFinite()) kotlin.math.ceil(points.coerceAtLeast(0.0) * resources.displayMetrics.density).toInt() else 0
+    }
+    val insets = Rect(pixels("left"), pixels("top"), pixels("right"), pixels("bottom"))
+    if (captionInsets == insets) return
+    captionInsets = insets
+    placeCaptions(content.width, content.height)
+  }
+
+  private fun placeCaptions(width: Int, height: Int) {
+    val insets = if (pipStage == null) captionInsets else Rect()
+    val x = maxOf(captionPicture.left, insets.left)
+    val y = maxOf(captionPicture.top, insets.top)
+    val w = maxOf(0, minOf(captionPicture.right, width - insets.right) - x)
+    val h = maxOf(0, minOf(captionPicture.bottom, height - insets.bottom) - y)
+    val textSize = minOf(captionPicture.height() * captionTextFraction, h * 0.42f)
+    subtitleLayer.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, textSize)
+    for (layer in listOf(subtitleLayer, assLayer)) {
+      layer.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
+      layer.layout(x, y, x + w, y + h)
     }
   }
 
@@ -380,7 +405,8 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     subtitleLayer.setStyle(androidx.media3.ui.CaptionStyleCompat(text, box, Color.TRANSPARENT, edge, Color.BLACK, null))
     // The viewer's size wins over a track's own font sizes; its colours, italics and placement stay.
     subtitleLayer.setApplyEmbeddedFontSizes(false)
-    subtitleLayer.setFractionalTextSize(look.textFraction)
+    captionTextFraction = look.textFraction
+    placeCaptions(content.width, content.height)
     subtitleLayer.setBottomPaddingFraction(look.bottomFraction)
     if (persist) lookStore.edit().apply { look.stored.forEach { (key, value) -> putString(key, value) } }.apply()
   }

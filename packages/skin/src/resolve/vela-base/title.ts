@@ -238,31 +238,39 @@ export const band: Node = {
           ],
         },
         {
-          type: 'image',
-          when: [{ test: 'detail.logo' }],
-          src: '{detail.logo}',
-          alt: '{detail.name}',
-          role: 'heading',
-          level: 1,
-          motion: enter(200),
-          style: {
-            height: '150px',
-            width: '80%',
-            'max-width': 'min(560px, 80%)',
-            'object-fit': 'contain',
-            'align-self': 'flex-start',
-          },
-          small: { height: '92px', 'max-width': '80%' },
-        },
-        {
-          type: 'text',
-          when: [{ test: 'detail.logo', not: true }],
-          text: '{detail.name}',
-          role: 'heading',
-          level: 1,
-          motion: enter(200),
-          style: { ...display, 'font-size': '84px', 'text-shadow': '0px 4px 40px $ui.shadow' },
-          small: { 'font-size': '46px' },
+          type: 'box',
+          // Keep 12px clear of the close button on a full-width frame.
+          style: { 'padding-right': '56px', 'min-width': '0px' },
+          small: { 'padding-right': '52px' },
+          children: [
+            {
+              type: 'image',
+              when: [{ test: 'detail.logo' }],
+              src: '{detail.logo}',
+              alt: '{detail.name}',
+              role: 'heading',
+              level: 1,
+              motion: enter(200),
+              style: {
+                height: '150px',
+                width: '80%',
+                'max-width': 'min(560px, 80%)',
+                'object-fit': 'contain',
+                'align-self': 'flex-start',
+              },
+              small: { height: '92px', 'max-width': '80%' },
+            },
+            {
+              type: 'text',
+              when: [{ test: 'detail.logo', not: true }],
+              text: '{detail.name}',
+              role: 'heading',
+              level: 1,
+              motion: enter(200),
+              style: { ...display, 'font-size': '84px', 'line-height': '1.04', 'text-shadow': '0px 4px 40px $ui.shadow' },
+              small: { 'font-size': '46px' },
+            },
+          ],
         },
         { type: 'use', template: 'velaEpisodeContext' },
         {
@@ -565,7 +573,7 @@ export const episodeRow: Node = {
         },
         {
           type: 'text',
-          text: '{card.facts}',
+          text: '{episode.facts}',
           style: { color: '$ui.inkQuiet', 'font-size': '12px', 'font-variant-numeric': 'tabular-nums' },
         },
         {
@@ -584,7 +592,7 @@ export const episodeRow: Node = {
     },
     {
       type: 'box',
-      when: [{ test: 'env.small', not: true }],
+      when: [{ test: 'env.small', not: true }, { test: 'episode.unreleased', not: true }],
       press: { action: 'play', arg: '{card.id}' },
       label: '{episode.playLabel}',
       style: {

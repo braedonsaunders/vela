@@ -5,7 +5,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { audioCardsOf, likedTitleIds, setTitleLiked, type Card } from '@vela/core';
+import { audioCardsOf, isUnreleased, likedTitleIds, setTitleLiked, type Card } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import type { SkinHost } from '@vela/skin';
 import { TrackedHost } from '@vela/skin/src/host';
@@ -86,6 +86,7 @@ export function ListenSection({ libraryId, at }: { libraryId: string; at: string
     go,
     play: (items: Card[], index: number, source, shuffle, positionSeconds) => store.audio.play({ items, index: Math.max(0, index), source, shuffle, positionSeconds }),
     playCard: (card: Card, shuffle?: boolean) => {
+      if (isUnreleased(card.airDate)) return;
       const role = card.media?.role;
       const leaf = role === 'track' || role === 'episode' || role === 'part';
       const source = leaf ? undefined : { id: card.id, name: card.name, kind: card.kind === 'playlist' ? 'playlist' as const : 'title' as const };

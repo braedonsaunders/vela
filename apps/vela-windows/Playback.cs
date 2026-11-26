@@ -15,7 +15,8 @@ internal sealed class Playback : IDisposable
     JsonElement plan;
     string source = "", seek = "", phase = "idle", subtitleAppearance = "";
     long lastCommand = -1;
-    double offset;
+    double offset, captionLift;
+    double subtitlePosition = 100;
     long sequence;
     DateTime observed, described;
     bool disposed, fullscreen;
@@ -201,7 +202,8 @@ internal sealed class Playback : IDisposable
         subtitleAppearance = raw;
         mpv.TrySet("sub-scale", Str(appearance, "subtitleSize") switch { "small" => "0.8", "large" => "1.25", "xl" => "1.5", _ => "1" });
         mpv.TrySet("sub-color", Str(appearance, "subtitleColor") == "yellow" ? "#FFFFE14D" : "#FFFFFFFF");
-        mpv.TrySet("sub-pos", Str(appearance, "subtitlePosition") == "raised" ? "88" : "100");
+        subtitlePosition = Str(appearance, "subtitlePosition") == "raised" ? 88 : 100;
+        ApplyCaptionLift();
         switch (Str(appearance, "subtitleBackground"))
         {
             case "box": mpv.TrySet("sub-border-style", "background-box"); mpv.TrySet("sub-back-color", "#B0000000"); mpv.TrySet("sub-shadow-offset", "0"); break;
@@ -209,6 +211,16 @@ internal sealed class Playback : IDisposable
             default: mpv.TrySet("sub-border-style", "outline-and-shadow"); mpv.TrySet("sub-shadow-offset", "1.5"); mpv.TrySet("sub-border-size", "2.5"); break;
         }
         if (Get(appearance, "offsetSeconds").ValueKind == JsonValueKind.Number) mpv.TrySet("sub-delay", Format(Num(appearance, "offsetSeconds")));
+    }
+
+    void ApplyCaptionLift() => mpv.TrySet("sub-pos", Format(Math.Min(subtitlePosition, 100 - captionLift)));
+
+    public void SetCaptionInsets(JsonElement layout)
+    {
+        captionLift = Math.Clamp(Num(layout, "lift"), 0, 100);
+        ApplyCaptionLift();
+        mpv.TrySet("sub-margin-x", Format(Math.Clamp(Math.Round(Num(layout, "margin")), 19, 4096)));
+        mpv.TrySet("sub-align-x", Str(layout, "align") switch { "left" => "left", "right" => "right", _ => "center" });
     }
 
     /// <summary>A command the session must apply: the server answers with a new plan.</summary>

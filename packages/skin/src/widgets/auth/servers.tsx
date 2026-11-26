@@ -10,6 +10,7 @@ export interface ServerSwitch {
   brandingName?: string;
   /** Open Connect a server, to add one. */
   openConnect(): void;
+  openDownloads?(): void;
   /** Validated same-host HTTP(S) return address supplied by the web host. */
   consoleUrl?: string;
 }

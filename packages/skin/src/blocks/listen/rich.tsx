@@ -3,7 +3,7 @@
 // arguments), its parts (document, node and skin styles already merged) and its part templates;
 // this file reads them in the block's context, publishes the parts and templates to the engine
 // below (look.tsx), and draws the engine. Engines keep their own data reads, focus and timing.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Platform, View } from 'react-native';
 import { currentInQueue, msg, withBand, type HistoryRecapPeriod } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -124,6 +124,8 @@ function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?
   const { tracks, entryIds } = limit ? { tracks: all.tracks.slice(0, limit), entryIds: all.entryIds.slice(0, limit) } : all;
   const playlistId = props.text('playlist');
   const sourceId = props.text('sourceId');
+  const sourceKind = props.enum('sourceKind', ['title', 'playlist', 'favorites'] as const);
+  const title = sourceId && sourceKind === 'title' ? asCard(read(`item:${sourceId}`)?.value) : undefined;
   const options: TrackListOptions = {
     covers: props.bool('covers'),
     album: props.bool('album'),
@@ -131,11 +133,12 @@ function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?
     header: props.bool('header'),
     discs: props.bool('discs'),
     reorder: props.bool('reorder'),
-    ...(sourceId ? { source: { id: sourceId, name: props.text('sourceName'), kind: props.enum('sourceKind', ['title', 'playlist', 'favorites'] as const) } } : {}),
+    ...(title?.media?.role === 'album' ? { albumAirDate: title.airDate } : {}),
+    ...(sourceId ? { source: { id: sourceId, name: props.text('sourceName'), kind: sourceKind } } : {}),
     ...(playlistId && entryIds.some(Boolean) ? { playlist: { id: playlistId, entryIds } } : {}),
   };
   // A stable list while the same tracks are named (the engine's progressive drawing keys on it).
-  const key = tracks.map(t => t.id).join('|');
+  const key = tracks.map(t => `${t.id}:${t.airDate}`).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stable = useMemo(() => tracks, [key]);
   if (!stable.length && empty) return <>{empty(ctx)}</>;
@@ -263,16 +266,13 @@ function NowPlayingBlock({ props, press, background }: { props: Props; press?(p:
   const panel = props.text('panel');
   // Inside the app's audio dock the dock closes Now Playing and opens the visualizer.
   const dock = useListenDock();
-  const drawn = !!item && !dock?.hidden;
-  const shown = dock?.shown;
-  useEffect(() => { if (drawn && Platform.isTV) shown?.(); }, [drawn, shown]);
   const onClose = dock?.close ?? closer(props.text('closeFlag'), press) ?? (() => undefined);
   const onOpenVisualizer = dock ? dock.openVisualizer
     : offered && flag && visualizerSwitch?.on && press ? () => press({ action: 'open', arg: flag, args: {}, control: 'now-playing-visualizer' }) : undefined;
   return (
     <View style={{ flex: 1, minHeight: 0 }} testID="listen-now-playing">
-      <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined} hidden={dock?.hidden}
-        visualizer={dock ? dock.visualizer : offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer}
+      <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined} hidden={dock?.hidden} open={dock?.open}
+        visualizer={dock ? dock.visualizer : offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer} setPlayTarget={dock?.setPlayTarget}
         background={background && item ? background(item, { playing, accent: item.accent }) : undefined} />
     </View>
   );

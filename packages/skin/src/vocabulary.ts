@@ -4,7 +4,7 @@
 // key for key. A template calls only the accessors it names.
 import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
-import { drawnAs, duration, msg, videoRoleLabel } from '@vela/core';
+import { drawnAs, duration, isUnreleased, msg, releaseLabel, videoRoleLabel } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
 import { selectEnv } from './host-source';
 import { aboutLabel, aboutLine, type About } from './about';
@@ -116,6 +116,8 @@ export interface Ctx {
   /** A season's compact selector label; absent when the same card appears outside a selector. */
   seasonLabel?: string;
   hit?: Hit;
+  searchSection?: import('@vela/core').SearchSection;
+  searchResult?: import('@vela/core').SearchResult;
   /** A channel of live.channels or live.favorites. */
   ch?: GuideChannel;
   /** A kind, genre or sort of library.kinds, library.genres or library.sorts. */
@@ -195,8 +197,9 @@ export function seasonDisplayName(card: Card): string {
 
 /** A series' primary action targets the server's Next Up episode, or the first unwatched episode. */
 function detailPlaybackCard(d: DetailModel): Card | undefined {
-  if (d.canPlay) return d.title[0];
-  return d.nextUp?.[0] ?? d.episodes.find(card => !card.played);
+  if (isUnreleased(d.title[0]?.airDate)) return;
+  const target = d.canPlay ? d.title[0] : d.nextUp?.[0] ?? d.episodes.find(card => !card.played);
+  if (!isUnreleased(target?.airDate)) return target;
 }
 
 /** A card or hero field, read from whichever the context holds. */
@@ -339,6 +342,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'season.pick': c => (c.card ? `${c.card.id}|season|` : ''),
   'episode.numberTitle': c => (c.card ? (c.card.episodeNumber > 0 ? t('ui.numberTitle', { number: c.card.episodeNumberLabel, title: c.card.name }) : c.card.name) : ''),
   'episode.upNextLabel': c => (c.card ? t(c.card.progressSeconds > 0 ? 'ui.continueWatching' : 'ui.upNext') : ''),
+  'episode.unreleased': from('card', x => yes(isUnreleased(x.airDate))),
+  'episode.facts': from('card', x => releaseLabel(x.airDate) || x.facts),
   'episode.playLabel': c => (c.card ? t(c.card.progressSeconds > 0 ? 'ui.resumeEpisode' : 'ui.playEpisode') : ''),
 
   'env.viewer': (_, e) => e.viewer,
@@ -409,7 +414,11 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.seed': title(x => String(x.id.length)),
   'detail.kindLabel': title(kindLabel),
   'detail.kindId': title(kindId),
-  'detail.factsLine': title(factsLine),
+  'detail.factsLine': title((card, detail) => {
+    const next = detail.nextUp?.[0] ?? detail.episodes.find(episode => !episode.played);
+    const release = releaseLabel(card.airDate) || (!detail.canPlay ? releaseLabel(next?.airDate) : '');
+    return [release, factsLine(card)].filter(Boolean).join(' · ');
+  }),
   'detail.resumePct': detail(d => {
     const card = detailPlaybackCard(d);
     return card ? pct(card.progressSeconds, card.durationSeconds) : '0';
@@ -516,7 +525,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
 
 /** Shelves keyed by what they hold: a Continue row that moves a title to the front, or a progress
  * shelf added above others, moves the drawn cards and rows instead of redrawing them in place. */
-const IDENTITY = new Set(['home.rows', 'row.items', 'library.rows']);
+const IDENTITY = new Set(['home.rows', 'row.items', 'library.rows', 'search.sections', 'search.sectionResults']);
 
 /** A stable key for a repeated item: its position and the id of the item it binds; for shelves and
  * their cards, their identity. */

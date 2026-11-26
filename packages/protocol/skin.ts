@@ -80,7 +80,7 @@ export type Action =
   /** Live TV multiview: add the channel (arg: its id) and show multiview; with no arg, show it as it is. */
   | 'multiview'
   /** Search (`routes.search`): open a live hit by its `hit.ref`; ask the descriptive lane again. */
-  | 'searchLibrary' | 'searchSort' | 'searchDirection' | 'searchKind' | 'searchMore' | 'openHit' | 'retryDescriptive'
+  | 'searchLibrary' | 'searchSort' | 'searchDirection' | 'searchKind' | 'searchMore' | 'searchScope' | 'searchServerPage' | 'openSearchResult' | 'openHit' | 'retryDescriptive'
   /** Renderer 19, plugin screens and surfaces (docs/plugin-screens.md): structured `args`. */
   | 'navigate' | 'setParam' | 'plugin' | 'openLink' | 'dismiss';
 

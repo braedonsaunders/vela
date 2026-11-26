@@ -42,6 +42,7 @@ export class Session {
   private readonly registry: ServerRegistry;
   private readonly connections = new Map<string, Connection>();
   private readonly resetListeners = new Set<(kind: ResetKind, refused?: boolean) => void>();
+  private readonly serverSessionListeners = new Set<(id: string) => void>();
   private readonly forgetListeners = new Set<(id: string) => void>();
   private relocator: PlexRelocatorHandle | undefined;
   /** The server last read as selected: undefined before the first read, '' while there is none. */
@@ -151,6 +152,14 @@ export class Session {
     return () => this.forgetListeners.delete(listener);
   }
 
+  onServerSessionChange(listener: (id: string) => void): void {
+    this.serverSessionListeners.add(listener);
+  }
+
+  serverSessionChanged(id: string): void {
+    for (const listener of this.serverSessionListeners) listener(id);
+  }
+
   /** The viewer signed in or out: everything read for the previous viewer is dropped. */
   resetSession(): void {
     this.epoch++;
@@ -196,6 +205,7 @@ export class Session {
     if (known && JSON.stringify(known.record) === JSON.stringify(record)) return known;
     const rejected = () => {
       if (this.activeId === id) this.resetServer(true);
+      else this.serverSessionChanged(id);
     };
     let made: Connection;
     if (record.kind === 'ether') {
@@ -244,6 +254,7 @@ export class Session {
   /** Forget a removed server's connection. */
   forget(id: string): void {
     this.connections.delete(id);
+    this.serverSessionChanged(id);
     for (const listener of [...this.forgetListeners]) listener(id);
   }
 

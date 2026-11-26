@@ -86,11 +86,14 @@ internal class PlayerReport(
 
   /** A newer plan: the server's track choices, unless the viewer made their own on the device. */
   fun adopt(plan: PlaybackPlan, newSession: Boolean) {
+    val versionChanged = this.plan?.selectedVersionId != plan.selectedVersionId
     this.plan = plan
     previewing = false
-    if (newSession) {
+    if (newSession || versionChanged) {
       audioClientOnly = false
       subtitleClientOnly = false
+    }
+    if (newSession) {
       sequence = 0
       liveBehind = false
     }
