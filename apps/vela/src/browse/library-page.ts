@@ -2,12 +2,12 @@
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { libraryCardArtwork, libraryTabs, libraryKey, recommendationTab, recommendationTabWaits, adoptRows, settledPluginLevels, tabCard, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
+import { libraryCardArtwork, libraryTabs, libraryKey, recommendationTab, recommendationTabWaits, adoptRows, settledPluginLevels, tabCard, type Card, type Choice, type CollectionPage, type LibraryExtras, type LibraryJumpBucket, type LibraryLiveModel, type LibraryQuery, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
 import type { LibraryPage } from '@vela/skin/src/widgets/library/model';
 import { useSectionFocus } from '../section-focus';
-import { asQueried } from './library-query';
+import { asQueried, jumpIndexEligible } from './library-query';
 import { libraryExtras, noPart, viewPart, type Part } from './library-parts';
 
 export interface LibraryState {
@@ -28,6 +28,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   // The library list is published again once a server without declared tabs has been probed.
   useVelaState(state => state.libraries.value);
   const canRecommend = store.catalogue.libraryRecommendationsAvailable;
+  const canJump = store.catalogue.libraryJumpIndexAvailable;
   const liveAvailable = useVelaState(state => state.home.value?.libraryLiveAvailable ?? false);
   const progressRevision = useVelaState(state => state.home.progressRevision);
   const revision = useVelaState(state => state.auth.revision);
@@ -53,6 +54,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     sort: viewTab.sort ?? query.sort,
     direction: viewTab.direction ?? query.direction,
     query: viewTab.search && tabQuery ? tabQuery : undefined,
+    start: undefined,
   } : query, [query, viewTab, tabQuery]);
   const key = libraryKey(id, browseQuery);
   const current = useVelaState(state => state.library[key]);
@@ -77,6 +79,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const rowsKey = `${id}|${rowsWait ? '\u0000wait' : rowsTab ?? ''}|${revision}`;
   const collectionsKey = `${id}|${revision}|${collectionTab ?? ''}|${tabQuery}`;
   const genresKey = `${id}|${revision}`;
+  const jumpKey = `${id}|${revision}`;
   const needRows = canRecommend && shows === 'recommended' && !rowsWait;
   const needCollections = canRecommend && (shows === 'collections' || shows === 'people');
   const needGenres = canRecommend && shows === 'genres';
@@ -105,6 +108,10 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const [genres, setGenres] = useState<Part<Choice[]>>(() => {
     const cached = store.catalogue.cachedLibraryGenres(id);
     return cached ? { key: genresKey, load: 'ready', attempt: 0, value: cached } : noPart;
+  });
+  const [jump, setJump] = useState<Part<LibraryJumpBucket[]>>(() => {
+    const cached = store.catalogue.cachedLibraryJumpIndex(id);
+    return cached ? { key: jumpKey, load: 'ready', attempt: 0, value: cached } : noPart;
   });
 
   useEffect(() => {
@@ -221,6 +228,29 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const landscape = (card ?? libraryCard) === 'landscape';
   const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => libraryCardArtwork(card, 'landscape')) })) } : rawExtras, [rawExtras, landscape]);
   const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !canRecommend || view === 'genres' && !extras?.genres.length ? 'library' : view;
+  const layout = viewTab?.layout ?? 'grid';
+  const jumpEligible = canJump && jumpIndexEligible(current?.value ?? earlier, browseQuery, { view: usableView, layout, facetTitle });
+
+  // Jump index: read once per session when an eligible title-sorted grid is on show. Failures hide
+  // the control quietly so ordinary paging is unaffected.
+  useEffect(() => {
+    if (!id || !focused || !jumpEligible) return;
+    if (jump.key === jumpKey && (jump.load === 'ready' || jump.load === 'failed')) return;
+    const cached = store.catalogue.cachedLibraryJumpIndex(id);
+    if (cached) {
+      setJump({ key: jumpKey, load: 'ready', attempt: 0, value: cached });
+      return;
+    }
+    let active = true;
+    const leave = new AbortController();
+    setJump({ key: jumpKey, load: 'loading', attempt: 0 });
+    void store.catalogue.libraryJumpIndex(id, false, leave.signal).then(value => {
+      if (active) setJump({ key: jumpKey, load: 'ready', attempt: 0, value: value ?? [] });
+    }).catch(() => {
+      if (active) setJump({ key: jumpKey, load: 'failed', attempt: 0, value: [] });
+    });
+    return () => { active = false; leave.abort(); };
+  }, [store, id, jumpKey, jumpEligible, focused, jump.key, jump.load]);
 
   useEffect(() => {
     if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, browseQuery, current?.value?.pages ?? 1, !!current?.value);
@@ -231,6 +261,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     const held = current?.value;
     const extrasView = usableView === 'recommended' || usableView === 'collections' || usableView === 'people' || usableView === 'genres' && canRecommend;
     const part = extrasView ? viewPart(usableView, rowsPart, collectionsPart, genresPart) : undefined;
+    const jumpBuckets = jumpEligible && jump.key === jumpKey && jump.load === 'ready' && jump.value && jump.value.length >= 2 ? jump.value : undefined;
     // While a new view is read, the library's last view stays on show under the new controls.
     return {
       model: (() => {
@@ -242,7 +273,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       loading: !held && current?.load !== 'failed',
       moreLoading: usableView === 'live' ? !!liveState.moreLoading : (usableView === 'collections' || usableView === 'people') ? !!collectionsPart?.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
-      layout: viewTab?.layout ?? 'grid',
+      layout,
       viewLoad: usableView === 'live' ? liveState.failed ? 'failed' : liveState.loading ? 'loading' : 'ready'
         : !extrasView ? current?.load ?? 'idle'
         : part?.load ?? 'idle',
@@ -255,11 +286,13 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       liveAvailable,
       viewRequest: requestedView ?? '',
       extras,
+      jumpBuckets,
+      jumpStart: jumpEligible ? browseQuery.start : undefined,
       // Only the part the view shows: Recommended never waits on, or fails with, collections.
       extrasLoading: extrasView && (!part || part.load === 'idle' || part.load === 'loading'),
       extrasFailed: extrasView && (part?.load === 'failed' || !!part?.moreFailed),
     };
-  }, [current, earlier, browseQuery, facetTitle, card, selectedTab?.id, selectedTab?.card, viewTab?.layout, usableView, requestedView, extras, rowsPart, collectionsPart, genresPart, canRecommend, liveAvailable, tabQuery, liveFilter, liveState]);
+  }, [current, earlier, browseQuery, facetTitle, card, selectedTab?.id, selectedTab?.card, layout, usableView, requestedView, extras, rowsPart, collectionsPart, genresPart, canRecommend, liveAvailable, tabQuery, liveFilter, liveState, jumpEligible, jump, jumpKey]);
 
   const failed = current?.load === 'failed';
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';

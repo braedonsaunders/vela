@@ -1,21 +1,23 @@
-// The browse toolbar's Filters and Sort panels. One compact button opens each: a popover under it
+// The browse toolbar's Filters, Sort and Jump panels. One compact button opens each: a popover under it
 // on a desktop web page, a sheet from the bottom of a phone, a centred panel on TV (a modal focus
 // scope the D-pad walks from its first control). Every facet, kind, watched, favourite, genre
 // and year control lives in Filters; a facet's values open in the same panel, with a way back.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { msg, number } from '@vela/core';
+import { msg, number, type LibraryJumpBucket } from '@vela/core';
 import { useVela } from '@vela/core/react';
 import type { FacetValue, LibraryFacet } from '../../../../protocol/types';
 import { FocusPressable } from '../../focus';
 import { useHost, type WidgetProps } from '../../host';
 import { holdBack } from '../../menu-key';
 import { Glyph } from '../common/controls';
+import { useFocusClaim } from '../common/focus-claim';
 import { ContentLoader } from '../common/loading';
 import { useLook } from '../common/look';
 import { SheetModal } from '../common/sheet-modal';
 import { TextField } from '../common/text-field';
-import { Button, ToolbarField } from './toolbar-controls';
+import { activeJumpBucket } from './jump';
+import { Button, CENTRED, ToolbarField } from './toolbar-controls';
 import { activeFilters, clearFiltersArg, lockedFacet } from './toolbar-model';
 import { YearInput } from './year-input';
 
@@ -239,6 +241,63 @@ function FacetValues({ facet, selected, onBack, onClose, onLabels }: {
       </ScrollView>
     </>}
   </>;
+}
+
+/** One letter tile inside the Jump panel. */
+function JumpTile({ bucket, selected, preferred, onPress }: {
+  bucket: LibraryJumpBucket; selected: boolean; preferred: boolean; onPress(): void;
+}) {
+  const look = useLook();
+  const [focused, focus] = useState(false);
+  const claim = useFocusClaim(preferred);
+  return <FocusPressable testID={`library-jump-${bucket.key}`} accessibilityRole="radio"
+    accessibilityLabel={`${bucket.label}, ${number(bucket.count)}`}
+    accessibilityState={{ selected, checked: selected }}
+    {...(Platform.OS === 'web' ? { 'aria-checked': selected } : {})}
+    hasTVPreferredFocus={claim} onFocus={() => focus(true)} onBlur={() => focus(false)} onPress={onPress}
+    style={look.box({
+      'min-width': Platform.isTV ? '64px' : '46px',
+      height: Platform.isTV ? '56px' : '42px',
+      padding: '0px 10px',
+      'border-radius': '$ui.radiusControl',
+      'background-color': selected ? '$ui.accent' : focused ? '$ui.controlHover' : '$ui.control',
+      border: `1px solid ${focused && selected ? '$ui.ink' : focused ? '$ui.accent' : selected ? '$ui.accent' : '$ui.glassEdge'}`,
+      'align-items': 'center',
+      'justify-content': 'center',
+    })}>
+    <Text accessible={false} numberOfLines={1}
+      style={[look.text({ color: selected ? '$ui.onAccent' : '$ui.ink', 'font-size': Platform.isTV ? '20px' : '$ui.controlFontSize', 'font-weight': '700' }), CENTRED]}>
+      {bucket.label}
+    </Text>
+  </FocusPressable>;
+}
+
+/** First-character jump index in server title-sort order. Picking a letter jumps straight to its offset. */
+export function JumpPanel({ anchor, onClose, onJump }: { anchor?: Anchor; onClose(): void; onJump(startOffset: number): void }) {
+  const host = useHost();
+  const page = host.env.library;
+  const buckets = page?.jumpBuckets;
+  if (!buckets?.length) return null;
+  const active = activeJumpBucket(buckets, page?.jumpStart);
+  const preferredKey = active?.key ?? buckets[0]?.key;
+  const choose = (startOffset: number) => {
+    const target = startOffset > 0 ? startOffset : 0;
+    host.dispatch('libraryFilter', target > 0 ? `start|${target}` : 'start|');
+    onJump(target);
+    onClose();
+  };
+  return <Panel label={msg('library.jumpTitle')} anchor={anchor} onClose={onClose} width={416}>
+    <PanelHeader title={msg('library.jumpTitle')} onDone={onClose} />
+    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 2 }}>
+      {buckets.map(bucket => <JumpTile key={bucket.key} bucket={bucket}
+        selected={active ? active.key === bucket.key : bucket.startOffset === 0}
+        preferred={bucket.key === preferredKey}
+        onPress={() => choose(bucket.startOffset)} />)}
+    </ScrollView>
+    {!!page?.jumpStart && <View style={{ flexDirection: 'row', justifyContent: 'flex-start' }}>
+      <Button testID="library-jump-top" label={msg('library.jumpTop')} quiet onPress={() => choose(0)} />
+    </View>}
+  </Panel>;
 }
 
 /** The sorts a library offers, and the direction when the sort in force has two. */
