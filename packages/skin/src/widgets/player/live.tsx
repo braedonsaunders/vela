@@ -82,7 +82,7 @@ function useSecondClock(on: boolean): number {
   return on ? Math.max(now, Date.now()) : now;
 }
 
-export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot | null, target?: ChromeTarget, send?: (command: CommandInput) => void): LiveWatch {
+export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot | null, target?: ChromeTarget, send?: (command: CommandInput) => void, seekingTo?: number, seeking = false): LiveWatch {
   const context = useLiveContext();
   const view = useLiveView();
   const watched = liveWatchOf(plan, target);
@@ -94,20 +94,25 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
   const live = snapshot?.live ?? null;
   const receivedAt = usePlanArrival(plan);
   const now = useSecondClock(!!plan?.live || !!plan?.catchUp);
-  const position = snapshot?.position ?? plan?.positionSeconds ?? 0;
+  const position = seekingTo ?? snapshot?.seekTarget ?? snapshot?.position ?? plan?.positionSeconds ?? 0;
   const edgeMovedAt = useEdgeMovedAt(live?.edgeSeconds, now);
   const measured = plan?.live ? timeshiftWindow({ live: plan.live, receivedAt, now, position, engine: live ? { ...live, edgeMovedAt } : null }) : null;
   // Back to live is taken at its word while the engine moves there and settles its latency.
   const wentLive = useRef(0);
-  const window = measured && measured.delayed && snapshot?.state !== 'paused' && now - wentLive.current < GO_LIVE_GRACE_MS ? { ...measured, delayed: false } : measured;
+  const paused = snapshot?.state === 'paused' || plan?.state === 'paused';
+  const delayed = !!measured && (measured.startOver || seekingTo !== undefined ||
+    ((measured.delayed || (measured.seekable && paused && measured.behind >= 1)) && now - wentLive.current >= GO_LIVE_GRACE_MS));
+  const window = measured ? { ...measured, delayed } : null;
   const rewindable = !!window?.seekable;
-  const paused = snapshot?.state === 'paused';
-  const behindSeconds = window ? window.behind
-    : plan?.catchUp ? Math.max(0, (now - (catchUpPictureTime(plan, position) ?? now)) / 1000) : 0;
+  const archiveStart = plan?.catchUp ? Date.parse(plan.catchUp.startAt) : NaN;
+  const windowEdgeAt = window?.startOver && Number.isFinite(archiveStart)
+    ? archiveStart + window.edge * 1000 : window?.edgeAt ?? now;
+  const pictureAt = catchUpPictureTime(plan ?? {}, position) ?? pictureTime(windowEdgeAt, window?.behind ?? 0);
+  const behindSeconds = plan?.catchUp ? Math.max(0, (now - pictureAt) / 1000) : window?.behind ?? 0;
   // A deliberate rewind is no delivery trouble: the window tells the delay, not "N seconds behind".
   // Behind live on purpose, the edge's publication waits are not the picture's business either.
-  const notices = rewindable && live ? liveNotices({ ...live, canCatchUp: false, ...(window!.delayed ? { delivery: 'available' as const } : {}) }) : liveNotices(live);
-  if (rewindable && window!.delayed) notices.push(msg('catchUp.behindLive', { delay: clock(window!.behind) }));
+  const notices = rewindable && live ? liveNotices({ ...live, canCatchUp: false, ...(window!.delayed || seeking ? { delivery: 'available' as const, reconnecting: false } : {}) }) : liveNotices(live);
+  if (rewindable && window!.delayed) notices.push(msg('catchUp.behindLive', { delay: clock(behindSeconds) }));
   // Start over plays its programme from the beginning: an engine joins a growing stream at its edge,
   // so the session is placed at its start once, when the engine itself reports the window (a seek
   // before then is refused; one that never reports places Start over on its own).
@@ -120,12 +125,10 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
     placed.current = plan.sessionId;
     send?.({ type: 'seek', seconds: placeAt });
   }, [placeAt, plan?.sessionId]);
-  const pictureAt = catchUpPictureTime(plan ?? {}, position) ?? pictureTime(window?.edgeAt ?? now, window?.behind ?? 0);
-  const archiveStart = plan?.catchUp ? Date.parse(plan.catchUp.startAt) : NaN;
-  const windowStartAt = Number.isFinite(archiveStart) ? archiveStart : (window?.edgeAt ?? now) - ((window?.edge ?? 0) - (window?.start ?? 0)) * 1000;
+  const windowStartAt = Number.isFinite(archiveStart) ? archiveStart : windowEdgeAt - ((window?.edge ?? 0) - (window?.start ?? 0)) * 1000;
   const guideChannel = channelId ? view.guide?.channels.find(c => c.id === channelId) : undefined;
   const offer = controller?.catchUpOffer;
-  const canStartOver = !archived && isLive && !!offer?.archive && !!guideChannel?.nowStartOver && !!guideChannel.nowId;
+  const canStartOver = !archived && isLive && !window?.delayed && !seeking && !!offer?.archive && !!guideChannel?.nowStartOver && !!guideChannel.nowId;
   return {
     live: isLive,
     channelId,
@@ -138,11 +141,11 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
     },
     archive: archived?.kind ?? null,
     window,
-    delay: window && (window.delayed || window.startOver || (paused && rewindable)) ? delayLabel(window.behind) : plan?.catchUp ? delayLabel(behindSeconds) : '',
+    delay: window && (window.delayed || window.startOver || (paused && rewindable)) ? delayLabel(behindSeconds) : plan?.catchUp ? delayLabel(behindSeconds) : '',
     behindSeconds,
     pictureAt,
     windowStartAt,
-    windowEdgeAt: window?.edgeAt ?? now,
+    windowEdgeAt,
     paused,
     backToLive: () => {
       wentLive.current = Date.now();

@@ -447,7 +447,7 @@ export class LiveController {
         return Promise.resolve(advanceGuideClock(block, this.now));
       }
       return loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids, range,
-        { clock: () => this.timing.now(), revalidate: read, currentUntil: this.clockUntil, archive: this.catchUpOffer.archive, archiveDays: this.catchUpOffer.maxDays });
+        { clock: () => this.timing.now(), revalidate: read, currentUntil: this.clockUntil, archive: this.catchUpOffer.archive, archiveDays: this.catchUpOffer.maxDays, initialLineup: this.surfaces.has('guide') && !base.length });
     })).then(
       models => {
         if (generation !== this.loadGeneration) return;

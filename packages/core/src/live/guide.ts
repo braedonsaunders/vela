@@ -124,13 +124,16 @@ function retainedListings(scope: string, id: string, from: number, until: number
   }
 }
 /** Every page of one window, shared by the minute-by-minute re-projections of that window. */
-function listings(api: GuideApi, scope: string, from: number, until: number, now: number, ids?: string[], read?: object): Promise<Listings> {
-  const key = `${scope}|${from}|${until}|${ids?.join(",") ?? "*"}`;
+function listings(api: GuideApi, scope: string, from: number, until: number, now: number, ids?: string[], read?: object, initialLineup = false): Promise<Listings> {
+  const key = `${scope}|${from}|${until}|${ids?.join(",") ?? "*"}|${initialLineup}`;
   const hit = cache.get(key);
   if (ids === undefined && hit && (!read || hit.read === read)) return hit.value;
   const value = (async () => {
     const channels = await channelMetadata(api, scope, now, read);
-    const requested = ids && ids.length === 0 ? [...channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id) : ids && [...new Set(ids)];
+    const firstRows = initialLineup || ids?.length === 0
+      ? [...channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id)
+      : [];
+    const requested = ids && [...new Set([...firstRows, ...ids])];
     const windowKey = `${scope}|${from}|${until}`;
     let entries = channelListings.get(windowKey);
     if (!entries) {
@@ -323,6 +326,8 @@ export interface GuideReadOptions {
   /** The server offers catch-up from channel archives (features.liveCatchUp): programmes carry `replay`. */
   archive?: boolean;
   archiveDays?: number;
+  /** The first visible rows must arrive together, including when a hand-off pins one channel. */
+  initialLineup?: boolean;
 }
 const clockModels = new WeakMap<GuideModel, { at: number; project(now: number): GuideModel }>();
 /** Recompute labels/progress from retained listings without reaching the adapter. */
@@ -354,7 +359,7 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
   const from = range ? Math.max(start, start + Math.floor(range.from / 30) * 30 * MINUTE) : start;
   const until = range ? Math.min(end, start + Math.ceil(range.to / 30) * 30 * MINUTE) : end;
   const windows = range ? await Promise.all(guideWindows(from, until, start, end).map(window =>
-    listings(api, scope, window.from, window.until, now, channelIds, options?.revalidate))) : [await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds, options?.revalidate)];
+    listings(api, scope, window.from, window.until, now, channelIds, options?.revalidate, options?.initialLineup))) : [await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds, options?.revalidate, options?.initialLineup)];
   const window = { channels: windows[0]?.channels ?? await channelMetadata(api, scope, now, options?.revalidate),
     programmes: [...new Map(windows.flatMap(window => window.programmes).map(p => [guideProgrammeKey(p), p])).values()],
     loaded: new Set((windows[0]?.channels ?? []).filter(c => windows.every(w => w.loaded.has(c.id))).map(c => c.id)),
@@ -367,7 +372,7 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
   const desiredEnd = options?.currentUntil && options.currentUntil > now ? options.currentUntil : now + 2 * HOUR;
   const currentEnd = currentStart + Math.ceil((desiredEnd - currentStart) / (3 * HOUR)) * 3 * HOUR;
   const currentWindows = guideWindows(now, desiredEnd, currentStart, currentEnd);
-  const currentParts = !range && day === 0 ? [window] : await Promise.all(currentWindows.map(w => listings(api, scope, w.from, w.until, now, channelIds, options?.revalidate)));
+  const currentParts = !range && day === 0 ? [window] : await Promise.all(currentWindows.map(w => listings(api, scope, w.from, w.until, now, channelIds, options?.revalidate, options?.initialLineup)));
   const current = { programmes: currentParts.flatMap(part => part.programmes), retryAt: Math.min(...currentParts.map(part => part.retryAt ?? Infinity)) };
   const coverageEnd = !range && day === 0 ? end : currentWindows.at(-1)?.until ?? now;
   const grouped = group(window.programmes.filter(p => Date.parse(p.start) < end && Date.parse(p.end) > start));

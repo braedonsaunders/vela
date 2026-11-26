@@ -1,6 +1,6 @@
 import { expect } from 'e2e';
 import { describe, test } from '@e2e-dev/web';
-import { waitForVideoReady } from './player-ready';
+import { videoState, waitForVideoPlayback, waitForVideoReady } from './player-ready';
 
 describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
   test('the guide replays an archive and Start over can pause, rewind and return live', async ({ app, browser, screen }) => {
@@ -55,6 +55,12 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
 
       await openProgramme(guide.programmes[1]!);
       await expect(screen.getByTestId('guide-start-over')).toBeVisible({ timeout: 30_000 });
+      await expect.poll(() => browser.evaluate(() => [2, 3, 5].every(channel =>
+        Array.from(document.querySelectorAll<HTMLElement>(`[data-testid^="guide-programme-channel-${channel}|"]`))
+          .some(cell => {
+            const box = cell.getBoundingClientRect();
+            return box.width > 12 && box.right > 310 && box.left < window.innerWidth && box.top < window.innerHeight;
+          })))).toBe(true);
       await app.screenshot('guide-start-over');
       await screen.getByTestId('guide-start-over').tap();
       await expect(timeline).toBeVisible({ timeout: 35_000 });
@@ -67,14 +73,32 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await goLive.tap();
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       await expect(screen.getByTestId('player-live-mark')).toBeVisible();
+      await waitForVideoPlayback(browser, screen);
       await pause();
+      const positionBeforeRewind = (await videoState(browser)).position;
       const seeks = commands.filter(kind => kind === 'seek').length;
       await screen.getByTestId('player-scrub').press('PageDown');
       await expect.poll(() => commands.filter(kind => kind === 'seek').length).toBe(seeks + 1);
       await expect(screen.getByTestId('player-live-delay')).toHaveText(/ · -\d+:[0-5]\d$/, { timeout: 35_000 });
       await expect(toggle).toHaveAttribute('aria-label', 'Play');
-      await expect(screen.getByTestId('player-live-status')).toHaveText(/behind live/);
-      await waitForVideoReady(browser, screen);
+      await expect(screen.getByTestId('player-live-status')).toHaveText(/^\d+:\d+ behind live$/);
+      await expect(screen.getByTestId('player-live-mark')).toBeHidden();
+      await expect(screen.getByTestId('player-start-over')).toBeHidden();
+      await expect(screen.getByTestId('player-status')).toBeHidden();
+      const progress = async () => {
+        const video = await videoState(browser);
+        return { ...video, rewind: positionBeforeRewind - video.position };
+      };
+      try {
+        await expect.poll(async () => {
+          const video = await progress();
+          return video.hasFrame && video.paused && !video.seeking && video.rewind > 30;
+        }, { timeout: 15_000 }).toBe(true);
+      } catch (error) {
+        console.info('Rewind picture state', { before: positionBeforeRewind, ...(await progress()) });
+        await app.screenshot('paused-live-rewind-diagnostic');
+        throw error;
+      }
       await app.screenshot('paused-live-rewind');
       await expect(goLive).toBeVisible();
       await goLive.tap();

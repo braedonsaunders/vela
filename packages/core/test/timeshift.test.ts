@@ -105,6 +105,12 @@ describe('the rewind window', () => {
     expect(timeshiftWindow({ live, receivedAt: NOW, now: NOW, position: 70, engine: { edgeSeconds: 80, windowStartSeconds: 0, canCatchUp: false } })!.delayed).toBe(false);
   });
 
+  test('clock labels carry the plan wall clock into the engine timeline', () => {
+    const window = timeshiftWindow({ live: { ...live, edgeAt: iso(NOW) }, receivedAt: NOW, now: NOW + 10_000,
+      position: 1850, engine: { edgeSeconds: 1906, windowStartSeconds: 100, canCatchUp: true } });
+    expect(window).toMatchObject({ edge: 1906, edgeAt: NOW + 6_000, behind: 56 });
+  });
+
   test("a paused engine's edge stands still; the window's grows from when it last moved", () => {
     const window = timeshiftWindow({ live, receivedAt: NOW, now: NOW + 60_000, position: 70,
       engine: { edgeSeconds: 80, windowStartSeconds: 0, canCatchUp: false, edgeMovedAt: NOW } })!;

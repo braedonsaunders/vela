@@ -258,6 +258,12 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return answer;
   }
 
+  async viewerLiveFeatures(): Promise<V.ServerCapabilities['features']> {
+    const answer = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, CACHED);
+    this.guideWindowLimits = answer.liveGuideWindow;
+    return answer.features;
+  }
+
   async declareClient(request: V.NegotiateRequest): Promise<void> {
     const answer = await this.http.request<V.NegotiateResponse>('POST', '/negotiate', request);
     if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;

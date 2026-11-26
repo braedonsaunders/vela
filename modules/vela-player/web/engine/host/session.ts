@@ -1,9 +1,10 @@
+import { holdSeekPicture } from './seek-picture';
 import { playsOnAfterEnd } from './continuation';
 import type { PlaybackSession } from '../model';
 import type { HostContext } from './state';
-import { detachMedia } from './native-events';
+import { bindMedia, detachMedia } from './native-events';
 import { resetMedia, activateSource, releaseOriginal } from './media';
-import { checkWaiting } from './watchdog';
+import { checkWaiting, resetProgress } from './watchdog';
 import { adaptLive } from './live';
 import { adaptCoreQuality, candidateSources } from './quality';
 import { publishHostState, emitHostEvent } from './events';
@@ -60,6 +61,33 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   )
     context.recovery.localDecoderRetries.clear();
   const retained = session.sources.find((source) => source.id === session.selectedSourceId);
+  const previous = context.session.current;
+  const intentionalLiveSeek = !!(previous?.live && session.live && previous.id === session.id
+    && session.seekGeneration !== previous.seekGeneration && session.serverState !== 'ended');
+  const current = context.media.source;
+  const pipeline = context.media.pipeline;
+  if (intentionalLiveSeek && retained && current && pipeline && session.seekGeneration !== undefined
+    && previous?.sourceGeneration === session.sourceGeneration && retained.id === current.id
+    && retained.url === current.url && retained.timeline === current.timeline
+    && retained.sourceRevision === current.sourceRevision && retained.timelineOriginSeconds === current.timelineOriginSeconds
+    && retained.audioTrackId === current.audioTrackId && previous.audioTrackId === session.audioTrackId
+    && previous.subtitleTrackId === session.subtitleTrackId) {
+    const at = session.position ?? 0;
+    const target = session.liveEdge !== undefined && at >= session.liveEdge && pipeline.publishedEdge !== null
+      ? Math.max(pipeline.publishedStart ?? 0, pipeline.publishedEdge - context.live.targetSeconds) : at;
+    if (pipeline.seekLive(target)) {
+      bindMedia(context, context.session.controller.keepSourceAtSeek(session.seekGeneration));
+      context.session.current = session;
+      context.media.source = retained;
+      context.session.pendingSeek = { position: target, startedAt: performance.now(), authorized: true };
+      resetProgress(context, target);
+      context.playback.status = 'buffering';
+      context.telemetry.lastObservation = -Infinity;
+      applyServerState(context, session.serverState, previous.serverState);
+      publishHostState(context);
+      return;
+    }
+  }
   const retainedPosition = retained ? retainedSeekPosition(context, session, retained) : null;
   if (retained && retainedPosition !== null) {
     await seekRetainedSource(context, session, retained, retainedPosition);
@@ -113,8 +141,9 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   if (playsOnAfterEnd({ ended: context.playback.status === 'ended', sameSession: session.id === context.session.current?.id, serverState: session.serverState,
     sourceGeneration: session.sourceGeneration, previousSourceGeneration: context.session.current?.sourceGeneration }))
     context.playback.wantsPlay = true;
+  if (intentionalLiveSeek) holdSeekPicture(context);
   context.session.controller.start(session.id, session.sourceGeneration, session.seekGeneration);
-  resetMedia(context);
+  resetMedia(context, intentionalLiveSeek);
   context.session.current = session;
   context.tracks.pendingTracks = undefined;
   if (session.serverState === 'ended') {
@@ -165,6 +194,9 @@ export async function loadSession(context: HostContext, session: PlaybackSession
       publishHostState(context);
       return;
     }
+  }
+  if (intentionalLiveSeek) {
+    context.session.pendingSeek = { position, startedAt: performance.now(), authorized: true };
   }
   await activateSource(context, source, position, recovery, true);
 }

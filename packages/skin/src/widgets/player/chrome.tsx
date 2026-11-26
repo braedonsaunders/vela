@@ -89,8 +89,22 @@ function Chrome({ state }: { state: PlayerChromeState }) {
 
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
-  const waiting = !failed && (!state.plan || view.waiting);
-  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send);
+  const [liveSeek, setLiveSeek] = useState<{ sessionId: string; generation: number; seconds: number } | null>(null);
+  const seeking = liveSeek != null && liveSeek.sessionId === state.plan?.sessionId && !failed;
+  useEffect(() => {
+    if (!liveSeek) return;
+    const snapshot = state.snapshot;
+    const settled = snapshot && snapshot.seekGeneration > liveSeek.generation && !snapshot.waiting
+      && Math.abs(snapshot.position - liveSeek.seconds) < 3;
+    if (!seeking || settled || state.actionError) setLiveSeek(null);
+  }, [liveSeek, seeking, state.snapshot, state.actionError]);
+  useEffect(() => {
+    if (!liveSeek) return;
+    const timer = setTimeout(() => setLiveSeek(null), 12_000);
+    return () => clearTimeout(timer);
+  }, [liveSeek]);
+  const waiting = !failed && !seeking && (!state.plan || view.waiting);
+  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send, seeking ? liveSeek.seconds : undefined, seeking);
   // A channel back in the foreground goes to the live edge and plays (session.ts, returnedLive).
   const returnedLive = state.returnedLive ?? 0;
   useEffect(() => {
@@ -135,11 +149,13 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     if (rewind) {
       if (!live.archive && toLive) {
         lastStep.current = null;
+        setLiveSeek(null);
         live.backToLive();
         return;
       }
       seconds = clampSeek(rewind, seconds);
       live.leftLive();
+      if (state.plan) setLiveSeek({ sessionId: state.plan.sessionId, generation: state.plan.seekGeneration, seconds });
     }
     lastStep.current = { seconds, at: Date.now() };
     send({ type: 'seek', seconds });

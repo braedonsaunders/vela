@@ -149,7 +149,7 @@ export function timeshiftWindow({ live, receivedAt, now, position, engine }: Win
   // than the stream's latency. Without a rewind window the engine's report is all there is.
   const fresh = engine?.edgeSeconds != null && (engine.edgeMovedAt === undefined || now - engine.edgeMovedAt <= EDGE_STALE_MS);
   const delayed = !seekable ? !!engine?.canCatchUp : fresh ? !!engine!.canCatchUp : behind > LIVE_SLACK_SECONDS * 2;
-  const edgeAt = hasClock && engine?.edgeSeconds == null && live.liveEdgeSeconds !== undefined
+  const edgeAt = hasClock && live.liveEdgeSeconds !== undefined
     ? issuedEdgeAt + (edge - live.liveEdgeSeconds) * 1000 : now;
   return { start, edge, edgeAt, position: at, behind, delayed, seekable, startOver };
 }

@@ -140,3 +140,24 @@ test('archive depth on the bulk row exposes distinct id-less listings as explici
     ['catchUp', { startAt: iso(-30), durationSeconds: 1200 }],
   ]);
 });
+
+test('a programme hand-off loads the initial lineup alongside the pinned channel', async () => {
+  const channels: Channel[] = Array.from({ length: 34 }, (_, index) => ({
+    id: String(index), name: String(index), number: String(index), kind: 'tv', artwork: [], favorite: false,
+  }));
+  const api: GuideApi = {
+    channels: async () => ({ items: channels, continuation: 'exhausted' }),
+    guide: async () => { throw new Error('Expected bulk guide'); },
+    guideWindow: async q => ({ ...answer(q), channels: q.channelIds.map(channelId => ({
+      channelId, state: 'ready', programmes: [{
+        id: channelId, channelId, name: channelId, summary: '', artwork: [],
+        start: query.from, end: query.until,
+      }],
+    })) }),
+  };
+  const guide = await loadGuide(api, 0, NOW, 'guide-handoff-lineup', undefined, undefined, ['33'],
+    { from: 720, to: 900 }, { initialLineup: true });
+  expect(guide.channels[2]?.programmes.map(p => p.id)).toEqual(['2']);
+  expect(guide.channels[33]?.programmes.map(p => p.id)).toEqual(['33']);
+  expect(guide.channels[32]?.listingsLoaded).toBe(false);
+});
