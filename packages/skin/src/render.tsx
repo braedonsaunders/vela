@@ -1053,7 +1053,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const drawn: Record<string, unknown> = { ...style, ...(web && swipe ? { touchAction: 'pan-y pinch-zoom' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion, ...focusRing };
   if (!web) drawn.pointerEvents = pointer.box;
   // Sticky keeps the document's stacking order: CSS on web, our ScrollView wrapper natively.
-  if (web && fx.sticky) drawn.position = 'sticky';
+  if (web && fx.sticky) {
+    drawn.position = 'sticky';
+    drawn.top = 0;
+  }
   // A masked box that only paints a colour draws the masked colour as a gradient fill.
   const filled = !!fx.maskedFill && node.children.length === 0;
   if (filled) {
