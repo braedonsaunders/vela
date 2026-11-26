@@ -12,7 +12,7 @@ export const sessions = new Map<string, Session>();
  * external file, beside a French track embedded in the source, as Jellyfin, Emby and Plex sidecars arrive, selected from the start when `selected` (a default or
  * remembered subtitle). The direct MP4 is the original file and `pathId` is where plans start. Track commands are
  * answered as Ether answers them: off the original file, with a new source generation. */
-export const sidecarFixture = { enabled: false, selected: true, pathId: 'direct' };
+export const sidecarFixture = { enabled: false, selected: true, pathId: 'direct', versionSwitch: false };
 export function withSidecar(plan: PlaybackPlan, base: string) {
   plan.subtitleTracks = [{ id: 'sub-en', kind: 'subtitle', language: 'en', name: 'English · sidecar', codec: 'webvtt',
     delivery: { kind: 'external', format: 'webvtt', url: `${base}/subtitles.vtt` } },
@@ -28,6 +28,20 @@ export function withSidecar(plan: PlaybackPlan, base: string) {
   const remux = plan.paths.find(path => path.id === 'remux');
   if (remux) remux.quality = { width: 1280, height: 720, bitrate: 2200000, codec: 'h264', videoCodec: 'avc1.64001f', codecStatus: 'verified' };
   if (plan.paths.some(path => path.id === sidecarFixture.pathId)) plan.selectedPathId = sidecarFixture.pathId;
+  versionSidecar(plan, base);
+}
+/** The cached edition has a different sidecar and uses HLS, on start and switch alike. */
+function versionSidecar(plan: PlaybackPlan, base: string) {
+  if (!sidecarFixture.versionSwitch) return;
+  const cached = plan.versions?.find(version => version.id === plan.playingVersionId)?.availability === 'cached';
+  const previous = plan.subtitleTracks[0];
+  if (!previous || (previous.id !== 'sub-en' && previous.id !== 'sub-en-cached')) return;
+  const id = cached ? 'sub-en-cached' : 'sub-en';
+  plan.subtitleTracks[0] = { ...previous, id, name: cached ? 'English · cached edition' : 'English · sidecar',
+    delivery: { kind: 'external', format: 'webvtt', url: `${base}/${cached ? 'version-subtitles' : 'subtitles'}.vtt` } };
+  if (plan.selectedSubtitleTrackId || sidecarFixture.selected) plan.selectedSubtitleTrackId = id;
+  const pathId = cached ? 'remux' : sidecarFixture.pathId;
+  if (plan.paths.some(path => path.id === pathId)) plan.selectedPathId = pathId;
 }
 /** Ether's answer to a track choice: the original file applies it in the player; a server path makes a new source. */
 export function answerTracks(plan: PlaybackPlan, cmd: { audioTrackId?: string; subtitleTrackId?: string | null }) {
@@ -211,7 +225,14 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
     case 'stop': s.plan.state = 'ended'; break;
     case 'tracks': answerTracks(s.plan, cmd); break;
     case 'switch': s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds; break;
-    case 'version': s.plan.selectedVersionId = cmd.versionId; setPlaying(s.plan); s.plan.sourceGeneration++; s.plan.seekGeneration++; if (cmd.positionSeconds !== undefined) s.plan.positionSeconds = cmd.positionSeconds; break;
+    case 'version':
+      s.plan.selectedVersionId = cmd.versionId;
+      setPlaying(s.plan);
+      s.plan.sourceGeneration++;
+      s.plan.seekGeneration++;
+      if (cmd.positionSeconds !== undefined) s.plan.positionSeconds = cmd.positionSeconds;
+      if (sidecarFixture.enabled) versionSidecar(s.plan, `/sessions/media/${s.plan.sessionId}/${s.mediaToken}`);
+      break;
   }
   publish(s);
 }

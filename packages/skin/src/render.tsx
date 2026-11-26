@@ -58,6 +58,7 @@ import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocab
 import { itemKey, items } from './screen/items';
 import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
+import { RichBlock } from './blocks/listen/rich';
 import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
@@ -108,6 +109,8 @@ export const Unfocusable = createContext(false);
 export interface SurfaceSlotViews {
   row?: ComponentType<{ id: string; surface: string }>;
   titlePanels?: ComponentType<{ id: string; kind: string }>;
+  /** Renderer 20: a published plugin slot in a built-in page (`plugin:<slot id>`), with its context filled. */
+  slot?: ComponentType<{ slot: string; context: Record<string, string>; limit?: number }>;
 }
 export const SurfaceSlots = createContext<SurfaceSlotViews | null>(null);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
@@ -549,6 +552,8 @@ function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node:
     case 'sections': case 'shelf': case 'grid': case 'marquee': case 'tabs': case 'table':
     case 'lineGraph': case 'player': case 'paramInput': case 'titleCard':
       return <BlockView node={node} ctx={ctx} />;
+    // Rich blocks (docs/experiences.md): native engines with named parts (blocks/listen).
+    case 'rich': return <RichBlock node={node} ctx={ctx} />;
   }
 }
 
@@ -1779,9 +1784,14 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
       </Frame>
     );
   }
+  // Renderer 20: inline runs, each a nested text with its own rows over the line's.
+  const spans = node.spans?.filter(span => holds(span.when, ctx, env)).map((span, i) => {
+    const rows = filled(span.style, ctx, env, false);
+    return <Text key={i} style={textStyle({ ...text.rows, ...rows }, measure(viewport, text.fontSize)).style}>{fill(span.text, ctx, env)}</Text>;
+  });
   return (
     <Line style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)} {...presentation}>
-      {value}
+      {value}{spans}
     </Line>
   );
 }
@@ -1883,8 +1893,20 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   const Frame = frameFor(node);
+  const surfaceSlots = useContext(SurfaceSlots);
   // Apple TV searches on the system's search screen (the shell's Search opens it): no field here.
   if (fx.hidden || (node.slot === 'searchField' && SYSTEM_SEARCH)) return null;
+  if (node.slot !== 'children' && node.slot !== 'searchField') {
+    // A plugin slot draws the surfaces filling it (the app's view), or nothing.
+    const Surfaces = surfaceSlots?.slot;
+    if (!Surfaces) return null;
+    const context = Object.fromEntries(Object.entries(node.context ?? {}).map(([name, value]) => [name, fill(value, ctx, host.env)]));
+    return (
+      <Inherited.Provider value={text}>
+        <Frame style={style as ViewStyle}><View style={inner as ViewStyle}><Surfaces slot={node.slot.slice('plugin:'.length)} context={context} limit={node.limit} /></View></Frame>
+      </Inherited.Provider>
+    );
+  }
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
   const box = <View style={inner as ViewStyle}>{content}</View>;
   // The search field is centred and narrower than the page; the TV focus engine only moves to

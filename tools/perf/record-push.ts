@@ -18,7 +18,7 @@ import { RecordStore } from '../../packages/core/src/screens/records';
 import { sameScopedRecordProps } from '../../packages/skin/src/blocks/record-scope';
 import { resolveScreenDocument } from '../../packages/skin/src/resolve/screen';
 import { resolveUi } from '../../packages/skin/src/resolve/ui';
-import { fill, holds, type RNode } from '../../packages/skin/src/resolve';
+import { fill, holds, type RNode, type Template, type Test } from '../../packages/skin/src/resolve';
 import { screenItems, screenRoot, type Items } from '../../packages/skin/src/screen/items';
 import { refKey, type RecordReader } from '../../packages/skin/src/screen/scope';
 import type { Ctx, Env } from '../../packages/skin/src/vocabulary';
@@ -38,7 +38,16 @@ export interface RecordPushAudit {
  *  the active `RecordReader` records every `$record` key that this subtree actually touches. */
 function touchSubtree(node: unknown, ctx: Ctx, env: Env): void {
   if (!node || typeof node !== 'object') return;
-  const n = node as RNode & {
+  const n = node as {
+    when?: Test[];
+    text?: Template;
+    src?: Template;
+    label?: Template;
+    arg?: Template;
+    args?: Record<string, Template>;
+    press?: { arg?: Template; args?: Record<string, Template> };
+    base?: { style?: Record<string, Template> };
+    children?: unknown[];
     item?: unknown;
     empty?: unknown;
     header?: unknown;
@@ -54,6 +63,10 @@ function touchSubtree(node: unknown, ctx: Ctx, env: Env): void {
   if (n.arg) fill(n.arg, ctx, env);
   if (n.args) {
     for (const v of Object.values(n.args)) fill(v, ctx, env);
+  }
+  if (n.press?.arg) fill(n.press.arg, ctx, env);
+  if (n.press?.args) {
+    for (const v of Object.values(n.press.args)) fill(v, ctx, env);
   }
   if (n.base?.style) {
     for (const v of Object.values(n.base.style)) fill(v, ctx, env);
@@ -79,12 +92,14 @@ interface CollectionSite {
 
 function collectSites(node: unknown, out: CollectionSite[] = []): CollectionSite[] {
   if (!node || typeof node !== 'object') return out;
-  const n = node as RNode & {
+  const n = node as {
+    kind?: string;
     items?: Items;
     item?: unknown;
+    children?: unknown[];
     sections?: { header?: unknown; body?: unknown }[];
   };
-  if (n.items && n.item) {
+  if (n.kind && n.items && n.item) {
     out.push({ kind: n.kind, items: n.items, itemTemplate: n.item });
   }
   if (Array.isArray(n.children)) {
@@ -198,8 +213,8 @@ export function auditRecordPushIsolation(
         // ShelfBlock, GridBlock, and MarqueeBlock wrap each item in <ScopedRecordNode>, which
         // short-circuits via sameScopedRecordProps unless the item's own reader subscribed to pushedRecordKey.
         const shortCircuitsParentPass = sameScopedRecordProps(
-          { node: site.itemTemplate, ctx: itemCtx1, renderNode },
-          { node: site.itemTemplate, ctx: itemCtx2, renderNode },
+          { node: site.itemTemplate as RNode, ctx: itemCtx1, renderNode },
+          { node: site.itemTemplate as RNode, ctx: itemCtx2, renderNode },
         );
         if (readsPushedRecord || !shortCircuitsParentPass) {
           currentRootInvalidatedItems++;

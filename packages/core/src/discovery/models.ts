@@ -1,6 +1,7 @@
 // Projections of the wire's discovery data (home, rows, titles) into the display models of
 // models.ts: labels formatted for the current locale, artwork sized for each slot.
 import type * as V from '../wire';
+import { slotSpec } from '../wire';
 import type { ArtworkRef, Bootstrap, LibraryLiveItem, Row as WireRow, RowEntry, ScreenNavigationEntry, SurfaceContribution, SurfaceRow, Title, TitleDetail } from '../wire';
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
@@ -372,7 +373,7 @@ export function screenNavigation(navigation: Bootstrap['navigation']): HomeModel
   });
 }
 
-const PRESENTATIONS = new Set(['playerOverlay', 'toast', 'homeRow', 'titlePanel']);
+const PRESENTATIONS = new Set(['playerOverlay', 'toast', 'homeRow', 'titlePanel', 'slot']);
 const ANCHORS = new Set(['topLeft', 'topRight', 'bottom']);
 
 /** Bootstrap's surfaces, each once, in Ether's order (it has capped and ordered them). One that is
@@ -383,8 +384,12 @@ export function surfaceContributions(surfaces: Bootstrap['surfaces']): SurfaceCo
     if (!surface || typeof surface.id !== 'string' || !surface.id || seen.has(surface.id) || !PRESENTATIONS.has(surface.presentation)) return [];
     if (!surface.document || typeof surface.document.href !== 'string' || !surface.document.href || typeof surface.document.renderer !== 'number') return [];
     if (surface.presentation === 'playerOverlay' && (!ANCHORS.has(surface.anchor ?? '') || !surface.setting || typeof surface.setting.id !== 'string')) return [];
+    // A slot surface (renderer 20) fills a published slot this client knows; a player-overlay slot needs its switch too.
+    if (surface.presentation === 'slot' && (!slotSpec(String(surface.slot ?? '')) || (String(surface.slot).startsWith('player.overlay.') && (!surface.setting || typeof surface.setting.id !== 'string')))) return [];
     seen.add(surface.id);
-    return [surface];
+    // A player-overlay slot stands at the anchor its id names, as a playerOverlay does.
+    const slotAnchor = surface.presentation === 'slot' ? /^player\.overlay\.(topLeft|topRight|bottom)$/.exec(String(surface.slot))?.[1] : undefined;
+    return [slotAnchor ? { ...surface, anchor: slotAnchor as SurfaceContribution['anchor'] } : surface];
   });
 }
 

@@ -3,7 +3,9 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
+import type { LibraryJumpIndex, LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
+import type { LibraryJumpBucket } from '../../models';
+import { parsePlexJumpIndex } from './jump-index';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { fetchTextBounded } from '../../protocol/timeout';
@@ -99,7 +101,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions, TrickplaySheets, UnloadStop {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, LibraryJumpIndex, Versions, TrickplaySheets, UnloadStop {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -396,6 +398,15 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const start = offset(cursor);
     const c = await this.request(`/library/sections/${enc(id)}/collections`, { 'X-Plex-Container-Start': start, 'X-Plex-Container-Size': 100 });
     return page(this.nodes(c).filter(n => n.type === 'collection').map(n => this.entry(n)), start, c.totalSize ?? c.size);
+  }
+  async libraryJumpIndex(id: string, query?: Pick<V.LibraryBrowseQuery, 'tab' | 'sort' | 'direction'>): Promise<LibraryJumpBucket[]> {
+    if ((query?.sort ?? 'title') !== 'title' || (query?.direction ?? 'asc') !== 'asc' || query?.tab) return [];
+    if (!this.sections.has(id)) await this.libraries({});
+    const section = this.sections.get(id);
+    if (!section || (section.type !== 'movie' && section.type !== 'show')) return [];
+    // Same parameters as /all for movie and show sections (no type or includeCollections), so offsets line up.
+    const c = await this.request(`/library/sections/${enc(id)}/firstCharacter`);
+    return parsePlexJumpIndex(c.Directory);
   }
   async libraryGenres(id: string): Promise<{ id: string; label: string }[]> {
     const c = await this.request(`/library/sections/${enc(id)}/genre`);

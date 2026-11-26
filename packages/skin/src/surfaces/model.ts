@@ -2,6 +2,7 @@
 // what the host is showing (`when`, evaluated here so an inapplicable surface costs no request),
 // which player overlays stand and where (anchors, boxes, the chrome's bars), the context a surface
 // reads, and the toast stack (which alerts stand, for how long). Nothing here draws.
+import { slotSpec, surfaceSlot } from '../../../protocol/experiences';
 import { SPOILER_DELAY_SECONDS } from '@vela/core';
 import type { AlertFrame, SurfaceContext, SurfaceContribution } from '../../../protocol/screen';
 
@@ -53,7 +54,7 @@ export const OVERLAYS_PER_ANCHOR = 2;
  * every applicable one (the player menu offers a switch for each, on or off). */
 export function playerOverlays(surfaces: readonly SurfaceContribution[], facts: SurfaceFacts, local: Record<string, boolean> = {}):
   { shown: SurfaceContribution[]; switchable: SurfaceContribution[] } {
-  const switchable = surfaces.filter(s => s.presentation === 'playerOverlay' && surfaceApplies(s, facts));
+  const switchable = surfaces.filter(s => surfaceSlot(s)?.startsWith('player.overlay.') && surfaceApplies(s, facts));
   const counts = new Map<Anchor, number>();
   const shown: SurfaceContribution[] = [];
   for (const surface of switchable) {
@@ -174,7 +175,7 @@ export function toastBox(size: (px: number) => number, small: boolean, width: nu
 
 /** The toast surface an alert draws with: the one it names, else the toast its plugin contributes. */
 export function toastSurface(alert: AlertFrame, surfaces: readonly SurfaceContribution[]): SurfaceContribution | undefined {
-  const toasts = surfaces.filter(s => s.presentation === 'toast');
+  const toasts = surfaces.filter(s => surfaceSlot(s) === 'toast');
   if (alert.surface) {
     const named = toasts.find(s => s.id === alert.surface);
     if (named) return named;
@@ -200,4 +201,29 @@ export function toastStack(alerts: readonly AlertFrame[], max = MAX_TOASTS): { s
 /** A toast's time left after it ran `ranMs` unheld: it resumes where it stopped, with at least a beat left. */
 export function toastRemaining(totalMs: number, ranMs: number): number {
   return Math.max(1200, totalMs - Math.max(0, ranMs));
+}
+
+/** The context keys a slot surface's data read carries to Ether (the rest stay on the client, but for
+ * `titleKind`, which only picks surfaces). */
+const SERVER_CONTEXT = new Set(['channel', 'event', 'title', 'kind']);
+
+/** The surfaces filling a published slot (renderer 20, `{type: "slot", slot: "plugin:<id>"}` in a built-in
+ * page): slot surfaces with that slot id, and the Sports-era presentations standing for it
+ * (experiences.ts surfaceSlot), in Ether's order, at most the slot's cap. A `titleKind` context
+ * picks by `when.titleKind`. */
+export function slotSurfaces(surfaces: readonly SurfaceContribution[], slot: string, context: Record<string, string>, limit?: number): SurfaceContribution[] {
+  const cap = Math.min(limit ?? Infinity, slotSpec(slot)?.cap.perSlot ?? Infinity);
+  return surfaces.filter(s => surfaceSlot(s) === slot && surfaceApplies(s, { titleKind: context.titleKind })).slice(0, Number.isFinite(cap) ? cap : undefined);
+}
+
+/** A slot's context as a surface reads it: server keys (a title as its `item:` key) and the rest local. */
+export function slotContext(context: Record<string, string>): { server: SurfaceContext; local: SurfaceContext } {
+  const server: Record<string, string> = {};
+  const local: Record<string, string> = {};
+  for (const [name, value] of Object.entries(context)) {
+    if (!value || name === 'titleKind') continue;
+    if (SERVER_CONTEXT.has(name)) server[name] = name === 'title' ? (value.startsWith('item:') ? value : `item:${value}`) : value;
+    else local[name] = value;
+  }
+  return { server: server as SurfaceContext, local: local as SurfaceContext };
 }

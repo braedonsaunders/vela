@@ -1,12 +1,17 @@
 // Plugin screens and surfaces (docs/plugin-screens.md): documents a plugin ships, Ether validates,
 // localises and serves, and Vela draws in the active skin. The node language is skin.ts's; this
 // file holds the document envelope and the wire around it (data, records, stream, actions,
-// bootstrap contributions). Ether's JSON Schema (plugin-screen.v1.json) is generated from here.
+// bootstrap contributions). Since renderer 20 the same envelope carries Vela's built-in page
+// documents (docs/experiences.md: `owner: "vela"`, `experience`). The JSON Schema
+// (vela-document.v1.json) is generated from here.
 import type { ID, Timestamp } from './types';
-import type { MotionPreset, Node, Template } from './skin';
+import type { FormFactor, MotionPreset, Node, PartStyle, Platform, Template } from './skin';
+import type { ExperienceId, SlotId } from './experiences';
 
-/** Where a document is drawn (docs/plugin-screens.md: Surfaces). */
-export type Presentation = 'section' | 'page' | 'playerOverlay' | 'toast' | 'homeRow' | 'titlePanel';
+/** Where a document is drawn (docs/plugin-screens.md: Surfaces). Renderer 20: `slot`, a published slot
+ * (`slot`, experiences.ts SLOTS); `homeRow`, `titlePanel`, `playerOverlay` and `toast` stay as aliases of
+ * the slots home.rows, title.panel, player.overlay.<anchor> and toast. */
+export type Presentation = 'section' | 'page' | 'playerOverlay' | 'toast' | 'homeRow' | 'titlePanel' | 'slot';
 
 /** Ether-owned: a page parameter. Values travel as `p.<name>` on data reads. */
 export interface ParamSpec {
@@ -30,6 +35,12 @@ export interface ScreenDocument {
   kind: 'screen';
   /** The lowest RENDERER_VERSION that draws this document (19 or more). */
   renderer: number;
+  /** Renderer 20: `vela` on Vela's built-in page documents (bundled, never served by Ether, and their
+   *  `vela.*` source arguments may read params). Absent on a plugin's documents. */
+  owner?: 'vela';
+  /** Renderer 20: the experience a built-in page belongs to (`listen`); the page is addressed as
+   *  `vela:<experience>/<page>`. */
+  experience?: ExperienceId;
   /** Blocks and kit templates the document cannot do without, by name. */
   requires?: string[];
   /** Plugin-scoped screen (or surface) id and the page within it. */
@@ -38,6 +49,8 @@ export interface ScreenDocument {
   version: string;
   title: Template;
   presentation: Presentation;
+  /** Renderer 20, presentation `slot`: the published slot this surface fills. */
+  slot?: SlotId;
   params?: Record<string, ParamSpec>;
   sources: Record<string, SourceSpec>;
   /** Served by Ether from the manifest: the plugin actions this page may call. */
@@ -53,6 +66,12 @@ export interface ScreenDocument {
   /** As skin keyframes, plus `color` to a `$ui` token. */
   keyframes?: Record<string, Record<string, { opacity?: number; translate?: string; scale?: number; rotate?: number; color?: string }>>;
   tree: Node;
+  /** Renderer 20: whole-tree replacements of `tree` by form factor and by platform (a platform's wins). */
+  forms?: Partial<Record<FormFactor, Node>>;
+  platforms?: Partial<Record<Platform, Node>>;
+  /** Renderer 20: rich-block part styles for every block in the document (`queue.row`); a block's own
+   *  `parts` apply over these. A template named after a part (`queue.row`) is that part's template. */
+  parts?: Record<string, PartStyle>;
   loading?: Node;
   failure?: Node;
   /** Re-read the non-lazy sources this often while shown (seconds, at least 60). */
@@ -133,7 +152,9 @@ export interface ScreenDocumentRef { href: string; renderer: number }
 export interface SurfaceContribution {
   id: ID;
   presentation: Exclude<Presentation, 'section' | 'page'>;
-  /** playerOverlay only. */
+  /** Renderer 20, presentation `slot`: the published slot it fills (its context, box and caps). */
+  slot?: SlotId;
+  /** playerOverlay (and the player.overlay.* slots) only. */
   anchor?: 'topLeft' | 'topRight' | 'bottom';
   when?: SurfaceWhen;
   /** playerOverlay only: always shown, only with the chrome, or a viewer switch in the player menu. */

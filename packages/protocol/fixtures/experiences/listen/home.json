@@ -1,0 +1,312 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "home",
+ "version": "1",
+ "title": "{s:music.home}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "info": {
+   "from": "vela.libraryInfo",
+   "id": "{param.library}"
+  },
+  "home": {
+   "from": "vela.musicHome",
+   "library": "{param.library}"
+  },
+  "rows": {
+   "from": "vela.rows",
+   "placement": "library",
+   "libraryId": "{param.library}",
+   "lazy": true
+  },
+  "queue": {
+   "from": "vela.queue"
+  }
+ },
+ "tree": {
+  "type": "sections",
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "tv": {
+   "padding-bottom": "48pt",
+   "padding-right": "32pt"
+  },
+  "testId": "music-main",
+  "children": [
+   {
+    "type": "box",
+    "needs": [
+     "home"
+    ],
+    "when": [
+     {
+      "test": "src.info.listening",
+      "is": "eq",
+      "value": "music"
+     }
+    ],
+    "children": [
+     {
+      "type": "box",
+      "children": [
+       {
+        "type": "wash",
+        "props": {
+         "accent": "{src.home.accent}",
+         "height": "360"
+        }
+       },
+       {
+        "type": "box",
+        "style": {
+         "padding-left": "20px",
+         "padding-right": "20px",
+         "padding-top": "28px"
+        },
+        "small": {
+         "padding-left": "16px",
+         "padding-right": "16px",
+         "padding-top": "16px"
+        },
+        "children": [
+         {
+          "type": "text",
+          "role": "heading",
+          "level": 1,
+          "text": "{env.now|greeting}",
+          "style": {
+           "font-family": "$ui.fontDisplay",
+           "font-size": "38px",
+           "color": "$ui.ink",
+           "letter-spacing": "-0.01em",
+           "margin-bottom": "20px"
+          },
+          "small": {
+           "font-size": "30px",
+           "margin-bottom": "14px"
+          },
+          "tv": {
+           "margin-bottom": "20pt"
+          }
+         },
+         {
+          "type": "quickTiles"
+         }
+        ],
+        "tv": {
+         "padding-left": "20pt",
+         "padding-right": "20pt",
+         "padding-top": "28pt"
+        }
+       },
+       {
+        "type": "box",
+        "style": {
+         "padding-left": "8px",
+         "padding-right": "8px"
+        },
+        "small": {
+         "padding-left": "4px",
+         "padding-right": "4px"
+        },
+        "children": [
+         {
+          "type": "homeShelves"
+         },
+         {
+          "type": "genres"
+         }
+        ],
+        "tv": {
+         "padding-left": "8pt",
+         "padding-right": "8pt"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "box",
+    "style": {
+     "flex": "1"
+    },
+    "when": [
+     {
+      "test": "src.info.listening",
+      "is": "ne",
+      "value": "music"
+     }
+    ],
+    "testId": "listen-home-spoken",
+    "children": [
+     {
+      "type": "box",
+      "children": [
+       {
+        "type": "box",
+        "testId": "spoken-home",
+        "children": [
+         {
+          "type": "repeat",
+          "over": "src.rows.rows",
+          "as": "r",
+          "item": {
+           "type": "wash",
+           "when": [
+            {
+             "test": "r.purpose",
+             "is": "eq",
+             "value": "continue"
+            },
+            {
+             "test": "r.items.length"
+            }
+           ],
+           "props": {
+            "accent": "{r.items.0.accent}",
+            "height": "360"
+           }
+          }
+         },
+         {
+          "type": "box",
+          "style": {
+           "padding-left": "20px",
+           "padding-right": "20px",
+           "padding-top": "28px"
+          },
+          "small": {
+           "padding-left": "16px",
+           "padding-right": "16px",
+           "padding-top": "16px"
+          },
+          "children": [
+           {
+            "type": "text",
+            "role": "heading",
+            "level": 1,
+            "text": "{env.now|greeting}",
+            "style": {
+             "font-family": "$ui.fontDisplay",
+             "font-size": "38px",
+             "color": "$ui.ink",
+             "letter-spacing": "-0.01em",
+             "margin-bottom": "20px"
+            },
+            "small": {
+             "font-size": "30px",
+             "margin-bottom": "14px"
+            },
+            "tv": {
+             "margin-bottom": "20pt"
+            }
+           },
+           {
+            "type": "repeat",
+            "over": "src.rows.rows",
+            "as": "r",
+            "item": {
+             "type": "continueListening",
+             "when": [
+              {
+               "test": "r.purpose",
+               "is": "eq",
+               "value": "continue"
+              },
+              {
+               "test": "r.items.length"
+              }
+             ],
+             "props": {
+              "row": "{r}"
+             }
+            }
+           }
+          ],
+          "tv": {
+           "padding-left": "20pt",
+           "padding-right": "20pt",
+           "padding-top": "28pt"
+          }
+         },
+         {
+          "type": "box",
+          "style": {
+           "padding-left": "8px",
+           "padding-right": "8px"
+          },
+          "small": {
+           "padding-left": "4px",
+           "padding-right": "4px"
+          },
+          "children": [
+           {
+            "type": "repeat",
+            "over": "src.rows.rows",
+            "as": "r",
+            "item": {
+             "type": "musicShelf",
+             "when": [
+              {
+               "test": "r.purpose",
+               "is": "ne",
+               "value": "continue"
+              }
+             ],
+             "props": {
+              "title": "{r.name}",
+              "items": "{r.items}",
+              "tileSize": "176"
+             }
+            }
+           },
+           {
+            "type": "genres"
+           }
+          ],
+          "tv": {
+           "padding-left": "8pt",
+           "padding-right": "8pt"
+          }
+         }
+        ],
+        "needs": [
+         "rows"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "states": [
+   {
+    "when": [
+     {
+      "test": "env.form",
+      "is": "eq",
+      "value": "small"
+     },
+     {
+      "test": "src.queue.current"
+     }
+    ],
+    "style": {
+     "padding-bottom": "110px"
+    }
+   }
+  ]
+ }
+}

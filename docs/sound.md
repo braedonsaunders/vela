@@ -15,7 +15,7 @@ settings, the decisions and the contract, and no engine applies them yet.
 | Wire contract (`features.loudness`, `TitleMedia.loudness`/`bpm`, `PlaybackPlan.loudness`) | `packages/protocol/types.ts`, protocol README "Loudness and AutoMix markers" |
 | Mock: loudness on every fixture track (some measured with album gain and fades, every fourth album hinted or unmeasured) | `packages/protocol/fixtures/media.ts`, `mock-server/main.ts` |
 
-Following the experiences design (docs/experiences.md on `plugin-screens/main`), the engine and decisions live in core, and the UI is a rich block that imports nothing from `widgets/music`. When the Listen documents replace `widgets/music`, they draw `SoundBlock` and `EqBlock` unchanged. The only caller-specific input is `tv` (remote focus: − and + instead of sliders).
+The engine and decisions live in core. The Listen documents draw `SoundBlock` and `EqBlock`. The `tv` input gives remote users − and + controls.
 
 Settings belong to the device, not the account: the right EQ for headphones is wrong for a TV's
 speakers. Defaults: AutoMix off (Smart length, albums kept gapless), levelling Smart with 0 dB

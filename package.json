@@ -10,7 +10,7 @@
   "scripts": {
     "test": "bun test ./packages ./modules ./mock-server ./apps/vela-desktop/test ./tools/parity ./tools/perf ./tools/release",
     "typecheck": "bun tools/typecheck.ts",
-    "check:skins": "for document in packages/protocol/fixtures/skins/cinematic.ts packages/protocol/fixtures/skins/*/document.ts packages/protocol/fixtures/screens/*/*.json packages/protocol/fixtures/screens/*/*/*.json; do case \"$document\" in */data*.json) continue;; esac; bun tools/skin.ts check \"$document\" || exit 1; done"
+    "check:skins": "for document in packages/protocol/fixtures/skins/cinematic.ts packages/protocol/fixtures/skins/*/document.ts packages/protocol/fixtures/screens/*/*.json packages/protocol/fixtures/screens/*/*/*.json packages/protocol/fixtures/experiences/*/*.json; do [ -f \"$document\" ] || continue; case \"$document\" in */data*.json) continue;; esac; bun tools/skin.ts check \"$document\" || exit 1; done"
   },
   "patchedDependencies": {
     "expo-image@58.0.18": "patches/expo-image@58.0.18.patch",

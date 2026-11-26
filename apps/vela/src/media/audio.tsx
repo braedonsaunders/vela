@@ -7,13 +7,12 @@ import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HostContext } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/widgets/media';
-import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '@vela/skin/src/widgets/media/player';
+import { MINI_PLAYER_HEIGHT, MiniPlayer } from '@vela/skin/src/widgets/media/player';
 import { MOTION, Presence } from '@vela/skin/src/presence';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { focusElement } from '@vela/skin/src/escape';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
 import { useCanOpenVisualizer, useCanVisualize } from '../visualizer/availability';
-import { Visualizer } from '../visualizer/visualizer';
 import { beginVisualizerFullscreen } from '../visualizer/stage';
 import { inVisualizerHistory, popVisualizerHistory, pushVisualizerHistory } from '../visualizer/page-history';
 import { visualizerPlan, visualizerProfile } from '../visualizer/selection';
@@ -25,9 +24,15 @@ import { useVela } from '../vela';
 import { preferences } from '../data/preferences';
 import { audioDiagnostics, createAudioEngine, syncMediaSession, type AppAudioEngine, type MediaSessionControls } from './audio-engine';
 import { useMediaPageActions } from './actions';
-import { musicTV, onOpenNowPlaying, wideMusic, type NowPlayingPanel } from '@vela/skin/src/widgets/music';
+import { musicTV } from '@vela/skin/src/blocks/listen/layout';
+import { onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/blocks/listen/hub';
+import { wideMusic } from '@vela/skin/src/widgets/media/window-layout';
 import { useMediaPlayerActions } from './player-actions';
 import { useReaderActions } from './reader-actions';
+import { useAppScreenActions } from '../screen-actions';
+import { ScreenView } from '@vela/skin/src/screen/host';
+import { builtinHref } from '@vela/skin/src/resolve/builtin';
+import { ListenDockContext, type ListenDock } from '@vela/skin/src/blocks/listen/dock';
 
 const fill = StyleSheet.absoluteFill;
 const dockStrip = { position: 'absolute', left: 0, right: 0, bottom: 0 } as const;
@@ -42,16 +47,10 @@ const FocusGuide = TVFocusGuideView as ComponentType<ComponentProps<typeof TVFoc
 
 /** On a TV, Now Playing draws over a page that stays in the focus engine: while open it takes the
  * focus and keeps it (the remote's presses never reach the page beneath), and gives it back on close. */
-function TVFocusTrap({ open, children }: { open: boolean; children: ReactNode }) {
-  const guide = useRef<Focusable>(null);
-  useEffect(() => {
-    if (!open) return;
-    const frame = requestAnimationFrame(() => guide.current?.requestTVFocus?.());
-    return () => cancelAnimationFrame(frame);
-  }, [open]);
+function TVFocusTrap({ open, children, guideRef }: { open: boolean; children: ReactNode; guideRef: Ref<Focusable> }) {
   if (!Platform.isTV) return <>{children}</>;
   return (
-    <FocusGuide ref={guide} style={fill} autoFocus focusable={open} trapFocusUp={open} trapFocusDown={open} trapFocusLeft={open} trapFocusRight={open}>
+    <FocusGuide ref={guideRef} style={fill} autoFocus focusable={open} trapFocusUp={open} trapFocusDown={open} trapFocusLeft={open} trapFocusRight={open}>
       {children}
     </FocusGuide>
   );
@@ -97,6 +96,9 @@ function followMediaSession(store: Store): () => void {
     syncMediaSession(audio, controls);
   });
 }
+
+const NOW_PLAYING_TARGET = { kind: 'screen' as const, id: 'vela.listen', page: 'nowPlaying' };
+const VISUALIZER_TARGET = { kind: 'screen' as const, id: 'vela.listen', page: 'visualizer' };
 
 export function AudioDock() {
   const vela = useVela();
@@ -200,6 +202,15 @@ export function AudioDock() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [fullscreen, leaveVisualizer]);
+  // Wait until the Now Playing document draws before requesting focus for the TV guide.
+  const trap = useRef<Focusable>(null);
+  const focusTrap = useCallback(() => { setTimeout(() => trap.current?.requestTVFocus?.(), 400); }, []);
+  const dock = useMemo<ListenDock>(() => ({ close, openVisualizer: readyToOpen ? openVisualizer : undefined, visualizer: visualizerSwitch, hidden: fullscreen, shown: focusTrap }),
+    [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen, focusTrap]);
+  const noBack = useCallback(() => undefined, []);
+  const noParams = useCallback(() => undefined, []);
+  const screenActions = useAppScreenActions({ host: host ?? null, back: noBack, setParams: noParams });
+  const nowPlayingParams = useMemo<Record<string, string>>(() => (panel ? { panel } : {} as Record<string, string>), [panel]);
   if (!host) return null;
   const bottom = Math.max(14, insets.bottom + 10);
   const still = host.env.still;
@@ -211,10 +222,13 @@ export function AudioDock() {
   // tabs above the screen.
   const nowPlaying = (
     <Presence shown={playing && open} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
-      <TVFocusTrap open={playing && open}>
+      <TVFocusTrap open={playing && open} guideRef={trap}>
         <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
-          {plan.stage ? <Visualizer mode={plan.stage} /> : null}
-          <NowPlaying onClose={close} panel={panel} hidden={fullscreen} onOpenVisualizer={readyToOpen ? openVisualizer : undefined} visualizer={visualizerSwitch} />
+          <ListenDockContext.Provider value={dock}>
+            <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={host} active={playing && open}
+              actions={screenActions} route={false} quiet />
+            {fullscreen ? <View style={fill}><ScreenView target={VISUALIZER_TARGET} href={builtinHref('listen', 'visualizer')} host={host} active actions={screenActions} route={false} quiet /></View> : null}
+          </ListenDockContext.Provider>
           {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
             <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
           </View> : null}

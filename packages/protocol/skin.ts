@@ -3,6 +3,8 @@
  * renderer (the "doc" engine) draws it; nothing in a document executes. See
  * docs/skin-schema.md for semantics, limits and the binding vocabulary.
  */
+import type { ExperienceId, ExperienceOverride, SlotId } from './experiences';
+import type { RichBlockName } from './rich-blocks';
 
 /** A string with `{key}` holes filled from the binding vocabulary (`{card.name}`); `{{` is a literal brace. */
 export type Template = string;
@@ -26,12 +28,32 @@ export type StyleProperty =
   | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate' | 'perspective'
   | 'transition' | 'animation' | 'pointer-events' | 'cursor';
 
+/** Renderer 20: the platform a variant applies on. Every device is exactly one: `tv` (Apple TV, Android TV
+ * and Google TV), `ios` (iPhone and iPad), `android` (phones and tablets), `desktop` (the desktop app) or
+ * `web` (a browser). */
+export type Platform = 'ios' | 'android' | 'web' | 'desktop' | 'tv';
+
+/** Renderer 20: an experience's form factor (its shell and whole-page variants). `tv` on a TV device;
+ * `fold` on a foldable held partly open (book or tabletop, @vela/fold); `wide` in a window with room for
+ * two panes (window-layout.ts: 980 px, or a landscape window of 840 px); `small` otherwise. */
+export type FormFactor = 'small' | 'wide' | 'tv' | 'fold';
+
+/** Renderer 20: the style of a rich block's part (`lyrics.activeLine`): a style, or layers with the
+ * node's viewport, platform and interaction variants. */
+export type PartStyle = Style | PartLayers;
+export interface PartLayers {
+  style?: Style; small?: Style; wide?: Style; tv?: Style; fold?: Style;
+  platforms?: Partial<Record<Platform, Style>>;
+  hover?: Style; focus?: Style; active?: Style;
+}
+
 /** One test on the binding vocabulary or the skin's own flags; a node's `when` list must all hold. */
 export interface Condition {
   /** A binding key (`card.played`, `hero.backdrop`, `env.small`), or `flag:<name>`. */
   test: string;
-  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` "n:r", the number % n == r. */
-  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt' | 'mod';
+  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` "n:r", the number % n == r.
+   *  Renderer 20: starts/ends: the text begins or ends with `value` (a row id's ":top"). */
+  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt' | 'mod' | 'starts' | 'ends';
   value?: string;
   not?: boolean;
 }
@@ -65,6 +87,10 @@ export type Action =
 interface NodeBase extends Breakpoints {
   /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px, `tv` on a TV (renderer 19). */
   style?: Style; small?: Style; wide?: Style; tv?: Style;
+  /** Renderer 20: on a foldable held partly open (env.fold), after `tv`. */
+  fold?: Style;
+  /** Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold). */
+  platforms?: Partial<Record<Platform, Style>>;
   /** Renderer 19: play a motion preset when the filled value changes (a score pops). */
   onChange?: { value: Template; motion: string };
   /** Renderer 19, screens: lazy sources read when this node is about to draw. */
@@ -124,7 +150,12 @@ export interface BoxNode extends NodeBase {
 }
 /** A text. One that is exactly `{env.viewerInitial}` and sets its own width and height is the viewer's
  * badge: the renderer draws the viewer's avatar over it, clipped to its shape, where the server gives one. */
-export interface TextNode extends NodeBase { type: 'text'; text: Template }
+export interface TextNode extends NodeBase { type: 'text'; text: Template;
+  /** Renderer 20: runs drawn inline after `text`, in the same line box (a bold name inside a sentence),
+   *  each with its own text rows (colour, font, size, weight, style, letter-spacing, text-transform). */
+  spans?: TextSpan[] }
+/** Renderer 20: an inline run of a text node. */
+export interface TextSpan { text: Template; style?: Style; when?: Condition[] }
 /** Breakpoints at the document's own widths, evaluated against the slot's width. */
 export interface Breakpoints { below?: Record<string, Style>; above?: Record<string, Style> }
 export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?: Template; /** Fade in once loaded. */ fade?: boolean;
@@ -140,8 +171,16 @@ export interface RepeatNode extends NodeBase { type: 'repeat'; over: string; lim
 export interface UseNode extends NodeBase { type: 'use'; template: string;
   /** Renderer 19: arguments read as `{arg.<name>}` in the template; children fill its `children` slot. */
   with?: Record<string, Template>; children?: Node[]; press?: Press }
-/** A foundation slot: `children` (the route content the shell wraps), `searchField`. */
-export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 'searchField'; /** The inner box around the content (`style` is the outer). */ inner?: Style }
+/** A foundation slot: `children` (the route content the shell wraps), `searchField`; or (renderer 20, in a
+ * built-in page) a published plugin slot, `plugin:<slot id>` (experiences.ts SLOTS), where the slot
+ * surfaces plugins contribute draw, each in its own box. */
+export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 'searchField' | PluginSlot; /** The inner box around the content (`style` is the outer). */ inner?: Style;
+  /** A plugin slot: the `{context.<name>}` values its surfaces read (the slot's published context names only). */
+  context?: Record<string, Template>;
+  /** A plugin slot: at most this many surfaces (within the slot's cap). */
+  limit?: number }
+/** A published plugin slot as a slot node names it. */
+export type PluginSlot = `plugin:${SlotId}`;
 /** A compiled interactive part, styled by `params`: `skinPicker`, `install`, `heroPreview`, `cardPreview`. */
 /** Widgets: `install`, `observe`, `liveTile`; `searchInput` (params placeholder, label, placeholderColor; its node style sets the
  *  text's colour and font) within 3 levels of home or the shell; `sentinel` (params.on: `row` | `home` | `library`) asks for
@@ -150,24 +189,45 @@ export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 's
 export interface WidgetNode extends NodeBase { type: 'widget'; widget: string; params?: Record<string, string> }
 /** A value per viewport class (renderer 19 blocks). */
 export type PerClass<T> = T | { default: T; small?: T; wide?: T; tv?: T };
-interface ItemsBase extends NodeBase { over: string; as: string; item: Node; key?: Template; exclude?: Template; limit?: number }
+/** Every block node (renderer 20): `fallback` is drawn when the client does not know the block, or when
+ * the block cannot run here (the visualizer where env.canVisualize is false). */
+interface BlockBase extends NodeBase { fallback?: Node }
+interface ItemsBase extends BlockBase { over: string; as: string; item: Node; key?: Template; exclude?: Template; limit?: number }
 /** Renderer 19 blocks (docs/plugin-screens.md: Building blocks). */
-export interface SectionsNode extends NodeBase { type: 'sections'; children: Node[]; gap?: string }
+export interface SectionsNode extends BlockBase { type: 'sections'; children: Node[]; gap?: string }
 export interface ShelfNode extends ItemsBase { type: 'shelf'; itemWidth?: PerClass<string>; gap?: string; stableOrder?: boolean; empty?: Node }
 export interface GridNode extends ItemsBase { type: 'grid'; columns: PerClass<number>; gap?: string }
-export interface TabsNode extends NodeBase { type: 'tabs'; over: string; as: string; value: Template; label: Template; count?: Template;
+export interface TabsNode extends BlockBase { type: 'tabs'; over: string; as: string; value: Template; label: Template; count?: Template;
   bind: { param?: string; state?: string; clear?: string[] }; default?: Template; all?: Template; chip?: string; size?: 'small';
   /** Nodes drawn after the options inside the same scroll and focus row (Sports' Hide scores switch). */ after?: Node[];
   /** With `bind.param`: on first draw an empty param takes the resolved `default` (history replace, no re-read), so a later
    *  change of the default does not move the selection. */ pin?: boolean }
-export interface TableNode extends NodeBase { type: 'table'; data: string; compact?: boolean; focusRows?: number;
+export interface TableNode extends BlockBase { type: 'table'; data: string; compact?: boolean; focusRows?: number;
   /** false: ignore rows' `highlight` (a game's own tables are not lit, as standings are). Default true. */ highlight?: boolean }
-export interface LineGraphNode extends NodeBase { type: 'lineGraph'; series: string; sides?: string; subject?: Template; live?: Template; height?: PerClass<string> }
-export interface PlayerNode extends NodeBase { type: 'player'; channel: Template }
-export interface ParamInputNode extends NodeBase { type: 'paramInput'; param: string; placeholder?: Template }
-export interface TitleCardNode extends NodeBase { type: 'titleCard'; item: Template }
+export interface LineGraphNode extends BlockBase { type: 'lineGraph'; series: string; sides?: string; subject?: Template; live?: Template; height?: PerClass<string> }
+/** With `channel`: one muted live preview of a channel (renderer 19). Without (renderer 20): the rich
+ * playback player, its props and parts in rich-blocks.ts. */
+export interface PlayerNode extends RichBase { type: 'player'; channel?: Template }
+/** Renderer 20: a rich native block (rich-blocks.ts lists each one's props, parts and part templates).
+ * The engine, focus and timing stay native; a document styles its published parts and replaces the
+ * part templates the block allows (a template reads `{item.*}`, the block's state as `{part.*}`). */
+interface RichBase extends BlockBase {
+  /** The block's props (rich-blocks.ts), as Templates; a single hole passes its raw value. */
+  props?: Record<string, Template>;
+  /** Part styles by part name (`trackTable.activeRow`), over the document's `parts`. */
+  parts?: Record<string, PartStyle>;
+  /** Part templates by part name (`queue.row`), over a document template of that name. */
+  partTemplates?: Record<string, Node>;
+}
+export interface RichNode extends RichBase { type: Exclude<RichBlockName, 'player' | 'visualizer'> }
+/** Renderer 20: the music visualizer (its engine is the app's). Without the capability (env.canVisualize
+ * false) it draws its `fallback`. Parts: visualizer.scenePicker, sceneChip, sceneChipActive, caption. */
+export interface VisualizerNode extends RichBase { type: 'visualizer'; mode: 'background' | 'fullscreen'; sceneId?: Template }
+export interface ParamInputNode extends BlockBase { type: 'paramInput'; param: string; placeholder?: Template }
+export interface TitleCardNode extends BlockBase { type: 'titleCard'; item: Template }
 export interface MarqueeNode extends ItemsBase { type: 'marquee'; gap?: string; speed?: number }
-export type BlockNode = SectionsNode | ShelfNode | GridNode | TabsNode | TableNode | LineGraphNode | PlayerNode | ParamInputNode | TitleCardNode | MarqueeNode;
+export type BlockNode = SectionsNode | ShelfNode | GridNode | TabsNode | TableNode | LineGraphNode | PlayerNode | ParamInputNode | TitleCardNode | MarqueeNode
+  | RichNode | VisualizerNode;
 export type Node = BoxNode | TextNode | ImageNode | IconNode | RepeatNode | UseNode | SlotNode | WidgetNode | BlockNode;
 
 export interface MotionPreset {
@@ -211,6 +271,10 @@ export interface SkinDocument {
   /** A tree per route the document draws whole (the route view); a route left out is the Vela base's.
    *  `search` is drawn in home's view, after home's nodes, while a query is open. */
   routes?: Partial<Record<'home' | 'search' | 'title' | 'person' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;
+  /** Renderer 20: overrides of the built-in experiences (`listen`), merged over Vela's page documents:
+   *  whole pages, templates (a part's template by the part's name), part styles and the shell per form
+   *  factor. Whatever is left out stays Vela's. */
+  experiences?: Record<ExperienceId, ExperienceOverride>;
   /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md). */
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */

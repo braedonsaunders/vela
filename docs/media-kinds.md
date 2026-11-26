@@ -230,7 +230,7 @@ an absent flag allows it. Reading needs its own endpoint and stays gated on
   its close control. A title page without that region gets a page of its own.
 - Player: persistent mini player + Now Playing (queue, shuffle, repeat), audiobook
   mode (chapters, speed, sleep timer), web Media Session.
-- The audio app (`packages/skin/src/widgets/music`): any library whose experience is `listen`
+- The listen experience (`packages/protocol/fixtures/experiences/listen`, drawn by `apps/vela/src/listen/section.tsx`): any library whose experience is `listen`
   (core's `libraryExperience`; the routing seams per experience are `apps/vela/src/experiences`) opens in it, in its wide, compact (phones) or TV form. Its words
   and controls follow the library's class (`listening.ts`): music keeps playlists, Liked Songs,
   shuffle and repeat; audiobooks and podcasts get Continue listening on Home, Your Library as

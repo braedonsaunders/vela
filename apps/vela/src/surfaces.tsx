@@ -9,7 +9,7 @@ import { HostContext } from '@vela/skin/src/host';
 import { usePlayerLook } from '@vela/skin/src/widgets/player/look';
 import { SurfaceAppContext, type SurfaceApp } from '@vela/skin/src/surfaces/view';
 import { AppToasts } from '@vela/skin/src/surfaces/toasts';
-import { HomeRowSurface, TitlePanels } from '@vela/skin/src/surfaces/slots';
+import { HomeRowSurface, PluginSlotSurfaces, TitlePanels } from '@vela/skin/src/surfaces/slots';
 import { SurfaceSlots, type SurfaceSlotViews } from '@vela/skin/src/render';
 import { claimPlayPause } from '@vela/player';
 import { useAppScreenActions } from './screen-actions';
@@ -40,8 +40,8 @@ export function SurfaceProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Home rows and title panels that plugins fill, drawn by the skin's pages in their places. */
-const SLOTS: SurfaceSlotViews = { row: HomeRowSurface, titlePanels: TitlePanels };
+/** Home rows, title panels and the published slots of built-in pages that plugins fill, drawn in their places. */
+const SLOTS: SurfaceSlotViews = { row: HomeRowSurface, titlePanels: TitlePanels, slot: PluginSlotSurfaces };
 
 const SIGNED_OUT = ['/sign-in', '/connect'];
 

@@ -1,16 +1,16 @@
-// The audio app's search results (widgets/music/search-results.ts): grouped by what the library
+// The audio app's search results (blocks/listen/search-results.ts): grouped by what the library
 // holds, kept to the library's own class when the server could not scope the search, and the
 // library's recent searches.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Card } from '@vela/core';
-import { listeningWords } from '../src/widgets/music/listening';
+import { listeningWords } from '../src/blocks/listen/listening';
 import {
   albumsTab, booksBy, creditedPeople, forgetSearch, listeningResults, nameMatches, readRecent, rememberSearch, RECENT_LIMIT, scopedItems, seeAllAlbums, topResult,
-} from '../src/widgets/music/search-results';
-import { parsePlace, placeParam } from '../src/widgets/music/place';
-import { nearEnd } from '../src/widgets/music/scroll-end';
+} from '../src/blocks/listen/search-results';
+import { claimsFirstFocus, parsePlace, placeParam } from '../src/blocks/listen/place';
+import { nearEnd } from '../src/blocks/listen/scroll-end';
 
 const catalogue = JSON.parse(readFileSync(join(import.meta.dir, '../../core/src/i18n/strings/en.json'), 'utf8')) as Record<string, string>;
 
@@ -217,4 +217,9 @@ test('a paged list reads on within a screen of its end, and at once when it does
   expect(nearEnd({ offset: 0, viewport: 800, content: 600 })).toBe(true);
   // Not laid out yet: nothing is known, so nothing is read.
   expect(nearEnd({ offset: 0, viewport: 0, content: 0 })).toBe(false);
+});
+
+test('on a TV, album, playlist, Liked Songs and Search pages claim their own first focus; Home, Duplicates and the rest open on the rail', () => {
+  expect(['title:album-paper-boats', 'playlist:p1', 'liked', 'search'].map(p => claimsFirstFocus(parsePlace(p)))).toEqual([true, true, true, true]);
+  expect(['', 'duplicates', 'library', 'rewind', 'import', 'albums:x'].map(p => claimsFirstFocus(parsePlace(p)))).toEqual([false, false, false, false, false, false]);
 });

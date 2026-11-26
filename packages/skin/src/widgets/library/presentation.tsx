@@ -1,9 +1,10 @@
 // The library toolbar (widget `libraryToolbar`, placed by every built-in skin through the
 // velaLibraryViews template): the library's tabs, or an opened collection's way back and title,
 // then on the same row its search, one Filters button (every facet, kind, watched, genre and year
-// control in a panel, with a count of those in force), one Sort button and the count. Filters in
-// force show as removable chips under it, only while there are any. A failed view's Try again is
-// the view's own (velaLibraryAlternative), never the toolbar's.
+// control in a panel, with a count of those in force), one Sort button, an optional A–Z jump
+// button for title-sorted libraries and the count. Filters in force show as removable chips under
+// it, only while there are any. A failed view's Try again is the view's own
+// (velaLibraryAlternative), never the toolbar's.
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { msg, number, plural } from '@vela/core';
@@ -16,7 +17,8 @@ import type { ComponentRef } from 'react';
 import { TextField } from '../common/text-field';
 import { tabOverflow } from './toolbar-layout';
 import { Button, control, controlText } from './toolbar-controls';
-import { FiltersPanel, SortPanel, type Anchor } from './filters';
+import { FiltersPanel, JumpPanel, SortPanel, type Anchor } from './filters';
+import { activeJumpBucket, useJumpFocus } from './jump';
 
 /** A horizontal strip that scrolls on its own and shows real buttons at a clipped edge, so
  * hidden tabs or filters are both hinted at and reachable with a pointer. Keyboard and remote
@@ -153,7 +155,7 @@ function LibrarySearch({ grow = false }: { grow?: boolean }) {
     style={[look.text(controlText), look.box({ ...control, width: grow ? 'auto' : host.viewport.width >= 1200 || Platform.isTV ? '220px' : '180px' }), grow ? { flexGrow: 1, flexShrink: 1, minWidth: 0 } : { flexShrink: 1, minWidth: 140 }, Platform.OS === 'web' && { fontSize: 16 }]} />;
 }
 
-type Open = { panel: 'filters' | 'sort'; anchor?: Anchor } | undefined;
+type Open = { panel: 'filters' | 'sort' | 'jump'; anchor?: Anchor } | undefined;
 
 /** Measures a button in the window, so its panel can open under it. */
 function anchorOf(view: { measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void } | null, open: (anchor?: Anchor) => void) {
@@ -161,7 +163,7 @@ function anchorOf(view: { measureInWindow?(callback: (x: number, y: number, widt
   view.measureInWindow((x, y, width, height) => open({ x, y, width, height }));
 }
 
-/** Search, Filters and Sort for browsing, and the quiet count. */
+/** Search, Filters, Sort and optional A–Z Jump for browsing, and the quiet count. */
 function BrowseControls({ ctx, compact, grow, labels, onLabels }: {
   ctx: WidgetProps['ctx']; compact: boolean; grow: boolean; labels: Record<string, Record<string, string>>; onLabels(field: string, values: Record<string, string>): void;
 }) {
@@ -172,6 +174,8 @@ function BrowseControls({ ctx, compact, grow, labels, onLabels }: {
   const [open, setOpen] = useState<Open>();
   const filtersButton = useRef<ComponentRef<typeof Button>>(null);
   const sortButton = useRef<ComponentRef<typeof Button>>(null);
+  const jumpButton = useRef<ComponentRef<typeof Button>>(null);
+  const jumpFocus = useJumpFocus(page);
   if (!model) return null;
   const locked = lockedFacet(page);
   const active = activeFilters(model, labels, locked).length;
@@ -180,15 +184,22 @@ function BrowseControls({ ctx, compact, grow, labels, onLabels }: {
   const sortLabel = sort ? `${sort.label} ${sort.directions.length === 2 ? model.direction === 'asc' ? '↑' : '↓' : ''}`.trim() : msg('library.sort');
   const total = !page?.facetTitle && model.total !== undefined && !page?.loading ? msg(`library.count.${plural(model.total)}`, { count: number(model.total) }) : '';
   const filtersLabel = active ? msg('library.filtersActive', { count: active }) : msg('library.filters');
+  const jumpBuckets = page?.jumpBuckets;
+  const activeJump = activeJumpBucket(jumpBuckets, page?.jumpStart);
   return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0, flexShrink: grow ? 1 : 0, flexGrow: grow ? 1 : 0 }}>
     <LibrarySearch grow={grow} />
     {hasFilterControls(model, locked) && <Button ref={filtersButton} testID="library-filters" icon="filter" iconOnly={compact} label={msg('library.filters')} accessibilityLabel={filtersLabel}
       badge={active || undefined} selected={active > 0} expanded={open?.panel === 'filters'} onPress={() => anchorOf(filtersButton.current as never, anchor => setOpen({ panel: 'filters', anchor }))} />}
     {model.sorts.length > 1 && <Button ref={sortButton} testID="library-sort" icon="sort" iconOnly={compact} label={sortLabel} accessibilityLabel={msg('library.sortSummary', { sort: sort?.label ?? '', direction })}
       expanded={open?.panel === 'sort'} onPress={() => anchorOf(sortButton.current as never, anchor => setOpen({ panel: 'sort', anchor }))} />}
+    {!!jumpBuckets?.length && <Button ref={jumpButton} testID="library-jump" label={activeJump ? activeJump.label : msg('library.jump')}
+      accessibilityLabel={activeJump ? msg('library.jumpActive', { letter: activeJump.label }) : msg('library.jumpLabel')}
+      selected={!!activeJump} expanded={open?.panel === 'jump'}
+      onPress={() => { jumpFocus.cancel(); anchorOf(jumpButton.current as never, anchor => setOpen({ panel: 'jump', anchor })); }} />}
     {!!total && <Text accessibilityLiveRegion="polite" numberOfLines={1} style={[look.text({ color: '$ui.inkSecondary', 'font-size': compact ? '13px' : '$ui.controlFontSize', 'font-weight': '500' }), { flexShrink: 0, marginLeft: 4 }]}>{total}</Text>}
     {open?.panel === 'filters' && <FiltersPanel ctx={ctx} anchor={open.anchor} labels={labels} onLabels={onLabels} onClose={() => setOpen(undefined)} />}
     {open?.panel === 'sort' && <SortPanel anchor={open.anchor} onClose={() => setOpen(undefined)} />}
+    {open?.panel === 'jump' && <JumpPanel anchor={open.anchor} onClose={() => setOpen(undefined)} onJump={jumpFocus.focusAfterJump} />}
   </View>;
 }
 
