@@ -327,9 +327,10 @@ export interface LiveTv {
 }
 
 /** Server-pushed events: a playback session's changes, and the viewer's (appearance first).
- * Each call is one connection; it resolves when the server closes it and rejects on failure. */
+ * Each call is one connection; it resolves when the server closes it and rejects on failure.
+ * A session's `onActivity` hears the stream open and every chunk on it, heartbeats included. */
 export interface EventStream {
-  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
+  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal, onActivity?: () => void): Promise<void>;
   streamViewerEvents(onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
 }
 

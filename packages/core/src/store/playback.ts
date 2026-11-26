@@ -16,7 +16,7 @@ import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-r
 import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
-import { followSession, forgetSession } from '../protocol/events';
+import { followSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
 import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
 import { VelaError } from '../adapter/errors';
@@ -111,6 +111,15 @@ const STOPPED_REMEMBERED = 32;
 
 const MAX_PREPARATIONS = 30;
 const POLL_SECONDS = 5;
+/**
+ * A session's events stream that drops while its media plays on is followed again after these
+ * many seconds (together they span Ether's 15 s disconnect grace) before the session is restarted.
+ * A connection up for `REFOLLOW_HELD_SECONDS` from the stream's opening starts them over, events or not.
+ */
+const REFOLLOW_SECONDS = [1, 2, 4, 4, 4];
+const REFOLLOW_HELD_SECONDS = 30;
+/** A connection whose snapshot read and stream have not both answered within this many seconds counts as failed. */
+const REFOLLOW_OPEN_SECONDS = 10;
 /** A plan offered with placeholder versions is read once more this long after it starts. */
 const COLD_VERSIONS_SECONDS = 4;
 /** A server that offers scrub thumbnails only once a session streams is asked again this often, while the viewer scrubs. */
@@ -522,27 +531,80 @@ export class Playback {
       void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(withPlaying(snapshot.plan, snapshot))); }).catch(() => undefined);
     };
     const loop = async () => {
+      let refollows = 0, connected = 0, lost = false;
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
         try {
           if (hasEventStream(adapter)) {
-            await followSession(adapter, present, sessionId, show, controller.signal, liveEvent => {
+            connected = 0;
+            const resumed = refollows > 0;
+            let plans = 0, deadline: ReturnType<typeof setTimeout> | undefined;
+            // Each connection has its own signal, so one given up on below cannot follow on later.
+            const attempt = new AbortController();
+            const abort = () => attempt.abort();
+            controller.signal.addEventListener('abort', abort, { once: true });
+            // The first plan is the snapshot read before connecting. Followed again after a drop, an end
+            // the player never reached in that snapshot means the server let the session go while its events
+            // were down (Ether's disconnect grace): it is restarted, not finished. Once the snapshot showed
+            // the session alive, an end on the stream is the server's own and takes the end path.
+            const onPlan = (plan: V.PlaybackPlan) => {
+              const index = plans++;
+              if (resumed && index === 0 && plan.state === 'ended' && !(this.lastPosition?.sessionId === sessionId && this.lastPosition.ended)) {
+                lost = true;
+                throw new Error('Session ended while its events were down');
+              }
+              // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek
+              // or a pause) would roll it back. An end is not held back.
+              if (plan.state !== 'ended' && olderThanShown(plan, this.box.get().playback.plan)) return;
+              show(plan);
+            };
+            const follow = followSession(adapter, present, sessionId, onPlan, attempt.signal, liveEvent => {
               if (this.run !== run || controller.signal.aborted) return;
               const current = this.box.get().playback.liveEvent;
               if (current?.id !== liveEvent?.id || current?.feed !== liveEvent?.feed) this.patch({ liveEvent });
+            }, () => {
+              // The stream opened (or sent anything, a heartbeat included): the connection counts as up.
+              // An attempt already given up on that answers late is not this connection.
+              if (connected || attempt.signal.aborted) return;
+              connected = Date.now();
+              clearTimeout(deadline);
             });
-            if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
-            break;
+            // A connection whose snapshot read or stream never answers, the first one included, would otherwise leave a paused viewer waiting for ever.
+            const timeout = new Promise<never>((_, reject) => {
+              deadline = setTimeout(() => reject(new Error('Session events did not answer')), REFOLLOW_OPEN_SECONDS * 1000);
+            });
+            try {
+              await Promise.race([follow, timeout]);
+            } finally {
+              clearTimeout(deadline);
+              controller.signal.removeEventListener('abort', abort);
+              attempt.abort();
+            }
+            if (controller.signal.aborted || this.box.get().playback.phase !== 'playing') {
+              if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
+              break;
+            }
+            throw new Error('Session events ended');
           }
           const snapshot = await adapter.sessionSnapshot(sessionId);
           if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
           show(present(withPlaying(snapshot.plan, snapshot)));
           await delay(POLL_SECONDS * 1000, controller.signal);
-        } catch {
-          if (!controller.signal.aborted) this.recover(sessionId);
+        } catch (error) {
+          if (controller.signal.aborted) break;
+          // Only the events connection was lost (it ended, the network dropped it, the server was
+          // briefly unavailable): the media plays on, so the stream is followed again. A server's
+          // own answer (the session is gone, the request refused, an error event) restarts at once.
+          if (hasEventStream(adapter) && !lost && !serverAnswered(error)) {
+            if (connected && Date.now() - connected >= REFOLLOW_HELD_SECONDS * 1000) refollows = 0;
+            if (refollows < REFOLLOW_SECONDS.length) {
+              try { await delay(REFOLLOW_SECONDS[refollows++]! * 1000, controller.signal); } catch { break; }
+              continue;
+            }
+          }
+          this.recover(sessionId);
           break;
         }
       }
-      forgetSession(sessionId);
     };
     void loop();
   }
@@ -1434,12 +1496,32 @@ function watchOf(target: PlaybackTarget): string {
     target.kind === 'programme' ? [target.channelId, target.from ?? '', target.range?.startAt, target.range?.durationSeconds] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
 }
 
+/** An answer from the server itself (a 4xx refusal, a session that is gone, an error event), as opposed to a lost connection. */
+function serverAnswered(error: unknown): boolean {
+  return error instanceof VelaError && error.status < 500 && error.status !== 408 && error.status !== 429;
+}
+
 function delay(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
+    const abort = () => {
       clearTimeout(timer);
       reject(signal.reason);
-    }, { once: true });
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', abort, { once: true });
   });
+}
+
+/**
+ * Whether `plan` is from an earlier source or seek generation of the session than the one shown, or, in the same
+ * generations, from an earlier revision (a pause accepted since) when both carry one.
+ */
+function olderThanShown(plan: V.PlaybackPlan, shown: V.PlaybackPlan | null): boolean {
+  if (!shown || shown.sessionId !== plan.sessionId) return false;
+  if (plan.sourceGeneration !== shown.sourceGeneration) return plan.sourceGeneration < shown.sourceGeneration;
+  if (plan.seekGeneration !== shown.seekGeneration) return plan.seekGeneration < shown.seekGeneration;
+  return typeof plan.revision === 'number' && typeof shown.revision === 'number' && plan.revision < shown.revision;
 }
