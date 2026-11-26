@@ -791,7 +791,7 @@ export class Playback {
     const current = this.box.get().playback;
     if (sessionId.startsWith('local-')) {
       const plan = current.sessionId === sessionId ? current.plan : null;
-      if (!plan) return;
+      if (!plan) return false;
       if (command.kind === 'stop') await this.stop();
       if (command.kind === 'pause') await this.checkpointDownload()?.catch(() => {});
       if (command.kind === 'tracks') {
@@ -804,7 +804,7 @@ export class Playback {
         } });
       }
       // File seeks and pause/resume happen in the native player.
-      return;
+      return true;
     }
     if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
     // The engine recovering on its own (a path switch, a fallback) is not progress (stall.ts).

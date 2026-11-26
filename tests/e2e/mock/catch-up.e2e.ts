@@ -90,7 +90,7 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await expect.poll(() => commands.filter(kind => kind === 'seek').length).toBe(seeks + 1);
       const requested = seekPositions.at(-1) ?? NaN;
       expect(Math.abs(positionBeforeRewind - requested - 60)).toBeLessThan(2);
-      await expect(screen.getByTestId('player-live-delay')).toHaveText(/ · -\d+:[0-5]\d$/, { timeout: 35_000 });
+      await expect(screen.getByTestId('player-live-edge-time')).toHaveText(/^\d{1,2}:[0-5]\d [AP]M · LIVE$/, { timeout: 35_000 });
       await expect(toggle).toHaveAttribute('aria-label', 'Play');
       await expect(screen.getByTestId('player-live-status')).toHaveText(/^\d+:\d+ behind live$/);
       await expect(screen.getByTestId('player-live-mark')).toBeHidden();
@@ -111,11 +111,22 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
         throw error;
       }
       await app.screenshot('paused-live-rewind');
+      await browser.setViewport({ width: 390, height: 844 });
       await expect(goLive).toBeVisible();
+      await expect.poll(() => browser.evaluate(() => {
+        const status = document.querySelector('[data-testid="player-live-status"]')?.getBoundingClientRect();
+        const chip = document.querySelector('[data-testid="player-go-live"]');
+        const controls = document.querySelector('[data-testid="player-phone-controls"]');
+        const button = chip?.getBoundingClientRect();
+        return !!(status && button && controls && !controls.contains(chip)
+          && button.left >= status.right && button.top <= status.top && button.bottom >= status.bottom);
+      })).toBe(true);
+      await app.screenshot('compact-go-live');
       await goLive.tap();
       await expect(screen.getByTestId('player-status')).toBeHidden();
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       expect(commands.filter(kind => kind === 'goLive')).toHaveLength(2);
+      await browser.setViewport({ width: 1440, height: 900 });
 
       const fromPlayer = screen.getByTestId('player-start-over');
       await expect(fromPlayer).toBeVisible();

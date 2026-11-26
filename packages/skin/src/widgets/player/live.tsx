@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { MOTION, Presence, useLast } from '../../presence';
-import { catchUpPictureTime, clock, delayLabel, LIVE_SLACK_SECONDS, msg, pictureTime, timeshiftWindow, type TimeshiftWindow } from '@vela/core';
+import { catchUpPictureTime, clock, LIVE_SLACK_SECONDS, msg, pictureTime, timeshiftWindow, type TimeshiftWindow } from '@vela/core';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { liveBehind, liveNotices, liveWatchKey, MiniGuide, useLiveContext, useLiveView } from '../guide';
 import { ChromeButton } from './button';
@@ -35,8 +35,6 @@ export interface LiveWatch {
   archive: 'startOver' | 'catchUp' | null;
   /** The rewind window (a channel with timeshift, or Start over); null where there is none to draw. */
   window: TimeshiftWindow | null;
-  /** "-12:30" while the picture trails live by intent, else ''. */
-  delay: string;
   /** Seconds the picture trails live (0 at live): what the score bug must not run ahead of. */
   behindSeconds: number;
   /** The real time on screen (ms). */
@@ -141,7 +139,6 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
     },
     archive: archived?.kind ?? null,
     window,
-    delay: window && (window.delayed || window.startOver || (paused && rewindable)) ? delayLabel(behindSeconds) : plan?.catchUp ? delayLabel(behindSeconds) : '',
     behindSeconds,
     pictureAt,
     windowStartAt,
@@ -243,14 +240,22 @@ export function LiveMark({ look, watch, onLeave }: { look: PlayerLook; watch: Li
   );
 }
 
-/** The bar's status line on a channel, where the timeline's clock sits on a film. */
+/** The channel status row also carries the compact player's return-to-live action. */
 export function LiveStatusLine({ look, watch }: { look: PlayerLook; watch: LiveWatch }) {
   if (!watch.notices.length) return null;
+  const showGoLive = look.small && !!watch.window?.delayed && !!watch.window.seekable;
+  const text = msg('catchUp.backToLive');
   return (
-    <View accessibilityLiveRegion="polite" testID="player-live-status">
-      <Text numberOfLines={1} style={[look.text(13, 500, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>
-        {watch.notices.join(' · ')}
-      </Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: look.size(10) }}>
+      <View accessibilityLiveRegion="polite" testID="player-live-status" style={{ flexShrink: 1 }}>
+        <Text numberOfLines={1} style={[look.text(13, 500, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>
+          {watch.notices.join(' · ')}
+        </Text>
+      </View>
+      {showGoLive ? (
+        <ChromeButton look={look} icon="live" label={text} text={text} compact primary size={44}
+          testID="player-go-live" onPress={watch.backToLive} />
+      ) : null}
     </View>
   );
 }
