@@ -10,7 +10,6 @@ import { opensMediaPage } from '@vela/core';
 import { MediaTitleScreen } from '../../src/media/screen';
 import { ReadTitleScreen } from '../../src/experiences/read-title';
 import { GalleryTitleScreen } from '../../src/experiences/gallery-title';
-import { legacyGallery } from '../../src/experiences';
 import { closeModal } from '../../src/modal-motion';
 
 export default function Title() {
@@ -53,7 +52,7 @@ export default function Title() {
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); };
   }, [back]));
   if (role === 'book' || role === 'series') return <ReadTitleScreen page={role} id={id ?? ''} library={library} active={focused} back={back} />;
-  if (role === 'photo' && !legacyGallery) return <GalleryTitleScreen id={id ?? ''} library={library} active={focused} back={back} />;
+  if (role === 'photo') return <GalleryTitleScreen id={id ?? ''} library={library} active={focused} back={back} />;
   if (mediaPage) return <MediaTitleScreen id={id ?? ''} library={library} active={focused} back={back} />;
   return <DocumentScreen route="title" entry={id ?? ''} library={library} />;
 }

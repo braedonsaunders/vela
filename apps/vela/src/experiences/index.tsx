@@ -10,8 +10,6 @@ import { WatchLibrary } from './watch';
 import { ReadLibrary } from './read';
 import { GalleryLibrary } from './gallery';
 
-export const legacyGallery = process.env.EXPO_PUBLIC_VELA_GALLERY_LEGACY === '1';
-
 export type LibrarySectionProps = { id: string; params: LibraryParams & { m?: string } };
 
 /** Live TV: today the standard library's live tabs, whose channels open the guide and the player. */
@@ -23,7 +21,7 @@ export const EXPERIENCE_SECTIONS: Record<VelaExperience, ComponentType<LibrarySe
   watch: WatchLibrary,
   listen: ListenLibrary,
   read: ReadLibrary,
-  gallery: legacyGallery ? WatchLibrary : GalleryLibrary,
+  gallery: GalleryLibrary,
   live: LiveLibrary,
 };
 
