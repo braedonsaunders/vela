@@ -80,7 +80,9 @@
        "margin-bottom": "12px"
       },
       "tv": {
-       "font-size": "40px"
+       "font-size": "40px",
+       "margin-top": "4pt",
+       "margin-bottom": "18pt"
       }
      },
      {
@@ -179,9 +181,19 @@
         "value": "unsupported",
         "not": true
        }
-      ]
+      ],
+      "tv": {
+       "margin-left": "-12pt",
+       "margin-right": "-12pt"
+      }
      }
-    ]
+    ],
+    "tv": {
+     "padding-left": "28pt",
+     "padding-right": "28pt",
+     "padding-top": "24pt",
+     "padding-bottom": "24pt"
+    }
    }
   ],
   "testId": "music-main",
@@ -189,8 +201,8 @@
    "padding-bottom": "32px"
   },
   "tv": {
-   "padding-bottom": "48px",
-   "padding-right": "32px"
+   "padding-bottom": "48pt",
+   "padding-right": "32pt"
   },
   "states": [
    {

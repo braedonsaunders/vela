@@ -58,7 +58,11 @@
      "type": "slot",
      "slot": "children"
     }
-   ]
+   ],
+   "tv": {
+    "padding-left": "28pt",
+    "padding-right": "28pt"
+   }
   },
   "albumHeader": {
    "type": "collectionHeader",
@@ -93,6 +97,9 @@
     "font-size": "26px",
     "color": "$ui.ink",
     "margin-bottom": "10px"
+   },
+   "tv": {
+    "margin-bottom": "10pt"
    }
   },
   "album": {
@@ -213,14 +220,19 @@
               "value": "Label"
              }
             ],
-            "text": "\u00a9 {fact.value}",
+            "text": "© {fact.value}",
             "style": {
              "font-size": "12px",
              "color": "$ui.inkQuiet"
             }
            }
           }
-         ]
+         ],
+         "tv": {
+          "padding-top": "28pt",
+          "padding-bottom": "28pt",
+          "gap": "4pt"
+         }
         }
        ]
       }
@@ -258,7 +270,11 @@
         "subtitle": "year"
        }
       }
-     ]
+     ],
+     "tv": {
+      "padding-left": "16pt",
+      "padding-right": "16pt"
+     }
     }
    ]
   },
@@ -391,12 +407,21 @@
                  "color": "$ui.inkSecondary"
                 }
                }
-              ]
+              ],
+              "tv": {
+               "padding-left": "16pt",
+               "padding-right": "16pt",
+               "padding-top": "12pt",
+               "padding-bottom": "12pt"
+              }
              }
             ]
            }
           }
-         ]
+         ],
+         "tv": {
+          "min-width": "520pt"
+         }
         },
         {
          "type": "artistLiked",
@@ -404,7 +429,10 @@
           "item": "{src.title.item}"
          }
         }
-       ]
+       ],
+       "tv": {
+        "gap": "40pt"
+       }
       }
      ]
     },
@@ -446,7 +474,11 @@
          "tileSize": "168"
         }
        }
-      ]
+      ],
+      "tv": {
+       "padding-left": "16pt",
+       "padding-right": "16pt"
+      }
      }
     },
     {
@@ -490,7 +522,13 @@
         "color": "$ui.inkSecondary"
        }
       }
-     ]
+     ],
+     "tv": {
+      "padding-left": "28pt",
+      "padding-right": "28pt",
+      "padding-bottom": "40pt",
+      "max-width": "860pt"
+     }
     }
    ]
   }
@@ -634,7 +672,10 @@
                    "item": "{src.title.item}"
                   }
                  }
-                ]
+                ],
+                "tv": {
+                 "gap": "10pt"
+                }
                }
               }
              },
@@ -656,7 +697,11 @@
                "item": "{src.title.item}"
               }
              }
-            ]
+            ],
+            "tv": {
+             "padding-left": "28pt",
+             "padding-right": "28pt"
+            }
            }
           ]
          },
@@ -735,7 +780,10 @@
                    "item": "{src.title.item}"
                   }
                  }
-                ]
+                ],
+                "tv": {
+                 "gap": "10pt"
+                }
                }
               }
              },
@@ -751,7 +799,11 @@
                "item": "{src.title.item}"
               }
              }
-            ]
+            ],
+            "tv": {
+             "padding-left": "28pt",
+             "padding-right": "28pt"
+            }
            },
            {
             "type": "spokenCollectionShelf",
@@ -776,7 +828,11 @@
                "item": "{src.title.item}"
               }
              }
-            ]
+            ],
+            "tv": {
+             "padding-left": "28pt",
+             "padding-right": "28pt"
+            }
            }
           ]
          }
@@ -791,8 +847,8 @@
    "padding-bottom": "32px"
   },
   "tv": {
-   "padding-bottom": "48px",
-   "padding-right": "32px"
+   "padding-bottom": "48pt",
+   "padding-right": "32pt"
   },
   "testId": "music-main",
   "states": [

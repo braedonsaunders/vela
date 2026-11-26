@@ -59,17 +59,26 @@
        {
         "type": "recentSearches"
        }
-      ]
+      ],
+      "tv": {
+       "margin-top": "26pt"
+      }
      }
-    ]
+    ],
+    "tv": {
+     "padding-left": "28pt",
+     "padding-right": "28pt",
+     "padding-top": "24pt",
+     "padding-bottom": "24pt"
+    }
    }
   ],
   "style": {
    "padding-bottom": "32px"
   },
   "tv": {
-   "padding-bottom": "48px",
-   "padding-right": "32px"
+   "padding-bottom": "48pt",
+   "padding-right": "32pt"
   },
   "states": [
    {

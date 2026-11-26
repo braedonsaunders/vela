@@ -84,7 +84,7 @@
             }
            },
            {
-            "text": " \u00b7 {src.tracks.items|totalLabel}"
+            "text": " · {src.tracks.items|totalLabel}"
            }
           ]
          }
@@ -145,23 +145,36 @@
            "color": "$ui.inkSecondary"
           }
          }
-        ]
+        ],
+        "tv": {
+         "padding-left": "18pt",
+         "padding-right": "18pt",
+         "padding-top": "12pt",
+         "padding-bottom": "12pt"
+        }
        },
        {
         "type": "box",
         "style": {
          "height": "40px"
+        },
+        "tv": {
+         "height": "40pt"
         }
        }
-      ]
+      ],
+      "tv": {
+       "padding-left": "28pt",
+       "padding-right": "28pt"
+      }
      }
     ]
    }
   ],
   "testId": "music-main",
   "tv": {
-   "padding-bottom": "48px",
-   "padding-right": "32px"
+   "padding-bottom": "48pt",
+   "padding-right": "32pt"
   },
   "states": [
    {
