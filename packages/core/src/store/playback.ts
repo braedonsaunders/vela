@@ -25,6 +25,8 @@ import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import { matchSeriesTracks } from '../series-tracks';
+import { atLiveEdge, liveRestart, liveRestartSeek, type LiveResume } from '../live/recovery';
+import { msg } from '../i18n';
 import type { ArchiveRange } from '../live/timeshift';
 import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
@@ -104,6 +106,7 @@ interface Intent {
   key: string;
   /** Asked again under a new key after the server answered with a session that had already ended. */
   fresh?: boolean;
+  liveResume?: LiveResume;
 }
 
 /** How many sessions this client stopped are remembered (`stoppedSessions`). */
@@ -147,6 +150,9 @@ export class Playback {
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   private watchdogAt = 0;
   private cursor = 0;
+  private liveCursor?: { sessionId: string; sourceGeneration: number; seekGeneration: number; seconds: number };
+  private liveTransportIntent?: { sessionId: string; atLive: boolean };
+  private liveRecoveryNotice?: { sessionId: string; text: string };
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
@@ -264,7 +270,10 @@ export class Playback {
     const watch = this.watch;
     if (watch?.target !== watchOf(target) || watch.session !== plan.sessionId) this.watch = { target: watchOf(target), session: plan.sessionId, restarts: 0 };
     this.stall = stallWatch(Date.now(), this.watch!.restarts);
-    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
+    // The live owner can take over a replacement while its recovery notice is still showing.
+    const notice = this.liveRecoveryNotice;
+    const error = notice?.sessionId === plan.sessionId ? notice.text : '';
+    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId, error });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
   }
@@ -348,6 +357,50 @@ export class Playback {
       return;
     }
     this.hold(connection.adapter, plan, viewerId ? { connection, viewer: viewerId } : undefined);
+    let evicted = false;
+    if (intent.liveResume) {
+      const resume = intent.liveResume;
+      const command = async (transport: { kind: 'goLive' } | { kind: 'seek'; positionSeconds: number }) =>
+        connection.plan(await this.send(connection.adapter, plan.sessionId, {
+          ...transport, sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+          idempotencyKey: `${intent.key}-${transport.kind}`,
+        }));
+      let failure: { error: unknown } | undefined;
+      try {
+        if (resume.kind !== 'edge') {
+          const position = liveRestartSeek(resume, plan);
+          if (position === 'evicted') evicted = true;
+          // A fresh live plan can use zero to mean join live. A seek to zero is explicit.
+          else if (resume.kind === 'timeshift' || position !== plan.positionSeconds) {
+            try {
+              plan = await command({ kind: 'seek', positionSeconds: position });
+            } catch (error) {
+              const code = error instanceof VelaError ? error.detail.code : undefined;
+              evicted = resume.kind === 'timeshift' &&
+                (code === 'timeshift_outside_window' || code === 'timeshift_position_evicted');
+              if (!evicted) throw error;
+            }
+          }
+        }
+        if ((evicted || resume.kind === 'edge') && plan.live?.timeshift && this.run === run && epoch === this.session.epoch) {
+          plan = await command({ kind: 'goLive' });
+        }
+      } catch (error) {
+        failure = { error };
+      }
+      if (failure || this.run !== run || epoch !== this.session.epoch) {
+        this.stopped(plan.sessionId);
+        try {
+          await this.send(connection.adapter, plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
+            seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` });
+          this.held.delete(plan.sessionId);
+        } catch { /* Keep it held for cleanup if the server could not be reached. */ }
+        if (failure && this.run === run && epoch === this.session.epoch) {
+          this.failed({ ...intent, key: `recover-${randomId()}` }, failure.error, attempt, preparation);
+        }
+        return;
+      }
+    }
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried.
@@ -416,12 +469,25 @@ export class Playback {
     this.recovering = false;
     this.established = true;
     this.recoveryAttempt = 0;
-    if (this.watch?.target !== watchOf(target)) this.watch = { target: watchOf(target), session: '', restarts: 0 };
+    const watchTarget = this.box.get().playback.target ?? target;
+    if (this.watch?.target !== watchOf(watchTarget)) this.watch = { target: watchOf(watchTarget), session: '', restarts: 0 };
     this.watch.session = plan.sessionId;
     this.stall = stallWatch(Date.now(), this.watch.restarts);
     this.cursor = plan.positionSeconds ?? 0;
-    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
+    if (intent.liveResume && plan.live?.timeshift) {
+      this.liveTransportIntent = { sessionId: plan.sessionId, atLive: evicted || intent.liveResume.kind === 'edge' };
+    }
+    const notice = evicted ? msg('catchUp.recoveredLive') : '';
+    if (notice) this.liveRecoveryNotice = { sessionId: plan.sessionId, text: notice };
+    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: notice, errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
+    if (notice) {
+      setTimeout(() => {
+        if (this.liveRecoveryNotice?.sessionId === plan.sessionId) this.liveRecoveryNotice = undefined;
+        const { playback } = this.box.get();
+        if (playback.sessionId === plan.sessionId && playback.error === notice) this.patch({ error: '' });
+      }, 5000);
+    }
     this.followSession(run, connection, plan.sessionId);
     // Placeholder versions (Play pressed before the title's release search finished) are read
     // again once, shortly after the start; opening the quality menu reads them again too.
@@ -621,7 +687,7 @@ export class Playback {
    * engine's own retries, or the server lost it. One intent owns all triggers. A session that has
    * had its last restart without playing again is not restarted: the viewer is told instead.
    */
-  recover(sessionId: string, reason = 'failed'): void {
+  recover(sessionId: string, reason = 'failed', livePosition?: number): void {
     const run = this.run;
     const current = this.box.get().playback;
     if (sessionId.startsWith('local-') && current.sessionId === sessionId) {
@@ -646,12 +712,20 @@ export class Playback {
     this.watchdog = undefined;
     this.audio ??= current.plan?.selectedAudioTrackId;
     if (this.subtitle === undefined) this.subtitle = current.plan?.selectedSubtitleTrackId;
+    const { plan } = current;
+    const sample = this.liveCursor;
+    const saved = sample?.sessionId === sessionId && sample.sourceGeneration === plan?.sourceGeneration &&
+      sample.seekGeneration === plan?.seekGeneration ? sample.seconds : plan?.positionSeconds ?? 0;
+    const position = livePosition !== undefined && Number.isFinite(livePosition) ? livePosition : saved;
+    const transport = this.liveTransportIntent;
+    const restart = plan && liveRestart(current.target, plan, Math.max(0, position),
+      transport?.sessionId === sessionId ? transport.atLive : !current.live?.canCatchUp && atLiveEdge(plan, position));
     const target = current.target.kind === 'title'
       ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
-      : current.target;
+      : restart?.target ?? current.target;
     this.abandoned = current.plan;
     this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1, versions: null });
-    this.scheduleRecovery({ run, target, key: `recover-${randomId()}` });
+    this.scheduleRecovery({ run, target, key: `recover-${randomId()}`, liveResume: restart?.resume });
   }
 
   private scheduleRecovery(intent: Intent, old: V.PlaybackPlan | null = this.abandoned): void {
@@ -825,6 +899,9 @@ export class Playback {
           nextPlan = this.withLocalTracks(nextPlan);
         } else {
           nextPlan = this.withLocalTracks(nextPlan);
+        }
+        if (nextPlan.live && (command.kind === 'goLive' || command.kind === 'seek' || command.kind === 'pause')) {
+          this.liveTransportIntent = { sessionId, atLive: command.kind === 'goLive' };
         }
         this.patch({ plan: nextPlan });
         return true;
@@ -1015,10 +1092,17 @@ export class Playback {
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
-  snapshot(snapshot: LiveObservation & StallSample & { audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
+  snapshot(snapshot: LiveObservation & StallSample & { seekTarget?: number | null; audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
+    const { plan } = current;
+    if ((plan?.catchUp || plan?.live?.timeshift) && snapshot.state !== 'loading' && snapshot.state !== 'idle' && snapshot.state !== 'failed'
+      && snapshot.seekTarget == null && snapshot.position !== undefined && Number.isFinite(snapshot.position)
+      && snapshot.sourceGeneration === plan.sourceGeneration && snapshot.seekGeneration === plan.seekGeneration) {
+      this.liveCursor = { sessionId: plan.sessionId, sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, seconds: snapshot.position };
+    }
     if (!this.localTracks && (snapshot.state === 'playing' || snapshot.state === 'paused')) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
@@ -1252,6 +1336,8 @@ export class Playback {
     this.recoveryAttempt = 0;
     this.stall = undefined;
     this.cursor = 0;
+    this.liveCursor = undefined;
+    this.liveTransportIntent = undefined;
     this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
