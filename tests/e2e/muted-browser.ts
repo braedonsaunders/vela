@@ -26,6 +26,15 @@ export function mutedBrowser(browser: 'chromium' | 'webkit', options: { allowSof
     }, ...(options.allowSoftwareVisualizer ? [() => {
       // Headless CI exposes WebGL through a software adapter. Exercise the actual scene renderer,
       // picker, persistence and fallback, but do not treat its frame timings as production data.
+      const getContext = HTMLCanvasElement.prototype.getContext;
+      Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+        configurable: true,
+        writable: true,
+        value(this: HTMLCanvasElement, id: string, attributes?: WebGLContextAttributes) {
+          return getContext.call(this, id, id === 'webgl2'
+            ? { ...attributes, failIfMajorPerformanceCaveat: false } : attributes);
+        },
+      });
       const context = globalThis.WebGL2RenderingContext;
       if (!context) return;
       const getParameter = context.prototype.getParameter;

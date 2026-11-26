@@ -1,5 +1,6 @@
 import { expect, type Locator } from 'e2e';
 import { describe, test, type Browser } from '@e2e-dev/web';
+import { waitForVideoReady } from './player-ready';
 
 async function seekFraction(scrubber: Locator, fraction: number) {
   const box = await scrubber.boundingBox();
@@ -32,8 +33,7 @@ describe('Film deterministic release gate', { session: 'mock-film' }, () => {
     await expect(screen.getByRole('radio', /Director’s Cut/)).toBeDisabled();
     await screen.getByRole('radio', /4K Dolby Vision Remux/).tap();
 
-    await expect(screen.getByRole('button', 'Close player')).toBeVisible({ timeout: 30_000 });
-    await expect(screen.getByRole('progressbar', 'Preparing your screening')).toBeHidden({ timeout: 30_000 });
+    await waitForVideoReady(browser, screen);
     expect(await browser.evaluate(async () => (await fetch('/__admin/failover', { method: 'POST' })).status)).toBe(200);
     await screen.getByTestId('player-quality-button').tap();
     await expect(screen.getByRole('radio', /1080p WEB-DL · DD\+ 5\.1.*Playing now/)).toBeVisible({ timeout: 30_000 });
@@ -71,6 +71,8 @@ describe('Film deterministic release gate', { session: 'mock-film' }, () => {
     await app.open('/vela/title/title-1-1');
     expect(await admin(browser, 'sidecar', { enabled: true, pathId: 'direct' })).toBe(200);
     try {
+      // Leave later parts of the original unbuffered so the seek requests a new byte range.
+      expect(await admin(browser, 'faults', { bandwidthBps: 3_000_000 })).toBe(200);
       await expect(screen.getByRole('heading', 'The Last Observatory')).toBeVisible({ timeout: 30_000 });
       await screen.getByRole('button', /^Versions,/).tap();
       await screen.getByRole('radio', /4K Dolby Vision Remux/).tap();
@@ -89,7 +91,7 @@ describe('Film deterministic release gate', { session: 'mock-film' }, () => {
       await screen.getByTestId('player-quality-button').tap();
       await screen.getByRole('button', 'Close player').tap();
     } finally {
-      await admin(browser, 'faults', { originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false });
+      await admin(browser, 'faults', { bandwidthBps: 0, originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false });
       await admin(browser, 'sidecar', { enabled: false });
     }
   });
@@ -98,6 +100,7 @@ describe('Film deterministic release gate', { session: 'mock-film' }, () => {
     await app.open('/vela/title/title-1-2');
     expect(await admin(browser, 'sidecar', { enabled: true, pathId: 'direct' })).toBe(200);
     try {
+      expect(await admin(browser, 'faults', { bandwidthBps: 3_000_000 })).toBe(200);
       await expect(screen.getByRole('button', /^Versions,/)).toBeVisible({ timeout: 30_000 });
       await screen.getByRole('button', /^Versions,/).tap();
       await screen.getByRole('radio', /4K Dolby Vision Remux/).tap();
@@ -117,7 +120,7 @@ describe('Film deterministic release gate', { session: 'mock-film' }, () => {
       await screen.getByTestId('player-quality-button').tap();
       await screen.getByRole('button', 'Close player').tap();
     } finally {
-      await admin(browser, 'faults', { originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false });
+      await admin(browser, 'faults', { bandwidthBps: 0, originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false });
       await admin(browser, 'sidecar', { enabled: false });
     }
   });
