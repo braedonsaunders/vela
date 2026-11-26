@@ -97,9 +97,10 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
   const measured = plan?.live ? timeshiftWindow({ live: plan.live, receivedAt, now, position, engine: live ? { ...live, edgeMovedAt } : null }) : null;
   // Back to live is taken at its word while the engine moves there and settles its latency.
   const wentLive = useRef(0);
+  const jumpingToLive = now - wentLive.current < GO_LIVE_GRACE_MS;
   const paused = snapshot?.state === 'paused' || plan?.state === 'paused';
   const delayed = !!measured && (measured.startOver || seekingTo !== undefined ||
-    ((measured.delayed || (measured.seekable && paused && measured.behind >= 1)) && now - wentLive.current >= GO_LIVE_GRACE_MS));
+    ((measured.delayed || (measured.seekable && paused && measured.behind >= 1)) && !jumpingToLive));
   const window = measured ? { ...measured, delayed } : null;
   const rewindable = !!window?.seekable;
   const archiveStart = plan?.catchUp ? Date.parse(plan.catchUp.startAt) : NaN;
@@ -109,7 +110,7 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
   const behindSeconds = plan?.catchUp ? Math.max(0, (now - pictureAt) / 1000) : window?.behind ?? 0;
   // A deliberate rewind is no delivery trouble: the window tells the delay, not "N seconds behind".
   // Behind live on purpose, the edge's publication waits are not the picture's business either.
-  const notices = rewindable && live ? liveNotices({ ...live, canCatchUp: false, ...(window!.delayed || seeking ? { delivery: 'available' as const, reconnecting: false } : {}) }) : liveNotices(live);
+  const notices = rewindable && live ? liveNotices({ ...live, canCatchUp: false, ...(window!.delayed || seeking ? { delivery: 'available' as const, reconnecting: false } : {}) }, jumpingToLive) : liveNotices(live, jumpingToLive);
   if (rewindable && window!.delayed) notices.push(msg('catchUp.behindLive', { delay: clock(behindSeconds) }));
   // Start over plays its programme from the beginning: an engine joins a growing stream at its edge,
   // so the session is placed at its start once, when the engine itself reports the window (a seek
