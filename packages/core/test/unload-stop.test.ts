@@ -22,7 +22,7 @@ function store(adapter: Record<string, unknown>) {
     asked.push([id, at]);
     return [{ url: `https://server.example/stop/${id}`, method: 'POST' as const }];
   }, ...adapter };
-  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter: full, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, client: {}, audioClient: {} };
+  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter: full, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'retry', client: {}, audioClient: {} };
   const box = new StateBox({ playback: initialPlayback } as VelaState);
   const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
   return { playback, asked, box };
@@ -206,4 +206,40 @@ test('Plex pagehide ends the session while a timeline update is in flight and an
   expect(requests()).toEqual(expected);
   expect(await command).toMatchObject({ message: 'Plex playback session ended' });
   expect((await plex.sessionSnapshot(sessionId)).plan).toMatchObject({ state: 'ended', positionSeconds: 17 });
+});
+
+test.each([204, 500])('Plex close retries at the generation of a held seek (cleanup HTTP %i)', async status => {
+  const plex = new PlexAdapter({ origin: 'https://plex.example', credentials: new FakeCredentials(), clientIdentifier: 'client-1' });
+  const seekSent = Promise.withResolvers<void>();
+  const seekResponse = Promise.withResolvers<Response>();
+  const track = { ratingKey: '9', type: 'track', title: 'Opening', duration: 60000, Media: [{ id: 5, container: 'mp3', audioCodec: 'mp3',
+    Part: [{ id: 6, key: '/library/parts/6/1/file.mp3' }] }] };
+  const seen = routeFetch({
+    'GET /library/metadata/9': { MediaContainer: { Metadata: [track] } },
+    'POST /:/timeline': ({ url }: Seen) => {
+      if (url.searchParams.get('state') === 'playing') {
+        seekSent.resolve();
+        return seekResponse.promise;
+      }
+      return new Response(null, { status: 204 });
+    },
+    'GET /music/:/transcode/universal/stop': new Response(null, { status }),
+  });
+  const { playback, box } = store({
+    startPlayback: plex.startPlayback.bind(plex), command: plex.command.bind(plex),
+    detail: plex.detail.bind(plex), unloadStop: plex.unloadStop.bind(plex),
+  });
+  await playback.start({ kind: 'title', id: '9' });
+  const { sessionId, sourceGeneration, seekGeneration } = box.get().playback.plan!;
+  const seek = playback.command(sessionId, { kind: 'seek', sourceGeneration, seekGeneration, positionSeconds: 19, idempotencyKey: 'seek' });
+  await seekSent.promise;
+  const close = playback.stop();
+  seekResponse.resolve(new Response(null, { status: 204 }));
+  await Promise.all([seek, close]);
+
+  expect(seen.filter(({ url }) => url.pathname === '/:/timeline').map(({ url }) =>
+    [url.searchParams.get('state'), url.searchParams.get('time')])).toEqual([['playing', '19000'], ['stopped', '19000']]);
+  const unload: string[] = [];
+  playback.stopOnUnload(({ url }) => unload.push(new URL(url).pathname));
+  expect(unload).toEqual(status === 500 ? ['/music/:/transcode/universal/stop'] : []);
 });

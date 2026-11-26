@@ -668,11 +668,10 @@ export class Playback {
     },
     command: async (sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> => {
       const connection = await this.session.ready();
-      try {
-        const plan = connection.plan(await this.send(connection, sessionId, command));
-        this.refreshHeld(plan);
-        return plan;
-      } finally { if (command.kind === 'stop') this.held.delete(sessionId); }
+      const plan = connection.plan(await this.send(connection, sessionId, command));
+      if (command.kind === 'stop') this.held.delete(sessionId);
+      else this.refreshHeld(plan);
+      return plan;
     },
     sessionSnapshot: async (sessionId: string): Promise<V.SessionSnapshot> => {
       const connection = await this.session.ready();
@@ -1088,15 +1087,14 @@ export class Playback {
       const endedOnHandover = handedOver && last?.ended && ack?.accepted;
       if (!endedOnHandover) {
         this.stopped(plan.sessionId);
-        try {
-          await connection.adapter.command(plan.sessionId, {
-            kind: 'stop',
-            sourceGeneration: plan.sourceGeneration,
-            seekGeneration: plan.seekGeneration,
-            idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
-          });
-        } finally { this.held.delete(plan.sessionId); }
-      } else this.held.delete(plan.sessionId);
+        await this.send(connection, plan.sessionId, {
+          kind: 'stop',
+          sourceGeneration: plan.sourceGeneration,
+          seekGeneration: plan.seekGeneration,
+          idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
+        });
+      }
+      this.held.delete(plan.sessionId);
       const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
       if (titleId && plan.purpose !== 'preview') {
         // Some servers return the raw session cursor even though their resume policy drops
@@ -1105,7 +1103,7 @@ export class Playback {
         confirmedPosition = detail.title.watch?.positionSeconds;
       }
     } catch {
-      // Ended, expired or already stopped: the server holds nothing for it.
+      // Keep a failed stop eligible for pagehide cleanup.
     }
     if (phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
   }
