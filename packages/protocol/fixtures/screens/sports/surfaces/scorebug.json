@@ -4,7 +4,7 @@
   "renderer": 19,
   "screen": "sports.scorebug",
   "page": "main",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "title": "{s:title}",
   "presentation": "playerOverlay",
   "sources": { "game": { "from": "liveEvent", "feed": "sports", "id": "{context.event}" } },
@@ -81,7 +81,7 @@
       "style": { "background-color": "$palette.glass", "flex-direction": "row", "align-items": "center", "justify-content": "center", "flex-grow": "1", "max-width": "100%", "gap": "6px", "padding": "7px 12px" },
       "below": { "440": { "padding": "4pt 5pt", "gap": "4pt" } },
       "states": [
-        { "when": [{ "test": "arg.state", "is": "eq", "value": "in" }], "style": { "background-color": "$ui.live" } },
+        { "when": [{ "test": "arg.state", "is": "eq", "value": "in" }], "style": { "background-color": "color-mix(in srgb, $ui.live 75%, #000000)" } },
         { "when": [{ "test": "arg.state", "is": "eq", "value": "post" }], "style": { "background-color": "$palette.final" } }
       ],
       "children": [
