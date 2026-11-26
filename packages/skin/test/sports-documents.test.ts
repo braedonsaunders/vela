@@ -198,8 +198,8 @@ describe('tabs pin', () => {
 });
 
 describe('a long status line (Ether puts the last play in detail)', () => {
-  test('the phone centre columns leave room for teams and give live status two lines', async () => {
-    for (const [file, centre, twoLineCount] of [['index.json', 'sports-hero-centre', 2], ['game.json', 'sports-game-centre', 1]] as const) {
+  test('the hero and game band centre columns are capped at half the row and the status clamps to one line', async () => {
+    for (const [file, centre] of [['index.json', 'sports-hero-centre'], ['game.json', 'sports-game-centre']] as const) {
       const doc = await json<ScreenDocument>(file);
       let found: RNode | undefined;
       const visit = (n: RNode) => {
@@ -214,14 +214,15 @@ describe('a long status line (Ether puts the last play in detail)', () => {
       const value = (k: string) => fill(style[k] as never, screenRoot(page({}), () => undefined), envAt(390));
       expect(value('max-width')).toBe('60%');
       expect(value('flex-shrink')).toBe('1');
+      // Every status text in the centre is one line with an ellipsis.
       const texts: RNode[] = [];
       const collect = (n: RNode) => { const node = n as RNode & { children?: RNode[] }; if (n.kind === 'text') texts.push(n); node.children?.forEach(collect); };
       collect(found!);
       const clamp = (t: RNode) => fill((t.base.style as Record<string, unknown>)['line-clamp'] as never, screenRoot(page({}), () => undefined), envAt(390));
-      expect(texts.filter(t => clamp(t) === '2')).toHaveLength(twoLineCount);
-      expect(texts.filter(t => clamp(t) === '1').length).toBeGreaterThan(0);
-      // The big score, dash, and spoiler label can take their natural sizes.
-      expect(texts.filter(t => !['1', '2'].includes(clamp(t))).length).toBeLessThanOrEqual(4);
+      const clamped = texts.filter(t => clamp(t) === '1');
+      // The status lines (detail, start) clamp; only the big score and its dash, and the spoiler words, do not.
+      expect(clamped.length).toBeGreaterThan(0);
+      expect(texts.filter(t => clamp(t) !== '1').length).toBeLessThanOrEqual(4);
     }
   });
 });

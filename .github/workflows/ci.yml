@@ -69,4 +69,4 @@ jobs:
           VELA_E2E_STATIC_ROOT: apps/vela/dist
           VELA_MOCK_MEDIA_ROOT: ${{ runner.temp }}/vela-media
           VELA_MOCK_MUSIC_ROOT: ${{ runner.temp }}/vela-music
-        run: VELA_E2E_BUN="$(command -v bun)" npx --no-install e2e run --strict-cache --config e2e.mock.config.ts --target mock-webkit --workers 1 --retries 0
+        run: VELA_E2E_BUN="$(command -v bun)" npx --no-install e2e run --strict-cache --config e2e.mock.config.ts --target mock-chromium,mock-webkit --workers 1 --retries 0
