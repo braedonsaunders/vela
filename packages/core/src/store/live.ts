@@ -2,7 +2,7 @@
 // Offered only by a server with the LiveTv capability; elsewhere every read fails honestly.
 import type * as V from '../wire';
 import { hasEventStream, hasLiveTv, hasMultiview, hasTileReplan } from '../adapter/capabilities';
-import { followSession, forgetSession } from '../protocol/events';
+import { followSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
 import type { Connection } from '../adapter/connection';
 import type { TransportCommand } from '../adapter';
@@ -101,13 +101,8 @@ export class Live {
         },
       } : {}),
       ...(hasEventStream(adapter) ? {
-        follow: async (sessionId: string, on: { plan(plan: V.PlaybackPlan): void; liveEvent(liveEvent: V.LiveEventRef | null): void }, signal: AbortSignal) => {
-          try {
-            await followSession(adapter, plan => connection.plan(plan), sessionId, on.plan, signal, on.liveEvent);
-          } finally {
-            forgetSession(sessionId);
-          }
-        },
+        follow: (sessionId: string, on: { plan(plan: V.PlaybackPlan): void; liveEvent(liveEvent: V.LiveEventRef | null): void }, signal: AbortSignal) =>
+          followSession(adapter, plan => connection.plan(plan), sessionId, on.plan, signal, on.liveEvent),
       } : {}),
     };
   }

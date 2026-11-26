@@ -14,7 +14,8 @@ public sealed class MediaProxy : IDisposable
     private readonly HttpListener listener = new();
     private readonly HttpClient client = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
     private readonly CancellationTokenSource stopping = new();
-    private readonly ConcurrentDictionary<string, Uri> resources = new();
+    private sealed record Resource(Uri Uri, LiveTimeline.Startup? Startup);
+    private readonly ConcurrentDictionary<string, Resource> resources = new();
     private readonly string token = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
     private readonly object accessLock = new();
     private Uri? origin;
@@ -51,13 +52,14 @@ public sealed class MediaProxy : IDisposable
         }
     }
 
-    public Uri Register(string source) => Register(Validate(new Uri(source, UriKind.Absolute)));
+    public Uri Register(string source) => Register(source, null);
+    internal Uri Register(string source, LiveTimeline.Startup? startup) => Register(Validate(new Uri(source, UriKind.Absolute)), startup);
     public Task<Uri> RegisterAsync(string source) => Task.FromResult(Register(source));
 
-    private Uri Register(Uri source)
+    private Uri Register(Uri source, LiveTimeline.Startup? startup)
     {
         string id = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        resources[id] = source;
+        resources[id] = new(source, startup);
         return new Uri(endpoint, id);
     }
 
@@ -91,8 +93,9 @@ public sealed class MediaProxy : IDisposable
         {
             var request = context.Request;
             string[] parts = request.Url!.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if ((request.HttpMethod != "GET" && request.HttpMethod != "HEAD") || parts.Length != 2 || parts[0] != token || !resources.TryGetValue(parts[1], out var target))
+            if ((request.HttpMethod != "GET" && request.HttpMethod != "HEAD") || parts.Length != 2 || parts[0] != token || !resources.TryGetValue(parts[1], out var resource))
             { context.Response.StatusCode = 404; return; }
+            Uri target = resource.Uri;
             HttpResponseMessage? upstream = null;
             try
             {
@@ -128,10 +131,15 @@ public sealed class MediaProxy : IDisposable
                     var duration = Regex.Match(text, @"(?m)^#EXT-X-TARGETDURATION:\s*(\d+(?:\.\d+)?)\s*$");
                     if (duration.Success && double.TryParse(duration.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds > 0 && seconds <= 60)
                         Volatile.Write(ref targetDuration, seconds);
+                    if (resource.Startup is { } startup && text.StartsWith("#EXTM3U", StringComparison.Ordinal))
+                    {
+                        string? Header(string name) => upstream.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
+                        text = startup.Apply(text, Header("X-Ether-Live-Media-Sequence"), Header("X-Ether-Live-Window-Start"));
+                    }
                     string rewritten = Regex.Replace(text, @"(?m)^(?!#)([^\r\n]+)|URI=""([^""]+)""", match =>
                     {
                         string value = match.Groups[1].Success ? match.Groups[1].Value.Trim() : match.Groups[2].Value;
-                        try { string url = Register(Validate(new Uri(target, value))).ToString(); return match.Groups[1].Success ? url : "URI=\"" + url + "\""; }
+                        try { string url = Register(Validate(new Uri(target, value)), resource.Startup).ToString(); return match.Groups[1].Success ? url : "URI=\"" + url + "\""; }
                         catch (ArgumentException) { return match.Groups[1].Success ? "" : "URI=\"\""; }
                     });
                     byte[] bytes = Encoding.UTF8.GetBytes(rewritten); response.ContentLength64 = bytes.Length;

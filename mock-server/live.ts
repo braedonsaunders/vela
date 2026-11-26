@@ -12,12 +12,12 @@ const epoch = Date.now() - (timeshiftMinutes ? 20 * 60_000 : 60_000);
  * relay starting from its backlog published it (Ether, November 2026: 5 s). A player that parks at
  * the playlist's time sits in front of a hole it never fills.
  */
-export const liveFaults = { gapEvery: 0, delayEvery: 0, delayMs: 8000, mediaLeadSeconds: 0 };
+export const liveFaults = { gapEvery: 0, delayEvery: 0, delayMs: 8000, mediaLeadSeconds: 0, rewindSegments: 0 };
 /** The newest published segment's sequence number. */
 export const edgeSequence = (now = Date.now()) => Math.floor((now - epoch) / 4000);
 /** The segment carrying a wall-clock instant (negative before the broadcast began: the archive). */
 export const sequenceAt = (ms: number) => Math.floor((ms - epoch) / 4000);
-const windowSegments = () => (timeshiftMinutes ? timeshiftMinutes * 15 : 12);
+const windowSegments = () => liveFaults.rewindSegments || (timeshiftMinutes ? timeshiftMinutes * 15 : 12);
 export function liveWindow() {
   const edgeSeq = edgeSequence(), edge = edgeSeq * 4;
   // As Ether publishes it: one exact sequence and its time from the playlist this plan was made
@@ -33,6 +33,13 @@ export function archiveWindow(startSeq: number, endSeq: number | null) {
   return { edge: Math.max(0, edgeSeq - startSeq) * 4, edgeAt: new Date(epoch + edgeSeq * 4000).toISOString(), ended: endSeq !== null && endSeq <= edgeSequence() };
 }
 const headers = { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' };
+
+// The muted browser gate exercises the video timeline with the generated video-only
+// CMAF ladder. GStreamer's muxed audio and video queues can deadlock on a seek flush.
+export const videoOnlyLive = process.env.VELA_MOCK_VIDEO_ONLY_LIVE === '1';
+function liveFile(resource: string): string {
+  return videoOnlyLive ? resource.replace(/^v(360|540|720)\//, 'video$1/') : resource;
+}
 
 // Rebase CMAF decode times when the synthetic ladder loops. This preserves a
 // continuous timeline without discontinuities or resetting the media sequence.
@@ -87,7 +94,7 @@ async function rebase(resource: string, offsetSeconds: number): Promise<Uint8Arr
 /** One fixture segment for a sequence number, its decode times moved `shift` seconds earlier. */
 async function segmentBytes(variant: string, seq: number, shift: number): Promise<Uint8Array> {
   const k = ((seq % 15) + 15) % 15, cycle = Math.floor(seq / 15);
-  return rebase(`${variant}/seg-${String(k).padStart(3, '0')}.m4s`, cycle * 60 - shift);
+  return rebase(liveFile(`${variant}/seg-${String(k).padStart(3, '0')}.m4s`), cycle * 60 - shift);
 }
 
 /**
@@ -112,7 +119,7 @@ async function serveArchive(req: Request, startSeq: number, endSeq: number | nul
     const bytes = await segmentBytes(segment[1]!, seq, startSeq * 4);
     return new Response(req.method === 'HEAD' ? null : bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'video/iso.segment', 'Cache-Control': 'no-store', 'Content-Length': String(bytes.length) } });
   }
-  return serveMedia(req, rest);
+  return serveMedia(req, liveFile(rest));
 }
 
 export async function serveLive(req: Request, resource: string): Promise<Response> {
@@ -122,7 +129,8 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
     const text = await Bun.file(join(mediaRoot, resource)).text();
     // The generated video ladder already contains English audio. Avoid a second
     // independent audio timeline in the small mock live fixture.
-    return new Response(text.split('\n').filter(l => !l.startsWith('#EXT-X-MEDIA:')).map(l => l.replace(',AUDIO="audio"', '')).join('\n'), { headers });
+    const master = text.split('\n').filter(line => !line.startsWith('#EXT-X-MEDIA:')).map(line => line.replace(',AUDIO="audio"', '')).join('\n');
+    return new Response(videoOnlyLive ? master.replaceAll(',mp4a.40.2', '') : master, { headers });
   }
   const playlist = /^(v360|v540|v720)\/index\.m3u8$/.exec(resource);
   if (playlist) {
@@ -149,5 +157,5 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
     const bytes = await segmentBytes(segment[1]!, seq, -liveFaults.mediaLeadSeconds);
     return new Response(req.method === 'HEAD' ? null : bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'video/iso.segment', 'Cache-Control': 'no-store', 'Content-Length': String(bytes.length) } });
   }
-  return serveMedia(req, resource);
+  return serveMedia(req, liveFile(resource));
 }

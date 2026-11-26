@@ -15,6 +15,8 @@ export { HostReader, HostSource } from './host-source';
  * view) by augmenting this interface from their own files. */
 export interface SkinHost {
   doc: ResolvedDocument;
+  /** Native font registration changes styles even when the document and viewport match. */
+  fontRevision?: number;
   env: Env;
   viewport: Viewport;
   dispatch(action: Action, arg: string): void;

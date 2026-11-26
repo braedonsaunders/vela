@@ -90,13 +90,41 @@ function isStartOver(plan) { return plan?.live?.mode === 'startOver'; }
  * (FFmpeg otherwise joins three segments from the end), so position 0 is the programme's start.
  */
 const LIVE_FORWARD_BYTES = '192MiB', LIVE_BACK_BYTES = '128MiB';
-function demuxerOptions(plan) {
+function demuxerOptions(plan, timeshiftStart = false) {
   const live = isLive(plan);
   return [
     ['demuxer-max-bytes', live ? LIVE_FORWARD_BYTES : '400MiB'],
     ['demuxer-max-back-bytes', live ? LIVE_BACK_BYTES : '100MiB'],
-    ['demuxer-lavf-o', isStartOver(plan) ? 'live_start_index=0' : ''],
+    ['demuxer-lavf-o', timeshiftStart ? 'prefer_x_start=1' : isStartOver(plan) ? 'live_start_index=0' : ''],
   ];
+}
+
+/** Pick the segment on the broadcast clock. FFmpeg opens that segment and mpv starts its local clock there. */
+function timeshiftLanding(playlist, headers, live, requested) {
+  if (/^#EXT-X-ENDLIST\s*$/m.test(playlist)) return null;
+  const sequence = Number(/^#EXT-X-MEDIA-SEQUENCE:\s*(\d+)\s*$/m.exec(playlist)?.[1] ?? 0);
+  const starts = [0];
+  for (const match of playlist.matchAll(/^#EXTINF:([\d.]+),/gm)) {
+    const duration = Number(match[1]);
+    if (!(duration > 0) || !Number.isFinite(duration)) return null;
+    starts.push(starts.at(-1) + duration);
+  }
+  const segments = starts.length - 1;
+  if (!segments || !Number.isSafeInteger(sequence)) return null;
+  const headerSequence = headers.get('X-Ether-Live-Media-Sequence');
+  const headerStart = headers.get('X-Ether-Live-Window-Start');
+  const anchor = headerSequence?.trim() && headerStart?.trim()
+    ? { mediaSequence: Number(headerSequence), windowStartSeconds: Number(headerStart) } : live.anchor;
+  const index = anchor?.mediaSequence - sequence;
+  if (!Number.isSafeInteger(anchor?.mediaSequence) || !Number.isSafeInteger(index) || index < 0 || index >= segments || !Number.isFinite(anchor?.windowStartSeconds)) return null;
+  const origin = anchor.windowStartSeconds - starts[index];
+  if (origin < 0) return null;
+  const edge = origin + starts.at(-1);
+  const inWindow = requested != null && requested >= origin && requested < edge - 1;
+  const position = inWindow ? requested : origin + starts[Math.max(0, segments - 3)];
+  const segment = starts.findLastIndex(start => origin + start <= position);
+  const segmentStart = origin + starts[segment];
+  return { offset: starts[segment], segmentStart, position };
 }
 
 /** How far behind the edge live normally plays: the plan's target (else 6 s), and never closer than the
@@ -171,4 +199,4 @@ function liveSnapshot(window, position, wasBehind, reconnecting) {
   return { behind, live: { edgeSeconds: window?.edge ?? null, windowStartSeconds: window?.start ?? null, driftSeconds: behind ? lag : 0,
     edgeSource: window?.source ?? null, reconnecting, delivery: window?.edge != null && !reconnecting ? 'available' : 'unknown', canCatchUp: behind } };
 }
-Object.assign(module.exports, { isLive, isStartOver, demuxerOptions, liveLatency, liveWindow, liveLag, behindLive, catchUpTarget, clampLiveSeek, resumeTarget, liveSnapshot });
+Object.assign(module.exports, { isLive, isStartOver, demuxerOptions, timeshiftLanding, liveLatency, liveWindow, liveLag, behindLive, catchUpTarget, clampLiveSeek, resumeTarget, liveSnapshot });

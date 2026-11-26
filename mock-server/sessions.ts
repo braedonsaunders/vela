@@ -1,6 +1,6 @@
 import type { LiveEventRef, PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../packages/protocol/types';
 import { faults, mediaRoot, fixtureDurationSeconds, originalFixture } from './media';
-import { liveWindow } from './live';
+import { liveWindow, videoOnlyLive } from './live';
 import { refreshLive } from './catch-up';
 import { mseFixture } from './mse';
 import { trickplayOffer } from './trickplay';
@@ -180,9 +180,10 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
     plan.live = { ...liveWindow(), mode: request.liveMode ?? 'adaptive' };
     plan.positionSeconds = 0;
     plan.paths = [{ id: 'live', kind: 'remux', transport: 'hls', url: `${base}/live/master.m3u8`, mimeType: 'application/vnd.apple.mpegurl', sourceId: 'synthetic-live', timelineId: 'synthetic-live', readiness: 'ready', boundaries: [],
-      qualities: [[360, 640, 700000], [540, 960, 1400000], [720, 1280, 2600000]].map(([height, width, bitrate]) => ({ id: `${height}p`, width, height, bitrate, videoCodec: 'avc1.64001f', audioCodec: 'mp4a.40.2', url: `${base}/live/v${height}/index.m3u8` })) }];
+      qualities: [[360, 640, 700000], [540, 960, 1400000], [720, 1280, 2600000]].map(([height, width, bitrate]) => ({ id: `${height}p`, width, height, bitrate, videoCodec: 'avc1.64001f', ...(!videoOnlyLive ? { audioCodec: 'mp4a.40.2' } : {}), url: `${base}/live/v${height}/index.m3u8` })) }];
     plan.selectedPathId = 'live';
-    plan.audioTracks = [tracks[0]]; plan.selectedAudioTrackId = tracks[0].id;
+    plan.audioTracks = videoOnlyLive ? [] : [tracks[0]];
+    plan.selectedAudioTrackId = videoOnlyLive ? undefined : tracks[0].id;
     plan.subtitleTracks = []; plan.selectedSubtitleTrackId = null; plan.chapters = [];
   }
   const s: Session = { owner, mediaToken: token, plan, history: [], listeners: new Map(), sequence: 0, expires: Date.now() + 86400000 };

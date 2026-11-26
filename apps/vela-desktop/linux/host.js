@@ -67,7 +67,7 @@ async function create({ window, emit }) {
   const updateSubtitlePosition = () => cmd('set_property', 'sub-pos', Math.min(subtitlePosition, 100 - captionLift)).catch(() => {});
   // Live timeshift: when the plan arrived (its edge grows from then), the behind-live verdict held between
   // snapshots, and a local live seek in flight ({ target, at }, on the axis of the reported position).
-  let planReceivedAt = 0, liveBehind = false, liveSeek = null;
+  let planReceivedAt = 0, liveBehind = false, liveSeek = null, liveStartup, liveStartupId = 0;
   const playback = settings(), sink = sinkFor(playback.audioDevice), audio = audioOptions(playback, sink);
   const windowEvents=['move','resize','show','hide','minimize','restore','focus','blur','enter-full-screen','leave-full-screen'];
   const send = (event, value) => { if (!disposed) emit(event, value); };
@@ -138,7 +138,21 @@ async function create({ window, emit }) {
       const values = await Promise.all(names.map(get));
       const p = Object.fromEntries(names.map((n,i) => [n,values[i]]));
       if (Date.now()-loadedAt > 10000 && p['track-list']?.some(t => t.type === 'video') && !p['video-out-params']) throw new Error('Native video output unavailable');
-      const offset = plan.paths.find(p => p.id === plan.selectedPathId)?.timelineOriginSeconds || 0;
+      const landing = liveStartup?.landing;
+      const offset = landing?.segmentStart ?? (plan.paths.find(p => p.id === plan.selectedPathId)?.timelineOriginSeconds || 0);
+      if (landing && !liveStartup.placed && p['time-pos'] != null) {
+        const relative = landing.position - landing.segmentStart;
+        if (relative > 0 && Math.abs(p['time-pos'] - relative) > 0.1) {
+          const cached = p['demuxer-cache-state']?.['seekable-ranges']?.some(range => range.start <= relative && relative < range.end);
+          // FFmpeg live HLS is not demuxer-seekable. Wait for the selected segment to enter mpv's cache.
+          if (cached && await liveSeekTo(landing.position, offset, true)) {
+            liveStartup.placed = true;
+            return;
+          }
+          if (Date.now() - loadedAt < 10000) return;
+        }
+        liveStartup.placed = true;
+      }
       if (p['time-pos'] != null) await describe(p);
       if (pendingSeek != null && p['time-pos'] != null) { await cmd('seek',pendingSeek,'absolute+exact'); pendingSeek=null; }
       const position = (p['time-pos'] || 0) + offset;
@@ -161,6 +175,7 @@ async function create({ window, emit }) {
         else if (kind === 'subtitle' && !id) await cmd('set_property','sid','no');
       }
       send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:live ? null : (p.duration || 0)+offset,live,seekTarget:liveSeek?.target ?? null,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:playbackRate(plan,p.speed),speeds:plan.channelId || plan.live ? [1] : [.5,.75,1,1.25,1.5,2],droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps'],mpv:facts,output:output()});
+      if (liveSeek?.startup) return;
       send('observation', {sessionId:plan.sessionId,observation:{idempotencyKey:`${source}:${++sequence}`,sequence,
         sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,observedAt:new Date().toISOString(),positionSeconds:position,state:state === 'loading' ? 'buffering' : state,
         selectedPathId:plan.selectedPathId,audioTrackId:plan.selectedAudioTrackId,subtitleTrackId:plan.selectedSubtitleTrackId,
@@ -173,8 +188,8 @@ async function create({ window, emit }) {
     return { position: (time || 0) + origin, window: liveWindow({ plan, cacheState, origin, receivedAt: planReceivedAt, now: Date.now(), targetDuration: proxy.targetDuration() }) };
   }
   /** A seek inside the live window mpv holds; false when mpv refused it. */
-  async function liveSeekTo(target, origin) {
-    liveSeek = { target, at: Date.now() }; pendingSeek = null;
+  async function liveSeekTo(target, origin, startup = false) {
+    liveSeek = { target, at: Date.now(), startup }; pendingSeek = null;
     try { await cmd('seek', Math.max(0, target - origin), 'absolute+exact'); return true; }
     catch { liveSeek = null; return false; }
   }
@@ -226,8 +241,10 @@ async function create({ window, emit }) {
       const loading = source !== key;
       if (loading) {
         // The demuxer reads these when it opens: live's bounded timeshift buffer, Start over from its first segment.
-        for (const [name, value] of demuxerOptions(plan)) await cmd('set_property', name, value).catch(() => {});
-        await cmd('loadfile', proxy.register(selected.url), 'replace'); source=key; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now(); facts=null;
+        liveStartup = selected.transport === 'hls' && plan.live?.timeshift && !isStartOver(plan)
+          ? { key: ++liveStartupId, live: plan.live, requested: plan.seekGeneration > 0 ? plan.positionSeconds : null } : undefined;
+        for (const [name, value] of demuxerOptions(plan, !!liveStartup)) await cmd('set_property', name, value).catch(() => {});
+        await cmd('loadfile', proxy.register(selected.url, liveStartup), 'replace'); source=key; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now(); facts=null;
         liveBehind=false; liveSeek=null;
         await cmd('set_property','speed',1);
       }
@@ -242,7 +259,7 @@ async function create({ window, emit }) {
       const c = props.command;
       if (c && c.id > lastCommand && isLive(plan) && ['play','pause','seek','seekBy','catchUp'].includes(c.type)) {
         lastCommand = c.id;
-        const refusal = await liveCommand(c, selected.timelineOriginSeconds || 0);
+        const refusal = await liveCommand(c, liveStartup?.landing?.segmentStart ?? (selected.timelineOriginSeconds || 0));
         send('command', refusal ? {id:c.id,ok:false,failure:{kind:'action',message:refusal,recoverable:true}} : {id:c.id,ok:true});
       } else if (c && c.id > lastCommand && c.type === 'catchUp') {
         lastCommand = c.id;
@@ -280,7 +297,7 @@ async function create({ window, emit }) {
     setAccess(grant) {
       const generation = ++accessGeneration; activeEntry=null; source=''; proxy?.close(); proxy=null;
       const immutable = grant ? {origin:grant.origin,pathPrefix:grant.pathPrefix,headers:{...grant.headers}} : null;
-      return enqueue(async () => { await cmd('stop'); source=''; seek=''; plan=null; pendingSeek=null;
+      return enqueue(async () => { await cmd('stop'); source=''; seek=''; plan=null; pendingSeek=null; liveStartup=undefined;
         if (generation === accessGeneration && immutable) { proxy=await createProxy(immutable); if(latestProps) await apply(latestProps); }
       });
     },

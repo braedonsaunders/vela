@@ -134,7 +134,7 @@ export async function activateSource(
       pipeline.expensiveSwitches = source.strategy === 'transcode';
       pipeline.initialRenditionId = context.quality.manual ?? source.initialRenditionId;
       pipeline.liveTargetSeconds = context.live.targetSeconds;
-      pipeline.startLiveAtEdge = !context.session.current?.startOver;
+      pipeline.startLiveAtEdge = !context.session.pendingSeek && !context.session.current?.startOver;
       pipeline.liveWindowStart = context.session.current?.liveWindowStart ?? null;
       pipeline.maxLiveDrift = context.session.current?.liveMaxDrift ?? 45;
       pipeline.abr.manual = context.quality.manual;

@@ -66,13 +66,24 @@ export class EtherTransport {
   }
 
   /** One connection to an event stream under `/vela/v0`, read to its end. */
-  async stream(path: string, headers: Record<string, string>, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+  async stream(path: string, headers: Record<string, string>, onEvent: EventHandler, signal?: AbortSignal, onActivity?: () => void): Promise<void> {
     const tokens = await this.credentials.get();
     if (!tokens) throw new Error('Sign in required');
-    const init = { headers: { Accept: 'text/event-stream', ...headers }, signal };
-    const response = await this.fetchBound(`/vela/v0${path}`, init, tokens);
-    if (!response.ok) throw await this.failure(response, signal);
-    await readEvents(response, onEvent, signal);
+    // The request has its own signal, so a stream left early (an event that could not be handled)
+    // ends the request too, not only its reader.
+    const request = new AbortController();
+    const abort = () => request.abort(signal?.reason);
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const init = { headers: { Accept: 'text/event-stream', ...headers }, signal: request.signal };
+      const response = await this.fetchBound(`/vela/v0${path}`, init, tokens);
+      if (!response.ok) throw await this.failure(response, signal);
+      await readEvents(response, onEvent, signal, onActivity);
+    } finally {
+      signal?.removeEventListener('abort', abort);
+      request.abort();
+    }
   }
 
   async request<T>(method: Method, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
