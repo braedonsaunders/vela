@@ -73,6 +73,8 @@ function run(command: string[]): Buffer {
 const simctl = (...args: string[]) => run(['xcrun', 'simctl', ...args]);
 const adb = (...args: string[]) => run([process.env.ADB ?? 'adb', '-s', udid, ...args]);
 const axe = (...args: string[]) => run(['axe', ...args, '--udid', udid]);
+const tapReader = () => axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
+const readerHasControl = (id: string) => new RegExp(`"AXUniqueId"\\s*:\\s*"${id}"`).test(axe('describe-ui', '--minimal-keys').toString());
 
 interface Device { relaunch(): void; shoot(file: string): void; keys?(codes: number[]): Promise<void> }
 const APP = 'app.ether.vela';
@@ -207,6 +209,12 @@ async function captureRead(): Promise<void> {
           return readFileSync(probe);
         };
         try {
+          if (phone && view.readerChrome) {
+            await settledFrames(take, () => Bun.sleep(700), { reader });
+            for (let i = 0; i < 10 && !readerHasControl('reader-hint'); i++) await Bun.sleep(300);
+            if (!readerHasControl('reader-hint')) throw new Error('reader controls did not auto-hide');
+            tapReader();
+          }
           if (phone && (view.name === 'reader-contents' || view.name === 'reader-appearance')) {
             await settledFrames(take, () => Bun.sleep(700), { reader });
             const button = view.name === 'reader-contents' ? 'reader-contents' : 'reader-type';
@@ -214,12 +222,15 @@ async function captureRead(): Promise<void> {
               axe('tap', '--id', button);
             } catch (error) {
               if (!String(error).includes('No accessibility element matched')) throw error;
-              axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
+              tapReader();
               axe('tap', '--id', button);
             }
             await Bun.sleep(2000);
           }
           const stable = await settledFrames(take, () => Bun.sleep(reader ? 1700 : 700), { reader });
+          if (phone && view.readerChrome && (readerHasControl('reader-hint') || !readerHasControl('reader-progress'))) {
+            throw new Error('reader chrome did not stay visible');
+          }
           writeFileSync(join(out, file), stable.primary);
           writeFileSync(join(out, frame), stable.confirmed);
         } finally {

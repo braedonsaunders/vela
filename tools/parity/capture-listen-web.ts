@@ -118,6 +118,10 @@ try {
           await page.evaluate(() => document.activeElement?.blur());
           await page.keyboard.press('Enter');
         }` : '';
+      const chromeVisible = read && 'readerChrome' in view && view.readerChrome ? `() => ['reader-top', 'reader-bottom'].every(id => {
+        const bar = document.querySelector('[data-testid="' + id + '"]');
+        return bar && getComputedStyle(bar).opacity === '1' && getComputedStyle(bar).pointerEvents === 'auto';
+      })` : '';
       const shoot = read ? `
         let previous = await page.screenshot();
         for (let attempt = 0; attempt < 30; attempt++) {
@@ -129,7 +133,10 @@ try {
             if (candidate.equals(primary)) {
               await page.waitForTimeout(700);
               const confirmed = await page.screenshot({ path: ${JSON.stringify(join(out, frame))} });
-              if (primary.equals(confirmed)) return { url: page.url() };
+              if (primary.equals(confirmed)) {
+                ${chromeVisible ? `if (!(await page.evaluate(${chromeVisible}))) throw new Error('Reader controls did not stay visible');` : ''}
+                return { url: page.url() };
+              }
               previous = confirmed;
               continue;
             }
@@ -157,6 +164,7 @@ try {
         ${showReaderChrome}
         ${(view.steps ?? []).map(stepCode).join('\n        ')}
         ${view.settled ? waitFor(view.settled) : ''}
+        ${chromeVisible ? `await page.waitForFunction(${chromeVisible}, null, { timeout: 5000 });` : ''}
         ${scroll && 'selector' in scroll ? `await page.locator(${JSON.stringify(scroll.selector)}).first().evaluate(${SCROLL});` : ''}
         await page.mouse.move(0, ${viewport.height - 1});
         await page.waitForTimeout(${read ? 250 : 1800});

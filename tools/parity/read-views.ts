@@ -14,6 +14,7 @@ interface ReadView {
   path: string;
   description: string;
   ready: string;
+  readerChrome?: true;
   steps?: Step[];
   settled?: string;
   only?: string[];
@@ -23,6 +24,12 @@ const BOOKS = '/library/books';
 const book = (id: string) => `/title/book-${id}?library=books`;
 const reader = (id: string) => `/read/book-${id}?library=books`;
 const READER_VIEWPORTS = [...READ_WEB_VIEWPORTS.map(viewport => viewport.name), 'ios-phone', 'ios-fold'];
+
+const readerFormats = [
+  { format: 'epub', id: 'harbour-of-bells', description: 'Resumed EPUB and its reading position' },
+  { format: 'pdf', id: 'field-guide-imaginary-birds', description: 'PDF reader' },
+  { format: 'comic', id: 'captain-pebble', description: 'Comic reader' },
+];
 
 export const READ_VIEWS: ReadView[] = [
   { name: 'home', path: BOOKS, ready: 'text:Continue reading', description: 'Books Home and Continue reading' },
@@ -34,16 +41,20 @@ export const READ_VIEWS: ReadView[] = [
   { name: 'standalone', path: book('patient-garden'), ready: 'media-byline', description: 'Standalone unread book' },
   { name: 'series', path: '/title/series-saltglass-chronicles?library=books', ready: 'media-book-book-harbour-of-bells',
     description: 'Series page and ordered volumes' },
-  { name: 'reader-epub', path: reader('harbour-of-bells'), ready: 'reader-hint', description: 'Resumed EPUB and its reading position', only: READER_VIEWPORTS },
+  ...readerFormats.flatMap(({ format, id, description }): ReadView[] => [
+    { name: `reader-${format}`, path: reader(id), ready: 'reader-hint', description, only: READER_VIEWPORTS },
+    { name: `reader-${format}-chrome`, path: reader(id), ready: 'reader-hint', readerChrome: true,
+      description: `${description} with header, progress and page controls`, only: READER_VIEWPORTS },
+  ]),
   { name: 'reader-contents', path: reader('harbour-of-bells'), ready: 'reader-hint',
     steps: [{ click: 'reader-contents' }], settled: 'text:Contents', description: 'EPUB contents drawer', only: READER_VIEWPORTS },
   { name: 'reader-appearance', path: reader('harbour-of-bells'), ready: 'reader-hint',
     steps: [{ click: 'reader-type' }], settled: 'text:Text and layout', description: 'EPUB appearance drawer', only: READER_VIEWPORTS },
-  { name: 'reader-pdf', path: reader('field-guide-imaginary-birds'), ready: 'reader-hint', description: 'PDF reader', only: READER_VIEWPORTS },
-  { name: 'reader-comic', path: reader('captain-pebble'), ready: 'reader-hint', description: 'Comic reader', only: READER_VIEWPORTS },
 ];
 
-export const READ_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [];
+export const READ_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [
+  { viewports: /^androidtv$/, views: ['standalone'], reason: 'Android TV sometimes paints the Close focus ring after consecutive title deep links. The ring accounts for the entire difference.' },
+];
 
 export function readReviewed(view: { name: string; review?: string }, viewport: string): string | undefined {
   return READ_REVIEWED.find(review => review.viewports.test(viewport) && review.views.includes(view.name))?.reason ?? view.review;
