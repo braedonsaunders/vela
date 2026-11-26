@@ -272,8 +272,8 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const sideBySide = nowPlayingSideBySide(m.width, m.height);
   const coverSize = sideBySide ? Math.min(480, m.height - 360, (m.width - m.gutter * 2) * 0.42) : Math.min(m.width - m.gutter * 2 - 24, m.height * 0.42, 420);
   const tint = item.accent || m.ui.accent;
-  // Keep text legible on the lighter frames of the paper and water scenes.
-  const washTop = onOpenVisualizer ? alpha(m.ui.page, 0.58) : alpha(tint, 0.3);
+  // Keep the header legible over pale covers and the lightest visualizer frames.
+  const washTop = alpha(m.ui.page, onOpenVisualizer ? 0.82 : 0.72);
   const parentId = item.media?.parent?.id;
   const chapterIndex = [...audio.chapters].reverse().find(c => c.startSeconds <= audio.positionSeconds);
   const chapterAt = chapterIndex ? audio.chapters.indexOf(chapterIndex) : -1;
@@ -366,7 +366,8 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const top = Math.max(14, host.viewport.insets.top + 10);
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: onOpenVisualizer ? 'transparent' : m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
-      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' }}>
+      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden',
+        backgroundColor: onOpenVisualizer ? 'transparent' : alpha(tint, 0.3) }}>
         {/* Native image blur (expo-image on Android and iOS) stops far short of 90: the cover's own
             lettering showed through behind the title and transport. There the wash is the colour alone. */}
         {!onOpenVisualizer && item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
@@ -381,9 +382,10 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         <Pressable {...source.handlers} disabled={!audio.queue.source} onPress={() => { const s = audio.queue?.source; if (s) { onClose(); actions.openTitle({ id: s.id, kind: parentId === s.id ? 'album' : (item.media?.class === 'audiobook' ? 'audiobook' : 'album') }); } }}
           accessibilityRole="link" style={[NO_RING, { flex: 1, alignItems: 'center' }]} testID="now-playing-source">
           <View style={[{ alignItems: 'center', maxWidth: '100%' },
-            Platform.isTV ? { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2, borderWidth: 2, borderColor: source.state.focus ? m.ui.ink : 'transparent' } : {}]}>
-            <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>{msg('media.player.nowPlaying')}</Text>
-            {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: source.state.focus ? '$ui.ink' : '$ui.inkSecondary' })}>{audio.queue.source.name}</Text> : null}
+            Platform.isTV ? { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2, borderWidth: 2, borderColor: source.state.focus ? m.ui.ink : 'transparent' } : undefined,
+            web && source.state.focus ? { borderRadius: 8, outlineColor: m.ui.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 3 } as ViewStyle : undefined]}>
+            <Text numberOfLines={1} style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{msg('media.player.nowPlaying')}</Text>
+            {audio.queue.source ? <Text numberOfLines={1} style={m.text({ 'font-size': '13px', 'font-weight': '600', color: '$ui.ink' })}>{audio.queue.source.name}</Text> : null}
           </View>
         </Pressable>
         <View style={{ width: headerSide, flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>

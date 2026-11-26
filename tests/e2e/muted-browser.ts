@@ -11,41 +11,6 @@ export function mutedBrowser(browser: 'chromium' | 'webkit', options: { allowSof
     },
     initScripts: [() => {
       const media = HTMLMediaElement.prototype;
-      const events: unknown[] = [];
-      Object.assign(window, { velaMediaDiagnostics: events });
-      const note = (event: string, video: HTMLMediaElement, error?: unknown) => {
-        events.push([Math.round(performance.now()), event, video.currentTime, video.paused, video.readyState,
-          navigator.userActivation?.isActive, error instanceof Error ? [error.name, error.message] : error]);
-        if (events.length > 150) events.shift();
-      };
-      const play = media.play;
-      media.play = function() {
-        note('play()', this);
-        const result = play.call(this);
-        void result.then(() => note('resolved', this), error => note('rejected', this, error));
-        return result;
-      };
-      const pause = media.pause;
-      media.pause = function() {
-        note('pause()', this);
-        pause.call(this);
-      };
-      const createElement = document.createElement;
-      document.createElement = function(...args: Parameters<typeof document.createElement>) {
-        const element = createElement.apply(this, args);
-        if (element instanceof HTMLVideoElement) {
-          for (const name of ['loadedmetadata', 'loadeddata', 'play', 'playing', 'pause', 'waiting', 'seeking', 'seeked', 'ended', 'error']) {
-            element.addEventListener(name, () => note(name, element, element.error?.message));
-          }
-        }
-        return element;
-      } as typeof document.createElement;
-      for (const name of ['keydown', 'keyup', 'pointerdown', 'click']) {
-        document.addEventListener(name, event => {
-          const target = (event.target as Element)?.closest('[data-testid="player-toggle"]');
-          if (target) events.push([Math.round(performance.now()), name, target.getAttribute('aria-label'), navigator.userActivation?.isActive]);
-        }, true);
-      }
       const muted = Object.getOwnPropertyDescriptor(media, 'muted');
       const volume = Object.getOwnPropertyDescriptor(media, 'volume');
       Object.defineProperty(media, 'muted', {
