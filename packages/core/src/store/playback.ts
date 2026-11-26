@@ -49,7 +49,7 @@ function evictedWindowStart(error: unknown): number | null {
 }
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
-export type OriginalLostResult = 'reopened' | 'version_unavailable' | 'gone';
+export type OriginalLostResult = 'reopened' | 'version_unavailable' | 'gone' | 'superseded';
 
 export interface PlaybackState {
   phase: PlaybackPhase;
@@ -296,7 +296,10 @@ export class Playback {
         return;
       }
       this.patch({ phase: 'preparing', retryAfterSeconds: seconds });
-      this.timer = setTimeout(() => void this.request(intent, attempt, preparation + 1), seconds * 1000);
+      this.timer = setTimeout(() => {
+        this.timer = undefined;
+        void this.request(intent, attempt, preparation + 1);
+      }, seconds * 1000);
       return;
     }
     let plan = connection.plan(reply as V.PlaybackPlan);
@@ -377,7 +380,10 @@ export class Playback {
       retryAfterSeconds: seconds,
       retryAttempt: seconds > 0 ? attempt + 1 : 0,
     });
-    if (seconds > 0) this.timer = setTimeout(() => void this.request(intent, attempt + 1, preparation), seconds * 1000);
+    if (seconds > 0) this.timer = setTimeout(() => {
+      this.timer = undefined;
+      void this.request(intent, attempt + 1, preparation);
+    }, seconds * 1000);
   }
 
   /** A start answered with a session that has already ended, or that this client stopped. */
@@ -479,10 +485,11 @@ export class Playback {
    * had its last restart without playing again is not restarted: the viewer is told instead.
    */
   recover(sessionId: string, reason = 'failed'): void {
+    const run = this.run;
     const current = this.box.get().playback;
     // Only an established session is recovered: a start that never reached one (no session id)
     // already ended in its own failed or retrying state.
-    if (!this.run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
+    if (!run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
     const attempt = this.stall?.attempt ?? this.watch?.restarts ?? 0;
     if (stallVerdict({ attempt }) === 'give-up') {
       console.warn(`Vela playback: session ${sessionId} ${reason} after ${attempt} restart(s); giving up`);
@@ -501,18 +508,17 @@ export class Playback {
     const target = current.target.kind === 'title'
       ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
       : current.target;
+    this.abandoned = current.plan;
     this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1, versions: null });
-    const old = current.plan;
-    this.abandoned = old;
-    const intent = { run: this.run, target, key: `recover-${randomId()}` };
-    this.scheduleRecovery(intent, old);
+    this.scheduleRecovery({ run, target, key: `recover-${randomId()}` });
   }
 
   private scheduleRecovery(intent: Intent, old: V.PlaybackPlan | null = this.abandoned): void {
+    if (this.run !== intent.run || !this.recovering || this.timer !== undefined) return;
     const seconds = [1, 2, 4, 8, 15][Math.min(this.recoveryAttempt++, 4)]!;
-    this.patch({ retryAfterSeconds: seconds });
     this.timer = setTimeout(async () => {
-      if (this.run !== intent.run) return;
+      this.timer = undefined;
+      if (this.run !== intent.run || !this.recovering) return;
       if (this.box.get().auth?.phase === 'offline') {
         this.scheduleRecovery(intent, old);
         return;
@@ -530,6 +536,7 @@ export class Playback {
       if (this.run !== intent.run) return;
       await this.request(intent, 0, 0);
     }, seconds * 1000);
+    this.patch({ retryAfterSeconds: seconds });
   }
 
   /**
@@ -721,18 +728,28 @@ export class Playback {
    * reopens in the existing session; an explicit version remains pinned and lets the chrome offer
    * another version at the held position. */
   async originalLost(sessionId: string, positionSeconds: number, failedSourceGeneration?: number): Promise<OriginalLostResult> {
+    const run = this.run;
+    const epoch = this.session.epoch;
     const current = this.box.get().playback;
     const before = current.plan;
-    if (!this.run || !before || current.sessionId !== sessionId || current.phase !== 'playing') return 'gone';
+    if (!run || this.recovering || !before || current.sessionId !== sessionId || current.phase !== 'playing') return 'superseded';
+    const ownsRead = () => {
+      const now = this.box.get().playback;
+      return this.run === run && this.session.epoch === epoch && !this.recovering &&
+        now.sessionId === sessionId && now.phase === 'playing' &&
+        now.plan?.sourceGeneration === before.sourceGeneration && now.plan?.seekGeneration === before.seekGeneration;
+    };
     try {
       const connection = await this.session.ready();
+      if (!ownsRead()) return 'superseded';
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
-      if (snapshot.plan.sessionId !== sessionId || this.box.get().playback.sessionId !== sessionId) return 'gone';
+      if (!ownsRead()) return 'superseded';
+      if (snapshot.plan.sessionId !== sessionId) return 'gone';
       const plan = connection.plan(snapshot.plan);
       if (plan.sourceFailure === 'version_unavailable') {
         this.cursor = Math.max(0, positionSeconds);
         this.lastPosition = { sessionId, seconds: this.cursor, ended: false };
-        this.patch({ plan, phase: 'playing', versions: sessionVersionsOf(plan) ?? current.versions });
+        this.patch({ plan, phase: 'playing', versions: sessionVersionsOf(plan) ?? this.box.get().playback.versions });
         return 'version_unavailable';
       }
       if (plan.state === 'ended' || plan.sourceGeneration <= (failedSourceGeneration ?? before.sourceGeneration)) return 'gone';
@@ -741,7 +758,7 @@ export class Playback {
       this.patch({ plan, phase: 'playing', error: '', errorCode: '', errorClass: '' });
       return 'reopened';
     } catch {
-      return 'gone';
+      return ownsRead() ? 'gone' : 'superseded';
     }
   }
 
