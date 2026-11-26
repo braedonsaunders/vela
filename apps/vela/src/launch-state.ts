@@ -9,3 +9,9 @@ export function launchReady(phase: string, load: string, fonts: boolean, authRou
   return fonts && (docError || ((phase === 'signed-out' || phase === 'offline') && authRoute) ||
     (phase === 'signed-in' && (load === 'ready' || load === 'failed' || homeSlow)));
 }
+
+/** Keep the auth form mounted when a late appearance update reloads fonts. The launch cover
+ * still waits for initial fonts, and the auth widgets can render with fallback fonts. */
+export function canRenderRouteWithFonts(route: string, fontsReady: boolean): boolean {
+  return route === 'auth' || fontsReady;
+}

@@ -64,7 +64,7 @@ import { useLiveController } from './live';
 import { useMultiviewController } from './multiview';
 import { MultiviewProvider, useMultiview } from '@vela/skin/src/widgets/multiview';
 import { LaunchGate } from './launch';
-import { launchReady } from './launch-state';
+import { launchReady, canRenderRouteWithFonts } from './launch-state';
 import { Previews } from './previews';
 import { createHostStateSelector } from './host-state';
 import { useViewState } from './view-state';
@@ -78,7 +78,7 @@ import { useTopShelf } from './top-shelf';
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
   store: Store;
-  /** The host a route draws with; null until the document and its fonts are ready. */
+  /** The host a route draws with; auth can draw while fonts load. */
   host(route: RouteName, entry: string, library?: string): SkinHost | null;
   doc: ResolvedDocument | null;
   docError: string | null;
@@ -503,7 +503,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [store]);
   const hosts = useRef(new Map<string, { inputs: unknown[]; host: SkinHost; libraries: unknown }>());
   const host = useCallback((route: RouteName, entry: string, library?: string): SkinHost | null => {
-    if (!resolved.doc || !fontsReady) return null;
+    if (!resolved.doc || !canRenderRouteWithFonts(route, fontsReady)) return null;
     const env = readEnvironment({
       state,
       view,

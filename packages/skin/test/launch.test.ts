@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { launchReady, launchDelay, searchlightGeometry } from '../../../apps/vela/src/launch-state';
+import { launchReady, launchDelay, canRenderRouteWithFonts, searchlightGeometry } from '../../../apps/vela/src/launch-state';
 
 test('launch waits for the first rendered answer, including failures and signed-out routing', () => {
   expect(launchReady('offline', 'idle', true, true, false)).toBe(true);
@@ -28,4 +28,11 @@ test('searchlight viewport and wordmark keep the approved phone and TV proportio
   expect(phone.wordWidth).toBeCloseTo(63.96);
   expect(searchlightGeometry(1920, 1080)).toEqual(searchlightGeometry(3840, 2160));
   expect(searchlightGeometry(1920, 1080).markWidth).toBe(300);
+});
+
+test('an auth route stays drawable before, during and after a font reload', () => {
+  for (const ready of [true, false, true]) expect(canRenderRouteWithFonts('auth', ready)).toBe(true);
+  expect(canRenderRouteWithFonts('home', false)).toBe(false);
+  expect(canRenderRouteWithFonts('home', true)).toBe(true);
+  expect(launchReady('signed-out', 'idle', false, true, false)).toBe(false);
 });
