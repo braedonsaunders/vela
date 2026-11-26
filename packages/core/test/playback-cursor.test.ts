@@ -8,7 +8,7 @@ import { VelaError } from '../src/adapter/errors';
 
 // Where a restart asks the server to resume: the last position the viewer saw, not the zero a
 // freshly reset engine reports while it loads the replacement.
-async function watch(run: (h: { playback: Playback; sessionId: () => string; restart: () => Promise<number>; publish: (seekGeneration: number, position: number, rest?: Partial<PlaybackPlan>) => Promise<void>; plan: () => PlaybackPlan | null; adapter: { command: (id: string, c: any) => Promise<PlaybackPlan> } }) => Promise<void>, start?: number) {
+async function watch(run: (h: { playback: Playback; sessionId: () => string; restart: (during?: () => Promise<void>) => Promise<number>; publish: (seekGeneration: number, position: number, rest?: Partial<PlaybackPlan>) => Promise<void>; plan: () => PlaybackPlan | null; adapter: { command: (id: string, c: any) => Promise<PlaybackPlan> }; requests: any[]; fire: (ms: number) => Promise<void> }) => Promise<void>, start?: number) {
   const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
   const timers = new Map<number, { ms: number; fire: () => unknown }>();
   let sequence = 0;
@@ -28,9 +28,11 @@ async function watch(run: (h: { playback: Playback; sessionId: () => string; res
     const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
     const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
     const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
-    const restart = async () => {
+    // `during`: what happens while recovery waits to ask for the replacement.
+    const restart = async (during?: () => Promise<void>) => {
       const before = requests.length;
       playback.recover(box.get().playback.sessionId);
+      await during?.();
       const entry = [...timers].find(([, t]) => t.ms === 1000);
       expect(entry).toBeDefined();
       timers.delete(entry![0]); await entry![1].fire();
@@ -50,7 +52,14 @@ async function watch(run: (h: { playback: Playback; sessionId: () => string; res
     };
     await playback.start({ kind: 'title', id: 'movie', ...(start !== undefined ? { positionSeconds: start } : {}) });
     await flush();
-    await run({ playback, sessionId: () => box.get().playback.sessionId, restart, publish, plan: () => box.get().playback.plan, adapter });
+    // Fires the pending timer of the given delay.
+    const fire = async (ms: number) => {
+      const entry = [...timers].find(([, t]) => t.ms === ms);
+      expect(entry).toBeDefined();
+      timers.delete(entry![0]); await entry![1].fire();
+      await flush();
+    };
+    await run({ playback, sessionId: () => box.get().playback.sessionId, restart, publish, plan: () => box.get().playback.plan, adapter, requests, fire });
     await playback.stop();
   } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; }
 }
@@ -199,8 +208,8 @@ test('Start Over: an accepted seek to zero published before its reply moves the 
 test('a plan published at a newer seek generation that no seek asked for does not move the restart position', async () => {
   await watch(async ({ playback, sessionId, restart, publish }) => {
     playback.snapshot(at(sessionId(), 'playing', 1815));
-    // A track change raises the seek generation at the server's last observed position.
-    await publish(2, 90);
+    // A track change raises both generations at the server's last observed position.
+    await publish(2, 90, { sourceGeneration: 2 });
     expect(await restart()).toBe(1815);
   }, 1800);
 });
@@ -244,13 +253,13 @@ test('Start Over: an accepted seek to zero read again through a refresh moves th
 test('a plan the session already had does not count for a seek issued against it', async () => {
   await watch(async ({ playback, sessionId, restart, publish, adapter }) => {
     playback.snapshot(at(sessionId(), 'playing', 1815));
-    // A track change raised the seek generation at 90 s; the viewer then seeks to 90 s against it.
-    await publish(2, 90);
+    // A track change raised both generations at 90 s; the viewer then seeks to 90 s against it.
+    await publish(2, 90, { sourceGeneration: 2 });
     const send = adapter.command;
     let refuse = () => {};
     adapter.command = (id, c) => c.kind === 'seek' ? new Promise((_, reject) => { refuse = () => reject(new Error('refused')); }) : send(id, c);
     const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
-    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 2, idempotencyKey: 'seek-90' });
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 2, seekGeneration: 2, idempotencyKey: 'seek-90' });
     await flush();
     // The same plan is read again, then the server refuses the seek.
     expect(await playback.refresh(sessionId())).toBe(true);
@@ -274,7 +283,7 @@ test('a published plan counts once for the seek it answers', async () => {
     // A later plan that no seek asked for (a track change at the server's last observed 90 s), read again.
     const id = sessionId();
     (adapter as any).sessionSnapshot = async () => ({ plan: { sessionId: id, state: 'playing', positionSeconds: 90, paths: [{ id: 'file', kind: 'direct', transport: 'file', original: true }],
-      selectedPathId: 'file', audioTracks: [], subtitleTracks: [], sourceGeneration: 1, seekGeneration: 3 } });
+      selectedPathId: 'file', audioTracks: [], subtitleTracks: [], sourceGeneration: 2, seekGeneration: 3 } });
     expect(await playback.refresh(id)).toBe(true);
     expect(await restart()).toBe(95);
     refuse(); await seek;
@@ -282,13 +291,17 @@ test('a published plan counts once for the seek it answers', async () => {
   }, 1800);
 });
 
-// A seek whose reply is held until the server refuses it, or until the reply is lost (`lose`).
+// Each seek's reply is held until the server refuses it, or until the reply is lost (`lose`); the latest seek by default.
 function refuseSeeks(adapter: { command: (id: string, c: any) => Promise<PlaybackPlan> }) {
   const send = adapter.command;
-  let fail = (_error: unknown) => {};
-  adapter.command = (id, c) => c.kind === 'seek' ? new Promise((_, reject) => { fail = reject; }) : send(id, c);
+  const fails: ((error: unknown) => void)[] = [];
+  adapter.command = (id, c) => c.kind === 'seek' ? new Promise((_, reject) => { fails.push(reject); }) : send(id, c);
   const refusal = new VelaError({ class: 'conflict', code: 'seek_refused', message: 'refused', retry: { allowed: false } }, 409);
-  return { refuse: () => fail(refusal), lose: () => fail(new TypeError('Failed to fetch')), restore: () => { adapter.command = send; } };
+  return {
+    refuse: (seek = fails.length - 1) => fails[seek]!(refusal),
+    lose: (seek = fails.length - 1) => fails[seek]!(new TypeError('Failed to fetch')),
+    restore: () => { adapter.command = send; },
+  };
 }
 
 test('a track change published at a waiting seek\'s target does not keep the restart position once the seek is refused', async () => {
@@ -313,8 +326,9 @@ test('a published plan matching a waiting seek keeps a later playing report once
     playback.snapshot(at(sessionId(), 'playing', 1815));
     const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
     await flush();
-    await publish(2, 90);
-    playback.snapshot({ ...at(sessionId(), 'playing', 92), seekGeneration: 2 });
+    // An unrelated track change at the seek's target, at both generations advanced, then a playing report on it.
+    await publish(2, 90, { sourceGeneration: 2 });
+    playback.snapshot({ ...at(sessionId(), 'playing', 92), sourceGeneration: 2, seekGeneration: 2 });
     refuse(); await seek;
     restore();
     expect(await restart()).toBe(92);
@@ -534,5 +548,103 @@ test('a track reply behind the shown plan only on seek generation still records 
     await restart();
     // Recovery asks the replacement for French.
     expect(sent.map(c => c.audioTrackId)).toEqual(['fr', 'fr']);
+  }, 1800);
+});
+
+test('a track plan on a newer source away from a waiting seek\'s target does not move the restart position when the seek is refused', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, adapter }) => {
+    const { refuse, restore } = refuseSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    // A track change is published at 120 s with both generations advanced; the seek is then refused.
+    await publish(2, 120, { sourceGeneration: 2 });
+    refuse(); await seek;
+    restore();
+    expect(await restart()).toBe(1815);
+  }, 1800);
+});
+
+test('a track plan on a newer source does not undo an accepted seek before the player presents it', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan }) => {
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    await playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    const accepted = plan()!;
+    // A track change is published on a newer source, still at the old position, before the player reports.
+    await publish(accepted.seekGeneration + 1, 1815, { sourceGeneration: accepted.sourceGeneration + 1 });
+    expect(await restart()).toBe(90);
+  }, 1800);
+});
+
+test('a seek refused while recovery waits takes the restart position back before the replacement is asked for', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, adapter }) => {
+    const { refuse, restore } = refuseSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    // A track change is published at the seek's target; the player fails, and the refusal arrives during recovery's wait.
+    await publish(2, 90, { sourceGeneration: 2 });
+    expect(await restart(async () => { refuse(); await seek; })).toBe(1815);
+    restore();
+  }, 1800);
+});
+
+for (const order of [[0, 1], [1, 0]]) {
+  test(`two waiting seeks each matched by a track change and both refused (${order.join(' then ')}) take the restart position back to before them`, async () => {
+    await watch(async ({ playback, sessionId, restart, publish, adapter }) => {
+      const { refuse, restore } = refuseSeeks(adapter);
+      const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+      playback.snapshot(at(sessionId(), 'playing', 1815));
+      const seeks = [playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' })];
+      await flush();
+      // Each track change advances both generations, as Ether does.
+      await publish(2, 90, { sourceGeneration: 2 });
+      seeks.push(playback.command(sessionId(), { kind: 'seek', positionSeconds: 120, sourceGeneration: 2, seekGeneration: 2, idempotencyKey: 'seek-120' }));
+      await flush();
+      await publish(3, 120, { sourceGeneration: 3 });
+      for (const index of order) { refuse(index); await seeks[index]; }
+      restore();
+      expect(await restart()).toBe(1815);
+    }, 1800);
+  });
+}
+
+test('a newer-source plan away from a matched seek\'s target does not keep the restart position once the seek is refused', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, adapter }) => {
+    const { refuse, restore } = refuseSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    // A track change matches the seek's target; an unrelated plan on a newer source follows at 120 s; the seek is then refused.
+    await publish(2, 90, { sourceGeneration: 2 });
+    await publish(3, 120, { sourceGeneration: 3 });
+    refuse(); await seek;
+    restore();
+    expect(await restart()).toBe(1815);
+  }, 1800);
+});
+
+test('a restart retried under the same key after its reply is lost sends the same request again', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, adapter, requests, fire }) => {
+    const { refuse, restore } = refuseSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    await publish(2, 90, { sourceGeneration: 2 });
+    // The replacement's start reaches the server, but its reply is lost.
+    const server = adapter as unknown as { startPlayback: (r: any) => Promise<PlaybackPlan> };
+    const start = server.startPlayback;
+    server.startPlayback = async r => { await start(r); server.startPlayback = start; throw new TypeError('Failed to fetch'); };
+    expect(await restart()).toBe(90);
+    // The seek is refused before the start is asked for again under the same key.
+    refuse(); await seek;
+    restore();
+    await fire(2000);
+    expect(requests.length).toBe(3);
+    expect(requests[2]).toEqual(requests[1]);
   }, 1800);
 });

@@ -10,7 +10,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
-import { belongs, qualityReached, restartAt } from './present';
+import { belongs, presentedAfter, qualityReached, restartAt } from './present';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
@@ -71,6 +71,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const position = useRef(0);
   const paused = useRef(false);
   const presented = useRef(false);
+  const reported = useRef<Snapshot | null>(null);
   const { kind, id } = target;
   const ownerRef = useRef(owner);
   ownerRef.current = owner;
@@ -107,6 +108,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
     [vela, kind, id, target.kind === 'title' ? target.positionSeconds : undefined, target.kind === 'title' ? target.mediaSourceId : undefined, target.kind === 'title' ? target.audioTrackId : undefined],
   );
+
+  // A presented zero belongs to the item it was reported for: another item (Next Episode) starts without it.
+  useEffect(() => { presented.current = false; }, [kind, id]);
 
   useEffect(() => {
     if (!id || external) return;
@@ -321,9 +325,10 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     onSnapshot: next => {
       setSnapshot(next);
       if (belongs(next, plan)) {
+        presented.current = presentedAfter(presented.current, reported.current, next);
+        reported.current = next;
         position.current = next.position;
         paused.current = next.state === 'paused';
-        presented.current = paused.current || next.state === 'playing';
         if (pendingAudio.current && pendingAudio.current.sessionId === sessionId && !next.pendingAudioTrackId && next.audioTrackId === pendingAudio.current.trackId) {
           const chosen = pendingAudio.current;
           pendingAudio.current = null;
