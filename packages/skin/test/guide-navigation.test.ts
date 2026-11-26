@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { bandOffset, coversRange, gapStep, PreviewDebounce, rowWindow, prefetchRows } from '../src/widgets/guide/navigation';
+import { androidGuidePress, bandOffset, coversRange, gapStep, PreviewDebounce, rowWindow, prefetchRows } from '../src/widgets/guide/navigation';
 import { programmeAt } from '../src/widgets/guide/geometry';
 import type { GuideChannel } from '@vela/core';
 
@@ -134,4 +134,13 @@ test('the guide leaves for the top bar by its Live TV destination and offers Bac
   expect(guideEscapeKey('Escape')).toBe(true);
   expect(guideEscapeKey('Home')).toBe(true);
   expect(guideEscapeKey('ArrowUp')).toBe(false);
+});
+
+test('Android guide steps on the initial down and each platform repeat, skipping key-up', () => {
+  const down = { eventKeyAction: 0, repeatCount: 0 };
+  const up = { eventKeyAction: 1, repeatCount: 0 };
+  expect([down, up].map(androidGuidePress)).toEqual(['start', 'release']);
+  expect([down, { ...down, repeatCount: 1 }, { ...down, repeatCount: 2 }, up].map(androidGuidePress))
+    .toEqual(['start', 'repeat', 'repeat', 'release']);
+  expect(androidGuidePress({})).toBeUndefined();
 });

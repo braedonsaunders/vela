@@ -82,6 +82,14 @@ export function remoteDirection(eventType: string): string | undefined {
   return ({ up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as Record<string, string>)[direction];
 }
 
+/** Activity dispatch supplies one down per platform repeat and one up when it ends. */
+export function androidGuidePress(event: { eventKeyAction?: number | string; repeatCount?: number }): 'start' | 'repeat' | 'release' | undefined {
+  const action = Number(event.eventKeyAction);
+  if (action === 1) return 'release';
+  if (action === 0) return event.repeatCount ? 'repeat' : 'start';
+  return undefined;
+}
+
 /** A time anchor inside a programme; long programmes must not pull vertical focus to their start. */
 export function programmeMinute(programme: { at: number; span: number }, preferred: number): number {
   const end = programme.at + programme.span - Math.min(0.01, programme.span / 2);
