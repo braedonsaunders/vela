@@ -9,6 +9,12 @@
 // so only what the server prepares counts, never the revision or state alone. Only quiet that
 // outlasts the attempt's budget is a stall; each restart gets a longer one, and after the last the
 // viewer is told (with Try again) instead of being kept in a loop. Pure: the caller owns the clock.
+//
+// A dropped session events stream is ridden out while the media plays on (the stream is followed
+// again). Once the events have dropped, only playing forward proves the media alive: a network drop
+// takes the media reads down too, and an engine reloading or refreshing its playlist behind a frozen
+// picture still receives bytes. Until both the events and the picture are back, an attempt that has
+// not played for its quiet budget is stalled, whatever else trickles in.
 
 /** Per attempt (the first session, then each restart): how long nothing may move before it is a stall. */
 export const QUIET_SECONDS = [10, 20, 40] as const;
@@ -73,6 +79,12 @@ export interface StallWatch {
   serverPreparing: boolean;
   /** Where playback was first seen moving in this attempt, for PLAYED_SECONDS. */
   playedFrom: number | null;
+  /** The last time the media was seen playing forward, or the viewer was not waiting (ms). */
+  played: number;
+  /** When the session's events stream dropped (ms), until the events are back and the media plays forward. */
+  eventsLost: number | null;
+  /** The events stream is down (it dropped and has not been connected again). */
+  eventsDown: boolean;
   /** What the server last said it prepares and plays (serverMark), or null before its first plan. */
   serverMark: string | null;
   /** Session commands the engine sent on its own that the server has not answered yet. */
@@ -86,8 +98,8 @@ export type StallVerdict = 'restart' | 'give-up';
 
 /** A new watch: a session that just started (attempt 0) or a restart's replacement. */
 export function stallWatch(now: number, attempt = 0): StallWatch {
-  return { attempt, heard: now, moved: now, idle: false, serverPreparing: false, playedFrom: null, serverMark: null,
-    engineCommands: 0, engineGenerations: null, marks: null };
+  return { attempt, heard: now, moved: now, idle: false, serverPreparing: false, playedFrom: null, played: now,
+    eventsLost: null, eventsDown: false, serverMark: null, engineCommands: 0, engineGenerations: null, marks: null };
 }
 
 const WAITING = new Set(['idle', 'loading', 'buffering', 'recovering']);
@@ -145,11 +157,11 @@ export function heardEngine(watch: StallWatch, sample: StallSample, now: number)
     generations: `${sample.sourceGeneration ?? ''}:${sample.seekGeneration ?? ''}`,
   };
   if (state === 'paused' || state === 'ended') {
-    return { ...watch, idle: true, heard: now, moved: now, playedFrom: null, marks };
+    return { ...watch, idle: true, heard: now, moved: now, played: now, playedFrom: null, marks };
   }
   const next: StallWatch = { ...watch, idle: false, marks };
   // Coming back from a pause, or a first sample: the clocks start now.
-  if (watch.idle || !last) return { ...next, heard: now, moved: now };
+  if (watch.idle || !last) return { ...next, heard: now, moved: now, played: now };
   const positionChanged = marks.position !== undefined && last.position !== undefined && Math.abs(marks.position - last.position) > EPSILON;
   // The engine's own path switch or fallback moves the generations, and its new source may start a
   // moment off the old position: neither is a position the viewer asked for, nor progress.
@@ -164,7 +176,8 @@ export function heardEngine(watch: StallWatch, sample: StallSample, now: number)
     // headroom, but require a series of advancing samples before forgiving a restart.
     const continuous = !newIntent && !marks.seeking && !last.seeking && elapsed < QUIET_SECONDS[0]
       && marks.position! - last.position! <= 2 + 4 * elapsed;
-    return { ...next, ...restartBudgetAfterProgress(watch, last.position!, marks.position!, continuous), heard: now, moved: now };
+    return { ...next, ...restartBudgetAfterProgress(watch, last.position!, marks.position!, continuous), heard: now, moved: now, played: now,
+      eventsLost: watch.eventsDown ? watch.eventsLost : null };
   }
   if (positionChanged || newIntent) return { ...next, heard: now, moved: now, playedFrom: null };
   // An engine that says it is waiting is believed while its buffer grows, bytes keep arriving or
@@ -190,6 +203,16 @@ function restartBudgetAfterProgress(watch: StallWatch, previous: number, positio
   const playedFrom = watch.playedFrom ?? previous;
   if (position - playedFrom >= PLAYED_SECONDS) return { attempt: 0, playedFrom: null };
   return { attempt: watch.attempt, playedFrom };
+}
+
+/** The session's events stream dropped: from now on only playing forward shows the media alive. */
+export function eventsLost(watch: StallWatch, now: number): StallWatch {
+  return { ...watch, eventsDown: true, eventsLost: watch.eventsLost ?? now };
+}
+
+/** The events stream is connected again; the drop is over once the media plays forward too. */
+export function eventsBack(watch: StallWatch): StallWatch {
+  return { ...watch, eventsDown: false };
 }
 
 /** The engine is sending a session command of its own (a recovery path switch, a fallback it
@@ -228,7 +251,9 @@ export function stallDeadline(watch: StallWatch): number | null {
   const quiet = QUIET_SECONDS[Math.min(watch.attempt, QUIET_SECONDS.length - 1)]! * 1000;
   const patience = watch.moved + PATIENCE_SECONDS * 1000;
   // While the server says it is preparing, only patience bounds the wait.
-  return watch.serverPreparing ? patience : Math.min(watch.heard + quiet, patience);
+  const deadline = watch.serverPreparing ? patience : Math.min(watch.heard + quiet, patience);
+  // Since the events dropped, only playing counts: the media that went down with them is not waited for.
+  return watch.eventsLost === null ? deadline : Math.min(deadline, watch.played + quiet);
 }
 
 /** At the deadline (or after a failure the engine could not ride out): restart, or tell the viewer. */

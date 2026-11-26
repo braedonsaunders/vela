@@ -209,6 +209,10 @@ source), as a server does for any update; a body `{"selectedSubtitleTrackId":nul
 makes it one in which the server changed the selected subtitle itself. `{"enabled":false}` restores the default fixture.
 SSE replacement, revocation, session end and disconnect release heartbeat timers;
 streams also close when their bearer grant expires.
+POST `/__admin/sessions/<id>/drop-events` closes a session's events streams; `expire` also makes
+the session gone (404); `freeze-media` keeps the session and its playlists answering while its media
+segments never do, as an engine's reload that sits loading behind a frozen picture. A network outage
+between player and server is the e2e mock proxy's `POST /__e2e/outage?seconds=12`.
 
 Live-specific faults are independent of VOD: GET/POST `/__admin/live-faults`
 accepts `{"gapEvery":0,"delayEvery":0,"delayMs":8000,"mediaLeadSeconds":0}`. Every Nth broadcast

@@ -13,7 +13,7 @@ import type { ServerAdapter } from '../adapter';
 import type { TrickplayFrame } from '../protocol/trickplay';
 import { TrickplayCache } from './trickplay';
 import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-retry';
-import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
+import { engineCommandAnswered, engineCommandSent, eventsBack, eventsLost, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession } from '../protocol/events';
@@ -636,6 +636,7 @@ export class Playback {
               if (connected || attempt.signal.aborted) return;
               connected = Date.now();
               clearTimeout(deadline);
+              if (resumed && this.run === run && this.stall && !this.recovering) this.stall = eventsBack(this.stall);
             });
             // A connection whose snapshot read or stream never answers, the first one included, would otherwise leave a paused viewer waiting for ever.
             const timeout = new Promise<never>((_, reject) => {
@@ -664,6 +665,13 @@ export class Playback {
           // briefly unavailable): the media plays on, so the stream is followed again. A server's
           // own answer (the session is gone, the request refused, an error event) restarts at once.
           if (hasEventStream(adapter) && !lost && !serverAnswered(error)) {
+            // The media is trusted to play on only while it is seen playing (stall.ts eventsLost): a
+            // network drop that took its reads down too, or left its engine reloading behind a frozen
+            // picture, is restarted once the attempt's quiet budget passes without play.
+            if (this.run === run && this.stall && !this.recovering && this.box.get().playback.sessionId === sessionId) {
+              this.stall = eventsLost(this.stall, Date.now());
+              this.armWatchdog(sessionId);
+            }
             if (connected && Date.now() - connected >= REFOLLOW_HELD_SECONDS * 1000) refollows = 0;
             if (refollows < REFOLLOW_SECONDS.length) {
               try { await delay(REFOLLOW_SECONDS[refollows++]! * 1000, controller.signal); } catch { break; }
@@ -1009,7 +1017,9 @@ export class Playback {
   private resetRestartBudget(sessionId: string): void {
     if (!this.stall || this.watch?.session !== sessionId) return;
     this.watch.restarts = 0;
-    this.stall = stallWatch(Date.now());
+    // A drop of the events stream still in progress outlives the new allowance.
+    const { played, eventsLost: lost, eventsDown } = this.stall;
+    this.stall = lost === null ? stallWatch(Date.now()) : { ...stallWatch(Date.now()), played, eventsLost: lost, eventsDown };
     this.armWatchdog(sessionId);
   }
 

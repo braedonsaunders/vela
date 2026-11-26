@@ -6,7 +6,8 @@ import { mseFixture } from './mse';
 import { trickplayOffer } from './trickplay';
 interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec: string; audioCodec?: string }>; timers: Map<string, ReturnType<typeof setTimeout>> }
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs;
-  /** The live event on air on a live channel session (Sports A6); undefined for other sessions. */ liveEvent?: LiveEventRef | null }
+  /** The live event on air on a live channel session (Sports A6); undefined for other sessions. */ liveEvent?: LiveEventRef | null;
+  /** `freeze-media`: its playlists still answer but its media segments never do (an engine's reload stuck loading behind a frozen picture). */ mediaFrozen?: boolean }
 export const sessions = new Map<string, Session>();
 /** The sidecar title (POST /__admin/sidecar): new VOD plans of the generated fixture carry its English WebVTT as an
  * external file, beside a French track embedded in the source, as Jellyfin, Emby and Plex sidecars arrive, selected from the start when `selected` (a default or
