@@ -1,6 +1,6 @@
-// A book's bytes crossing into the reader's web view on phones and tablets (widgets/media/reader-bytes.ts).
+// A book's bytes crossing into the reader's web view on phones and tablets (blocks/read/reader-bytes.ts).
 import { expect, test } from 'bun:test';
-import { readerChunk, toBase64 } from '../src/widgets/media/reader-bytes';
+import { readerChunk, toBase64 } from '../src/blocks/read/reader-bytes';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 

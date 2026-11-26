@@ -40,6 +40,18 @@ const searchPage: ScreenDocument = {
   sources: { found: { from: 'vela.search', q: '{param.q}', library: 'music' } },
 };
 
+const book = mediaGroups.books.find(item => item.media?.parents?.some(parent => parent.role === 'series'))!;
+const seriesId = book.media!.parents!.find(parent => parent.role === 'series')!.id;
+const bookPage: ScreenDocument = {
+  ...albumPage, screen: 'vela.read', page: 'book',
+  sources: {
+    title: { from: 'vela.title', id: '{param.id}' },
+    series: { from: 'vela.children', id: '{src.title.seriesId}' },
+    progress: { from: 'vela.readingProgress', id: '{param.id}' },
+    preview: { from: 'vela.children', id: '{src.title.seriesId}', limit: 1 },
+  },
+};
+
 beforeAll(async () => {
   mock = await launchMock({});
   const realFetch = globalThis.fetch;
@@ -52,7 +64,7 @@ beforeAll(async () => {
   store = createVela({ etherOrigin: mock.url, secrets: new MemoryStore(), device, appVersion: '0.2.9', rendererVersion: 19,
     media: { containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: { native: false, fmp4: false, mpegTs: false }, mse: false } as never,
     page: { origin: mock.url, webCode: code }, artWidth: 640 } as VelaPlatform & { rendererVersion: number });
-  store.screens.provideDocuments(href => (href === 'vela:listen/album' ? albumPage : href === 'vela:listen/search' ? searchPage : undefined));
+  store.screens.provideDocuments(href => (href === 'vela:listen/album' ? albumPage : href === 'vela:listen/search' ? searchPage : href === 'vela:read/book' ? bookPage : undefined));
   await store.auth.start();
 });
 afterAll(async () => { await store?.audio.stop().catch(() => undefined); await mock?.stop(); });
@@ -66,6 +78,26 @@ async function until(check: () => boolean, ms = 8000): Promise<void> {
 }
 
 const target = { kind: 'screen' as const, id: 'vela.listen', page: 'album' };
+
+test('a book document reads its series from the book detail and can bind reading progress', async () => {
+  const handle = store.screens.open({ target: { kind: 'screen', id: 'vela.read', page: 'book' }, href: 'vela:read/book', params: { id: book.id } });
+  const page = () => store.getState().screens.pages[handle.key]!;
+  try {
+    await until(() => page()?.load === 'ready' && Object.keys(page().pending).length === 0);
+    expect(page().errors).toEqual({});
+    const detail = page().sources.title as TitleValue;
+    expect(detail.seriesId).toBe(seriesId);
+    expect(detail.item).toEqual({ $record: `item:${book.id}` });
+    const series = page().sources.series as ListValue;
+    expect(series.items.map(item => item.$record)).toEqual(mediaChildren(seriesId).map(item => `item:${item.id}`));
+    expect(page().sources.progress).toMatchObject({ fraction: expect.any(Number) });
+    expect(page().sources.preview).toMatchObject({ items: series.items.slice(0, 1), more: true });
+    await store.screens.action(handle.key, { name: 'vela.more', args: { source: 'preview' } });
+    expect(page().sources.preview).toMatchObject({ items: series.items.slice(0, 2), more: series.items.length > 2 });
+  } finally {
+    handle.release();
+  }
+});
 
 test('a built-in page reads its vela.* sources through the active server, with live queue records', async () => {
   const handle = store.screens.open({ target, href: 'vela:listen/album', params: { id: album.id } });
