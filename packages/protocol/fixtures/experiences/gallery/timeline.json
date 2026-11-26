@@ -9,13 +9,44 @@
   "version": "1",
   "title": "Photos",
   "presentation": "section",
-  "params": { "library": { "type": "string" } },
+  "params": {
+    "library": {
+      "type": "string"
+    }
+  },
   "sources": {
-    "photos": { "from": "vela.photoTimeline", "library": "{param.library}" }
+    "photos": {
+      "from": "vela.photoTimeline",
+      "library": "{param.library}"
+    }
   },
   "tree": {
-    "type": "timeline",
-    "style": { "flex": "1", "min-height": "0px" },
-    "props": { "items": "{src.photos}", "source": "photos", "pending": "{src.photos.$pending}", "failed": "{src.photos.$error}" }
+    "type": "box",
+    "style": {
+      "flex": "1",
+      "min-height": "0px"
+    },
+    "children": [
+      {
+        "type": "slot",
+        "slot": "children",
+        "style": {
+          "flex-shrink": "0"
+        }
+      },
+      {
+        "type": "timeline",
+        "style": {
+          "flex": "1",
+          "min-height": "0px"
+        },
+        "props": {
+          "items": "{src.photos}",
+          "source": "photos",
+          "pending": "{src.photos.$pending}",
+          "failed": "{src.photos.$error}"
+        }
+      }
+    ]
   }
 }

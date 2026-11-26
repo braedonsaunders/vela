@@ -2,8 +2,12 @@
 // (<experience>/<page>.json), bundled with the app. packages/skin/src/resolve/builtin.ts addresses them as
 // vela:<experience>/<page>. Do not edit; add or remove a JSON file and run the tool.
 import type { ScreenDocument } from '../../screen';
+import doc_gallery_album from './gallery/album.json';
+import doc_gallery_albums from './gallery/albums.json';
 import doc_gallery_home from './gallery/home.json';
 import doc_gallery_library from './gallery/library.json';
+import doc_gallery_people from './gallery/people.json';
+import doc_gallery_person from './gallery/person.json';
 import doc_gallery_photo from './gallery/photo.json';
 import doc_gallery_shell from './gallery/shell.json';
 import doc_gallery_timeline from './gallery/timeline.json';
@@ -28,8 +32,12 @@ import doc_read_series from './read/series.json';
 import doc_read_shell from './read/shell.json';
 
 export const BUILTIN_DOCUMENTS: readonly ScreenDocument[] = [
+  doc_gallery_album as unknown as ScreenDocument,
+  doc_gallery_albums as unknown as ScreenDocument,
   doc_gallery_home as unknown as ScreenDocument,
   doc_gallery_library as unknown as ScreenDocument,
+  doc_gallery_people as unknown as ScreenDocument,
+  doc_gallery_person as unknown as ScreenDocument,
   doc_gallery_photo as unknown as ScreenDocument,
   doc_gallery_shell as unknown as ScreenDocument,
   doc_gallery_timeline as unknown as ScreenDocument,

@@ -3672,6 +3672,44 @@
           "templates": [],
           "tv": "Sliders become − and + (a remote's arrows move the focus)."
         },
+        "galleryDirectory": {
+          "doc": "A paged grid of Gallery albums or people. Each tile shows its artwork, name and count.",
+          "parts": [
+            "galleryDirectory.tile",
+            "galleryDirectory.name",
+            "galleryDirectory.count"
+          ],
+          "props": {
+            "failed": {
+              "doc": "The last source error ({src.x.$error}).",
+              "type": "template"
+            },
+            "items": {
+              "doc": "The list source ({items, more}).",
+              "required": true,
+              "type": "value"
+            },
+            "kind": {
+              "doc": "The directory to display.",
+              "required": true,
+              "type": "enum",
+              "values": [
+                "albums",
+                "people"
+              ]
+            },
+            "pending": {
+              "doc": "Whether a page is being read ({src.x.$pending}).",
+              "type": "value"
+            },
+            "source": {
+              "doc": "The list source name for vela.more.",
+              "type": "template"
+            }
+          },
+          "templates": [],
+          "tv": "Moves by D-pad through album or person tiles."
+        },
         "genres": {
           "doc": "The library's genres as coloured tiles.",
           "parts": [],
@@ -4226,8 +4264,13 @@
               "doc": "The last source error ({src.x.$error}).",
               "type": "template"
             },
+            "groupByDate": {
+              "default": "true",
+              "doc": "Group photos under calendar headings.",
+              "type": "boolean"
+            },
             "items": {
-              "doc": "The photo list source ({items, more}).",
+              "doc": "The list source ({items, more}).",
               "required": true,
               "type": "value"
             },
@@ -4680,6 +4723,7 @@
             "discography",
             "duplicates",
             "eq",
+            "galleryDirectory",
             "genres",
             "homeShelves",
             "importSubtitle",

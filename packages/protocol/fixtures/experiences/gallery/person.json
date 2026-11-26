@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "kind": "screen",
+  "renderer": 20,
+  "owner": "vela",
+  "experience": "gallery",
+  "screen": "gallery",
+  "page": "person",
+  "version": "1",
+  "title": "{s:gallery.people}",
+  "presentation": "section",
+  "params": {
+    "library": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "sources": {
+    "entries": {
+      "from": "vela.photoPeople",
+      "library": "{param.library}",
+      "id": "{param.id}"
+    }
+  },
+  "tree": {
+    "type": "box",
+    "style": {
+      "flex": "1",
+      "min-height": "0px"
+    },
+    "children": [
+      {
+        "type": "slot",
+        "slot": "children",
+        "style": {
+          "flex-shrink": "0"
+        }
+      },
+      {
+        "type": "text",
+        "role": "heading",
+        "level": 1,
+        "text": "{param.name}",
+        "style": {
+          "padding-left": "max(28px, 4vw)",
+          "padding-right": "max(28px, 4vw)",
+          "margin-top": "18px",
+          "margin-bottom": "14px",
+          "font-size": "28px",
+          "font-weight": "650",
+          "color": "$ui.ink",
+          "line-clamp": "2"
+        },
+        "small": {
+          "padding-left": "18px",
+          "padding-right": "18px",
+          "font-size": "23px"
+        }
+      },
+      {
+        "type": "timeline",
+        "style": {
+          "flex": "1",
+          "min-height": "0px"
+        },
+        "props": {
+          "items": "{src.entries}",
+          "source": "entries",
+          "pending": "{src.entries.$pending}",
+          "failed": "{src.entries.$error}",
+          "groupByDate": "false"
+        }
+      }
+    ]
+  }
+}

@@ -11,6 +11,14 @@ function dateKey(value: string): string {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day ? day : '';
 }
 
+export function photoRows<T extends DatedPhoto>(photos: readonly T[], columns: number): TimelineRow<T>[] {
+  const rows: TimelineRow<T>[] = [];
+  for (let at = 0; at < photos.length; at += columns) {
+    rows.push({ kind: 'photos', key: photos[at]!.id, photos: photos.slice(at, at + columns) });
+  }
+  return rows;
+}
+
 /** Group by calendar dates, without converting a photo to the viewer's time zone. */
 export function timelineRows<T extends DatedPhoto>(photos: readonly T[], columns: number): TimelineRow<T>[] {
   const months = new Map<string, Map<string, T[]>>();
@@ -25,21 +33,16 @@ export function timelineRows<T extends DatedPhoto>(photos: readonly T[], columns
     items.push(photo);
   }
   const rows: TimelineRow<T>[] = [];
-  const addPhotos = (items: T[]) => {
-    for (let at = 0; at < items.length; at += columns) {
-      rows.push({ kind: 'photos', key: items[at]!.id, photos: items.slice(at, at + columns) });
-    }
-  };
   for (const [month, days] of months) {
     rows.push({ kind: 'month', key: `month:${month}`, date: month });
     const items = [...days.values()].flat();
     if (!month || days.size < 2 || items.length < Math.max(12, columns * 2)) {
-      addPhotos(items);
+      rows.push(...photoRows(items, columns));
       continue;
     }
     for (const [day, taken] of days) {
       rows.push({ kind: 'day', key: `day:${day}`, date: day });
-      addPhotos(taken);
+      rows.push(...photoRows(taken, columns));
     }
   }
   return rows;
