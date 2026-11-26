@@ -1,6 +1,6 @@
-import { Image } from 'expo-image';
-import type { ReactNode } from 'react';
-import { ScrollView, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Image, type ImageSource } from 'expo-image';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ScrollView, Text, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 import { msg, type Card } from '@vela/core';
 import { useHost } from '../../host';
 import { useMediaActions, type MediaActions } from './context';
@@ -9,16 +9,25 @@ import { alpha, RoundButton, useMediaLook, type MediaLook } from './parts';
 /** The page: its colour wash from the cover, a blurred cover behind the hero, the back control.
  * Framed, the document's title frame is the page: the wash and the content scroll in its region
  * and the frame's own close control closes it. */
-export function MediaFrame({ framed, accent, backdrop, wideArt, children }: { framed: boolean; accent: string; backdrop: string; wideArt: boolean; children: ReactNode }) {
+export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponents, children }: {
+  framed: boolean; accent: string; backdrop: string; wideArt: boolean; backdropComponents?: [number, number]; children: ReactNode;
+}) {
   const host = useHost();
   const m = useMediaLook();
   const actions = useMediaActions();
   const tint = accent || m.ui.accent;
   const top = m.tv ? 32 : Math.max(16, host.viewport.insets.top + 12);
+  const backdropSource = useMemo(() => backdrop ? host.image(backdrop) : undefined, [backdrop, host.image]);
+  const backdropStyle: ImageStyle = {
+    position: 'absolute', top: wideArt ? 0 : -80, left: wideArt ? 0 : -80, right: wideArt ? 0 : -80, bottom: 0,
+    opacity: wideArt ? 0.6 : 0.42,
+  };
   const wash = (
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: wideArt ? Math.min(640, m.height * 0.8) : 620, overflow: 'hidden' }}>
-      {backdrop ? <Image source={host.image(backdrop)} contentFit="cover" blurRadius={wideArt ? 0 : 70} transition={framed ? 240 : 0}
-        style={{ position: 'absolute', top: wideArt ? 0 : -80, left: wideArt ? 0 : -80, right: wideArt ? 0 : -80, bottom: 0, opacity: wideArt ? 0.6 : 0.42 } as never} /> : null}
+      {backdropSource ? backdropComponents
+        ? <CoverColorBackdrop key={backdrop} source={backdropSource} components={backdropComponents} style={backdropStyle} transition={framed ? 240 : 0} />
+        : <Image source={backdropSource} contentFit="cover" blurRadius={wideArt ? 0 : 70} transition={framed ? 240 : 0} style={backdropStyle} />
+        : null}
       <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
         m.box({ 'background-image': `linear-gradient(180deg, ${alpha(tint, 0.34)} 0%, ${alpha(m.ui.page, 0.55)} 55%, ${m.ui.page} 100%)` })]} />
     </View>
@@ -41,6 +50,28 @@ export function MediaFrame({ framed, accent, backdrop, wideArt, children }: { fr
       </View>
     </View>
   );
+}
+
+/** Encode just the cover's broad color fields so the decoder cannot draw its lettering. */
+function CoverColorBackdrop({ source, components: [x, y], style, transition }: {
+  source: ImageSource | number; components: [number, number]; style: ImageStyle; transition: number;
+}) {
+  const [hash, setHash] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const thumbnail = await Image.loadAsync(source, { maxWidth: 96, maxHeight: 144 });
+      try {
+        if (!active) return;
+        const hash = await Image.generateBlurhashAsync(thumbnail, [x, y]);
+        if (active) setHash(hash);
+      } finally {
+        thumbnail.release();
+      }
+    })().catch(() => { /* The frame's accent wash still draws when the cover is unavailable. */ });
+    return () => { active = false; };
+  }, [source, x, y]);
+  return hash ? <Image source={{ blurhash: hash, width: 96, height: 144 }} contentFit="cover" transition={transition} style={style} /> : null;
 }
 
 export function Hero({ cover, children }: { cover: ReactNode; children: ReactNode }) {

@@ -3,7 +3,7 @@ export function readingChapterLabel(label: string): string {
   return label.replace(/(?:^| · )\d+(?:[.,]\d+)?\s*%\s*$/, '');
 }
 
-/** Enlarged book covers put their lettering behind the foreground cover on TV. */
-export function readTitleBackdrop(page: 'book' | 'series', tv: boolean, poster = ''): string {
-  return tv && page === 'book' ? '' : poster;
+/** The enlarged native cover needs just its broad color shapes behind the hero. */
+export function readBackdropComponents(page: 'book' | 'series', platform: string, tv: boolean): [number, number] | undefined {
+  return page === 'book' && (tv || platform === 'ios') ? [3, 4] : undefined;
 }

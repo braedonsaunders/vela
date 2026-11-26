@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readingChapterLabel, readTitleBackdrop } from '../src/blocks/read/book-layout';
+import { readBackdropComponents, readingChapterLabel } from '../src/blocks/read/book-layout';
 
 test('the book hero drops a stored percentage while keeping its chapter or page label', () => {
   expect(readingChapterLabel('Chapter 3 · 34%')).toBe('Chapter 3');
@@ -10,9 +10,11 @@ test('the book hero drops a stored percentage while keeping its chapter or page 
   expect(readingChapterLabel('Someone Said 50%')).toBe('Someone Said 50%');
 });
 
-test('TV book pages keep the cover in the hero and omit the enlarged backdrop', () => {
-  expect(readTitleBackdrop('book', true, 'cover')).toBe('');
-  expect(readTitleBackdrop('book', false, 'cover')).toBe('cover');
-  expect(readTitleBackdrop('series', true, 'series')).toBe('series');
-  expect(readTitleBackdrop('book', false)).toBe('');
+test('TV and iOS book pages use only low-frequency cover colors as their backdrop', () => {
+  expect(readBackdropComponents('book', 'ios', true)).toEqual([3, 4]);
+  expect(readBackdropComponents('book', 'android', true)).toEqual([3, 4]);
+  expect(readBackdropComponents('book', 'ios', false)).toEqual([3, 4]);
+  expect(readBackdropComponents('book', 'web', false)).toBeUndefined();
+  expect(readBackdropComponents('book', 'android', false)).toBeUndefined();
+  expect(readBackdropComponents('series', 'ios', true)).toBeUndefined();
 });
