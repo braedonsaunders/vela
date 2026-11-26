@@ -54,3 +54,22 @@ export function watchFrames(viewport: Viewport): WatchFrames {
     chrome: { top: lowerTop, right, bottom: insets.bottom, left },
   };
 }
+
+/** The visible video, intersected with the safe area and the active pane on a book fold. */
+export function watchPictureBounds(
+  viewport: Viewport, frames: WatchFrames, video: { width: number; height: number } | null | undefined, fill: boolean,
+): Edges {
+  const { picture, chrome } = frames;
+  const width = watchWidth(viewport) - picture.left - picture.right;
+  const height = viewport.height - picture.top - picture.bottom;
+  const aspect = video ? video.width / video.height : 0;
+  const fit = !fill && aspect > 0 && Number.isFinite(aspect) && width > 0 && height > 0;
+  const x = fit ? (width - Math.min(width, height * aspect)) / 2 : 0;
+  const y = fit ? (height - Math.min(height, width / aspect)) / 2 : 0;
+  return {
+    left: Math.max(picture.left + x, chrome.left),
+    right: Math.max(picture.right + x, chrome.right),
+    top: Math.max(picture.top + y, viewport.insets.top),
+    bottom: Math.max(picture.bottom + y, viewport.insets.bottom),
+  };
+}

@@ -494,6 +494,118 @@ export const swatch = (colour: string): Node => ({
     'box-sizing': 'border-box',
   },
 });
+const menuContent: Node[] = [
+  {
+    type: 'box',
+    style: { ...row, gap: '12px', 'align-items': 'center' },
+    children: [
+      mascot('happy', 44),
+      {
+        type: 'box',
+        style: { ...col, gap: '2px', flex: '1', 'min-width': '0px' },
+        children: [
+          { type: 'text', text: '{s:hello}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
+          {
+            type: 'text',
+            text: '{env.viewer}',
+            style: {
+              'font-size': '18px',
+              'font-weight': '650',
+              'white-space': 'nowrap',
+              'overflow-x': 'hidden',
+              'text-overflow': 'ellipsis',
+            },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    type: 'box',
+    style: {
+      height: '0px',
+      'border-style': 'dashed',
+      'border-width': '0px',
+      'border-top-width': '2.5px',
+      'border-top-color': '$line-strong',
+    },
+  },
+  {
+    type: 'box',
+    press: { action: 'openPicker' },
+    label: '{s:appearance}',
+    testId: 'skin-picker',
+    when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
+    style: {
+      ...row,
+      position: 'relative',
+      gap: '12px',
+      'align-items': 'center',
+      'box-sizing': 'border-box',
+      width: '100%',
+      padding: '10px 12px',
+      border: '2.5px solid $ink',
+      'border-radius': '16px',
+      'background-color': '$page',
+      color: '$ink',
+      cursor: 'pointer',
+    },
+    hover: { 'background-color': '$lavender-soft' },
+    focus: { outline: 'auto', 'box-shadow': ring },
+    active: { scale: '0.97' },
+    children: [
+      {
+        type: 'box',
+        style: { ...col, gap: '2px', flex: '1', 'min-width': '0px', 'text-align': 'left' },
+        children: [
+          {
+            type: 'text',
+            text: '{s:appearance}',
+            style: { ...Label, 'font-size': '10px', color: '$ink-soft' },
+          },
+          {
+            type: 'text',
+            text: '{s:name}',
+            style: { 'font-size': '16px', 'font-weight': '600', color: '$ink' },
+          },
+        ],
+      },
+      {
+        type: 'box',
+        style: { ...row, gap: '4px' },
+        children: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff'].map(swatch),
+      },
+    ],
+  },
+  { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
+  { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
+  // Your servers: the current one checked; choosing another switches, and "Add a server" connects one.
+  // Its rows sit 10px outside their column, as in the base's menu, so the column is inset to match.
+  {
+    type: 'box',
+    style: { ...col, padding: '0px 10px' },
+    children: [{ type: 'widget', widget: 'serverSwitcher' }],
+  },
+  {
+    type: 'box',
+    press: { action: 'signOut' },
+    label: '{s:signOut}',
+    style: { ...Puffy, height: '48px', padding: '0px 16px', 'box-shadow': '0px 3px 0px $ink', gap: '10px' },
+    ...puffy,
+    children: [icon('out', 14), { type: 'text', text: '{s:signOut}', style: { 'font-size': '15px' } }],
+  },
+  // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
+  {
+    type: 'box',
+    when: [{ test: 'env.aboutLine' }],
+    readingStop: true,
+    label: '{env.aboutLabel}',
+    testId: 'about-line',
+    style: { padding: '2px 4px 0px', 'border-radius': '10px' },
+    children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-soft', 'text-align': 'center' } }],
+  },
+];
+
 export const menu: Node = {
   type: 'box',
   id: 'viewer-settings',
@@ -510,8 +622,6 @@ export const menu: Node = {
     'z-index': '30',
     width: '272px',
     'box-sizing': 'border-box',
-    padding: '20px',
-    gap: '16px',
     border: '3px solid $ink',
     'border-radius': '24px',
     'background-color': '$card',
@@ -529,112 +639,15 @@ export const menu: Node = {
     },
     {
       type: 'box',
-      style: { ...row, gap: '12px', 'align-items': 'center' },
-      children: [
-        mascot('happy', 44),
-        {
-          type: 'box',
-          style: { ...col, gap: '2px', flex: '1', 'min-width': '0px' },
-          children: [
-            { type: 'text', text: '{s:hello}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
-            {
-              type: 'text',
-              text: '{env.viewer}',
-              style: {
-                'font-size': '18px',
-                'font-weight': '650',
-                'white-space': 'nowrap',
-                'overflow-x': 'hidden',
-                'text-overflow': 'ellipsis',
-              },
-            },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'box',
       style: {
-        height: '0px',
-        'border-style': 'dashed',
-        'border-width': '0px',
-        'border-top-width': '2.5px',
-        'border-top-color': '$line-strong',
+        ...col,
+        padding: '20px',
+        gap: '16px',
+        'max-height': 'calc(100vh - 110px - env(safe-area-inset-bottom))',
+        'overflow-y': 'auto',
       },
-    },
-    {
-      type: 'box',
-      press: { action: 'openPicker' },
-      label: '{s:appearance}',
-      testId: 'skin-picker',
-      when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
-      style: {
-        ...row,
-        position: 'relative',
-        gap: '12px',
-        'align-items': 'center',
-        'box-sizing': 'border-box',
-        width: '100%',
-        padding: '10px 12px',
-        border: '2.5px solid $ink',
-        'border-radius': '16px',
-        'background-color': '$page',
-        color: '$ink',
-        cursor: 'pointer',
-      },
-      hover: { 'background-color': '$lavender-soft' },
-      focus: { outline: 'auto', 'box-shadow': ring },
-      active: { scale: '0.97' },
-      children: [
-        {
-          type: 'box',
-          style: { ...col, gap: '2px', flex: '1', 'min-width': '0px', 'text-align': 'left' },
-          children: [
-            {
-              type: 'text',
-              text: '{s:appearance}',
-              style: { ...Label, 'font-size': '10px', color: '$ink-soft' },
-            },
-            {
-              type: 'text',
-              text: '{s:name}',
-              style: { 'font-size': '16px', 'font-weight': '600', color: '$ink' },
-            },
-          ],
-        },
-        {
-          type: 'box',
-          style: { ...row, gap: '4px' },
-          children: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff'].map(swatch),
-        },
-      ],
-    },
-    { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-    { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-    // Your servers: the current one checked; choosing another switches, and "Add a server" connects one.
-    // Its rows sit 10px outside their column, as in the base's menu, so the column is inset to match.
-    {
-      type: 'box',
-      style: { ...col, padding: '0px 10px' },
-      children: [{ type: 'widget', widget: 'serverSwitcher' }],
-    },
-    {
-      type: 'box',
-      press: { action: 'signOut' },
-      label: '{s:signOut}',
-      style: { ...Puffy, height: '48px', padding: '0px 16px', 'box-shadow': '0px 3px 0px $ink', gap: '10px' },
-      ...puffy,
-      children: [icon('out', 14), { type: 'text', text: '{s:signOut}', style: { 'font-size': '15px' } }],
-    },
-    // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
-    {
-      type: 'box',
-      when: [{ test: 'env.aboutLine' }],
-      readingStop: true,
-      label: '{env.aboutLabel}',
-      testId: 'about-line',
-      style: { padding: '2px 4px 0px', 'border-radius': '10px' },
-      children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-soft', 'text-align': 'center' } }],
+      below: { [COMPACT]: { 'max-height': 'calc(100vh - 92px - env(safe-area-inset-bottom))' } },
+      children: menuContent,
     },
   ],
 };
