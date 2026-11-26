@@ -8,6 +8,7 @@ import { nativeAudioCapabilities, withAudioPlayback } from './audio';
 import { Platform } from 'react-native';
 import type { NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 import type {
+  CaptionInsets,
   Command,
   Failure,
   MediaAccess,
@@ -54,6 +55,7 @@ interface NativeViewProps {
   ambient?: boolean;
   tile?: number;
   videoFill?: boolean;
+  captionInsets?: CaptionInsets;
   serverError?: Failure | null;
   onSnapshot?: (event: NativeSyntheticEvent<Snapshot>) => void;
   onError?: (event: NativeSyntheticEvent<Failure>) => void;
@@ -211,6 +213,7 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     ambient: props.ambient,
     tile: props.tile,
     videoFill: props.videoFill === true,
+    captionInsets: props.captionInsets,
     serverError: props.serverError ? { ...props.serverError, message: redactMediaError(props.serverError.message) } : null,
     onSnapshot: forward(props.onSnapshot),
     onError: forward<Failure>(error => props.onError?.({ ...error, message: redactMediaError(error.message) })),

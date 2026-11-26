@@ -62,6 +62,7 @@ final class VelaPlayerView: ExpoView {
     func commitProps() { session.commitProps() }
     func setAmbient(_ value: Bool) { session.setAmbient(value) }
     func setTile(_ value: Int?) { session.setTile(value) }
+    func setCaptionInsets(_ value: [String: Any]?) { session.setCaptionInsets(value) }
     func setVideoFill(_ value: Bool) { session.setVideoFill(value) }
     func setMetadata(_ map: [String: Any]?) { session.setMetadata(map) }
     func setPreview(_ map: [String: Any]?) { session.setPreview(map) }

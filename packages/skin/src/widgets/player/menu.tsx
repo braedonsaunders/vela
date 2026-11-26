@@ -30,6 +30,7 @@ export function MenuPanel({
   children,
   anchorRef,
   onClose,
+  onPanelLayout,
 }: {
   look: PlayerLook;
   name: string;
@@ -38,6 +39,7 @@ export function MenuPanel({
   children: ReactNode;
   anchorRef: RefObject<ComponentRef<typeof View> | null>;
   onClose(): void;
+  onPanelLayout?(width: number, height: number): void;
 }) {
   const { viewport } = useHost();
   const [anchor, setAnchor] = useState<{ left: number; top: number; width: number } | null>(null);
@@ -71,6 +73,10 @@ export function MenuPanel({
       accessibilityRole="menu"
       accessibilityLabel={name}
       testID="player-menu"
+      onLayout={event => {
+        const { width, height } = event.nativeEvent.layout;
+        onPanelLayout?.(width, height);
+      }}
       style={{
         position: 'absolute',
         right: native && anchor ? Math.max(0, watchWidth(viewport) - anchor.left - anchor.width) : 0,

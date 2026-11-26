@@ -106,9 +106,9 @@ export default function Watch() {
   if (!skin) return <View style={styles.stage} />;
   return (
     <RouteSurface host={skin} state={{ ...session.chrome, title, close, nextEpisode, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
-      {session.view.plan ? (
+      {captionInsets => session.view.plan ? (
         <View pointerEvents={Platform.OS === 'android' ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
-          <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />
+          <VelaPlayerView {...session.view} metadata={metadata} captionInsets={captionInsets} style={StyleSheet.absoluteFill} />
         </View>
       ) : null}
     </RouteSurface>

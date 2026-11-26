@@ -67,22 +67,20 @@ export async function ensureOverlay(context: HostContext): Promise<SubtitleSessi
         const video = original?.supportsSubtitles ? original.videoSize : undefined;
         const width = context.surface.video.videoWidth || video?.width || rect.width;
         const height = context.surface.video.videoHeight || video?.height || rect.height;
-        const scale = Math.min(rect.width / width, rect.height / height);
-        const y = (rect.height - height * scale) / 2;
-        const button = context.surface.fullscreenContainer.querySelector<HTMLElement>(
-          '[data-testid="player-toggle"]',
-        );
-        let visible = !!button;
-        for (let node = button; node && visible; node = node.parentElement)
-          if (getComputedStyle(node).visibility === 'hidden' || Number(getComputedStyle(node).opacity) < 0.05)
-            visible = false;
-        const controlsTop = button?.parentElement?.getBoundingClientRect().top ?? Infinity;
+        const scale = context.surface.video.style.objectFit === 'cover'
+          ? Math.max(rect.width / width, rect.height / height)
+          : Math.min(rect.width / width, rect.height / height);
+        const x = Math.max(0, (rect.width - width * scale) / 2);
+        const y = Math.max(0, (rect.height - height * scale) / 2);
+        const insets = context.surface.captionInsets;
+        const left = Math.max(x, insets?.left ?? 0);
+        const top = Math.max(y, insets?.top ?? 0);
         return {
-          x: (rect.width - width * scale) / 2,
-          y,
-          width: width * scale,
-          height: height * scale,
-          bottomInset: visible ? Math.max(0, rect.top + y + height * scale - controlsTop + 12) : 0,
+          x: left,
+          y: top,
+          width: Math.max(1, rect.width - Math.max(x, insets?.right ?? 0) - left),
+          height: Math.max(1, rect.height - Math.max(y, insets?.bottom ?? 0) - top),
+          pictureHeight: rect.height - 2 * y,
         };
       },
       onTracks: () => {
