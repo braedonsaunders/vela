@@ -6,7 +6,7 @@
 // - Wraps each section in a staggered entrance motion (`SectionRise`: opacity + 18px translateY, delay
 //   `min(index, 3) * 70ms`, skipped when `still` is true).
 // - Calls `requestNeeds` when a section with `needs: string[]` is about to mount.
-// - Renders a hidden level-1 heading on the web (`aria-level={1}`) for screen readers.
+// - Gives standalone pages a hidden level-1 heading on the web.
 // - Wraps each section with focusable children in a TV `FocusBand` (`TVFocusGuideView autoFocus`)
 //   for per-section focus memory, and in `ScopedRecordNode` so a record push only re-renders the
 //   section reading that record.
@@ -203,7 +203,9 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
 
   if (!runtime) return null;
 
-  const title = runtime.pageTitle;
+  // Pages in an experience shell draw their own headings. A second, invisible heading
+  // with the document title would repeat the visible heading in the accessibility tree.
+  const title = embedded ? undefined : runtime.pageTitle;
   const shown = visibleChildren.slice(0, mountedCount);
   const testID = node.testId ? fill(node.testId as Template, ctx, host.env).trim() || undefined : undefined;
 
