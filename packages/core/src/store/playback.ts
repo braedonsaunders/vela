@@ -23,13 +23,15 @@ import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './sessi
 import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
+import { matchSeriesTracks } from '../series-tracks';
+import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
   /** `audio`: the app's audio engine plays it (music, audiobooks, podcasts), so the request declares what that engine plays. */
-  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
+  | { kind: 'title'; id: string; showId?: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
     /** The title's media class when the caller knows it (the audio queue does): a class that never
      * enters Continue (music) is not followed by a read of Home's progress shelves. Not sent. */
     media?: V.MediaClass }
@@ -155,6 +157,8 @@ export class Playback {
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
+  /** Series-track context for the active title session: server, viewer, title and series ID. */
+  private sessionContext: { sessionId: string; serverId: string; viewerId: string; titleId: string; showId?: string; connection: Connection } | undefined;
   private externalId: string | undefined;
   private follow: AbortController | undefined;
   /** Read the followed session's snapshot now (servers without an event stream), not at the next poll. */
@@ -188,6 +192,7 @@ export class Playback {
     private readonly session: Session,
     private readonly watched: (watched: Watched) => void,
     private readonly reconcile: (watched: Watched, media?: V.MediaClass) => void,
+    private readonly seriesTracks?: SeriesTracks,
   ) {
     this.trickplay.subscribe(() => this.trickplayChanged());
     session.onReset(() => {
@@ -253,12 +258,23 @@ export class Playback {
     const { run, target } = intent;
     const epoch = this.session.epoch;
     let connection: Connection;
+    let viewerId = '';
+    let initialShowId: string | undefined;
+    let showIdLookup: Promise<string | undefined> | undefined;
     let reply: V.PlaybackPlan | V.PlaybackPreparing;
     try {
       connection = await this.session.ready();
       const api = connection.adapter;
       await this.session.negotiate(api);
       if (this.run !== run) return;
+      if (this.seriesTracks && target.kind === 'title' && !target.audio) {
+        viewerId = (await this.session.tokens?.(connection))?.viewer.id ?? '';
+        initialShowId = target.showId || this.cachedShowId(target.id);
+        const serverId = connection.record?.id ?? '';
+        if (!this.recovering && !initialShowId && serverId && viewerId && this.seriesTracks.hasForViewer(serverId, viewerId)) {
+          showIdLookup = api.detail(target.id).then(detail => (detail.title.kind === 'episode' ? detail.title.showId : undefined)).catch(() => undefined);
+        }
+      }
       const position = target.kind === 'title' || target.kind === 'programme' ? target.positionSeconds : undefined;
       if (target.kind === 'library-live') {
         if (!this.session.features?.libraryLive?.available || !hasLibraryLive(api)) throw new Error('Library live is unavailable');
@@ -317,25 +333,60 @@ export class Playback {
     const differs = (audio !== undefined && audio !== plan.selectedAudioTrackId)
       || (subtitle !== undefined && subtitle !== (plan.selectedSubtitleTrackId ?? null));
     if (this.recovering && !live && differs) {
-      try {
-        plan = connection.plan(await this.send(connection, plan.sessionId, {
-          kind: 'tracks', audioTrackId: audio, subtitleTrackId: subtitle,
-          sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
-          idempotencyKey: this.session.key(),
-        }));
-      } catch {
-        // Some servers leave track selection to the engines. Their plan still describes the
-        // available tracks, so carry the viewer's choices into the new engine session.
-        this.localTracks = true;
+      if (this.localTracks) {
+        // Tracks chosen locally (remembered series choices, or a server that leaves track selection
+        // to the engine) stay local across recovery too — never written back to the server.
         plan = this.withLocalTracks(plan);
+      } else {
+        try {
+          plan = connection.plan(await this.send(connection, plan.sessionId, {
+            kind: 'tracks', audioTrackId: audio, subtitleTrackId: subtitle,
+            sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+            idempotencyKey: this.session.key(),
+          }));
+        } catch {
+          // Some servers leave track selection to the engines. Their plan still describes the
+          // available tracks, so carry the viewer's choices into the new engine session.
+          this.localTracks = true;
+          plan = this.withLocalTracks(plan);
+        }
+        if (this.run !== run) {
+          this.stopped(plan.sessionId);
+          const sessionId = plan.sessionId;
+          void connection.adapter.command(sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
+            seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {}).finally(() => this.held.delete(sessionId));
+          return;
+        }
       }
-      if (this.run !== run) {
+    } else if (this.seriesTracks && !this.recovering && target.kind === 'title' && !target.audio) {
+      const showId = initialShowId ?? (showIdLookup ? await showIdLookup : undefined);
+      if (this.run !== run || epoch !== this.session.epoch) {
         this.stopped(plan.sessionId);
         const sessionId = plan.sessionId;
         void connection.adapter.command(sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
           seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {}).finally(() => this.held.delete(sessionId));
         return;
       }
+      this.sessionContext = { sessionId: plan.sessionId, serverId: connection.record.id, viewerId, titleId: target.id, showId, connection };
+      const preference = showId && viewerId ? this.seriesTracks?.get(connection.record.id, viewerId, showId) : undefined;
+      if (preference) {
+        let client: V.ClientCapabilities | undefined;
+        try { client = this.session.client; } catch { /* Capabilities optional for matching. */ }
+        const matched = matchSeriesTracks(plan, preference, { explicitAudio: !!target.audioTrackId, client });
+        const audioDiff = matched.audioTrackId !== undefined && matched.audioTrackId !== plan.selectedAudioTrackId;
+        const subtitleDiff = matched.subtitleTrackId !== undefined && matched.subtitleTrackId !== (plan.selectedSubtitleTrackId ?? null);
+        if (audioDiff || subtitleDiff) {
+          this.localTracks = true;
+          if (audioDiff) this.audio = matched.audioTrackId;
+          if (subtitleDiff) this.subtitle = matched.subtitleTrackId;
+          plan = this.withLocalTracks(plan);
+        }
+      }
+    }
+    if (this.seriesTracks && this.recovering && target.kind === 'title' && !target.audio) {
+      this.sessionContext = this.sessionContext
+        ? { ...this.sessionContext, sessionId: plan.sessionId, connection }
+        : { sessionId: plan.sessionId, serverId: connection.record.id, viewerId, titleId: target.id, showId: initialShowId, connection };
     }
     this.abandoned = null;
     this.recovering = false;
@@ -475,8 +526,69 @@ export class Playback {
     if (!this.localTracks) return plan;
     return { ...plan,
       ...(this.audio && plan.audioTracks.some(track => track.id === this.audio) ? { selectedAudioTrackId: this.audio } : {}),
-      ...(this.subtitle === null || plan.subtitleTracks.some(track => track.id === this.subtitle) ? { selectedSubtitleTrackId: this.subtitle ?? null } : {}),
+      ...(this.subtitle === null || (this.subtitle !== undefined && plan.subtitleTracks.some(track => track.id === this.subtitle)) ? { selectedSubtitleTrackId: this.subtitle ?? null } : {}),
     };
+  }
+
+  /**
+   * Remember a viewer's deliberate audio or subtitle choice for the playing episode's series.
+   * Called only after the player confirms the viewer's switch took effect; never writes to the server.
+   */
+  rememberTrack(sessionId: string, kind: 'audio' | 'subtitle', trackId: string | null): void {
+    const current = this.box.get().playback;
+    if (!sessionId || current.sessionId !== sessionId || current.plan?.sessionId !== sessionId) return;
+    if (kind === 'audio' && trackId) this.audio = trackId;
+    if (kind === 'subtitle') this.subtitle = trackId;
+    if (!this.seriesTracks || this.sessionContext?.sessionId !== sessionId) return;
+    const { serverId, viewerId, titleId, connection } = this.sessionContext;
+    if (!viewerId) return;
+    const track = kind === 'audio'
+      ? (trackId ? current.plan.audioTracks.find(t => t.id === trackId) : undefined)
+      : (trackId === null ? null : current.plan.subtitleTracks.find(t => t.id === trackId));
+    if (track === undefined) return;
+    const save = (showId: string) => {
+      if (kind === 'audio') this.seriesTracks!.rememberAudio(serverId, viewerId, showId, track as V.Track);
+      else this.seriesTracks!.rememberSubtitle(serverId, viewerId, showId, track as V.Track | null);
+    };
+    const showId = this.sessionContext.showId || this.cachedShowId(titleId);
+    if (showId) {
+      this.sessionContext.showId = showId;
+      save(showId);
+      return;
+    }
+    void connection.adapter.detail(titleId).then(detail => {
+      if (detail.title.kind === 'episode' && detail.title.showId) {
+        if (this.sessionContext?.sessionId === sessionId) this.sessionContext.showId = detail.title.showId;
+        save(detail.title.showId);
+      }
+    }).catch(() => undefined);
+  }
+
+  /** Find an episode's showId from already-loaded state before making any network call. */
+  private cachedShowId(titleId: string): string | undefined {
+    const state = this.box.get();
+    const titles = state.titles ?? {};
+    const own = titles[titleId]?.value?.title[0];
+    if (own?.kind === 'episode' && own.showId) return own.showId;
+    for (const entry of Object.values(titles)) {
+      const detail = entry?.value;
+      if (!detail) continue;
+      const hit = detail.episodes.find(c => c.id === titleId && c.showId)
+        ?? detail.nextUp?.find(c => c.id === titleId && c.showId);
+      if (hit?.showId) return hit.showId;
+    }
+    const home = state.home?.value;
+    if (home) {
+      const hero = home.hero.find(c => c.id === titleId && c.showId);
+      if (hero?.showId) return hero.showId;
+      for (const row of home.rows) {
+        const card = row.items.find(c => c.id === titleId && c.showId);
+        if (card?.showId) return card.showId;
+      }
+    }
+    const searchHit = state.search?.fast?.items?.find(c => c.id === titleId && c.showId)
+      ?? state.search?.descriptive?.items?.find(c => c.id === titleId && c.showId);
+    return searchHit?.showId || undefined;
   }
 
   /**
@@ -642,7 +754,17 @@ export class Playback {
       const connection = await this.session.ready();
       const plan = await this.send(connection, sessionId, command, origin);
       answered(plan);
-      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
+        let nextPlan = connection.plan(plan);
+        if (command.kind === 'tracks') {
+          if (command.audioTrackId !== undefined && nextPlan.selectedAudioTrackId) this.audio = nextPlan.selectedAudioTrackId;
+          if (command.subtitleTrackId !== undefined) this.subtitle = nextPlan.selectedSubtitleTrackId;
+          nextPlan = this.withLocalTracks(nextPlan);
+        } else {
+          nextPlan = this.withLocalTracks(nextPlan);
+        }
+        this.patch({ plan: nextPlan });
+      }
     } catch (error) {
       answered(null);
       const words = commandFailure(command, error, origin);
@@ -715,7 +837,7 @@ export class Playback {
         this.giveUp(true);
         return true;
       }
-      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: this.withLocalTracks(connection.plan(snapshot.plan)) });
       return true;
     } catch {
       // The caller starts over; the server's words are not the viewer's.
@@ -745,7 +867,7 @@ export class Playback {
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
       if (!ownsRead()) return 'superseded';
       if (snapshot.plan.sessionId !== sessionId) return 'gone';
-      const plan = connection.plan(snapshot.plan);
+      const plan = this.withLocalTracks(connection.plan(snapshot.plan));
       if (plan.sourceFailure === 'version_unavailable') {
         this.cursor = Math.max(0, positionSeconds);
         this.lastPosition = { sessionId, seconds: this.cursor, ended: false };
@@ -808,7 +930,7 @@ export class Playback {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
-    if (snapshot.state === 'playing' || snapshot.state === 'paused') {
+    if (!this.localTracks && (snapshot.state === 'playing' || snapshot.state === 'paused')) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
     }
@@ -1011,6 +1133,7 @@ export class Playback {
     this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
+    this.sessionContext = undefined;
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
     this.externalId = undefined;

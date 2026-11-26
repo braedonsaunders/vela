@@ -1,6 +1,6 @@
 {
   "name": "vela",
-  "version": "0.2.70",
+  "version": "0.2.71",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -52,6 +52,13 @@
       "exclude": [
         "react-native"
       ]
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-image"
+        ]
+      }
     }
   },
   "reanimated": {

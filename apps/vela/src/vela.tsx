@@ -48,6 +48,7 @@ import { aboutApp, listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';
 import { usePlayerSettings } from './player-settings';
+import { useSeriesTracks } from './series-tracks';
 import { AppearancePicker } from './picker';
 import { AddToPlaylist } from './playlists/add-to-playlist';
 import { useLast } from '@vela/skin/src/presence';
@@ -196,6 +197,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   const signedIn = auth.phase === 'signed-in';
   useMediaAccess(store, signedIn ? auth.revision : null);
   usePlayerSettings(store);
+  useSeriesTracks(store);
   const live = useLiveController(store, signedIn ? auth.revision : null);
   const multiview = useMultiviewController(store, signedIn ? auth.revision : null, live);
   useSignedOutGate(auth.phase);

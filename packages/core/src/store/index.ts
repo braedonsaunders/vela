@@ -24,6 +24,8 @@ import { Media, type ChildrenModel } from './media';
 import { Audio, initialAudio, type AudioState } from './audio';
 import { initialServers, Servers, type ServersState } from './servers';
 import { initialPlayerSettings, PlayerSettings, type PlayerSettingsState } from './player-settings';
+import { initialSeriesTracks, SeriesTracks, type SeriesTracksState } from './series-tracks';
+import { PlexRelocator } from './plex-relocate';
 import { Session } from './session';
 import { idle, StateBox, type Loadable } from './state';
 
@@ -59,10 +61,12 @@ export interface VelaState {
   previews: PreviewState;
   /** This device's player settings: the streaming cap on each network, and the picture's fit. */
   playerSettings: PlayerSettingsState;
+  /** Remembered per-series audio and subtitle choices on this device, keyed by (server, viewer, show). */
+  seriesTracks: SeriesTracksState;
 }
 
 export interface VelaOptions extends VelaPlatform {
-  /** The skin renderer version this app draws; built-in documents needing a newer one are not offered. */
+  /** The skin renderer this app draws; built-in documents needing a newer one are not offered. */
   rendererVersion: number;
 }
 
@@ -99,6 +103,7 @@ export interface Vela {
   media: Media;
   audio: Audio;
   playerSettings: PlayerSettings;
+  seriesTracks: SeriesTracks;
 }
 
 const initialState: VelaState = {
@@ -123,6 +128,7 @@ const initialState: VelaState = {
   appearance: idle(),
   previews: initialPreviews,
   playerSettings: initialPlayerSettings,
+  seriesTracks: initialSeriesTracks,
 };
 
 /** Art widths come in steps, so a window resized by a few pixels reads the same images; never wider than 4K. */
@@ -133,6 +139,7 @@ const bucket = (width: number) => Math.min(MAX_ART_WIDTH, Math.max(ART_STEP, Mat
 export function createVela(options: VelaOptions): Vela {
   const box = new StateBox<VelaState>(initialState);
   const session = new Session(options);
+  session.setRelocator(new PlexRelocator(box, session));
   let artWidth = bucket(options.artWidth);
   const width = () => artWidth;
   const auth = new Auth(box, session, options);
@@ -142,6 +149,7 @@ export function createVela(options: VelaOptions): Vela {
   const catalogue = new Catalogue(box, session, width);
   const playlists = new Playlists(box, session, width);
   const music = new Music(box, session, width);
+  const seriesTracks = new SeriesTracks(box, session);
   // What the viewer watched changes their resume positions, Continue Watching and the hero:
   // applied locally only from the server-confirmed stop position. Detail and Home's progress
   // shelves are then reconciled in place; navigation and playback never repeat the full bootstrap.
@@ -156,6 +164,7 @@ export function createVela(options: VelaOptions): Vela {
       catalogue.reconcile(watched);
       if (reconcilesHome(media)) void home.reconcile(watched);
     },
+    seriesTracks,
   );
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);
   const audio = new Audio(box, session, playback);
@@ -199,6 +208,7 @@ export function createVela(options: VelaOptions): Vela {
     media: new Media(box, session, width, () => void home.refreshProgress()),
     audio,
     playerSettings: new PlayerSettings(box, session),
+    seriesTracks,
   };
   // Vela's own pages read `vela.*` sources through these same stores and the active server.
   screens.attachLocal(vela, { ready: () => session.ready(), features: () => session.features });
