@@ -2,7 +2,7 @@
 // heading with its collapse control, new playlist and the library tools; filters; and the
 // playlists, liked albums and artists (music) or the books and shows under way (spoken word).
 // Collapsed it is an icon rail. Embedded (Your Library on a phone or a TV) it is a plain list.
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View } from 'react-native';
 import { durationLabel, msg, number, type Card, type PlaylistModel } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -14,8 +14,8 @@ import { placeOf, useMusic } from './app';
 import { listenedFraction, listeningWords } from './listening';
 import { useLibraryItems, useLibraryRows, useLiked, usePlaylists } from './data';
 import { musicTV } from './layout';
-import { samePlace, type MusicPlace } from './place';
-import { Chip, FocusGroup, IconButton, LikedCover, playlistCard, Surface, transition } from './parts';
+import { claimsFirstFocus, samePlace, type MusicPlace } from './place';
+import { Chip, FocusGroup, hasRememberedSpot, IconButton, LikedCover, playlistCard, Surface, transition } from './parts';
 
 type Filter = 'all' | 'playlists' | 'albums' | 'artists';
 
@@ -264,6 +264,10 @@ function PlaylistThumb({ playlist }: { playlist?: PlaylistModel }) {
 /** Apple TV (tvOS): where the rail's items are named focus targets. */
 const APPLE_TV = Platform.isTV && Platform.OS === 'ios';
 
+/** The element a document names as its first focus (its focus.initial), when the rail is drawn by one. */
+export const RailFirstFocus = createContext('');
+
+
 export function NavItem({ symbol, label, place, rail, testID }: { symbol: string; label: string; place: MusicPlace; rail: boolean; testID?: string }) {
   const app = useMusic();
   const m = useMediaLook();
@@ -271,13 +275,21 @@ export function NavItem({ symbol, label, place, rail, testID }: { symbol: string
   const { state, handlers } = useInteraction();
   const on = samePlace(app.place, place);
   const lit = state.hover || state.focus;
-  // On Apple TV the rail's items are focus targets by name (music-nav-home, …), so a document can
-  // name its first focus (the listen shell's focus.initial: Home, as the hand-written shell's
-  // focus guide gave it). Android TV's first focus is the app's navigation, so nothing registers
-  // there; web and phones are untouched.
-  const navId = APPLE_TV ? `music-nav-${place.kind}` : undefined;
+  // On Apple TV (only: Android TV's first focus is the app's navigation; web and phones are
+  // untouched), where the page opened claims no first focus of its own (Play, Search's field) and has no
+  // spot to come back to, the rail's items are named focus targets (decided once, as the rail
+  // first draws), so the shell's focus.initial can name Home; elsewhere nothing is named and the
+  // page's own focus stands. The item named first is also the preferred focus from the rail's
+  // first frame, so tvOS never picks an element of the page first (and scrolls to it) before
+  // focus.initial lands, as the hand-written shell's rail had it; only until it has had focus.
+  const firstFocus = useContext(RailFirstFocus);
+  const [named] = useState(() => APPLE_TV && !claimsFirstFocus(app.place) && !hasRememberedSpot(app.place));
+  const navId = named ? `music-nav-${place.kind}` : undefined;
+  const [preferred, setPreferred] = useState(() => !!navId && navId === firstFocus);
+  const focus = handlers.onFocus;
   return (
-    <Pressable {...handlers} {...(navId ? { ref: focusTarget(navId) as never, nativeID: navId } : {})} onPress={() => app.go(place)} testID={testID} accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={label}
+    <Pressable {...handlers} {...(navId ? { ref: focusTarget(navId) as never, nativeID: navId } : {})} {...(preferred ? { hasTVPreferredFocus: true } : {})}
+      onFocus={() => { focus(); if (preferred) setPreferred(false); }} onPress={() => app.go(place)} testID={testID} accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={label}
       style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 16, height: tv ? 60 : 44, width: tv ? 60 : undefined, paddingHorizontal: rail ? 0 : 12, justifyContent: rail ? 'center' : 'flex-start', borderRadius: tv ? 30 : 10,
         backgroundColor: tv && state.focus ? m.ui.ink : lit ? m.ui.control : on && tv ? m.ui.control : 'transparent', transform: [{ scale: tv && state.focus ? 1.08 : 1 }] }, transition('background-color, transform', 120)]}>
       <Glyph symbol={symbol} size={tv ? 28 : 24} color={tv && state.focus ? m.ui.inkInverse : on || lit ? m.ui.ink : m.ui.inkSecondary} />

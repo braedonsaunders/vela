@@ -33,3 +33,9 @@ export function placeParam(place: MusicPlace): string {
 export function samePlace(a: MusicPlace, b: MusicPlace): boolean {
   return placeParam(a) === placeParam(b);
 }
+
+/** Pages that claim their own first focus on a TV: Play on an album, artist, playlist, Liked Songs,
+ * a book or show (the action bar), and Search's field. The rest open on the rail's Home. */
+export function claimsFirstFocus(place: MusicPlace): boolean {
+  return place.kind === 'title' || place.kind === 'playlist' || place.kind === 'liked' || place.kind === 'search';
+}
