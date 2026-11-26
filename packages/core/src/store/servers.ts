@@ -217,7 +217,9 @@ export class Servers {
   /** Identify what answers at a typed address, before any credential is sent. */
   async probe(url: string): Promise<ProbeResult> {
     const secure = pageSecure(this.platform);
-    const probe = await probeServer(url, this.session.device, secure, this.session.servers.standalone);
+    const detected = await probeServer(url, this.session.device, secure, true);
+    const probe = detected.state === 'found' && detected.kind === 'ether' && !this.session.servers.canAddEther(detected.url)
+      ? { ...detected, state: 'unsupported' as const } : detected;
     let note = '';
     if (probe.state !== 'found') {
       if (probe.kind === 'ether') note = msg('server.probe.vela');
@@ -251,7 +253,7 @@ export class Servers {
 
   async add(kind: ServerKind, name: string, url: string, machineIdentifier?: string): Promise<ServerResult> {
     try {
-      const ether = kind === 'ether' && this.session.servers.standalone;
+      const ether = kind === 'ether' && this.session.servers.canAddEther(url);
       if (kind !== 'jellyfin' && kind !== 'emby' && kind !== 'plex' && !ether) throw new Error(msg('server.probe.unsupported'));
       if (pageSecure(this.platform) && /^http:/i.test(url.trim())) {
         throw new Error(msg('server.probe.insecure', { url: url.trim() }));
@@ -271,7 +273,7 @@ export class Servers {
   /** Removing forgets the session either way; revocation is attempted while the server answers. */
   async remove(id: string): Promise<ServerResult> {
     try {
-      if (id === 'ether') throw new Error('Cannot remove the default server');
+      if (id === 'ether' && this.session.servers.read().selectedId === id) throw new Error('Cannot remove the selected host server');
       const connection = this.session.connection(id);
       try {
         await bounded(endSession(connection, this.session));

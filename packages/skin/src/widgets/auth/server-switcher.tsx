@@ -76,11 +76,11 @@ export function ServerSwitcher({ params }: WidgetProps) {
         {title}
       </Words>
       {switcher.servers.list.map(server => {
-        const removable = !server.selected && server.id !== switcher.servers.selectedId && server.id !== 'ether';
+        const removable = !server.selected && server.id !== switcher.servers.selectedId;
         const confirming = removable && confirmId === server.id;
         return (
           <View key={server.id}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: -10, gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -10, gap: 4 }}>
               <Row
                 label={server.selected && switcher.brandingName ? switcher.brandingName : server.name}
                 detail={pending === server.id && !confirming ? msg('ui.connectingToYourLibrary') : serverDetail(server)}
@@ -93,7 +93,8 @@ export function ServerSwitcher({ params }: WidgetProps) {
                 inline
               />
               {removable && !confirming ? <Row
-                label={msg('connect.removeAction')}
+                icon="close"
+                iconOnly
                 accessibilityLabel={msg('connect.remove', { name: server.name })}
                 onPress={() => { setError(''); setReturnTo(''); setConfirmId(server.id); }}
                 disabled={busy}
@@ -111,7 +112,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
                     testID="server-remove-cancel" inline compact preferFocus />
                   <Row label={msg('connect.removeAction')} accessibilityLabel={msg('connect.remove', { name: server.name })}
                     onPress={() => void remove(server)} disabled={busy} busy={pending === server.id}
-                    testID="server-remove-confirm" inline compact />
+                    testID="server-remove-confirm" inline compact destructive />
                 </View>
               </View>
             ) : null}
@@ -130,6 +131,8 @@ export function ServerSwitcher({ params }: WidgetProps) {
 
 function Row({
   label,
+  iconOnly = false,
+  destructive = false,
   detail,
   ready = true,
   selected = false,
@@ -144,7 +147,9 @@ function Row({
   compact = false,
   preferFocus = false,
 }: {
-  label: string;
+  label?: string;
+  iconOnly?: boolean;
+  destructive?: boolean;
   detail?: string;
   ready?: boolean;
   selected?: boolean;
@@ -167,7 +172,10 @@ function Row({
   useEffect(() => {
     if (Platform.OS === 'web' && preferFocus && !disabled) button.current?.focus();
   }, [preferFocus, disabled]);
-  const rows = compact ? { ...ROW, 'background-color': '$ui.control' } : ROW;
+  const rows = destructive ? { ...ROW, 'background-color': '#a32638' }
+    : iconOnly ? { ...ROW, 'justify-content': 'center', width: '44px', padding: '0px' }
+    : compact ? { ...ROW, 'background-color': '$ui.control' } : ROW;
+  const looks = destructive ? { ...LOOKS, hover: { 'background-color': '#b83143' } } : LOOKS;
   return (
     <APressable
       ref={button}
@@ -180,12 +188,12 @@ function Row({
       {...(href && Platform.OS === 'web' ? { href } : {})}
       accessibilityState={{ selected, disabled, busy }}
       testID={testID}
-      style={[look.box(overlaid(rows, state, LOOKS, disabled)), inline && { marginLeft: 0, marginRight: 0, flex: compact ? undefined : 1 }, NO_RING]}
+      style={[look.box(overlaid(rows, state, looks, disabled)), inline && { marginLeft: 0, marginRight: 0, flex: compact ? undefined : 1 }, NO_RING]}
       {...handlers}
     >
       {icon ? <Glyph symbol={icon} size={17} color={look.ui.ink} /> : null}
-      <View style={{ flex: compact ? undefined : 1, minWidth: 0, gap: 2 }}>
-        <Words rows={{ 'font-size': '14px' }} style={face ? { fontFamily: face } : undefined} lines={1}>
+      {iconOnly ? null : <View style={{ flex: compact ? undefined : 1, minWidth: 0, gap: 2 }}>
+        <Words rows={{ 'font-size': '14px', ...(destructive ? { color: '#ffffff' } : {}) }} style={face ? { fontFamily: face } : undefined} lines={1}>
           {label}
         </Words>
         {detail ? (
@@ -193,7 +201,7 @@ function Row({
             {detail}
           </Words>
         ) : null}
-      </View>
+      </View>}
       {busy ? <ActivityIndicator size="small" color={look.ui.accent} /> : selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}
     </APressable>
   );
