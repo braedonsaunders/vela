@@ -423,16 +423,12 @@ internal class PlayerController(
     if (path.isOriginalFile && audioId != null && state.audioId != audioId) {
       engine?.select("audio", audioId)
     }
-    val subtitleIndex = if (subtitle?.isExternal == false) subtitle.streamIndex else null
-    val subtitleId = subtitleIndex?.let { state.trackId("sub", it) }
+    val subtitleId = subtitle?.let { localSubtitleId(it.id) }
     if (subtitleId != null) {
       if (state.subtitleId != subtitleId) {
         engine?.select("sub", subtitleId)
       }
-    } else if (subtitle?.isExternal == true) {
-      val localId = state.tracks.firstOrNull { it["plan-id"] == subtitle.id }?.get("id") as? Long
-      if (localId != null && state.subtitleId != localId) engine?.select("sub", localId)
-    } else if ((subtitle == null && report.subtitleTrackId?.startsWith("mpv-sub-") != true) || subtitle?.isExternal == true) {
+    } else if (subtitle == null && report.subtitleTrackId?.startsWith("mpv-sub-") != true) {
       engine?.select("sub", null)
     }
   }
@@ -607,6 +603,9 @@ internal class PlayerController(
     return null
   }
 
+  private fun localSubtitleId(id: String): Long? =
+    state.tracks.firstOrNull { it["type"] == "sub" && it["plan-id"] == id }?.get("id") as? Long
+
   private fun selectSubtitle(id: String?): String? {
     if (id == report.subtitleTrackId) return null
     val local = id?.takeIf { it.startsWith("mpv-sub-") }?.removePrefix("mpv-sub-")?.toLongOrNull()
@@ -636,7 +635,7 @@ internal class PlayerController(
       return null
     }
     if (external != null) {
-      val localId = state.tracks.firstOrNull { it["plan-id"] == id }?.get("id") as? Long
+      val localId = localSubtitleId(id)
       report.subtitleTrackId = id
       report.subtitleClientOnly = true
       // A sidecar the plan just added is still being prepared: applyTracks selects it when it appears.
@@ -644,7 +643,7 @@ internal class PlayerController(
       else report.publish(state, pendingSeek, force = true)
       return null
     }
-    val engineId = track.streamIndex?.takeIf { playsOriginal }?.let { state.trackId("sub", it) }
+    val engineId = if (playsOriginal) localSubtitleId(id) else null
     if (engineId == null) {
       report.sessionCommand(mapOf("kind" to "tracks", "subtitleTrackId" to id))
       return null

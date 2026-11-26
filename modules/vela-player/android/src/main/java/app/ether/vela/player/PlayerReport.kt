@@ -159,9 +159,8 @@ internal class PlayerReport(
       "audioTracks" to plan?.audioTracks.orEmpty().map { it.snapshot },
       "subtitleTracks" to (plan?.subtitleTracks.orEmpty().map { it.snapshot } + state.tracks.mapNotNull { track ->
         val id = track["id"] as? Long
-        val index = (track["ff-index"] as? Long)?.toInt()
         if (plan?.selectedPath?.isOriginalFile != true || track["type"] != "sub" || track["external"] == true || id == null ||
-          (index != null && plan?.subtitleTracks.orEmpty().any { it.streamIndex == index })) null
+          track["plan-id"] != null) null
         else mapOf("id" to "mpv-sub-$id", "label" to (track["title"] ?: track["lang"] ?: "Subtitle $id"), "language" to (track["lang"] ?: "und"), "codec" to (track["codec"] ?: ""))
       }),
       "audioTrackIds" to plan?.audioTracks.orEmpty().map { it.id },

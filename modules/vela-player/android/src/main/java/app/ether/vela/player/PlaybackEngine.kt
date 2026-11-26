@@ -268,22 +268,28 @@ internal class Media3Engine(
     state.audioId = null
     state.subtitleId = null
     val offsets = mutableMapOf<String, Int>()
+    val embeddedSubtitles = plan?.subtitleTracks.orEmpty().filterNot { it.isExternal }.sortedBy { it.streamIndex ?: Int.MAX_VALUE }
+    val originalSubtitleIds = mutableSetOf<String>()
     state.tracks = tracks.groups.flatMap { group ->
       val type = when (group.type) { C.TRACK_TYPE_AUDIO -> "audio"; C.TRACK_TYPE_TEXT -> "sub"; else -> return@flatMap emptyList() }
-      (0 until group.length).map { index ->
+      (0 until group.length).mapNotNull { index ->
         val format = group.getTrackFormat(index)
+        if (type == "sub" && originalUri != null && format.id?.let { !originalSubtitleIds.add(it) } == true) {
+          return@mapNotNull null
+        }
         val id = (choices.size + 1).toLong()
         choices[id] = group to index
         val external = plan?.subtitleTracks?.firstOrNull { it.matchesExternalFormat(format.id) }
         val ordinal = offsets[type] ?: 0
         if (external == null) offsets[type] = ordinal + 1
-        val planned = if (type == "audio") plan?.audioTracks.orEmpty() else plan?.subtitleTracks.orEmpty().filter { !it.isExternal }
-        val stream = planned.sortedBy { it.streamIndex ?: Int.MAX_VALUE }.getOrNull(ordinal)?.streamIndex
+        val planned = external ?: if (type == "sub") embeddedSubtitles.getOrNull(ordinal)
+          else plan?.audioTracks.orEmpty().sortedBy { it.streamIndex ?: Int.MAX_VALUE }.getOrNull(ordinal)
+        val codec = if (format.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES) format.codecs else format.sampleMimeType
         if (group.isTrackSelected(index)) {
           if (type == "audio") state.audioId = id else state.subtitleId = id
         }
-        mapOf("id" to id, "type" to type, "ff-index" to stream?.toLong(), "external" to (external != null),
-          "plan-id" to external?.id, "title" to format.label, "lang" to format.language, "codec" to format.sampleMimeType)
+        mapOf("id" to id, "type" to type, "ff-index" to planned?.streamIndex?.toLong(), "external" to (external != null),
+          "plan-id" to planned?.id, "title" to format.label, "lang" to format.language, "codec" to codec)
       }
     }
   }
