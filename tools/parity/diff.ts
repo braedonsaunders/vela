@@ -48,6 +48,16 @@ export interface DiffResult {
 export interface Verdict { pass: boolean; reasons: string[] }
 
 export const RULE = { maxPercent: 1, maxDisplacement: 2 } as const;
+export const MAX_MASK_PERCENT = 5;
+
+/** Uses the union of all masks because overlapping rectangles exclude a pixel only once. */
+export function maskCoverage({ width, height, compared }: Pick<DiffResult, 'width' | 'height' | 'compared'>): number {
+  return width && height ? (1 - compared / (width * height)) * 100 : 0;
+}
+
+export function needsMaskReview(result: Pick<DiffResult, 'width' | 'height' | 'compared'>): boolean {
+  return result.width * result.height - result.compared > result.width * result.height * MAX_MASK_PERCENT / 100;
+}
 
 export function inMask(x: number, y: number, mask: readonly Rect[]): boolean {
   for (const r of mask) if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height) return true;

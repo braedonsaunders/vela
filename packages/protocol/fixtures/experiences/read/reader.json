@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "read",
+ "screen": "read",
+ "page": "reader",
+ "version": "1",
+ "title": "{src.title.item.name}",
+ "presentation": "page",
+ "params": {
+  "id": {
+   "type": "string"
+  },
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "title": {
+   "from": "vela.title",
+   "id": "{param.id}"
+  }
+ },
+ "tree": {
+  "type": "box",
+  "children": [
+   {
+    "type": "reader",
+    "props": {
+     "item": "{src.title.item}"
+    },
+    "style": {
+     "flex": "1"
+    }
+   },
+   {
+    "type": "slot",
+    "slot": "plugin:read.sidePanel",
+    "context": {
+     "title": "{src.title.item.$key}",
+     "titleKind": "book"
+    },
+    "style": {
+     "position": "absolute",
+     "right": "0px",
+     "top": "0px",
+     "max-width": "100%"
+    }
+   }
+  ],
+  "style": {
+   "flex": "1"
+  }
+ },
+ "palette": {
+  "paper": "#fbf9f4"
+ },
+ "loading": {
+  "type": "box",
+  "style": {
+   "flex": "1",
+   "background-color": "$palette.paper"
+  }
+ }
+}

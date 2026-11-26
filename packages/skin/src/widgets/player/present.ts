@@ -2,7 +2,7 @@
 // clock, the timeline, the choosable tracks, qualities, speeds and chapters, and the playback
 // facts for the info card. Pure: no React, no clock. A value the engine has not reported stays
 // empty rather than estimated.
-import { msg, number, playingRelease, second } from '@vela/core';
+import { languageLabel, msg, number, playingRelease, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
 import type { Command, PlaybackPlan, Snapshot } from '@vela/player-api';
 import { formatLines, type FormatLines } from './format';
@@ -179,20 +179,49 @@ interface AnyTrack {
   channels?: number;
   forced?: boolean;
   hearingImpaired?: boolean;
+  delivery?: { kind: string; format?: string };
 }
 
 /** Metadata and engine discovery complement each other; an empty early snapshot must not
  * erase the plan's embedded or external tracks. Engine labels win for the same identity. */
-function trackOptions(planned: AnyTrack[], observed: AnyTrack[]): TrackOption[] {
-  return [...new Map([...planned, ...observed].map(track => [track.id, track])).values()].map(trackOption);
+function trackOptions(planned: AnyTrack[], observed: AnyTrack[], subtitle = false): TrackOption[] {
+  const tracks = new Map(planned.map(track => [track.id, track]));
+  for (const track of observed) {
+    const previous = tracks.get(track.id);
+    tracks.set(track.id, { ...previous, ...track, name: track.name ?? track.label ?? previous?.name,
+      language: track.language ?? previous?.language, codec: subtitle ? [track.codec, previous?.codec].find(codec => subtitleFormat(codec)) : track.codec || previous?.codec });
+  }
+  return [...tracks.values()].map(track => trackOption(track, subtitle));
+}
+
+const SUBTITLE_FORMATS: Record<string, string> = {
+  srt: 'SRT', subrip: 'SRT', 'application/x-subrip': 'SRT',
+  ass: 'ASS', ssa: 'ASS', 'text/x-ssa': 'ASS',
+  pgs: 'PGS', sup: 'PGS', hdmv_pgs_subtitle: 'PGS', 'application/pgs': 'PGS',
+  vtt: 'WebVTT', webvtt: 'WebVTT', 'webvtt-window': 'WebVTT', 'text/vtt': 'WebVTT', 'application/x-mp4-vtt': 'WebVTT',
+};
+
+function subtitleFormat(codec: string | undefined): string {
+  return SUBTITLE_FORMATS[(codec ?? '').trim().toLowerCase()] ?? '';
 }
 
 /** Name, language, codec, channels, forced, SDH: the first is the name, the rest its detail. */
-function trackOption(track: AnyTrack): TrackOption {
+function trackOption(track: AnyTrack, subtitle: boolean): TrackOption {
+  const language = track.language && track.language !== 'und' ? track.language : '';
+  const title = track.name ?? track.label ?? '';
+  const format = subtitleFormat(track.delivery?.kind === 'external' ? track.delivery.format : track.codec);
+  // A server title that only restates the language and format ("en PGS", "English · SRT") is not a
+  // name: the language and format are shown on their own.
+  const restated = new Set([language, language && languageLabel(language)].filter(Boolean).map(word => word.toLowerCase()));
+  const onlyRestates = (part: string) => part.split(/\s+/).every(word =>
+    !word || restated.has(word.toLowerCase()) || !!subtitleFormat(word) || /^(application|audio|text|video)\//i.test(word));
+  const name = subtitle
+    ? title.split(/\s*·\s*/).filter(part => !onlyRestates(part)).join(' · ')
+    : title;
   const parts = [
-    track.name ?? track.label ?? '',
-    track.language && track.language !== 'und' ? track.language : '',
-    (track.codec ?? '').toUpperCase(),
+    name,
+    subtitle && language ? languageLabel(language) : language,
+    subtitle ? format : (track.codec ?? '').toUpperCase(),
     track.channels ? `${track.channels} ch` : '',
     track.forced ? 'Forced' : '',
     track.hearingImpaired ? 'SDH' : '',
@@ -488,7 +517,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     audio: trackOptions(plan?.audioTracks ?? [], snapshot?.audioTracks ?? []),
     audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? plan?.audioTracks.find(track => track.default)?.id ?? '',
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
-    subtitles: trackOptions(plan?.subtitleTracks ?? [], snapshot?.subtitleTracks ?? []),
+    subtitles: trackOptions(plan?.subtitleTracks ?? [], snapshot?.subtitleTracks ?? [], true),
     subtitleId: snapshot ? (snapshot.subtitleTrackId ?? '') : (plan?.selectedSubtitleTrackId ?? ''),
     pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
     subtitleError: snapshot?.subtitleError ?? '',

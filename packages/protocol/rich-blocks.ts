@@ -2,9 +2,8 @@
 // never replaces. Each block publishes its props, its named parts (styled by `parts`, by a skin's
 // `experiences.<id>.parts`, and by the document's own `parts`) and the parts whose template a
 // document may replace (`partTemplates`, or a document template named after the part). Pure data:
-// the resolver validates against it, the schema tool emits it as `$defs.RichBlocks`, and the Listen
-// blocks (packages/skin/src/blocks/listen) draw from it. Owned by the Listen blocks; additive within
-// a renderer version.
+// the resolver validates against it, the schema tool emits it as `$defs.RichBlocks`, and the
+// rich blocks (packages/skin/src/blocks) draw from it. Additive within a renderer version.
 
 export type RichPropType = 'value' | 'template' | 'boolean' | 'number' | 'enum';
 
@@ -33,7 +32,48 @@ export interface RichBlockSpec {
 
 const flag = (doc: string, fallback?: 'true' | 'false'): RichPropSpec => ({ type: 'boolean', doc, ...(fallback ? { default: fallback } : {}) });
 
+const readItem = { type: 'value', required: true, doc: 'The book or series as an item: record or a vela.title value.' } as const;
+const readItems = { type: 'value', doc: 'The children as item: records, from vela.children.' } as const;
+
 export const RICH_BLOCKS = {
+  reader: {
+    doc: 'The full-screen book reader, driven by Vela’s reader session.',
+    props: { item: readItem },
+    parts: ['reader.page', 'reader.toolbar', 'reader.title', 'reader.progress', 'reader.button', 'reader.panel'],
+    templates: [], tv: 'The reader is offered on phones, tablets, web and desktop.',
+  },
+  bookCover: {
+    doc: 'A book’s cover with a spine and the page edges.',
+    props: { item: readItem }, parts: ['bookCover.root'], templates: [], tv: 'No focus.',
+  },
+  bookHero: {
+    doc: 'A book’s cover, series, title, author, format facts, reading progress and action.',
+    props: { item: readItem, cover: flag('Include the cover slot.', 'true'), action: flag('Include the reading action slot.', 'true') },
+    parts: ['bookHero.title', 'bookHero.author', 'bookHero.series', 'bookHero.progress'],
+    templates: ['bookHero.cover', 'bookHero.action'], templateScope: { 'bookHero.cover': [], 'bookHero.action': [] },
+    tv: 'Focusable series and author links. The reading action becomes a quiet line on TV.',
+  },
+  bookReadAction: {
+    doc: 'The Read, Continue reading or Read again button; a quiet explanation on TV.',
+    props: { item: readItem }, parts: ['bookReadAction.button', 'bookReadAction.message'], templates: [], tv: 'No focus on TV.',
+  },
+  bookSummary: {
+    doc: 'A book or series synopsis in serif type.',
+    props: { item: readItem }, parts: ['bookSummary.root'], templates: [], tv: 'No focus.',
+  },
+  bookFacts: {
+    doc: 'The metadata labels and values for a book.',
+    props: { item: readItem }, parts: ['bookFacts.root'], templates: [], tv: 'No focus.',
+  },
+  bookSeriesList: {
+    doc: 'The other books in a book’s series, or the ordered books on the series’ page.',
+    props: { item: readItem, items: readItems }, parts: ['bookSeriesList.root'], templates: [], tv: 'Each book is one focus target.',
+  },
+  seriesHero: {
+    doc: 'A fan of series covers, title, author, and the link to start or resume the series.',
+    props: { item: readItem, items: readItems }, parts: ['seriesHero.title', 'seriesHero.author'], templates: [],
+    tv: 'A reading action becomes a quiet line on TV. Playable audio and video links remain focusable.',
+  },
   trackTable: {
     doc: 'A tracklist: number (a play control on hover, a live meter on the track playing), cover, title with the explicit mark and artist, album, the heart, duration and the row menu. Double-click or Enter plays from a track (a tap on touch, select on TV); right-click or long-press opens the menu.',
     props: {

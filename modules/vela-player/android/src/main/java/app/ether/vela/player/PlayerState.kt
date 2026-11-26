@@ -36,10 +36,12 @@ internal class PlayerState {
   var videoCodec: String? = null
   /** Source and output facts for the info card. */
   val format = PlaybackFormatFacts()
-  /** A live stream's retained window, on the axis of `position` (Media3's window time). */
+  /** A live stream's retained window, on the axis of `position`. */
   var live: LiveWindow? = null
-  /** The position in the live window before it is held at zero: negative once the window slid past it. */
-  var windowPosition = 0.0
+  /** The live position before clamping to the oldest available frame. */
+  var livePosition = 0.0
+  /** A one-shot snapshot flag when the saved startup point has left the loaded playlist. */
+  var timeshiftRecoveryEvicted = false
   /** A lost connection is being re-established (a read retry), until playback is ready again. */
   var reconnecting = false
   /** The speed the player runs at (the audio output may refuse a requested one). */

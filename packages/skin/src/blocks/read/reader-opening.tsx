@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Text, View, type ViewStyle } from 'react-native';
 import Animated, { cubicBezier } from 'react-native-reanimated';
 import { useHost } from '../../host';
-import { useMediaLook } from './parts';
+import { useMediaLook } from '../media/parts';
 import { bookFrom, bookRect, pageFill, type Rect } from './reader-origin';
 
 /** The phases, in order. `grow`: out of the card; `wait`: standing until the pages are ready;

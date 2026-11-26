@@ -2,9 +2,9 @@
 // EPUB in paginated or scrolled columns and CBZ/PDF as fixed pages. Settings become the book's
 // injected styles and the page geometry (reader-layout.ts); taps and keys inside the book's frames
 // come back as page turns and the controls' toggle.
-import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/widgets/media/reader-engine';
-import { READER_THEMES } from '@vela/skin/src/widgets/media/reader-engine';
-import { isTap, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/widgets/media/reader-layout';
+import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/blocks/read/reader-engine';
+import { READER_THEMES } from '@vela/skin/src/blocks/read/reader-engine';
+import { headingOrphaned, isTap, READER_COLUMN_START, READER_HEADINGS, readerHeadingRules, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/blocks/read/reader-layout';
 
 type Input = 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape';
 interface FoliateTocItem { label?: string; href?: string; subitems?: FoliateTocItem[] }
@@ -72,6 +72,7 @@ export function readerCss(settings: ReaderSettings): string {
     body { color: inherit !important; background: transparent !important; }
     ${face ? `body, p, li, blockquote, dd, div, span { font-family: ${face} !important; }` : ''}
     p, li, blockquote, dd { line-height: ${settings.lineHeight} !important; text-align: justify; hyphens: auto; -webkit-hyphens: auto; widows: 2; orphans: 2; }
+    ${readerHeadingRules(settings.flow)}
     [align="left"] { text-align: left; } [align="right"] { text-align: right; } [align="center"] { text-align: center; }
     a:link, a:visited { color: ${theme.link} !important; }
     pre { white-space: pre-wrap !important; }
@@ -82,6 +83,44 @@ export function readerCss(settings: ReaderSettings): string {
     html.vela-picture-page body > * { margin: 0 auto !important; max-height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     ${settings.theme === 'dark' ? 'img, svg image { filter: brightness(0.9); }' : ''}
   `;
+}
+
+/** WebKit can break between a heading and a drop cap despite break-after: avoid. Correct only
+ * headings that rendered as orphans, with attributes that keep the EPUB's CFI node paths intact. */
+function keepHeadingWithText(doc: Document): boolean {
+  const win = doc.defaultView;
+  if (!win) return false;
+  const root = doc.documentElement;
+  const style = win.getComputedStyle(root);
+  const desiredWidth = Number.parseFloat(style.columnWidth);
+  const gap = Number.parseFloat(style.columnGap);
+  if (!(desiredWidth > 0 && gap >= 0)) return false;
+  const vertical = /^(vertical|sideways)-/.test(style.writingMode);
+  const bounds = root.getBoundingClientRect();
+  const leading = Number.parseFloat(vertical ? style.paddingTop : style.paddingLeft);
+  const trailing = Number.parseFloat(vertical ? style.paddingBottom : style.paddingRight);
+  const available = (vertical ? bounds.height : bounds.width) - leading - trailing;
+  if (!(available > 0)) return false;
+  const count = Math.max(1, Math.floor((available + gap) / (desiredWidth + gap)));
+  const stride = (available + gap) / count;
+  const origin = (vertical ? bounds.top : bounds.left) + leading;
+  const place = (rect: DOMRect) => vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2;
+  const drawn = (rect: DOMRect) => rect.width > 0 && rect.height > 0;
+  const old = new Set(Array.from(doc.querySelectorAll(`[${READER_COLUMN_START}]`)));
+  for (const element of old) element.removeAttribute(READER_COLUMN_START);
+  let changed = false;
+  const range = doc.createRange();
+  for (const heading of Array.from(doc.querySelectorAll(READER_HEADINGS))) {
+    const next = heading.nextElementSibling;
+    const head = Array.from(heading.getClientRects()).find(drawn);
+    if (!next || !head) continue;
+    range.selectNodeContents(next);
+    const line = Array.from(range.getClientRects()).find(drawn) ?? Array.from(next.getClientRects()).find(drawn);
+    if (!line || !headingOrphaned(place(head), place(line), origin, stride)) continue;
+    heading.setAttribute(READER_COLUMN_START, '');
+    if (!old.delete(heading)) changed = true;
+  }
+  return changed || old.size > 0;
 }
 
 /** Pictures keep their shape: a cover drawn as an SVG told to fill its box (calibre's
@@ -115,9 +154,21 @@ export function createReaderEngine(): ReaderEngine | null {
   let cover = '';
   let resize: ResizeObserver | null = null;
   let geometry = '';
+  let chapter: Document | null = null;
+  let headingFrame = 0;
   const locations = new Set<(location: ReaderLocation) => void>();
   const inputs = new Set<(input: Input) => void>();
   const emit = (input: Input) => { for (const listener of [...inputs]) listener(input); };
+
+  const repairHeadings = () => {
+    cancelAnimationFrame(headingFrame);
+    if (chapter && settings?.flow === 'paginated' && keepHeadingWithText(chapter)) view?.renderer.render?.();
+  };
+
+  const scheduleHeadings = () => {
+    cancelAnimationFrame(headingFrame);
+    headingFrame = requestAnimationFrame(repairHeadings);
+  };
 
   /** The page geometry for the reader's size and text size; foliate re-lays out only when it changes. */
   const layout = () => {
@@ -142,6 +193,7 @@ export function createReaderEngine(): ReaderEngine | null {
     if (!view?.renderer) return;
     view.renderer.setStyles?.(readerCss(next));
     layout();
+    scheduleHeadings();
   };
 
   /** A press that stayed put and was quick, by where it landed across the reader. Links, selections
@@ -238,7 +290,12 @@ export function createReaderEngine(): ReaderEngine | null {
       target.replaceChildren(opened);
       opened.addEventListener('load', event => {
         const { doc } = (event as CustomEvent<{ doc: Document }>).detail;
-        if (!opened.isFixedLayout) fitPictures(doc);
+        if (!opened.isFixedLayout) {
+          fitPictures(doc);
+          chapter = doc;
+          scheduleHeadings();
+          void doc.fonts.ready.then(() => { if (chapter === doc) scheduleHeadings(); });
+        }
         attachInput(doc);
       });
       // Taps beside the pages (a comic spread's gutter, the margins); taps inside a page's frame
@@ -274,7 +331,7 @@ export function createReaderEngine(): ReaderEngine | null {
       // The new geometry resizes foliate's page area, and foliate re-lays out on its own observer a
       // frame later: let that pass before the first page loads, or it lands mid-load.
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      resize = new ResizeObserver(() => layout());
+      resize = new ResizeObserver(() => { layout(); scheduleHeadings(); });
       resize.observe(target);
       // The book's own cover, for the opening: often sharper than the server's poster.
       try {
@@ -282,6 +339,7 @@ export function createReaderEngine(): ReaderEngine | null {
         if (image && image.size > 0 && view === opened) cover = URL.createObjectURL(image);
       } catch { /* The server's poster stands in. */ }
       await land(opened, locator, source.fraction);
+      repairHeadings();
       // A comic without metadata is titled after its file (ours is always book.<format>): no title.
       const title = text(opened.book.metadata?.title).trim();
       const book: ReaderBook = { title: /^book\.(epub|pdf|cbz)$/i.test(title) ? '' : title, author: text(opened.book.metadata?.author), toc: flatten(opened.book.toc), rtl, ...(cover ? { cover } : {}) };
@@ -297,6 +355,8 @@ export function createReaderEngine(): ReaderEngine | null {
     onLocation(listener) { locations.add(listener); return () => locations.delete(listener); },
     onInput(listener) { inputs.add(listener); return () => inputs.delete(listener); },
     destroy() {
+      cancelAnimationFrame(headingFrame);
+      chapter = null;
       resize?.disconnect();
       resize = null;
       view?.close();

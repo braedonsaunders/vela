@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Card } from '@vela/core';
-import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from '../src/widgets/media/series';
+import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from '../src/blocks/read/series';
 
 const book = (id: string, index: number, extra: Partial<NonNullable<Card['media']>> = {}) =>
   ({ id, media: { class: 'book', role: 'book', index, readingFormat: 'epub', ...extra } }) as unknown as Card;

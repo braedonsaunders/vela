@@ -4,7 +4,7 @@
 // so the engine draws exactly as it always has.
 import { createContext, useContext, type ReactNode } from 'react';
 import { Platform, type TextStyle, type ViewStyle } from 'react-native';
-import { useMediaLook } from '../../widgets/media/parts';
+import { useMediaLook } from '../media/parts';
 import { hasRows, partRows, splitRows, type FilledParts, type PartState } from './part-style';
 
 export interface ListenLook {

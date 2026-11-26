@@ -46,3 +46,9 @@ test('a session that has yet to play keeps the chrome up until it does', () => {
   for (const state of ['idle', 'loading', 'buffering', 'recovering'] as const) expect(holdsChrome({ ...starting, state })).toBe(true);
   expect(holdsChrome({ ...starting, state: 'playing' })).toBe(false);
 });
+
+test('an intentional jump to live suppresses the reconnect notice during the jump', () => {
+  const buffering = { ...healthy, reconnecting: true };
+  expect(liveNotices(buffering, true)).toEqual([]);
+  expect(liveNotices(buffering)).toEqual(['Reconnecting to the live stream…']);
+});

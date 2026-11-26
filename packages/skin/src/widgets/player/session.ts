@@ -313,8 +313,15 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     send({ type: 'pause' });
   }, [sessionId, send]);
 
+  const recovery = playback.timeshiftRecovery;
+  const enginePlan = useMemo(() => Platform.OS === 'android' && recovery && plan &&
+    recovery.sessionId === plan.sessionId && recovery.seekGeneration === plan.seekGeneration
+    ? { ...plan, timeshiftRecoveryAtMs: recovery.at }
+    : plan ?? undefined, [plan, recovery]);
+  const actionError = playback.phase === 'playing' ? playback.error : '';
+  const liveRecoveryNotice = Platform.OS === 'android' && actionError === msg('catchUp.recoveredLive') ? actionError : '';
   const view: VelaPlayerProps = {
-    plan: plan ?? undefined,
+    plan: enginePlan,
     command: viewCommand(sent.command, sent.on, sessionId),
     videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
@@ -410,7 +417,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         ? (owned && !owned.failure ? owned.retrying : null)
         : startRetrying(playback),
       failure: playback.phase === 'preparing' ? null : failure,
-      actionError: refused || (playback.phase === 'playing' ? playback.error : ''),
+      actionError: refused || (liveRecoveryNotice ? '' : actionError),
+      liveRecoveryNotice,
       pendingQualityId,
       pendingVersionId,
       versionMessage,

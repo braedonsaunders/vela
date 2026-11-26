@@ -26,7 +26,7 @@ internal interface PlaybackEngine {
   var onChange: () -> Unit
   var onFailure: (Int, Boolean, Boolean) -> Unit
   var onSubtitleCues: (CueGroup) -> Unit
-  fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean = false)
+  fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean = false, recoveryAtMs: Double? = null, windowOffset: Boolean = false)
   fun attach(surface: Surface?)
   fun play(playing: Boolean)
   fun volume(value: Float)
@@ -130,9 +130,12 @@ internal class Media3Engine(
     .build()
   override val liveWindowSeconds: Double get() = player.duration.takeIf { it > 0 }?.div(1000.0) ?: Double.NaN
   override val sessionPlayer: Player get() = player
-  override fun titleSeconds(mediaSeconds: Double): Double = timeline.titleTime(mediaSeconds)
+  override fun titleSeconds(mediaSeconds: Double): Double =
+    timeshiftStart()?.plus(mediaSeconds) ?: timeline.titleTime(mediaSeconds)
   private var plan: PlaybackPlan? = null
   private var timeline = MediaTimeline()
+  private var timeshiftSeek: Double? = null
+  private var reportTimeshiftEviction = false
   private var refused = false
   private var loggedLiveWindow = false
   private val choices = mutableMapOf<Long, Pair<Tracks.Group, Int>>()
@@ -222,12 +225,17 @@ internal class Media3Engine(
     main.post(tick)
   }
 
-  override fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean) {
+  override fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean, recoveryAtMs: Double?, windowOffset: Boolean) {
     this.plan = plan
     originalUri = url.takeIf { plan?.selectedPath?.isOriginalFile == true }
-    // Live windows have their own clock; never rebase them or move them to the edge.
     timeline = MediaTimeline.of(plan)
     if (!preview) Log.i("vela-media3", "media timeline origin ${timeline.origin}s")
+    val clock = plan?.timeshiftClock
+    timeshiftSeek = if (clock != null && !windowOffset) {
+      recoveryAtMs?.let(clock::broadcastSeconds) ?: position
+    } else null
+    reportTimeshiftEviction = recoveryAtMs != null
+    state.live = null
     state.position = position ?: 0.0
     refused = false
     loggedLiveWindow = false
@@ -252,7 +260,8 @@ internal class Media3Engine(
         .setLanguage(track.language).setLabel(track.name).build()
     })
     player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-    player.setMediaItem(builder.build(), position?.let { (timeline.mediaTime(it) * 1000).toLong() } ?: C.TIME_UNSET)
+    val start = position.takeIf { timeshiftSeek == null }
+    player.setMediaItem(builder.build(), start?.let { (timeline.mediaTime(it) * 1000).toLong() } ?: C.TIME_UNSET)
     player.prepare()
   }
 
@@ -268,37 +277,66 @@ internal class Media3Engine(
     state.audioId = null
     state.subtitleId = null
     val offsets = mutableMapOf<String, Int>()
+    val embeddedSubtitles = plan?.subtitleTracks.orEmpty().filterNot { it.isExternal }.sortedBy { it.streamIndex ?: Int.MAX_VALUE }
+    val originalSubtitleIds = mutableSetOf<String>()
     state.tracks = tracks.groups.flatMap { group ->
       val type = when (group.type) { C.TRACK_TYPE_AUDIO -> "audio"; C.TRACK_TYPE_TEXT -> "sub"; else -> return@flatMap emptyList() }
-      (0 until group.length).map { index ->
+      (0 until group.length).mapNotNull { index ->
         val format = group.getTrackFormat(index)
+        if (type == "sub" && originalUri != null && format.id?.let { !originalSubtitleIds.add(it) } == true) {
+          return@mapNotNull null
+        }
         val id = (choices.size + 1).toLong()
         choices[id] = group to index
         val external = plan?.subtitleTracks?.firstOrNull { it.matchesExternalFormat(format.id) }
         val ordinal = offsets[type] ?: 0
         if (external == null) offsets[type] = ordinal + 1
-        val planned = if (type == "audio") plan?.audioTracks.orEmpty() else plan?.subtitleTracks.orEmpty().filter { !it.isExternal }
-        val stream = planned.sortedBy { it.streamIndex ?: Int.MAX_VALUE }.getOrNull(ordinal)?.streamIndex
+        val planned = external ?: if (type == "sub") embeddedSubtitles.getOrNull(ordinal)
+          else plan?.audioTracks.orEmpty().sortedBy { it.streamIndex ?: Int.MAX_VALUE }.getOrNull(ordinal)
+        val codec = if (format.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES) format.codecs else format.sampleMimeType
         if (group.isTrackSelected(index)) {
           if (type == "audio") state.audioId = id else state.subtitleId = id
         }
-        mapOf("id" to id, "type" to type, "ff-index" to stream?.toLong(), "external" to (external != null),
-          "plan-id" to external?.id, "title" to format.label, "lang" to format.language, "codec" to format.sampleMimeType)
+        mapOf("id" to id, "type" to type, "ff-index" to planned?.streamIndex?.toLong(), "external" to (external != null),
+          "plan-id" to planned?.id, "title" to format.label, "lang" to format.language, "codec" to codec)
       }
     }
   }
 
   private fun update() {
+    val window = if (plan?.live == true) currentWindow() else null
+    val requested = timeshiftSeek
+    if (requested != null) {
+      if (window == null || window.durationMs <= 0) return
+      val clock = plan?.timeshiftClock ?: return
+      timeshiftSeek = null
+      val placement = clock.placement(requested, window.broadcastStartMs(), window.durationMs / 1000.0)
+      when (placement) {
+        is TimeshiftPlacement.Seek -> {
+          Log.i("vela-media3", "timeshift startup seek ${requested}s to window +${placement.windowSeconds}s")
+          player.seekTo((placement.windowSeconds * 1000).toLong())
+        }
+        TimeshiftPlacement.Evicted -> {
+          Log.i("vela-media3", "timeshift startup position ${requested}s expired; joining live")
+          state.timeshiftRecoveryEvicted = reportTimeshiftEviction
+          player.seekToDefaultPosition()
+        }
+        TimeshiftPlacement.Live -> player.seekToDefaultPosition()
+      }
+    }
     state.loaded = player.playbackState in listOf(Player.STATE_READY, Player.STATE_ENDED) || state.loaded
     state.paused = !player.playWhenReady
     state.pausedForCache = player.playbackState == Player.STATE_BUFFERING
     state.finished = player.playbackState == Player.STATE_ENDED
-    state.position = timeline.titleTime(player.currentPosition.coerceAtLeast(0) / 1000.0)
-    state.windowPosition = player.currentPosition / 1000.0
-    state.live = if (plan?.live == true) readLiveWindow() else null
+    val windowStart = timeshiftStart(window)
+    val mediaPosition = player.currentPosition / 1000.0
+    state.livePosition = (windowStart ?: 0.0) + mediaPosition
+    val position = mediaPosition.coerceAtLeast(0.0)
+    state.position = windowStart?.plus(position) ?: timeline.titleTime(position)
+    state.live = window?.let { readLiveWindow(it, windowStart ?: 0.0) }
     if (player.playbackState == Player.STATE_READY) state.reconnecting = false
     state.speed = player.playbackParameters.speed.toDouble()
-    state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let(timeline::titleTime)
+    state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let { windowStart?.plus(it) ?: timeline.titleTime(it) }
     state.cacheAhead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000.0
     state.receivedBytes = received.get()
     player.videoDecoderCounters?.let { counters ->
@@ -316,20 +354,25 @@ internal class Media3Engine(
     onChange()
   }
 
-  /** The live window on the axis of `position`: Media3's window time, from 0 to the window's duration.
-   * A start-over (EVENT) playlist's window grows from the programme's start; once it ends (ENDLIST) it is
-   * still the window. Latency is the target offset the live configuration resolved (18 s, clamped to the
-   * window), which is where Media3 joins; the segment is the playlist's target duration. */
-  private fun readLiveWindow(): LiveWindow? {
+  private fun currentWindow(): Timeline.Window? {
     val timeline = player.currentTimeline
     if (timeline.isEmpty || player.currentMediaItemIndex >= timeline.windowCount) return null
-    val window = timeline.getWindow(player.currentMediaItemIndex, liveWindow)
+    return timeline.getWindow(player.currentMediaItemIndex, liveWindow)
+  }
+
+  private fun Timeline.Window.broadcastStartMs(): Long? = windowStartTimeMs.takeIf { it != C.TIME_UNSET }
+
+  private fun timeshiftStart(window: Timeline.Window? = currentWindow()): Double? =
+    window?.let { plan?.timeshiftClock?.windowStartSeconds(it.broadcastStartMs()) }
+
+  /** The live window uses the same clock as position. EVENT playlists grow from programme start. */
+  private fun readLiveWindow(window: Timeline.Window, start: Double): LiveWindow? {
     val durationMs = window.durationMs
     if (durationMs == C.TIME_UNSET || durationMs <= 0) return null
     val target = window.liveConfiguration?.targetOffsetMs?.takeIf { it != C.TIME_UNSET && it > 0 }
     val playlist = (player.currentManifest as? HlsManifest)?.mediaPlaylist
     val segment = playlist?.targetDurationUs?.takeIf { it > 0 }?.div(1_000_000.0)
-    return LiveWindow(start = 0.0, edge = durationMs / 1000.0, latency = target?.div(1000.0) ?: 6.0,
+    return LiveWindow(start = start, edge = start + durationMs / 1000.0, latency = target?.div(1000.0) ?: 6.0,
       segment = segment ?: 2.0, source = if (playlist != null) "playlist" else "seekable")
   }
 
@@ -341,7 +384,10 @@ internal class Media3Engine(
     if (tunnels) selector.parameters = selector.buildUponParameters().setTunnelingEnabled(value == 1.0).build()
     player.playbackParameters = PlaybackParameters(value.toFloat())
   }
-  override fun seek(seconds: Double) { player.seekTo((timeline.mediaTime(seconds) * 1000).toLong()) }
+  override fun seek(seconds: Double) {
+    val target = timeshiftStart()?.let { (seconds - it).coerceAtLeast(0.0) } ?: timeline.mediaTime(seconds)
+    player.seekTo((target * 1000).toLong())
+  }
   override fun select(type: String, id: Long?) {
     val trackType = if (type == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
     val params = selector.buildUponParameters().clearOverridesOfType(trackType).setTrackTypeDisabled(trackType, id == null)

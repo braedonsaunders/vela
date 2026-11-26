@@ -107,10 +107,19 @@ test('a seek starts its own wait; only sustained playback forgives earlier resta
   expect(watch.attempt).toBe(1);
   expect(watch.moved).toBe(now);
   expect(stallDeadline(watch)).toBe(now + 20 * S);
-  // Ten seconds of play: healthy again, the next stall gets the first budget.
-  ({ watch, now } = feed(Array.from({ length: 12 }, (_, i) => ({ state: 'playing', position: 900 + i, seekGeneration: 2 })), watch, now));
+  // Sustained play restores the first attempt’s budget.
+  ({ watch, now } = feed(Array.from({ length: 61 }, (_, i) => ({ state: 'playing', position: 900 + i, seekGeneration: 2 })), watch, now));
   expect(watch.attempt).toBe(0);
   expect(stallDeadline(watch)).toBe(now + 10 * S);
+});
+
+test('a clock jump or a long freeze does not earn a fresh restart allowance', () => {
+  const playing = (position: number): StallSample => ({ state: 'playing', position });
+  const { watch, now } = feed(Array.from({ length: 60 }, (_, i) => playing(i)), stallWatch(0, 2));
+  expect(watch.attempt).toBe(2);
+  expect(heardEngine(watch, playing(120), now + S).attempt).toBe(2);
+  expect(heardEngine(watch, playing(60), now + 15 * S).attempt).toBe(2);
+  expect(heardEngine(watch, playing(60), now + S).attempt).toBe(0);
 });
 
 test("an engine's own recovery is not progress: waiting-state flips, reloads that start over and its path switches", () => {

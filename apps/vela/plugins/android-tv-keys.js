@@ -16,10 +16,11 @@ module.exports = function withAndroidTVKeys(config) {
     return id?.startsWith("vela-hero-action:") == true
   }
 
-  override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-    val tv = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) ==
+  private fun isVelaTelevision(): Boolean =
+     (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) ==
       android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    if (tv && (event.action == android.view.KeyEvent.ACTION_DOWN || event.action == android.view.KeyEvent.ACTION_UP)) {
+  override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+    if (isVelaTelevision() && (event.action == android.view.KeyEvent.ACTION_DOWN || event.action == android.view.KeyEvent.ACTION_UP)) {
       val type = when (event.keyCode) {
         android.view.KeyEvent.KEYCODE_DPAD_UP -> "up"
         android.view.KeyEvent.KEYCODE_DPAD_DOWN -> "down"
@@ -70,6 +71,16 @@ module.exports = function withAndroidTVKeys(config) {
   }
 `;
     mod.modResults.contents = mod.modResults.contents.replace('class MainActivity : ReactActivity() {', 'class MainActivity : ReactActivity() {\n' + code);
+    const superCreate = /^(\s*)super\.onCreate\([^)]*\)\s*$/m;
+    if (!superCreate.test(mod.modResults.contents)) throw new Error('MainActivity.onCreate has no super.onCreate call');
+    const openingFocus = `    // A physical keyboard can make Android focus the first button as the tree mounts.
+    if (!isVelaTelevision()) {
+      findViewById<android.view.ViewGroup>(android.R.id.content)?.apply {
+        isFocusableInTouchMode = true
+        requestFocus()
+      }
+    }`;
+    mod.modResults.contents = mod.modResults.contents.replace(superCreate, match => `${match}\n${openingFocus}`);
     return mod;
   });
 };

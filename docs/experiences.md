@@ -53,7 +53,7 @@ Each step reaches parity with today's pages before the code it replaces is delet
 | --- | --- |
 | Watch pages (home, library, title, person, collection, search, live home) | Already skin documents (`routes.*`) over a fixed vocabulary of app data (`vocabulary.ts`), with compiled widgets for the hard parts |
 | Listen (the music app) | Built-in shell and page documents in `packages/protocol/fixtures/experiences/listen` over the blocks in `packages/skin/src/blocks/listen`. |
-| Read | `widgets/media/reader*` (engine, layout, opening) and `app/read/[id].tsx` |
+| Read | Built-in library, book, series and reader documents in `packages/protocol/fixtures/experiences/read` over the blocks in `packages/skin/src/blocks/read`. |
 | Gallery | No dedicated experience; photos open as ordinary library pages |
 | Live | The guide and multiview are native widgets and routes; Sports is moving to plugin documents |
 | Plugin screens and surfaces | Approved, and being built on `plugin-screens/main` |

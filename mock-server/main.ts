@@ -985,6 +985,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (typeof locator !== 'string' || !locator || locator.length > 4096 || typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction < 0 || fraction > 1
         || (label !== undefined && (typeof label !== 'string' || label.length > 200))
         || (observedAt !== undefined && (typeof observedAt !== 'string' || !Number.isFinite(Date.parse(observedAt))))) fail('request', 'invalid_reading_progress', 'locator (1–4096 chars), fraction 0–1, an optional label up to 200 chars and an optional RFC3339 observedAt are required');
+      // Parity captures all reopen at the seeded locator with the original Continue row.
+      if (process.env.VELA_MOCK_READ_FREEZE === '1') return json({ accepted: true } satisfies V.Ack);
       const previous = readingState(viewerId, mediaItem);
       const updatedAt = readingWriteTime(previous.reading?.updatedAt, observedAt, Date.now());
       // An older observed write (a device syncing late) is acknowledged and dropped.

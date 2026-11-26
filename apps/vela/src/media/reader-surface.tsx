@@ -2,12 +2,12 @@
 // The book's pages on iPhone, iPad and Android phones and tablets: the web reader engine
 // (reader-engine.web.ts, foliate-js) running in an Expo DOM component, so every client lays out,
 // paginates and locates a book the same way. The reader's chrome stays in the app
-// (widgets/media/reader.tsx); this page only draws the book. It never sees a server address or a
+// (blocks/read/reader.tsx); this page only draws the book. It never sees a server address or a
 // credential: the app downloads the document and the page asks it for the bytes a slice at a time
 // (reader-engine.ts), then opens them from a blob.
 import { useEffect, useRef, type Ref } from 'react';
 import { useDOMImperativeHandle, type DOMImperativeFactory, type DOMProps } from 'expo/dom';
-import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings } from '@vela/skin/src/widgets/media/reader-engine';
+import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings } from '@vela/skin/src/blocks/read/reader-engine';
 import { createReaderEngine } from './reader-engine.web';
 
 export interface SurfaceSource { format: 'epub' | 'pdf' | 'cbz'; mimeType: string; size: number; fraction?: number }

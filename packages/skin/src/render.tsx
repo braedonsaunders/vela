@@ -58,7 +58,7 @@ import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocab
 import { itemKey, items } from './screen/items';
 import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
-import { RichBlock } from './blocks/listen/rich';
+import { RichBlock } from './blocks/rich';
 import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
@@ -1258,12 +1258,12 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
           if (heroButton && buttonRef.current) buttonCarry.focused(buttonRef.current, true);
-          if (inHero || (heroControl && visible)) holdHero(host.setFlag, true, Platform.isTV);
+          if ((Platform.isTV || web) && (inHero || (heroControl && visible))) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => { set('focus', false); if (heroButton && buttonRef.current) buttonCarry.focused(buttonRef.current, false); if (inHero || heroControl) holdHero(host.setFlag, false, Platform.isTV); }}
+        onBlur={() => { set('focus', false); if (heroButton && buttonRef.current) buttonCarry.focused(buttonRef.current, false); if ((Platform.isTV || web) && (inHero || heroControl)) holdHero(host.setFlag, false, Platform.isTV); }}
         onPointerDown={event => {
           set('focus', false);
           if (web && node.directionalFocus === false) (event as unknown as { preventDefault?(): void }).preventDefault?.();

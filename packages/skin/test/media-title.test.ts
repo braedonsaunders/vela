@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveDocument, type RNode } from '../src/resolve';
-import { mediaTitleTree, TITLE_SCROLL_ID } from '../src/resolve/media-title';
+import { inlineMediaTitleCloseTargets, mediaTitleTree, TITLE_SCROLL_ID } from '../src/resolve/media-title';
 import { cinematicDoc } from '../../protocol/fixtures/skins/cinematic';
 import type { Node, SkinDocument } from '../../protocol/skin';
 
@@ -59,5 +59,18 @@ test('every built-in document opens media titles in its own title page, with its
     const frames = (tree: RNode) => find(tree, node => testId(node) === 'detail-frame').map(node => node.motion?.keyframes ?? '');
     expect(frames(media!), name).toEqual(frames(resolved.routes.title!));
     expect(find(media!, node => node.kind === 'widget' && node.widget === 'titleActions').length, name).toBe(0);
+  }
+});
+
+test('the inline media slot preserves modal framing and close controls for the active skin', () => {
+  for (const [name, doc] of documents) for (const width of [390, 1440]) {
+    const { mediaTitle, mediaTitleSlot } = resolveDocument(doc, width);
+    expect(mediaTitleSlot, name).toBeDefined();
+    const slotCount = (tree: RNode) => find(tree, node => node.kind === 'slot' && node.slot === 'children').length;
+    expect(slotCount(mediaTitleSlot!), name).toBe(slotCount(mediaTitle!) + 1);
+    expect(find(mediaTitleSlot!, node => node.kind === 'widget' && node.widget === 'mediaPage')).toEqual([]);
+    const closeControls = (tree: RNode) => find(tree, node => ['detail-close', 'detail-back'].includes(testId(node)));
+    expect(closeControls(mediaTitleSlot!).map(testId)).toEqual(closeControls(mediaTitle!).map(testId));
+    expect(inlineMediaTitleCloseTargets(mediaTitleSlot!).length, name).toBeGreaterThan(0);
   }
 });

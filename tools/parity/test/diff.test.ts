@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateSync } from 'node:zlib';
 import { decodePng, encodePng, type Image } from '../png';
-import { diffImages, findShift, groupRegions, inMask, movingMask, verdict } from '../diff';
+import { diffImages, findShift, groupRegions, inMask, maskCoverage, movingMask, needsMaskReview, verdict } from '../diff';
+import { captureHasContent, readerHasContent, settledFrames } from '../settle';
 
 /** A w×h image of one colour, with optional filled rectangles drawn on it. */
 function canvas(width: number, height: number, ground: number[], rects: { x: number; y: number; w: number; h: number; c: number[] }[] = []): Image {
@@ -117,6 +118,17 @@ describe('diffImages', () => {
     expect(result.image.data[2]!).toBeGreaterThan(result.image.data[0]!);
   });
 
+  test('mask review counts overlap only once and starts above five percent', () => {
+    const a = canvas(100, 100, BLACK);
+    const mask = [{ x: 0, y: 0, width: 5, height: 100 }, { x: 2, y: 0, width: 3, height: 100 }];
+    const covered = diffImages(a, a, { mask });
+    expect(maskCoverage(covered)).toBeCloseTo(5, 6);
+    expect(needsMaskReview(covered)).toBe(false);
+    const larger = diffImages(a, a, { mask: [...mask, { x: 5, y: 5, width: 1, height: 1 }] });
+    expect(maskCoverage(larger)).toBeCloseTo(5.01, 6);
+    expect(needsMaskReview(larger)).toBe(true);
+  });
+
   test('a size mismatch counts the uncovered pixels as differing', () => {
     const result = diffImages(canvas(10, 10, BLACK), canvas(10, 12, BLACK));
     expect(result.height).toBe(12);
@@ -129,6 +141,22 @@ describe('diffImages', () => {
     const regions = diffImages(legacy, document).regions.map(({ x, y, width, height, pixels }) => ({ x, y, width, height, pixels }));
     expect(regions).toEqual([{ x: 5, y: 5, width: 3, height: 3, pixels: 9 }, { x: 70, y: 70, width: 4, height: 2, pixels: 8 }]);
   });
+});
+
+test('reader settling skips a stable opening splash and verifies a third matching frame', async () => {
+  const sleeping = canvas(100, 100, BLACK);
+  const splash = canvas(100, 100, WHITE, [{ x: 42, y: 49, w: 16, h: 2, c: BLACK }]);
+  const firstPage = canvas(100, 100, WHITE, [{ x: 10, y: 20, w: 60, h: 12, c: BLACK }]);
+  const nextPage = canvas(100, 100, WHITE, [{ x: 12, y: 24, w: 60, h: 12, c: BLACK }]);
+  expect(captureHasContent(sleeping)).toBe(false);
+  expect(captureHasContent(firstPage)).toBe(true);
+  expect(readerHasContent(splash)).toBe(false);
+  expect(readerHasContent(firstPage)).toBe(true);
+  const frames = [sleeping, sleeping, sleeping, splash, splash, splash, firstPage, firstPage, nextPage, nextPage, nextPage].map(encodePng);
+  const capture = await settledFrames(() => frames.shift()!, async () => {}, { reader: true, attempts: frames.length });
+  expect(frames).toHaveLength(0);
+  expect(capture.primary).toEqual(encodePng(nextPage));
+  expect(capture.confirmed).toEqual(capture.primary);
 });
 
 describe('regions and shifts', () => {

@@ -134,6 +134,8 @@ export interface LiveSnapshot {
   canCatchUp: boolean;
 }
 export interface Snapshot {
+  /** The platform joined live because the saved recovery position left the loaded window. */
+  timeshiftRecoveryEvicted?: boolean | null;
   sessionId: string | null;
   sourceGeneration: number;
   seekGeneration: number;

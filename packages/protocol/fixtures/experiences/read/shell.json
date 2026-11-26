@@ -1,0 +1,75 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "read",
+ "screen": "read",
+ "page": "shell",
+ "version": "1",
+ "title": "{s:media.ui.books}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {},
+ "tree": {
+  "type": "slot",
+  "slot": "children",
+  "style": {
+   "flex": "1",
+   "min-height": "0px"
+  },
+  "inner": {
+   "flex": "1"
+  }
+ },
+ "forms": {
+  "small": {
+   "type": "slot",
+   "slot": "children",
+   "style": {
+    "flex": "1",
+    "min-height": "0px"
+   },
+   "inner": {
+    "flex": "1"
+   }
+  },
+  "wide": {
+   "type": "slot",
+   "slot": "children",
+   "style": {
+    "flex": "1",
+    "min-height": "0px"
+   },
+   "inner": {
+    "flex": "1"
+   }
+  },
+  "fold": {
+   "type": "slot",
+   "slot": "children",
+   "style": {
+    "flex": "1",
+    "min-height": "0px"
+   },
+   "inner": {
+    "flex": "1"
+   }
+  },
+  "tv": {
+   "type": "slot",
+   "slot": "children",
+   "style": {
+    "flex": "1",
+    "min-height": "0px"
+   },
+   "inner": {
+    "flex": "1"
+   }
+  }
+ }
+}
