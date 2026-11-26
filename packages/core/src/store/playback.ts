@@ -49,6 +49,7 @@ function evictedWindowStart(error: unknown): number | null {
 }
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
+export type OriginalLostResult = 'reopened' | 'version_unavailable' | 'gone';
 
 export interface PlaybackState {
   phase: PlaybackPhase;
@@ -712,6 +713,35 @@ export class Playback {
     } catch {
       // The caller starts over; the server's words are not the viewer's.
       return false;
+    }
+  }
+
+  /** A direct original was conclusively lost or truncated. Read the current plan before an end
+   * observation or a replacement session can mark the title watched. A newer source generation
+   * reopens in the existing session; an explicit version remains pinned and lets the chrome offer
+   * another version at the held position. */
+  async originalLost(sessionId: string, positionSeconds: number, failedSourceGeneration?: number): Promise<OriginalLostResult> {
+    const current = this.box.get().playback;
+    const before = current.plan;
+    if (!this.run || !before || current.sessionId !== sessionId || current.phase !== 'playing') return 'gone';
+    try {
+      const connection = await this.session.ready();
+      const snapshot = await connection.adapter.sessionSnapshot(sessionId);
+      if (snapshot.plan.sessionId !== sessionId || this.box.get().playback.sessionId !== sessionId) return 'gone';
+      const plan = connection.plan(snapshot.plan);
+      if (plan.sourceFailure === 'version_unavailable') {
+        this.cursor = Math.max(0, positionSeconds);
+        this.lastPosition = { sessionId, seconds: this.cursor, ended: false };
+        this.patch({ plan, phase: 'playing', versions: sessionVersionsOf(plan) ?? current.versions });
+        return 'version_unavailable';
+      }
+      if (plan.state === 'ended' || plan.sourceGeneration <= (failedSourceGeneration ?? before.sourceGeneration)) return 'gone';
+      this.cursor = plan.positionSeconds;
+      this.lastPosition = { sessionId, seconds: plan.positionSeconds, ended: false };
+      this.patch({ plan, phase: 'playing', error: '', errorCode: '', errorClass: '' });
+      return 'reopened';
+    } catch {
+      return 'gone';
     }
   }
 

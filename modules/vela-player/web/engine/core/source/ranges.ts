@@ -2,6 +2,7 @@ import { DeliveryMeter, mediaCapWait } from './delivery';
 import { BandwidthEstimator } from '../../abr';
 import { abortable, delay } from '../async';
 import type { ByteReader } from '../types';
+import { isOriginalLostError, originalLostError, originalLostResponse } from '../../original-lost';
 
 const PAGE = 256 * 1024;
 const MAX_READ = 16 * 1024 * 1024;
@@ -244,7 +245,7 @@ export class RangeReader implements ByteReader {
     void this.loadForward(run)
       .catch((error) => {
         this.rejectForward(run, error);
-        if (error instanceof RangeFailure && !run.signal.aborted) this.lifetime.abort(error);
+        if ((error instanceof RangeFailure || isOriginalLostError(error)) && !run.signal.aborted) this.lifetime.abort(error);
       })
       .finally(() => {
         this.forwardRuns.delete(run);
@@ -296,7 +297,7 @@ export class RangeReader implements ByteReader {
       void this.loadForward(tail)
         .catch((error) => {
           this.rejectForward(tail, error);
-          if (error instanceof RangeFailure && !tail.signal.aborted) this.lifetime.abort(error);
+          if ((error instanceof RangeFailure || isOriginalLostError(error)) && !tail.signal.aborted) this.lifetime.abort(error);
         })
         .finally(() => {
           this.forwardRuns.delete(tail);
@@ -690,7 +691,7 @@ export class RangeReader implements ByteReader {
           );
         } catch (error) {
           signal.throwIfAborted();
-          if (error instanceof RangeFailure || attempt >= 2) throw error;
+          if (error instanceof RangeFailure || isOriginalLostError(error) || attempt >= 2) throw error;
           await delay(200 * 2 ** attempt, signal);
         }
       }
@@ -719,7 +720,7 @@ export class RangeReader implements ByteReader {
       }
       run.signal.throwIfAborted();
       if (failure instanceof RangePreempt) continue;
-      if (failure instanceof RangeFailure || attempts >= 2) throw failure;
+      if (failure instanceof RangeFailure || isOriginalLostError(failure) || attempts >= 2) throw failure;
       await delay(200 * 2 ** attempts++, run.signal);
     }
   }
@@ -762,7 +763,7 @@ export class RangeReader implements ByteReader {
           disarm();
         }
         if (chunk.done) {
-          if (run.next !== run.end || filled) throw new TypeError('Original forward range was truncated');
+          if (run.next !== run.end || filled) throw originalLostError('truncated');
           complete = true;
           break;
         }
@@ -830,6 +831,7 @@ export class RangeReader implements ByteReader {
       }),
       firstByte = performance.now();
     try {
+      if (originalLostResponse(response)) throw originalLostError('refused');
       if (response.status !== 206) {
         if (response.status === 408 || response.status === 429 || response.status >= 500)
           throw new TypeError(`Original range HTTP ${response.status}`);
@@ -861,7 +863,7 @@ export class RangeReader implements ByteReader {
       return { response, at, firstByte, total, expected: last - first + 1 };
     } catch (error) {
       await response.body?.cancel().catch(() => {});
-      if (error instanceof RangeFailure && !signal.aborted) this.lifetime.abort(error);
+      if ((error instanceof RangeFailure || isOriginalLostError(error)) && !signal.aborted) this.lifetime.abort(error);
       throw error;
     }
   }
@@ -895,7 +897,7 @@ export class RangeReader implements ByteReader {
         if (written !== expected) await body.cancel().catch(() => {});
         body.releaseLock();
       }
-      if (written !== expected) throw new TypeError('Original range body was truncated');
+      if (written !== expected) throw originalLostError('truncated');
       this.notePage(scope, index, total);
       this.bandwidth.sample(
         written,

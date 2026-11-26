@@ -60,6 +60,8 @@ export interface PlayerChromeState {
   pendingQualityId?: string;
   pendingVersionId?: string;
   versionMessage: string;
+  /** Increments when an explicitly pinned original disappears; the chrome opens version choices. */
+  offerVersions?: number;
   send(command: CommandInput): void;
   switchVersion(versionId: string): void;
   /** The quality menu opened: re-read the session's versions (the plan prop shows the result). */

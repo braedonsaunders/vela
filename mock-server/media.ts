@@ -38,6 +38,9 @@ const originalTypes: Record<string, string> = { mkv: 'video/x-matroska', webm: '
 export const originalFixtureName = /^[\w.()-]+\.(mkv|webm|mp4|mov)$/;
 export interface Faults {
   rangeFailSeconds: number; bandwidthBps: number; failEvery: number; truncateEvery: number; stallMs: number; fallbackUnavailable: boolean; capacityExhausted: boolean;
+  originalLost409: number;
+  originalLostTruncate: number;
+  originalLostVersionUnavailable: boolean;
   /** Session refresh (POST /auth/refresh) fails for this many seconds from when it is set (main.ts). */
   refreshFailSeconds: number;
   /** 500 answers like a server whose database is busy (no retry offered); 503 offers a retry after 2 s. */
@@ -65,11 +68,11 @@ export interface Faults {
    */
   startStoppedSession: number;
 }
-export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, bootstrapStaleReads: 0, startStoppedSession: 0 };
+export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, bootstrapStaleReads: 0, startStoppedSession: 0 };
 let segmentCount = 0;
 let rangeFailureUntil = 0;
 let rangeFailureSetting = 0;
-export async function serveMedia(req: Request, resource: string): Promise<Response> {
+export async function serveMedia(req: Request, resource: string, truncateOriginal = false): Promise<Response> {
   if (faults.rangeFailSeconds !== rangeFailureSetting) {
     rangeFailureSetting = faults.rangeFailSeconds;
     rangeFailureUntil = Date.now() + rangeFailureSetting * 1000;
@@ -105,7 +108,7 @@ export async function serveMedia(req: Request, resource: string): Promise<Respon
   const length = end - start + 1;
   headers.set('Content-Length', String(length));
   if (req.method === 'HEAD') return new Response(null, { status, headers });
-  const truncate = segment && f.truncateEvery > 0 && count % f.truncateEvery === 0;
+  const truncate = truncateOriginal || (segment && f.truncateEvery > 0 && count % f.truncateEvery === 0);
   if (!f.bandwidthBps && !f.stallMs && !truncate) return new Response(file.slice(start, end + 1), { status, headers });
   const stop = truncate ? start + Math.floor(length / 2) : end + 1;
   let pos = start, first = true, cancelled = false;
@@ -114,7 +117,12 @@ export async function serveMedia(req: Request, resource: string): Promise<Respon
     async pull(controller) {
       if (first) { first = false; if (f.stallMs) await wait(Math.min(f.stallMs, 60000)); }
       if (cancelled || req.signal.aborted) { if (!cancelled) controller.close(); return; }
-      if (pos >= stop) { if (truncate) controller.error(new Error('Injected truncated segment')); else controller.close(); return; }
+      if (pos >= stop) {
+        if (truncateOriginal) controller.close();
+        else if (truncate) controller.error(new Error('Injected truncated segment'));
+        else controller.close();
+        return;
+      }
       const size = f.bandwidthBps ? Math.max(1, Math.min(16384, Math.floor(f.bandwidthBps / 8 / 10))) : 16384;
       const next = Math.min(stop, pos + size), bytes = new Uint8Array(await file.slice(pos, next).arrayBuffer());
       if (f.bandwidthBps) await wait(bytes.length * 8000 / f.bandwidthBps);

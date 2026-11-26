@@ -67,9 +67,11 @@ internal class PlayerReport(
   }
 
   /** Asks for a fresh plan: the grant behind the media URL has expired or was revoked. */
-  fun sessionRefresh() {
+  fun sessionRefresh(originalLost: Boolean = false, positionSeconds: Double? = null) {
     val plan = plan ?: return
-    emitSessionRefresh(mapOf("sessionId" to plan.sessionId))
+    emitSessionRefresh(mapOf("sessionId" to plan.sessionId) +
+      if (originalLost) mapOf("reason" to "original_lost", "positionSeconds" to (positionSeconds ?: plan.positionSeconds),
+        "sourceGeneration" to plan.sourceGeneration) else emptyMap())
   }
 
   /** A preview plays: snapshots and errors without a session, and no observations. */

@@ -27,7 +27,9 @@ export function createViewEvents(props: () => VelaPlayerProps, engine: () => Pla
       return;
     }
     if (event.type === 'session-refresh') {
-      current.onSessionRefresh?.({ sessionId: event.sessionId });
+      current.onSessionRefresh?.({ sessionId: event.sessionId, ...(event.reason ? { reason: event.reason } : {}),
+        ...(event.positionSeconds !== undefined ? { positionSeconds: event.positionSeconds } : {}),
+        ...(event.sourceGeneration !== undefined ? { sourceGeneration: event.sourceGeneration } : {}) });
       return;
     }
     const snapshot = event.snapshot.failure
