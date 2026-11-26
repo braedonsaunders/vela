@@ -173,6 +173,8 @@ export class Playback {
   private cursorFollowsSeek = false;
   private provisional = new Set<WaitingSeek>();
   private beforeProvisional: CursorState | undefined;
+  /** The source generation of the version the viewer last took: a seek sent before it no longer moves that position. */
+  private chosenSource = 0;
   /** The source generation the cursor's seek state belongs to: a newer source ends it. */
   private cursorSource = 0;
   /** The session and version a `switchVersion` call still waiting for its reply asked for, until a plan on that
@@ -519,6 +521,7 @@ export class Playback {
     this.cursorSource = plan.sourceGeneration;
     this.cursorFollowsSeek = false;
     this.provisional.clear();
+    this.chosenSource = 0;
     this.switching = undefined;
     if (intent.liveResume && plan.live?.timeshift) {
       this.liveTransportIntent = { sessionId: plan.sessionId, atLive: evicted || intent.liveResume.kind === 'edge' };
@@ -990,7 +993,14 @@ export class Playback {
       const connection = await this.session.ready();
       const plan = await this.send(connection.adapter, sessionId, command, origin);
       answered(plan);
-      if (seek && this.provisional.has(seek)) this.settle(seek, plan.positionSeconds);
+      if (seek && this.provisional.has(seek)) this.settle(seek, plan.positionSeconds, plan.seekGeneration);
+      // A seek no published plan was matched to (the server moved its target) is accepted all the same: a refusal
+      // of a later match on its session, sent since the last version the viewer took, goes back to it, unless the
+      // place it would go back to came from its own or a newer seek generation (a report there is newer).
+      else if (seek && this.provisional.size && [...this.provisional][0]!.sessionId === seek.sessionId &&
+        seek.sourceGeneration >= this.chosenSource && plan.seekGeneration > fallbackSeek(this.beforeProvisional)) {
+        this.beforeProvisional = { cursor: plan.positionSeconds, cursorSeek: this.cursorSeek, followsSeek: true, seekGeneration: plan.seekGeneration };
+      }
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
         // A late reply behind the plan already shown on its generations (a newer seek's, a version switch's)
         // is not published and moves nothing. One behind it only on revision is not published either, but
@@ -1148,7 +1158,10 @@ export class Playback {
       this.cursor = plan.positionSeconds;
       this.cursorSeek = Math.max(this.cursorSeek, plan.seekGeneration);
     }
-    if (chosen) this.provisional.clear();
+    if (chosen) {
+      this.provisional.clear();
+      this.chosenSource = plan.sourceGeneration;
+    }
     this.cursorFollowsSeek = taken;
     return before;
   }
@@ -1167,6 +1180,7 @@ export class Playback {
         Math.abs(seek.seconds - plan.positionSeconds) < 0.001);
       if (!seek) return;
       this.seeking.delete(seek);
+      seek.matchedSeek = plan.seekGeneration;
       if (!this.provisional.size) this.beforeProvisional = before ?? { cursor: this.cursor, cursorSeek: this.cursorSeek, followsSeek: this.cursorFollowsSeek };
       this.provisional.add(seek);
     } else {
@@ -1179,14 +1193,16 @@ export class Playback {
 
   /** An accepted seek settles its own match and the earlier ones it overtook; later matches stay provisional,
    * and a refusal of them comes back to where the server accepted it (`seconds`: its reply's position, or its
-   * target when the reply was lost). */
-  private settle(seek: WaitingSeek, seconds = seek.seconds): void {
+   * target when the reply was lost), unless that place already came from the same or a newer seek generation. */
+  private settle(seek: WaitingSeek, seconds = seek.seconds, seekGeneration = seek.matchedSeek ?? seek.seekGeneration): void {
     for (const match of this.provisional) {
       this.provisional.delete(match);
       if (match === seek) break;
     }
-    this.beforeProvisional = { cursor: seconds, cursorSeek: this.cursorSeek, followsSeek: true };
-    this.cursor = [...this.provisional].at(-1)?.seconds ?? seconds;
+    if (seekGeneration > fallbackSeek(this.beforeProvisional)) {
+      this.beforeProvisional = { cursor: seconds, cursorSeek: this.cursorSeek, followsSeek: true, seekGeneration };
+    }
+    this.cursor = [...this.provisional].at(-1)?.seconds ?? (this.beforeProvisional?.cursor ?? seconds);
   }
 
   private offersPath(sessionId: string, pathId: string): boolean {
@@ -1456,6 +1472,7 @@ export class Playback {
     this.cursorSource = plan.sourceGeneration;
     this.cursorFollowsSeek = false;
     this.provisional.clear();
+    this.chosenSource = 0;
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     void this.session.ready().then(connection => { if (this.run === run) this.followSession(run, connection, plan.sessionId); }, () => undefined);
@@ -1618,6 +1635,7 @@ export class Playback {
     this.cursorSource = 0;
     this.cursorFollowsSeek = false;
     this.provisional.clear();
+    this.chosenSource = 0;
     this.switching = undefined;
     this.liveCursor = undefined;
     this.liveTransportIntent = undefined;
@@ -1798,10 +1816,12 @@ export class Playback {
 }
 
 /** A seek sent and not yet answered, at the seek generation it was sent against. */
-type WaitingSeek = { sessionId: string; seconds: number; sourceGeneration: number; seekGeneration: number };
+type WaitingSeek = { sessionId: string; seconds: number; sourceGeneration: number; seekGeneration: number; matchedSeek?: number };
 
-/** The cursor and the seek state it moved with, kept to put back. */
-type CursorState = { cursor: number; cursorSeek: number; followsSeek: boolean };
+/** The cursor and the seek state it moved with, kept to put back, and the seek generation of what supplied it. */
+type CursorState = { cursor: number; cursorSeek: number; followsSeek: boolean; seekGeneration?: number };
+
+const fallbackSeek = (state: CursorState | undefined) => state?.seekGeneration ?? state?.cursorSeek ?? 0;
 
 /** A plan older than the one shown: behind on its source generation, then its seek generation, then (unless
  * `revision` is false) its revision when both carry one. */

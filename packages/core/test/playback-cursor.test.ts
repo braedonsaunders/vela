@@ -652,10 +652,10 @@ test('a restart retried under the same key after its reply is lost sends the sam
 // Each seek is held until its reply is released with the plan the server answers with, or until the server refuses it.
 function answerSeeks(adapter: { command: (id: string, c: any) => Promise<PlaybackPlan> }) {
   const send = adapter.command;
-  const waiting: { accept: (plan: PlaybackPlan) => void; refuse: () => void }[] = [];
+  const waiting: { accept: (plan: PlaybackPlan) => void; refuse: () => void; lose: () => void }[] = [];
   const refusal = new VelaError({ class: 'conflict', code: 'seek_refused', message: 'refused', retry: { allowed: false } }, 409);
   adapter.command = (id, c) => c.kind === 'seek'
-    ? new Promise((accept, reject) => { waiting.push({ accept, refuse: () => reject(refusal) }); }) : send(id, c);
+    ? new Promise((accept, reject) => { waiting.push({ accept, refuse: () => reject(refusal), lose: () => reject(new TypeError('Failed to fetch')) }); }) : send(id, c);
   return { waiting, restore: () => { adapter.command = send; } };
 }
 
@@ -858,6 +858,143 @@ test('an accepted seek moved by the server is where a later matched seek, refuse
     waiting[1]!.refuse(); await second;
     restore();
     expect(await restart()).toBe(91);
+  }, 1800);
+});
+
+// The server answers the seek to 90 at 91 s, so no published plan is matched to it; a track change at 120 s
+// then matches the second seek, which the server refuses.
+for (const [order, expected] of [['released after the track change', 91], ['released before the second seek', 91], ['lost', 1815]] as const) {
+  test(`an accepted seek the server moved, its plan unmatched and its reply ${order}, is where a later matched seek, refused, goes back to`, async () => {
+    await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+      const { waiting, restore } = answerSeeks(adapter);
+      const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+      playback.snapshot(at(sessionId(), 'playing', 1815));
+      const first = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+      await flush();
+      // The seek's plan advances the seek generation only, as Ether does.
+      await publish(2, 91);
+      const reply = { ...plan()! };
+      const answer = () => order === 'lost' ? waiting[0]!.lose() : waiting[0]!.accept(reply);
+      if (order === 'released before the second seek') { answer(); await first; }
+      const second = playback.command(sessionId(), { kind: 'seek', positionSeconds: 120, sourceGeneration: 1, seekGeneration: 2, idempotencyKey: 'seek-120' });
+      await flush();
+      // A track change advances both generations.
+      await publish(3, 120, { sourceGeneration: 2 });
+      if (order !== 'released before the second seek') { answer(); await first; }
+      waiting[1]!.refuse(); await second;
+      restore();
+      expect(await restart()).toBe(expected);
+    }, 1800);
+  });
+}
+
+for (const state of ['playing', 'paused'] as const) {
+  test(`a ${state} report after the plan of a seek the server moved is newer than that seek's late reply when a later matched seek is refused`, async () => {
+    await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+      const { waiting, restore } = answerSeeks(adapter);
+      const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+      playback.snapshot(at(sessionId(), 'playing', 1815));
+      const first = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+      await flush();
+      await publish(2, 91);
+      const reply = { ...plan()! };
+      // The player presents 95 s at the seek's generations before the reply arrives.
+      playback.snapshot({ ...at(sessionId(), state, 95), seekGeneration: 2 });
+      const second = playback.command(sessionId(), { kind: 'seek', positionSeconds: 120, sourceGeneration: 1, seekGeneration: 2, idempotencyKey: 'seek-120' });
+      await flush();
+      await publish(3, 120, { sourceGeneration: 2 });
+      waiting[0]!.accept(reply); await first;
+      waiting[1]!.refuse(); await second;
+      restore();
+      expect(await restart()).toBe(95);
+    }, 1800);
+  });
+}
+
+// Seeks to 60, 90 and 120: the first answered at 60 (its plan matched) or at 61, the second at 91, the third matched
+// by a track change and refused.
+for (const first of [60, 61]) {
+  for (const order of [[0, 1], [1, 0]]) {
+    test(`of two accepted seeks, the newer is where a later matched seek, refused, goes back to (first at ${first}, replies ${order.join(' then ')})`, async () => {
+      await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+        const { waiting, restore } = answerSeeks(adapter);
+        const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+        playback.snapshot(at(sessionId(), 'playing', 1815));
+        const seeks = [], replies: PlaybackPlan[] = [];
+        for (const [i, [target, published]] of ([[60, first], [90, 91]] as const).entries()) {
+          seeks.push(playback.command(sessionId(), { kind: 'seek', positionSeconds: target, sourceGeneration: 1, seekGeneration: i + 1, idempotencyKey: `seek-${target}` }));
+          await flush();
+          await publish(i + 2, published);
+          replies.push({ ...plan()! });
+        }
+        const last = playback.command(sessionId(), { kind: 'seek', positionSeconds: 120, sourceGeneration: 1, seekGeneration: 3, idempotencyKey: 'seek-120' });
+        await flush();
+        await publish(4, 120, { sourceGeneration: 2 });
+        for (const i of order) { waiting[i]!.accept(replies[i]!); await seeks[i]; }
+        waiting[2]!.refuse(); await last;
+        restore();
+        expect(await restart()).toBe(91);
+      }, 1800);
+    });
+  }
+}
+
+for (const between of ['another title is opened', 'the session is replaced by recovery']) {
+  test(`a late reply of a seek the server moved does not move the restart position once ${between}`, async () => {
+    await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+      const { waiting, restore } = answerSeeks(adapter);
+      const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+      playback.snapshot(at(sessionId(), 'playing', 1815));
+      const first = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+      await flush();
+      await publish(2, 91);
+      const reply = { ...plan()! };
+      const old = sessionId();
+      let expected = 1815;
+      // The next session's first snapshot is its own start plan.
+      const snapshots = adapter as unknown as { sessionSnapshot: (id: string) => Promise<{ plan: PlaybackPlan }> };
+      snapshots.sessionSnapshot = async id => ({ plan: { ...reply, sessionId: id, positionSeconds: between === 'another title is opened' ? 1800 : 1815, sourceGeneration: 1, seekGeneration: 1 } });
+      if (between === 'another title is opened') {
+        await playback.start({ kind: 'title', id: 'other', positionSeconds: 1800 });
+        await flush();
+        playback.snapshot(at(sessionId(), 'playing', 1802));
+        expected = 1802;
+      } else expect(await restart()).toBe(1815);
+      expect(sessionId()).not.toBe(old);
+      const second = playback.command(sessionId(), { kind: 'seek', positionSeconds: 120, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-120' });
+      await flush();
+      await publish(2, 120, { sourceGeneration: 2 });
+      waiting[0]!.accept(reply); await first;
+      waiting[1]!.refuse(); await second;
+      restore();
+      expect(await restart()).toBe(expected);
+    }, 1800);
+  });
+}
+
+test('a late reply of a seek the server moved does not move the restart position once the viewer took another version', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const { waiting, restore } = answerSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const first = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    await publish(2, 91);
+    const reply = { ...plan()! };
+    await publish(3, 1815, { sourceGeneration: 2 });
+    const versions = adapter as unknown as Record<string, unknown>;
+    versions.titleVersions = async () => ({ versions: [] });
+    versions.clearVersionChoice = async () => {};
+    versions.switchVersion = async (id: string) => ({ ...plan()!, sessionId: id, positionSeconds: 1815, selectedVersionId: 'b', sourceGeneration: 3, seekGeneration: 4 });
+    await playback.switchVersion(sessionId(), 'b', 1815);
+    const second = playback.command(sessionId(), { kind: 'seek', positionSeconds: 120, sourceGeneration: 3, seekGeneration: 4, idempotencyKey: 'seek-120' });
+    await flush();
+    await publish(5, 120, { sourceGeneration: 4, selectedVersionId: 'b' });
+    waiting[0]!.accept(reply); await first;
+    waiting[1]!.refuse(); await second;
+    restore();
+    expect(await restart()).toBe(1815);
+    expect(requests.at(-1).versionId).toBe('b');
   }, 1800);
 });
 
