@@ -82,3 +82,36 @@ test('explicit zero overrides server resume without publishing watch state befor
   expect(watched).toBe(0);
   await playback.stop();
 });
+
+test('an in-flight progress report and stop stay with the originating server across a switch', async () => {
+  const calls: string[] = [];
+  const progress = Promise.withResolvers<{ accepted: boolean }>();
+  const plan = {
+    sessionId: 'shared-id', sourceGeneration: 0, seekGeneration: 0, state: 'playing', titleId: 't',
+    paths: [], audioTracks: [], subtitleTracks: [],
+  } as unknown as PlaybackPlan;
+  const adapter = (name: string) => ({
+    startPlayback: async () => plan,
+    sessionSnapshot: async () => ({ plan }),
+    reportObservation: () => { calls.push(`${name}:progress`); return progress.promise; },
+    command: async () => { calls.push(`${name}:stop`); return { ...plan, state: 'ended' }; },
+    detail: async () => { calls.push(`${name}:detail`); return { title: { watch: { positionSeconds: 30 } } }; },
+  });
+  let active = adapter('origin');
+  const session = {
+    epoch: 0, onReset() {},
+    ready: async () => ({ adapter: active, plan: (value: PlaybackPlan) => value }),
+    negotiate: async () => {}, client: {},
+  };
+  const box = new StateBox({ playback: initialPlayback } as VelaState);
+  const playback = new Playback(box, session as unknown as Session,
+    () => calls.push('publish'), () => calls.push('reconcile'));
+  await playback.start({ kind: 'title', id: 't' });
+  const reporting = playback.observe(plan.sessionId, { positionSeconds: 30, state: 'playing' } as never);
+  const stopping = playback.stop();
+  active = adapter('new');
+  session.epoch++;
+  progress.resolve({ accepted: true });
+  await Promise.all([reporting, stopping]);
+  expect(calls).toEqual(['origin:progress', 'origin:stop']);
+});
