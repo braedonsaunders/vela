@@ -57,6 +57,7 @@ export interface PlayerChromeState {
   failure: Failure | null;
   /** The last command the engine or the server refused, in words ("" when none). */
   actionError: string;
+  liveRecoveryNotice?: string;
   /** Only the quality command currently awaiting acknowledgement. */
   pendingQualityId?: string;
   pendingVersionId?: string;
