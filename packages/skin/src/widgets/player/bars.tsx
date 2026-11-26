@@ -23,6 +23,7 @@ import { Volume } from './volume';
 import type { Focusable } from '../../escape';
 import type { PlayerIconName } from './icons';
 import { useMultiview } from '../multiview/context';
+import { PLAYER_CHROME_TRANSITION_MS } from './idle';
 
 /** TV: focus to a control once the one it replaces has left the tree. */
 function focusLater(target: { current: Focusable | null }): void {
@@ -47,7 +48,7 @@ function shownStyle(look: PlayerLook, visible: boolean, from: number): ViewStyle
     opacity: visible ? 1 : 0,
     transform: [{ translateY: visible || look.still || look.tv ? 0 : from }],
     transitionProperty: ['opacity', 'transform'],
-    transitionDuration: look.tv || look.still ? 0 : 420,
+    transitionDuration: look.tv || look.still ? 0 : PLAYER_CHROME_TRANSITION_MS,
     // Native Reanimated takes a bezier only as cubicBezier(): easing() converts the CSS text.
     transitionTimingFunction: easing('cubic-bezier(0.16, 1, 0.3, 1)'),
   } as ViewStyle;

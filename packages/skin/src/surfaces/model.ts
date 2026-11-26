@@ -83,7 +83,7 @@ export interface OverlayBox {
 
 export interface OverlayFrame {
   width: number; height: number;
-  /** A phone (under 640 px): tighter edges, and corners may take more of the narrow width. */
+  /** A phone has tighter insets and lets a lone corner use the available width. */
   small: boolean;
   /** The player's design size: (px) => points (look.size). */
   size(px: number): number;
@@ -96,13 +96,13 @@ export interface OverlayFrame {
 
 /** Give corner documents room for a compact row or a wrapped layout on short screens. */
 export function overlayBox(anchor: Anchor, frame: OverlayFrame): OverlayBox {
-  const edge = frame.small ? 18 : frame.size(30);
-  const gutter = frame.small ? 16 : frame.size(40);
+  const edge = frame.small ? 12 : frame.size(30);
+  const gutter = frame.small ? 12 : frame.size(40);
   if (anchor === 'bottom') return { left: 0, right: 0, bottom: 0, maxWidth: frame.width, maxHeight: Math.round(frame.height * 0.12), shift: 0 };
   // Under the chrome's top bar while it stands, back to the edge as it hides (as the score bug moved).
   const shift = frame.chrome ? Math.max(0, frame.top - edge) : 0;
   const available = Math.max(0, frame.width - gutter * 2);
-  const preferred = frame.small ? Math.round(frame.width * 0.8) : Math.max(frame.size(440), Math.round(frame.width * 0.34));
+  const preferred = frame.small ? available : Math.max(frame.size(440), Math.round(frame.width * 0.34));
   const maxWidth = Math.floor(Math.min(preferred, frame.opposingCorners ? Math.max(0, (available - gutter) / 2) : available));
   const maxHeight = Math.max(0, Math.min(frame.height - edge - shift, Math.max(frame.size(120), Math.round(frame.height * 0.22))));
   return anchor === 'topLeft' ? { left: gutter, top: edge, maxWidth, maxHeight, shift } : { right: gutter, top: edge, maxWidth, maxHeight, shift };

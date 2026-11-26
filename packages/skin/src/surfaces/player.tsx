@@ -6,15 +6,16 @@
 // while it stands, the overlay's controls are reachable after the top bar's. Each overlay has a
 // switch in the player (a chrome button for `toggle` ones, a row in the subtitles menu for all),
 // remembered per viewer by Ether.
-import { useCallback, useMemo, useState } from 'react';
-import { Platform, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import type { SurfaceContext, SurfaceContribution } from '../../../protocol/screen';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../host';
 import { EASE_OUT } from '../presence';
 import type { PlayerLook } from '../widgets/player/look';
-import { watchFrames, watchWidth } from '../widgets/player/fold-layout';
+import { watchFrames, watchPictureBounds, watchWidth } from '../widgets/player/fold-layout';
+import { PLAYER_CHROME_TRANSITION_MS } from '../widgets/player/idle';
 import { bandLift, overlayBox, overlayContext, overlayVisible, playerOverlays, type Anchor, type PlayerFacts } from './model';
 import { SurfaceView } from './view';
 
@@ -66,33 +67,52 @@ interface Props {
   chrome: boolean;
   /** Where the chrome's top bar ends. */
   top: number;
+  video?: { width: number; height: number } | null;
+  fill: boolean;
 }
 
 /** Room around a corner's box for its shadow: the box clips content, not the shade beside it. */
 const SHADE = 24;
 
-export function PlayerOverlays({ look, surfaces, chrome, top }: Props) {
+export function PlayerOverlays({ look, surfaces, chrome, top, video, fill }: Props) {
   const host = useHost();
   const { viewport } = host;
+  const [holdHeaderSpace, setHoldHeaderSpace] = useState(chrome);
+  const animate = !look.still && !look.tv;
+  useEffect(() => {
+    if (chrome) {
+      setHoldHeaderSpace(true);
+      return;
+    }
+    if (!animate) return;
+    const timer = setTimeout(() => setHoldHeaderSpace(false), PLAYER_CHROME_TRANSITION_MS);
+    return () => clearTimeout(timer);
+  }, [chrome, animate]);
   if (!surfaces.shown.length) return null;
-  const safe = watchFrames(viewport).chrome;
-  // The chrome already positions this component in its safe pane, including on a foldable.
+  const frames = watchFrames(viewport);
+  const safe = frames.chrome;
+  const picture = watchPictureBounds(viewport, frames, video, fill);
+  const width = watchWidth(viewport);
   const visible = surfaces.shown.filter(surface => overlayVisible(surface, chrome));
-  const frame = {
-    width: watchWidth(viewport) - safe.left - safe.right,
-    height: viewport.height - safe.top - safe.bottom,
-    small: look.small, size: look.size, chrome, top,
-    opposingCorners: visible.some(surface => (surface.anchor ?? 'topLeft') === 'topLeft')
-      && visible.some(surface => surface.anchor === 'topRight'),
-  };
+  const opposingCorners = visible.some(surface => (surface.anchor ?? 'topLeft') === 'topLeft')
+    && visible.some(surface => surface.anchor === 'topRight');
+  const headerOverPicture = safe.top < viewport.height - picture.bottom;
   const anchors: Anchor[] = ['topLeft', 'topRight', 'bottom'];
   const unfocusable = Platform.isTV && !chrome;
   return (
-    <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
+    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {anchors.map(anchor => {
         const here = visible.filter(surface => (surface.anchor ?? 'topLeft') === anchor);
         if (!here.length) return null;
-        const box = overlayBox(anchor, frame);
+        const bounds = anchor === 'bottom' ? safe : picture;
+        const box = overlayBox(anchor, {
+          width: width - bounds.left - bounds.right,
+          height: viewport.height - bounds.top - bounds.bottom,
+          small: look.small, size: look.size, opposingCorners,
+          chrome: headerOverPicture && (chrome || (animate && holdHeaderSpace)),
+          top: safe.top + top - bounds.top,
+        });
+        if (box.maxWidth <= 0 || box.maxHeight <= 0) return null;
         const slot = anchor === 'bottom' ? host : { ...host, viewport: { ...viewport, width: box.maxWidth } };
         const views = here.map(surface => (
           <SurfaceView key={`${surface.id}|${JSON.stringify(surfaces.context.server)}`} surface={surface} context={surfaces.context}
@@ -102,22 +122,22 @@ export function PlayerOverlays({ look, surfaces, chrome, top }: Props) {
           return (
             <View key={anchor} testID="player-overlay-bottom" pointerEvents="box-none"
               onLayout={(event: LayoutChangeEvent) => surfaces.setBand(event.nativeEvent.layout.height)}
-              style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: box.maxHeight, overflow: 'hidden' }}>
+              style={{ position: 'absolute', left: safe.left, right: safe.right, bottom: safe.bottom, maxHeight: box.maxHeight, overflow: 'hidden' }}>
               {views}
             </View>
           );
         }
         const glide = {
           transform: [{ translateY: box.shift }],
-          // Give the top bar time to fade before the corner moves into its space.
-          ...(look.still || look.tv || chrome ? {} : {
-            transitionProperty: ['transform'], transitionDelay: 420, transitionDuration: 420, transitionTimingFunction: EASE_OUT,
-          }),
+          ...(animate && !chrome ? {
+            transitionProperty: ['transform'], transitionDuration: PLAYER_CHROME_TRANSITION_MS, transitionTimingFunction: EASE_OUT,
+          } : {}),
         } as ViewStyle;
-        const side = anchor === 'topLeft' ? { left: box.left! - SHADE, alignItems: 'flex-start' as const } : { right: box.right! - SHADE, alignItems: 'flex-end' as const };
+        const side = anchor === 'topLeft' ? { left: bounds.left + box.left! - SHADE, alignItems: 'flex-start' as const }
+          : { right: bounds.right + box.right! - SHADE, alignItems: 'flex-end' as const };
         return (
           <Animated.View key={anchor} testID={`player-overlay-${anchor}`} pointerEvents="box-none"
-            style={[{ position: 'absolute', top: box.top! - SHADE, ...side, maxWidth: box.maxWidth + SHADE * 2, maxHeight: box.maxHeight + SHADE * 2,
+            style={[{ position: 'absolute', top: bounds.top + box.top! - SHADE, ...side, maxWidth: box.maxWidth + SHADE * 2, maxHeight: box.maxHeight + SHADE * 2,
               padding: SHADE, overflow: 'hidden', gap: look.size(8) }, glide]}>
             {views}
           </Animated.View>

@@ -17,7 +17,7 @@ import { InfoCard } from './info-card';
 import { LiveDial, LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
-import { present, type PlayerView } from './present';
+import { belongs, present, type PlayerView } from './present';
 import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
 import { watchFrames } from './fold-layout';
@@ -263,6 +263,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         // A skip button over the hidden chrome takes focus instead, so select skips.
         hasTVPreferredFocus={Platform.isTV && !skip}
       />}
+      <PlayerOverlays look={look} surfaces={surfaces} chrome={chromeUp} top={top}
+        video={belongs(state.snapshot, state.plan) ? state.snapshot.video : null} fill={state.picture?.fill ?? false} />
       <View style={[StyleSheet.absoluteFill, frame]} pointerEvents="box-none">
       {/* Each bar holds its own edge: on a short screen they overlap at the middle rather than
           push the controls off the bottom. On TV, moving focus along a bar keeps the chrome up:
@@ -271,8 +273,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
       <View style={styles.top} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} bleed={bleed} />
       </View>
-      {/* Plugin overlays (the score bug, the ticker) and alert toasts, under the bars so a menu always covers them. */}
-      <PlayerOverlays look={look} surfaces={surfaces} chrome={chromeUp} top={top} />
+      {/* Alert toasts stay under the bars so a menu always covers them. */}
       <PlayerToasts look={look} top={chromeUp ? top : look.small ? 18 : look.size(30)} playingChannelId={live.live ? live.channelId : ''}
         right={info && !failed && !look.small ? look.gutter + look.size(300) + look.size(14) : undefined} />
       <View style={[styles.bottom, { bottom: surfaces.lift }, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
