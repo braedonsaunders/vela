@@ -482,7 +482,7 @@ export const searchScope: Node = {
   small: gutterSmall,
   children: [{
     ...scopes,
-    style: { ...scopes.style, 'align-self': 'flex-start', 'flex-wrap': 'wrap', 'max-width': '100%' },
+    style: { ...scopes.style, 'align-self': 'center', 'flex-wrap': 'wrap', 'max-width': '100%' },
   }],
 };
 
@@ -526,6 +526,7 @@ export const groupedSearch: Node = {
             ...titleGrid,
             when: [{ test: 'search.serverHasResults' }],
             style: { ...(titleGrid as BoxNode).style, 'grid-template-columns': 'repeat(auto-fill, minmax(150px, 1fr))' },
+            small: { ...(titleGrid as BoxNode).small, 'grid-template-columns': 'repeat({search.phoneColumns}, minmax(0px, 1fr))' },
             children: [{ type: 'repeat', over: 'search.sectionResults', limit: 1000, item: {
               ...searchGridCard,
               id: '{search.resultId}',

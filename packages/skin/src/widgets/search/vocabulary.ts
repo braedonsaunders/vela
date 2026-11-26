@@ -79,6 +79,13 @@ export const SEARCH_VOCABULARY: Record<string, Accessor> = {
   'search.serverName': c => c.searchSection?.name ?? '',
   'search.serverStatus': c => c.searchSection?.status ?? '',
   'search.serverError': c => yes(c.searchSection?.status === 'failed' || c.searchSection?.status === 'timed-out'),
+  'search.cardFacts': (c, e) => {
+    if (!c.card) return '';
+    return e.small && (c.searchSection?.results.length ?? 0) >= 3
+      ? [c.card.yearLabel, c.card.durationLabel].filter(Boolean).join(' · ')
+      : c.card.facts;
+  },
+  'search.phoneColumns': c => (c.searchSection?.results.length ?? 0) >= 3 ? '3' : '2',
   'search.serverHasResults': c => yes(!!c.searchSection?.results.length),
   'search.serverAction': c => yes(c.searchSection?.status === 'failed' || c.searchSection?.status === 'timed-out'
     || (c.searchSection?.status === 'ready' && !!c.searchSection.nextCursor)),

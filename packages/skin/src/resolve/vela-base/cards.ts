@@ -529,7 +529,10 @@ const searchMetadata: BoxNode = {
     if (child.type === 'text' && child.text === '{card.name}') return {
       ...child,
       style: { ...child.style, 'line-clamp': '2', 'line-height': '17px', 'min-height': '34px' },
-      small: { ...child.small, 'line-clamp': '3', 'line-height': '16px', 'min-height': '48px' },
+      small: { ...child.small, 'line-clamp': '2', 'line-height': '16px', 'min-height': '32px' },
+    };
+    if (child.type === 'text' && child.text === '{card.facts}') return {
+      ...child, text: '{search.cardFacts}', small: { 'line-clamp': '1' },
     };
     return child;
   }),
