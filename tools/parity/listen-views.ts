@@ -123,6 +123,8 @@ export const LISTEN_REVIEWED: { viewports: RegExp; views: string[]; reason: stri
     reason: "The only difference is the iPhone Duo's system status-bar clock (the simulator's own time); a rerun leaving the clock out passes (G1's clock diagnostic)" },
   { viewports: /^tvos$/, views: ['album'],
     reason: 'Focus matches (Play, in both); the album header stays visible instead of being scrolled away by the focus side effect (legacy scrolled 265 pt)' },
+  { viewports: /^tvos$/, views: ['audiobooks-home'],
+    reason: 'First focus: the document focuses the rail\'s Home, as on every Listen home (the shell\'s focus.initial, legacy TVShell\'s rule); legacy\'s focus engine landed on the last Recently added tile here. Only the Home icon and that tile\'s focus ring differ' },
 ];
 
 export function listenReviewed(view: { name: string; review?: string }, viewport: string): string | undefined {
