@@ -52,6 +52,13 @@
       "exclude": [
         "react-native"
       ]
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-image"
+        ]
+      }
     }
   },
   "reanimated": {
