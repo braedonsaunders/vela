@@ -13,7 +13,7 @@ import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
 import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
-import { heroButtonRank, heroEdgeKeyGate, heroFocusCarry } from './hero-focus';
+import { androidHeroAfterTurn, androidHeroKeyDirection, androidHeroPageDirection, heroButtonRank, heroFocusCarry, type AndroidHeroKey } from './hero-focus';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -25,7 +25,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, Fragment, memo, cloneElement, startTransition, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, DeviceEventEmitter, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, DeviceEventEmitter, Dimensions, findNodeHandle, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -115,7 +115,12 @@ export interface SurfaceSlotViews {
 export const SurfaceSlots = createContext<SurfaceSlotViews | null>(null);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
 const PressLabelContent = createContext(false);
-const HeroInteraction = createContext(false);
+interface AndroidHeroGroup {
+  focus: ReturnType<typeof heroFocusCarry<Focusable>>;
+  step?: SkinHost['stepHero'];
+  pending?: { direction: -1 | 1; keys: (-1 | 1)[] };
+}
+const HeroInteraction = createContext<boolean | AndroidHeroGroup>(false);
 /** First content layout releases the skeleton covering a newly loaded route. */
 const InstantContent = createContext(false);
 /** A menu or drawer (a box with `escape`) whose flag has just closed: drawn a moment longer while it
@@ -760,60 +765,29 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
 
 /** The one focus the hero's buttons hand on (there is one focus, and one hero on show). */
 const heroFocus = heroFocusCarry<Focusable>();
-/** Android TV: hardware left/right key-down vs key-up focus gate (MainActivity velaAndroidTVKey). */
-const heroKeyGate = heroEdgeKeyGate();
+const androidTV = Platform.OS === 'android' && Platform.isTV;
+const androidHeroButtons = new Map<number, AndroidHeroGroup>();
 let androidHeroKeysSubscribed = false;
 
-function subscribeAndroidHeroKeys(): void {
-  if (androidHeroKeysSubscribed || Platform.OS !== 'android' || !Platform.isTV) return;
-  if (typeof DeviceEventEmitter?.addListener !== 'function') return;
-  androidHeroKeysSubscribed = true;
-  DeviceEventEmitter.addListener('velaAndroidTVKey', (event: { eventType?: string; eventKeyAction?: number; focus?: string }) => {
-    const direction = event?.eventType === 'left' ? -1 : event?.eventType === 'right' ? 1 : 0;
-    if (!direction) return;
-    if (event.eventKeyAction === 0) heroKeyGate.key(direction as -1 | 1, true, event.focus);
-    else if (event.eventKeyAction === 1) heroKeyGate.key(direction as -1 | 1, false, event.focus);
-  });
-}
-
-/** Android TV: a press that turns the hero page must find focus already on the outermost button
- * and stay there from key-down to key-up (tracked via MainActivity's velaAndroidTVKey focus
- * snapshots, with HERO_EDGE_SETTLED_MS fallback when unavailable). HERO_EDGE_WAIT_MS gives any
- * late focus report time to settle before checking screen positions. */
-const HERO_EDGE_WAIT_MS = 120;
-const HERO_EDGE_SETTLED_MS = 300;
-/** A press reaches every focused control that listens; it turns the page once. */
-const heroEdgePresses = new WeakSet<object>();
-
-/** A left or right press on a focused hero button turns to the next or previous title when the
- * button is the outermost in that direction. On Android TV, by where the buttons stand on screen
- * (rank orders focus hand-over, and Restart stands between Play and More info), and only for a
- * press that started there. On tvOS, by rank. */
-function heroEdgePress(event: object, target: Focusable, direction: -1 | 1, turn: () => void): void {
-  if (Platform.OS !== 'android') {
-    if (heroFocus.atEdge(target, direction)) turn();
-    return;
+function bindAndroidHeroButton(target: Focusable, group: AndroidHeroGroup) {
+  const tag = findNodeHandle(target as HostInstance);
+  if (tag == null) return;
+  androidHeroButtons.set(tag, group);
+  if (!androidHeroKeysSubscribed) {
+    androidHeroKeysSubscribed = true;
+    DeviceEventEmitter.addListener('velaAndroidTVKey', (event: AndroidHeroKey) => {
+      const direction = androidHeroKeyDirection(event);
+      const owner = event.heroTag === undefined ? undefined : androidHeroButtons.get(event.heroTag);
+      if (direction === undefined || !owner?.step) return;
+      if (owner.pending) {
+        owner.pending.keys.push(direction);
+      } else if (androidHeroPageDirection(event)) {
+        owner.pending = { direction, keys: [] };
+        owner.step(direction);
+      }
+    });
   }
-  if (heroEdgePresses.has(event)) return;
-  heroEdgePresses.add(event);
-  const pressedAt = Date.now();
-  setTimeout(() => {
-    const held = heroFocus.current();
-    if (!held || !heroKeyGate.stayed(direction, pressedAt, held.since, HERO_EDGE_SETTLED_MS)) return;
-    const buttons = heroFocus.targets();
-    const xs = new Map<Focusable, number>();
-    let waiting = buttons.length;
-    const done = (button: Focusable, x?: number) => {
-      if (x !== undefined) xs.set(button, x);
-      if (--waiting > 0 || heroFocus.current()?.target !== held.target) return;
-      if (heroFocus.atEdge(held.target, direction, button => xs.get(button))) turn();
-    };
-    for (const button of buttons) {
-      const measurable = button as Focusable & { measureInWindow?(callback: (x: number) => void): void };
-      if (measurable.measureInWindow) measurable.measureInWindow(x => done(button, x));
-      else done(button);
-    }
-  }, HERO_EDGE_WAIT_MS);
+  return () => { androidHeroButtons.delete(tag); };
 }
 
 function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; measure?: FitMeasure }) {
@@ -825,6 +799,35 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const [cardMenu, setCardMenu] = useState<{ anchor: CardMenuAnchor; mode: CardMenuOpenMode } | null>(null);
   // Only the hero reads the hero's count and index: every other box redraws without them.
   const swipe = useHeroSwipe(!!hero, hero ? env.home?.hero.length ?? 0 : 0, hero ? env.heroIndex : 0, host.dispatch);
+  const heroParent = useContext(HeroInteraction);
+  const ownAndroidHero = useMemo<AndroidHeroGroup | null>(() =>
+    androidTV && hero ? { focus: heroFocusCarry<Focusable>() } : null, [hero]);
+  const androidHero = ownAndroidHero ?? (typeof heroParent === 'object' ? heroParent : null);
+  const buttonCarry = androidHero?.focus ?? heroFocus;
+  const heroCount = ownAndroidHero ? env.home?.hero.length ?? 0 : 0;
+  const heroIndex = ownAndroidHero ? env.heroIndex : 0;
+  useLayoutEffect(() => {
+    if (!ownAndroidHero) return;
+    ownAndroidHero.step = heroCount > 1 ? host.stepHero : undefined;
+  }, [ownAndroidHero, heroCount, host.stepHero]);
+  useLayoutEffect(() => {
+    if (ownAndroidHero?.pending === undefined) return;
+    const frame = requestAnimationFrame(() => {
+      const pending = ownAndroidHero.pending;
+      ownAndroidHero.pending = undefined;
+      if (!pending) return;
+      ownAndroidHero.focus.take();
+      const buttons = ownAndroidHero.focus.visualTargets();
+      if (!buttons.length) return;
+      const result = androidHeroAfterTurn(buttons.length, pending.direction, pending.keys);
+      buttons[result.focus]?.requestTVFocus?.();
+      if (result.turn && ownAndroidHero.step) {
+        ownAndroidHero.pending = { direction: result.turn, keys: result.remaining };
+        ownAndroidHero.step(result.turn);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [ownAndroidHero, heroIndex]);
   const parentText = useContext(Inherited);
   const parentGroup = useContext(Group);
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
@@ -862,7 +865,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   };
   useEffect(() => () => { if (route && scrolled.current) host.setFlag('keep-page-scrolled', false); }, []);
   const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY, viewport.height) : null), [route, viewport.height]);
-  const inHero = useContext(HeroInteraction) || !!hero;
+  const inHero = !!heroParent || !!hero;
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
   const menuCard = ctx.card
@@ -895,14 +898,14 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   useFocusedTVKeys(ui.focus && (heroAction || !!cardPrimary), event => {
     const direction = event.eventType === 'left' ? -1 : event.eventType === 'right' ? 1 : 0;
     if (direction && heroAction && buttonRef.current) {
-      heroEdgePress(event, buttonRef.current, direction as -1 | 1, () => {
+      if (!androidTV && heroFocus.atEdge(buttonRef.current, direction as -1 | 1)) {
         const count = env.home?.hero.length ?? 0;
         const target = count > 1 ? (env.heroIndex + direction + count) % count : null;
         if (target !== null) {
           heroFocus.turn(direction as -1 | 1);
           host.dispatch('pickHero', String(target));
         }
-      });
+      }
       return;
     }
     if (!cardPrimary) return;
@@ -1037,7 +1040,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     );
   }
   if (node.press) content = <PressLabelContent.Provider value>{content}</PressLabelContent.Provider>;
-  if (hero) content = <HeroInteraction.Provider value>{content}</HeroInteraction.Provider>;
+  if (hero) content = <HeroInteraction.Provider value={ownAndroidHero ?? true}>{content}</HeroInteraction.Provider>;
   const layers = (
     <>
       {fx.backdropBlur ? <Backdrop blur={fx.backdropBlur} glass={style.backgroundColor !== undefined} /> : null}
@@ -1161,7 +1164,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       if (!target) return;
       buttonRef.current = target;
       const heroRank = heroButton ? heroButtonRank(press!.action, fill(press!.arg, ctx, env)) : -1;
-      if (heroRank >= 0) { subscribeAndroidHeroKeys(); heroFocus.add(target, heroRank); }
+      if (heroRank >= 0) buttonCarry.add(target, heroRank);
+      const unbindAndroidHero = heroRank >= 0 && androidHero ? bindAndroidHeroButton(target, androidHero) : undefined;
       const unregister = registerButton(target);
       const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
       const contextTarget = web && cardPrimary ? target as unknown as HTMLElement : undefined;
@@ -1179,8 +1183,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         buttonRef.current = null;
         // On TV a hero button (Play, More info, Restart; not the pager) leaving while focused,
         // because the title now on show has other buttons, hands focus to the hero's primary one.
-        if (heroRank >= 0 && heroFocus.remove(target)) {
-          requestAnimationFrame(() => heroFocus.take()?.requestTVFocus?.());
+        unbindAndroidHero?.();
+        if (heroRank >= 0 && buttonCarry.remove(target) && androidHero?.pending === undefined) {
+          requestAnimationFrame(() => buttonCarry.take()?.requestTVFocus?.());
         }
         unregister?.();
         untrack?.();
@@ -1252,13 +1257,13 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
-          if (heroButton && buttonRef.current) { heroFocus.focused(buttonRef.current, true); heroKeyGate.focused(); }
+          if (heroButton && buttonRef.current) buttonCarry.focused(buttonRef.current, true);
           if (inHero || (heroControl && visible)) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => { set('focus', false); if (heroButton && buttonRef.current) heroFocus.focused(buttonRef.current, false); if (inHero || heroControl) holdHero(host.setFlag, false, Platform.isTV); }}
+        onBlur={() => { set('focus', false); if (heroButton && buttonRef.current) buttonCarry.focused(buttonRef.current, false); if (inHero || heroControl) holdHero(host.setFlag, false, Platform.isTV); }}
         onPointerDown={event => {
           set('focus', false);
           if (web && node.directionalFocus === false) (event as unknown as { preventDefault?(): void }).preventDefault?.();
@@ -1266,7 +1271,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
         accessibilityRole={a11y.accessibilityRole ?? (href ? 'link' : 'button')} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={expanded === undefined ? a11y.accessibilityState : { ...a11y.accessibilityState, expanded }}
-        testID={a11y.testID} />
+        testID={a11y.testID} nativeID={androidHero && heroButton ? 'vela-hero-action:' : undefined} />
     ) : null;
     // On a TV a reading stop is a real focusable responder (the tvOS focus engine passes over a
     // plain focusable view): a button that does nothing, over the section, wearing the focus look.
