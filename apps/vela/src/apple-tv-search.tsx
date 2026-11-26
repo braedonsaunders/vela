@@ -16,6 +16,7 @@ import { HostContext, InheritedContext } from '@vela/skin/src/host';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { SearchBack } from '@vela/skin/src/widgets/search/search-back';
 import { NativeSearchView, liveQuery, resultsFocus } from '@vela/search-native';
+import { useSearchReturn } from './search-return';
 import { useNativeDismissal } from './native-dismissal';
 import { useVela } from './vela';
 
@@ -28,6 +29,7 @@ export function AppleTvSearch() {
   const isCurrent = useIsFocused();
   // Back from a title opened here puts focus back on its card.
   useReturnFocus(isCurrent);
+  useSearchReturn(store, isCurrent, host?.env.query);
   // Leaving pops the route, which dismisses the screen, back to where search was opened from.
   const navigation = useNavigation();
   const leaving = useRef(false);
@@ -55,7 +57,7 @@ export function AppleTvSearch() {
   const view = host?.env.search;
   useEffect(() => {
     if (submitted === null) return;
-    const next = resultsFocus(submitted, view);
+    const next = view?.query === submitted && view.sections ? 'focus' : resultsFocus(submitted, view);
     if (next === 'wait') return;
     setSubmitted(null);
     if (next === 'focus') setFocusRequest(request => request + 1);

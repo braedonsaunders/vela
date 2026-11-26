@@ -5,7 +5,7 @@ import { chipGroup, libChip, glassSelect } from './library';
 // up. The list stays a skeleton until the lane it shows has answered, so a fallback never moves a
 // list already shown. Titles lie in the library's multi-row grid, not a sideways shelf.
 import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
-import { gridCard, titleGrid } from './cards';
+import { gridCard, searchGridCard, titleGrid } from './cards';
 import { display, emptyState, enter, gutter, gutterSmall, is, pill, placeholder, rowSkeleton } from './look';
 
 const some = (test: string): Condition => ({ test, is: 'gt', value: '0' });
@@ -464,4 +464,85 @@ export const searchPaging: Node = {
   children: [{ type: 'box', when: [{ test: 'search.moreFast' }],
     press: { action: 'searchMore', arg: 'fast' }, label: 'Show more', style: { ...glassSelect, padding: '12px', ...controlMotion }, focus: { ...searchControlFocus, 'border-color': '$ui.accent' },
     children: [{ type: 'text', text: 'More results' }] }],
+};
+
+/** Shared scope controls and grouped title results, including for installed skins. */
+const scopeButton = (all: boolean): BoxNode => ({
+  ...libChip([{ test: 'search.allServers', not: !all }], all ? 'all' : 'current', all ? '{t:search.allServers}' : '{t:search.currentServer}'),
+  press: { action: 'searchScope', arg: all ? 'all' : 'current' },
+  testId: all ? 'search-scope-all' : 'search-scope-current',
+  focus: searchControlFocus,
+});
+
+const scopes = chipGroup('{t:search.scopeLabel}', [scopeButton(false), scopeButton(true)]);
+export const searchScope: Node = {
+  type: 'box',
+  when: [{ test: 'search.canSearchAll' }],
+  style: gutter,
+  small: gutterSmall,
+  children: [{
+    ...scopes,
+    style: { ...scopes.style, 'align-self': 'flex-start', 'flex-wrap': 'wrap', 'max-width': '100%' },
+  }],
+};
+
+const serverNote = (when: Condition[], text: string): Node => ({
+  type: 'text', when, text, style: { ...secondary('15px'), ...gutter }, small: gutterSmall,
+});
+const sectionButton = (when: Condition[], text: string): BoxNode => ({
+  type: 'box', when,
+  press: { action: 'searchServerPage', arg: '{search.serverId}' },
+  label: text,
+  style: { ...glassSelect, 'align-self': 'flex-start', padding: '12px' },
+  focus: searchControlFocus,
+  children: [{ type: 'text', text }],
+});
+
+export const groupedSearch: Node = {
+  type: 'box',
+  when: [{ test: 'search.allServers' }],
+  style: { position: 'relative', ...column('26px'), 'padding-bottom': '32px' },
+  children: [
+    {
+      type: 'text', text: '{search.announcement}', role: 'status',
+      style: { position: 'absolute', width: '1px', height: '1px', opacity: '0', overflow: 'hidden' },
+    },
+    {
+      type: 'text', text: '{t:ui.resultsForQuery|query=env.query}', role: 'heading', level: 1,
+      style: { ...display, 'font-size': '46px', 'line-clamp': '2', ...gutter } as Style,
+      small: { 'font-size': '32px', ...gutterSmall },
+    },
+    {
+      type: 'repeat', over: 'search.sections', limit: 100, item: {
+        type: 'box',
+        style: column('12px'),
+        children: [
+          laneHeading('{search.serverName}'),
+          serverNote([is('search.serverStatus', 'loading')], '{t:search.serverSearching}'),
+          serverNote([is('search.serverStatus', 'timed-out')], '{t:search.serverTimeout}'),
+          serverNote([is('search.serverStatus', 'failed')], '{t:search.serverFailed}'),
+          serverNote([{ test: 'search.serverEmpty' }], '{t:search.serverEmpty}'),
+          {
+            ...titleGrid,
+            when: [{ test: 'search.serverHasResults' }],
+            style: { ...(titleGrid as BoxNode).style, 'grid-template-columns': 'repeat(auto-fill, minmax(150px, 1fr))' },
+            children: [{ type: 'repeat', over: 'search.sectionResults', limit: 1000, item: {
+              ...searchGridCard,
+              id: '{search.resultId}',
+              testId: 'search-result-{search.serverId}-{card.id}',
+              press: { action: 'openSearchResult', arg: '{search.resultRef}' },
+            } as Node }],
+          } as Node,
+          {
+            type: 'box', style: gutter, small: gutterSmall,
+            when: [{ test: 'search.serverAction' }],
+            children: [
+              sectionButton([{ test: 'search.serverError' }], '{t:ui.tryAgain}'),
+              sectionButton([{ test: 'search.serverMore' }], '{t:search.serverMore}'),
+            ],
+          },
+        ],
+      },
+    },
+  ],
 };

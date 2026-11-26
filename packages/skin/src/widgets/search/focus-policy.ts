@@ -15,7 +15,7 @@ export type SearchDoneFocus = { to: 'wait' } | { to: 'field' } | { to: 'result';
 
 export function searchDoneFocus(query: string, search: SearchView | undefined): SearchDoneFocus {
   if (query.trim() === '') return { to: 'field' };
-  if (!search || search.query !== query || search.titles.state === 'loading') return { to: 'wait' };
+  if (!search || search.query !== query || (!search.sections && search.titles.state === 'loading')) return { to: 'wait' };
   const does = searchResultPresses(search);
   return does.length ? { to: 'result', does } : { to: 'field' };
 }
