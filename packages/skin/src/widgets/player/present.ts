@@ -447,13 +447,17 @@ export function viewCommand(command: Command | undefined, sentOn: string, sessio
   return command && ['audio', 'subtitle', 'play', 'pause', 'seek', 'seekBy', 'catchUp'].includes(command.type) && sentOn !== sessionId ? undefined : command;
 }
 
-/** An audio or subtitle pick awaiting the player: the session and the file (the selected path's
- * `sourceId`) it was made on, and the track (null: Off). */
+/** An audio or subtitle pick awaiting the player: the session and the file (`planSource`) it was made
+ * on, and the track (null: Off). */
 export interface PendingPick { sessionId: string; source: string | undefined; trackId: string | null }
 
-/** The file a plan plays: its selected path's `sourceId`, or undefined when the server does not say. */
+/** The file a plan plays: its selected path's `sourceId`; without one, the release playing (`playingVersionId`,
+ * or `selectedVersionId` when the plan does not say which plays); undefined when nothing names it. The
+ * row alone tells files apart but an equal row does not prove the same file (`settlePick` only drops on a difference). */
 export function planSource(plan: PlaybackPlan | null | undefined): string | undefined {
-  return plan?.paths.find(path => path.id === plan.selectedPathId)?.sourceId || undefined;
+  if (!plan) return undefined;
+  const version = plan.playingVersionId !== undefined ? plan.playingVersionId : plan.selectedVersionId;
+  return plan.paths.find(path => path.id === plan.selectedPathId)?.sourceId || version || undefined;
 }
 
 /** What a report of `plan` does to a pending pick: confirms it as the viewer's choice, drops it, or

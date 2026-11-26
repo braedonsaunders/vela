@@ -177,6 +177,8 @@ export class Playback {
   private subtitleOff = false;
   /** What the player last reported for subtitles on the current source; undefined before its first report there. */
   private subtitleReported: string | null | undefined;
+  /** A version switch awaiting its reply: the session, the source generation it was asked from and the version asked for. */
+  private switching: { sessionId: string; sourceGeneration: number; versionId: string } | undefined;
   /** Series-track context for the active title session: server, viewer, title and series ID. */
   private sessionContext: { sessionId: string; serverId: string; viewerId: string; titleId: string; showId?: string; connection: Connection } | undefined;
   private externalId: string | undefined;
@@ -712,6 +714,8 @@ export class Playback {
   }
 
   private withLocalTracks(plan: V.PlaybackPlan): V.PlaybackPlan {
+    // The version asked for starts from its own selection, not the previous version's local tracks.
+    this.takeSwitched(plan);
     if (!this.localTracks) return plan;
     // Only what the engine can switch to on this plan: a muxed transcode keeps the server's tracks.
     const { audio, subtitle } = this.carried(plan);
@@ -1055,28 +1059,52 @@ export class Playback {
     if (!plan) throw new Error('Playback session is unavailable');
     const connection = await this.session.ready();
     if (!hasVersions(connection.adapter)) throw new Error('Versions are unavailable');
-    const next = connection.plan(await connection.adapter.switchVersion(sessionId, {
-      kind: 'version', versionId, ...(positionSeconds !== undefined ? { positionSeconds } : {}),
-      sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
-      idempotencyKey: this.session.key(),
-    }));
+    // Until the reply, a plan the session publishes of a later source that names this version is it coming in (takeSwitched).
+    const switching = { sessionId, sourceGeneration: plan.sourceGeneration, versionId };
+    this.switching = switching;
+    let next: V.PlaybackPlan, brings: boolean;
+    try {
+      next = connection.plan(await connection.adapter.switchVersion(sessionId, {
+        kind: 'version', versionId, ...(positionSeconds !== undefined ? { positionSeconds } : {}),
+        sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+        idempotencyKey: this.session.key(),
+      }));
+    } finally {
+      brings = this.switching === switching;
+      if (brings) this.switching = undefined;
+    }
     const now = this.box.get().playback;
     // A restart (stall recovery) asks for the file now playing, not the one first asked for.
     if (now.sessionId === sessionId) {
       if (!this.recovering) this.resetRestartBudget(sessionId);
-      // Track IDs and local choices belong to the previous version. Keep the negotiated
-      // selection through later snapshots and recovery, even when a track ID is reused.
-      this.localTracks = false;
-      this.audio = next.selectedAudioTrackId;
-      this.subtitle = next.selectedSubtitleTrackId;
-      this.audioChoice = trackChoice(next, next.audioTracks, this.audio);
-      this.subtitleChoice = trackChoice(next, next.subtitleTracks, this.subtitle ?? undefined);
-      // An Off chosen on the previous version is not the viewer's on this one; its reports start from its own selection.
-      this.subtitleOff = false;
-      this.subtitleReported = undefined;
-      this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
+      // Only a reply that brings the new version in resets the choices: one the session published first
+      // already did, and choices made on it since stand. A reply older than the plan shown does not replace it.
+      if (brings) this.takeVersion(next);
+      this.patch({ ...(olderThanShown(next, now.plan) ? {} : { plan: next }), error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     }
     return next;
+  }
+
+  /** A new version's plan: track IDs and local choices belong to the previous version. Keep the negotiated
+   * selection through later snapshots and recovery, even when a track ID is reused. */
+  private takeVersion(next: V.PlaybackPlan): void {
+    this.localTracks = false;
+    this.audio = next.selectedAudioTrackId;
+    this.subtitle = next.selectedSubtitleTrackId;
+    this.audioChoice = trackChoice(next, next.audioTracks, this.audio);
+    this.subtitleChoice = trackChoice(next, next.subtitleTracks, this.subtitle ?? undefined);
+    // An Off chosen on the previous version is not the viewer's on this one; its reports start from its own selection.
+    this.subtitleOff = false;
+    this.subtitleReported = undefined;
+  }
+
+  /** The session published the version asked for before the switch reply: it comes in now. A later source
+   * of the same version (a quality change, a part) or a plan that names no version is not it. */
+  private takeSwitched(plan: V.PlaybackPlan): void {
+    const switching = this.switching;
+    if (switching?.sessionId !== plan.sessionId || plan.sourceGeneration <= switching.sourceGeneration || plan.selectedVersionId !== switching.versionId) return;
+    this.switching = undefined;
+    this.takeVersion(plan);
   }
 
   private resetRestartBudget(sessionId: string): void {
@@ -1525,6 +1553,7 @@ export class Playback {
     this.subtitleChoice = undefined;
     this.subtitleOff = false;
     this.subtitleReported = undefined;
+    this.switching = undefined;
     this.sessionContext = undefined;
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
@@ -1664,6 +1693,7 @@ export class Playback {
       // A new source of the session (a version, a part): its own subtitle selection is what its reports are measured against.
       const before = this.box.get().playback.plan;
       if (before?.sessionId === change.plan.sessionId && before.sourceGeneration !== change.plan.sourceGeneration) this.subtitleReported = undefined;
+      this.takeSwitched(change.plan);
     }
     this.box.update('playback', playback => ({ ...playback, ...change }));
   }

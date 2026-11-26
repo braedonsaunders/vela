@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
-import { settlePick } from '../src/widgets/player/present';
+import { planSource, settlePick } from '../src/widgets/player/present';
 
 // Version A plays file a; the switch to version B plays file b at the next source generation.
 const planOf = (source: string | undefined, generation: number) => ({
@@ -38,4 +38,17 @@ test('a pick on version A is confirmed by A\'s report', () => {
 
 test('without a file identity on the plans, a pick is confirmed as before', () => {
   expect(settlePick({ sessionId: 's1', source: undefined, trackId: null }, 'subtitle', report(1, {}), planOf(undefined, 1))).toBe('confirm');
+});
+
+test('without a source id, the version id tells the files apart', () => {
+  // Version A and version B name no source; the server says which version each plan plays.
+  const version = (selected: string, generation: number, playing?: string | null) => ({ ...planOf(undefined, generation), selectedVersionId: selected,
+    ...(playing !== undefined ? { playingVersionId: playing } : {}) }) as PlaybackPlan;
+  const onA = version('va', 0), onB = version('vb', 1);
+  const off = { sessionId: 's1', source: planSource(onA), trackId: null };
+  expect(settlePick(off, 'subtitle', report(1, {}), onB)).toBe('drop');
+  expect(settlePick(off, 'subtitle', report(0, {}), onA)).toBe('confirm');
+  // With Auto chosen the selected version stays the same; the release playing is the file.
+  const auto = { sessionId: 's1', source: planSource(version('auto', 0, 'r1')), trackId: null };
+  expect(settlePick(auto, 'subtitle', report(1, {}), version('auto', 1, 'r2'))).toBe('drop');
 });
